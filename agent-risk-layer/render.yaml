@@ -2,6 +2,7 @@ services:
   - type: web
     name: agent-risk-layer
     runtime: docker
+    rootDir: agent-risk-layer
     plan: starter
     healthCheckPath: /api/health
     envVars:
