@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: agent-risk-layer
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DEMO_MODE
+        value: "false"
+      - key: ALLOW_DEMO_IN_PRODUCTION
+        value: "false"
+      - key: DATABASE_PATH
+        value: /var/data/agent-risk-layer.sqlite
+      - key: COMPANY_NAME
+        value: AgentRiskLayer
+      - key: COMPANY_LEGAL_NAME
+        sync: false
+      - key: COMPANY_ADDRESS
+        sync: false
+      - key: LEGAL_JURISDICTION
+        value: England and Wales
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_BASIC_REPORT
+        sync: false
+      - key: STRIPE_PRICE_PRO_REPORT
+        sync: false
+      - key: STRIPE_PRICE_DEVELOPER_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_AGENCY_MONTHLY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+    disk:
+      name: agent-risk-layer-data
+      mountPath: /var/data
+      sizeGB: 1

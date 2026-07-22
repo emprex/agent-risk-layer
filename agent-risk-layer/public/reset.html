@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reset password | AgentRiskLayer</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/reset.js"></script>
+</head>
+<body>
+<header class="site-header"><a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a><nav><a href="/auth.html">Sign in</a></nav></header>
+<main class="auth-wrap">
+  <div class="page-heading"><span class="eyebrow">Account recovery</span><h1 id="resetTitle">Reset your password.</h1><p id="resetIntro">Enter your account email and we will send a time-limited reset link.</p></div>
+  <div class="panel">
+    <div id="resetError" class="error-box"></div>
+    <div id="resetSuccess" class="success-box" hidden></div>
+    <form id="requestForm" class="auth-form">
+      <div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" required autocomplete="email"></div>
+      <button class="button primary full" type="submit">Send reset link</button>
+    </form>
+    <form id="confirmForm" class="auth-form" hidden>
+      <div class="field"><label for="newPassword">New password</label><input id="newPassword" type="password" minlength="12" maxlength="200" required autocomplete="new-password"></div>
+      <div class="field"><label for="confirmPassword">Confirm password</label><input id="confirmPassword" type="password" minlength="12" maxlength="200" required autocomplete="new-password"></div>
+      <button class="button primary full" type="submit">Set new password</button>
+    </form>
+  </div>
+</main>
+<footer><span>© 2026 AgentRiskLayer</span><span>Reset links expire after 30 minutes and work once.</span></footer>
+</body>
+</html>
