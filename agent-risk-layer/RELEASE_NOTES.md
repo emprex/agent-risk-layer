@@ -50,3 +50,17 @@ Release date: 22 July 2026
 - End-to-end smoke test covering registration, assessment, private/public token isolation, paid fulfilment, PDF generation, subscription activation, account export, password recovery, password change and account deletion.
 
 Live Stripe, Resend, tax, legal, monitoring and independent security validation require production credentials or external professional review and are therefore launch-operator tasks rather than bundled code.
+
+## v1.1.1 — Stripe Managed Payments compatibility
+
+- Enables `managed_payments[enabled]=true` on every Stripe Checkout Session.
+- Pins Stripe API requests to `2025-03-31.basil`, the minimum Managed Payments-compatible API version.
+- Adds Render and `.env.example` configuration for `STRIPE_API_VERSION`.
+- Adds regression tests protecting the Managed Payments integration.
+
+
+
+## v1.1.2 — Current Managed Payments preview API
+
+- Updates Stripe API requests to `2026-03-04.preview`, matching Stripe's current Managed Payments setup documentation.
+- Updates Render, local environment examples, smoke validation, and regression tests.

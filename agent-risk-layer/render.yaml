@@ -31,6 +31,8 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
+      - key: STRIPE_API_VERSION
+        value: 2026-03-04.preview
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRICE_BASIC_REPORT

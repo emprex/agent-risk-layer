@@ -92,7 +92,7 @@ async function request(route, { method = 'GET', body, binary = false } = {}) {
 try {
   const health = await wait();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '1.1.0');
+  assert.equal(health.version, '1.1.2');
 
   await request('/api/auth/register', { method: 'POST', body: { email: 'owner@example.com', password: 'secure-demo-password', termsAccepted: true } });
   const { questionnaire } = await request('/api/questionnaire');

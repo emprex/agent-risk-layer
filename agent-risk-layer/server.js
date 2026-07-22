@@ -350,6 +350,7 @@ async function createCheckout(req, res, body) {
     params.set('mode', plan.recurring ? 'subscription' : 'payment');
     params.set('line_items[0][price]', price);
     params.set('line_items[0][quantity]', '1');
+    params.set('managed_payments[enabled]', 'true');
     params.set('customer_email', req.user.email);
     params.set('client_reference_id', req.user.id);
     params.set('allow_promotion_codes', 'true');
@@ -555,7 +556,7 @@ async function stripeRequest(method, endpoint, params = null) {
   if (!config.stripeSecretKey) throw new Error('Stripe secret key is missing.');
   const response = await fetch(`https://api.stripe.com${endpoint}`, {
     method,
-    headers: { Authorization: `Bearer ${config.stripeSecretKey}`, ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+    headers: { Authorization: `Bearer ${config.stripeSecretKey}`, 'Stripe-Version': config.stripeApiVersion, ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
     body: params ? params.toString() : undefined,
   });
   const payload = await response.json();

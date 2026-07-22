@@ -4,7 +4,7 @@ const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 
 export const config = {
-  appVersion: '1.1.0',
+  appVersion: '1.1.2',
   scoringVersion: 'arl-risk-v1.1',
   termsVersion: process.env.TERMS_VERSION || '2026-07-22',
   companyName: process.env.COMPANY_NAME || 'AgentRiskLayer',
@@ -20,6 +20,7 @@ export const config = {
   sessionSecret: process.env.SESSION_SECRET || defaultSessionSecret,
   databasePath: path.resolve(root, process.env.DATABASE_PATH || './data/agent-risk-layer.sqlite'),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
+  stripeApiVersion: process.env.STRIPE_API_VERSION || '2026-03-04.preview',
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   resendApiKey: process.env.RESEND_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || 'AgentRiskLayer <reports@example.com>',
