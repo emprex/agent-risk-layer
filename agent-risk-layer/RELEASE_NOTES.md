@@ -64,3 +64,12 @@ Live Stripe, Resend, tax, legal, monitoring and independent security validation 
 
 - Updates Stripe API requests to `2026-03-04.preview`, matching Stripe's current Managed Payments setup documentation.
 - Updates Render, local environment examples, smoke validation, and regression tests.
+
+## v1.1.3 — Stripe Dahlia webhook compatibility
+
+- Uses Stripe API version `2026-06-24.dahlia`.
+- Supports subscription billing periods from `items.data[].current_period_end`.
+- Supports failed-invoice subscription references from `invoice.parent.subscription_details.subscription`.
+- Retains backward compatibility with older Stripe webhook payload shapes.
+- Adds regression tests for the current webhook object structure.
+

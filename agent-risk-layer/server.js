@@ -304,7 +304,12 @@ async function handleStripeWebhook(req, res) {
     if (event.type === 'checkout.session.async_payment_succeeded') await fulfilCheckout(event.data.object);
     if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') syncSubscription(event.data.object);
     if (event.type === 'invoice.payment_failed') {
-      const subscriptionId = String(event.data.object.subscription || '');
+      const invoice = event.data.object;
+      const subscriptionId = String(
+        invoice.subscription ||
+        invoice.parent?.subscription_details?.subscription ||
+        ''
+      );
       if (subscriptionId) db.prepare(`UPDATE subscriptions SET status = 'past_due', updated_at = ? WHERE stripe_subscription_id = ?`).run(nowIso(), subscriptionId);
     }
     if (event.id) db.prepare('INSERT INTO stripe_events (id, event_type, processed_at) VALUES (?, ?, ?)').run(event.id, event.type, nowIso());
@@ -542,7 +547,11 @@ function syncSubscription(subscription) {
   const row = db.prepare('SELECT * FROM subscriptions WHERE stripe_subscription_id = ?').get(subscriptionId);
   const metadata = subscription.metadata || {};
   if (!row && (!metadata.user_id || !metadata.product_key)) return;
-  const end = subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
+  const itemPeriodEnds = Array.isArray(subscription.items?.data)
+    ? subscription.items.data.map((item) => Number(item.current_period_end || 0)).filter(Boolean)
+    : [];
+  const periodEnd = Number(subscription.current_period_end || Math.max(0, ...itemPeriodEnds));
+  const end = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
   if (row) {
     db.prepare(`UPDATE subscriptions SET status = ?, current_period_end = ?, updated_at = ? WHERE stripe_subscription_id = ?`)
       .run(subscription.status, end, nowIso(), subscriptionId);

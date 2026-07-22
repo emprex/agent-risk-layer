@@ -14,5 +14,5 @@ test('Stripe requests pin a Managed Payments-compatible API version', () => {
   const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src', 'config.js'), 'utf8');
   assert.match(server, /Stripe-Version/);
-  assert.match(config, /2026-03-04\.preview/);
+  assert.match(config, /2026-06-24\.dahlia/);
 });

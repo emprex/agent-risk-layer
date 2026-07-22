@@ -33,7 +33,7 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_API_VERSION
-        value: 2026-03-04.preview
+        value: 2026-06-24.dahlia
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_PRICE_BASIC_REPORT
