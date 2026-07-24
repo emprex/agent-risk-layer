@@ -1,112 +1,24 @@
 import { api, escapeHtml, qs, riskClass, setBusy } from './shared.js';
+const root=document.querySelector('#resultRoot');const id=qs('id');const token=qs('token');let assessment,user,isOwner=false;
+async function init(){if(!id||!token)return fail('The assessment link is incomplete.');try{const[a,u]=await Promise.all([api(`/api/assessments/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`),api('/api/auth/me')]);assessment=a.assessment;isOwner=a.isOwner;user=u.user;render();}catch(e){fail(e.message)}}
+function render(){const full=assessment.result;const paid=assessment.paidTier!=='free';const color=assessment.score>=75?'var(--red)':assessment.score>=50?'var(--orange)':assessment.score>=25?'var(--yellow)':'var(--green)';const findings=paid?full.findings:assessment.topFindings;root.className='result-grid';root.innerHTML=`
+<aside class="panel result-score"><span class="eyebrow">Evidence-led assessment</span><div class="score-ring ${riskClass(assessment.riskBand)}"><strong>${assessment.score}<small>/100</small></strong></div><div class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} risk</div><h2>${escapeHtml(assessment.name)}</h2><p class="muted">${escapeHtml(assessment.agentType)}</p>${paid?`<a class="button primary full" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf?token=${encodeURIComponent(token)}">Download ${assessment.paidTier==='pro'?'professional':'essential'} PDF</a>`:`<button class="button primary full" id="buyPro">Unlock professional report · £24.99</button><button class="button ghost full" id="buyBasic">Essential report · £9.99</button>`}${isOwner?`<a class="button ghost full" href="/inspector.html?assessment=${encodeURIComponent(assessment.id)}">${full.inspection?'Run another technical inspection':'Add technical inspection'}</a><a class="button ghost full" href="/redteam.html?assessment=${encodeURIComponent(assessment.id)}">${full.redTeam?'Run another controlled red team':'Add controlled red-team evidence'}</a>`:''}${sharingHtml()}</aside>
+<section><div class="panel"><span class="eyebrow">Deployment decision</span><h1 class="result-headline">${escapeHtml(full.headline)}</h1><div class="decision-banner"><span class="muted">Recommended decision</span><strong>${escapeHtml(full.decision||'Review required')}</strong></div><div class="metric-grid"><div class="metric-card"><span>Inherent exposure</span><strong>${full.inherentRisk??assessment.score}</strong></div><div class="metric-card"><span>Control gap</span><strong>${full.controlGap??assessment.score}</strong></div><div class="metric-card"><span>Evidence confidence</span><strong>${full.evidenceConfidence??35}%</strong></div></div><p class="microcopy">${escapeHtml(full.methodology)}</p></div>
+${full.inspection?`<div class="panel inspection-panel"><div class="section-heading compact-heading"><div><span class="eyebrow">Integrity-verified local evidence</span><h2>Technical inspection</h2></div><span class="assurance-badge">${escapeHtml(full.inspection.assurance)}</span></div><div class="metric-grid"><div class="metric-card"><span>Technical posture</span><strong>${full.inspection.summary.postureScore}</strong></div><div class="metric-card"><span>Observed risk</span><strong>${full.inspection.summary.technicalRisk}</strong></div><div class="metric-card"><span>Static findings</span><strong>${full.inspection.summary.findingsTotal}</strong></div></div><p>${escapeHtml(full.inspection.summary.conclusion)}</p><div class="trust-note"><strong>Trust boundary:</strong> ${escapeHtml(full.inspection.trust.boundary)}</div>${(paid?full.inspection.findings:full.inspection.findings.slice(0,3)).map(inspectorFindingHtml).join('')}${!paid&&full.inspection.findings.length>3?'<p class="microcopy">The paid report includes the complete observed finding register and evidence references.</p>':''}</div>`:''}
+${full.redTeam?`<div class="panel redteam-panel"><div class="section-heading compact-heading"><div><span class="eyebrow">${full.redTeam.assurance}</span><h2>Controlled adversarial testing</h2></div><a class="button ghost small" href="/redteam-run.html?id=${encodeURIComponent(full.redTeam.id)}">View full run</a></div><div class="metric-grid"><div class="metric-card"><span>Assurance</span><strong>${full.redTeam.summary.assuranceScore}</strong></div><div class="metric-card"><span>Adversarial risk</span><strong>${full.redTeam.summary.riskScore}</strong></div><div class="metric-card"><span>Failed cases</span><strong>${full.redTeam.summary.counts.failed}</strong></div></div><p>${escapeHtml(full.redTeam.campaign?.target?.mode==='simulation'?'This is a runner simulation used to verify the testing pipeline. It is not evidence about the assessed target.':full.redTeam.summary.decision)}</p><div class="trust-note"><strong>Trust boundary:</strong> ${escapeHtml(full.redTeam.trust.boundary)}</div>${(paid?full.redTeam.failedResults:full.redTeam.failedResults.slice(0,3)).map(redTeamCaseHtml).join('')}${!paid&&full.redTeam.failedResults.length>3?'<p class="microcopy">The paid report includes the complete adversarial case register and remediation.</p>':''}</div>`:''}
+${paid&&full.attackPaths?.length?`<div class="panel"><h2>Credible attack paths</h2>${full.attackPaths.map(pathHtml).join('')}</div>`:''}
+<div class="panel"><h2>${paid?'Full finding register':'Your three highest-priority findings'}</h2><div class="finding-list ${paid?'':'locked'}">${findings.length?findings.map(findingHtml).join(''):'<div class="success-box">No material weakness was identified from the supplied answers. Evidence verification is still required.</div>'}</div>${paid?'':`<div class="unlock-box"><h3>The score is only the starting point.</h3><p class="muted">Unlock attack paths, all findings, evidence gaps, remediation actions, framework mappings and retest criteria.</p><button class="button primary" id="unlockInline">View report options</button></div>`}</div>
+<div class="panel"><h2>Control assurance</h2><div class="control-grid">${assessment.controls.map(c=>`<div class="control ${c.status}">${escapeHtml(c.name)}<small class="evidence-chip">${escapeHtml(c.evidence||'Evidence not stated')}</small></div>`).join('')}</div></div>
+${paid?`<div class="panel"><h2>Prioritised remediation</h2><div class="recommendation-list">${full.recommendations.map((x,i)=>`<div class="finding"><div class="finding-head"><h4>${i+1}. ${escapeHtml(x.text)}</h4><span class="severity ${x.priority==='Immediate'?'critical':x.priority==='High'?'high':'medium'}">${escapeHtml(x.priority)}</span></div>${(x.frameworks||[]).length?`<div class="framework-tags">${x.frameworks.map(t=>`<span class="framework-tag">${escapeHtml(t)}</span>`).join('')}</div>`:''}</div>`).join('')}</div></div>`:''}</section>`;
+wire();}
+function pathHtml(x){return `<article class="finding attack-path"><div class="finding-head"><h4>${escapeHtml(x.id)} ${escapeHtml(x.title)}</h4><span class="severity ${escapeHtml(x.severity)}">${escapeHtml(x.severity)}</span></div><p>${escapeHtml(x.narrative)}</p><div class="framework-tags">${(x.frameworks||[]).map(t=>`<span class="framework-tag">${escapeHtml(t)}</span>`).join('')}</div></article>`}
+function findingHtml(f){return `<article class="finding"><div class="finding-head"><h4>${escapeHtml(f.id||'')} ${escapeHtml(f.title)}</h4><span class="severity ${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span></div><p><strong>Observed:</strong> ${escapeHtml(f.observed)}</p>${f.evidence?`<p class="evidence-chip"><strong>Evidence:</strong> ${escapeHtml(f.evidence)}</p>`:''}${f.impact?`<p>${escapeHtml(f.impact)}</p>`:''}${f.recommendation?`<p><strong>Required action:</strong> ${escapeHtml(f.recommendation)}</p>`:''}<div class="framework-tags">${(f.frameworks||[]).map(t=>`<span class="framework-tag">${escapeHtml(t)}</span>`).join('')}</div></article>`}
+function inspectorFindingHtml(f){return `<article class="finding observed-finding"><div class="finding-head"><h4>${escapeHtml(f.ruleId)} ${escapeHtml(f.title)}</h4><span class="severity ${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span></div><p>${escapeHtml(f.summary)}</p><p><strong>Confidence:</strong> ${escapeHtml(f.confidence)} · <strong>Category:</strong> ${escapeHtml(f.category)}</p>${f.review?`<div class="trust-note"><strong>${escapeHtml(f.review.status)}</strong> · Owner ${escapeHtml(f.review.owner)} · Expires ${escapeHtml(f.review.expires||'not set')}<br>${escapeHtml(f.review.reason)}</div>`:''}${(f.evidence||[]).slice(0,4).map(e=>`<p class="evidence-chip">${escapeHtml(e.basename||e.pathHash)}${e.line?` · line ${e.line}`:''} · ${escapeHtml(e.fact)}</p>`).join('')}<p><strong>Remediation:</strong> ${escapeHtml(f.remediation)}</p><div class="framework-tags">${(f.frameworks||[]).map(t=>`<span class="framework-tag">${escapeHtml(t)}</span>`).join('')}</div></article>`}
 
-const root = document.querySelector('#resultRoot');
-const id = qs('id');
-const token = qs('token');
-let assessment;
-let user;
-let isOwner = false;
-
-async function init() {
-  if (!id || !token) return fail('The assessment link is incomplete.');
-  try {
-    const [assessmentResponse, authResponse] = await Promise.all([
-      api(`/api/assessments/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`),
-      api('/api/auth/me'),
-    ]);
-    assessment = assessmentResponse.assessment;
-    isOwner = assessmentResponse.isOwner;
-    user = authResponse.user;
-    render();
-  } catch (error) {
-    fail(error.message);
-  }
-}
-
-function render() {
-  const full = assessment.result;
-  const paid = assessment.paidTier !== 'free';
-  const scoreColor = assessment.score >= 75 ? 'var(--red)' : assessment.score >= 50 ? 'var(--orange)' : assessment.score >= 25 ? 'var(--yellow)' : 'var(--green)';
-  const findings = paid ? full.findings : assessment.topFindings;
-  root.className = 'result-grid';
-  root.innerHTML = `
-    <aside class="panel result-score">
-      <span class="eyebrow">Assessment complete</span>
-      <div class="score-ring" style="--score:${assessment.score};--score-color:${scoreColor}"><strong>${assessment.score}<small>/100</small></strong></div>
-      <div class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} risk</div>
-      <h2>${escapeHtml(assessment.name)}</h2><p class="muted">${escapeHtml(assessment.agentType)}</p>
-      ${paid ? `<a class="button primary full" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf?token=${encodeURIComponent(token)}">Download ${assessment.paidTier === 'pro' ? 'professional' : 'essential'} PDF</a>` : `<button class="button primary full" id="buyPro">Unlock professional report · £24.99</button><button class="button ghost full" id="buyBasic">Essential report · £9.99</button>`}
-      ${sharingHtml()}
-    </aside>
-    <section>
-      <div class="panel"><span class="eyebrow">Finding</span><h1 class="result-headline">${escapeHtml(full.headline)}</h1><p class="muted">${escapeHtml(full.methodology)}</p><p class="microcopy">Scoring model: ${escapeHtml(assessment.scoringVersion || 'arl-risk-v1.0')}</p></div>
-      <div class="panel"><h2>${paid ? 'All material findings' : 'Your three highest-risk findings'}</h2><div class="finding-list ${paid ? '' : 'locked'}">${findings.length ? findings.map(findingHtml).join('') : '<div class="success-box">No material weaknesses were identified by the questionnaire.</div>'}</div>${paid ? '' : `<div class="unlock-box"><h3>There is more behind the score.</h3><p class="muted">Unlock every finding, control recommendation and the 30-day remediation plan.</p><button class="button primary" id="unlockInline">View report options</button></div>`}</div>
-      <div class="panel"><h2>Baseline control coverage</h2><div class="control-grid">${assessment.controls.map((c) => `<div class="control ${c.status}">${escapeHtml(c.name)}</div>`).join('')}</div></div>
-      ${paid ? `<div class="panel"><h2>Prioritised recommendations</h2><div class="recommendation-list">${full.recommendations.map((item, index) => `<div class="finding"><div class="finding-head"><h4>${index + 1}. ${escapeHtml(item.text)}</h4><span class="severity ${item.priority === 'Immediate' ? 'critical' : item.priority === 'High' ? 'high' : 'medium'}">${escapeHtml(item.priority)}</span></div></div>`).join('')}</div></div><div class="panel"><h2>30-day action plan</h2>${buildActionPlan(full.recommendations)}</div>` : ''}
-    </section>`;
-
-  document.querySelector('#toggleSharing')?.addEventListener('click', toggleSharing);
-  document.querySelector('#copyShare')?.addEventListener('click', () => copyText(document.querySelector('#shareUrl').value, 'Result link copied'));
-  document.querySelector('#copyBadge')?.addEventListener('click', () => copyText(`${location.origin}/badge/${assessment.shareToken}.svg`, 'Badge URL copied'));
-  document.querySelector('#buyBasic')?.addEventListener('click', (event) => checkout('basic_report', event.currentTarget));
-  document.querySelector('#buyPro')?.addEventListener('click', (event) => checkout('pro_report', event.currentTarget));
-  document.querySelector('#unlockInline')?.addEventListener('click', () => document.querySelector('#buyPro').scrollIntoView({ behavior: 'smooth', block: 'center' }));
-}
-
-function sharingHtml() {
-  if (!isOwner) return '';
-  if (!assessment.publicEnabled) {
-    return `<div class="share-box"><label class="muted">Public sharing is off</label><p class="microcopy">Your result and badge are private until you explicitly enable sharing.</p><button class="button ghost small" id="toggleSharing">Enable public summary</button></div>`;
-  }
-  return `<div class="share-box"><label class="muted">Public summary link</label><input id="shareUrl" readonly value="${location.origin}/shared.html?token=${encodeURIComponent(assessment.shareToken)}"><button class="button ghost small" id="copyShare">Copy result link</button><button class="button ghost small" id="copyBadge">Copy badge image URL</button><button class="button danger small" id="toggleSharing">Disable public sharing</button></div>`;
-}
-
-async function toggleSharing(event) {
-  setBusy(event.currentTarget, true, assessment.publicEnabled ? 'Disabling…' : 'Enabling…');
-  try {
-    const result = await api(`/api/assessments/${encodeURIComponent(id)}/sharing`, { method: 'POST', body: JSON.stringify({ enabled: !assessment.publicEnabled }) });
-    assessment.publicEnabled = result.publicEnabled;
-    render();
-  } catch (error) {
-    alert(error.message);
-    setBusy(event.currentTarget, false);
-  }
-}
-
-function findingHtml(finding) {
-  return `<article class="finding"><div class="finding-head"><h4>${escapeHtml(finding.id || '')} ${escapeHtml(finding.title)}</h4><span class="severity ${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span></div><p>${escapeHtml(finding.observed)}</p></article>`;
-}
-
-function buildActionPlan(recommendations) {
-  if (!recommendations.length) return '<p class="muted">Maintain the current controls and retest after material changes.</p>';
-  return `<div class="recommendation-list">${recommendations.slice(0, 8).map((item, index) => `<div class="finding"><div class="finding-head"><h4>${index < 3 ? 'First 24 hours' : index < 6 ? 'First 7 days' : 'Within 30 days'}</h4><span class="severity ${index < 3 ? 'critical' : index < 6 ? 'high' : 'medium'}">${index + 1}</span></div><p>${escapeHtml(item.text)}</p></div>`).join('')}</div>`;
-}
-
-async function checkout(productKey, button) {
-  if (!user) {
-    const next = encodeURIComponent(`/result.html?id=${id}&token=${token}`);
-    location.href = `/auth.html?claimAssessmentId=${encodeURIComponent(id)}&claimToken=${encodeURIComponent(token)}&next=${next}`;
-    return;
-  }
-  setBusy(button, true, 'Opening checkout…');
-  try {
-    await api(`/api/assessments/${encodeURIComponent(id)}/claim`, { method: 'POST', body: JSON.stringify({ token }) }).catch(() => null);
-    const { url } = await api('/api/checkout', { method: 'POST', body: JSON.stringify({ productKey, assessmentId: id }) });
-    location.href = url;
-  } catch (error) {
-    alert(error.message);
-    setBusy(button, false);
-  }
-}
-
-async function copyText(value, message) {
-  try { await navigator.clipboard.writeText(value); alert(message); }
-  catch { prompt('Copy this value:', value); }
-}
-
-function fail(message) {
-  root.className = 'panel';
-  root.innerHTML = `<div class="error-box show">${escapeHtml(message)}</div><a class="button primary" href="/assessment.html">Start a new assessment</a>`;
-}
-
-init();
+function redTeamCaseHtml(x){return `<article class="finding observed-finding"><div class="finding-head"><h4>${escapeHtml(x.caseId)} ${escapeHtml(x.title)}</h4><span class="outcome ${escapeHtml(x.outcome)}">${escapeHtml(x.outcome)}</span></div><p><strong>${escapeHtml(x.category)}</strong> · ${escapeHtml(x.severity)} severity · confidence ${escapeHtml(x.confidence)}</p>${(x.evidence||[]).map(e=>`<p class="evidence-chip">${escapeHtml(e.fact)}</p>`).join('')}<p><strong>Remediation:</strong> ${escapeHtml(x.remediation)}</p><div class="framework-tags">${(x.frameworks||[]).map(t=>`<span class="framework-tag">${escapeHtml(t)}</span>`).join('')}</div></article>`}
+function sharingHtml(){if(!isOwner)return'';if(!assessment.publicEnabled)return`<div class="share-box"><label class="muted">Public sharing is off</label><p class="microcopy">Private by default.</p><button class="button ghost small" id="toggleSharing">Enable public summary</button></div>`;return`<div class="share-box"><label class="muted">Public summary link</label><input id="shareUrl" readonly value="${location.origin}/shared.html?token=${encodeURIComponent(assessment.shareToken)}"><button class="button ghost small" id="copyShare">Copy result link</button><button class="button danger small" id="toggleSharing">Disable public sharing</button></div>`}
+function wire(){document.querySelector('#toggleSharing')?.addEventListener('click',toggleSharing);document.querySelector('#copyShare')?.addEventListener('click',()=>copyText(document.querySelector('#shareUrl').value,'Result link copied'));document.querySelector('#buyBasic')?.addEventListener('click',e=>checkout('basic_report',e.currentTarget));document.querySelector('#buyPro')?.addEventListener('click',e=>checkout('pro_report',e.currentTarget));document.querySelector('#unlockInline')?.addEventListener('click',()=>document.querySelector('#buyPro').scrollIntoView({behavior:'smooth',block:'center'}));}
+async function toggleSharing(e){setBusy(e.currentTarget,true,assessment.publicEnabled?'Disabling…':'Enabling…');try{const r=await api(`/api/assessments/${encodeURIComponent(id)}/sharing`,{method:'POST',body:JSON.stringify({enabled:!assessment.publicEnabled})});assessment.publicEnabled=r.publicEnabled;render()}catch(err){alert(err.message)}}
+async function checkout(productKey,button){if(!user){location.href=`/auth.html?claimAssessmentId=${encodeURIComponent(id)}&claimToken=${encodeURIComponent(token)}&next=${encodeURIComponent(`/result.html?id=${id}&token=${token}`)}`;return}setBusy(button,true,'Opening checkout…');try{await api(`/api/assessments/${encodeURIComponent(id)}/claim`,{method:'POST',body:JSON.stringify({token})}).catch(()=>null);const{url}=await api('/api/checkout',{method:'POST',body:JSON.stringify({productKey,assessmentId:id})});location.href=url}catch(e){alert(e.message);setBusy(button,false)}}
+async function copyText(v,m){try{await navigator.clipboard.writeText(v);alert(m)}catch{prompt('Copy this value:',v)}}
+function fail(m){root.className='panel';root.innerHTML=`<div class="error-box show">${escapeHtml(m)}</div><a class="button primary" href="/assessment.html">Start a new assessment</a>`}init();

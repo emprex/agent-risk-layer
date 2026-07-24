@@ -4,9 +4,10 @@ const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 
 export const config = {
-  appVersion: '1.1.3',
-  scoringVersion: 'arl-risk-v1.1',
+  appVersion: '4.2.0',
+  scoringVersion: 'arl-risk-v3.2',
   termsVersion: process.env.TERMS_VERSION || '2026-07-22',
+  productStage: process.env.PRODUCT_STAGE || 'controlled-beta',
   companyName: process.env.COMPANY_NAME || 'AgentRiskLayer',
   companyLegalName: (process.env.COMPANY_LEGAL_NAME || '').trim(),
   companyAddress: (process.env.COMPANY_ADDRESS || '').trim(),
@@ -25,6 +26,14 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || 'AgentRiskLayer <reports@example.com>',
   adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  sessionIdleHours: Math.max(1, Number(process.env.SESSION_IDLE_HOURS || 12)),
+  sessionAbsoluteDays: Math.max(1, Number(process.env.SESSION_ABSOLUTE_DAYS || 30)),
+  emailVerificationHours: Math.max(1, Number(process.env.EMAIL_VERIFICATION_HOURS || 24)),
+  rateLimitStorage: process.env.RATE_LIMIT_STORAGE || 'sqlite',
+  trustedProxyHops: Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS || 1)),
+  fulfilmentWorkerIntervalMs: Math.max(5_000, Number(process.env.FULFILMENT_WORKER_INTERVAL_MS || 30_000)),
+  retentionWorkerIntervalMs: Math.max(60_000, Number(process.env.RETENTION_WORKER_INTERVAL_MS || 60 * 60_000)),
+  backupRetentionDays: Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS || 30)),
   stripePrices: {
     basic_report: process.env.STRIPE_PRICE_BASIC_REPORT || '',
     pro_report: process.env.STRIPE_PRICE_PRO_REPORT || '',

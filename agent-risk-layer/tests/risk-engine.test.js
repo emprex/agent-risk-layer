@@ -2,35 +2,45 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateAssessment, questionnaire } from '../src/risk-engine.js';
 
-function answersAt(optionIndex) {
-  return Object.fromEntries(questionnaire.map((q) => [q.id, q.options[optionIndex].value]));
+function answersAt(optionIndex, evidence = 'tested') {
+  return Object.fromEntries(questionnaire.map((q) => [q.id, { value: q.options[optionIndex].value, evidence }]));
 }
 
-test('hardened configuration scores as low risk', () => {
+test('hardened and tested configuration scores as low risk', () => {
   const result = evaluateAssessment(answersAt(0));
-  assert.equal(result.score, 0);
+  assert.ok(result.score < 10);
   assert.equal(result.riskBand, 'Low');
   assert.equal(result.findings.length, 0);
+  assert.equal(result.evidenceConfidence, 100);
 });
 
 test('maximum-risk configuration scores as critical', () => {
-  const result = evaluateAssessment(answersAt(3));
+  const result = evaluateAssessment(answersAt(3, 'none'));
   assert.equal(result.score, 100);
   assert.equal(result.riskBand, 'Critical');
-  assert.ok(result.findings.length >= 10);
+  assert.ok(result.findings.length >= 15);
   assert.ok(result.recommendations.some((item) => item.priority === 'Immediate'));
 });
 
-test('moderate configuration produces explainable findings', () => {
-  const answers = answersAt(1);
-  answers.permissions = 'user';
-  answers.untrusted_input = 'mixed';
-  answers.kill_switch = 'slow';
-  const result = evaluateAssessment(answers);
-  assert.ok(result.score >= 25 && result.score < 50);
-  assert.equal(result.riskBand, 'Moderate');
+test('moderate configuration produces findings and attack paths', () => {
+  const answers = answersAt(1, 'documented');
+  answers.permissions = { value: 'user', evidence: 'documented' };
+  answers.external_content = { value: 'mixed', evidence: 'documented' };
+  answers.input_boundary = { value: 'prompt-only', evidence: 'claimed' };
+  answers.tool_scope = { value: 'broad', evidence: 'documented' };
+  const result = evaluateAssessment(answers, { agentType: 'Email agent' });
+  assert.ok(result.score >= 25 && result.score < 75);
+  assert.ok(['Moderate', 'High'].includes(result.riskBand));
   assert.equal(result.topFindings.length, 3);
+  assert.ok(result.attackPaths.length >= 1);
   assert.ok(result.controls.some((control) => control.status === 'action'));
+});
+
+test('unsupported control claims reduce evidence confidence', () => {
+  const result = evaluateAssessment(answersAt(0, 'claimed'));
+  assert.equal(result.riskBand, 'Low');
+  assert.equal(result.evidenceConfidence, 35);
+  assert.ok(result.score > 0);
 });
 
 test('invalid or missing answer is rejected', () => {

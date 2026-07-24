@@ -24,7 +24,7 @@ export async function api(url, options = {}) {
   });
   const type = response.headers.get('content-type') || '';
   const payload = type.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) throw new Error(payload?.error || payload || 'Request failed.');
+  if (!response.ok) { const error = new Error(payload?.error || payload || 'Request failed.'); error.status = response.status; error.code = payload?.code || ''; error.payload = payload; throw error; }
   return payload;
 }
 

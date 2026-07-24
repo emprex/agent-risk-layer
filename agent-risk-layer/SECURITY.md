@@ -1,30 +1,63 @@
 # Security Policy
 
-## Reporting a vulnerability
-
-Configure `SUPPORT_EMAIL` before deployment. Security researchers should send a concise description, affected route, reproduction steps and impact. Do not include live customer data.
-
-The deployed application publishes the configured contact at:
-
-```text
-/.well-known/security.txt
-```
-
 ## Supported release
 
-Security fixes are applied to the current `1.1.x` launch-beta line.
+AgentRiskLayer 4.2 is the supported controlled-beta release.
 
-## Operational requirements
+## Reporting vulnerabilities
 
-- Run only behind HTTPS in production.
-- Keep `DEMO_MODE=false` in production.
-- Rotate `SESSION_SECRET` through a controlled session-invalidation process if exposed.
-- Restrict production database and environment-secret access.
-- Back up the SQLite database to a separate encrypted location.
-- Alert on repeated authentication failures, webhook failures and email delivery failures.
-- Review Stripe and Resend dashboard activity independently of application logs.
-- Test restore procedures, password recovery, account deletion and billing cancellation regularly.
+Use the private contact published at `/.well-known/security.txt`. Do not send customer secrets, personal data or production exploit evidence through public channels.
 
-## Security boundaries
+## Identity and session controls
 
-The included controls reduce common web-application risk but do not establish that the product is free of vulnerabilities. Independent penetration testing and infrastructure review remain required before a public launch.
+- Salted asynchronous scrypt password hashing
+- Verified-email gates for purchases and evidence workflows
+- Optional TOTP MFA and one-time recovery codes
+- Production administrator MFA requirement
+- Recent-password/MFA reauthentication for destructive actions
+- HTTP-only SameSite session cookies
+- Idle and absolute session expiry
+- CSRF protection
+- Persistent, progressive rate limits
+- Trusted right-most proxy-chain client-IP resolution
+
+## Payment and delivery controls
+
+- Stripe webhook signature verification
+- Idempotent event tracking
+- Durable fulfilment state machine
+- Transactional paid-access grant
+- Retryable PDF/email jobs with backoff
+- Dead-letter alerts and administrator reconciliation
+- Shared report snapshot generation across download and email paths
+
+## Evidence and controlled-testing controls
+
+- Separate private-access and public-share tokens
+- Object-level ownership checks
+- HMAC-hashed one-time evidence tokens
+- SHA-256 and Ed25519 evidence integrity
+- Official Inspector and Runner build-digest checks
+- Atomic token claims and replay rejection
+- Secret-like payload rejection
+- Written Rules of Engagement
+- Assessment, environment and endpoint-origin binding
+- Campaign start/completion window enforcement
+- Automated evidence retention, deletion receipts and explicit legal holds
+
+## Browser and application controls
+
+- Strict CSP without `unsafe-inline`
+- No public inline style attributes
+- Frame denial, MIME sniffing prevention and strict transport security
+- Request-size limits and malformed-input handling
+- Data export and account deletion
+- Consistent SQLite backup, checksum verification and atomic restore tooling
+
+## Trust limitations
+
+Integrity verification proves that the submitted bundle matches its local signature and published tool release. It does not prove completeness, independent custody, production equivalence or absence of pre-generation tampering.
+
+## External assurance
+
+Do not describe AgentRiskLayer as independently certified, enterprise audited or guaranteed secure until external penetration testing, independent methodology review, legal review, a live restore drill and real-customer evidence are complete.

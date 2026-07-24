@@ -1,0 +1,15 @@
+{
+  "exclude": [
+    "generated/**",
+    "vendor-snapshots/**"
+  ],
+  "acceptedRisks": [
+    {
+      "ruleId": "ARL-AI-002",
+      "basename": "public-badge-handler.js",
+      "reason": "Wildcard CORS is intentionally limited to a public, non-credentialed SVG badge response.",
+      "owner": "Security owner",
+      "expires": "2026-10-31"
+    }
+  ]
+}

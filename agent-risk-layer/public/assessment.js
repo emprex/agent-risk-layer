@@ -7,22 +7,17 @@ const progressBar = document.querySelector('#progressBar');
 const progressText = document.querySelector('#progressText');
 const submit = document.querySelector('#submitAssessment');
 let questionnaire = [];
+let evidenceOptions = [];
 
 async function init() {
   try {
-    const [{ questionnaire: questions }, cfg] = await Promise.all([api('/api/questionnaire'), api('/api/config')]);
-    questionnaire = questions;
+    const [questionPayload, cfg] = await Promise.all([api('/api/questionnaire'), api('/api/config')]);
+    questionnaire = questionPayload.questionnaire;
+    evidenceOptions = questionPayload.evidenceOptions || [];
     if (cfg.demoMode) document.querySelector('#demoNotice').hidden = false;
     const preset = qs('type');
     if (preset) document.querySelector('#agentType').value = preset;
-    list.innerHTML = questions.map((q, index) => `
-      <section class="question-card">
-        <h3>${index + 1}. ${escapeHtml(q.title)}</h3>
-        <p>${escapeHtml(q.help)}</p>
-        <div class="option-grid">
-          ${q.options.map((o) => `<label class="option"><input type="radio" name="${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" required><span>${escapeHtml(o.label)}</span></label>`).join('')}
-        </div>
-      </section>`).join('');
+    list.innerHTML = questionsHtml();
     list.addEventListener('change', updateProgress);
     updateProgress();
   } catch (error) {
@@ -30,8 +25,31 @@ async function init() {
   }
 }
 
+function questionsHtml() {
+  let lastDomain = '';
+  return questionnaire.map((q, index) => {
+    const domain = q.domain !== lastDomain ? `<div class="domain-divider"><span>${escapeHtml(q.domain)}</span></div>` : '';
+    lastDomain = q.domain;
+    return `${domain}<section class="question-card" data-kind="${escapeHtml(q.kind)}">
+      <div class="question-meta"><span>${q.kind === 'exposure' ? 'Exposure' : 'Control'}</span><span>${index + 1} of ${questionnaire.length}</span></div>
+      <h3>${escapeHtml(q.title)}</h3>
+      <p>${escapeHtml(q.help)}</p>
+      <div class="option-grid">
+        ${q.options.map((o) => `<label class="option"><input type="radio" name="${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" required><span>${escapeHtml(o.label)}</span></label>`).join('')}
+      </div>
+      <div class="evidence-row">
+        <label for="evidence_${escapeHtml(q.id)}"><strong>Evidence confidence</strong><span>How well can you prove this answer today?</span></label>
+        <select id="evidence_${escapeHtml(q.id)}" name="evidence_${escapeHtml(q.id)}" required>
+          <option value="">Select evidence level</option>
+          ${evidenceOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+        </select>
+      </div>
+    </section>`;
+  }).join('');
+}
+
 function updateProgress() {
-  const answered = questionnaire.filter((q) => form.querySelector(`input[name="${q.id}"]:checked`)).length;
+  const answered = questionnaire.filter((q) => form.querySelector(`input[name="${q.id}"]:checked`) && document.querySelector(`#evidence_${q.id}`)?.value).length;
   const profile = Number(Boolean(document.querySelector('#agentName').value.trim())) + Number(Boolean(document.querySelector('#agentType').value));
   const percent = Math.round(((answered + profile) / (questionnaire.length + 2)) * 100);
   progressBar.style.width = `${percent}%`;
@@ -45,10 +63,12 @@ form.addEventListener('submit', async (event) => {
   const answers = {};
   for (const question of questionnaire) {
     const selected = form.querySelector(`input[name="${question.id}"]:checked`);
+    const evidence = document.querySelector(`#evidence_${question.id}`)?.value;
     if (!selected) return showError(errorBox, `Please answer: ${question.title}`);
-    answers[question.id] = selected.value;
+    if (!evidence) return showError(errorBox, `Select an evidence level for: ${question.title}`);
+    answers[question.id] = { value: selected.value, evidence };
   }
-  setBusy(submit, true, 'Calculating…');
+  setBusy(submit, true, 'Analysing attack paths…');
   try {
     const payload = await api('/api/assessments', {
       method: 'POST',

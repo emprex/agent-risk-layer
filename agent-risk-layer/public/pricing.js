@@ -3,16 +3,16 @@ const grid = document.querySelector('#pricingGrid');
 const errorBox = document.querySelector('#pricingError');
 let user;
 const descriptions = {
-  basic_report: ['All material findings', 'Prioritised controls', '30-day action plan', 'PDF and email delivery'],
-  pro_report: ['Everything in Essential', 'Deployment decision', 'Verification checklist', 'Complete response evidence'],
-  developer_monthly: ['Professional access for saved assessments', 'Central assessment history', 'Subscription portal', 'Automatic Stripe invoices'],
-  agency_monthly: ['Professional access for client assessments', 'Public summaries and badges', 'Client-ready report evidence', 'Priority support channel'],
+  basic_report: ['Complete declared-risk findings', 'Local Inspector technical summary', 'Prioritised 30-day remediation plan', 'PDF and email delivery'],
+  pro_report: ['Everything in Essential', 'Full observed-evidence register', '2 authorised red-team campaigns for this assessment', '32-case catalogue, repeated trials, reproduced evidence and retest criteria'],
+  developer_monthly: ['Repeat professional assessments and local scans', '10 authorised red-team campaigns per rolling 30 days', 'Technical posture and adversarial drift history', 'Saved evidence-backed reports and billing portal'],
+  agency_monthly: ['Multi-assessment portfolio in one secured account', '50 authorised red-team campaigns per rolling 30 days', 'Client-ready evidence and adversarial reports', 'Repeat testing, comparison and remediation workflow'],
 };
 const summaries = {
-  basic_report: 'A one-off remediation report for one completed assessment.',
-  pro_report: 'Decision-ready evidence for one launch or architecture review.',
-  developer_monthly: 'Ongoing professional reporting for one builder account.',
-  agency_monthly: 'Ongoing client-facing reporting for consultants and agencies.',
+  basic_report: 'A concise evidence-aware security review for one AI-agent system.',
+  pro_report: 'The complete controlled-beta launch review: declared risk, static evidence and authorised staging tests.',
+  developer_monthly: 'Continuous assurance for builders who inspect, attack safely, remediate and retest.',
+  agency_monthly: 'Evidence-led AI security reviews and controlled campaigns across multiple client systems.',
 };
 async function init() {
   try {

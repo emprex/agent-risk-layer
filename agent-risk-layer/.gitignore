@@ -6,3 +6,11 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 .DS_Store
 npm-debug.log*
+# AgentRisk Inspector local evidence and signing material
+agentrisk-inspection*.json
+agentrisk*.sarif
+*.inspector-private.pem
+*.inspector-private.pem.pub
+# AgentRisk Red Team local evidence
+agentrisk-redteam*.json
+agentrisk-redteam*.sarif

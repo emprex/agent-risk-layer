@@ -5,12 +5,16 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { assertSafeProductionConfig, config, launchReadiness, plans } from './src/config.js';
 import { db, id, insertEvent, nowIso } from './src/db.js';
-import { authenticateUser, changePassword, clearSession, createPasswordReset, createSession, getUserFromRequest, registerUser, resetPassword, verifyUserPassword } from './src/auth.js';
-import { evaluateAssessment, questionnaire } from './src/risk-engine.js';
-import { buildReport } from './src/report.js';
+import { authenticateUser, beginMfaSetup, changePassword, clearSession, completeMfaLogin, createEmailVerification, createMfaLoginChallenge, createPasswordReset, createSession, disableMfa, enableMfa, getUserFromRequest, reauthenticateSession, registerUser, resetPassword, verifyEmailToken } from './src/auth.js';
+import { evaluateAssessment, questionnaire, evidenceOptions } from './src/risk-engine.js';
 import { renderReportPdf } from './src/pdf.js';
-import { sendPasswordChangedEmail, sendPasswordResetEmail, sendReportEmail, sendWelcomeEmail } from './src/email.js';
-import { applySecurityHeaders, cleanText, issueCsrfToken, rateLimitAllowed, verifyCsrf } from './src/security.js';
+import { buildAssessmentReport } from './src/report-service.js';
+import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail } from './src/email.js';
+import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
+import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
+import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
+import { fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
+import { enforceRetention, retentionOverview, startRetentionWorker } from './src/retention.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
@@ -19,6 +23,7 @@ const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml; charset=utf-8',
   '.png': 'image/png',
@@ -26,57 +31,83 @@ const mimeTypes = {
   '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.yaml': 'text/yaml; charset=utf-8',
+  '.yml': 'text/yaml; charset=utf-8',
 };
 
 const server = http.createServer(async (req, res) => {
   applySecurityHeaders(res);
-  if (!rateLimitAllowed(req)) return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
-
   const url = new URL(req.url, config.baseUrl);
+  if (!primaryRateLimitAllowed(req, url.pathname)) return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
   req.user = getUserFromRequest(req);
 
   try {
     if (req.method === 'POST' && url.pathname === '/api/stripe/webhook') return handleStripeWebhook(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/inspector/upload') return handleInspectionUpload(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/redteam/upload') return handleRedTeamUpload(req, res);
     if (req.method === 'GET' && url.pathname === '/api/csrf') return json(res, 200, { csrfToken: issueCsrfToken(req, res) });
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !verifyCsrf(req)) {
       return json(res, 403, { error: 'Security token missing or invalid. Refresh the page and try again.' });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, version: config.appVersion, demoMode: config.demoMode, timestamp: nowIso() });
+      return json(res, 200, { ok: true, version: config.appVersion, productStage: config.productStage, demoMode: config.demoMode, timestamp: nowIso() });
     }
     if (req.method === 'GET' && url.pathname === '/api/config') {
       return json(res, 200, {
         demoMode: config.demoMode,
         version: config.appVersion,
+        productStage: config.productStage,
         termsVersion: config.termsVersion,
         supportEmail: config.supportEmail,
         user: req.user,
         prices: Object.fromEntries(Object.values(plans).map((plan) => [plan.key, { name: plan.name, amountPence: plan.amountPence, recurring: plan.recurring }])),
       });
     }
-    if (req.method === 'GET' && url.pathname === '/api/questionnaire') return json(res, 200, { questionnaire });
+    if (req.method === 'GET' && url.pathname === '/api/questionnaire') return json(res, 200, { questionnaire, evidenceOptions });
     if (req.method === 'GET' && url.pathname === '/api/auth/me') return json(res, 200, { user: req.user });
 
     if (req.method === 'POST' && url.pathname === '/api/auth/register') {
-      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 10, bucket: 'register' })) return json(res, 429, { error: 'Too many registration attempts.' });
       const body = await readBody(req);
+      const emailIdentity = cleanText(body.email, 254).toLowerCase();
+      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 8, bucket: 'register-ip', penaltyMs: 60_000 }) ||
+          !rateLimitAllowed(req, { windowMs: 60 * 60_000, max: 4, bucket: 'register-account', identity: emailIdentity, penaltyMs: 5 * 60_000 })) {
+        return json(res, 429, { error: 'Too many registration attempts. Try again later.' });
+      }
       try {
-        const user = registerUser(body.email, body.password, body.termsAccepted === true);
+        const user = await registerUser(body.email, body.password, body.termsAccepted === true);
+        const verification = createEmailVerification(user.id);
+        if (verification) await sendEmailVerification({ userId: user.id, to: user.email, token: verification.token })
+          .catch((error) => console.error('Verification email failed:', error.message));
         createSession(res, user.id);
         claimAssessmentForUser(body.claimAssessmentId, body.claimToken, user.id);
         insertEvent('user_registered', user.id);
-        return json(res, 201, { user });
+        return json(res, 201, {
+          user,
+          verificationRequired: true,
+          demoVerificationUrl: config.demoMode && verification ? `/verify.html?token=${encodeURIComponent(verification.token)}` : null,
+        });
       } catch (error) {
         return json(res, 400, { error: error.message });
       }
     }
 
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
-      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 15, bucket: 'login' })) return json(res, 429, { error: 'Too many sign-in attempts.' });
       const body = await readBody(req);
+      const emailIdentity = cleanText(body.email, 254).toLowerCase();
+      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 30, bucket: 'auth-global', penaltyMs: 60_000 }) ||
+          !rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 8, bucket: 'login-ip', penaltyMs: 60_000 }) ||
+          !rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 6, bucket: 'login-account', identity: emailIdentity, penaltyMs: 2 * 60_000 })) {
+        return json(res, 429, { error: 'Too many sign-in attempts. Try again later.' });
+      }
       try {
-        const user = authenticateUser(body.email, body.password);
+        const user = await authenticateUser(body.email, body.password);
+        clearRateLimit(req, { bucket: 'login-account', identity: emailIdentity });
+        if (user.mfaEnabled) {
+          const challenge = createMfaLoginChallenge(user.id);
+          return json(res, 202, { mfaRequired: true, challengeToken: challenge.challengeToken, expiresAt: challenge.expiresAt });
+        }
         createSession(res, user.id);
         claimAssessmentForUser(body.claimAssessmentId, body.claimToken, user.id);
         insertEvent('user_logged_in', user.id);
@@ -86,14 +117,57 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/auth/mfa/verify') {
+      const body = await readBody(req);
+      if (!rateLimitAllowed(req, { windowMs: 10 * 60_000, max: 8, bucket: 'mfa-login', identity: body.challengeToken, penaltyMs: 2 * 60_000 })) {
+        return json(res, 429, { error: 'Too many authentication-code attempts.' });
+      }
+      try {
+        const userId = completeMfaLogin(body.challengeToken, body.code);
+        createSession(res, userId, { mfaVerified: true });
+        const user = db.prepare('SELECT * FROM users WHERE id=?').get(userId);
+        insertEvent('user_logged_in_mfa', userId);
+        return json(res, 200, { user: { id: user.id, email: user.email, emailVerified: Boolean(user.email_verified_at), mfaEnabled: true } });
+      } catch (error) { return json(res, 401, { error: error.message }); }
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
       clearSession(req, res);
       return json(res, 200, { ok: true });
     }
 
-    if (req.method === 'POST' && url.pathname === '/api/auth/password-reset/request') {
-      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 5, bucket: 'password-reset-request' })) return json(res, 429, { error: 'Too many reset requests. Try again later.' });
+    if (req.method === 'POST' && url.pathname === '/api/auth/verify-email') {
       const body = await readBody(req);
+      try {
+        const userId = verifyEmailToken(body.token);
+        insertEvent('email_verified', userId);
+        return json(res, 200, { ok: true });
+      } catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/verification/resend') {
+      if (!requireUser(req, res)) return;
+      if (req.user.emailVerified) return json(res, 200, { ok: true, alreadyVerified: true });
+      if (!rateLimitAllowed(req, { windowMs: 60 * 60_000, max: 3, bucket: 'verification-resend', identity: req.user.email, penaltyMs: 10 * 60_000 })) {
+        return json(res, 429, { error: 'Too many verification emails requested.' });
+      }
+      const verification = createEmailVerification(req.user.id);
+      if (verification) await sendEmailVerification({ userId: req.user.id, to: req.user.email, token: verification.token });
+      return json(res, 200, { ok: true, demoVerificationUrl: config.demoMode && verification ? `/verify.html?token=${encodeURIComponent(verification.token)}` : null });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/reauth') {
+      if (!requireUser(req, res)) return;
+      const body = await readBody(req);
+      try { return json(res, 200, { user: await reauthenticateSession(req, body.password, body.code) }); }
+      catch (error) { return json(res, 401, { error: error.message }); }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/password-reset/request') {
+      const body = await readBody(req);
+      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 5, bucket: 'password-reset-request', identity: body.email, penaltyMs: 5 * 60_000 })) {
+        return json(res, 429, { error: 'Too many reset requests. Try again later.' });
+      }
       const reset = createPasswordReset(body.email);
       let demoResetUrl = null;
       if (reset) {
@@ -105,10 +179,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/auth/password-reset/confirm') {
-      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 10, bucket: 'password-reset-confirm' })) return json(res, 429, { error: 'Too many reset attempts. Try again later.' });
       const body = await readBody(req);
+      if (!rateLimitAllowed(req, { windowMs: 15 * 60_000, max: 10, bucket: 'password-reset-confirm', identity: body.token, penaltyMs: 5 * 60_000 })) {
+        return json(res, 429, { error: 'Too many reset attempts. Try again later.' });
+      }
       try {
-        const userId = resetPassword(body.token, body.password);
+        const userId = await resetPassword(body.token, body.password);
         const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
         await sendPasswordChangedEmail({ userId, to: user.email }).catch((error) => console.error('Password changed email failed:', error.message));
         insertEvent('password_reset_completed', userId);
@@ -126,7 +202,7 @@ const server = http.createServer(async (req, res) => {
         const agentType = cleanText(body.agentType, 80);
         if (name.length < 2) throw new Error('Enter a name for the agent or system.');
         if (agentType.length < 2) throw new Error('Choose an agent type.');
-        const result = evaluateAssessment(body.answers || {});
+        const result = evaluateAssessment(body.answers || {}, { agentType });
         const assessmentId = id('asm_');
         const accessToken = id('access_');
         const shareToken = id('share_');
@@ -155,7 +231,9 @@ const server = http.createServer(async (req, res) => {
       if (!hasToken && !isOwner) return json(res, 403, { error: 'This assessment is private.' });
       const subscribed = Boolean(isOwner && hasActiveSubscription(req.user.id));
       const effectiveTier = subscribed ? 'pro' : row.paid_tier;
-      return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed });
+      const inspection = isOwner ? latestInspection(row.id) : null;
+      const redTeamRun = isOwner ? latestRedTeamRun(row.id) : null;
+      return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, inspection, redTeamRun });
     }
 
     match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/claim$/);
@@ -199,9 +277,75 @@ const server = http.createServer(async (req, res) => {
     match = url.pathname.match(/^\/badge\/([^/]+)\.svg$/);
     if (req.method === 'GET' && match) return serveBadge(res, decodeURIComponent(match[1]));
 
-    if (req.method === 'POST' && url.pathname === '/api/checkout') {
+    if (req.method === 'POST' && url.pathname === '/api/inspector/tokens') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 10, bucket: 'inspection-token', identity: req.user.id })) return json(res, 429, { error: 'Too many inspection token requests.' });
+      const body = await readBody(req);
+      try { return json(res, 201, createInspectionToken({ userId: req.user.id, assessmentId: cleanText(body.assessmentId, 80) })); }
+      catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/inspections$/);
+    if (req.method === 'GET' && match) {
       if (!requireUser(req, res)) return;
-      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 20, bucket: 'checkout' })) return json(res, 429, { error: 'Too many checkout attempts.' });
+      try { return json(res, 200, { inspections: listInspectionsForAssessment({ assessmentId: decodeURIComponent(match[1]), userId: req.user.id }) }); }
+      catch (error) { return json(res, 404, { error: error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/inspections\/([^/]+)$/);
+    if (req.method === 'GET' && match) {
+      if (!requireUser(req, res)) return;
+      const inspection = getInspection({ inspectionId: decodeURIComponent(match[1]), userId: req.user.id });
+      return inspection ? json(res, 200, { inspection }) : json(res, 404, { error: 'Inspection not found.' });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/redteam/authorisations') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 8, bucket: 'redteam-authorisation', identity: req.user.id })) return json(res, 429, { error: 'Too many authorisation requests.' });
+      const body = await readBody(req);
+      try { return json(res, 201, { authorisation: createRedTeamAuthorisation({ userId:req.user.id, assessmentId:cleanText(body.assessmentId,80), input:body }) }); }
+      catch (error) { return json(res, 400, { error:error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/redteam\/authorisations$/);
+    if (req.method === 'GET' && match) {
+      if (!requireUser(req, res)) return;
+      try { return json(res, 200, { authorisations:listRedTeamAuthorisations({ assessmentId:decodeURIComponent(match[1]), userId:req.user.id }) }); }
+      catch (error) { return json(res, 404, { error:error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/redteam\/authorisations\/([^/]+)\/revoke$/);
+    if (req.method === 'POST' && match) {
+      if (!requireUser(req, res)) return;
+      try { return json(res, 200, revokeRedTeamAuthorisation({ authorisationId:decodeURIComponent(match[1]), userId:req.user.id })); }
+      catch (error) { return json(res, 400, { error:error.message }); }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/redteam/tokens') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 10, bucket: 'redteam-token', identity: req.user.id })) return json(res, 429, { error: 'Too many red-team token requests.' });
+      const body = await readBody(req);
+      try { return json(res, 201, createRedTeamToken({ userId: req.user.id, assessmentId: cleanText(body.assessmentId, 80), mode:cleanText(body.mode || 'simulation',20), authorisationId:cleanText(body.authorisationId || '',80) || null })); }
+      catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/redteam$/);
+    if (req.method === 'GET' && match) {
+      if (!requireUser(req, res)) return;
+      try { return json(res, 200, { runs: listRedTeamRunsForAssessment({ assessmentId: decodeURIComponent(match[1]), userId: req.user.id }) }); }
+      catch (error) { return json(res, 404, { error: error.message }); }
+    }
+
+    match = url.pathname.match(/^\/api\/redteam\/runs\/([^/]+)$/);
+    if (req.method === 'GET' && match) {
+      if (!requireUser(req, res)) return;
+      const run = getRedTeamRun({ runId: decodeURIComponent(match[1]), userId: req.user.id });
+      return run ? json(res, 200, { run }) : json(res, 404, { error: 'Red-team run not found.' });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/checkout') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      if (!rateLimitAllowed(req, { windowMs: 60_000, max: 20, bucket: 'checkout', identity: req.user.id })) return json(res, 429, { error: 'Too many checkout attempts.' });
       const body = await readBody(req);
       return createCheckout(req, res, body);
     }
@@ -232,12 +376,39 @@ const server = http.createServer(async (req, res) => {
       return exportAccount(req, res);
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/account/mfa/setup') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      const body = await readBody(req);
+      try { return json(res, 200, await beginMfaSetup(req.user.id, body.password)); }
+      catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/account/mfa/enable') {
+      if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+      const body = await readBody(req);
+      try {
+        const result = await enableMfa(req.user.id, body);
+        insertEvent('mfa_enabled', req.user.id);
+        return json(res, 200, result);
+      } catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/account/mfa/disable') {
+      if (!requireUser(req, res)) return;
+      const body = await readBody(req);
+      try {
+        await disableMfa(req.user.id, body);
+        insertEvent('mfa_disabled', req.user.id);
+        return json(res, 200, { ok: true });
+      } catch (error) { return json(res, 400, { error: error.message }); }
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/account/password') {
       if (!requireUser(req, res)) return;
       const body = await readBody(req);
       try {
-        changePassword(req.user.id, body.currentPassword, body.newPassword);
-        createSession(res, req.user.id);
+        await changePassword(req.user.id, body.currentPassword, body.newPassword);
+        createSession(res, req.user.id, { mfaVerified: req.user.mfaVerified });
         await sendPasswordChangedEmail({ userId: req.user.id, to: req.user.email }).catch((error) => console.error('Password changed email failed:', error.message));
         insertEvent('password_changed', req.user.id);
         return json(res, 200, { ok: true });
@@ -249,7 +420,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/account/delete') {
       if (!requireUser(req, res)) return;
       const body = await readBody(req);
-      return deleteAccount(req, res, body);
+      return await deleteAccount(req, res, body);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/dashboard') {
@@ -258,13 +429,36 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/admin/analytics') {
-      if (!requireUser(req, res)) return;
+      if (!requireAdmin(req, res, { requireMfa: true })) return;
       return adminAnalytics(req, res);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/admin/operations') {
+      if (!requireAdmin(req, res, { requireMfa: true })) return;
+      return json(res, 200, {
+        fulfilment: fulfilmentOperations(),
+        retention: retentionOverview(),
+        rateLimits: rateLimitSnapshot({ limit: 100 }),
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/operations/reconcile') {
+      if (!requireAdmin(req, res, { requireMfa: true })) return;
+      const fulfilment = await reconcileIncompletePurchases({ limit: 100 });
+      const jobs = await processDueFulfilmentJobs({ limit: 100 });
+      const retention = enforceRetention();
+      insertEvent('admin_reconciliation_run', req.user.id, { fulfilment, jobs, retention });
+      return json(res, 200, { fulfilment, jobs, retention });
+    }
+
+    match = url.pathname.match(/^\/api\/admin\/alerts\/([^/]+)\/resolve$/);
+    if (req.method === 'POST' && match) {
+      if (!requireAdmin(req, res, { requireMfa: true })) return;
+      return json(res, resolveOperationalAlert(decodeURIComponent(match[1])) ? 200 : 404, { ok: true });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/admin/readiness') {
-      if (!requireUser(req, res)) return;
-      if (!config.adminEmail || req.user.email !== config.adminEmail) return json(res, 403, { error: 'Admin access required.' });
+      if (!requireAdmin(req, res, { requireMfa: true })) return;
       return json(res, 200, launchReadiness());
     }
 
@@ -284,7 +478,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, 404, { error: 'Not found.' });
   } catch (error) {
     console.error(error);
-    if (!res.headersSent) return json(res, error.code === 'BODY_TOO_LARGE' ? 413 : 500, { error: error.code === 'BODY_TOO_LARGE' ? 'Request body is too large.' : 'Unexpected server error.' });
+    if (!res.headersSent) {
+      const status = error.code === 'BODY_TOO_LARGE' ? 413 : error.code === 'INVALID_JSON' ? 400 : 500;
+      const message = error.code === 'BODY_TOO_LARGE' ? 'Request body is too large.' : error.code === 'INVALID_JSON' ? 'Request body contains invalid JSON.' : 'Unexpected server error.';
+      return json(res, status, { error: message });
+    }
     res.end();
   }
 });
@@ -296,7 +494,15 @@ async function handleStripeWebhook(req, res) {
   let event;
   try { event = JSON.parse(raw.toString('utf8')); } catch { return text(res, 400, 'Invalid webhook JSON.'); }
   try {
-    if (event.id && db.prepare('SELECT 1 AS ok FROM stripe_events WHERE id = ?').get(event.id)) return json(res, 200, { received: true, duplicate: true });
+    const checkoutTypes = new Set(['checkout.session.completed', 'checkout.session.async_payment_succeeded']);
+    const existingEvent = event.id ? db.prepare('SELECT status FROM stripe_events WHERE id=?').get(event.id) : null;
+    if (existingEvent && !checkoutTypes.has(event.type)) return json(res, 200, { received: true, duplicate: true });
+    if (event.id) {
+      db.prepare(`INSERT INTO stripe_events (id,event_type,processed_at,status,last_error)
+        VALUES (?,?,?,'processing',NULL)
+        ON CONFLICT(id) DO UPDATE SET status='processing',last_error=NULL,processed_at=excluded.processed_at`)
+        .run(event.id, event.type, nowIso());
+    }
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       if (session.mode === 'subscription' || session.payment_status === 'paid' || session.payment_status === 'no_payment_required') await fulfilCheckout(session);
@@ -305,18 +511,49 @@ async function handleStripeWebhook(req, res) {
     if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') syncSubscription(event.data.object);
     if (event.type === 'invoice.payment_failed') {
       const invoice = event.data.object;
-      const subscriptionId = String(
-        invoice.subscription ||
-        invoice.parent?.subscription_details?.subscription ||
-        ''
-      );
-      if (subscriptionId) db.prepare(`UPDATE subscriptions SET status = 'past_due', updated_at = ? WHERE stripe_subscription_id = ?`).run(nowIso(), subscriptionId);
+      const subscriptionId = String(invoice.subscription || invoice.parent?.subscription_details?.subscription || '');
+      if (subscriptionId) db.prepare(`UPDATE subscriptions SET status='past_due',updated_at=? WHERE stripe_subscription_id=?`).run(nowIso(), subscriptionId);
     }
-    if (event.id) db.prepare('INSERT INTO stripe_events (id, event_type, processed_at) VALUES (?, ?, ?)').run(event.id, event.type, nowIso());
-    return json(res, 200, { received: true });
+    if (event.id) db.prepare(`UPDATE stripe_events SET status='processed',last_error=NULL,processed_at=? WHERE id=?`).run(nowIso(), event.id);
+    return json(res, 200, { received: true, reconciled: Boolean(existingEvent) });
   } catch (error) {
+    if (event?.id) db.prepare(`UPDATE stripe_events SET status='failed',last_error=?,processed_at=? WHERE id=?`).run(cleanText(error.message, 1000), nowIso(), event.id);
     console.error('Webhook fulfilment failed:', error);
     return text(res, 500, 'Webhook fulfilment failed.');
+  }
+}
+
+async function handleInspectionUpload(req, res) {
+  if (!rateLimitAllowed(req, { windowMs: 60_000, max: 12, bucket: 'inspection-upload' })) return json(res, 429, { error: 'Too many inspection uploads.' });
+  const authorization = String(req.headers.authorization || '');
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  try {
+    const raw = await readRawBody(req, 2_000_000);
+    const contentType = String(req.headers['content-type'] || '').split(';')[0];
+    if (contentType !== 'application/json') return json(res, 415, { error: 'Evidence bundle must be JSON.' });
+    const bundle = JSON.parse(raw.toString('utf8'));
+    const accepted = consumeInspectionUpload({ rawToken: token, bundle });
+    return json(res, 201, accepted);
+  } catch (error) {
+    const status = error.code === 'BODY_TOO_LARGE' ? 413 : 400;
+    return json(res, status, { error: error.code === 'BODY_TOO_LARGE' ? 'Evidence bundle exceeds 2 MB.' : error.message });
+  }
+}
+
+async function handleRedTeamUpload(req, res) {
+  if (!rateLimitAllowed(req, { windowMs: 60_000, max: 8, bucket: 'redteam-upload' })) return json(res, 429, { error: 'Too many red-team uploads.' });
+  const authorization = String(req.headers.authorization || '');
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  try {
+    const raw = await readRawBody(req, 2_000_000);
+    const contentType = String(req.headers['content-type'] || '').split(';')[0];
+    if (contentType !== 'application/json') return json(res, 415, { error: 'Red-team evidence must be JSON.' });
+    const bundle = JSON.parse(raw.toString('utf8'));
+    const accepted = consumeRedTeamUpload({ rawToken: token, bundle });
+    return json(res, 201, accepted);
+  } catch (error) {
+    const status = error.code === 'BODY_TOO_LARGE' ? 413 : 400;
+    return json(res, status, { error: error.code === 'BODY_TOO_LARGE' ? 'Red-team evidence exceeds 2 MB.' : error.message });
   }
 }
 
@@ -380,11 +617,20 @@ async function checkoutStatus(req, res, sessionIdValue) {
   try {
     const sessionId = cleanText(sessionIdValue, 200);
     let purchase = db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
+    if (purchase && purchase.fulfilment_state !== 'fulfilled') {
+      const storedSession = JSON.parse(purchase.session_json || '{}');
+      if (storedSession?.id) await fulfilCheckout(storedSession);
+      purchase = db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
+    }
     if (!purchase && !config.demoMode && sessionId.startsWith('cs_')) {
       const session = await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
       if (session.metadata?.user_id !== req.user.id) throw new Error('Checkout session does not belong to this account.');
       if (session.mode === 'subscription' || session.payment_status === 'paid' || session.payment_status === 'no_payment_required') await fulfilCheckout(session);
       purchase = db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
+    }
+    if (purchase && !['sent','simulated'].includes(purchase.email_state)) {
+      await processPurchaseJobs(purchase.id).catch(() => null);
+      purchase = db.prepare('SELECT * FROM purchases WHERE id=?').get(purchase.id);
     }
     const subscription = db.prepare(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`).get(req.user.id);
     return json(res, 200, { purchase: purchase || null, subscription: subscription || null });
@@ -416,7 +662,7 @@ async function downloadReport(req, res, assessmentId, token) {
   const effectiveTier = subscribed ? 'pro' : row.paid_tier;
   if ((!hasToken && !isOwner) || effectiveTier === 'free') return json(res, 403, { error: 'A paid report or active subscription is required.' });
   try {
-    const report = buildReport({ ...row, paid_tier: effectiveTier }, effectiveTier);
+    const { report } = buildAssessmentReport(row.id, effectiveTier);
     const pdf = await renderReportPdf(report);
     insertEvent('report_downloaded', req.user?.id || null, { assessmentId: row.id, tier: effectiveTier });
     res.writeHead(200, {
@@ -433,32 +679,69 @@ async function downloadReport(req, res, assessmentId, token) {
 }
 
 function exportAccount(req, res) {
-  const user = db.prepare('SELECT id, email, terms_version, terms_accepted_at, created_at FROM users WHERE id = ?').get(req.user.id);
-  const assessments = db.prepare('SELECT id, name, agent_type, answers_json, score, risk_band, result_json, paid_tier, public_enabled, scoring_version, created_at, updated_at FROM assessments WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id)
-    .map((row) => ({ ...row, answers: JSON.parse(row.answers_json), result: JSON.parse(row.result_json), answers_json: undefined, result_json: undefined, public_enabled: Boolean(row.public_enabled) }));
-  const purchases = db.prepare('SELECT id, assessment_id, product_key, amount_pence, currency, status, created_at FROM purchases WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
-  const subscriptions = db.prepare('SELECT plan_key, status, current_period_end, created_at, updated_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
-  const payload = JSON.stringify({ exportedAt: nowIso(), service: config.companyName, version: config.appVersion, user, assessments, purchases, subscriptions }, null, 2);
+  const user = db.prepare(`SELECT id,email,email_verified_at,mfa_enabled_at,terms_version,terms_accepted_at,created_at
+    FROM users WHERE id=?`).get(req.user.id);
+  const assessments = db.prepare(`SELECT id,name,agent_type,answers_json,score,risk_band,result_json,paid_tier,public_enabled,
+    scoring_version,created_at,updated_at FROM assessments WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id)
+    .map((row) => ({ ...row, answers: parseJson(row.answers_json, {}), result: parseJson(row.result_json, {}),
+      answers_json: undefined, result_json: undefined, public_enabled: Boolean(row.public_enabled) }));
+  const purchases = db.prepare(`SELECT id,assessment_id,product_key,amount_pence,currency,status,fulfilment_state,
+    fulfilment_attempts,fulfilment_error,fulfilled_at,access_granted_at,email_state,email_attempts,email_error,email_sent_at,
+    report_digest,created_at,updated_at FROM purchases WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
+  const subscriptions = db.prepare(`SELECT plan_key,status,current_period_end,created_at,updated_at
+    FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
+  const inspections = db.prepare(`SELECT id,assessment_id,schema_version,scanner_version,policy_version,bundle_digest,
+    subject_json,scope_json,summary_json,findings_json,technologies_json,trust_json,delta_json,created_at
+    FROM inspections WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id).map((row) => ({ ...row,
+      subject: parseJson(row.subject_json, {}), scope: parseJson(row.scope_json, {}), summary: parseJson(row.summary_json, {}),
+      findings: parseJson(row.findings_json, []), technologies: parseJson(row.technologies_json, []), trust: parseJson(row.trust_json, {}),
+      delta: parseJson(row.delta_json, {}), subject_json: undefined, scope_json: undefined, summary_json: undefined,
+      findings_json: undefined, technologies_json: undefined, trust_json: undefined, delta_json: undefined }));
+  const redTeamRuns = db.prepare(`SELECT id,assessment_id,authorisation_id,schema_version,runner_version,policy_version,
+    bundle_digest,campaign_json,scope_json,summary_json,results_json,trust_json,delta_json,retention_expires_at,created_at
+    FROM redteam_runs WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id).map((row) => ({ ...row,
+      campaign: parseJson(row.campaign_json, {}), scope: parseJson(row.scope_json, {}), summary: parseJson(row.summary_json, {}),
+      results: parseJson(row.results_json, []), trust: parseJson(row.trust_json, {}), delta: parseJson(row.delta_json, {}),
+      campaign_json: undefined, scope_json: undefined, summary_json: undefined, results_json: undefined,
+      trust_json: undefined, delta_json: undefined }));
+  const redTeamAuthorisations = db.prepare(`SELECT id,assessment_id,target_name,endpoint_origin,environment,authority_basis,
+    authorised_by,authorised_role,emergency_contact,window_start,window_end,permitted_actions_json,prohibited_actions_json,
+    data_classification,retention_days,legal_hold,status,accepted_at,revoked_at,created_at
+    FROM redteam_authorisations WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id).map((row) => ({ ...row,
+      permittedActions: parseJson(row.permitted_actions_json, []), prohibitedActions: parseJson(row.prohibited_actions_json, []),
+      legalHold: Boolean(row.legal_hold), permitted_actions_json: undefined, prohibited_actions_json: undefined }));
+  const purgeReceipts = db.prepare(`SELECT id,assessment_id,authorisation_id,evidence_type,records_deleted,digests_json,
+    reason,retention_deadline,executed_at FROM data_purge_receipts WHERE user_id=? ORDER BY executed_at DESC`).all(req.user.id)
+    .map((row) => ({ ...row, digests: parseJson(row.digests_json, []), digests_json: undefined }));
+  const payload = JSON.stringify({ exportedAt: nowIso(), service: config.companyName, version: config.appVersion,
+    user: { ...user, emailVerified: Boolean(user.email_verified_at), mfaEnabled: Boolean(user.mfa_enabled_at) },
+    assessments, purchases, subscriptions, inspections, redTeamRuns, redTeamAuthorisations, purgeReceipts }, null, 2);
   insertEvent('account_exported', req.user.id);
-  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="agentrisklayer-data-export.json"', 'Content-Length': Buffer.byteLength(payload), 'Cache-Control': 'private, no-store' });
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
+    'Content-Disposition': 'attachment; filename="agentrisklayer-data-export.json"',
+    'Content-Length': Buffer.byteLength(payload), 'Cache-Control': 'private, no-store' });
   return res.end(payload);
 }
 
-function deleteAccount(req, res, body) {
+async function deleteAccount(req, res, body) {
   if (body.confirmation !== 'DELETE') return json(res, 400, { error: 'Type DELETE to confirm account deletion.' });
-  if (!verifyUserPassword(req.user.id, body.password)) return json(res, 401, { error: 'Password is incorrect.' });
+  try { await reauthenticateSession(req, body.password, body.code || ''); }
+  catch (error) { return json(res, 401, { error: error.message }); }
   if (hasOpenSubscription(req.user.id)) return json(res, 409, { error: 'Cancel or resolve the subscription from billing before deleting the account.' });
   const userId = req.user.id;
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM email_log WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM events WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM purchases WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM assessments WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    db.prepare('DELETE FROM password_reset_tokens WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM email_verification_tokens WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM mfa_login_challenges WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM email_log WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM events WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM data_purge_receipts WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM purchases WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM assessments WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM subscriptions WHERE user_id=?').run(userId);
+    db.prepare('DELETE FROM users WHERE id=?').run(userId);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -470,76 +753,51 @@ function deleteAccount(req, res, body) {
 }
 
 function dashboard(req, res) {
-  const assessments = db.prepare(`SELECT id, name, agent_type, score, risk_band, paid_tier, access_token, share_token, public_enabled, scoring_version, created_at FROM assessments WHERE user_id = ? ORDER BY created_at DESC`).all(req.user.id);
-  const purchases = db.prepare(`SELECT id, assessment_id, product_key, amount_pence, currency, status, created_at FROM purchases WHERE user_id = ? ORDER BY created_at DESC`).all(req.user.id);
-  const subscription = db.prepare(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`).get(req.user.id) || null;
+  const assessments = db.prepare(`
+    SELECT a.id,a.name,a.agent_type,a.score,a.risk_band,a.paid_tier,a.access_token,a.share_token,a.public_enabled,
+      a.scoring_version,a.created_at,
+      (SELECT i.summary_json FROM inspections i WHERE i.assessment_id=a.id ORDER BY i.created_at DESC LIMIT 1) latest_inspection_summary,
+      (SELECT i.created_at FROM inspections i WHERE i.assessment_id=a.id ORDER BY i.created_at DESC LIMIT 1) latest_inspection_at,
+      (SELECT r.summary_json FROM redteam_runs r WHERE r.assessment_id=a.id ORDER BY r.created_at DESC LIMIT 1) latest_redteam_summary,
+      (SELECT r.created_at FROM redteam_runs r WHERE r.assessment_id=a.id ORDER BY r.created_at DESC LIMIT 1) latest_redteam_at
+    FROM assessments a WHERE a.user_id=? ORDER BY a.created_at DESC`).all(req.user.id)
+    .map((row) => ({ ...row, latest_inspection_summary: parseJson(row.latest_inspection_summary, null),
+      latest_redteam_summary: parseJson(row.latest_redteam_summary, null) }));
+  const purchases = db.prepare(`SELECT id,assessment_id,product_key,amount_pence,currency,status,fulfilment_state,
+    fulfilment_attempts,fulfilment_error,email_state,email_attempts,email_error,email_sent_at,created_at
+    FROM purchases WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
+  const subscription = db.prepare(`SELECT * FROM subscriptions WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).get(req.user.id) || null;
   const stats = {
     assessments: assessments.length,
-    averageScore: assessments.length ? Math.round(assessments.reduce((sum, item) => sum + item.score, 0) / assessments.length) : 0,
+    averageScore: assessments.length ? Math.round(assessments.reduce((sum,item) => sum + item.score,0) / assessments.length) : 0,
     critical: assessments.filter((item) => item.risk_band === 'Critical').length,
     paidReports: assessments.filter((item) => item.paid_tier !== 'free').length,
+    inspections: db.prepare('SELECT COUNT(*) count FROM inspections WHERE user_id=?').get(req.user.id).count,
+    redTeamRuns: db.prepare('SELECT COUNT(*) count FROM redteam_runs WHERE user_id=?').get(req.user.id).count,
   };
-  return json(res, 200, { user: req.user, assessments, purchases, subscription, stats });
+  return json(res, 200, { user: req.user, assessments, purchases, subscription, stats,
+    retention: retentionOverview(req.user.id) });
 }
 
 function adminAnalytics(req, res) {
-  if (!config.adminEmail || req.user.email !== config.adminEmail) return json(res, 403, { error: 'Admin access required.' });
   const totals = {
-    users: db.prepare('SELECT COUNT(*) AS count FROM users').get().count,
-    assessments: db.prepare('SELECT COUNT(*) AS count FROM assessments').get().count,
-    purchases: db.prepare(`SELECT COUNT(*) AS count FROM purchases WHERE status = 'paid'`).get().count,
-    revenuePence: db.prepare(`SELECT COALESCE(SUM(amount_pence), 0) AS total FROM purchases WHERE status = 'paid'`).get().total,
-    activeSubscriptions: db.prepare(`SELECT COUNT(*) AS count FROM subscriptions WHERE status IN ('active','trialing')`).get().count,
+    users: db.prepare('SELECT COUNT(*) count FROM users').get().count,
+    verifiedUsers: db.prepare('SELECT COUNT(*) count FROM users WHERE email_verified_at IS NOT NULL').get().count,
+    mfaUsers: db.prepare('SELECT COUNT(*) count FROM users WHERE mfa_enabled_at IS NOT NULL').get().count,
+    assessments: db.prepare('SELECT COUNT(*) count FROM assessments').get().count,
+    purchases: db.prepare(`SELECT COUNT(*) count FROM purchases WHERE status='paid'`).get().count,
+    fulfilledPurchases: db.prepare(`SELECT COUNT(*) count FROM purchases WHERE status='paid' AND fulfilment_state='fulfilled'`).get().count,
+    revenuePence: db.prepare(`SELECT COALESCE(SUM(amount_pence),0) total FROM purchases WHERE status='paid'`).get().total,
+    activeSubscriptions: db.prepare(`SELECT COUNT(*) count FROM subscriptions WHERE status IN ('active','trialing')`).get().count,
+    inspections: db.prepare('SELECT COUNT(*) count FROM inspections').get().count,
+    redTeamRuns: db.prepare('SELECT COUNT(*) count FROM redteam_runs').get().count,
+    openAlerts: db.prepare(`SELECT COUNT(*) count FROM operational_alerts WHERE status='open'`).get().count,
   };
-  const funnel = db.prepare(`SELECT name, COUNT(*) AS count FROM events GROUP BY name ORDER BY count DESC`).all();
-  const recentFailures = db.prepare(`SELECT to_email, subject, error, created_at FROM email_log WHERE status = 'failed' ORDER BY created_at DESC LIMIT 10`).all();
-  const riskBands = db.prepare(`SELECT risk_band AS band, COUNT(*) AS count FROM assessments GROUP BY risk_band ORDER BY count DESC`).all();
-  return json(res, 200, { totals, funnel, recentFailures, riskBands, readiness: launchReadiness() });
-}
-
-async function fulfilCheckout(session) {
-  const metadata = session.metadata || {};
-  const userId = metadata.user_id;
-  const productKey = metadata.product_key;
-  const assessmentId = metadata.assessment_id || null;
-  const plan = plans[productKey];
-  if (!userId || !plan) throw new Error('Checkout metadata is incomplete.');
-  const existing = db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ?').get(session.id);
-  if (existing) return existing;
-  const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(userId);
-  if (!user) throw new Error('Checkout user not found.');
-  const created = nowIso();
-
-  const amountPence = Number.isFinite(Number(session.amount_total)) ? Number(session.amount_total) : plan.amountPence;
-  const currency = cleanText(session.currency || 'gbp', 8).toLowerCase();
-  db.prepare(`
-    INSERT INTO purchases
-    (id, user_id, assessment_id, product_key, amount_pence, currency, status, stripe_session_id, stripe_customer_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?)
-  `).run(id('pay_'), userId, assessmentId, productKey, amountPence, currency, session.id, String(session.customer || ''), created, created);
-
-  if (plan.recurring) {
-    const subscriptionId = String(session.subscription || id('sub_'));
-    db.prepare(`
-      INSERT INTO subscriptions
-      (id, user_id, plan_key, status, stripe_customer_id, stripe_subscription_id, current_period_end, created_at, updated_at)
-      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)
-      ON CONFLICT(stripe_subscription_id) DO UPDATE SET status='active', plan_key=excluded.plan_key, updated_at=excluded.updated_at
-    `).run(id('subrec_'), userId, productKey, String(session.customer || ''), subscriptionId, new Date(Date.now() + 31 * 86400000).toISOString(), created, created);
-    insertEvent('subscription_started', userId, { productKey });
-    await sendWelcomeEmail({ userId, to: user.email, planName: plan.name }).catch((error) => console.error('Welcome email failed:', error.message));
-  } else {
-    const assessment = db.prepare('SELECT * FROM assessments WHERE id = ? AND user_id = ?').get(assessmentId, userId);
-    if (!assessment) throw new Error('Assessment for report fulfilment not found.');
-    const nextTier = assessment.paid_tier === 'pro' || plan.reportTier === 'pro' ? 'pro' : 'basic';
-    db.prepare('UPDATE assessments SET paid_tier = ?, updated_at = ? WHERE id = ?').run(nextTier, nowIso(), assessment.id);
-    const report = buildReport({ ...assessment, paid_tier: nextTier }, nextTier);
-    const pdf = await renderReportPdf(report);
-    await sendReportEmail({ userId, to: user.email, assessmentName: assessment.name, pdfBuffer: pdf, filename: `${safeFilename(assessment.name)}-agent-risk-report.pdf` })
-      .catch((error) => console.error('Report email failed:', error.message));
-    insertEvent('report_purchased', userId, { assessmentId, productKey, tier: nextTier });
-  }
-  return db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ?').get(session.id);
+  const funnel = db.prepare(`SELECT name,COUNT(*) count FROM events GROUP BY name ORDER BY count DESC`).all();
+  const recentFailures = db.prepare(`SELECT to_email,subject,error,created_at FROM email_log WHERE status='failed' ORDER BY created_at DESC LIMIT 10`).all();
+  const riskBands = db.prepare(`SELECT risk_band band,COUNT(*) count FROM assessments GROUP BY risk_band ORDER BY count DESC`).all();
+  return json(res, 200, { totals, funnel, recentFailures, riskBands, readiness: launchReadiness(),
+    fulfilment: fulfilmentOperations(), retention: retentionOverview() });
 }
 
 function syncSubscription(subscription) {
@@ -621,13 +879,15 @@ function parseResult(row) { return typeof row.result_json === 'string' ? JSON.pa
 
 function publicAssessment(row) {
   const result = parseResult(row);
-  return { id: row.id, name: row.name, agentType: row.agent_type, score: row.score, riskBand: row.risk_band, paidTier: row.paid_tier, createdAt: row.created_at, shareToken: row.share_token, publicEnabled: Boolean(row.public_enabled), scoringVersion: row.scoring_version || 'arl-risk-v1.0', headline: result.headline, topFindings: result.topFindings, controls: result.controls, methodology: result.methodology };
+  return { id: row.id, name: row.name, agentType: row.agent_type, score: row.score, riskBand: row.risk_band, paidTier: row.paid_tier, createdAt: row.created_at, shareToken: row.share_token, publicEnabled: Boolean(row.public_enabled), scoringVersion: row.scoring_version || 'arl-risk-v2.0', headline: result.headline, topFindings: result.topFindings, controls: result.controls, methodology: result.methodology };
 }
 
-function accessibleAssessment(row, effectiveTier = row.paid_tier) {
-  const result = parseResult(row);
-  const base = { ...publicAssessment(row), paidTier: effectiveTier };
-  if (effectiveTier === 'free') return { ...base, result: { score: result.score, riskBand: result.riskBand, headline: result.headline, methodology: result.methodology, topFindings: result.topFindings, findings: result.topFindings, controls: result.controls, recommendations: [] } };
+function accessibleAssessment(row, effectiveTier = row.paid_tier, inspection = null, redTeamRun = null) {
+  const result = attachRedTeamToResult(attachInspectionToResult(parseResult(row), inspection), redTeamRun);
+  const base = { ...publicAssessment(row), paidTier: effectiveTier,
+    inspectionSummary: inspection ? { id: inspection.id, createdAt: inspection.createdAt, summary: inspection.summary, trust: inspection.trust, scope: inspection.scope } : null,
+    redTeamSummary: redTeamRun ? { id: redTeamRun.id, createdAt: redTeamRun.createdAt, summary: redTeamRun.summary, trust: redTeamRun.trust, scope: redTeamRun.scope } : null };
+  if (effectiveTier === 'free') return { ...base, result: { score: result.score, riskBand: result.riskBand, headline: result.headline, decision: result.decision, inherentRisk: result.inherentRisk, controlGap: result.controlGap, evidenceConfidence: result.evidenceConfidence, methodology: result.methodology, topFindings: result.topFindings, findings: result.topFindings, controls: result.controls, recommendations: [], attackPaths: [], inspection: result.inspection ? { assurance: result.inspection.assurance, summary: result.inspection.summary, trust: result.inspection.trust, findings: result.inspection.findings.slice(0, 3) } : null, redTeam: result.redTeam ? { id: result.redTeam.id, assurance: result.redTeam.assurance, campaign: result.redTeam.campaign, summary: result.redTeam.summary, trust: result.redTeam.trust, failedResults: result.redTeam.failedResults.slice(0, 3) } : null } };
   return { ...base, result };
 }
 
@@ -635,6 +895,27 @@ function requireUser(req, res) {
   if (req.user) return true;
   json(res, 401, { error: 'Sign in required.' });
   return false;
+}
+
+function requireVerifiedEmail(req, res) {
+  if (req.user?.emailVerified) return true;
+  json(res, 403, { error: 'Verify your email before using this security-sensitive feature.', code: 'EMAIL_VERIFICATION_REQUIRED' });
+  return false;
+}
+
+function requireAdmin(req, res, { requireMfa = false } = {}) {
+  if (!req.user) { json(res, 401, { error: 'Sign in required.' }); return false; }
+  if (!config.adminEmail || req.user.email !== config.adminEmail) { json(res, 403, { error: 'Admin access required.' }); return false; }
+  if (!req.user.emailVerified) { json(res, 403, { error: 'Verified admin email required.' }); return false; }
+  if (requireMfa && config.nodeEnv === 'production' && (!req.user.mfaEnabled || !req.user.mfaVerified)) {
+    json(res, 403, { error: 'Multi-factor authentication is required for administrative access.', code: 'ADMIN_MFA_REQUIRED' });
+    return false;
+  }
+  return true;
+}
+
+function parseJson(value, fallback) {
+  try { return value == null ? fallback : JSON.parse(value); } catch { return fallback; }
 }
 
 async function readRawBody(req, limit = 100_000) {
@@ -656,7 +937,10 @@ async function readBody(req) {
   const raw = await readRawBody(req);
   if (!raw.length) return {};
   const contentType = String(req.headers['content-type'] || '').split(';')[0];
-  if (contentType === 'application/json') return JSON.parse(raw.toString('utf8'));
+  if (contentType === 'application/json') {
+    try { return JSON.parse(raw.toString('utf8')); }
+    catch { const error = new Error('Invalid JSON body.'); error.code = 'INVALID_JSON'; throw error; }
+  }
   if (contentType === 'application/x-www-form-urlencoded') return Object.fromEntries(new URLSearchParams(raw.toString('utf8')));
   return {};
 }
@@ -720,12 +1004,12 @@ function legalShell(title, content) {
 
 function renderPrivacyPage() {
   const operator = legalOperator();
-  return legalShell('Privacy Notice', `<h1 style="font-size:48px">Privacy notice</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Who operates the service</h2><p>${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Privacy contact: ${escapeXml(operator.email)}.</p><h2>Information we process</h2><ul><li>Account email address, password hash, consent record and session records.</li><li>Assessment answers, scores, reports, sharing settings and timestamps.</li><li>Purchase, subscription and transactional-email references.</li><li>Security and product events used to prevent abuse and operate the service.</li></ul><h2>Why we process it</h2><p>We process this information to provide requested assessments and reports, perform the contract, secure accounts, fulfil payments, maintain records and improve service reliability.</p><h2>Processors</h2><p>Stripe processes live payments, subscriptions and billing. Resend delivers transactional email. The selected hosting provider stores and serves application data. Card details are not stored by AgentRiskLayer.</p><h2>Sharing and public results</h2><p>Assessments are private by default. A public summary and badge are exposed only after the account owner enables public sharing. Sharing can be disabled from the result page.</p><h2>Retention and your controls</h2><p>Account holders can download a structured data export and permanently delete their account from the dashboard. Billing records may need to be retained by payment providers or the operator where law requires it.</p><h2>Your rights</h2><p>Depending on applicable law, you may request access, correction, deletion, restriction, portability or objection. Contact ${escapeXml(operator.email)}. You may also complain to the relevant supervisory authority.</p><h2>International processing and security</h2><p>Processors may operate internationally under their own data-protection terms. We use salted password hashing, HTTP-only sessions, CSRF controls, access checks and encrypted HTTPS transport in production.</p><h2>Changes</h2><p>Material changes will be reflected by a new effective date. This notice should be reviewed by qualified counsel before public launch.</p>`);
+  return legalShell('Privacy Notice', `<h1 class="legal-title">Privacy notice</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Who operates the service</h2><p>${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Privacy contact: ${escapeXml(operator.email)}.</p><h2>Information we process</h2><ul><li>Account email address, password hash, consent record and session records.</li><li>Assessment answers, scores, reports, sharing settings and timestamps.</li><li>Customer-authorised inspection and red-team summaries, redacted finding metadata, cryptographic integrity data and declared scope. The official tools are designed not to upload source code, raw prompts, target responses, credentials or matched secret values.</li><li>Purchase, subscription and transactional-email references.</li><li>Security and product events used to prevent abuse and operate the service.</li></ul><h2>Why we process it</h2><p>We process this information to provide requested assessments and reports, perform the contract, secure accounts, fulfil payments, maintain records and improve service reliability.</p><h2>Processors</h2><p>Stripe processes live payments, subscriptions and billing. Resend delivers transactional email. The selected hosting provider stores and serves application data. Card details are not stored by AgentRiskLayer.</p><h2>Sharing and public results</h2><p>Assessments are private by default. A public summary and badge are exposed only after the account owner enables public sharing. Sharing can be disabled from the result page.</p><h2>Retention and your controls</h2><p>Account holders can download a structured data export and permanently delete their account from the dashboard. Billing records may need to be retained by payment providers or the operator where law requires it.</p><h2>Your rights</h2><p>Depending on applicable law, you may request access, correction, deletion, restriction, portability or objection. Contact ${escapeXml(operator.email)}. You may also complain to the relevant supervisory authority.</p><h2>International processing and security</h2><p>Processors may operate internationally under their own data-protection terms. We use salted password hashing, HTTP-only sessions, CSRF controls, access checks and encrypted HTTPS transport in production.</p><h2>Changes</h2><p>Material changes will be reflected by a new effective date. This notice should be reviewed by qualified counsel before public launch.</p>`);
 }
 
 function renderTermsPage() {
   const operator = legalOperator();
-  return legalShell('Terms of Service', `<h1 style="font-size:48px">Terms of service</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Operator</h2><p>The service is operated by ${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Contact: ${escapeXml(operator.email)}.</p><h2>Service scope</h2><p>AgentRiskLayer provides automated security decision support based on information supplied by the user. It is not a penetration test, certification, guarantee, insurance product or legal opinion.</p><h2>Accounts and acceptable use</h2><p>You must provide accurate account details, protect credentials and use the service lawfully. You may not probe, disrupt, reverse engineer, abuse rate limits or submit information you are not authorised to process.</p><h2>User responsibility</h2><p>You are responsible for input accuracy, professional review, control implementation, system testing and compliance with law, regulation and contracts. A score does not establish that a system is safe.</p><h2>Payments and subscriptions</h2><p>One-off reports are fulfilled after confirmed payment. Recurring plans continue until cancelled through the billing portal. Prices, taxes and renewal information are shown at checkout. Statutory consumer rights are not excluded.</p><h2>Intellectual property</h2><p>You retain rights in submitted information. The operator retains rights in the software, scoring methodology, report design and service branding. You may use purchased reports internally and share them with advisers and stakeholders.</p><h2>Availability and changes</h2><p>The service may change, be suspended for maintenance or be withdrawn. We do not promise uninterrupted availability. Material scoring-model changes are identified by a scoring-version reference.</p><h2>Liability</h2><p>Nothing excludes liability that cannot legally be excluded. Any additional limitation of liability, refund treatment and business-customer terms must be reviewed for the laws of ${escapeXml(operator.jurisdiction)} before public launch.</p><h2>Termination and deletion</h2><p>You may stop using the service and delete your account after cancelling an active subscription. We may suspend access for security, non-payment or material breach.</p><h2>Governing law</h2><p>These terms are intended to be governed by the laws and courts of ${escapeXml(operator.jurisdiction)}, subject to mandatory consumer protections. Obtain legal review before relying on this clause.</p>`);
+  return legalShell('Terms of Service', `<h1 class="legal-title">Terms of service</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Operator</h2><p>The service is operated by ${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Contact: ${escapeXml(operator.email)}.</p><h2>Service scope</h2><p>AgentRiskLayer provides automated security decision support based on user-supplied information and optional customer-operated static inspection evidence and controlled, non-destructive adversarial testing in local, test, or staging environments. The inspector does not exploit systems, and the red-team runner refuses production targets and destructive actions. The service is not a penetration test, independent audit, certification, guarantee, insurance product or legal opinion.</p><h2>Accounts and acceptable use</h2><p>You must provide accurate account details, protect credentials and use the service lawfully. You may not probe, disrupt, reverse engineer, abuse rate limits or submit information or inspect systems you do not own or have explicit permission to assess.</p><h2>User responsibility</h2><p>You are responsible for input accuracy, professional review, control implementation, system testing and compliance with law, regulation and contracts. A score does not establish that a system is safe.</p><h2>Payments and subscriptions</h2><p>One-off reports are fulfilled after confirmed payment. Recurring plans continue until cancelled through the billing portal. Prices, taxes and renewal information are shown at checkout. Statutory consumer rights are not excluded.</p><h2>Intellectual property</h2><p>You retain rights in submitted information. The operator retains rights in the software, scoring methodology, report design and service branding. You may use purchased reports internally and share them with advisers and stakeholders.</p><h2>Availability and changes</h2><p>The service may change, be suspended for maintenance or be withdrawn. We do not promise uninterrupted availability. Material scoring-model changes are identified by a scoring-version reference.</p><h2>Liability</h2><p>Nothing excludes liability that cannot legally be excluded. Any additional limitation of liability, refund treatment and business-customer terms must be reviewed for the laws of ${escapeXml(operator.jurisdiction)} before public launch.</p><h2>Termination and deletion</h2><p>You may stop using the service and delete your account after cancelling an active subscription. We may suspend access for security, non-payment or material breach.</p><h2>Governing law</h2><p>These terms are intended to be governed by the laws and courts of ${escapeXml(operator.jurisdiction)}, subject to mandatory consumer protections. Obtain legal review before relying on this clause.</p>`);
 }
 
 function renderRobots() {
@@ -733,7 +1017,7 @@ function renderRobots() {
 }
 
 function renderSitemap() {
-  const paths = ['/', '/assessment.html', '/pricing.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
+  const paths = ['/', '/assessment.html', '/pricing.html', '/methodology.html', '/sample-report.html', '/trust.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
 }
 
@@ -756,7 +1040,10 @@ function renderSeoPage(page) {
 
 db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(nowIso());
 db.prepare('DELETE FROM password_reset_tokens WHERE expires_at <= ? OR used_at IS NOT NULL').run(nowIso());
+enforceRetention();
 assertSafeProductionConfig();
+startFulfilmentWorker();
+startRetentionWorker();
 server.listen(config.port, () => {
   console.log(`AgentRiskLayer running at ${config.baseUrl}`);
   console.log(`Mode: ${config.demoMode ? 'DEMO (simulated payments)' : 'LIVE'}`);

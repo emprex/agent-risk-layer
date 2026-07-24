@@ -1,0 +1,17 @@
+{
+  "name": "AgentRisk Red Team Runner",
+  "version": "4.1.0",
+  "policyVersion": "arl-redteam-policy-2026.08",
+  "bundleSchema": "arl.redteam.bundle.v1",
+  "runnerSha256": "373b2a287699fff0bae23f630d4b634f076e2dd984746bc58d5b167372adfd9f",
+  "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
+  "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7",
+  "safetyContract": [
+    "Explicit authorisation required",
+    "Local/test/staging only",
+    "Synthetic canaries only",
+    "Dry-run tools only",
+    "No raw transcript upload",
+    "No production target mode"
+  ]
+}

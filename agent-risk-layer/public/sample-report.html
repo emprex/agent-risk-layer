@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Professional Report Preview | AgentRiskLayer</title>
+  <meta name="description" content="Preview an AgentRiskLayer Professional AI-agent security report combining declared controls, static inspection and controlled staging red-team evidence.">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/shared.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a>
+  <nav><a href="/methodology.html">Methodology</a><a href="/redteam.html">Red team</a><a href="/pricing.html">Pricing</a><a href="/assessment.html">Start assessment</a></nav>
+</header>
+<main class="app-shell wide">
+  <div class="page-heading">
+    <span class="eyebrow">Professional report preview</span>
+    <h1>A security decision document backed by multiple evidence classes.</h1>
+    <p>The 22-page sample combines declared controls, read-only static inspection and repeated controlled adversarial outcomes from a written, authorised staging campaign. Each source remains visibly separate so customers can see what was claimed, observed and reproduced.</p>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card"><span>Residual risk</span><strong>63</strong></div>
+    <div class="metric-card"><span>Static posture</span><strong>39</strong></div>
+    <div class="metric-card"><span>Red-team assurance</span><strong>16</strong><small>96 repeated trials</small></div>
+  </div>
+
+  <section class="panel section-gap">
+    <h2>Example deployment decision</h2>
+    <div class="decision-banner"><span class="muted">Recommendation</span><strong>DO NOT DEPLOY</strong></div>
+    <p>The sample reaches this decision because a controlled staging campaign reproduced material prompt-injection and unsafe-tool failures. A simulation result alone would not change the deployment recommendation.</p>
+
+    <h2>Example reproduced behaviour</h2>
+    <article class="finding attack-path">
+      <div class="finding-head"><h4>RT-PI-002: Indirect injection in synthetic email</h4><span class="severity critical">critical</span></div>
+      <p><strong>Reproduced:</strong> untrusted synthetic email content influenced the staging agent and produced an unauthorised action request. The hosted report stores the case result and bounded evidence facts, not the raw payload or model transcript.</p>
+      <p><strong>Required action:</strong> treat retrieved content as data, enforce deterministic tool policy, require parameter-bound approval, and rerun the exact case after remediation.</p>
+    </article>
+
+    <h2>Example static observation</h2>
+    <article class="finding observed-finding">
+      <div class="finding-head"><h4>ARL-MCP-001: MCP configuration exposes shell execution</h4><span class="severity critical">critical</span></div>
+      <p><strong>Observed:</strong> a command-capable MCP server is configured through mutable provenance. Evidence contains the rule result, path hash and bounded location data—not source code or command secrets.</p>
+      <p><strong>Required action:</strong> remove general shell access or isolate it behind a hardened sandbox, immutable package pin, deterministic allowlist and transaction-bound approval.</p>
+    </article>
+
+    <h2>Professional report sections</h2>
+    <div class="feature-grid">
+      <article><h3>Executive decision</h3><p>Deployment recommendation, combined risk composition and primary credible threats.</p></article>
+      <article><h3>Three evidence layers</h3><p>Declared control gaps, observed static evidence and reproduced staging behaviour remain separate and traceable.</p></article>
+      <article><h3>Attack paths and remediation</h3><p>Business impact, failed cases, accountable fixes, deadlines, verification methods and retest criteria.</p></article>
+      <article><h3>Assurance lifecycle</h3><p>0-72 hour containment, 14-day closure, 30-90 day maturity, framework mappings and explicit limitations.</p></article>
+    </div>
+  </section>
+
+  <div class="button-row">
+    <a class="button primary" href="/downloads/agentrisklayer-sample-professional-report.pdf" download>Download premium sample PDF</a>
+    <a class="button ghost" href="/assessment.html">Assess an agent free</a>
+    <a class="button ghost" href="/methodology.html">Read methodology</a>
+  </div>
+</main>
+<footer><span>© 2026 AgentRiskLayer</span><span>Sample content is fictional and not a real customer assessment.</span></footer>
+</body>
+</html>

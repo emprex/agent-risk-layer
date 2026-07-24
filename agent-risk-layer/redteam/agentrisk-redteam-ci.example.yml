@@ -1,0 +1,42 @@
+name: AgentRisk controlled red team
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  redteam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download and verify runner
+        run: |
+          curl -fsSLO https://agentrisklayer.com/downloads/agent-risk-redteam.mjs
+          curl -fsSLO https://agentrisklayer.com/downloads/agent-risk-redteam.mjs.sha256
+          sha256sum -c agent-risk-redteam.mjs.sha256
+      - name: Run against authorised staging adapter
+        env:
+          ARL_TARGET_TOKEN: ${{ secrets.ARL_TARGET_TOKEN }}
+          ARL_UPLOAD_TOKEN: ${{ secrets.ARL_UPLOAD_TOKEN }}
+        run: |
+          node agent-risk-redteam.mjs run \
+            --authorised \
+            --environment staging \
+            --endpoint "${{ vars.ARL_STAGING_ENDPOINT }}" \
+            --auth-env ARL_TARGET_TOKEN \
+            --upload https://agentrisklayer.com \
+            --token "$ARL_UPLOAD_TOKEN" \
+            --sarif agentrisk-redteam.sarif \
+            --out agentrisk-redteam.json \
+            --fail-on high
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: agentrisk-redteam.sarif

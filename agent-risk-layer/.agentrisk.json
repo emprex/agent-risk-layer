@@ -1,0 +1,16 @@
+{
+  "exclude": [
+    "public/downloads/**",
+    "data/**"
+  ],
+  "falsePositives": [
+    {
+      "ruleId": "ARL-SEC-001",
+      "basename": "inspector.test.js",
+      "reason": "The credential-shaped string is an intentionally invalid test fixture used to prove redaction and detection. It is not accepted as a credential and is reviewed on every scanner release.",
+      "owner": "AgentRiskLayer security owner",
+      "expires": "2027-01-31"
+    }
+  ],
+  "acceptedRisks": []
+}

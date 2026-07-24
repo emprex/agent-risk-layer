@@ -1,0 +1,329 @@
+{
+  "policyVersion": "arl-inspector-policy-2026.08",
+  "rules": [
+    {
+      "id": "ARL-SEC-001",
+      "title": "Potential secret committed to repository",
+      "severity": "critical",
+      "category": "Secrets management",
+      "summary": "Secret-like material was detected in a tracked text file. The matched value is never included in the evidence bundle.",
+      "remediation": "Revoke and rotate the credential, remove it from current and historical source control, and use a managed secret store.",
+      "frameworks": [
+        "OWASP Agent Security - Data Protection & Privacy",
+        "NIST AI RMF GOVERN 1.7"
+      ]
+    },
+    {
+      "id": "ARL-SEC-002",
+      "title": "Private key material present in repository",
+      "severity": "critical",
+      "category": "Secrets management",
+      "summary": "A private-key file or private-key marker was detected.",
+      "remediation": "Remove the key from the repository, rotate it, protect replacement keys in a managed KMS or secret store, and review access logs.",
+      "frameworks": [
+        "OWASP Agent Security - Tool Security",
+        "NIST AI RMF MANAGE 2.4"
+      ]
+    },
+    {
+      "id": "ARL-SEC-003",
+      "title": "Environment file is tracked",
+      "severity": "high",
+      "category": "Secrets management",
+      "summary": "An environment file is tracked by Git and may expose credentials or production configuration.",
+      "remediation": "Remove environment files from source control, rotate exposed values, add a safe template, and enforce secret scanning in CI.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "NIST AI RMF GOVERN 1.7"
+      ]
+    },
+    {
+      "id": "ARL-CICD-001",
+      "title": "GitHub Actions uses broad write permissions",
+      "severity": "high",
+      "category": "CI/CD",
+      "summary": "A workflow grants write-all or broad write permissions to the workflow token.",
+      "remediation": "Set default permissions to read-only and grant narrowly scoped write permissions only to the job that requires them.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "NIST AI RMF GOVERN 1.7"
+      ]
+    },
+    {
+      "id": "ARL-CICD-002",
+      "title": "Third-party GitHub Action is not pinned to a commit",
+      "severity": "medium",
+      "category": "CI/CD",
+      "summary": "A workflow action reference is pinned to a mutable tag or branch rather than a full commit SHA.",
+      "remediation": "Pin third-party actions to reviewed immutable commit SHAs and automate controlled updates.",
+      "frameworks": [
+        "SLSA Build L2",
+        "OWASP LLM03 Supply Chain"
+      ]
+    },
+    {
+      "id": "ARL-CICD-003",
+      "title": "pull_request_target workflow handles untrusted pull requests",
+      "severity": "high",
+      "category": "CI/CD",
+      "summary": "pull_request_target can expose privileged tokens or secrets to code influenced by an untrusted pull request.",
+      "remediation": "Avoid checking out or executing untrusted pull-request code in pull_request_target; separate privileged metadata operations.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "SLSA Build L2"
+      ]
+    },
+    {
+      "id": "ARL-CICD-004",
+      "title": "Remote script execution found in build workflow",
+      "severity": "high",
+      "category": "CI/CD",
+      "summary": "A build or install script pipes downloaded content directly to a shell.",
+      "remediation": "Download to a file, verify checksum and signature, inspect provenance, and execute only a pinned verified artifact.",
+      "frameworks": [
+        "SLSA Source",
+        "OWASP LLM03 Supply Chain"
+      ]
+    },
+    {
+      "id": "ARL-CTR-001",
+      "title": "Container runs without a non-root USER",
+      "severity": "medium",
+      "category": "Container security",
+      "summary": "A Dockerfile does not declare a non-root runtime user.",
+      "remediation": "Create a dedicated unprivileged user and switch with USER before the final command.",
+      "frameworks": [
+        "NIST AI RMF MANAGE 2",
+        "OWASP Agent Security - Least Privilege"
+      ]
+    },
+    {
+      "id": "ARL-CTR-002",
+      "title": "Container base image is mutable or unpinned",
+      "severity": "medium",
+      "category": "Container security",
+      "summary": "A Docker base image uses latest or lacks a stable version or digest.",
+      "remediation": "Pin a minimal image to a reviewed version and preferably an immutable digest; update through controlled automation.",
+      "frameworks": [
+        "SLSA Build",
+        "OWASP LLM03 Supply Chain"
+      ]
+    },
+    {
+      "id": "ARL-CTR-003",
+      "title": "Privileged container configuration detected",
+      "severity": "critical",
+      "category": "Container security",
+      "summary": "A container is privileged, uses host networking, or mounts the Docker socket.",
+      "remediation": "Remove privileged mode and host access; isolate the workload and provide only the minimum required capabilities.",
+      "frameworks": [
+        "OWASP Agent Security - Least Privilege",
+        "NIST AI RMF MANAGE 2.4"
+      ]
+    },
+    {
+      "id": "ARL-CTR-004",
+      "title": "Container allows privilege escalation",
+      "severity": "high",
+      "category": "Container security",
+      "summary": "A Kubernetes or container security context allows privilege escalation or runs as privileged.",
+      "remediation": "Set allowPrivilegeEscalation false, runAsNonRoot true, drop capabilities, and enforce the policy at admission.",
+      "frameworks": [
+        "OWASP Agent Security - Least Privilege",
+        "NIST AI RMF MANAGE 2"
+      ]
+    },
+    {
+      "id": "ARL-MCP-001",
+      "title": "MCP or tool configuration exposes shell execution",
+      "severity": "critical",
+      "category": "Agent tools",
+      "summary": "An MCP server or tool configuration appears able to execute arbitrary commands.",
+      "remediation": "Remove general shell access or place it behind a hardened sandbox, explicit allowlist, parameter validation, and transaction-bound approval.",
+      "frameworks": [
+        "OWASP Agentic: Tool Misuse",
+        "OWASP Agent Security - Tool Security"
+      ]
+    },
+    {
+      "id": "ARL-MCP-002",
+      "title": "Filesystem tool appears scoped to root or broad paths",
+      "severity": "high",
+      "category": "Agent tools",
+      "summary": "A filesystem-capable tool appears to allow root, home, or other broad directories.",
+      "remediation": "Restrict allowed paths to dedicated application directories and explicitly deny secrets, keys and environment files.",
+      "frameworks": [
+        "OWASP Agent Security - Tool Security",
+        "OWASP Agentic: Excessive Agency"
+      ]
+    },
+    {
+      "id": "ARL-MCP-003",
+      "title": "Dynamic or unreviewed MCP server configuration",
+      "severity": "high",
+      "category": "Agent supply chain",
+      "summary": "An MCP configuration loads servers through mutable package references or network locations without an integrity pin.",
+      "remediation": "Pin server versions and hashes, maintain an allowlist, review permissions, and record provenance before activation.",
+      "frameworks": [
+        "OWASP MCP Security Guide",
+        "OWASP LLM03 Supply Chain"
+      ]
+    },
+    {
+      "id": "ARL-AI-001",
+      "title": "Dangerous execution primitive found near AI integration",
+      "severity": "high",
+      "category": "Agent execution",
+      "summary": "AI SDK usage is present alongside command execution, eval, or dynamic function creation.",
+      "remediation": "Separate model reasoning from execution; enforce deterministic authorisation, sandboxing, allowlists, schemas, and human approval for sensitive actions.",
+      "frameworks": [
+        "OWASP Agentic: Tool Misuse",
+        "OWASP Agent Security - Human-in-the-Loop"
+      ]
+    },
+    {
+      "id": "ARL-AI-002",
+      "title": "Wildcard CORS configuration detected",
+      "severity": "medium",
+      "category": "Application security",
+      "summary": "The application appears to allow cross-origin requests from any origin.",
+      "remediation": "Use an explicit origin allowlist, reject credentialed wildcard access, and test browser security boundaries.",
+      "frameworks": [
+        "OWASP API Security",
+        "NIST AI RMF MANAGE 2"
+      ]
+    },
+    {
+      "id": "ARL-AI-003",
+      "title": "TLS certificate verification disabled",
+      "severity": "critical",
+      "category": "Application security",
+      "summary": "Code disables TLS certificate verification, enabling man-in-the-middle attacks.",
+      "remediation": "Remove the override, restore certificate verification, and use a trusted CA or pinned internal certificate.",
+      "frameworks": [
+        "OWASP Transport Layer Security",
+        "NIST AI RMF MANAGE 2.4"
+      ]
+    },
+    {
+      "id": "ARL-AI-004",
+      "title": "Sensitive environment values may be logged",
+      "severity": "high",
+      "category": "Logging",
+      "summary": "A logging statement appears to emit process environment variables or secret-bearing configuration.",
+      "remediation": "Log only approved fields, redact secrets before logging, and test logs for credential and personal-data leakage.",
+      "frameworks": [
+        "OWASP Agent Security - Monitoring",
+        "NIST AI RMF MEASURE 2.4"
+      ]
+    },
+    {
+      "id": "ARL-AI-005",
+      "title": "Agent resource limits are not evident",
+      "severity": "medium",
+      "category": "Resource controls",
+      "summary": "AI SDK usage was detected, but no clear timeout, token, retry, recursion, or budget limit was observed in scanned configuration.",
+      "remediation": "Enforce hard server-side limits for time, tokens, retries, tool depth, concurrency and spend; fail closed when limits are reached.",
+      "frameworks": [
+        "OWASP LLM10 Unbounded Consumption",
+        "OWASP Agent Security - Resource Limits"
+      ]
+    },
+    {
+      "id": "ARL-AI-006",
+      "title": "Structured output validation is not evident",
+      "severity": "medium",
+      "category": "Output validation",
+      "summary": "Agent integration was detected without clear schema validation or structured-output enforcement.",
+      "remediation": "Require typed structured outputs and independently validate every tool call, destination and business rule before execution.",
+      "frameworks": [
+        "OWASP LLM05 Improper Output Handling",
+        "OWASP Agent Security - Output Validation"
+      ]
+    },
+    {
+      "id": "ARL-AI-007",
+      "title": "Human approval control is not evident for execution-capable agent",
+      "severity": "high",
+      "category": "Human oversight",
+      "summary": "An execution-capable agent was detected without a clear approval gate for sensitive operations.",
+      "remediation": "Classify actions by impact and require unexpired, parameter-bound approval for financial, destructive, administrative and externally visible actions.",
+      "frameworks": [
+        "OWASP Agent Security - Human-in-the-Loop",
+        "NIST AI RMF GOVERN 1"
+      ]
+    },
+    {
+      "id": "ARL-AI-008",
+      "title": "Tenant or session isolation is not evident in persistent memory",
+      "severity": "high",
+      "category": "Memory security",
+      "summary": "Persistent agent memory or vector storage was detected without a clear tenant or session scoping signal.",
+      "remediation": "Scope every read and write by tenant and session, validate memory content, retain provenance, expire data, and test cross-user isolation.",
+      "frameworks": [
+        "OWASP Agentic: Memory Poisoning",
+        "OWASP Agent Security - Memory & Context Security"
+      ]
+    },
+    {
+      "id": "ARL-DEP-001",
+      "title": "Dependency lockfile is missing",
+      "severity": "medium",
+      "category": "Supply chain",
+      "summary": "A package manifest exists without its ecosystem lockfile.",
+      "remediation": "Commit and enforce a lockfile, use reproducible installs, and review automated dependency updates.",
+      "frameworks": [
+        "SLSA Build",
+        "OWASP LLM03 Supply Chain"
+      ]
+    },
+    {
+      "id": "ARL-DEP-002",
+      "title": "Dependency version is unbounded or mutable",
+      "severity": "medium",
+      "category": "Supply chain",
+      "summary": "A direct dependency uses wildcard, latest, URL, branch, or another mutable version reference.",
+      "remediation": "Pin direct dependencies to controlled versions and use a lockfile with integrity metadata.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "SLSA Source"
+      ]
+    },
+    {
+      "id": "ARL-DEP-003",
+      "title": "Install script executes shell or remote content",
+      "severity": "high",
+      "category": "Supply chain",
+      "summary": "A package lifecycle script executes a shell command or retrieves remote executable content.",
+      "remediation": "Remove unnecessary lifecycle scripts; verify and pin unavoidable tooling and run installs in a restricted environment.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "SLSA Build"
+      ]
+    },
+    {
+      "id": "ARL-REPO-001",
+      "title": "Security policy is missing",
+      "severity": "low",
+      "category": "Governance",
+      "summary": "No SECURITY.md or equivalent vulnerability-reporting policy was found.",
+      "remediation": "Publish a security policy with supported versions, a private reporting channel, response expectations and safe-harbour language.",
+      "frameworks": [
+        "NIST AI RMF GOVERN 2",
+        "NIST SSDF"
+      ]
+    },
+    {
+      "id": "ARL-REPO-002",
+      "title": "Automated tests are not evident",
+      "severity": "medium",
+      "category": "Assurance",
+      "summary": "No test directory, test script, or common test configuration was detected.",
+      "remediation": "Add repeatable unit, integration, security and adversarial tests and enforce them as a release gate.",
+      "frameworks": [
+        "NIST AI RMF MEASURE 2.1",
+        "OWASP Secure Agent Testing"
+      ]
+    }
+  ]
+}

@@ -8,6 +8,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PRODUCT_STAGE
+        value: controlled-beta
       - key: BASE_URL
         sync: false
       - key: SESSION_SECRET
@@ -18,6 +20,20 @@ services:
         value: "false"
       - key: DATABASE_PATH
         value: /var/data/agent-risk-layer.sqlite
+      - key: SESSION_IDLE_HOURS
+        value: "12"
+      - key: SESSION_ABSOLUTE_DAYS
+        value: "7"
+      - key: EMAIL_VERIFICATION_HOURS
+        value: "24"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: FULFILMENT_WORKER_INTERVAL_MS
+        value: "15000"
+      - key: RETENTION_WORKER_INTERVAL_MS
+        value: "3600000"
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
       - key: COMPANY_NAME
         value: AgentRiskLayer
       - key: COMPANY_LEGAL_NAME

@@ -1,0 +1,13 @@
+{
+  "name": "AgentRisk Inspector",
+  "version": "3.1.0",
+  "policyVersion": "arl-inspector-policy-2026.08",
+  "bundleSchema": "arl.inspection.bundle.v1",
+  "sha256": "3f9de25e4d8c8103db13cd03b16a214345f2b8cad0ddec08ee97690569c7f2c0",
+  "privacyContract": [
+    "No source code uploaded",
+    "No matched secret values uploaded",
+    "Read-only static inspection",
+    "No exploitation or network probing"
+  ]
+}

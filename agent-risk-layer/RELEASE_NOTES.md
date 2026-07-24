@@ -73,3 +73,127 @@ Live Stripe, Resend, tax, legal, monitoring and independent security validation 
 - Retains backward compatibility with older Stripe webhook payload shapes.
 - Adds regression tests for the current webhook object structure.
 
+## v2.0.0 — Evidence-led Agent Security Review
+
+- Expands the assessment to 25 security controls across exposure, authority, data, tools, memory, monitoring, governance and incident response.
+- Adds evidence confidence for every answer: none, claimed, documented or tested.
+- Separates inherent exposure, control weakness and evidence confidence.
+- Adds credible multi-control attack paths rather than isolated checklist findings.
+- Adds detailed finding impact, required control, evidence status and framework mappings.
+- Rebuilds the Professional PDF as an 11-section decision and assurance report.
+- Adds remediation owners, deadlines, verification methods and retest acceptance criteria.
+- Adds a transparent methodology page and Professional report preview.
+- Updates the results page with deployment decision, risk composition and attack-path visibility.
+
+
+## v3.0.0 — AgentRisk Inspector and continuous technical evidence
+
+### Product
+
+- Adds an official, downloadable, zero-dependency local inspector.
+- Adds a private inspector workspace for creating one-time upload commands and viewing scan history.
+- Separates self-declared risk from observed technical risk.
+- Adds observed findings to paid reports without claiming independent verification.
+- Adds scan-to-scan change tracking for new, resolved and unchanged findings.
+- Adds professional PDF sections for local technical evidence, integrity, scope and drift.
+
+### Scanner
+
+- 27 deterministic policy checks covering secrets, supply chain, CI/CD, containers, Kubernetes, MCP/tool scope, AI execution, output validation, approvals, memory, resource limits, governance and tests.
+- No target-code execution, exploitation, symlink following or network probing.
+- Source code and matched secret values excluded from bundles.
+- Optional relative paths; default evidence uses basenames and path hashes.
+- Ed25519 signature and SHA-256 digest.
+- Published scanner-release digest comparison with explicit remote-attestation limitation.
+- SARIF export and `--fail-on` CI release gates.
+- Optional stable local signing key.
+- Disclosed exclusions and accountable accepted-risk review configuration.
+
+### Platform security
+
+- One-time inspection tokens stored as HMAC hashes.
+- Fifteen-minute token expiry and single-use transaction.
+- Unique bundle digest replay protection.
+- 2 MB upload limit and bounded schema validation.
+- Bundle freshness checks and secret-like payload rejection.
+- Inspection access limited to assessment owners.
+- Account export and deletion include inspection evidence.
+
+### Validation
+
+- Adds redaction, secret-value exclusion, signature-tamper, approved-release, replay-protection and drift-comparison tests.
+- Full commercial flow remains covered: account, assessment, paywall, PDF, subscription, sharing, recovery, export and deletion.
+- Recalculates inspection posture and finding totals server-side instead of trusting submitted summaries.
+- Claims one-time scan tokens atomically to prevent concurrent reuse.
+- Uses non-correlating per-scan HMAC fingerprints for detected credential values.
+- Adds a public Trust Centre, dynamic security.txt and downloadable 20-page sample report.
+- Adds a private, bookmarkable technical-evidence detail page.
+
+## v4.1.0 - Controlled beta hardening
+
+### Reliability
+
+- Invalid JSON now returns HTTP 400 rather than an unexpected HTTP 500.
+- Account data exports now include red-team authorisations.
+- Added SQLite backup creation, SHA-256 manifests, independent verification and restore-drill tooling.
+
+### Static Inspector precision
+
+- Added named false-positive review with owner, reason and expiry.
+- False-positive findings remain visible but are excluded from technical-risk scoring.
+- Secret-shaped values in test/example contexts are downgraded pending review.
+- Public image/SVG wildcard CORS is no longer reported when the response is explicitly public, cacheable and cross-origin safe.
+
+### Controlled testing
+
+- Expanded from 16 to 32 attack cases.
+- Added 1-5 repeated trials, pass rate and confidence statements.
+- Added encoded, multilingual, hidden-markup, RAG poisoning, SSRF-shaped, SQL-shaped, command-shaped, template-shaped, tenant-isolation, stale-approval, tool-shadowing and recursive-delegation cases.
+- Added written Rules of Engagement with authority, scope, window, emergency contact, expiry and revocation.
+- Staging uploads are bound to the approved assessment, campaign mode, environment and endpoint origin.
+
+### Reporting and website
+
+- Redesigned the Professional PDF with a premium cover, metric cards, risk bars, decision callouts and Rules of Engagement evidence.
+- Updated the website with controlled-beta disclosure, evidence ladder, repeated-trial messaging and clearer assurance boundaries.
+- Updated founding-beta pricing language without changing Stripe prices.
+
+## v4.2.0 — Reliability, identity and operational hardening
+
+### Payment reliability
+
+- Introduces durable purchase fulfilment states and retryable background jobs.
+- Grants paid access transactionally before asynchronous PDF/email work.
+- Records Stripe session snapshots and report-snapshot digests.
+- Adds exponential retry, dead-letter handling, operational alerts and admin reconciliation.
+- Makes webhook and checkout-status processing safe to repeat after partial failure.
+
+### Report consistency
+
+- Uses one report service for browser downloads, email delivery and retries.
+- Includes the latest Inspector and Red Team evidence in every Professional report snapshot.
+- Records report integrity metadata used for operational verification.
+
+### Identity and abuse resistance
+
+- Replaces synchronous password hashing with asynchronous scrypt.
+- Adds email verification and gates paid/evidence-producing actions behind it.
+- Adds TOTP MFA, recovery codes and MFA login challenges.
+- Adds reauthentication for destructive account actions.
+- Adds idle and absolute session expiration.
+- Adds persistent SQLite-backed rate limits and trusted-proxy client-IP resolution.
+- Requires MFA for production administrator access.
+
+### Privacy and testing authority
+
+- Enforces Rules of Engagement campaign start/completion windows.
+- Adds scheduled evidence retention enforcement, deletion receipts and legal holds.
+- Exposes retention status and fulfilment status in customer and operator views.
+
+### Operations and platform
+
+- Adds alerts and reconciliation controls to the owner dashboard.
+- Adds checksum-verified atomic database restore tooling and backup rotation.
+- Pins the production Node container tag.
+- Removes inline styles and `unsafe-inline` from the browser CSP.
+- Removes unsupported Agency client/team-workspace claims.

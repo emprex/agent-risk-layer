@@ -1,39 +1,53 @@
-# AgentRiskLayer
+# AgentRiskLayer 4.2 — Resilient Controlled Beta
 
-A complete, zero-dependency Node 22 application for selling automated AI-agent security assessments.
+AgentRiskLayer is an evidence-led AI-agent security assessment platform. It combines four assurance layers while keeping their trust boundaries explicit:
+
+1. **Declared risk assessment** — 25 controls covering exposure, authority, tools, data, memory, monitoring and incident response.
+2. **Read-only local Inspector** — static checks for repository, CI/CD, containers, MCP, dependency and agent-control risks.
+3. **Controlled Red Team Runner** — 32 non-destructive attack cases with repeated trials against a simulator or authorised staging adapter.
+4. **Professional security report** — deployment decision, attack paths, evidence register, remediation roadmap and retest criteria.
+
+The product stage is **controlled beta**. Active testing is limited to local, test and staging systems with synthetic data, dry-run tools and written Rules of Engagement. Production and destructive testing are refused.
+
+## What changed in 4.2
+
+Version 4.2 resolves all six blockers from the independent v4.1 audit:
+
+- **Durable payment fulfilment:** purchases now move through recorded fulfilment states, paid access is granted transactionally, failed PDF/email work is retried with backoff, dead-lettered jobs create operational alerts, and administrators can reconcile incomplete purchases.
+- **Complete report delivery:** downloaded and emailed reports use the same report service and include the latest Inspector and Red Team evidence.
+- **Persistent trusted-proxy rate limiting:** limits are stored in SQLite, client identity uses the trusted right-most proxy chain rather than spoofable left-most forwarding values, and repeated abuse receives progressive penalties.
+- **Enforced evidence retention:** expired red-team evidence is purged automatically, deletion receipts are retained, and explicit legal holds prevent deletion while remaining visible to operators.
+- **Strict authorisation windows:** staging evidence is accepted only when its recorded start and completion fall inside the approved Rules of Engagement window, with a five-minute clock-skew allowance.
+- **Honest Agency positioning:** unsupported team/client-workspace claims were removed. The current Agency product offers a multi-assessment portfolio in one secured account.
+
+Additional hardening includes:
+
+- Asynchronous scrypt password verification to avoid blocking the Node event loop.
+- Verified-email gates for payments, Inspector uploads and Red Team campaigns.
+- Optional TOTP MFA with one-time recovery codes.
+- Recent-password/MFA reauthentication for destructive account actions.
+- Idle and absolute session expiry.
+- Admin MFA enforcement in production.
+- Strict CSP without `unsafe-inline` and removal of inline style attributes.
+- Backup checksum verification, atomic restore tooling and automated retention.
+- Owner operations view for fulfilment failures, retention activity and unresolved alerts.
+- Exact Node container tag for reproducible builds.
 
 ## Customer journey
 
-1. Complete a twelve-domain security questionnaire.
-2. Receive a free 0–100 residual-risk score and the top three findings.
-3. Create an account and save the assessment.
-4. Buy an Essential report for **£9.99** or a Professional report for **£24.99**.
-5. Receive an automatically generated PDF by download and email.
-6. Subscribe to Developer for **£19/month** or Agency for **£59/month**.
-7. Manage billing, saved assessments, public result links and shareable badges.
-
-## Included
-
-- Responsive landing, assessment, result, pricing, authentication and dashboard screens
-- Five focused SEO assessment pages
-- Deterministic and tested scoring engine
-- Salted `scrypt` password hashing and HTTP-only sessions
-- SQLite persistence using Node's built-in `node:sqlite`
-- A real free-summary paywall
-- Stripe Checkout, verified webhooks, subscriptions and billing portal
-- Safe simulated checkout for local testing
-- Automatic Essential and Professional PDF generation
-- Resend email delivery with PDF attachments
-- Owner revenue and funnel analytics
-- Public result pages and SVG badges
-- Security headers, request limits and rate limiting
-- Privacy and terms templates
-- Dockerfile and Render blueprint
-- Automated tests and end-to-end smoke-test script
+1. Complete the free evidence-aware assessment.
+2. Verify the account email and save the result.
+3. Run the Inspector locally against an authorised repository.
+4. Upload the signed, redacted evidence bundle with a one-time token.
+5. Purchase a report or use an eligible subscription.
+6. For staging testing, create written Rules of Engagement.
+7. Run the signed customer-side runner against a simulator or staging adapter.
+8. Review declared, observed and reproduced findings separately.
+9. Remediate and rerun to compare new, resolved and unchanged findings.
 
 ## Run locally
 
-Node **22.5 or newer** is required. There are no external npm dependencies.
+Node **22.5 or newer** is required. There are no external runtime npm dependencies.
 
 ```bash
 cp .env.example .env
@@ -42,106 +56,148 @@ npm start
 
 Open `http://localhost:3000`.
 
-`DEMO_MODE=true` is the default. Demo checkout charges nothing, records the purchase, generates the report and simulates email delivery unless a Resend key is configured.
+Run the complete release validation:
 
 ```bash
-npm run dev
-npm test
-npm run check
+npm run validate
 ```
 
-## Live Stripe configuration
+## Local Inspector
 
-Create four Stripe Prices and add their IDs to `.env`:
+```bash
+node inspector/agent-risk-inspector.mjs scan . \
+  --authorised \
+  --environment test \
+  --out agentrisk-inspection.json
+```
+
+Use `.agentrisk.json` for exclusions, accepted-risk reviews and named false-positive reviews. Reviews require a reason, accountable owner and expiry date. Suppressed findings remain in the evidence bundle but do not inflate technical risk.
+
+## Controlled Red Team Runner
+
+Simulation:
+
+```bash
+node redteam/agent-risk-redteam.mjs run \
+  --authorised \
+  --environment test \
+  --profile hardened \
+  --trials 5 \
+  --out agentrisk-redteam.json
+```
+
+Authorised staging campaign:
+
+```bash
+ARL_TARGET_TOKEN=... node redteam/agent-risk-redteam.mjs run \
+  --authorised \
+  --environment staging \
+  --endpoint https://staging.example.com/agentrisklayer/evaluate \
+  --auth-env ARL_TARGET_TOKEN \
+  --authorisation-id roe_... \
+  --trials 3 \
+  --upload https://agentrisklayer.com \
+  --token red_... \
+  --out agentrisk-redteam.json
+```
+
+The adapter contract is documented in [REDTEAM_ADAPTER_PROTOCOL.md](REDTEAM_ADAPTER_PROTOCOL.md).
+
+## Backup and restore
+
+Create a consistent SQLite backup:
+
+```bash
+DATABASE_PATH=/var/data/agent-risk-layer.sqlite \
+BACKUP_RETENTION_DAYS=30 \
+npm run db:backup -- /var/data/backups/agentrisklayer.sqlite
+```
+
+Verify it:
+
+```bash
+npm run db:verify-backup -- /var/data/backups/agentrisklayer.sqlite
+```
+
+Restore to a separate path first:
+
+```bash
+npm run db:restore -- \
+  /var/data/backups/agentrisklayer.sqlite \
+  /var/data/restore-drill.sqlite
+```
+
+The restore command validates the manifest checksum and SQLite `quick_check`, copies atomically and refuses to overwrite an existing database unless `--force` is supplied during a controlled maintenance window.
+
+## Production configuration
 
 ```dotenv
-DEMO_MODE=false
-STRIPE_SECRET_KEY=sk_...
+NODE_ENV=production
+PRODUCT_STAGE=controlled-beta
+BASE_URL=https://agentrisklayer.com
+DATABASE_PATH=/var/data/agent-risk-layer.sqlite
+SESSION_SECRET=...
+SESSION_IDLE_HOURS=12
+SESSION_ABSOLUTE_DAYS=7
+EMAIL_VERIFICATION_HOURS=24
+TRUSTED_PROXY_HOPS=1
+FULFILMENT_WORKER_INTERVAL_MS=15000
+RETENTION_WORKER_INTERVAL_MS=3600000
+BACKUP_RETENTION_DAYS=30
+STRIPE_SECRET_KEY=sk_live_...
 STRIPE_API_VERSION=2026-06-24.dahlia
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_BASIC_REPORT=price_...
 STRIPE_PRICE_PRO_REPORT=price_...
 STRIPE_PRICE_DEVELOPER_MONTHLY=price_...
 STRIPE_PRICE_AGENCY_MONTHLY=price_...
-```
-
-Webhook endpoint:
-
-```text
-https://your-domain.example/api/stripe/webhook
-```
-
-Subscribe to:
-
-```text
-checkout.session.completed
-customer.subscription.updated
-customer.subscription.deleted
-invoice.payment_failed
-```
-
-The application verifies webhook signatures and records each checkout session only once before fulfilment.
-
-Managed Payments is enabled on every Checkout Session, so Stripe/Link acts as merchant of record for eligible products when the feature is activated in the Stripe Dashboard.
-
-## Resend email configuration
-
-```dotenv
 RESEND_API_KEY=re_...
-EMAIL_FROM=AgentRiskLayer <reports@your-domain.example>
+EMAIL_FROM=AgentRiskLayer <reports@agentrisklayer.com>
+ADMIN_EMAIL=...
+SUPPORT_EMAIL=...
+COMPANY_LEGAL_NAME=...
+COMPANY_ADDRESS=...
 ```
 
-Without a key, delivery is logged as simulated and reports remain downloadable.
+Existing Stripe, Resend, DNS and Price IDs remain compatible with the v4.2 in-place upgrade.
 
-## Owner analytics
-
-```dotenv
-ADMIN_EMAIL=owner@your-domain.example
-```
-
-Sign in with that email and open `/admin.html`.
-
-## Database and deployment
-
-Default database:
+## Product routes
 
 ```text
-./data/agent-risk-layer.sqlite
+/                         Commercial landing page
+/assessment.html          Evidence-aware questionnaire
+/inspector.html           Private static-inspection workspace
+/redteam.html             Private campaign and authorisation workspace
+/methodology.html          Scoring, evidence and test methodology
+/trust.html                Trust centre and assurance boundaries
+/sample-report.html        Professional sample report
+/pricing.html              Reports and subscriptions
+/dashboard.html            Customer workspace and security settings
+/admin.html                Owner analytics, alerts and reconciliation
+/verify.html               Email verification
+/api/health                Health and deployed version
 ```
 
-Production persistent disk:
+## Trust boundary
 
-```dotenv
-DATABASE_PATH=/var/data/agent-risk-layer.sqlite
-```
+AgentRiskLayer does not claim that:
 
-The included `render.yaml` provisions persistent storage. For horizontal scaling or a serverless platform, replace the SQLite adapter with managed PostgreSQL.
+- A questionnaire answer is technically verified.
+- A static scan proves runtime or cloud security.
+- A customer-operated signature proves independent custody.
+- A passing case proves the entire system is secure.
+- A controlled campaign is an independent penetration test.
+- A score is a breach probability, certification or guarantee.
 
-## Main routes
+## Release evidence
 
-```text
-/                         Landing page
-/assessment.html          Questionnaire
-/result.html              Private result and report purchase
-/shared.html              Public summary
-/pricing.html             Reports and subscriptions
-/auth.html                Sign in and registration
-/dashboard.html           Customer workspace
-/admin.html               Owner analytics
-/privacy.html             Privacy template
-/terms.html               Terms template
-/checks/...                SEO pages
-/api/health               Health check
-```
+See:
 
-## Before public launch
+- [VALIDATION.md](VALIDATION.md)
+- [SECURITY.md](SECURITY.md)
+- [MIGRATION_V4_2.md](MIGRATION_V4_2.md)
+- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
+- [ASVS_5_CHECKLIST.md](ASVS_5_CHECKLIST.md)
+- [ACCESSIBILITY_AUDIT.md](ACCESSIBILITY_AUDIT.md)
 
-- Replace legal/operator placeholders.
-- Obtain legal review for privacy, refunds, consumer rights and liability.
-- Configure VAT/tax and invoice details in Stripe.
-- Add account deletion and data export.
-- Enable monitoring, backups and incident alerting.
-- Run penetration testing.
-- Test every Stripe flow in test mode before using live keys.
-
-AgentRiskLayer is automated decision support, not a penetration test, certification, guarantee, insurance product or legal opinion.
+External penetration testing, legal review and real-customer outcome evidence remain required before enterprise-grade or independently audited claims are made.
