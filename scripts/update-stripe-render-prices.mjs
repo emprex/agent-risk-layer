@@ -87,7 +87,7 @@ async function stripeRequest(path, options = {}) {
 }
 
 async function findOrCreatePrice(spec) {
-  const query = new URLSearchParams({ lookup_keys: spec.lookupKey, active: 'true', limit: '1' });
+  const query = new URLSearchParams({ 'lookup_keys[]': spec.lookupKey, active: 'true', limit: '1' });
   const existing = await stripeRequest(`/prices?${query}`);
   const found = existing.data?.[0];
   if (found) {
@@ -108,7 +108,6 @@ async function findOrCreatePrice(spec) {
     tax_behavior: 'inclusive',
     nickname: `${spec.name} — AgentRiskLayer v4.3`,
     'product_data[name]': spec.name,
-    'product_data[description]': spec.description,
     'product_data[metadata][app]': 'AgentRiskLayer',
     'metadata[release]': '4.4.0',
   });
