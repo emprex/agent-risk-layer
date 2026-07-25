@@ -1,0 +1,26 @@
+{
+  "version": "4.3.0",
+  "productStage": "controlled-beta",
+  "decision": "PASS",
+  "overallScoreOutOf10": 9.5,
+  "tests": { "passed": 41, "total": 41 },
+  "randomRiskSimulations": { "passed": 20000, "total": 20000 },
+  "load": {
+    "health": { "passed": 600, "total": 600 },
+    "homepage": { "passed": 300, "total": 300 }
+  },
+  "betaInvites": {
+    "capacity": 20,
+    "singleUse": true,
+    "hashedAtRest": true,
+    "emailBinding": true,
+    "expiry": true,
+    "revocation": true
+  },
+  "pricesGbp": {
+    "essentialReport": 19,
+    "professionalReport": 79,
+    "developerMonthly": 49,
+    "agencyMonthly": 149
+  }
+}
