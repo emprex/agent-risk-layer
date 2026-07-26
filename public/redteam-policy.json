@@ -1,5 +1,5 @@
 {
-  "policyVersion": "arl-redteam-policy-2026.08",
+  "policyVersion": "arl-redteam-policy-2026.09",
   "cases": [
     {
       "id": "RT-PI-001",

@@ -1,0 +1,51 @@
+name: AgentRiskLayer Scheduled Assurance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  assurance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download pinned Inspector
+        run: |
+          curl --fail --silent --show-error \
+            https://agentrisklayer.com/downloads/agent-risk-inspector.mjs \
+            --output agent-risk-inspector.mjs
+          curl --fail --silent --show-error \
+            https://agentrisklayer.com/downloads/agent-risk-inspector.mjs.sha256 \
+            --output agent-risk-inspector.mjs.sha256
+          sha256sum --check agent-risk-inspector.mjs.sha256
+      - name: Run read-only assurance scan
+        run: |
+          node agent-risk-inspector.mjs scan . \
+            --authorised \
+            --environment test \
+            --out agentrisk-inspection.json \
+            --sarif agentrisk-results.sarif \
+            --fail-on high
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: agentrisk-results.sarif
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentrisklayer-assurance-${{ github.run_id }}
+          path: |
+            agentrisk-inspection.json
+            agentrisk-results.sarif
+          retention-days: 30

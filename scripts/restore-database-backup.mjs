@@ -1,37 +1,36 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { verifyBackup } from './backup-database.mjs';
 
-export function restoreDatabase(backupPath, destinationPath, { expectedSha256 = null, force = false } = {}) {
-  const backup = path.resolve(backupPath);
-  const destination = path.resolve(destinationPath);
-  if (!fs.existsSync(backup)) throw new Error(`Backup not found: ${backup}`);
-  const digest = sha256(backup);
-  const manifestPath = `${backup}.manifest.json`;
-  if (fs.existsSync(manifestPath)) {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (manifest.sha256 !== digest) throw new Error('Backup checksum does not match its manifest.');
-  }
-  if (expectedSha256 && digest !== expectedSha256) throw new Error('Backup checksum does not match the expected digest.');
-  const check = new DatabaseSync(backup, { readOnly: true });
-  try {
-    const result = Object.values(check.prepare('PRAGMA quick_check').get())[0];
-    if (result !== 'ok') throw new Error(`SQLite quick_check returned ${result}`);
-  } finally { check.close(); }
-  if (fs.existsSync(destination) && !force) throw new Error('Destination exists. Pass --force only during a controlled maintenance window.');
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  const temporary = `${destination}.restore-${process.pid}-${Date.now()}`;
-  fs.copyFileSync(backup, temporary, fs.constants.COPYFILE_EXCL);
-  fs.chmodSync(temporary, 0o600);
-  fs.renameSync(temporary, destination);
-  return { ok: true, backup, destination, sha256: digest, restoredAt: new Date().toISOString() };
+export function restoreDatabase(backupPath, destinationUrl, { expectedSha256 = null, force = false, spawn = spawnSync } = {}) {
+  if (!force) throw new Error('Restore requires --force and a controlled maintenance window.');
+  assertDestination(destinationUrl);
+  const verification = verifyBackup(backupPath, { spawn, expectedSha256 });
+  const args = [
+    '--clean', '--if-exists', '--no-owner', '--no-privileges',
+    '--exit-on-error', '--single-transaction', path.resolve(backupPath),
+  ];
+  const result = spawn('pg_restore', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PGDATABASE: destinationUrl } });
+  if (result?.error) throw new Error(`pg_restore failed: ${result.error.message}`);
+  if (result?.status !== 0) throw new Error(`pg_restore failed: ${String(result?.stderr || '').trim() || `exit ${result?.status}`}`);
+  return { ok: true, backup: verification.file, destination: redact(destinationUrl), sha256: verification.sha256, restoredAt: new Date().toISOString() };
 }
-function sha256(file) { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); }
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
-  const [backup, destination, ...flags] = process.argv.slice(2);
-  if (!backup || !destination) { console.error('Usage: node scripts/restore-database-backup.mjs <backup.sqlite> <destination.sqlite> [--force]'); process.exit(1); }
+function assertDestination(value) {
+  let parsed;
+  try { parsed = new URL(String(value || '')); } catch { throw new Error('Destination must be a valid PostgreSQL URL.'); }
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !parsed.hostname || !parsed.pathname.slice(1)) throw new Error('Destination must be a PostgreSQL URL with host and database name.');
+}
+function redact(value) { const parsed = new URL(value); parsed.username = parsed.username ? '***' : ''; parsed.password = parsed.password ? '***' : ''; return parsed.toString(); }
+const isCli = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isCli) {
+  const [backup, ...flags] = process.argv.slice(2);
+  const destination = process.env.RESTORE_DATABASE_URL;
+  if (!backup || !destination) {
+    console.error('Usage: RESTORE_DATABASE_URL=postgresql://... node scripts/restore-database-backup.mjs <backup.dump> --force');
+    process.exit(1);
+  }
   try { console.log(JSON.stringify(restoreDatabase(backup, destination, { force: flags.includes('--force') }), null, 2)); }
   catch (error) { console.error(`Restore failed: ${error.message}`); process.exitCode = 1; }
 }

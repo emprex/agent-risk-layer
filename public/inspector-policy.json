@@ -1,5 +1,5 @@
 {
-  "policyVersion": "arl-inspector-policy-2026.08",
+  "policyVersion": "arl-inspector-policy-2026.09",
   "rules": [
     {
       "id": "ARL-SEC-001",

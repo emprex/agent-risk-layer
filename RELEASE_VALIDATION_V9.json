@@ -1,0 +1,166 @@
+{
+  "schema": "arl.release-validation.v2",
+  "product": "AgentRiskLayer",
+  "version": "9.0.0",
+  "releaseStatus": "deployment-package-ready-controlled-beta-live-verification-pending",
+  "generatedAt": "2026-07-26T13:01:04.530234Z",
+  "productionPersistence": {
+    "engine": "PostgreSQL",
+    "requiredEnvironmentVariable": "DATABASE_URL",
+    "filesystemDatabaseSupportedInProduction": false,
+    "renderPersistentDisk": false,
+    "renderDatabase": {
+      "majorVersion": "18",
+      "plan": "basic-1gb",
+      "diskSizeGB": 25,
+      "storageAutoscaling": true
+    },
+    "migrationFiles": [
+      "migrations/001_initial_schema.sql",
+      "migrations/002_indexes_and_backfill.sql",
+      "migrations/003_security_control_plane.sql"
+    ],
+    "migrationControl": "advisory lock plus SHA-256 checksum ledger",
+    "liveManagedDatabaseTested": false
+  },
+  "automatedGate": {
+    "command": "npm run validate",
+    "passed": true,
+    "tests": {
+      "total": 86,
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0
+    },
+    "syntaxCheck": true,
+    "smokeJourney": {
+      "passed": true,
+      "hostedRuntimeGuard": true,
+      "guardReplayProtection": true,
+      "privacySafeRuntimeEvidence": true,
+      "inventoryDriftWorkflow": true,
+      "remediationWorkflow": true,
+      "ownedWorkspaceDeletion": true,
+      "accountDeletion": true,
+      "analytics": {
+        "users": 1,
+        "assessments": 1,
+        "purchases": 2,
+        "fulfilledPurchases": 2,
+        "revenuePence": 12800,
+        "activeSubscriptions": 1,
+        "inspections": 3,
+        "redTeamRuns": 2,
+        "openAlerts": 0
+      }
+    },
+    "detectionBenchmark": {
+      "cases": 20,
+      "passed": 20,
+      "truePositive": 10,
+      "trueNegative": 10,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "scope": "Public synthetic English cases; internal and not production-representative."
+    },
+    "safetyScenarios": {
+      "total": 1000,
+      "passed": 1000,
+      "failed": 0,
+      "unsafeDecisions": 0,
+      "criticalPathScenarios": 567,
+      "averageScore": 57,
+      "seed": "0x5a17c0de"
+    },
+    "redTeamSimulation": {
+      "cases": 32,
+      "passed": 32,
+      "failed": 0,
+      "trialsPerCase": 1,
+      "grade": "A",
+      "scope": "Controlled synthetic hardened-profile simulation."
+    },
+    "loadTest": {
+      "virtualUsers": 100,
+      "requestsPerUser": 50,
+      "requests": 5000,
+      "success": 5000,
+      "errors": 0,
+      "durationSeconds": 1.99,
+      "requestsPerSecond": 2511.7,
+      "latencyMs": {
+        "p50": 32.1,
+        "p95": 76.4,
+        "p99": 148.4,
+        "max": 174.5
+      },
+      "scope": "Local mixed public-read and per-user CSRF/session traffic; no real payments, emails, PostgreSQL network traffic or external services."
+    },
+    "releaseAssets": {
+      "inspector": {
+        "version": "4.0.0",
+        "policyVersion": "arl-inspector-policy-2026.09",
+        "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
+      },
+      "redTeam": {
+        "version": "5.1.0",
+        "policyVersion": "arl-redteam-policy-2026.09",
+        "runnerSha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5"
+      },
+      "samplePdfBytes": 108513
+    },
+    "pricingDryRun": {
+      "passed": true,
+      "communityMonthlyPence": 0,
+      "communityGuardDecisions": 10000,
+      "foundingAssessmentOncePence": 9900,
+      "developerMonthlyPence": 2900,
+      "teamMonthlyPence": 9900,
+      "agencyMonthlyPence": 24900,
+      "enterpriseAnnualFromPence": 600000
+    },
+    "selfInspection": {
+      "passed": true,
+      "postureScore": 100,
+      "grade": "A",
+      "technicalRisk": 0,
+      "checksEvaluated": 27,
+      "activeFindings": 0,
+      "declaredFalsePositives": 1,
+      "integrityDigest": "15a95cb1bb2c2512f93d9aa110da499832d44b35a4d83fa79c1f1045f47153e0"
+    }
+  },
+  "controlPlane": {
+    "hostedGuard": true,
+    "monitorAndEnforce": true,
+    "productionDefault": "enforce",
+    "oneTimeHashedKeys": true,
+    "immediateRevocation": true,
+    "privacySafeRuntimeEvidence": true,
+    "inventoryDriftGate": true,
+    "ownedRemediation": true,
+    "auditTrail": true,
+    "protectedMetrics": true,
+    "community": {
+      "projects": 1,
+      "keysPerProject": 2,
+      "monthlyGuardDecisions": 10000,
+      "retentionDays": 7
+    }
+  },
+  "credentialBoundChecksRequiredBeforeControlledBeta": [
+    "Render managed PostgreSQL migration and readiness",
+    "real backup and restore drill",
+    "Stripe live checkout/webhook/portal/cancellation",
+    "Resend production delivery",
+    "DNS/TLS/security headers/monitoring",
+    "desktop and mobile production journeys",
+    "owner alert and recovery routing"
+  ],
+  "explicitLimitations": [
+    "Internal engineering validation, not independent certification, a penetration test or production history.",
+    "Complete smoke and load journeys use the isolated test-only compatibility adapter.",
+    "No owner-controlled live PostgreSQL, Stripe, Resend, DNS or production traffic was available in this environment.",
+    "The 20-case detection benchmark and 32-case red-team simulation are synthetic and not statistically representative of production accuracy."
+  ]
+}

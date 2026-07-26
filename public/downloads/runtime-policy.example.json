@@ -1,0 +1,13 @@
+{
+  "schema": "arl.runtime.policy.v1",
+  "version": "production-2026-07-25",
+  "mode": "enforce",
+  "failMode": "closed",
+  "allowedTools": ["search", "read_file", "support.lookup"],
+  "deniedTools": ["shell", "exec", "delete", "payment"],
+  "allowedHosts": ["api.example.com"],
+  "deniedPathPatterns": ["..", "/etc/", "/root/", ".ssh/", ".env", "credentials"],
+  "requireApprovalFor": ["write", "delete", "send", "deploy", "execute", "payment", "transfer"],
+  "maxArgumentBytes": 32768,
+  "blockSecretLikeValues": true
+}

@@ -22,6 +22,16 @@ test('maximum-risk configuration scores as critical', () => {
   assert.ok(result.recommendations.some((item) => item.priority === 'Immediate'));
 });
 
+test('critical attack path always overrides aggregate score and blocks deployment', () => {
+  const answers = answersAt(0);
+  answers.external_content = { value: 'open', evidence: 'tested' };
+  answers.input_boundary = { value: 'none', evidence: 'tested' };
+  answers.tool_scope = { value: 'privileged', evidence: 'tested' };
+  const result = evaluateAssessment(answers);
+  assert.ok(result.attackPaths.some((path) => path.severity === 'critical'));
+  assert.equal(result.decision, 'DO NOT DEPLOY');
+});
+
 test('moderate configuration produces findings and attack paths', () => {
   const answers = answersAt(1, 'documented');
   answers.permissions = { value: 'user', evidence: 'documented' };

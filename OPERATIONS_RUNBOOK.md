@@ -1,70 +1,52 @@
-# AgentRiskLayer 4.2 Operations Runbook
+# AgentRiskLayer v9 operations runbook
 
-## Daily checks
+## Daily
 
-- `/api/health` reports `ok: true` and version `4.4.0`.
-- Render service is Live and the persistent disk is mounted.
-- Owner dashboard shows no unresolved critical operational alerts.
-- Stripe webhook deliveries return HTTP 200.
-- Fulfilment jobs are not accumulating in retrying or dead-letter states.
-- Resend delivery failures are investigated and retried.
+- Check Render status, `/api/ready`, deployment logs and open operational alerts.
+- Check protected `/metrics` for request volume, runtime denies, project growth, open remediation and memory/uptime anomalies.
+- Review Stripe webhook failures, incomplete purchases and Resend delivery failures.
+- Confirm PostgreSQL connections, storage and managed backup status.
+- Review unusual Guard authentication/rate-limit activity without logging project secrets.
 
-## Paid customer reports
+## Weekly
 
-A paid purchase is healthy when:
+- Create an independent PostgreSQL archive and run `npm run db:verify-backup`.
+- Review control-plane quota use, denied decisions, risky inventory drift and overdue remediation.
+- Review beta invitation use, owner/admin activity, key revocations and integration failures.
+- Run one sandbox payment and one transactional email after payment/email configuration changes.
 
-1. The purchase is recorded as paid.
-2. Access is granted.
-3. The report snapshot is generated.
-4. The PDF/email job is completed or deliberately retried.
-5. The customer dashboard displays delivery status.
+## Monthly
 
-For an incomplete purchase, open `/admin.html`, inspect the alert and use reconciliation. Never edit the database manually while the service is running.
+- Restore the latest verified archive into a non-production PostgreSQL database.
+- Record restore duration, archive digest, migration state, table counts and functional smoke results.
+- Review account/workspace access, SCIM tokens, project keys, integration secrets and GitHub/Render membership.
+- Rotate credentials on schedule or immediately after suspected disclosure.
+- Patch the Node base image and dependencies only after full validation.
 
-## Fulfilment incident
+## Runtime-control incident
 
-1. Confirm the Stripe Checkout Session is paid in Stripe.
-2. Confirm the local purchase/session identifiers match.
-3. Review the fulfilment job error and attempt count.
-4. Fix the root cause, such as Resend configuration or storage access.
-5. Trigger reconciliation.
-6. Confirm report access and delivery.
-7. Close the operational alert with an incident note.
+1. Put affected projects into enforce mode or revoke exposed keys.
+2. Fail closed for high-impact actions while integrity is uncertain.
+3. Preserve privacy-safe runtime evidence, audit history and database recovery points.
+4. Compare inventory snapshots and identify new agents/tools/MCP servers/models.
+5. Assign remediation with owner, severity and due date.
+6. Retest and verify before reopening deployment gates.
+7. Notify affected customers according to the approved incident process.
 
-## Evidence retention
+## Payment/email incident
 
-The retention worker runs periodically and on startup. Expired red-team evidence is deleted and a non-sensitive receipt is retained. A legal hold blocks deletion and must include an accountable decision outside the application.
+- Disable checkout or fulfilment if webhook integrity is uncertain.
+- Never fulfil from a browser redirect alone; reconcile against signed Stripe events.
+- Retry transactional email from the recorded fulfilment state without duplicating purchases.
 
-Review legal holds at least monthly. Remove a hold only after written authorisation.
+## Database recovery
 
-## Backup schedule
+- Prefer Render-managed point-in-time recovery where available.
+- Verify independent `.dump` archives before restoration.
+- Restore to a new database first; never test restoration against production.
+- Require `--force`, an approved maintenance window and separately supplied `RESTORE_DATABASE_URL`.
+- Re-run migrations, `/api/ready`, the full smoke journey and business reconciliation before routing traffic.
 
-- Daily automated backup to `/var/data/backups`.
-- Retain at least 30 days or the legally approved period.
-- Verify every backup’s checksum and SQLite `quick_check`.
-- Perform a restore drill at least monthly to a separate path.
-- Never restore over the live database without maintenance mode and a rollback copy.
+## Graceful shutdown
 
-## Key rotation
-
-Rotate immediately after suspected disclosure and at the organisation’s chosen periodic interval:
-
-- Stripe secret and webhook secret
-- Resend API key
-- Render deploy hook
-- Session secret only with an accepted consequence that all sessions and encrypted MFA secrets require a controlled migration/reset
-
-## Incident severity
-
-- **Critical:** unauthorised access, secret exposure, payment access not granted, evidence scope breach.
-- **High:** repeated delivery failure, retention failure, broken MFA/admin protection.
-- **Medium:** isolated report-generation failure, non-sensitive monitoring gap.
-- **Low:** cosmetic or informational issue without security/customer impact.
-
-## Emergency actions
-
-- Enable Render maintenance mode.
-- Revoke affected external credentials.
-- Preserve logs and database backup.
-- Stop Red Team token issuance if authorisation integrity is uncertain.
-- Notify affected customers and regulators when legally required.
+Render `SIGTERM` stops accepting new HTTP connections, waits for in-flight work and closes the PostgreSQL pool. The process forces termination after ten seconds if shutdown cannot complete.

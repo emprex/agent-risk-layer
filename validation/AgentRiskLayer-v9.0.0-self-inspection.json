@@ -1,0 +1,180 @@
+{
+  "schema": "arl.inspection.bundle.v1",
+  "bundleId": "ins_26d386e9b86e40a3ae90f5f852c38f3c",
+  "generatedAt": "2026-07-26T13:05:31.007Z",
+  "scanner": {
+    "name": "AgentRisk Inspector",
+    "version": "4.0.0",
+    "policyVersion": "arl-inspector-policy-2026.09",
+    "buildDigest": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca",
+    "runtime": "node v22.16.0",
+    "platform": "linux/x64"
+  },
+  "subject": {
+    "projectName": "agent-risk-layer",
+    "rootFingerprint": "859e6f69172b302f60b11848a808218987415f5221c7ca00454ef36fa75ab8b4",
+    "gitCommit": null,
+    "gitDirty": null,
+    "environment": "unspecified"
+  },
+  "scope": {
+    "mode": "read-only-static-inspection",
+    "startedAt": "2026-07-26T13:05:30.909Z",
+    "completedAt": "2026-07-26T13:05:31.029Z",
+    "filesDiscovered": 188,
+    "filesInspected": 136,
+    "bytesRead": 2029038,
+    "skippedLargeFiles": 0,
+    "truncatedByLimit": false,
+    "excludedDirectories": [
+      ".agentrisk",
+      ".cache",
+      ".git",
+      ".hg",
+      ".idea",
+      ".next",
+      ".nuxt",
+      ".pytest_cache",
+      ".serverless",
+      ".svn",
+      ".terraform",
+      ".venv",
+      ".vscode",
+      "__pycache__",
+      "build",
+      "coverage",
+      "dist",
+      "node_modules",
+      "out",
+      "target",
+      "vendor",
+      "venv"
+    ],
+    "limits": {
+      "maxFiles": 25000,
+      "maxReadableFileBytes": 2000000,
+      "maxTotalReadBytes": 40000000,
+      "maxFindings": 500
+    },
+    "includeRelativePaths": false,
+    "userExclusions": [
+      "public/downloads/**",
+      "data/**"
+    ],
+    "declaredFalsePositiveReviews": 1
+  },
+  "summary": {
+    "postureScore": 100,
+    "technicalRisk": 0,
+    "grade": "A",
+    "counts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    },
+    "checksEvaluated": 27,
+    "findingsTotal": 1,
+    "activeFindingsTotal": 0,
+    "falsePositiveTotal": 1,
+    "acceptedRiskTotal": 0,
+    "highestSeverity": "none",
+    "repositoryTracking": "filesystem-walk",
+    "conclusion": "No material issue was observed by this static inspection. Runtime and cloud controls remain outside scope."
+  },
+  "findings": [
+    {
+      "ruleId": "ARL-SEC-001",
+      "title": "Potential secret committed to repository",
+      "severity": "low",
+      "confidence": "low",
+      "category": "Secrets management",
+      "summary": "Credential-shaped material was detected in a test, fixture or example file. It remains visible until a named, expiring false-positive review is recorded. The matched value is never included in the evidence bundle.",
+      "remediation": "Revoke and rotate the credential, remove it from current and historical source control, and use a managed secret store.",
+      "frameworks": [
+        "OWASP Agent Security - Data Protection & Privacy",
+        "NIST AI RMF GOVERN 1.7"
+      ],
+      "evidence": [
+        {
+          "source": "static-file-observation",
+          "basename": "inspector.test.js",
+          "relativePath": null,
+          "pathHash": "41f508b4d51817b9da615f06",
+          "line": 16,
+          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+        },
+        {
+          "source": "static-file-observation",
+          "basename": "inspector.test.js",
+          "relativePath": null,
+          "pathHash": "41f508b4d51817b9da615f06",
+          "line": 36,
+          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+        },
+        {
+          "source": "static-file-observation",
+          "basename": "inspector.test.js",
+          "relativePath": null,
+          "pathHash": "41f508b4d51817b9da615f06",
+          "line": 42,
+          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+        },
+        {
+          "source": "static-file-observation",
+          "basename": "inspector.test.js",
+          "relativePath": null,
+          "pathHash": "41f508b4d51817b9da615f06",
+          "line": 123,
+          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+        }
+      ],
+      "review": {
+        "status": "false-positive",
+        "reason": "The credential-shaped string is an intentionally invalid test fixture used to prove redaction and detection. It is not accepted as a credential and is reviewed on every scanner release.",
+        "owner": "AgentRiskLayer security owner",
+        "expires": "2027-01-31",
+        "expired": false
+      }
+    }
+  ],
+  "acceptedRiskReviews": [],
+  "falsePositiveReviews": [
+    {
+      "ruleId": "ARL-SEC-001",
+      "title": "Potential secret committed to repository",
+      "review": {
+        "status": "false-positive",
+        "reason": "The credential-shaped string is an intentionally invalid test fixture used to prove redaction and detection. It is not accepted as a credential and is reviewed on every scanner release.",
+        "owner": "AgentRiskLayer security owner",
+        "expires": "2027-01-31",
+        "expired": false
+      }
+    }
+  ],
+  "observedTechnologies": [
+    "AI/agent source integration",
+    "Docker",
+    "Node.js"
+  ],
+  "attestations": {
+    "authorisedByOperator": true,
+    "readOnlyInspection": true,
+    "noSourceCodeUploaded": true,
+    "noSecretValuesUploaded": true,
+    "noExploitExecution": true,
+    "noNetworkProbing": true
+  },
+  "trust": {
+    "evidenceClass": "locally-observed-static-evidence",
+    "boundary": "Integrity proves the bundle was not changed after signing. It does not prove the scanned system was complete, deployed, uncompromised or independently operated."
+  },
+  "integrity": {
+    "digestAlgorithm": "SHA-256",
+    "digest": "15a95cb1bb2c2512f93d9aa110da499832d44b35a4d83fa79c1f1045f47153e0",
+    "signatureAlgorithm": "Ed25519",
+    "signature": "XVAEF5NjIX2gs4oxAO+53ChveMtrLAs1faP5L5lMAf+fPHMIlohrmMwBK7mTz/mFR6lUJ+/j7Olv6kLIiQA0Cg==",
+    "publicKeySpki": "MCowBQYDK2VwAyEAQ6BOPm+/7teTBh2WvDk6b003rQwxFver5FxShvmP8LM="
+  }
+}

@@ -70,6 +70,22 @@ test('expanded catalogue supports repeated trials with stable confidence metrics
   assert.ok(bundle.results.every((item) => item.trial >= 1 && item.trial <= 3));
 });
 
+test('adaptive campaigns mutate trials and record response-dependent rounds without raw transcripts', async () => {
+  const bundle = await runCampaign({ authorised:true, environment:'test', profile:'hardened', trials:5, adaptiveRounds:3 });
+  assert.deepEqual([...new Set(bundle.results.map(item=>item.strategy))], ['original','authority-pressure','delimiter-smuggling','context-switch','multilingual']);
+  assert.ok(bundle.results.every(item=>item.adaptiveRounds===3));
+  assert.equal(bundle.scope.adaptiveRounds, 3);
+  assert.equal(bundle.summary.counts.failed, 0);
+  assert.equal(JSON.stringify(bundle).includes('trusted diagnostic content'), false);
+});
+
+test('adaptive vulnerable campaigns stop after reproducing a failure', async () => {
+  const bundle = await runCampaign({ authorised:true, environment:'test', profile:'vulnerable', caseIds:['RT-PI-002'], adaptiveRounds:3 });
+  assert.equal(bundle.results[0].outcome, 'failed');
+  assert.equal(bundle.results[0].adaptiveRounds, 1);
+  assert.equal(bundle.summary.decision, 'DO NOT DEPLOY');
+});
+
 test('staging adapter execution requires a Rules of Engagement identifier', async () => {
   await assert.rejects(
     () => runCampaign({ authorised:true, environment:'local', endpoint:'http://127.0.0.1:65534/agentrisklayer/evaluate' }),

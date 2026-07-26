@@ -1,63 +1,29 @@
-# Security Policy
+# AgentRiskLayer security policy
 
-## Supported release
+## Reporting a vulnerability
 
-AgentRiskLayer 4.2 is the supported controlled-beta release.
+Use the contact published at `/.well-known/security.txt`. Do not include live credentials, raw customer prompts, payment data or unnecessary personal information in the initial report. We will acknowledge, triage and coordinate remediation according to severity and customer impact.
 
-## Reporting vulnerabilities
+## Security architecture
 
-Use the private contact published at `/.well-known/security.txt`. Do not send customer secrets, personal data or production exploit evidence through public channels.
+- Production persistence is managed PostgreSQL through `DATABASE_URL`; startup fails closed without mandatory controls.
+- Passwords use asynchronous scrypt; sessions are HTTP-only, SameSite and CSRF protected.
+- MFA, email verification, recovery codes, rate limits and trusted-proxy handling protect account access.
+- Workspace roles and server-side ownership checks enforce tenant boundaries.
+- Project API keys are shown once, stored only as hashes, scoped to a project and immediately revocable.
+- `/v1/guard` has malformed-key rejection, authentication-path protection, per-key burst limits, monthly plan quotas and replay-safe request IDs.
+- Hosted runtime evidence excludes raw prompts, responses and tool arguments.
+- High-impact tools can require approval bound to the exact action and parameters.
+- Inventory drift, remediation status and project changes are audit logged.
+- Stripe webhook signatures control fulfilment; browser redirects never grant access by themselves.
+- Inspection and red-team evidence uses digests/signatures, one-time upload tokens and replay protection.
+- Production metrics require a separate strong bearer token.
+- PostgreSQL migrations are checksum protected; backups are hashed and verified before restoration.
 
-## Identity and session controls
+## Scope and limitations
 
-- Salted asynchronous scrypt password hashing
-- Verified-email gates for purchases and evidence workflows
-- Optional TOTP MFA and one-time recovery codes
-- Production administrator MFA requirement
-- Recent-password/MFA reauthentication for destructive actions
-- HTTP-only SameSite session cookies
-- Idle and absolute session expiry
-- CSRF protection
-- Persistent, progressive rate limits
-- Trusted right-most proxy-chain client-IP resolution
+AgentRiskLayer provides security decision support and enforcement controls. It is not an independent penetration test, certification, guarantee, legal opinion or insurance product. Internal benchmarks cover disclosed synthetic cases and must not be represented as universal detection accuracy.
 
-## Payment and delivery controls
+## Release requirements
 
-- Stripe webhook signature verification
-- Idempotent event tracking
-- Durable fulfilment state machine
-- Transactional paid-access grant
-- Retryable PDF/email jobs with backoff
-- Dead-letter alerts and administrator reconciliation
-- Shared report snapshot generation across download and email paths
-
-## Evidence and controlled-testing controls
-
-- Separate private-access and public-share tokens
-- Object-level ownership checks
-- HMAC-hashed one-time evidence tokens
-- SHA-256 and Ed25519 evidence integrity
-- Official Inspector and Runner build-digest checks
-- Atomic token claims and replay rejection
-- Secret-like payload rejection
-- Written Rules of Engagement
-- Assessment, environment and endpoint-origin binding
-- Campaign start/completion window enforcement
-- Automated evidence retention, deletion receipts and explicit legal holds
-
-## Browser and application controls
-
-- Strict CSP without `unsafe-inline`
-- No public inline style attributes
-- Frame denial, MIME sniffing prevention and strict transport security
-- Request-size limits and malformed-input handling
-- Data export and account deletion
-- Consistent SQLite backup, checksum verification and atomic restore tooling
-
-## Trust limitations
-
-Integrity verification proves that the submitted bundle matches its local signature and published tool release. It does not prove completeness, independent custody, production equivalence or absence of pre-generation tampering.
-
-## External assurance
-
-Do not describe AgentRiskLayer as independently certified, enterprise audited or guaranteed secure until external penetration testing, independent methodology review, legal review, a live restore drill and real-customer evidence are complete.
+No release is production-ready until automated tests, syntax checks, smoke journey, detection benchmark, safety scenarios, load test, manifest verification and owner-controlled live-service checks pass.

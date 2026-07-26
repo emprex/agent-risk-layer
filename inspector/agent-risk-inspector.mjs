@@ -15,8 +15,8 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '3.1.0';
-export const POLICY_VERSION = 'arl-inspector-policy-2026.08';
+export const INSPECTOR_VERSION = '4.0.0';
+export const POLICY_VERSION = 'arl-inspector-policy-2026.09';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
 const DEFAULT_LIMITS = Object.freeze({
@@ -552,6 +552,31 @@ export function toSarif(bundle){
   }));
   return {version:'2.1.0','$schema':'https://json.schemastore.org/sarif-2.1.0.json',runs:[{tool:{driver:{name:'AgentRisk Inspector',version:INSPECTOR_VERSION,informationUri:'https://agentrisklayer.com/methodology.html',rules}},results}]};
 }
+export function compareBundles(baseline,current){
+  if(!baseline||!current||baseline.schema!==BUNDLE_SCHEMA||current.schema!==BUNDLE_SCHEMA)throw new Error('Both files must be AgentRisk Inspector bundles.');
+  const key=(item)=>`${item.ruleId}:${(item.evidence||[]).map((e)=>e.pathHash||e.basename||e.fact).sort().join('|')}`;
+  const before=new Map((baseline.findings||[]).map((item)=>[key(item),item]));
+  const after=new Map((current.findings||[]).map((item)=>[key(item),item]));
+  const added=[...after].filter(([id])=>!before.has(id)).map(([,item])=>item);
+  const resolved=[...before].filter(([id])=>!after.has(id)).map(([,item])=>item);
+  const unchanged=[...after].filter(([id])=>before.has(id)).map(([,item])=>item);
+  return {
+    schema:'arl.inspection.delta.v1',generatedAt:new Date().toISOString(),
+    baseline:{bundleId:baseline.bundleId,generatedAt:baseline.generatedAt,postureScore:baseline.summary?.postureScore},
+    current:{bundleId:current.bundleId,generatedAt:current.generatedAt,postureScore:current.summary?.postureScore},
+    summary:{added:added.length,resolved:resolved.length,unchanged:unchanged.length,postureChange:(current.summary?.postureScore||0)-(baseline.summary?.postureScore||0)},
+    added,resolved,unchanged,
+  };
+}
+
+export function frameworkCoverage(bundle){
+  const coverage=new Map();
+  for(const finding of bundle.findings||[])for(const framework of finding.frameworks||[]){
+    const current=coverage.get(framework)||{framework,findings:0,critical:0,high:0,medium:0,low:0};
+    current.findings+=1;current[finding.severity]=(current[finding.severity]||0)+1;coverage.set(framework,current);
+  }
+  return [...coverage.values()].sort((a,b)=>b.findings-a.findings||a.framework.localeCompare(b.framework));
+}
 function failsThreshold(findings,threshold){
   const rank={critical:4,high:3,medium:2,low:1,info:0};const target=rank[String(threshold).toLowerCase()];
   if(target===undefined)throw new Error('--fail-on must be critical, high, medium, low, or info.');
@@ -573,6 +598,12 @@ async function main(){
     const file=args.positionals[0];if(!file)throw new Error('Usage: verify <bundle.json>');
     const result=verifyBundle(JSON.parse(fs.readFileSync(file,'utf8')));console.log(JSON.stringify(result,null,2));process.exitCode=result.valid?0:2;return;
   }
+  if(args.command==='compare'){
+    const [baselineFile,currentFile]=args.positionals;if(!baselineFile||!currentFile)throw new Error('Usage: compare <baseline.json> <current.json> [--out delta.json]');
+    const delta=compareBundles(JSON.parse(fs.readFileSync(path.resolve(baselineFile),'utf8')),JSON.parse(fs.readFileSync(path.resolve(currentFile),'utf8')));
+    if(args.out)fs.writeFileSync(path.resolve(args.out),JSON.stringify(delta,null,2)+'\n',{mode:0o600});
+    console.log(JSON.stringify(delta.summary,null,2));return;
+  }
   if(args.command==='keygen'){
     const out=path.resolve(args.out||args.positionals[0]||path.join(os.homedir(),'.config','agentrisk','inspector-ed25519.pem'));
     fs.mkdirSync(path.dirname(out),{recursive:true,mode:0o700});const {privateKey,publicKey}=crypto.generateKeyPairSync('ed25519');
@@ -580,7 +611,7 @@ async function main(){
     console.log(`Private signing key written to ${out}`);console.log(`Public key written to ${out}.pub`);return;
   }
   if(args.command!=='scan'){
-    console.log(`AgentRisk Inspector ${INSPECTOR_VERSION}\n\nUsage:\n  node agent-risk-inspector.mjs scan [path] --authorised --out inspection.json\n  node agent-risk-inspector.mjs scan [path] --authorised --upload https://agentrisklayer.com --token ONE_TIME_TOKEN\n  node agent-risk-inspector.mjs scan [path] --authorised --include-paths --sarif agentrisk.sarif --fail-on high\n  node agent-risk-inspector.mjs verify inspection.json\n  node agent-risk-inspector.mjs rules\n  node agent-risk-inspector.mjs keygen --out ~/.config/agentrisk/inspector-ed25519.pem\n\nThe scanner is read-only. Upload is opt-in. Source code and secret values are excluded from evidence bundles.`);return;
+    console.log(`AgentRisk Inspector ${INSPECTOR_VERSION}\n\nUsage:\n  node agent-risk-inspector.mjs scan [path] --authorised --out inspection.json\n  node agent-risk-inspector.mjs scan [path] --authorised --upload https://agentrisklayer.com --token ONE_TIME_TOKEN\n  node agent-risk-inspector.mjs scan [path] --authorised --include-paths --sarif agentrisk.sarif --fail-on high\n  node agent-risk-inspector.mjs compare baseline.json current.json --out delta.json\n  node agent-risk-inspector.mjs verify inspection.json\n  node agent-risk-inspector.mjs rules\n  node agent-risk-inspector.mjs keygen --out ~/.config/agentrisk/inspector-ed25519.pem\n\nThe scanner is read-only. Upload is opt-in. Source code and secret values are excluded from evidence bundles.`);return;
   }
   if(!args.authorised)throw new Error('Inspection requires explicit authorisation. Re-run with --authorised after confirming you own or are authorised to inspect the target.');
   const root=args.positionals[0]||'.';const privateKeyPem=args.key?fs.readFileSync(path.resolve(args.key),'utf8'):null;

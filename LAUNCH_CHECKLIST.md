@@ -1,58 +1,57 @@
-# AgentRiskLayer v3 Launch Checklist
+# AgentRiskLayer v9 controlled-beta launch checklist
 
-## Product integrity before customer scans
+## Infrastructure
 
-- [ ] Run `npm run validate` from a clean checkout.
-- [ ] Confirm `/downloads/agent-risk-inspector.mjs`, `.sha256`, release manifest and policy catalogue were generated together.
-- [ ] Verify the published scanner checksum from a second machine.
-- [ ] Run the Inspector against Node.js, Python, Docker, Kubernetes, GitHub Actions and MCP fixtures.
-- [ ] Confirm raw source, secret values and ignored paths are absent from every uploaded bundle.
-- [ ] Confirm replayed bundles, tampered signatures, expired upload tokens and modified scanner builds are rejected.
-- [ ] Confirm an anonymous/public-share token cannot read inspection evidence or paid reports.
-- [ ] Review every high/critical rule for false-positive wording and a safe, actionable remediation.
-- [ ] Publish the scanner architecture, trust boundaries, rules and limitations.
+- [ ] GitHub repository contains the v9.0.0 package at root
+- [ ] Render Blueprint provisions paid web plus managed PostgreSQL
+- [ ] Web service has no persistent disk and no production `DATABASE_PATH`
+- [ ] `/api/health` and `/api/ready` return 200
+- [ ] `/metrics` is reachable only with the configured bearer token
+- [ ] Custom domain, HTTPS and security headers are active
 
-## Required before controlled customer access
+## Security control plane
 
-- [ ] Configure the registered operator name, correspondence address, jurisdiction and support email.
-- [ ] Obtain legal review of Terms, Privacy Notice, data-processing language and authorised-scanning terms.
-- [ ] Verify Stripe live products, webhook delivery and refund procedures.
-- [ ] Verify the Resend sending domain and password-reset/report delivery.
-- [ ] Confirm persistent storage, encrypted backups and a documented restore procedure.
-- [ ] Enable uptime, error, disk-capacity and backup monitoring.
-- [ ] Confirm scan data retention and account deletion remove all inspection records.
-- [ ] Test the full browser → token → local scan → upload → report → rescan workflow on production infrastructure.
+- [ ] Community project and one-time key issuance tested
+- [ ] Production project defaults to enforce mode
+- [ ] Guard allow, deny, replay, quota and revoked-key cases tested
+- [ ] High-impact action fails closed without transaction-bound approval
+- [ ] Raw prompts, responses and tool arguments are absent from stored runtime evidence
+- [ ] Inventory baseline and risky drift gate tested
+- [ ] Remediation assignment and verification tested
+- [ ] Key/policy/inventory/remediation audit history reviewed
 
-## Required before broad commercial launch
+## Identity and tenancy
 
-- [ ] Complete independent penetration testing of the web application and upload API.
-- [ ] Arrange independent review of the Inspector rules and scoring methodology by a qualified AI/AppSec practitioner.
-- [ ] Sign scanner release manifests with an offline release key and document key rotation/revocation.
-- [ ] Add software-bill-of-materials and reproducible-release evidence for the scanner package.
-- [ ] Establish a vulnerability disclosure process and security response SLA.
-- [ ] Complete accessibility, Windows, macOS and Linux compatibility testing.
-- [ ] Document false-positive appeal, accepted-risk and retest procedures.
-- [ ] Add customer-facing status and incident-communication procedures.
+- [ ] Strong `SESSION_SECRET` and `METRICS_TOKEN` generated in Render
+- [ ] Legal entity, address, jurisdiction, support and owner email are factual
+- [ ] Registration requires one of 20 controlled-beta invitations
+- [ ] Email verification, MFA, recovery codes and password reset tested
+- [ ] Cross-workspace access, billing-owner limits and SCIM deprovisioning tested
 
-## Controlled beta targets
+## Payments and email
 
-- [ ] Recruit 10–20 developers, security engineers and AI consultancies.
-- [ ] Measure scanner completion, upload success and report download rates.
-- [ ] Review all critical/high findings manually during beta.
-- [ ] Measure false-positive, false-negative and “not applicable” feedback per rule.
-- [ ] Measure time-to-remediate and whether rescans verify improvement.
-- [ ] Release every rule/scoring change under a new policy/model version.
+- [ ] Free, £99, £29, £99, £249 and Enterprise pricing claims reviewed
+- [ ] Stripe Managed Payments checkout and signed webhook tested in sandbox
+- [ ] Resend domain and sender verified
+- [ ] Paid report, subscription, billing portal, cancellation and retry journeys tested
 
-## Controlled-beta gates (v4.1)
+## Data and recovery
 
-- [ ] Create and verify a live SQLite backup before deploying
-- [ ] Complete a restore drill from that exact backup
-- [ ] Confirm `/api/health` reports `4.1.0` and `controlled-beta`
-- [ ] Confirm malformed JSON receives HTTP 400
-- [ ] Confirm the public sample PDF is the 22-page premium version
-- [ ] Confirm the Inspector self-scan reports zero active findings
-- [ ] Run the 5-trial hardened simulation and retain the signed result
-- [ ] Confirm staging token creation is blocked without written Rules of Engagement
-- [ ] Confirm revoked and expired authorisations cannot issue or accept staging evidence
-- [ ] Review the first 20 customer reports manually for false positives and unclear remediation
-- [ ] Do not claim independent penetration testing, certification or enterprise audit
+- [ ] Three PostgreSQL migrations applied with matching checksums
+- [ ] PostgreSQL backup created and independently verified
+- [ ] Restore drill completed against non-production PostgreSQL
+- [ ] Runtime/project retention purge and legal hold tested
+- [ ] Export and account deletion reconcile project/workspace records
+
+## Customer journey
+
+- [ ] Desktop and mobile registration, control plane, assessment, checkout and dashboard tested
+- [ ] Inspector and red-team evidence upload/replay protection tested
+- [ ] PDF, email, sharing, export and deletion tested
+- [ ] Security Centre, comparison and pricing statements match executable scope
+
+## External assurance
+
+- [ ] Legal review completed before unrestricted public sales
+- [ ] Independent penetration test scheduled or completed
+- [ ] Internal results are not described as certification, guaranteed detection or production history

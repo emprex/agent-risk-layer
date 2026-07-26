@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "AgentRiskLayer-4.2.0",
-  "documentNamespace": "https://agentrisklayer.com/sbom/4.2.0/4e755de104907af4",
+  "name": "AgentRiskLayer-9.0.0",
+  "documentNamespace": "https://agentrisklayer.com/sbom/9.0.0/41ad1c3c771dfc00",
   "creationInfo": {
-    "created": "2026-07-24T10:29:26Z",
+    "created": "2026-07-26T12:55:51Z",
     "creators": [
       "Tool: AgentRiskLayer release process"
     ]
@@ -14,7 +14,7 @@
     {
       "name": "agent-risk-layer",
       "SPDXID": "SPDXRef-Package-AgentRiskLayer",
-      "versionInfo": "4.2.0",
+      "versionInfo": "9.0.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -25,7 +25,25 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/agent-risk-layer@4.2.0"
+          "referenceLocator": "pkg:npm/agent-risk-layer@9.0.0"
+        }
+      ]
+    },
+    {
+      "name": "pg",
+      "SPDXID": "SPDXRef-Package-pg",
+      "versionInfo": "8.22.0",
+      "downloadLocation": "https://www.npmjs.com/package/pg",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/pg@8.22.0"
         }
       ]
     }
@@ -35,14 +53,19 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-AgentRiskLayer"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-AgentRiskLayer",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-pg"
     }
   ],
   "annotations": [
     {
-      "annotationDate": "2026-07-24T10:29:26Z",
+      "annotationDate": "2026-07-26T12:55:51Z",
       "annotationType": "OTHER",
       "annotator": "Tool: AgentRiskLayer release process",
-      "comment": "Application declares zero external runtime npm dependencies. Production container base is node:22.18.0-alpine3.22."
+      "comment": "Production container base is node:22.18.0-alpine3.22. Production persistence uses PostgreSQL through pg 8.22.0."
     }
   ]
 }

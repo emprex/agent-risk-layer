@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Quick start | AgentRiskLayer</title><meta name="description" content="Create an AI security project, enforce a runtime policy and scan a repository with AgentRiskLayer."><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><script type="module" src="/shared.js"></script></head><body><header class="site-header premium-nav"><a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span><em>9</em></a><nav><a href="/control-plane.html">Control plane</a><a href="/runtime.html">Runtime</a><a href="/standards.html">Standards</a><a href="/pricing.html">Pricing</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a></nav></header><main class="app-shell wide"><div class="page-heading"><div><span class="eyebrow">Developer quick start</span><h1>Protect one agent from repository to runtime.</h1><p>Create a scoped project, enforce a production policy, inventory the AI assets and add a repository gate. Every stage contributes to one evidence trail.</p></div><a class="button primary" href="/control-plane.html">Create security project</a></div>
+<section class="panel section-gap"><h2>1. Create a project and issue a runtime key</h2><p>Open the control plane, choose the environment, publish the default policy and create a one-time API key. Production, staging and test projects start in enforce mode; development starts in monitor mode.</p><a class="button primary" href="/control-plane.html">Open control plane</a>
+<h2>2. Add a Guard call at the trust boundary</h2><pre><code>const decision = await fetch('https://agentrisklayer.com/v1/guard', {
+  method: 'POST',
+  headers: {
+    authorization: `Bearer ${process.env.AGENTRISK_API_KEY}`,
+    'content-type': 'application/json'
+  },
+  body: JSON.stringify({
+    request_id: crypto.randomUUID(),
+    input: untrustedInput,
+    tool_call: proposedToolCall,
+    metadata: { application: 'support-agent' }
+  })
+}).then(response =&gt; response.json());
+
+if (decision.decision !== 'allow') throw new Error('Security policy denied the action');</code></pre>
+<h2>3. Record the asset baseline</h2><p>Paste or submit the agent manifest in the Inventory section. A later snapshot that adds public, privileged or production exposure automatically changes the deployment gate to <strong>review required</strong>.</p>
+<h2>4. Scan the repository locally</h2><pre><code>curl -fsSLO https://agentrisklayer.com/downloads/agent-risk-inspector.mjs
+node agent-risk-inspector.mjs scan . --authorised \
+  --environment test \
+  --out agentrisk-inspection.json \
+  --sarif agentrisk-results.sarif \
+  --fail-on high</code></pre>
+<h2>5. Gate pull requests</h2><p>Use the supplied workflow to scan changes, upload SARIF and fail the build on active high or critical findings.</p><div class="button-row"><a class="button ghost" href="/downloads/agentrisklayer-ci.yml" download>Download GitHub Action</a><a class="button ghost" href="/downloads/agent-risk-inspector.mjs" download>Download Inspector</a></div></section>
+<section class="panel section-gap"><h2>Evidence and privacy</h2><ul class="check-list"><li>Hosted runtime screening stores no raw prompt, response or tool arguments.</li><li>Local inspection excludes source content and matched secret values from evidence.</li><li>Project keys are one-time secrets and only their hashes are stored.</li><li>Every policy, key, inventory and remediation change is audit logged.</li><li>A passing result is engineering evidence—not an independent penetration test or certification.</li></ul></section></main><footer><span>© 2026 AgentRiskLayer</span><span>One project. One policy. One evidence trail.</span></footer></body></html>

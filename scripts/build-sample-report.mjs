@@ -22,7 +22,7 @@ const answers = Object.fromEntries(questionnaire.map((question) => {
 const result = evaluateAssessment(answers, { agentType: 'Finance operations agent' });
 const created = '2026-07-23T12:00:00.000Z';
 const inspection = {
-  id: 'ins_sample_public', assessmentId: 'asmt_sample_public', scannerVersion: '3.1.0', policyVersion: 'arl-inspector-policy-2026.08',
+  id: 'ins_sample_public', assessmentId: 'asmt_sample_public', scannerVersion: '4.0.0', policyVersion: 'arl-inspector-policy-2026.09',
   digest: 'sample-illustrative-digest-not-a-customer-scan', signatureValid: true, createdAt: created,
   subject: { projectName: 'sample-finance-agent', environment: 'staging', gitCommit: 'sample' },
   scope: { mode: 'read-only-static-inspection', filesDiscovered: 146, filesInspected: 139, bytesRead: 824000, skippedLargeFiles: 2, truncatedByLimit: false, userExclusions: [], includeRelativePaths: false },

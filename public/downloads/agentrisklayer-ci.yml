@@ -1,0 +1,28 @@
+name: AgentRiskLayer security gate
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download Inspector
+        run: |
+          curl -fsSLO https://agentrisklayer.com/downloads/agent-risk-inspector.mjs
+          curl -fsSLO https://agentrisklayer.com/downloads/agent-risk-inspector.mjs.sha256
+          sha256sum -c agent-risk-inspector.mjs.sha256
+      - name: Inspect repository
+        run: node agent-risk-inspector.mjs scan . --authorised --environment test --out agentrisk-inspection.json --sarif agentrisk-results.sarif --fail-on high
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: agentrisk-results.sarif

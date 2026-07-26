@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Interactive Security Demo | AgentRiskLayer</title>
+  <meta name="description" content="Explore a safe, preloaded AI-agent security finding from local observation through reproduced failure, remediation and retest.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/demo.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#demo">Skip to demo</a>
+  <header class="site-header">
+    <a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a>
+    <nav><a href="/methodology.html">Methodology</a><a href="/sample-report.html">Sample report</a><a href="/pricing.html">Pricing</a><a class="nav-cta" href="/assessment.html">Assess your agent</a></nav>
+  </header>
+  <main id="demo" class="app-shell wide demo-shell">
+    <div class="page-heading demo-heading">
+      <span class="eyebrow">No login · synthetic data · about 2 minutes</span>
+      <h1>See a dangerous permission become verified evidence.</h1>
+      <p>This guided example uses a fictional support agent, fake customer data and dry-run tools. It never contacts a real agent or executes a real action.</p>
+    </div>
+    <div class="demo-layout">
+      <section class="panel demo-stage" aria-live="polite">
+        <div class="demo-progress"><span id="stepLabel">Step 1 of 4</span><div class="progress-track"><div id="demoProgress" class="progress-bar"></div></div></div>
+        <div id="demoContent"></div>
+        <div class="demo-controls"><button id="backButton" class="button ghost" type="button">Back</button><button id="nextButton" class="button primary" type="button">Inspect locally</button></div>
+      </section>
+      <aside class="panel demo-summary">
+        <span class="muted">Sample agent</span>
+        <h2>InboxPilot Support</h2>
+        <p class="muted">Reads support email, looks up customer records and can prepare refunds through dry-run tools.</p>
+        <div class="demo-score"><span>Evidence-backed risk</span><strong id="demoScore">72<small>/100</small></strong><div id="demoRisk" class="risk-pill high">High risk</div></div>
+        <div class="evidence-status"><span>Declared <b>✓</b></span><span>Observed <b id="observedStatus">—</b></span><span>Reproduced <b id="reproducedStatus">—</b></span><span>Retested <b id="retestedStatus">—</b></span></div>
+      </aside>
+    </div>
+    <section class="demo-complete panel" id="demoComplete" hidden>
+      <div><span class="eyebrow">Demo complete</span><h2>Now test an agent you control.</h2><p>The free assessment creates a private declared-risk score. Local inspection and controlled staging evidence can then strengthen the result.</p></div>
+      <div class="proof-actions"><a class="button primary" href="/assessment.html">Start free assessment</a><a class="button ghost" href="/downloads/agentrisklayer-sample-professional-report.pdf" download>Download sample PDF</a></div>
+    </section>
+  </main>
+  <footer><span>© 2026 AgentRiskLayer</span><span>Guided demonstration only; no live target is contacted.</span></footer>
+</body>
+</html>

@@ -1,36 +1,10 @@
 #!/usr/bin/env node
 
 const PRICE_SPECS = [
-  {
-    envKey: 'STRIPE_PRICE_BASIC_REPORT',
-    lookupKey: 'agentrisklayer_essential_report_gbp_19_v430',
-    name: 'Essential Report',
-    amount: 1900,
-    description: 'One-off AgentRiskLayer Essential security risk report.',
-  },
-  {
-    envKey: 'STRIPE_PRICE_PRO_REPORT',
-    lookupKey: 'agentrisklayer_professional_report_gbp_79_v430',
-    name: 'Professional Report',
-    amount: 7900,
-    description: 'One-off AgentRiskLayer Professional security risk report.',
-  },
-  {
-    envKey: 'STRIPE_PRICE_DEVELOPER_MONTHLY',
-    lookupKey: 'agentrisklayer_developer_gbp_49_monthly_v430',
-    name: 'Developer',
-    amount: 4900,
-    recurring: true,
-    description: 'Monthly AgentRiskLayer Developer plan.',
-  },
-  {
-    envKey: 'STRIPE_PRICE_AGENCY_MONTHLY',
-    lookupKey: 'agentrisklayer_agency_gbp_149_monthly_v430',
-    name: 'Agency',
-    amount: 14900,
-    recurring: true,
-    description: 'Monthly AgentRiskLayer Agency plan.',
-  },
+  { envKey: 'STRIPE_PRICE_PRO_REPORT', lookupKey: 'agentrisklayer_founding_assessment_gbp_99_v900', name: 'Founding Security Assessment', amount: 9900, description: 'One-off AgentRiskLayer founding security assessment.' },
+  { envKey: 'STRIPE_PRICE_DEVELOPER_MONTHLY', lookupKey: 'agentrisklayer_developer_gbp_29_monthly_v900', name: 'Developer', amount: 2900, recurring: true, description: 'Monthly AgentRiskLayer Developer plan.' },
+  { envKey: 'STRIPE_PRICE_TEAM_MONTHLY', lookupKey: 'agentrisklayer_team_gbp_99_monthly_v900', name: 'Team', amount: 9900, recurring: true, description: 'Monthly AgentRiskLayer Team plan.' },
+  { envKey: 'STRIPE_PRICE_AGENCY_MONTHLY', lookupKey: 'agentrisklayer_agency_gbp_249_monthly_v900', name: 'Agency', amount: 24900, recurring: true, description: 'Monthly AgentRiskLayer Agency plan.' },
 ];
 
 const args = new Set(process.argv.slice(2));
@@ -106,10 +80,10 @@ async function findOrCreatePrice(spec) {
     unit_amount: String(spec.amount),
     lookup_key: spec.lookupKey,
     tax_behavior: 'inclusive',
-    nickname: `${spec.name} — AgentRiskLayer v4.3`,
+    nickname: `${spec.name} — AgentRiskLayer v9.0`,
     'product_data[name]': spec.name,
     'product_data[metadata][app]': 'AgentRiskLayer',
-    'metadata[release]': '4.4.0',
+    'metadata[release]': '9.0.0',
   });
   if (spec.recurring) {
     form.set('recurring[interval]', 'month');

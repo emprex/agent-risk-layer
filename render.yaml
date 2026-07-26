@@ -2,9 +2,9 @@ services:
   - type: web
     name: agent-risk-layer
     runtime: docker
-    rootDir: agent-risk-layer
     plan: starter
-    healthCheckPath: /api/health
+    healthCheckPath: /api/ready
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
@@ -14,12 +14,30 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agent-risk-layer-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false"
+      - key: DATABASE_POOL_MAX
+        value: "10"
+      - key: DATABASE_CONNECT_TIMEOUT_MS
+        value: "10000"
+      - key: DATABASE_STATEMENT_TIMEOUT_MS
+        value: "15000"
+      - key: DATABASE_LOCK_TIMEOUT_MS
+        value: "5000"
       - key: DEMO_MODE
         value: "false"
       - key: ALLOW_DEMO_IN_PRODUCTION
         value: "false"
-      - key: DATABASE_PATH
-        value: /var/data/agent-risk-layer.sqlite
+      - key: REQUIRE_BETA_INVITE
+        value: "true"
+      - key: BETA_INVITE_LIMIT
+        value: "20"
       - key: SESSION_IDLE_HOURS
         value: "12"
       - key: SESSION_ABSOLUTE_DAYS
@@ -52,11 +70,11 @@ services:
         value: 2026-06-24.dahlia
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_BASIC_REPORT
-        sync: false
       - key: STRIPE_PRICE_PRO_REPORT
         sync: false
       - key: STRIPE_PRICE_DEVELOPER_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_TEAM_MONTHLY
         sync: false
       - key: STRIPE_PRICE_AGENCY_MONTHLY
         sync: false
@@ -64,7 +82,14 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
-    disk:
-      name: agent-risk-layer-data
-      mountPath: /var/data
-      sizeGB: 1
+
+databases:
+  - name: agent-risk-layer-db
+    plan: basic-1gb
+    region: frankfurt
+    diskSizeGB: 25
+    storageAutoscalingEnabled: true
+    postgresMajorVersion: "18"
+    databaseName: agentrisklayer
+    user: agentrisklayer
+    ipAllowList: []

@@ -19,7 +19,10 @@ async function init() {
         <div class="stat"><span>Paid reports</span><strong>${data.stats.paidReports}</strong></div>
         <div class="stat"><span>Technical inspections</span><strong>${data.stats.inspections}</strong></div>
         <div class="stat"><span>Red-team runs</span><strong>${data.stats.redTeamRuns}</strong></div>
+        <div class="stat"><span>Security projects</span><strong>${data.controlPlane?.totals?.projects || 0}</strong></div>
+        <div class="stat"><span>Runtime checks</span><strong>${data.controlPlane?.totals?.runtimeRequestsMonth || 0}</strong><small>This month</small></div>
       </div>
+      ${controlPlaneCard(data.controlPlane)}
       <div class="dashboard-grid">
         <section class="panel">
           <div class="section-heading compact-heading"><h2>Assessment history</h2><a class="button primary small" href="/assessment.html">New assessment</a></div>
@@ -47,6 +50,15 @@ async function init() {
     if (error.message.includes('Sign in')) location.href = `/auth.html?next=${encodeURIComponent('/dashboard.html')}`;
     else root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
   }
+}
+
+function controlPlaneCard(controlPlane) {
+  const totals = controlPlane?.totals || {};
+  const entitlement = controlPlane?.entitlement || { name: 'Community', runtimeRequestsPerMonth: 10000 };
+  const projects = controlPlane?.projects || [];
+  const usage = Number(totals.runtimeRequestsMonth || 0);
+  const limit = Number(entitlement.runtimeRequestsPerMonth || 10000);
+  return `<section class="panel section-gap control-dashboard-card"><div class="section-heading compact-heading"><div><span class="eyebrow">Runtime control plane</span><h2>${projects.length ? 'Your live security projects' : 'Protect your first runtime boundary'}</h2><p>${escapeHtml(entitlement.name)} plan · ${usage.toLocaleString('en-GB')} of ${limit.toLocaleString('en-GB')} Guard decisions used this month.</p></div><a class="button primary" href="/control-plane.html">${projects.length ? 'Open control plane' : 'Create free project'}</a></div><div class="dashboard-stats"><div class="stat"><span>Denied this month</span><strong>${Number(totals.deniedMonth || 0).toLocaleString('en-GB')}</strong></div><div class="stat"><span>Assets tracked</span><strong>${Number(totals.assets || 0).toLocaleString('en-GB')}</strong></div><div class="stat"><span>Open remediation</span><strong>${Number(totals.openRemediations || 0).toLocaleString('en-GB')}</strong></div><div class="stat"><span>Retention</span><strong>${entitlement.retentionDays || 7} days</strong></div></div></section>`;
 }
 
 function verificationBanner(user) {

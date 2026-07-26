@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Security control plane | AgentRiskLayer</title>
+  <meta name="description" content="Create AI security projects, issue runtime API keys, enforce policies, track asset drift and close remediation work.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/control-plane.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="site-header premium-nav">
+    <a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span><em>9</em></a>
+    <nav><a href="/dashboard.html">Dashboard</a><a href="/workspaces.html">Workspaces</a><a href="/quickstart.html">Integrate</a><a href="/security-center.html">Security centre</a><button class="button ghost small" id="logout">Log out</button></nav>
+  </header>
+  <main id="main" class="app-shell wide">
+    <div class="page-heading control-plane-heading">
+      <div><span class="eyebrow">Live security operations</span><h1>AI security control plane.</h1><p>Create a project, apply an enforceable policy, issue a scoped API key and inspect every security decision without retaining raw prompts or tool arguments.</p></div>
+      <div class="control-plane-badge"><i></i><span>Fail-closed runtime</span><strong>ACTIVE</strong></div>
+    </div>
+    <div id="controlPlaneError" class="error-box"></div>
+    <div id="controlPlaneRoot" class="loading"><div class="spinner"></div>Loading security control plane…</div>
+  </main>
+  <footer><span>© 2026 AgentRiskLayer</span><span>Discovery, runtime enforcement, remediation and evidence in one control plane.</span></footer>
+</body>
+</html>

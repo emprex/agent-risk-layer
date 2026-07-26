@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { scanRepository, toSarif, verifyBundle } from '../inspector/agent-risk-inspector.mjs';
+import { compareBundles, frameworkCoverage, scanRepository, toSarif, verifyBundle } from '../inspector/agent-risk-inspector.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-inspector-'));
@@ -48,6 +48,29 @@ test('bundle tampering invalidates the Ed25519 integrity proof', async (t) => {
   const bundle = await scanRepository(root, { authorised: true });
   bundle.summary.postureScore += 1;
   assert.equal(verifyBundle(bundle).valid, false);
+});
+
+test('baseline comparison reports resolved and unchanged findings', async (t) => {
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const baseline = await scanRepository(root, { authorised: true });
+  fs.rmSync(path.join(root, '.env'));
+  const current = await scanRepository(root, { authorised: true });
+  const delta = compareBundles(baseline, current);
+  assert.equal(delta.schema, 'arl.inspection.delta.v1');
+  assert.ok(delta.summary.resolved >= 1);
+  assert.ok(delta.summary.unchanged >= 1);
+  assert.ok(delta.summary.postureChange >= 0);
+});
+
+test('framework coverage is derived from actual findings', async (t) => {
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bundle = await scanRepository(root, { authorised: true });
+  const coverage = frameworkCoverage(bundle);
+  assert.ok(coverage.some((item) => item.framework.startsWith('OWASP')));
+  assert.ok(coverage.some((item) => item.framework.startsWith('NIST')));
+  assert.equal(coverage.reduce((sum, item) => sum + item.findings, 0), bundle.findings.reduce((sum, item) => sum + item.frameworks.length, 0));
 });
 
 test('inspection requires explicit operator authorisation in CLI mode', async () => {

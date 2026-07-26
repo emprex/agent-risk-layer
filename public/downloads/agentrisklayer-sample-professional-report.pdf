@@ -52,8 +52,8 @@ BT /F1 9 Tf 0.043137254901960784 0.07058823529411765 0.09019607843137255 rg 1 0 
 BT /F1 9 Tf 0.043137254901960784 0.07058823529411765 0.09019607843137255 rg 1 0 0 1 58 404 Tm (16/100 with 5 failed cases.) Tj ET
 BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 387 Tm (Assessment ID: asmt_sample_public) Tj ET
 BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 377 Tm (Agent type: Finance operations agent) Tj ET
-BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 367 Tm (Assessment date: 23 July 2026 at 13:00) Tj ET
-BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 357 Tm (Generated: 25 July 2026 at 16:55) Tj ET
+BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 367 Tm (Assessment date: 23 July 2026 at 12:00) Tj ET
+BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 357 Tm (Generated: 26 July 2026 at 13:05) Tj ET
 BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 347 Tm (Scoring model: arl-risk-v3.1) Tj ET
 0.8470588235294118 0.8862745098039215 0.8666666666666667 RG 0.5 w 48 42 m 547 42 l S
 BT /F1 8 Tf 0.396078431372549 0.45098039215686275 0.4235294117647059 rg 1 0 0 1 48 28 Tm (AgentRiskLayer arl-risk-v3.1 | Confidential | Page 1 of 17) Tj ET
@@ -164,7 +164,7 @@ BT /F1 7 Tf 0.396078431372549 0.45098039215686275 0.4235294117647059 rg 1 0 0 1 
 BT /F1 8 Tf 0.396078431372549 0.45098039215686275 0.4235294117647059 rg 1 0 0 1 401 659 Tm (EVIDENCE CLASS) Tj ET
 BT /F2 18 Tf 0.043137254901960784 0.07058823529411765 0.09019607843137255 rg 1 0 0 1 401 637 Tm (SIGNED) Tj ET
 BT /F1 7 Tf 0.396078431372549 0.45098039215686275 0.4235294117647059 rg 1 0 0 1 401 624 Tm (illustrative locally-observed stat) Tj ET
-BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 608 Tm (Scanner 3.1.0 | Policy arl-inspector-policy-2026.08 | Digest) Tj ET
+BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 608 Tm (Scanner 4.0.0 | Policy arl-inspector-policy-2026.09 | Digest) Tj ET
 BT /F1 8 Tf 0.38 0.43 0.42 rg 1 0 0 1 48 592 Tm (sample-illustrative-digest-not-a-customer-scan) Tj ET
 BT /F1 10 Tf 0.08 0.10 0.12 rg 1 0 0 1 48 576 Tm (Critical observed weaknesses require immediate remediation before relying on the inspected) Tj ET
 BT /F1 10 Tf 0.08 0.10 0.12 rg 1 0 0 1 48 556 Tm (system.) Tj ET

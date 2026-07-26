@@ -1,9 +1,9 @@
 {
   "name": "agent-risk-layer",
-  "version": "4.4.0",
+  "version": "9.0.0",
   "private": true,
   "type": "module",
-  "description": "Evidence-based AI-agent security platform with local inspection and controlled adversarial red-team testing.",
+  "description": "Production AI-agent security control plane with PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, payments, signed evidence, and operational recovery.",
   "engines": {
     "node": ">=22.5.0"
   },
@@ -11,20 +11,28 @@
     "prices:update": "node scripts/update-stripe-render-prices.mjs",
     "dev": "node --env-file-if-exists=.env --watch server.js",
     "start": "node --env-file-if-exists=.env server.js",
-    "test": "node --test",
-    "check": "node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check \"$f\"; done",
+    "test": "NODE_ENV=test node --test",
+    "check": "node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs runtime/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check \"$f\"; done",
     "smoke": "node tests/smoke.mjs",
-    "validate": "npm run build:release-assets && npm test && npm run check && npm run smoke",
+    "test:scenarios": "node scripts/run-1000-scenarios.mjs test-artifacts",
+    "test:load": "node scripts/load-stress.mjs",
+    "test:detection-benchmark": "node scripts/run-detection-benchmark.mjs",
+    "validate": "npm run build:release-assets && npm test && npm run check && npm run smoke && npm run test:detection-benchmark && npm run test:scenarios",
+    "runtime:start": "node runtime/agent-risk-runtime.mjs --policy runtime/runtime-policy.example.json --upstream http://127.0.0.1:3000 --port 8787",
     "inspect": "node inspector/agent-risk-inspector.mjs scan . --authorised --out data/local-inspection.json",
+    "inspect:ci": "node inspector/agent-risk-inspector.mjs scan . --authorised --environment test --out agentrisk-inspection.json --sarif agentrisk-results.sarif --fail-on high",
     "build:inspector-release": "node scripts/build-inspector-release.mjs",
     "build:sample-report": "node scripts/build-sample-report.mjs",
     "build:release-assets": "npm run build:inspector-release && npm run build:redteam-release && npm run build:sample-report",
     "build:redteam-release": "node scripts/build-redteam-release.mjs",
     "redteam:simulation": "node redteam/agent-risk-redteam.mjs run --authorised --environment test --profile hardened --out data/local-redteam.json",
+    "redteam:adaptive": "node redteam/agent-risk-redteam.mjs run --authorised --environment test --profile hardened --trials 5 --adaptive-rounds 3 --out data/adaptive-redteam.json --sarif data/adaptive-redteam.sarif",
     "db:backup": "node scripts/backup-database.mjs",
     "db:verify-backup": "node scripts/verify-database-backup.mjs",
-    "pretest": "npm run build:inspector-release && npm run build:redteam-release",
+    "pretest": "npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
     "db:restore": "node scripts/restore-database-backup.mjs"
   },
-  "dependencies": {}
+  "dependencies": {
+    "pg": "8.22.0"
+  }
 }

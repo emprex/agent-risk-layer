@@ -1,4 +1,70 @@
-# AgentRiskLayer v1.1.0 — Launch-ready beta
+# AgentRiskLayer — Release notes
+
+## v9.0.0 — Hosted security control plane
+
+- Added scoped security projects with server-enforced Community, Developer, Team, Agency and Enterprise entitlements.
+- Added one-time hashed project API keys, immediate revocation and billing-owner enforcement across workspaces.
+- Added the hosted `POST /v1/guard` API for prompt, output and tool-call policy decisions in monitor or enforce mode.
+- Added replay-safe request IDs, monthly quotas, per-key burst limits, authentication-path abuse protection and standard retry guidance.
+- Added privacy-safe runtime evidence that excludes raw prompts, model responses and tool arguments.
+- Added versioned policies, transaction-bound approval checks and asynchronous signed integration notification for denied actions.
+- Added AI asset snapshots, drift comparison and a deployment gate that requires review when privileged exposure changes.
+- Added owned remediation work with severity, due date, state, verification evidence and audit history.
+- Added a responsive browser control plane, developer quick start, hosted/local runtime choice and transparent plan entitlements.
+- Added protected Prometheus metrics, control-plane retention, account export/deletion coverage and production monitoring requirements.
+- Added PostgreSQL migration `003_security_control_plane.sql` and complete compatibility coverage for the isolated test adapter.
+- Final internal release gate is recorded in `RELEASE_VALIDATION_V9.md`; these results are engineering validation, not independent certification or production history.
+
+## v8.1.0 — PostgreSQL production release candidate
+
+- Replaced production filesystem persistence with pooled PostgreSQL through `DATABASE_URL`.
+- Added checksum-recorded, advisory-lock-protected PostgreSQL migrations.
+- Converted database callers and critical multi-step flows to asynchronous connection-bound transactions.
+- Added database readiness, graceful pool shutdown and structured operational logging.
+- Replaced filesystem backup/restore with `pg_dump`/`pg_restore`, SHA-256 manifests and forced controlled restore.
+- Updated Render Blueprint to provision paid web hosting and managed PostgreSQL without a disk.
+- Added PostgreSQL adapter, migration, infrastructure and backup contract tests.
+- Updated commercial pricing to £99 founding assessment, £29 Developer, £99 Team and £249 Agency; Enterprise starts from £6,000/year.
+- Preserved internal security, customer, payment, email, invitation, workspace, SCIM, report and evidence journeys.
+- Final internal gate: 80/80 tests, complete smoke journey, 20/20 labelled synthetic detection cases, 1,000/1,000 safety scenarios and 5,000/5,000 local load requests.
+- Live Render PostgreSQL, Stripe, Resend, DNS and browser verification remain credential-bound deployment checks, not completed production history.
+
+## v5.1.0 — Adaptive and continuous assurance
+
+- Adds deterministic attack mutation across five strategies.
+- Adds response-dependent multi-turn escalation with up to three rounds.
+- Increases repeated trials to ten per case.
+- Records redacted strategy and round evidence without uploading raw transcripts.
+- Adds an optional HTTPS completion webhook for portable notifications.
+- Adds a weekly scheduled GitHub assurance workflow with SARIF and evidence retention.
+- Preserves production refusal, synthetic-data requirements, dry-run tools and Rules of Engagement.
+- Extends the server upload allowlist for the signed v5.1 runner.
+
+## v5.0.1 — Safety precedence and stress-test gate
+
+- Forces `DO NOT DEPLOY` whenever the assessment identifies a critical attack path, regardless of the aggregate score.
+- Adds a regression test for critical-path decision precedence.
+- Adds a deterministic 1,000-scenario functional and security-invariant gate.
+- Adds a local concurrent HTTP/session stress harness with latency, throughput, status and error reporting.
+
+## v5.0.0 — Developer-native continuous assurance
+
+- Adds a five-minute local scan and GitHub code-scanning quick start.
+- Publishes a ready-to-copy GitHub Action with checksum verification, SARIF upload and a configurable security gate.
+- Adds Inspector baseline comparison for new, resolved and unchanged findings plus posture movement.
+- Adds transparent OWASP, NIST AI RMF, SLSA and NIST SSDF mapping without claiming certification.
+- Promotes developer onboarding and release-to-release assurance on the homepage.
+- Preserves the v4.5 interactive demo, controlled red-team workflow, payment fulfilment and superuser beta operations.
+
+## v4.5.0 — Interactive proof and clearer conversion journey
+
+- Adds a no-login, synthetic-data interactive demo showing the full declared → observed → reproduced → retested evidence flow.
+- Repositions the homepage around the direct outcome: find dangerous permissions and attack paths before deployment.
+- Reduces the core workflow to four clear actions: scan, reproduce, fix and verify.
+- Makes the downloadable sample Professional PDF visible from the homepage, demo and pricing page.
+- Clarifies what happens after each pricing action and distinguishes one-off assessment purchases from recurring plans.
+- Adds the demo page to the public sitemap.
+- Preserves the corrected Stripe price lookup and creation parameters used for the live v4.4.0 price migration.
 
 ## v4.4.0 — Searchable Help Centre and user manual
 
@@ -211,3 +277,19 @@ Live Stripe, Resend, tax, legal, monitoring and independent security validation 
 - Pins the production Node container tag.
 - Removes inline styles and `unsafe-inline` from the browser CSP.
 - Removes unsupported Agency client/team-workspace claims.
+# v5.2.0 — Runtime enforcement
+
+- Added a customer-operated HTTP runtime gateway.
+- Added tool allowlists/denylists, path boundaries and host allowlists.
+- Added secret-like argument blocking and explicit human/production approvals.
+- Added enforce and monitor modes with fail-closed evaluation.
+- Added privacy-preserving JSONL runtime evidence.
+- Added downloadable gateway, example policy and runtime product page.
+- Preserved Inspector, adaptive red-team, payment, invitation and account flows.
+# v6.0.0 — Full-lifecycle security experience
+
+- Rebuilt the public product experience around one clear journey: inspect, attack-test, enforce and prove.
+- Added a responsive security command-centre preview and a clearer conversion path.
+- Added decoding-aware and context-composed runtime detection.
+- Added signed SSO state, SCIM user lifecycle normalisation, signed webhooks, and Slack/Jira-ready event builders.
+- Preserved existing payments, invitations, MFA, assessments, Inspector, adaptive red-team, runtime gateway, reports and release gates.
