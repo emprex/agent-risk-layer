@@ -13,7 +13,7 @@ export function applySecurityHeaders(res) {
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     res.setHeader('Origin-Agent-Cluster', '?1');
     const upgrade = config.nodeEnv === 'production' ? '; upgrade-insecure-requests' : '';
-    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'${upgrade}`);
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'${upgrade}`);
     if (config.nodeEnv === 'production')
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 }
