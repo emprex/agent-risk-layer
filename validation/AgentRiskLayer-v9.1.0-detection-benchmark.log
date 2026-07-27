@@ -1,0 +1,19 @@
+{
+  "schema": "arl.detection-benchmark.v1",
+  "version": "9.1.0",
+  "dataset": "ARL transparent smoke benchmark 2026-07-25",
+  "scope": "20 public synthetic English cases; not independent or production-representative",
+  "cases": 20,
+  "confusionMatrix": {
+    "tp": 10,
+    "tn": 10,
+    "fp": 0,
+    "fn": 0
+  },
+  "metrics": {
+    "precision": 1,
+    "recall": 1,
+    "specificity": 1,
+    "accuracy": 1
+  }
+}

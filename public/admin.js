@@ -3,8 +3,8 @@ const root = document.querySelector('#adminRoot');
 
 async function init() {
   try {
-    const [{ totals, funnel, recentFailures, riskBands, readiness }, operations, invites] = await Promise.all([
-      api('/api/admin/analytics'), api('/api/admin/operations'), api('/api/admin/invites'),
+    const [{ totals, funnel, recentFailures, riskBands, readiness }, operations] = await Promise.all([
+      api('/api/admin/analytics'), api('/api/admin/operations'),
     ]);
     root.className = '';
     root.innerHTML = `
@@ -30,15 +30,9 @@ async function init() {
         <section class="panel"><h2>Product funnel</h2>${rows(funnel, item=>item.name.replaceAll('_',' '), item=>item.count)}</section>
         <aside class="panel"><h2>Assessment risk bands</h2>${rows(riskBands,item=>item.band,item=>item.count)}</aside>
       </div>
-      <section class="panel section-gap"><div class="section-heading"><div><span class="eyebrow">Founding beta</span><h2>Invitation control</h2><p>${invites.used} used · ${invites.active} active · ${invites.remaining} remaining of ${invites.capacity}</p></div></div>
-        <form id="inviteForm" class="auth-form"><div class="settings-grid"><div class="field"><label for="inviteEmail">Reserve for email (optional)</label><input id="inviteEmail" type="email" autocomplete="email"></div><div class="field"><label for="inviteDays">Expires in days</label><input id="inviteDays" type="number" min="1" max="90" value="14"></div></div><button class="button primary" type="submit" ${invites.remaining ? '' : 'disabled'}>Create beta invitation</button></form>
-        <div id="inviteOutput" class="success-box" hidden></div><div class="assessment-list section-gap">${inviteRows(invites.invites)}</div>
-      </section>
       <section class="panel section-gap"><h2>Recent email failures</h2>${recentFailures.length ? recentFailures.map(item=>`<div class="assessment-row"><div><strong>${escapeHtml(item.subject)}</strong><div class="assessment-meta"><span>${escapeHtml(item.to_email)}</span><span>${new Date(item.created_at).toLocaleString('en-GB')}</span></div><p class="fail-text small-copy">${escapeHtml(item.error||'Unknown provider error')}</p></div></div>`).join('') : '<p class="muted">No failed email deliveries.</p>'}</section>`;
     document.querySelector('#reconcile').addEventListener('click', reconcile);
-    document.querySelector('#inviteForm').addEventListener('submit', createInvite);
     document.querySelectorAll('[data-resolve-alert]').forEach(button=>button.addEventListener('click', resolveAlert));
-    document.querySelectorAll('[data-revoke-invite]').forEach(button=>button.addEventListener('click', revokeInvite));
   } catch (error) {
     if (error.message.includes('Sign in')) location.href=`/auth.html?next=${encodeURIComponent('/admin.html')}`;
     else if (error.code === 'ADMIN_MFA_REQUIRED') root.innerHTML='<div class="error-box show">Enable MFA and sign in with it before accessing owner operations.</div>';
@@ -50,9 +44,6 @@ function operationRows(items,label){return items.length?items.map(item=>`<div cl
 function alertRows(items){return items.length?items.map(item=>`<div class="assessment-row"><div><strong>${escapeHtml(item.category)}</strong><p>${escapeHtml(item.message)}</p><div class="assessment-meta"><span>${escapeHtml(item.severity)}</span><span>${new Date(item.created_at).toLocaleString('en-GB')}</span></div></div><button class="button ghost small" data-resolve-alert="${escapeHtml(item.id)}">Resolve</button></div>`).join(''):'<p class="pass-text">No open alerts.</p>';}
 function purchaseLabel(item){return `${item.product_key}: ${item.fulfilment_state} / ${item.email_state}`;}
 function jobLabel(item){return `${item.job_type}: attempt ${item.attempts}`;}
-function inviteRows(items){return items.length?items.map(item=>`<div class="assessment-row"><div><strong>${escapeHtml(item.email||'Unassigned invitation')}</strong><div class="assessment-meta"><span>${escapeHtml(item.status)}</span><span>Created ${new Date(item.created_at).toLocaleDateString('en-GB')}</span><span>Expires ${new Date(item.expires_at).toLocaleDateString('en-GB')}</span></div></div>${item.status==='active'?`<button class="button danger small" data-revoke-invite="${escapeHtml(item.id)}">Revoke</button>`:''}</div>`).join(''):'<p class="muted">No invitations created yet.</p>';}
-async function createInvite(event){event.preventDefault();const button=event.currentTarget.querySelector('button');setBusy(button,true,'Creating…');try{const data=await api('/api/admin/invites',{method:'POST',body:JSON.stringify({email:document.querySelector('#inviteEmail').value,expiresInDays:Number(document.querySelector('#inviteDays').value)})});const output=document.querySelector('#inviteOutput');output.innerHTML=`<strong>Copy this code now. It will not be shown again.</strong><pre>${escapeHtml(data.code)}</pre>`;output.hidden=false;event.currentTarget.reset();document.querySelector('#inviteDays').value='14';}catch(error){const box=document.querySelector('#adminError');box.textContent=error.message;box.classList.add('show');}finally{setBusy(button,false);}}
-async function revokeInvite(event){if(!confirm('Revoke this unused invitation?'))return;setBusy(event.currentTarget,true,'Revoking…');try{await api(`/api/admin/invites/${encodeURIComponent(event.currentTarget.dataset.revokeInvite)}/revoke`,{method:'POST',body:'{}'});location.reload();}catch(error){alert(error.message);setBusy(event.currentTarget,false);}}
 async function reconcile(event){setBusy(event.currentTarget,true,'Reconciling…');try{const data=await api('/api/admin/operations/reconcile',{method:'POST',body:'{}'});const box=document.querySelector('#adminMessage');box.textContent=`Reconciliation finished: ${data.fulfilment.fulfilled} purchases recovered, ${data.jobs.completed} jobs completed, ${data.retention.recordsDeleted} expired evidence records purged.`;box.hidden=false;setTimeout(()=>location.reload(),1200);}catch(error){const box=document.querySelector('#adminError');box.textContent=error.message;box.classList.add('show');setBusy(event.currentTarget,false);}}
 async function resolveAlert(event){setBusy(event.currentTarget,true,'Resolving…');try{await api(`/api/admin/alerts/${encodeURIComponent(event.currentTarget.dataset.resolveAlert)}/resolve`,{method:'POST',body:'{}'});location.reload();}catch(error){alert(error.message);setBusy(event.currentTarget,false);}}
 init();

@@ -22,8 +22,8 @@ The release does not automatically ingest an old filesystem database into produc
 2. retain an immutable final legacy backup;
 3. create the managed PostgreSQL database and apply this release’s schema;
 4. migrate records with an owner-approved, separately validated data-transfer procedure;
-5. reconcile table counts, foreign keys, assessment/report digests, invitation states, subscriptions and fulfilment records;
+5. reconcile table counts, foreign keys, assessment/report digests, legacy registration records, subscriptions and fulfilment records;
 6. keep the old service read-only until the reconciliation is signed off;
 7. do not attach the old disk to the new production service.
 
-For a controlled beta with no customer records worth preserving, deploy to a clean PostgreSQL database and issue fresh invitations.
+For a new public deployment with no customer records to preserve, deploy to a clean PostgreSQL database.

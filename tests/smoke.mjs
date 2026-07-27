@@ -124,8 +124,17 @@ async function rawJsonRequest(route, rawBody) {
 try {
   const health = await wait();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '9.0.0');
-  assert.equal(health.productStage, 'controlled-beta');
+  assert.equal(health.version, '9.1.0');
+  assert.equal(health.productStage, 'production');
+  const authPage = await anonymousRequest('/auth.html');
+  assert.match(authPage, /Create free account/i);
+  assert.doesNotMatch(authPage, /beta invitation|controlled beta/i);
+  const pricingPage = await anonymousRequest('/pricing.html');
+  assert.match(pricingPage, /No payment card/i);
+  assert.doesNotMatch(pricingPage, /founding-beta|controlled-beta/i);
+  const homePage = await anonymousRequest('/');
+  assert.match(homePage, /One clear production story/i);
+  assert.match(homePage, /Start in three steps/i);
   const trustPage = await anonymousRequest('/trust.html');
   assert.match(trustPage, /Trust centre/i);
   assert.match(await anonymousRequest('/compare.html'), /Compare by operational outcome/i);
@@ -139,11 +148,11 @@ try {
   const helpScript = await anonymousRequest('/help.js');
   assert.match(helpScript, /filterHelp/);
   const demoPage = await anonymousRequest('/demo.html');
-  assert.match(demoPage, /See a dangerous permission become verified evidence/i);
+  assert.match(demoPage, /See AgentRiskLayer stop a dangerous AI-agent action/i);
   assert.match(demoPage, /synthetic data/i);
   const demoScript = await anonymousRequest('/demo.js');
-  assert.match(demoScript, /Reproduced safely/);
-  assert.match(demoScript, /Retested/);
+  assert.match(demoScript, /unsafe tool call denied/i);
+  assert.match(demoScript, /Privacy-safe evidence is recorded/i);
   const quickstartPage = await anonymousRequest('/quickstart.html');
   assert.match(quickstartPage, /Developer quick start/i);
   assert.match(quickstartPage, /agentrisk-results\.sarif/i);
@@ -363,15 +372,8 @@ try {
   assert.equal(analytics.totals.purchases, 2);
   assert.equal(analytics.totals.redTeamRuns, 2);
   assert.ok(Array.isArray(analytics.readiness.checks));
-  const inviteBefore = await request('/api/admin/invites');
-  assert.equal(inviteBefore.capacity, 20);
-  const betaInvite = await request('/api/admin/invites', { method: 'POST', body: { email: 'founder@example.com', expiresInDays: 14 } });
-  assert.match(betaInvite.code, /^ARL-/);
-  assert.equal(betaInvite.remaining, 19);
-  const inviteAfter = await request('/api/admin/invites');
-  assert.equal(inviteAfter.active, 1);
-  await request(`/api/admin/invites/${betaInvite.invite.id}/revoke`, { method: 'POST', body: {} });
-  assert.equal((await request('/api/admin/invites')).remaining, 20);
+  const retiredInviteEndpoint = await fetch(`${APP_ORIGIN}/api/admin/invites`, { headers: { ...(cookieHeader() ? { Cookie: cookieHeader() } : {}) } });
+  assert.equal(retiredInviteEndpoint.status, 404);
 
   const ownedWorkspace = await request('/api/workspaces', { method: 'POST', body: { name: 'Smoke Owner Workspace' } });
   assert.equal(ownedWorkspace.workspace.name, 'Smoke Owner Workspace');

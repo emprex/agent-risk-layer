@@ -111,7 +111,7 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     else if (assessment.paid_tier === 'pro')
         limit = 2;
     if (!limit)
-        throw new Error('A founding assessment or active Developer, Team, or Agency subscription is required for controlled red-team evidence.');
+        throw new Error('A paid security assessment or active Developer, Team, or Agency subscription is required for controlled red-team evidence.');
     if (!superuser && subscription && recentRuns >= limit)
         throw new Error(`Your plan includes ${limit} controlled red-team runs per rolling 30 days. The current allowance is used.`);
     if (!superuser && !subscription && assessmentRuns >= limit)

@@ -1,11 +1,11 @@
-# AgentRiskLayer v9 production deployment
+# AgentRiskLayer v9.1 production deployment
 
 ## 1. Repository and Render Blueprint
 
 1. Put the definitive package at the GitHub repository root.
 2. Confirm `render.yaml`, `Dockerfile`, `package-lock.json`, `migrations/`, `server.js` and `src/control-plane.js` are committed.
 3. Create a Render Blueprint from the repository.
-4. Confirm it provisions the paid `agent-risk-layer` web service and `agent-risk-layer-db` managed PostgreSQL service in Frankfurt.
+4. Confirm it provisions the paid `agent-risk-layer` web service and `agent-risk-layer-db` managed PostgreSQL service in Oregon.
 5. Confirm the web service has no persistent disk and receives the database private connection string as `DATABASE_URL`.
 
 ## 2. Owner-controlled variables
@@ -43,11 +43,11 @@ Check Render logs for `server_started`, the applied migration list and no unreso
 - HTTPS: wait for Render certificate issuance before customer traffic
 - Metrics: configure the monitoring service to call `/metrics` with `METRICS_TOKEN`
 
-## 5. Live controlled-beta journey
+## 5. Live public customer journey
 
 Use dedicated test identities and synthetic content. Verify:
 
-1. invitation-bound registration, verification, MFA and recovery;
+1. public account registration, email verification, MFA and recovery;
 2. free Community project creation and one-time API key display;
 3. Guard allow, deny, monitor, replay and revoked-key behaviour;
 4. project quota and burst-rate responses, including `Retry-After`;

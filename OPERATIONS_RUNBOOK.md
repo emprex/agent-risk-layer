@@ -12,7 +12,7 @@
 
 - Create an independent PostgreSQL archive and run `npm run db:verify-backup`.
 - Review control-plane quota use, denied decisions, risky inventory drift and overdue remediation.
-- Review beta invitation use, owner/admin activity, key revocations and integration failures.
+- Review public registration abuse signals, owner/admin activity, key revocations and integration failures.
 - Run one sandbox payment and one transactional email after payment/email configuration changes.
 
 ## Monthly

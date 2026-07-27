@@ -12,6 +12,7 @@ async function init() {
     root.innerHTML = `
       ${verificationBanner(data.user)}
       ${data.user.isSuperuser ? '<div class="notice"><strong>Superuser access active.</strong> Professional reports, Inspector, Red Team and owner operations are unlocked. Production owner operations still require MFA. <a class="text-link" href="/admin.html">Open owner operations</a></div>' : ''}
+      ${firstRunGuide(data)}
       <div class="dashboard-stats">
         <div class="stat"><span>Assessments</span><strong>${data.stats.assessments}</strong></div>
         <div class="stat"><span>Average risk</span><strong>${data.stats.averageScore}</strong></div>
@@ -50,6 +51,13 @@ async function init() {
     if (error.message.includes('Sign in')) location.href = `/auth.html?next=${encodeURIComponent('/dashboard.html')}`;
     else root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
   }
+}
+
+function firstRunGuide(data) {
+  const hasProjects = Number(data.controlPlane?.totals?.projects || 0) > 0;
+  const hasAssessments = Number(data.stats?.assessments || 0) > 0;
+  if (hasProjects || hasAssessments) return '';
+  return `<section class="panel first-run-guide"><div><span class="eyebrow">Start here</span><h2>Protect your first AI agent in three steps.</h2><p>Create a free project, issue a scoped API key and send your first Guard request. You can also watch the demonstration before connecting anything.</p></div><div class="first-run-actions"><a class="button primary" href="/control-plane.html">Create free project</a><a class="button ghost" href="/demo.html">Watch 90-second demo</a><a class="text-link" href="/quickstart.html">Open integration guide →</a></div></section>`;
 }
 
 function controlPlaneCard(controlPlane) {

@@ -1,19 +1,39 @@
 let csrfToken = null;
+let csrfPromise = null;
 
-async function getCsrfToken() {
+async function getCsrfToken({ force = false } = {}) {
+  if (force) {
+    csrfToken = null;
+    csrfPromise = null;
+  }
   if (csrfToken) return csrfToken;
-  const response = await fetch('/api/csrf', { credentials: 'same-origin', cache: 'no-store' });
-  const payload = await response.json();
-  if (!response.ok || !payload.csrfToken) throw new Error('Could not initialise the secure session. Refresh and try again.');
-  csrfToken = payload.csrfToken;
-  return csrfToken;
+  if (!csrfPromise) {
+    csrfPromise = fetch('/api/csrf', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.csrfToken) throw new Error('Could not initialise the secure session. Refresh and try again.');
+        csrfToken = payload.csrfToken;
+        return csrfToken;
+      })
+      .finally(() => { csrfPromise = null; });
+  }
+  return csrfPromise;
+}
+
+export function warmCsrf() {
+  return getCsrfToken();
 }
 
 export async function api(url, options = {}) {
+  return request(url, options, true);
+}
+
+async function request(url, options, allowCsrfRetry) {
   const method = String(options.method || 'GET').toUpperCase();
   const headers = { ...(options.headers || {}) };
   if (options.body != null && !(options.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) headers['X-CSRF-Token'] = await getCsrfToken();
+  const changesState = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  if (changesState) headers['X-CSRF-Token'] = await getCsrfToken();
 
   const response = await fetch(url, {
     credentials: 'same-origin',
@@ -23,8 +43,21 @@ export async function api(url, options = {}) {
     headers,
   });
   const type = response.headers.get('content-type') || '';
-  const payload = type.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) { const error = new Error(payload?.error || payload || 'Request failed.'); error.status = response.status; error.code = payload?.code || ''; error.payload = payload; throw error; }
+  const payload = type.includes('application/json') ? await response.json().catch(() => ({})) : await response.text();
+
+  const csrfFailure = response.status === 403 && changesState
+    && String(payload?.error || payload || '').toLowerCase().includes('security token');
+  if (csrfFailure && allowCsrfRetry) {
+    await getCsrfToken({ force: true });
+    return request(url, options, false);
+  }
+  if (!response.ok) {
+    const error = new Error(payload?.error || payload || 'Request failed.');
+    error.status = response.status;
+    error.code = payload?.code || '';
+    error.payload = payload;
+    throw error;
+  }
   return payload;
 }
 
@@ -102,6 +135,16 @@ export function hydrateHelpLink() {
   nav.insertBefore(link, authLink || logout || null);
 }
 
+
+export function hydrateFooterLinks() {
+  const footer = document.querySelector('footer');
+  if (!footer || footer.querySelector('.footer-links')) return;
+  const links = document.createElement('span');
+  links.className = 'footer-links';
+  links.innerHTML = '<a href="/company.html">Company</a><a href="/status.html">Status</a><a href="/security-center.html">Security</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a>';
+  footer.appendChild(links);
+}
+
 export function downloadObject(filename, object) {
   const blob = new Blob([JSON.stringify(object, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -115,4 +158,5 @@ export function downloadObject(filename, object) {
 document.addEventListener('DOMContentLoaded', () => {
   hydrateHelpLink();
   hydrateNav();
+  hydrateFooterLinks();
 });

@@ -2,10 +2,10 @@ import path from 'node:path';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 export const config = {
-    appVersion: '9.0.0',
+    appVersion: '9.1.0',
     scoringVersion: 'arl-risk-v3.2',
     termsVersion: process.env.TERMS_VERSION || '2026-07-22',
-    productStage: process.env.PRODUCT_STAGE || 'controlled-beta',
+    productStage: process.env.PRODUCT_STAGE || 'production',
     companyName: process.env.COMPANY_NAME || 'AgentRiskLayer',
     companyLegalName: (process.env.COMPANY_LEGAL_NAME || '').trim(),
     companyAddress: (process.env.COMPANY_ADDRESS || '').trim(),
@@ -32,8 +32,6 @@ export const config = {
     resendApiKey: process.env.RESEND_API_KEY || '',
     emailFrom: process.env.EMAIL_FROM || 'AgentRiskLayer <reports@example.com>',
     adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
-    betaInviteLimit: Math.max(1, Number(process.env.BETA_INVITE_LIMIT || 20)),
-    requireBetaInvite: String(process.env.REQUIRE_BETA_INVITE ?? 'true').toLowerCase() !== 'false',
     sessionIdleHours: Math.max(1, Number(process.env.SESSION_IDLE_HOURS || 12)),
     sessionAbsoluteDays: Math.max(1, Number(process.env.SESSION_ABSOLUTE_DAYS || 30)),
     emailVerificationHours: Math.max(1, Number(process.env.EMAIL_VERIFICATION_HOURS || 24)),
@@ -53,7 +51,7 @@ export const config = {
 export const plans = {
     pro_report: {
         key: 'pro_report',
-        name: 'Founding security assessment',
+        name: 'AI agent security assessment',
         amountPence: 9900,
         recurring: false,
         reportTier: 'pro',

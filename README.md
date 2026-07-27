@@ -1,8 +1,8 @@
-# AgentRiskLayer v9.0.0
+# AgentRiskLayer v9.1.0
 
 AgentRiskLayer is an evidence-first AI-agent security control plane for teams that need to discover AI assets, inspect code and model artefacts, test agent behaviour, enforce runtime policy, assign remediation, and make a defensible deployment decision from one auditable workflow.
 
-This release is the definitive production package for the controlled beta. Production uses Render Managed PostgreSQL through `DATABASE_URL`; there is no filesystem database or application disk.
+This release is the production package for public self-service onboarding. Production uses Render Managed PostgreSQL through `DATABASE_URL`; there is no filesystem database or application disk.
 
 ## What is included
 
@@ -14,7 +14,7 @@ This release is the definitive production package for the controlled beta. Produ
 - **Controlled red teaming:** 32 non-destructive cases, repeated/adaptive trials, written Rules of Engagement and signed redacted evidence.
 - **Local runtime gateway:** customer-operated enforcement is available where content must remain entirely inside the customer boundary.
 - **Enterprise foundations:** workspaces, five roles, MFA, SCIM, signed HTTPS/Slack/Jira/CEF/OCSF/SARIF outputs and tenant isolation.
-- **Commercial operations:** Stripe Managed Payments, Resend transactional email, reports, subscriptions, 20 beta invitations, metrics, retention, backups and controlled restoration.
+- **Commercial operations:** Stripe Managed Payments, Resend transactional email, reports, subscriptions, public self-service onboarding, metrics, retention, backups and controlled restoration.
 
 ## Runtime privacy boundary
 
@@ -108,7 +108,7 @@ Restore only to a separately supplied destination during an approved maintenance
 ## Commercial catalogue
 
 - Community: **free** — 1 project and 10,000 Guard decisions/month
-- Founding security assessment: **£99 once**
+- AI agent security assessment: **£99 once**
 - Developer: **£29/month**
 - Team: **£99/month**
 - Agency: **£249/month**

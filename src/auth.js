@@ -82,14 +82,11 @@ export async function getUserFromRequest(req) {
     Object.defineProperty(user, '_sessionTokenHash', { value: row.session_token_hash, enumerable: false });
     return user;
 }
-export async function registerUser(email, password, termsAccepted = false, inviteCode = '') {
+export async function registerUser(email, password, termsAccepted = false) {
     const normalized = normalizeEmail(email);
     validatePassword(password);
     if (!termsAccepted)
         throw new Error('Accept the Terms of Service and Privacy Notice to create an account.');
-    // The configured owner may recover/bootstrap the superuser account without
-    // consuming one of the finite customer beta invitations.
-    const invite = config.requireBetaInvite && normalized !== config.adminEmail ? await validateInvite(inviteCode, normalized) : null;
     const created = nowIso();
     const user = {
         id: id('usr_'), email: normalized, email_verified_at: null, mfa_enabled_at: null,
@@ -98,17 +95,9 @@ export async function registerUser(email, password, termsAccepted = false, invit
     };
     try {
         const passwordHash = await hashPassword(password);
-        await db.transaction(async () => {
-            await db.prepare(`INSERT INTO users (id, email, password_hash, email_verified_at, mfa_enabled_at, role, terms_version, terms_accepted_at, created_at)
+        await db.prepare(`INSERT INTO users (id, email, password_hash, email_verified_at, mfa_enabled_at, role, terms_version, terms_accepted_at, created_at)
         VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?)`)
-                .run(user.id, user.email, passwordHash, user.role, user.terms_version, user.terms_accepted_at, user.created_at);
-            if (invite) {
-                const used = await db.prepare(`UPDATE beta_invites SET status='used',used_by=?,used_at=?
-          WHERE id=? AND status='active' AND used_at IS NULL`).run(user.id, created, invite.id);
-                if (Number(used.changes) !== 1)
-                    throw new Error('This beta invitation has already been used.');
-            }
-        });
+            .run(user.id, user.email, passwordHash, user.role, user.terms_version, user.terms_accepted_at, user.created_at);
     }
     catch (error) {
         if (String(error.message).includes('UNIQUE'))
@@ -282,17 +271,6 @@ export function publicUser(row) {
         terms_accepted_at: row.terms_accepted_at,
         created_at: row.created_at,
     };
-}
-async function validateInvite(code, email) {
-    const value = String(code || '').trim();
-    if (!value)
-        throw new Error('A beta invitation code is required.');
-    const codeHash = tokenHash(value, 'beta-invite');
-    const invite = await db.prepare(`SELECT * FROM beta_invites WHERE code_hash=? AND status='active' AND used_at IS NULL
-    AND (expires_at IS NULL OR expires_at>?)`).get(codeHash, nowIso());
-    if (!invite || (invite.email && invite.email !== email))
-        throw new Error('This beta invitation is invalid, expired or assigned to another email.');
-    return invite;
 }
 async function verifyMfaCode(userId, encryptedSecret, recoveryJson, code) {
     const value = String(code || '').trim();

@@ -80,10 +80,10 @@ async function findOrCreatePrice(spec) {
     unit_amount: String(spec.amount),
     lookup_key: spec.lookupKey,
     tax_behavior: 'inclusive',
-    nickname: `${spec.name} — AgentRiskLayer v9.0`,
+    nickname: `${spec.name} — AgentRiskLayer v9.1`,
     'product_data[name]': spec.name,
     'product_data[metadata][app]': 'AgentRiskLayer',
-    'metadata[release]': '9.0.0',
+    'metadata[release]': '9.1.0',
   });
   if (spec.recurring) {
     form.set('recurring[interval]', 'month');

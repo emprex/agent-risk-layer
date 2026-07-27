@@ -14,19 +14,19 @@
 </head>
 <body class="v6-home">
   <header class="site-header premium-nav">
-    <a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span><em>9</em></a>
-    <nav><a href="#platform">Platform</a><a href="/control-plane.html">Control plane</a><a href="/runtime.html">Runtime</a><a href="/compare.html">Compare</a><a href="/security-center.html">Security centre</a><a href="/pricing.html">Pricing</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a><a class="button primary small" href="/assessment.html">Assess an agent</a></nav>
+    <a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span></a>
+    <nav><a href="#how-it-works">How it works</a><a href="/demo.html">Demo</a><a href="/pricing.html">Pricing</a><a href="/security-center.html">Security</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a><a class="button primary small" href="/auth.html?mode=register&next=%2Fdashboard.html%3Fwelcome%3D1">Start free</a></nav>
   </header>
   <main>
-    <section class="launch-strip"><span class="live-dot"></span><strong>Controlled beta</strong><span>20 founding-team places · private-by-design evidence · no production attacks</span><a href="/trust.html">Read our operating rules →</a></section>
+    <section class="launch-strip"><span class="live-dot"></span><strong>Start free</strong><span>One security project · 10,000 monthly decisions · no payment card</span><a href="/trust.html">Review our security and data boundaries →</a></section>
 
     <section class="hero hero-v6">
       <div class="hero-story">
         <span class="eyebrow">The security control plane for AI agents</span>
-        <h1>Know what your agent can do. <span class="gradient-text">Stop what it shouldn’t.</span></h1>
-        <p class="hero-copy">AgentRiskLayer discovers dangerous permissions, safely reproduces attack paths, blocks unsafe prompts, outputs and tool calls through a hosted or customer-operated runtime, then tracks the owner, fix and retest in one control plane.</p>
-        <div class="button-row"><a class="button primary button-xl" href="/control-plane.html">Protect an agent free <span>→</span></a><a class="button glass button-xl" href="/demo.html">Watch a threat get blocked</a></div>
-        <div class="hero-proof"><div><strong>86/86</strong><span>automated tests passed</span></div><div><strong>1,000/1,000</strong><span>safety scenarios passed</span></div><div><strong>Privacy-safe</strong><span>raw runtime content is not retained</span></div></div>
+        <h1>Stop unsafe AI actions <span class="gradient-text">before they reach your systems.</span></h1>
+        <p class="hero-copy">Connect an AI agent, define what it is allowed to do and screen every prompt, output and tool call. AgentRiskLayer blocks dangerous actions, requests human approval when needed and records privacy-safe evidence your team can review.</p>
+        <div class="button-row"><a class="button primary button-xl" href="/auth.html?mode=register&next=%2Fdashboard.html%3Fwelcome%3D1">Start free <span>→</span></a><a class="button glass button-xl" href="/demo.html">See the 90-second demo</a></div>
+        <div class="hero-proof"><div><strong>£0</strong><span>one free security project</span></div><div><strong>10,000</strong><span>Guard decisions each month</span></div><div><strong>Privacy-safe</strong><span>raw runtime content is not retained</span></div></div>
       </div>
 
       <div class="command-visual" aria-label="AgentRiskLayer live security command centre preview">
@@ -43,6 +43,38 @@
         </div>
         <div class="float-card float-one"><span>Deployment gate</span><strong>DO NOT DEPLOY</strong><small>Critical path overrides score</small></div>
         <div class="float-card float-two"><span>Evidence</span><strong>Signed + replay protected</strong><small>Raw content not retained</small></div>
+      </div>
+    </section>
+
+
+    <section class="content-section simple-start" id="how-it-works">
+      <div class="section-heading vertical"><span class="eyebrow">Start in three steps</span><h2>From account to protected agent.</h2><p>No security maze. AgentRiskLayer guides you from a free project to your first enforced decision.</p></div>
+      <div class="simple-start-grid">
+        <article><span>1</span><h3>Create a free project</h3><p>Name the AI system and choose monitor or enforce mode. No payment card is required.</p></article>
+        <article><span>2</span><h3>Connect one API call</h3><p>Issue a scoped key and send prompts, outputs or tool calls to the Guard API before execution.</p></article>
+        <article><span>3</span><h3>Review decisions and evidence</h3><p>See what was allowed, denied or sent for human approval, then assign and verify fixes.</p></article>
+      </div>
+      <div class="button-row"><a class="button primary" href="/auth.html?mode=register&next=%2Fdashboard.html%3Fwelcome%3D1">Create free account</a><a class="button ghost" href="/quickstart.html">Read the quick start</a></div>
+    </section>
+
+
+    <section class="content-section use-case-section" aria-labelledby="useCaseTitle">
+      <div class="section-heading vertical"><span class="eyebrow">One clear production story</span><h2 id="useCaseTitle">A support agent tries to issue the wrong refund.</h2><p>AgentRiskLayer evaluates the request before the tool executes, binds approval to the corrected transaction and records evidence without storing the raw conversation.</p></div>
+      <div class="use-case-flow">
+        <article><span>01</span><strong>Agent requests £2,500</strong><p>The amount exceeds policy and the request contains untrusted instructions.</p><b class="status-bad">Denied</b></article>
+        <i aria-hidden="true">→</i>
+        <article><span>02</span><strong>Human reviews £125</strong><p>The approver sees the exact customer, amount and action that will be authorised.</p><b class="status-warn">Approval required</b></article>
+        <i aria-hidden="true">→</i>
+        <article><span>03</span><strong>Corrected action executes</strong><p>The signed approval matches one transaction and cannot be replayed for another.</p><b class="status-good">Allowed</b></article>
+      </div>
+      <div class="button-row"><a class="button primary" href="/demo.html">Watch the complete demonstration</a><a class="button ghost" href="/runtime.html">See the runtime API</a></div>
+    </section>
+
+    <section class="proof-band" aria-labelledby="proofTitle">
+      <div class="content-section">
+        <div class="section-heading"><div><span class="eyebrow">Product evidence</span><h2 id="proofTitle">Inspectable proof, not borrowed logos.</h2></div><p>These numbers describe the current source and its internal release validation. They are not customer testimonials or independent certification.</p></div>
+        <div class="proof-grid"><article><strong>27</strong><span>deterministic inspection rules</span></article><article><strong>32</strong><span>controlled adversarial cases</span></article><article><strong>4</strong><span>evidence levels kept separate</span></article><article><strong>1,000</strong><span>deterministic safety scenarios</span></article></div>
+        <div class="button-row"><a class="button ghost" href="/security-center.html">Review assurance status</a><a class="text-link" href="/status.html">View live system status →</a></div>
       </div>
     </section>
 
@@ -70,7 +102,7 @@
       <div class="trust-mosaic"><article class="mosaic-large"><span class="mosaic-icon">⌘</span><h3>Hosted or customer-operated</h3><p>Use the hosted Guard API for immediate enforcement, or run the signed Inspector, adversarial runner and local gateway under your control. You choose scope, retention and policy.</p><div class="code-proof"><code>$ agentrisk inspect --authorised</code><span>✓ deterministic controls checked</span><span>✓ 0 raw secrets retained</span><span>✓ evidence bundle signed</span></div></article><article><span class="mosaic-icon">◈</span><h3>Evidence ladder</h3><p>Declared, observed, reproduced and retested evidence never gets blended into a vague claim.</p></article><article><span class="mosaic-icon">◎</span><h3>Enterprise-ready identity</h3><p>Workspace roles, signed approvals, SSO state protection and SCIM user normalisation.</p></article><article><span class="mosaic-icon">↗</span><h3>Operational exports</h3><p>SARIF, JSON, CEF, OCSF and signed Slack/Jira-ready security events.</p></article><article><span class="mosaic-icon">◇</span><h3>Honest boundaries</h3><p>No false certification, no reckless production testing and no claim that a single score proves safety.</p></article></div>
     </section>
 
-    <section class="final-cta"><div><span class="eyebrow">Founding beta</span><h2>Your AI agent is becoming a production user.<br>Give it enforceable boundaries.</h2><p>Create one free security project with 10,000 runtime decisions per month. No card.</p><div class="button-row"><a class="button primary button-xl" href="/control-plane.html">Start free project</a><a class="button glass button-xl" href="/assessment.html">Run the security assessment</a></div></div></section>
+    <section class="final-cta"><div><span class="eyebrow">Start free today</span><h2>Your AI agent is becoming a production user.<br>Give it enforceable boundaries.</h2><p>Create one free security project with 10,000 runtime decisions per month. No payment card is required.</p><div class="button-row"><a class="button primary button-xl" href="/auth.html?mode=register&next=%2Fdashboard.html%3Fwelcome%3D1">Create free account</a><a class="button glass button-xl" href="/demo.html">Watch the demo</a></div></div></section>
   </main>
   <footer><span>© 2026 AgentRiskLayer · <a href="/trust.html">Trust</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></span><span>Customer-operated security evidence with explicit scope limits; not an independent certification or legal opinion.</span></footer>
 </body>

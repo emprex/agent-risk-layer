@@ -1,5 +1,6 @@
-import { api, hideError, qs, setBusy, showError } from './shared.js';
-const tabs = document.querySelectorAll('[data-tab]');
+import { api, hideError, qs, setBusy, showError, warmCsrf } from './shared.js';
+
+const tabs = [...document.querySelectorAll('[data-tab]')];
 const login = document.querySelector('#loginForm');
 const register = document.querySelector('#registerForm');
 const mfa = document.querySelector('#mfaForm');
@@ -11,60 +12,90 @@ const requestedNext = qs('next') || '/dashboard.html';
 const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/dashboard.html';
 let challengeToken = '';
 
-tabs.forEach((tab) => tab.addEventListener('click', () => {
-  tabs.forEach((x) => x.classList.toggle('active', x === tab));
-  login.hidden = tab.dataset.tab !== 'login';
-  register.hidden = tab.dataset.tab !== 'register';
+function selectTab(name, { focus = false } = {}) {
+  tabs.forEach((tab) => {
+    const active = tab.dataset.tab === name;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+  login.hidden = name !== 'login';
+  register.hidden = name !== 'register';
   mfa.hidden = true;
   hideError(errorBox);
+  noticeBox.hidden = true;
+  document.querySelector('#authTitle').textContent = name === 'register' ? 'Create your free account' : 'Welcome back';
+  if (focus) document.querySelector(name === 'register' ? '#registerEmail' : '#loginEmail')?.focus();
+  const url = new URL(location.href);
+  if (name === 'register') url.searchParams.set('mode', 'register');
+  else url.searchParams.delete('mode');
+  history.replaceState(null, '', url);
+}
+
+tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.tab, { focus: true })));
+document.querySelector('#backToLogin').addEventListener('click', () => selectTab('login', { focus: true }));
+document.querySelectorAll('[data-toggle-password]').forEach((button) => button.addEventListener('click', () => {
+  const input = document.querySelector(`#${CSS.escape(button.dataset.togglePassword)}`);
+  const reveal = input.type === 'password';
+  input.type = reveal ? 'text' : 'password';
+  button.textContent = reveal ? 'Hide' : 'Show';
+  button.setAttribute('aria-label', `${reveal ? 'Hide' : 'Show'} password`);
+  input.focus();
 }));
 
-login.addEventListener('submit', (event) => submitLogin(event));
-register.addEventListener('submit', (event) => submitRegister(event));
+login.addEventListener('submit', submitLogin);
+register.addEventListener('submit', submitRegister);
 mfa.addEventListener('submit', submitMfa);
 
 async function submitLogin(event) {
   event.preventDefault();
   hideError(errorBox);
   const button = event.currentTarget.querySelector('button[type="submit"]');
-  setBusy(button, true, 'Checking…');
+  setBusy(button, true, 'Signing in…');
   try {
     const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({
-      email: document.querySelector('#loginEmail').value,
+      email: document.querySelector('#loginEmail').value.trim(),
       password: document.querySelector('#loginPassword').value,
       claimAssessmentId, claimToken,
     }) });
     if (data.mfaRequired) {
       challengeToken = data.challengeToken;
       login.hidden = true;
+      register.hidden = true;
       mfa.hidden = false;
+      document.querySelector('#authTitle').textContent = 'Verify your identity';
       document.querySelector('#mfaCode').focus();
-      notice('Enter the six-digit authenticator code or one unused recovery code.');
+      notice('Enter the six-digit code from your authenticator or an unused recovery code.');
       return;
     }
     location.href = next;
-  } catch (error) { showError(errorBox, error.message); }
-  finally { setBusy(button, false); }
+  } catch (error) {
+    showError(errorBox, error.message);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function submitRegister(event) {
   event.preventDefault();
   hideError(errorBox);
   const button = event.currentTarget.querySelector('button[type="submit"]');
-  setBusy(button, true, 'Creating…');
+  setBusy(button, true, 'Creating account…');
   try {
     const data = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({
-      email: document.querySelector('#registerEmail').value,
+      email: document.querySelector('#registerEmail').value.trim(),
       password: document.querySelector('#registerPassword').value,
-      inviteCode: document.querySelector('#inviteCode').value,
       termsAccepted: document.querySelector('#termsAccepted').checked,
       claimAssessmentId, claimToken,
     }) });
-    sessionStorage.setItem('arl_registration_notice', 'Check your inbox and verify your email before purchasing reports or running security tools.');
+    sessionStorage.setItem('arl_registration_notice', 'Account created. Check your inbox and verify your email to unlock all security operations.');
     if (data.demoVerificationUrl) location.href = data.demoVerificationUrl;
-    else location.href = next;
-  } catch (error) { showError(errorBox, error.message); }
-  finally { setBusy(button, false); }
+    else location.href = '/dashboard.html?welcome=1';
+  } catch (error) {
+    showError(errorBox, error.message);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 async function submitMfa(event) {
@@ -73,10 +104,13 @@ async function submitMfa(event) {
   const button = event.currentTarget.querySelector('button[type="submit"]');
   setBusy(button, true, 'Verifying…');
   try {
-    await api('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ challengeToken, code: document.querySelector('#mfaCode').value }) });
+    await api('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ challengeToken, code: document.querySelector('#mfaCode').value.trim() }) });
     location.href = next;
-  } catch (error) { showError(errorBox, error.message); }
-  finally { setBusy(button, false); }
+  } catch (error) {
+    showError(errorBox, error.message);
+  } finally {
+    setBusy(button, false);
+  }
 }
 
 function notice(message) {
@@ -84,4 +118,8 @@ function notice(message) {
   noticeBox.hidden = false;
 }
 
+selectTab(qs('mode') === 'register' ? 'register' : 'login');
+const email = qs('email');
+if (email) document.querySelector(qs('mode') === 'register' ? '#registerEmail' : '#loginEmail').value = email;
+warmCsrf().catch(() => notice('Secure session initialisation will retry automatically when you submit the form.'));
 api('/api/auth/me').then(({ user }) => { if (user) location.href = next; }).catch(() => null);

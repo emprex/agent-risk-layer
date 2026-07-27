@@ -41,6 +41,13 @@ const mimeTypes = {
     '.yaml': 'text/yaml; charset=utf-8',
     '.yml': 'text/yaml; charset=utf-8',
 };
+function publicDatabaseHealth(database) {
+    return {
+        ok: Boolean(database?.ok),
+        adapter: database?.adapter || database?.kind || 'unknown',
+        latencyMs: Number.isFinite(Number(database?.latencyMs)) ? Number(database.latencyMs) : null,
+    };
+}
 const server = http.createServer(async (req, res) => {
     applySecurityHeaders(res);
     const url = new URL(req.url, config.baseUrl);
@@ -51,7 +58,7 @@ const server = http.createServer(async (req, res) => {
         try {
             const database = await db.healthcheck();
             const readiness = launchReadiness();
-            return json(res, readiness.ready ? 200 : 503, { ok: readiness.ready, version: config.appVersion, productStage: config.productStage, database, readiness, timestamp: nowIso() });
+            return json(res, readiness.ready ? 200 : 503, { ok: readiness.ready, version: config.appVersion, productStage: config.productStage, database: publicDatabaseHealth(database), readiness, timestamp: nowIso() });
         }
         catch (error) {
             return json(res, 503, { ok: false, version: config.appVersion, productStage: config.productStage, database: { ok: false, error: 'database_unavailable' }, timestamp: nowIso() });
@@ -127,7 +134,7 @@ const server = http.createServer(async (req, res) => {
                 return json(res, 429, { error: 'Too many registration attempts. Try again later.' });
             }
             try {
-                const user = await registerUser(body.email, body.password, body.termsAccepted === true, body.inviteCode);
+                const user = await registerUser(body.email, body.password, body.termsAccepted === true);
                 const verification = await createEmailVerification(user.id);
                 if (verification)
                     await sendEmailVerification({ userId: user.id, to: user.email, token: verification.token }).catch((error) => console.error('Verification email failed:', error.message));
@@ -788,32 +795,6 @@ const server = http.createServer(async (req, res) => {
             if (!requireAdmin(req, res, { requireMfa: true }))
                 return;
             return json(res, 200, launchReadiness());
-        }
-        if (req.method === 'GET' && url.pathname === '/api/admin/invites') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, await betaInviteSummary());
-        }
-        if (req.method === 'POST' && url.pathname === '/api/admin/invites') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            const body = await readBody(req);
-            try {
-                return json(res, 201, await createBetaInvite(req.user, body));
-            }
-            catch (error) {
-                return json(res, 400, { error: error.message });
-            }
-        }
-        match = url.pathname.match(/^\/api\/admin\/invites\/([^/]+)\/revoke$/);
-        if (req.method === 'POST' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            const changed = await db.prepare(`UPDATE beta_invites SET status='revoked',revoked_at=? WHERE id=? AND status='active'`).run(nowIso(), decodeURIComponent(match[1]));
-            if (Number(changed.changes) !== 1)
-                return json(res, 404, { error: 'Active invitation not found.' });
-            await insertEvent('beta_invite_revoked', req.user.id, { inviteId: decodeURIComponent(match[1]) });
-            return json(res, 200, { ok: true });
         }
         if (req.method === 'GET' && ['/privacy', '/privacy.html'].includes(url.pathname))
             return html(res, 200, renderPrivacyPage());
@@ -1476,33 +1457,6 @@ function requireAdmin(req, res, { requireMfa = false } = {}) {
     }
     return true;
 }
-async function betaInviteSummary() {
-    const invites = await db.prepare(`SELECT id,email,status,created_at,expires_at,used_at,revoked_at FROM beta_invites ORDER BY created_at DESC`).all();
-    return {
-        capacity: config.betaInviteLimit,
-        active: invites.filter((item) => item.status === 'active').length,
-        used: invites.filter((item) => item.status === 'used').length,
-        remaining: Math.max(0, config.betaInviteLimit - invites.filter((item) => item.status !== 'revoked').length),
-        invites,
-    };
-}
-async function createBetaInvite(user, input = {}) {
-    const summary = await betaInviteSummary();
-    if (summary.remaining <= 0)
-        throw new Error(`The ${config.betaInviteLimit}-invite controlled-beta capacity has been reached.`);
-    const email = cleanText(input.email || '', 254).toLowerCase() || null;
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-        throw new Error('Enter a valid invitee email or leave it blank.');
-    const days = Math.min(90, Math.max(1, Number(input.expiresInDays || 14)));
-    const code = `ARL-${crypto.randomBytes(12).toString('base64url').toUpperCase()}`;
-    const inviteId = id('inv_');
-    const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
-    const codeHash = crypto.createHmac('sha256', config.sessionSecret).update(`beta-invite:${code}`).digest('hex');
-    await db.prepare(`INSERT INTO beta_invites (id,code_hash,email,status,created_by,created_at,expires_at) VALUES (?,?,?,'active',?,?,?)`)
-        .run(inviteId, codeHash, email, user.id, nowIso(), expiresAt);
-    await insertEvent('beta_invite_created', user.id, { inviteId, assigned: Boolean(email), expiresAt });
-    return { invite: { id: inviteId, email, status: 'active', expiresAt }, code, remaining: summary.remaining - 1 };
-}
 function parseJson(value, fallback) {
     try {
         return value == null ? fallback : JSON.parse(value);
@@ -1611,7 +1565,7 @@ function renderRobots() {
     return `User-agent: *\nAllow: /\nDisallow: /dashboard.html\nDisallow: /admin.html\nDisallow: /auth.html\nDisallow: /reset.html\nDisallow: /result.html\nSitemap: ${config.baseUrl}/sitemap.xml\n`;
 }
 function renderSitemap() {
-    const paths = ['/', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
+    const paths = ['/', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
     return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
 }
 function renderSecurityTxt() {

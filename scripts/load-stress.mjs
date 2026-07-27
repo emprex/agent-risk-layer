@@ -96,7 +96,7 @@ try {
     scope: 'Local mixed public-read and per-user CSRF/session traffic; no real payments, emails, or external services.',
   };
   fs.mkdirSync('test-artifacts', { recursive: true });
-  fs.writeFileSync(`test-artifacts/AgentRiskLayer-v9.0.0-load-stress-${users}x${requestsPerUser}.json`, `${JSON.stringify(summary, null, 2)}\n`);
+  fs.writeFileSync(`test-artifacts/AgentRiskLayer-v9.1.0-load-stress-${users}x${requestsPerUser}.json`, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(JSON.stringify(summary));
   if (errors) process.exitCode = 1;
 } finally {

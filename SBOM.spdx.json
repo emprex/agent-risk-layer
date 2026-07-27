@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "AgentRiskLayer-9.0.0",
-  "documentNamespace": "https://agentrisklayer.com/sbom/9.0.0/41ad1c3c771dfc00",
+  "name": "AgentRiskLayer-9.1.0",
+  "documentNamespace": "https://agentrisklayer.com/sbom/9.1.0/20260727",
   "creationInfo": {
-    "created": "2026-07-26T12:55:51Z",
+    "created": "2026-07-27T14:02:52.382205Z",
     "creators": [
       "Tool: AgentRiskLayer release process"
     ]
@@ -14,7 +14,7 @@
     {
       "name": "agent-risk-layer",
       "SPDXID": "SPDXRef-Package-AgentRiskLayer",
-      "versionInfo": "9.0.0",
+      "versionInfo": "9.1.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -25,7 +25,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/agent-risk-layer@9.0.0"
+          "referenceLocator": "pkg:npm/agent-risk-layer@9.1.0"
         }
       ]
     },
@@ -62,7 +62,7 @@
   ],
   "annotations": [
     {
-      "annotationDate": "2026-07-26T12:55:51Z",
+      "annotationDate": "2026-07-27T14:02:52.382205Z",
       "annotationType": "OTHER",
       "annotator": "Tool: AgentRiskLayer release process",
       "comment": "Production container base is node:22.18.0-alpine3.22. Production persistence uses PostgreSQL through pg 8.22.0."

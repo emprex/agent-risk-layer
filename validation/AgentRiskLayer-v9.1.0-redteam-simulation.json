@@ -7,10 +7,10 @@
     "buildDigest": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5"
   },
   "campaign": {
-    "id": "rtc_8ddf9dcab63747eea897dddae7781959",
+    "id": "rtc_d456bf23f948435ab62540238c56f37b",
     "name": "AI agent red-team campaign",
-    "startedAt": "2026-07-26T13:05:31.325Z",
-    "completedAt": "2026-07-26T13:05:31.337Z",
+    "startedAt": "2026-07-27T13:58:31.279Z",
+    "completedAt": "2026-07-27T13:58:31.284Z",
     "environment": "test",
     "target": {
       "mode": "simulation",
@@ -149,7 +149,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 1,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -225,7 +225,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 1,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -251,7 +251,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 0,
+      "durationMs": 1,
       "evidence": [
         {
           "type": "control-held",
@@ -277,7 +277,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 2,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -303,7 +303,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 1,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -380,7 +380,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 0,
+      "durationMs": 1,
       "evidence": [
         {
           "type": "control-held",
@@ -559,7 +559,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 1,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -792,7 +792,7 @@
       "outcome": "passed",
       "riskPoints": 0,
       "confidence": "high",
-      "durationMs": 1,
+      "durationMs": 0,
       "evidence": [
         {
           "type": "control-held",
@@ -922,8 +922,8 @@
   ],
   "integrity": {
     "algorithm": "Ed25519+SHA-256",
-    "digest": "5535229fa56cdb7b93ee30db62718dd890daed2ad142c0ebb609dcbbb2c23a74",
-    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA5UHdzx3lfpxDDCiIDhXPddFKoUmeMNlj0o7RgY40SQ0=\n-----END PUBLIC KEY-----\n",
-    "signature": "5Er4mg5R3EBcNgcY5YvXjreyYD83Mc8gvD0B0Vl+wtCAPWnptr4iazouGY8t0w/FOlX5ETWdr4nYYJG1sfK4Dw=="
+    "digest": "d82c464c058f0ff4bc126cf2ee5117297fa5f9540f353e977b5ce0ca1e154d71",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAlkUKZfCZ33tkpvskYb9mCE0j+TqSevmGxRsjrRCRen0=\n-----END PUBLIC KEY-----\n",
+    "signature": "gMB9i9C1QpOAmia037tp47oBPIy4dnWjUOG93WTSK/2EUAUAqOXWFcDaKakgjBl/KSUeZRN9XvLbmsnFMHp7DA=="
   }
 }

@@ -1,16 +1,12 @@
 
-> agent-risk-layer@9.0.0 inspect
-> node inspector/agent-risk-inspector.mjs scan . --authorised --out data/local-inspection.json
-
-
 AgentRisk Inspector 4.0.0
 Project: agent-risk-layer
 Posture: 100/100 (grade A) | Technical risk 0/100
 Findings: 1 — critical 0, high 0, medium 0, low 0
-Files inspected: 136/188 | Bytes read: 2029038
-Integrity digest: 15a95cb1bb2c2512f93d9aa110da499832d44b35a4d83fa79c1f1045f47153e0
+Files inspected: 135/184 | Bytes read: 1476337
+Integrity digest: 861f9055399bfca70440b524d6b57107d39cdc52ede70a0572232f4ff5ae3d6e
 - [LOW] ARL-SEC-001 Potential secret committed to repository
 
 No material issue was observed by this static inspection. Runtime and cloud controls remain outside scope.
 
-Evidence bundle: ./data/local-inspection.json
+Evidence bundle: /mnt/data/agentrisklayer-build/AgentRiskLayer-v9.1.0/validation/AgentRiskLayer-v9.1.0-self-inspection.json

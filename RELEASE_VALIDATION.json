@@ -1,166 +1,85 @@
 {
-  "schema": "arl.release-validation.v2",
+  "schema": "arl.release-validation.v3",
   "product": "AgentRiskLayer",
-  "version": "9.0.0",
-  "releaseStatus": "deployment-package-ready-controlled-beta-live-verification-pending",
-  "generatedAt": "2026-07-26T13:01:04.530234Z",
+  "version": "9.1.0",
+  "releaseStatus": "deployment-ready-owner-controlled-live-verification-required",
+  "generatedAt": "2026-07-27T14:02:52.382205Z",
+  "publicExperience": {
+    "publicRegistration": true,
+    "invitationFieldPresent": false,
+    "publicBetaLanguagePresent": false,
+    "guidedWelcomeRoute": "/dashboard.html?welcome=1",
+    "companyPage": true,
+    "statusPage": true,
+    "demoPage": true,
+    "csrfAutomaticRecovery": true
+  },
   "productionPersistence": {
     "engine": "PostgreSQL",
     "requiredEnvironmentVariable": "DATABASE_URL",
     "filesystemDatabaseSupportedInProduction": false,
     "renderPersistentDisk": false,
-    "renderDatabase": {
-      "majorVersion": "18",
-      "plan": "basic-1gb",
-      "diskSizeGB": 25,
-      "storageAutoscaling": true
-    },
-    "migrationFiles": [
-      "migrations/001_initial_schema.sql",
-      "migrations/002_indexes_and_backfill.sql",
-      "migrations/003_security_control_plane.sql"
-    ],
-    "migrationControl": "advisory lock plus SHA-256 checksum ledger",
-    "liveManagedDatabaseTested": false
+    "renderRegion": "oregon",
+    "postgresMajorVersion": "18"
   },
   "automatedGate": {
     "command": "npm run validate",
     "passed": true,
     "tests": {
-      "total": 86,
-      "passed": 86,
-      "failed": 0,
-      "skipped": 0
+      "total": 89,
+      "passed": 89,
+      "failed": 0
     },
     "syntaxCheck": true,
-    "smokeJourney": {
-      "passed": true,
-      "hostedRuntimeGuard": true,
-      "guardReplayProtection": true,
-      "privacySafeRuntimeEvidence": true,
-      "inventoryDriftWorkflow": true,
-      "remediationWorkflow": true,
-      "ownedWorkspaceDeletion": true,
-      "accountDeletion": true,
-      "analytics": {
-        "users": 1,
-        "assessments": 1,
-        "purchases": 2,
-        "fulfilledPurchases": 2,
-        "revenuePence": 12800,
-        "activeSubscriptions": 1,
-        "inspections": 3,
-        "redTeamRuns": 2,
-        "openAlerts": 0
-      }
-    },
+    "customerPaymentSecuritySmoke": true,
     "detectionBenchmark": {
       "cases": 20,
       "passed": 20,
-      "truePositive": 10,
-      "trueNegative": 10,
-      "falsePositive": 0,
-      "falseNegative": 0,
-      "scope": "Public synthetic English cases; internal and not production-representative."
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "scope": "Limited public synthetic English dataset; not independent or production-representative."
     },
     "safetyScenarios": {
       "total": 1000,
       "passed": 1000,
       "failed": 0,
-      "unsafeDecisions": 0,
-      "criticalPathScenarios": 567,
-      "averageScore": 57,
-      "seed": "0x5a17c0de"
+      "unsafeDecisions": 0
     },
-    "redTeamSimulation": {
+    "controlledRedTeam": {
       "cases": 32,
       "passed": 32,
       "failed": 0,
-      "trialsPerCase": 1,
-      "grade": "A",
-      "scope": "Controlled synthetic hardened-profile simulation."
-    },
-    "loadTest": {
-      "virtualUsers": 100,
-      "requestsPerUser": 50,
-      "requests": 5000,
-      "success": 5000,
-      "errors": 0,
-      "durationSeconds": 1.99,
-      "requestsPerSecond": 2511.7,
-      "latencyMs": {
-        "p50": 32.1,
-        "p95": 76.4,
-        "p99": 148.4,
-        "max": 174.5
-      },
-      "scope": "Local mixed public-read and per-user CSRF/session traffic; no real payments, emails, PostgreSQL network traffic or external services."
-    },
-    "releaseAssets": {
-      "inspector": {
-        "version": "4.0.0",
-        "policyVersion": "arl-inspector-policy-2026.09",
-        "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
-      },
-      "redTeam": {
-        "version": "5.1.0",
-        "policyVersion": "arl-redteam-policy-2026.09",
-        "runnerSha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5"
-      },
-      "samplePdfBytes": 108513
-    },
-    "pricingDryRun": {
-      "passed": true,
-      "communityMonthlyPence": 0,
-      "communityGuardDecisions": 10000,
-      "foundingAssessmentOncePence": 9900,
-      "developerMonthlyPence": 2900,
-      "teamMonthlyPence": 9900,
-      "agencyMonthlyPence": 24900,
-      "enterpriseAnnualFromPence": 600000
+      "decision": "CONTROLLED TESTS PASSED"
     },
     "selfInspection": {
-      "passed": true,
       "postureScore": 100,
-      "grade": "A",
       "technicalRisk": 0,
-      "checksEvaluated": 27,
+      "grade": "A",
       "activeFindings": 0,
-      "declaredFalsePositives": 1,
-      "integrityDigest": "15a95cb1bb2c2512f93d9aa110da499832d44b35a4d83fa79c1f1045f47153e0"
+      "reviewedFalsePositives": 1,
+      "boundary": "Static inspection does not prove runtime, cloud or production security."
+    },
+    "load": {
+      "virtualUsers": 100,
+      "requestsPerUser": 50,
+      "totalRequests": 5000,
+      "errors": 0,
+      "requestsPerSecond": 3388.4,
+      "latencyMs": {
+        "p50": 25.8,
+        "p95": 44.1,
+        "p99": 102.2,
+        "max": 120.3
+      },
+      "scope": "Local mixed public-read and per-user CSRF/session traffic; no real external services."
     }
   },
-  "controlPlane": {
-    "hostedGuard": true,
-    "monitorAndEnforce": true,
-    "productionDefault": "enforce",
-    "oneTimeHashedKeys": true,
-    "immediateRevocation": true,
-    "privacySafeRuntimeEvidence": true,
-    "inventoryDriftGate": true,
-    "ownedRemediation": true,
-    "auditTrail": true,
-    "protectedMetrics": true,
-    "community": {
-      "projects": 1,
-      "keysPerProject": 2,
-      "monthlyGuardDecisions": 10000,
-      "retentionDays": 7
-    }
-  },
-  "credentialBoundChecksRequiredBeforeControlledBeta": [
-    "Render managed PostgreSQL migration and readiness",
-    "real backup and restore drill",
-    "Stripe live checkout/webhook/portal/cancellation",
-    "Resend production delivery",
-    "DNS/TLS/security headers/monitoring",
-    "desktop and mobile production journeys",
-    "owner alert and recovery routing"
-  ],
-  "explicitLimitations": [
-    "Internal engineering validation, not independent certification, a penetration test or production history.",
-    "Complete smoke and load journeys use the isolated test-only compatibility adapter.",
-    "No owner-controlled live PostgreSQL, Stripe, Resend, DNS or production traffic was available in this environment.",
-    "The 20-case detection benchmark and 32-case red-team simulation are synthetic and not statistically representative of production accuracy."
+  "liveVerificationRequired": [
+    "Deploy commit to Render and verify /api/ready reports version 9.1.0 and production stage.",
+    "Create and verify a real public account through agentrisklayer.com.",
+    "Complete live Stripe checkout, webhook entitlement and billing portal tests.",
+    "Confirm Resend verification, password-reset and report-delivery email.",
+    "Exercise PostgreSQL backup and restore into a separate non-production database.",
+    "Complete independent penetration testing and obtain real customer evidence."
   ]
 }

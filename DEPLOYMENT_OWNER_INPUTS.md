@@ -7,7 +7,7 @@ The code package is complete. Only owner-controlled credentials, billing and leg
 - Enable paid Render billing.
 - Connect the production GitHub repository and deploy `render.yaml` as a Blueprint.
 - Record the web service ID (`srv-...`) for the price-update script.
-- Confirm the generated managed PostgreSQL database, private `DATABASE_URL`, 25 GB initial storage and storage autoscaling. The controlled-beta Blueprint uses `basic-1gb`; moving to multiple web instances or PostgreSQL high availability is an owner-controlled cost decision after live load evidence.
+- Confirm the generated managed PostgreSQL database, private `DATABASE_URL`, 25 GB initial storage and storage autoscaling. The production Blueprint uses `basic-1gb`; moving to multiple web instances or PostgreSQL high availability is an owner-controlled cost decision after live load evidence.
 
 ## Company and support
 
@@ -32,4 +32,4 @@ Provide the live Resend API key and a sender on the already verified AgentRiskLa
 
 ## Existing data decision
 
-This release creates the PostgreSQL schema for a clean controlled-beta deployment. If any existing SQLite database contains real customer or payment records that must be preserved, approve a separately tested migration and reconciliation window before cutover. Do not copy the SQLite file into production.
+This release creates the PostgreSQL schema for a clean production deployment. If any existing SQLite database contains real customer or payment records that must be preserved, approve a separately tested migration and reconciliation window before cutover. Do not copy the SQLite file into production.

@@ -1,0 +1,5 @@
+
+> agent-risk-layer@9.1.0 test:load
+> node scripts/load-stress.mjs
+
+{"generatedAt":"2026-07-27T13:58:59.298Z","virtualUsers":100,"requestsPerUser":50,"totalRequests":5000,"durationSeconds":1.48,"requestsPerSecond":3388.4,"errors":0,"errorRatePercent":0,"statusCounts":{"200":5000},"latencyMs":{"p50":25.8,"p95":44.1,"p99":102.2,"max":120.3},"scope":"Local mixed public-read and per-user CSRF/session traffic; no real payments, emails, or external services."}

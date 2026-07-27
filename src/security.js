@@ -134,9 +134,15 @@ export function verifyCsrf(req) {
     const headerToken = String(req.headers['x-csrf-token'] || '');
     if (!cookieToken || !headerToken)
         return false;
-    const origin = String(req.headers.origin || '');
-    if (origin && origin !== config.baseUrl)
-        return false;
+    const suppliedOrigin = normaliseOrigin(req.headers.origin);
+    if (suppliedOrigin) {
+        const allowedOrigins = new Set([
+            normaliseOrigin(config.baseUrl),
+            requestOrigin(req),
+        ].filter(Boolean));
+        if (!allowedOrigins.has(suppliedOrigin))
+            return false;
+    }
     try {
         const left = Buffer.from(cookieToken);
         const right = Buffer.from(headerToken);
@@ -145,6 +151,24 @@ export function verifyCsrf(req) {
     catch {
         return false;
     }
+}
+function normaliseOrigin(value) {
+    try {
+        return value ? new URL(String(value)).origin : '';
+    }
+    catch {
+        return '';
+    }
+}
+function requestOrigin(req) {
+    const host = String(req.headers.host || '').trim();
+    if (!host)
+        return '';
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+    const protocol = forwardedProto === 'https' || forwardedProto === 'http'
+        ? forwardedProto
+        : req.socket?.encrypted ? 'https' : 'http';
+    return normaliseOrigin(`${protocol}://${host}`);
 }
 export function appendSetCookie(res, cookie) {
     const current = res.getHeader('Set-Cookie');

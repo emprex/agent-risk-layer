@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: PRODUCT_STAGE
-        value: controlled-beta
+        value: production
       - key: BASE_URL
         sync: false
       - key: SESSION_SECRET
@@ -34,10 +34,6 @@ services:
         value: "false"
       - key: ALLOW_DEMO_IN_PRODUCTION
         value: "false"
-      - key: REQUIRE_BETA_INVITE
-        value: "true"
-      - key: BETA_INVITE_LIMIT
-        value: "20"
       - key: SESSION_IDLE_HOURS
         value: "12"
       - key: SESSION_ABSOLUTE_DAYS
@@ -86,7 +82,7 @@ services:
 databases:
   - name: agent-risk-layer-db
     plan: basic-1gb
-    region: frankfurt
+    region: oregon
     diskSizeGB: 25
     storageAutoscalingEnabled: true
     postgresMajorVersion: "18"

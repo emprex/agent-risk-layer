@@ -1,7 +1,3 @@
-
-> agent-risk-layer@9.0.0 redteam:simulation
-> node redteam/agent-risk-redteam.mjs run --authorised --environment test --profile hardened --out data/local-redteam.json
-
 {
   "caseTotal": 32,
   "trialTotal": 32,

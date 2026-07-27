@@ -1,7 +1,7 @@
 {
   "schema": "arl.inspection.bundle.v1",
-  "bundleId": "ins_26d386e9b86e40a3ae90f5f852c38f3c",
-  "generatedAt": "2026-07-26T13:05:31.007Z",
+  "bundleId": "ins_7d5d95842f814d2297b2fe45ca736dcc",
+  "generatedAt": "2026-07-27T13:58:31.243Z",
   "scanner": {
     "name": "AgentRisk Inspector",
     "version": "4.0.0",
@@ -12,18 +12,18 @@
   },
   "subject": {
     "projectName": "agent-risk-layer",
-    "rootFingerprint": "859e6f69172b302f60b11848a808218987415f5221c7ca00454ef36fa75ab8b4",
+    "rootFingerprint": "fe46323010bee762a0797586c0ae4cc8a2b2564a574e4320220dcc17317e72bb",
     "gitCommit": null,
     "gitDirty": null,
-    "environment": "unspecified"
+    "environment": "test"
   },
   "scope": {
     "mode": "read-only-static-inspection",
-    "startedAt": "2026-07-26T13:05:30.909Z",
-    "completedAt": "2026-07-26T13:05:31.029Z",
-    "filesDiscovered": 188,
-    "filesInspected": 136,
-    "bytesRead": 2029038,
+    "startedAt": "2026-07-27T13:58:31.190Z",
+    "completedAt": "2026-07-27T13:58:31.247Z",
+    "filesDiscovered": 184,
+    "filesInspected": 135,
+    "bytesRead": 1476337,
     "skippedLargeFiles": 0,
     "truncatedByLimit": false,
     "excludedDirectories": [
@@ -103,7 +103,7 @@
           "relativePath": null,
           "pathHash": "41f508b4d51817b9da615f06",
           "line": 16,
-          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+          "fact": "Stripe secret key; fingerprint a334282e122bd303"
         },
         {
           "source": "static-file-observation",
@@ -111,7 +111,7 @@
           "relativePath": null,
           "pathHash": "41f508b4d51817b9da615f06",
           "line": 36,
-          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+          "fact": "Stripe secret key; fingerprint a334282e122bd303"
         },
         {
           "source": "static-file-observation",
@@ -119,7 +119,7 @@
           "relativePath": null,
           "pathHash": "41f508b4d51817b9da615f06",
           "line": 42,
-          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+          "fact": "Stripe secret key; fingerprint a334282e122bd303"
         },
         {
           "source": "static-file-observation",
@@ -127,7 +127,7 @@
           "relativePath": null,
           "pathHash": "41f508b4d51817b9da615f06",
           "line": 123,
-          "fact": "Stripe secret key; fingerprint 3da7ff4afa835eae"
+          "fact": "Stripe secret key; fingerprint a334282e122bd303"
         }
       ],
       "review": {
@@ -172,9 +172,9 @@
   },
   "integrity": {
     "digestAlgorithm": "SHA-256",
-    "digest": "15a95cb1bb2c2512f93d9aa110da499832d44b35a4d83fa79c1f1045f47153e0",
+    "digest": "861f9055399bfca70440b524d6b57107d39cdc52ede70a0572232f4ff5ae3d6e",
     "signatureAlgorithm": "Ed25519",
-    "signature": "XVAEF5NjIX2gs4oxAO+53ChveMtrLAs1faP5L5lMAf+fPHMIlohrmMwBK7mTz/mFR6lUJ+/j7Olv6kLIiQA0Cg==",
-    "publicKeySpki": "MCowBQYDK2VwAyEAQ6BOPm+/7teTBh2WvDk6b003rQwxFver5FxShvmP8LM="
+    "signature": "LcnctZZtD5c2CX8HF52aGIqFhQ8Fs72v2t8XSMknE4qcDBfMsDrOfweHoJa7DuDSBJc+DB2QVejH6sarGrrdDw==",
+    "publicKeySpki": "MCowBQYDK2VwAyEAEy25ybQhsgoRWRol3Bs/9ZTi0Q7q6Y3SOLRoflkzGWo="
   }
 }
