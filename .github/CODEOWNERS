@@ -1,0 +1,13 @@
+# AgentRiskLayer repository ownership
+# The owner must review changes affecting the codebase.
+
+/                         @emprex
+/.github/                 @emprex
+/src/                     @emprex
+/scripts/                 @emprex
+/package.json             @emprex
+/package-lock.json        @emprex
+/Dockerfile               @emprex
+/render.yaml              @emprex
+/SECURITY.md              @emprex
+/LICENSE                  @emprex
