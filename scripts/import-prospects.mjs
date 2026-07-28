@@ -161,8 +161,10 @@ if (!args.file) {
         if (!owner?.id) throw new Error(`No user found for ID: ${userId}`);
       }
 
-      for (let index = 0; index < eligible.length; index += 1) {
-        const record = eligible[index];
+      const concurrency = 8;
+      for (let offset = 0; offset < eligible.length; offset += concurrency) {
+        const batch = eligible.slice(offset, offset + concurrency);
+        await Promise.all(batch.map(async (record) => {
         const marker = `[ARL-IMPORT:${record.record_id}]`;
         try {
           const existing = await db.prepare('SELECT id FROM sales_prospects WHERE notes LIKE ? LIMIT 1').get(`%${marker}%`);
@@ -214,8 +216,10 @@ if (!args.file) {
           report.failed += 1;
           if (report.errors.length < 100) report.errors.push({ recordId: record.record_id, message: error.message });
         }
-        if ((index + 1) % 250 === 0) {
-          console.log(`Processed ${index + 1}/${eligible.length}; created ${report.created}; existing ${report.alreadyImported}; failed ${report.failed}`);
+        }));
+        const processed = Math.min(offset + batch.length, eligible.length);
+        if (processed === eligible.length || Math.floor(processed / 250) !== Math.floor((processed - batch.length) / 250)) {
+          console.log(`Processed ${processed}/${eligible.length}; created ${report.created}; existing ${report.alreadyImported}; failed ${report.failed}`);
         }
       }
 
