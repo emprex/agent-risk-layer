@@ -170,7 +170,7 @@ if (!args.file) {
           const existing = await db.prepare('SELECT id FROM sales_prospects WHERE notes LIKE ? LIMIT 1').get(`%${marker}%`);
           if (existing?.id) {
             report.alreadyImported += 1;
-            continue;
+            return;
           }
 
           const evidence = compact([
