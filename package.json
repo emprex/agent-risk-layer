@@ -30,7 +30,8 @@
     "db:backup": "node scripts/backup-database.mjs",
     "db:verify-backup": "node scripts/verify-database-backup.mjs",
     "pretest": "npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
-    "db:restore": "node scripts/restore-database-backup.mjs"
+    "db:restore": "node scripts/restore-database-backup.mjs",
+    "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs"
   },
   "dependencies": {
     "pg": "8.22.0"
