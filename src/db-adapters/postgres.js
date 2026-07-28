@@ -76,12 +76,11 @@ export async function createPostgresDatabase(config, dependencies = {}) {
     connectionTimeoutMillis: config.databaseConnectTimeoutMs,
     allowExitOnIdle: config.nodeEnv === 'test',
     ssl: config.databaseSsl ? { rejectUnauthorized: config.databaseSslRejectUnauthorized } : false,
-  });
-
-  pool.on('connect', (client) => {
-    client.query(`SET TIME ZONE 'UTC'`).catch(() => {});
-    client.query(`SET statement_timeout = ${Math.max(1000, config.databaseStatementTimeoutMs)}`).catch(() => {});
-    client.query(`SET lock_timeout = ${Math.max(1000, config.databaseLockTimeoutMs)}`).catch(() => {});
+    options: [
+      '-c', 'timezone=UTC',
+      '-c', `statement_timeout=${Math.max(1000, config.databaseStatementTimeoutMs)}`,
+      '-c', `lock_timeout=${Math.max(1000, config.databaseLockTimeoutMs)}`,
+    ].join(' '),
   });
 
   const execute = async (sql, params = []) => {
