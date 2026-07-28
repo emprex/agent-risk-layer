@@ -23,6 +23,10 @@ import {
     listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeEvents, recordAssetSnapshot,
     revokeProjectApiKey, screenGuardRequest, updateRemediationItem, updateSecurityProject,
 } from './src/control-plane.js';
+import {
+    buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
+    recordActivity, salesOverview, updateMessage, updateProspect,
+} from './src/sales-agent.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
 const mimeTypes = {
@@ -795,6 +799,62 @@ const server = http.createServer(async (req, res) => {
             if (!requireAdmin(req, res, { requireMfa: true }))
                 return;
             return json(res, 200, launchReadiness());
+        }
+        if (req.method === 'GET' && url.pathname === '/api/admin/sales/overview') {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { overview: await salesOverview() });
+        }
+        if (req.method === 'GET' && url.pathname === '/api/admin/sales/prospects') {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { prospects: await listProspects({ stage: url.searchParams.get('stage') || undefined, limit: url.searchParams.get('limit') }) });
+        }
+        if (req.method === 'POST' && url.pathname === '/api/admin/sales/prospects') {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 201, { prospect: await createProspect(req.user.id, await readBody(req)) });
+        }
+        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)$/);
+        if (req.method === 'GET' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            const prospect = await getProspect(decodeURIComponent(match[1]));
+            return prospect ? json(res, 200, { prospect }) : json(res, 404, { error: 'Prospect not found.' });
+        }
+        if (req.method === 'PATCH' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { prospect: await updateProspect(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
+        }
+        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/messages$/);
+        if (req.method === 'POST' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 201, { message: await createMessage(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
+        }
+        if (req.method === 'GET' && url.pathname === '/api/admin/sales/messages') {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { messages: await listMessages(url.searchParams.get('prospectId') || null) });
+        }
+        match = url.pathname.match(/^\/api\/admin\/sales\/messages\/([^/]+)$/);
+        if (req.method === 'PATCH' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { message: await updateMessage(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
+        }
+        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/activities$/);
+        if (req.method === 'POST' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 201, { activity: await recordActivity(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
+        }
+        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/demo-brief$/);
+        if (req.method === 'GET' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            return json(res, 200, { brief: buildDemoBrief(await getProspect(decodeURIComponent(match[1]))) });
         }
         if (req.method === 'GET' && ['/privacy', '/privacy.html'].includes(url.pathname))
             return html(res, 200, renderPrivacyPage());

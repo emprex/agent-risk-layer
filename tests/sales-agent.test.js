@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+const root = path.resolve(import.meta.dirname, '..');
+const dbPath = path.join(root, 'data', `sales-agent-${process.pid}.sqlite`);
+for (const suffix of ['', '-shm', '-wal']) fs.rmSync(dbPath + suffix, { force: true });
+process.env.DATABASE_PATH = dbPath;
+process.env.NODE_ENV = 'test';
+process.env.DEMO_MODE = 'true';
+process.env.BASE_URL = 'http://localhost:3000';
+process.env.SESSION_SECRET = 'sales-agent-test-secret-12345678901234567890';
+const { db, initialiseDatabase, nowIso } = await import('../src/db.js');
+const { registerUser } = await import('../src/auth.js');
+const sales = await import('../src/sales-agent.js');
+let ownerId;
+test.before(async () => {
+  await initialiseDatabase();
+  const owner = await registerUser('sales-owner@example.com', 'Strong-password-42', true);
+  ownerId = owner.id;
+  await db.prepare(`UPDATE users SET role='superuser',email_verified_at=? WHERE id=?`).run(nowIso(), ownerId);
+});
+test.after(async () => {
+  await db.close();
+  for (const suffix of ['', '-shm', '-wal']) fs.rmSync(dbPath + suffix, { force: true });
+});
+test('qualification score is transparent and based only on recorded evidence', () => {
+  const result = sales.scoreProspect({ agentUseCase: 'Support agent', toolAccess: 'Email and CRM', triggerSignal: 'Launched this week', buyerName: 'Ada', buyerRole: 'CTO', buyerLinkedin: 'https://linkedin.com/in/ada', evidence: ['Launch post'], companySize: '11-50' });
+  assert.equal(result.score, 100);
+  assert.equal(result.reasons.length, 7);
+  assert.equal(sales.scoreProspect({}).score, 0);
+});
+test('prospect workflow drafts evidence-based messages and requires approval before sent', async () => {
+  const prospect = await sales.createProspect(ownerId, { companyName: 'Example AI', website: 'https://example.com', companySize: '11-50', buyerName: 'Ada Lovelace', buyerRole: 'CTO', buyerLinkedin: 'https://linkedin.com/in/ada', triggerSignal: 'Published an MCP-enabled finance agent', agentUseCase: 'Finance operations agent', toolAccess: 'Payment approval API', evidence: ['https://example.com/launch'] });
+  assert.equal(prospect.score, 100);
+  const message = await sales.createMessage(ownerId, prospect.id, { messageType: 'first_message', channel: 'linkedin' });
+  assert.equal(message.status, 'draft');
+  assert.match(message.body, /Published an MCP-enabled finance agent/);
+  await assert.rejects(() => sales.updateMessage(ownerId, message.id, { status: 'sent' }), /approved/i);
+  const approved = await sales.updateMessage(ownerId, message.id, { status: 'approved' });
+  assert.equal(approved.status, 'approved');
+  const sent = await sales.updateMessage(ownerId, message.id, { status: 'sent' });
+  assert.ok(sent.sentAt);
+});
+test('pipeline overview and demo brief support the commercial workflow', async () => {
+  const prospects = await sales.listProspects();
+  await sales.updateProspect(ownerId, prospects[0].id, { stage: 'demo_booked', nextAction: 'Run tailored demo', nextActionAt: new Date(Date.now() + 3600000).toISOString() });
+  await sales.recordActivity(ownerId, prospects[0].id, { activityType: 'demo', outcome: 'booked' });
+  const overview = await sales.salesOverview();
+  assert.equal(overview.totals.prospects, 1);
+  assert.equal(overview.totals.demos, 1);
+  const brief = sales.buildDemoBrief(await sales.getProspect(prospects[0].id));
+  assert.match(brief.close, /£99 assessment/);
+  assert.ok(brief.claimBoundaries.length >= 3);
+});
+test('sales UI remains private and contains the approval boundary', () => {
+  const html = fs.readFileSync(path.join(root, 'public', 'sales-agent.html'), 'utf8');
+  const js = fs.readFileSync(path.join(root, 'public', 'sales-agent.js'), 'utf8');
+  assert.match(html, /noindex/);
+  assert.match(html, /External messages require explicit owner approval/);
+  assert.match(js, /Mark sent/);
+});
