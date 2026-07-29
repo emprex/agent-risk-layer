@@ -56,7 +56,7 @@ export async function applyOrderedSubscriptionEvent(event) {
       status,
       periodStart: period.start,
       periodEnd: period.end,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end ? 1 : 0,
+      cancelAtPeriodEnd: databaseBoolean(subscription.cancel_at_period_end),
       canceledAt: stripeTimestamp(subscription.canceled_at),
     };
     if (comparison === 'equal_timestamp') {
@@ -65,8 +65,8 @@ export async function applyOrderedSubscriptionEvent(event) {
       return recordSubscriptionConflict({ row, order, eventType: event.type, proposedState: nextState });
     }
     const updated = await db.prepare(`UPDATE subscriptions SET status=?,current_period_start=?,current_period_end=?,
-      cancel_at_period_end=?,canceled_at=?,authoritative_state=1,billing_state_source='stripe_event',
-      reconciliation_required=0,reconciliation_started_at=NULL,
+      cancel_at_period_end=?,canceled_at=?,authoritative_state=TRUE,billing_state_source='stripe_event',
+      reconciliation_required=FALSE,reconciliation_started_at=NULL,
       latest_stripe_event_created=?,latest_stripe_event_id=?,latest_stripe_event_type=?,latest_stripe_event_state=?,updated_at=?
       WHERE id=?`).run(status, nextState.periodStart, nextState.periodEnd, nextState.cancelAtPeriodEnd,
         nextState.canceledAt, order.created, order.id, event.type, status, nowIso(), row.id);
@@ -97,7 +97,7 @@ export async function applyOrderedInvoiceFailure(event) {
       status: 'past_due',
       periodStart: row.current_period_start,
       periodEnd: row.current_period_end,
-      cancelAtPeriodEnd: Number(row.cancel_at_period_end || 0),
+      cancelAtPeriodEnd: databaseBoolean(row.cancel_at_period_end),
       canceledAt: row.canceled_at || null,
     };
     if (comparison === 'equal_timestamp') {
@@ -105,8 +105,8 @@ export async function applyOrderedInvoiceFailure(event) {
         return { outcome: 'ignored_equivalent_state', reason: 'Equal-time event represents the already stored subscription state.' };
       return recordSubscriptionConflict({ row, order, eventType: event.type, proposedState: nextState });
     }
-    await db.prepare(`UPDATE subscriptions SET status='past_due',authoritative_state=1,billing_state_source='stripe_event',
-      reconciliation_required=0,reconciliation_started_at=NULL,
+    await db.prepare(`UPDATE subscriptions SET status='past_due',authoritative_state=TRUE,billing_state_source='stripe_event',
+      reconciliation_required=FALSE,reconciliation_started_at=NULL,
       latest_stripe_event_created=?,latest_stripe_event_id=?,latest_stripe_event_type=?,
       latest_stripe_event_state='past_due',updated_at=? WHERE id=?`)
       .run(order.created, order.id, event.type, nowIso(), row.id);
@@ -135,8 +135,8 @@ async function recordSubscriptionConflict({ row, order, eventType, proposedState
     ON CONFLICT(subscription_id,prior_event_id,conflicting_event_id) DO NOTHING`)
     .run(id('ssc_'), row.id, order.created, row.latest_stripe_event_id, row.latest_stripe_event_type,
       order.id, eventType, boundedState(row), boundedState(proposedState), reason, timestamp);
-  await db.prepare(`UPDATE subscriptions SET authoritative_state=0,billing_state_source='reconciliation_required',
-    reconciliation_required=1,reconciliation_started_at=COALESCE(reconciliation_started_at,?),updated_at=? WHERE id=?`)
+  await db.prepare(`UPDATE subscriptions SET authoritative_state=FALSE,billing_state_source='reconciliation_required',
+    reconciliation_required=TRUE,reconciliation_started_at=COALESCE(reconciliation_started_at,?),updated_at=? WHERE id=?`)
     .run(timestamp, timestamp, row.id);
   return { outcome: 'reconciliation_required', reason };
 }
@@ -197,6 +197,10 @@ function stripeTimestamp(value) {
   if (!Number.isSafeInteger(seconds) || seconds < 0)
     throw new Error('Stripe cancellation timestamp is invalid.');
   return new Date(seconds * 1000).toISOString();
+}
+
+function databaseBoolean(value) {
+  return db.kind === 'postgres' ? Boolean(value) : Number(Boolean(value));
 }
 
 function verifySubscriptionBinding(row, { customerId, metadata }) {

@@ -317,7 +317,7 @@ async function createPendingSubscriptionBinding({ session, userId, productKey, p
     await db.prepare(`INSERT INTO subscriptions
     (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,purchase_id,current_period_start,current_period_end,
      cancel_at_period_end,canceled_at,authoritative_state,billing_state_source,created_at,updated_at)
-    VALUES (?, ?, ?, 'pending', ?, ?, ?, NULL, NULL, 0, NULL, 0, 'pending_checkout', ?, ?)
+    VALUES (?, ?, ?, 'pending', ?, ?, ?, NULL, NULL, FALSE, NULL, FALSE, 'pending_checkout', ?, ?)
     ON CONFLICT(stripe_subscription_id) DO NOTHING`)
         .run(id('subrec_'), userId, productKey, String(session.customer || ''), subscriptionId, purchaseId, at, at);
     const binding = await db.prepare('SELECT * FROM subscriptions WHERE stripe_subscription_id=?').get(subscriptionId);
