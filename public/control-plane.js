@@ -144,7 +144,7 @@ function oneTimeKey(value) {
 }
 
 function keyRow(key) {
-  const status = key.revoked_at ? 'revoked' : key.expires_at && Date.parse(key.expires_at) < Date.now() ? 'expired' : 'active';
+  const status = key.status || 'invalid';
   return `<div class="key-row"><div><strong>${escapeHtml(key.name)}</strong><span>arl_live_${escapeHtml(key.key_prefix)}_••••••••</span><small>Created ${date(key.created_at)}${key.last_used_at ? ` · last used ${dateTime(key.last_used_at)}` : ' · never used'}</small></div><div><span class="status-dot ${status}">${status}</span>${status === 'active' && project.permissions.rotateKeys ? `<button class="icon-button" title="Revoke key" data-revoke-key="${escapeHtml(key.id)}">×</button>` : ''}</div></div>`;
 }
 
@@ -170,7 +170,13 @@ function inventoryHistory(items) {
 
 function remediationRow(item) {
   const verification = item.verification || {};
-  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Implementation evidence:</strong> ${escapeHtml(verification.reference || 'Not attached')}</p><p><strong>Retest evidence:</strong> ${escapeHtml(verification.retestReference || 'Not attached')}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p><label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
+  const evidenceLabel = verification.artifactEvidenceType === 'verified_artifact' ? `Verified artifact ${verification.artifactId}` :
+    verification.reference ? `Customer-provided attestation: ${verification.reference} (unverified)` : 'Not attached';
+  const retestLabel = verification.retestArtifactEvidenceType === 'verified_artifact' ? `Verified artifact ${verification.retestArtifactId}` :
+    verification.retestReference ? `Customer-provided attestation: ${verification.retestReference} (unverified)` : 'Not attached';
+  const upgrade = item.compatibilityState === 'evidence_upgrade_required'
+    ? `<button class="button ghost small" data-evidence-upgrade="${escapeHtml(item.id)}">Start evidence upgrade</button>` : '';
+  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
 }
 
 function nextRemediationOptions(status) {
@@ -181,6 +187,7 @@ function nextRemediationOptions(status) {
     retested: [['verified_closed', 'Verify closed'], ['ready_for_retest', 'Retest again']],
     verified_closed: [['open', 'Reopen']],
     accepted_risk: [['open', 'Reopen']],
+    evidence_upgrade_required: [['ready_for_retest', 'Ready for compliant retest'], ['open', 'Reopen']],
   };
   return (options[status] || []).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 }
@@ -201,6 +208,7 @@ function bind() {
   document.querySelector('#remediationForm')?.addEventListener('submit', createRemediation);
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
+  document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
 }
 
@@ -271,20 +279,36 @@ async function updateRemediation(event) {
   event.currentTarget.disabled = true;
   const status = event.currentTarget.value;
   const verification = {};
-  if (status === 'evidence_attached') {
-    verification.reference = prompt('Evidence reference (artifact ID, test-result ID, or controlled URL):') || '';
-    verification.integrityHash = prompt('SHA-256 integrity hash (64 hexadecimal characters):') || '';
-  }
-  if (status === 'retested') {
-    verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
-    verification.retestReference = prompt('Retest evidence reference (test-result ID or controlled URL):') || '';
-    verification.retestIntegrityHash = prompt('Retest evidence SHA-256 hash (64 hexadecimal characters):') || '';
-  }
-  if (status === 'verified_closed') {
-    const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
-    Object.assign(verification, item?.verification || {});
-  }
-  try { await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, { method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined }) }); await loadProject(project.id); await loadOverview(); render(); } catch (error) { fail(error); event.currentTarget.disabled = false; }
+  try {
+    if (status === 'evidence_attached') {
+      const sourceId = prompt('AgentRiskLayer inventory snapshot ID for the implemented change:') || '';
+      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}/evidence`,
+        { method: 'POST', body: JSON.stringify({ artifactType: 'implementation', sourceId }) });
+      verification.artifactId = registered.artifact.id;
+    }
+    if (status === 'retested') {
+      verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
+      const sourceId = prompt('AgentRiskLayer runtime event or request ID for the retest:') || '';
+      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}/evidence`,
+        { method: 'POST', body: JSON.stringify({ artifactType: 'retest', sourceId }) });
+      verification.retestArtifactId = registered.artifact.id;
+    }
+    if (status === 'verified_closed') {
+      const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
+      Object.assign(verification, item?.verification || {});
+    }
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, { method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined }) });
+    await loadProject(project.id); await loadOverview(); render();
+  } catch (error) { fail(error); event.currentTarget.disabled = false; }
+}
+
+async function beginEvidenceUpgrade(event) {
+  event.currentTarget.disabled = true;
+  try {
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.evidenceUpgrade)}/evidence-upgrade`,
+      { method: 'POST', body: JSON.stringify({ reason: 'Operator initiated trusted evidence upgrade' }) });
+    await loadProject(project.id); await loadOverview(); render();
+  } catch (error) { fail(error); event.currentTarget.disabled = false; }
 }
 
 function startRefresh() {

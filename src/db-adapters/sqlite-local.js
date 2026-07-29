@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS security_projects (
   status TEXT NOT NULL DEFAULT 'active',
   policy_json TEXT NOT NULL DEFAULT '{}',
   policy_version TEXT NOT NULL DEFAULT '1',
+  policy_digest TEXT,
+  policy_published_at TEXT,
   retention_days INTEGER NOT NULL DEFAULT 30,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -398,6 +400,9 @@ CREATE TABLE IF NOT EXISTS runtime_events (
   evaluation_ms REAL NOT NULL DEFAULT 0,
   metadata_json TEXT NOT NULL DEFAULT '{}',
   response_json TEXT NOT NULL DEFAULT '{}',
+  policy_version TEXT,
+  policy_digest TEXT,
+  policy_published_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(project_id, request_id),
   FOREIGN KEY (project_id) REFERENCES security_projects(id) ON DELETE CASCADE,
@@ -435,6 +440,26 @@ CREATE TABLE IF NOT EXISTS remediation_items (
   UNIQUE(project_id, finding_key),
   FOREIGN KEY (project_id) REFERENCES security_projects(id) ON DELETE CASCADE,
   FOREIGN KEY (assessment_id) REFERENCES assessments(id) ON DELETE SET NULL,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS remediation_evidence_artifacts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  remediation_id TEXT NOT NULL,
+  artifact_type TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  lifecycle_state TEXT NOT NULL DEFAULT 'active',
+  content_json TEXT NOT NULL,
+  content_digest TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  invalidated_at TEXT,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES security_projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (remediation_id) REFERENCES remediation_items(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
 );
 
@@ -581,6 +606,13 @@ ensureColumn('stripe_events', 'status', "TEXT NOT NULL DEFAULT 'processed'");
 ensureColumn('stripe_events', 'last_error', 'TEXT');
 ensureColumn('redteam_authorisations', 'legal_hold', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('redteam_runs', 'retention_expires_at', 'TEXT');
+ensureColumn('security_projects', 'policy_digest', 'TEXT');
+ensureColumn('security_projects', 'policy_published_at', 'TEXT');
+ensureColumn('runtime_events', 'policy_version', 'TEXT');
+ensureColumn('runtime_events', 'policy_digest', 'TEXT');
+ensureColumn('runtime_events', 'policy_published_at', 'TEXT');
+ensureColumn('remediation_evidence_artifacts', 'source_type', 'TEXT');
+ensureColumn('remediation_evidence_artifacts', 'source_id', 'TEXT');
 
 
 rawDb.exec(`
@@ -594,6 +626,7 @@ CREATE INDEX IF NOT EXISTS idx_alerts_status ON operational_alerts(status, creat
 CREATE INDEX IF NOT EXISTS idx_beta_invites_status ON beta_invites(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id,status);
 CREATE INDEX IF NOT EXISTS idx_workspace_integrations_workspace ON workspace_integrations(workspace_id,status);
+CREATE INDEX IF NOT EXISTS idx_remediation_evidence_scope ON remediation_evidence_artifacts(workspace_id,project_id,remediation_id,artifact_type,lifecycle_state);
 `);
 
 if (config.adminEmail) rawDb.prepare(`UPDATE users SET role='superuser' WHERE email=?`).run(config.adminEmail);

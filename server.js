@@ -19,9 +19,9 @@ import { authenticateScim, configureIntegration, createScimToken, createWorkspac
 import { discoverAiAssets } from './src/asset-discovery.js';
 import { analyseModelArtifact } from './src/model-artifact-analysis.js';
 import {
-    authenticateProjectApiKey, controlPlaneOverview, createProjectApiKey, createRemediationItem, createSecurityProject, entitlementForUser, getSecurityProject,
+    authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createSecurityProject, entitlementForUser, getSecurityProject,
     listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeEvents, recordAssetSnapshot,
-    revokeProjectApiKey, screenGuardRequest, updateRemediationItem, updateSecurityProject,
+    registerRemediationEvidenceArtifact, revokeProjectApiKey, screenGuardRequest, updateRemediationItem, updateSecurityProject,
 } from './src/control-plane.js';
 import {
     buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
@@ -761,6 +761,35 @@ const server = http.createServer(async (req, res) => {
             const body = await readBody(req);
             try {
                 return json(res, 200, { remediation: await updateRemediationItem({ projectId: decodeURIComponent(match[1]), itemId: decodeURIComponent(match[2]), userId: req.user.id, patch: body }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/remediations\/([^/]+)\/evidence$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 201, { artifact: await registerRemediationEvidenceArtifact({
+                    projectId: decodeURIComponent(match[1]), itemId: decodeURIComponent(match[2]), userId: req.user.id,
+                    artifactType: cleanText(body.artifactType, 30), sourceId: cleanText(body.sourceId, 100),
+                }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/remediations\/([^/]+)\/evidence-upgrade$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 200, { remediation: await beginLegacyRemediationUpgrade({
+                    projectId: decodeURIComponent(match[1]), itemId: decodeURIComponent(match[2]), userId: req.user.id, reason: body.reason,
+                }) });
             }
             catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
