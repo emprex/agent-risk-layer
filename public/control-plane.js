@@ -275,15 +275,17 @@ async function createRemediation(event) {
 }
 
 async function updateRemediation(event) {
-  if (!event.currentTarget.value) return;
-  event.currentTarget.disabled = true;
-  const status = event.currentTarget.value;
+  const target = event.currentTarget;
+  if (!target?.value) return;
+  const remediationId = target.dataset.remediationStatus;
+  target.disabled = true;
+  const status = target.value;
   const verification = {};
   let retestCriteria;
   try {
     if (status === 'evidence_attached') {
       const sourceId = prompt('AgentRiskLayer inventory snapshot ID for the implemented change:') || '';
-      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}/evidence`,
+      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}/evidence`,
         { method: 'POST', body: JSON.stringify({ artifactType: 'implementation', sourceId }) });
       verification.artifactId = registered.artifact.id;
     }
@@ -297,14 +299,14 @@ async function updateRemediation(event) {
       };
     }
     if (status === 'verified_closed') {
-      const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
+      const item = project.remediations.find((candidate) => candidate.id === remediationId);
       Object.assign(verification, item?.verification || {});
     }
-    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, {
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}`, {
       method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined, retestCriteria }),
     });
     await loadProject(project.id); await loadOverview(); render();
-  } catch (error) { fail(error); event.currentTarget.disabled = false; }
+  } catch (error) { fail(error); target.disabled = false; }
 }
 
 async function beginEvidenceUpgrade(event) {
