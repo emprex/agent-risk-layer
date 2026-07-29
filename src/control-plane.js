@@ -4,6 +4,7 @@ import { compileRuntimePolicy, evaluateRuntimeAction } from './runtime-policy.js
 import { inspectContent } from './content-security.js';
 import { discoverAiAssets } from './asset-discovery.js';
 import { deliverSecurityEventSystem } from './workspaces.js';
+import { subscriptionAccessDecision } from './subscription-access.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
@@ -33,8 +34,9 @@ const MANAGE_ROLES = new Set(['developer', 'admin', 'owner']);
 const REVIEW_ROLES = new Set(['analyst', 'developer', 'admin', 'owner']);
 
 export async function entitlementForUser(userId) {
-  const subscription = await db.prepare(`SELECT plan_key,status,current_period_end FROM subscriptions
-    WHERE user_id=? AND status IN ('active','trialing') ORDER BY updated_at DESC LIMIT 1`).get(userId);
+  const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required,updated_at
+    FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC`).all(userId);
+  const subscription = subscriptions.find((candidate) => subscriptionAccessDecision(candidate).allowed) || null;
   const requested = subscription?.plan_key || 'community';
   const key = PLAN_ENTITLEMENTS[requested] ? requested : 'community';
   return { key, ...PLAN_ENTITLEMENTS[key], subscription: subscription || null };

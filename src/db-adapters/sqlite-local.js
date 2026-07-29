@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from '../config.js';
 
@@ -68,10 +69,29 @@ CREATE TABLE IF NOT EXISTS purchases (
   status TEXT NOT NULL,
   stripe_session_id TEXT UNIQUE,
   stripe_customer_id TEXT,
+  project_id TEXT,
+  stripe_price_id TEXT,
+  expected_amount_pence INTEGER,
+  expected_currency TEXT,
+  checkout_mode TEXT,
+  expected_customer_email TEXT,
+  binding_state TEXT,
+  binding_expires_at TEXT,
+  checkout_created_at TEXT,
+  binding_verified_at TEXT,
+  quarantined_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-  FOREIGN KEY (assessment_id) REFERENCES assessments(id) ON DELETE SET NULL
+  FOREIGN KEY (assessment_id) REFERENCES assessments(id) ON DELETE SET NULL,
+  FOREIGN KEY (project_id) REFERENCES security_projects(id) ON DELETE SET NULL,
+  CHECK (amount_pence >= 0 AND (expected_amount_pence IS NULL OR expected_amount_pence >= 0)),
+  CHECK (binding_state IS NULL OR binding_state IN
+    ('legacy_fulfilled','legacy_review_required','pending_creation','pending','verified','quarantined','creation_failed')),
+  CHECK (checkout_mode IS NULL OR checkout_mode IN ('payment','subscription')),
+  CHECK (binding_state IN ('legacy_fulfilled','legacy_review_required') OR
+    (currency GLOB '[a-z][a-z][a-z]' AND length(currency)=3
+      AND (expected_currency IS NULL OR (expected_currency GLOB '[a-z][a-z][a-z]' AND length(expected_currency)=3))))
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -81,10 +101,77 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   status TEXT NOT NULL,
   stripe_customer_id TEXT,
   stripe_subscription_id TEXT UNIQUE,
+  purchase_id TEXT UNIQUE,
+  current_period_start TEXT,
   current_period_end TEXT,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  canceled_at TEXT,
+  authoritative_state INTEGER NOT NULL DEFAULT 0,
+  billing_state_source TEXT NOT NULL,
+  latest_stripe_event_created INTEGER,
+  latest_stripe_event_id TEXT,
+  latest_stripe_event_type TEXT,
+  latest_stripe_event_state TEXT,
+  reconciliation_required INTEGER NOT NULL DEFAULT 0,
+  reconciliation_started_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE SET NULL,
+  CHECK (status IN ('pending','active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')),
+  CHECK (authoritative_state IN (0,1)),
+  CHECK (reconciliation_required IN (0,1)),
+  CHECK (
+    (latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL) OR
+    (latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL)
+  ),
+  CHECK (billing_state_source IS NOT NULL AND (
+    (billing_state_source='pending_checkout' AND authoritative_state=0 AND status='pending'
+      AND current_period_start IS NULL AND current_period_end IS NULL
+      AND cancel_at_period_end=0 AND canceled_at IS NULL
+      AND latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL
+      AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL
+      AND reconciliation_required=0 AND reconciliation_started_at IS NULL) OR
+    (billing_state_source='legacy_reconciliation_required' AND authoritative_state=0
+      AND latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL
+      AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL
+      AND reconciliation_required=0 AND reconciliation_started_at IS NULL) OR
+    (billing_state_source='reconciliation_required' AND authoritative_state=0
+      AND status IN ('active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')
+      AND current_period_start IS NOT NULL AND current_period_end IS NOT NULL
+      AND latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL
+      AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL
+      AND reconciliation_required=1 AND reconciliation_started_at IS NOT NULL) OR
+    (billing_state_source IN ('stripe_event','stripe_retrieval') AND authoritative_state=1
+      AND status IN ('active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')
+      AND current_period_start IS NOT NULL AND current_period_end IS NOT NULL
+      AND latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL
+      AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL
+      AND reconciliation_required=0 AND reconciliation_started_at IS NULL)
+  ))
+);
+
+CREATE TABLE IF NOT EXISTS stripe_subscription_conflicts (
+  id TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL,
+  stripe_created INTEGER NOT NULL,
+  prior_event_id TEXT NOT NULL,
+  prior_event_type TEXT NOT NULL,
+  conflicting_event_id TEXT NOT NULL,
+  conflicting_event_type TEXT NOT NULL,
+  prior_state TEXT NOT NULL,
+  conflicting_state TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  resolving_event_id TEXT,
+  FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE RESTRICT,
+  UNIQUE(subscription_id,prior_event_id,conflicting_event_id),
+  CHECK (prior_event_id <> conflicting_event_id),
+  CHECK (
+    (resolved_at IS NULL AND resolving_event_id IS NULL) OR
+    (resolved_at IS NOT NULL AND resolving_event_id IS NOT NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS email_log (
@@ -111,7 +198,41 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS stripe_events (
   id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
-  processed_at TEXT NOT NULL
+  processed_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processed',
+  last_error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  processing_started_at TEXT,
+  completed_at TEXT,
+  created_at TEXT,
+  processing_result TEXT,
+  ignored_reason TEXT,
+  recovery_actor_id TEXT,
+  recovery_reason TEXT,
+  recovered_at TEXT,
+  FOREIGN KEY (recovery_actor_id) REFERENCES users(id) ON DELETE SET NULL,
+  CHECK (status IN ('received','processing','failed','processed')),
+  CHECK (
+    (status='received' AND processing_started_at IS NULL AND completed_at IS NULL) OR
+    (status='processing' AND processing_started_at IS NOT NULL AND completed_at IS NULL) OR
+    (status='failed' AND processing_started_at IS NULL AND completed_at IS NULL) OR
+    (status='processed' AND processing_started_at IS NULL AND completed_at IS NOT NULL)
+  ),
+  CHECK (
+    (recovery_actor_id IS NULL AND recovery_reason IS NULL AND recovered_at IS NULL) OR
+    (recovery_actor_id IS NOT NULL AND recovery_reason IS NOT NULL AND recovered_at IS NOT NULL)
+  )
+);
+
+CREATE TABLE IF NOT EXISTS stripe_event_recoveries (
+  id TEXT PRIMARY KEY,
+  stripe_event_id TEXT NOT NULL,
+  actor_id TEXT,
+  prior_state TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  recovered_at TEXT NOT NULL,
+  FOREIGN KEY (stripe_event_id) REFERENCES stripe_events(id) ON DELETE RESTRICT,
+  FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 
@@ -634,8 +755,41 @@ ensureColumn('purchases', 'email_sent_at', 'TEXT');
 ensureColumn('purchases', 'session_json', "TEXT NOT NULL DEFAULT '{}'");
 ensureColumn('purchases', 'report_snapshot_json', 'TEXT');
 ensureColumn('purchases', 'report_digest', 'TEXT');
+ensureColumn('purchases', 'project_id', 'TEXT');
+ensureColumn('purchases', 'stripe_price_id', 'TEXT');
+ensureColumn('purchases', 'expected_amount_pence', 'INTEGER');
+ensureColumn('purchases', 'expected_currency', 'TEXT');
+ensureColumn('purchases', 'checkout_mode', 'TEXT');
+ensureColumn('purchases', 'expected_customer_email', 'TEXT');
+ensureColumn('purchases', 'binding_state', 'TEXT');
+ensureColumn('purchases', 'binding_expires_at', 'TEXT');
+ensureColumn('purchases', 'checkout_created_at', 'TEXT');
+ensureColumn('purchases', 'binding_verified_at', 'TEXT');
+ensureColumn('purchases', 'quarantined_at', 'TEXT');
 ensureColumn('stripe_events', 'status', "TEXT NOT NULL DEFAULT 'processed'");
 ensureColumn('stripe_events', 'last_error', 'TEXT');
+ensureColumn('stripe_events', 'attempt_count', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('stripe_events', 'processing_started_at', 'TEXT');
+ensureColumn('stripe_events', 'completed_at', 'TEXT');
+ensureColumn('stripe_events', 'created_at', 'TEXT');
+ensureColumn('stripe_events', 'processing_result', 'TEXT');
+ensureColumn('stripe_events', 'ignored_reason', 'TEXT');
+ensureColumn('stripe_events', 'recovery_actor_id', 'TEXT');
+ensureColumn('stripe_events', 'recovery_reason', 'TEXT');
+ensureColumn('stripe_events', 'recovered_at', 'TEXT');
+upgradeSubscriptionsLifecycleTable();
+ensureColumn('subscriptions', 'purchase_id', 'TEXT');
+ensureColumn('subscriptions', 'current_period_start', 'TEXT');
+ensureColumn('subscriptions', 'cancel_at_period_end', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('subscriptions', 'canceled_at', 'TEXT');
+ensureColumn('subscriptions', 'authoritative_state', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('subscriptions', 'billing_state_source', 'TEXT');
+ensureColumn('subscriptions', 'latest_stripe_event_created', 'INTEGER');
+ensureColumn('subscriptions', 'latest_stripe_event_id', 'TEXT');
+ensureColumn('subscriptions', 'latest_stripe_event_type', 'TEXT');
+ensureColumn('subscriptions', 'latest_stripe_event_state', 'TEXT');
+ensureColumn('subscriptions', 'reconciliation_required', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('subscriptions', 'reconciliation_started_at', 'TEXT');
 ensureColumn('redteam_authorisations', 'legal_hold', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('redteam_runs', 'retention_expires_at', 'TEXT');
 ensureColumn('security_projects', 'policy_digest', 'TEXT');
@@ -650,10 +804,15 @@ ensureColumn('runtime_events', 'retest_satisfied', 'INTEGER');
 ensureColumn('remediation_evidence_artifacts', 'source_type', 'TEXT');
 ensureColumn('remediation_evidence_artifacts', 'source_id', 'TEXT');
 
-
 rawDb.exec(`
 CREATE INDEX IF NOT EXISTS idx_fulfilment_jobs_due ON fulfilment_jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_purchases_fulfilment ON purchases(fulfilment_state, updated_at);
+CREATE INDEX IF NOT EXISTS idx_purchases_binding ON purchases(binding_state,binding_expires_at,updated_at);
+CREATE INDEX IF NOT EXISTS idx_stripe_events_processing ON stripe_events(status,processing_started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_purchase ON subscriptions(purchase_id) WHERE purchase_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_order ON subscriptions(stripe_subscription_id,latest_stripe_event_created,latest_stripe_event_id);
+CREATE INDEX IF NOT EXISTS idx_stripe_event_recoveries_event ON stripe_event_recoveries(stripe_event_id,recovered_at);
+CREATE INDEX IF NOT EXISTS idx_stripe_subscription_conflicts_open ON stripe_subscription_conflicts(subscription_id,stripe_created) WHERE resolved_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_rate_limits_reset ON rate_limit_buckets(reset_at);
 CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_tokens(user_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_mfa_challenges_user ON mfa_login_challenges(user_id, expires_at);
@@ -676,7 +835,16 @@ if (config.adminEmail) rawDb.prepare(`UPDATE users SET role='superuser' WHERE em
 rawDb.prepare(`UPDATE users SET email_verified_at = COALESCE(email_verified_at, created_at)`).run();
 rawDb.prepare(`UPDATE sessions SET last_seen_at = COALESCE(last_seen_at, created_at), authenticated_at = COALESCE(authenticated_at, created_at)`).run();
 rawDb.prepare(`UPDATE purchases SET fulfilment_state = CASE WHEN fulfilment_state='received' AND status='paid' THEN 'fulfilled' ELSE fulfilment_state END, fulfilled_at = COALESCE(fulfilled_at, CASE WHEN status='paid' THEN updated_at END), access_granted_at = COALESCE(access_granted_at, CASE WHEN status='paid' THEN updated_at END), email_state = CASE WHEN email_state='pending' AND status='paid' THEN 'unknown' ELSE email_state END`).run();
-
+rawDb.prepare(`UPDATE purchases SET binding_state=CASE
+  WHEN fulfilment_state='fulfilled' AND access_granted_at IS NOT NULL THEN 'legacy_fulfilled'
+  ELSE 'legacy_review_required' END WHERE binding_state IS NULL`).run();
+rawDb.prepare(`UPDATE stripe_events SET completed_at=COALESCE(completed_at,processed_at),
+  created_at=COALESCE(created_at,processed_at),
+  attempt_count=CASE WHEN attempt_count<1 THEN 1 ELSE attempt_count END WHERE status='processed'`).run();
+rawDb.prepare(`UPDATE stripe_events SET processing_started_at=COALESCE(processing_started_at,processed_at),
+  completed_at=NULL WHERE status='processing'`).run();
+rawDb.prepare(`UPDATE stripe_events SET processing_started_at=NULL,completed_at=NULL
+  WHERE status IN ('received','failed')`).run();
 // Earlier MVP builds reused the public token for private access. Preserve the old
 // private links as access tokens and rotate the public token during migration.
 const legacyTokenRows = rawDb.prepare(`SELECT id, share_token FROM assessments WHERE access_token IS NULL OR access_token = ''`).all();
@@ -691,35 +859,184 @@ function ensureColumn(table, column, definition) {
   if (!columns.some((item) => item.name === column)) rawDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
+function upgradeSubscriptionsLifecycleTable() {
+  const table = rawDb.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='subscriptions'`).get();
+  const definition = String(table?.sql || '');
+  if (definition.includes('billing_state_source TEXT NOT NULL')
+      && definition.includes('billing_state_source IS NOT NULL')) return;
+
+  const foreignKeysWereEnabled = Number(rawDb.prepare('PRAGMA foreign_keys').get().foreign_keys) === 1;
+  rawDb.exec('PRAGMA foreign_keys = OFF;');
+  try {
+    rawDb.exec('BEGIN IMMEDIATE;');
+    rawDb.exec(`
+      CREATE TABLE subscriptions_billing_upgrade (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan_key TEXT NOT NULL,
+        status TEXT NOT NULL,
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT UNIQUE,
+        purchase_id TEXT UNIQUE,
+        current_period_start TEXT,
+        current_period_end TEXT,
+        cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+        canceled_at TEXT,
+        authoritative_state INTEGER NOT NULL DEFAULT 0,
+        billing_state_source TEXT NOT NULL,
+        latest_stripe_event_created INTEGER,
+        latest_stripe_event_id TEXT,
+        latest_stripe_event_type TEXT,
+        latest_stripe_event_state TEXT,
+        reconciliation_required INTEGER NOT NULL DEFAULT 0,
+        reconciliation_started_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE SET NULL,
+        CHECK (status IN ('pending','active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')),
+        CHECK (authoritative_state IN (0,1)),
+        CHECK (reconciliation_required IN (0,1)),
+        CHECK (
+          (latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL) OR
+          (latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL)
+        ),
+        CHECK (billing_state_source IS NOT NULL AND (
+          (billing_state_source='pending_checkout' AND authoritative_state=0 AND status='pending'
+            AND current_period_start IS NULL AND current_period_end IS NULL
+            AND cancel_at_period_end=0 AND canceled_at IS NULL
+            AND latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL
+            AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL
+            AND reconciliation_required=0 AND reconciliation_started_at IS NULL) OR
+          (billing_state_source='legacy_reconciliation_required' AND authoritative_state=0
+            AND latest_stripe_event_created IS NULL AND latest_stripe_event_id IS NULL
+            AND latest_stripe_event_type IS NULL AND latest_stripe_event_state IS NULL
+            AND reconciliation_required=0 AND reconciliation_started_at IS NULL) OR
+          (billing_state_source='reconciliation_required' AND authoritative_state=0
+            AND status IN ('active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')
+            AND current_period_start IS NOT NULL AND current_period_end IS NOT NULL
+            AND latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL
+            AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL
+            AND reconciliation_required=1 AND reconciliation_started_at IS NOT NULL) OR
+          (billing_state_source IN ('stripe_event','stripe_retrieval') AND authoritative_state=1
+            AND status IN ('active','trialing','canceled','cancelled','past_due','unpaid','incomplete','incomplete_expired','paused')
+            AND current_period_start IS NOT NULL AND current_period_end IS NOT NULL
+            AND latest_stripe_event_created IS NOT NULL AND latest_stripe_event_id IS NOT NULL
+            AND latest_stripe_event_type IS NOT NULL AND latest_stripe_event_state IS NOT NULL
+            AND reconciliation_required=0 AND reconciliation_started_at IS NULL)
+        ))
+      );
+    `);
+    const insert = rawDb.prepare(`INSERT INTO subscriptions_billing_upgrade
+      (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,purchase_id,current_period_start,current_period_end,
+       cancel_at_period_end,canceled_at,authoritative_state,billing_state_source,latest_stripe_event_created,
+       latest_stripe_event_id,latest_stripe_event_type,latest_stripe_event_state,reconciliation_required,
+       reconciliation_started_at,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    for (const row of rawDb.prepare('SELECT * FROM subscriptions').all()) {
+      const classified = classifySubscriptionForUpgrade(row);
+      insert.run(
+        classified.id, classified.user_id, classified.plan_key, classified.status,
+        classified.stripe_customer_id ?? null, classified.stripe_subscription_id ?? null, classified.purchase_id ?? null,
+        classified.current_period_start ?? null, classified.current_period_end ?? null, Number(classified.cancel_at_period_end || 0),
+        classified.canceled_at ?? null, Number(classified.authoritative_state || 0), classified.billing_state_source,
+        classified.latest_stripe_event_created ?? null, classified.latest_stripe_event_id ?? null,
+        classified.latest_stripe_event_type ?? null, classified.latest_stripe_event_state ?? null,
+        Number(classified.reconciliation_required || 0), classified.reconciliation_started_at ?? null,
+        classified.created_at, classified.updated_at,
+      );
+    }
+    rawDb.exec(`DROP TABLE subscriptions;
+      ALTER TABLE subscriptions_billing_upgrade RENAME TO subscriptions;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_purchase
+        ON subscriptions(purchase_id) WHERE purchase_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_order
+        ON subscriptions(stripe_subscription_id,latest_stripe_event_created,latest_stripe_event_id);`);
+    const violations = rawDb.prepare('PRAGMA foreign_key_check').all();
+    if (violations.length) throw new Error(`SQLite subscription upgrade found ${violations.length} foreign-key violation(s).`);
+    rawDb.exec('COMMIT;');
+  } catch (error) {
+    try { rawDb.exec('ROLLBACK;'); } catch {}
+    throw error;
+  } finally {
+    rawDb.exec(`PRAGMA foreign_keys = ${foreignKeysWereEnabled ? 'ON' : 'OFF'};`);
+  }
+}
+
+function classifySubscriptionForUpgrade(row) {
+  const completeOrder = row.latest_stripe_event_created != null && row.latest_stripe_event_id != null
+    && row.latest_stripe_event_type != null && row.latest_stripe_event_state != null;
+  const absentOrder = row.latest_stripe_event_created == null && row.latest_stripe_event_id == null
+    && row.latest_stripe_event_type == null && row.latest_stripe_event_state == null;
+  const source = String(row.billing_state_source || '');
+  const pending = source === 'pending_checkout' && Number(row.authoritative_state) === 0 && row.status === 'pending'
+    && row.current_period_start == null && row.current_period_end == null && Number(row.cancel_at_period_end || 0) === 0
+    && row.canceled_at == null && absentOrder && Number(row.reconciliation_required) === 0
+    && row.reconciliation_started_at == null;
+  const legacy = source === 'legacy_reconciliation_required' && Number(row.authoritative_state) === 0
+    && absentOrder && Number(row.reconciliation_required) === 0 && row.reconciliation_started_at == null;
+  const reconciling = source === 'reconciliation_required' && Number(row.authoritative_state) === 0
+    && row.status !== 'pending' && row.current_period_start != null && row.current_period_end != null
+    && completeOrder && Number(row.reconciliation_required) === 1 && row.reconciliation_started_at != null;
+  const authoritative = ['stripe_event', 'stripe_retrieval'].includes(source)
+    && Number(row.authoritative_state) === 1 && row.status !== 'pending'
+    && row.current_period_start != null && row.current_period_end != null && completeOrder
+    && Number(row.reconciliation_required) === 0 && row.reconciliation_started_at == null;
+  if (pending || legacy || reconciling || authoritative) return row;
+  return {
+    ...row,
+    authoritative_state: 0,
+    billing_state_source: 'legacy_reconciliation_required',
+    latest_stripe_event_created: null,
+    latest_stripe_event_id: null,
+    latest_stripe_event_type: null,
+    latest_stripe_event_state: null,
+    reconciliation_required: 0,
+    reconciliation_started_at: null,
+  };
+}
+
 
 export function createSqliteTestDatabase() {
+  let transactionTail = Promise.resolve();
+  const transactionContext = new AsyncLocalStorage();
+  const execute = async (operation) => {
+    if (!transactionContext.getStore()) await transactionTail;
+    return operation();
+  };
   const adapter = {
     kind: 'sqlite-test',
     prepare(sql) {
       const statement = rawDb.prepare(sql);
       return {
-        async get(...params) { return statement.get(...params); },
-        async all(...params) { return statement.all(...params); },
+        async get(...params) { return execute(() => statement.get(...params)); },
+        async all(...params) { return execute(() => statement.all(...params)); },
         async run(...params) {
-          const result = statement.run(...params);
+          const result = await execute(() => statement.run(...params));
           return { changes: Number(result.changes || 0), lastInsertRowid: result.lastInsertRowid ?? null };
         },
       };
     },
-    async exec(sql) { rawDb.exec(sql); },
+    async exec(sql) { return execute(() => rawDb.exec(sql)); },
     async transaction(callback) {
-      rawDb.exec('BEGIN IMMEDIATE');
-      try {
-        const result = await callback(adapter);
-        rawDb.exec('COMMIT');
-        return result;
-      } catch (error) {
-        try { rawDb.exec('ROLLBACK'); } catch {}
-        throw error;
-      }
+      if (transactionContext.getStore()) return callback(adapter);
+      const run = async () => {
+        rawDb.exec('BEGIN IMMEDIATE');
+        try {
+          const result = await transactionContext.run({ active: true }, () => callback(adapter));
+          rawDb.exec('COMMIT');
+          return result;
+        } catch (error) {
+          try { rawDb.exec('ROLLBACK'); } catch {}
+          throw error;
+        }
+      };
+      const result = transactionTail.then(run, run);
+      transactionTail = result.catch(() => undefined);
+      return result;
     },
     async close() { rawDb.close(); },
-    async healthcheck() { rawDb.prepare('SELECT 1 AS ok').get(); return { ok: true, adapter: 'sqlite-test' }; },
+    async healthcheck() { await execute(() => rawDb.prepare('SELECT 1 AS ok').get()); return { ok: true, adapter: 'sqlite-test' }; },
   };
   return adapter;
 }

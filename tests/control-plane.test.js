@@ -10,6 +10,7 @@ import {
   createProjectApiKey,
   createRemediationItem,
   createSecurityProject,
+  entitlementForUser,
   getSecurityProject,
   listAssetSnapshots,
   listRemediationItems,
@@ -187,6 +188,69 @@ test('workspace members cannot bypass the billing owner project allowance', asyn
   const first = await createSecurityProject({ userId: owner.userId, workspaceId: workspace.id, name: 'Owner project' });
   assert.equal(first.billingUserId, owner.userId);
   await assert.rejects(() => createSecurityProject({ userId: member.userId, workspaceId: workspace.id, name: 'Member bypass project' }), /supports 1 active project/i);
+});
+
+test('all control-plane entitlements use the shared fail-closed subscription decision and tenant scope', async () => {
+  const owner = await createUser();
+  const unrelated = await createUser();
+  const now = Date.now();
+  const cases = [
+    { status: 'pending', authoritative: 0, source: 'pending_checkout', end: null },
+    { status: 'active', authoritative: 0, source: 'legacy_reconciliation_required', end: new Date(now + 86400000).toISOString() },
+    { status: 'active', authoritative: 0, source: 'legacy_reconciliation_required', end: null },
+    { status: 'active', authoritative: 0, source: 'legacy_reconciliation_required', end: 'malformed' },
+    { status: 'active', authoritative: 1, source: 'stripe_event', end: new Date(now - 1).toISOString() },
+    { status: 'active', authoritative: 1, source: 'stripe_event', end: new Date(now).toISOString() },
+    { status: 'past_due', authoritative: 1, source: 'stripe_event', end: new Date(now + 86400000).toISOString() },
+    { status: 'unpaid', authoritative: 1, source: 'stripe_event', end: new Date(now + 86400000).toISOString() },
+    { status: 'incomplete', authoritative: 1, source: 'stripe_event', end: new Date(now + 86400000).toISOString() },
+    { status: 'paused', authoritative: 1, source: 'stripe_event', end: new Date(now + 86400000).toISOString() },
+    { status: 'canceled', authoritative: 1, source: 'stripe_event', end: new Date(now + 86400000).toISOString() },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const trusted = item.authoritative === 1;
+    const periodStart = trusted ? new Date(now - 86400000).toISOString() : null;
+    const orderCreated = trusted ? 1000 + index : null;
+    await db.prepare(`INSERT INTO subscriptions
+      (id,user_id,plan_key,status,stripe_subscription_id,current_period_start,current_period_end,
+       authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
+       latest_stripe_event_type,latest_stripe_event_state,reconciliation_required,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`)
+      .run(`subrec_entitlement_${crypto.randomUUID()}`, owner.userId, 'agency_monthly', item.status,
+        `sub_entitlement_${crypto.randomUUID()}`, periodStart, item.end, item.authoritative, item.source,
+        orderCreated, trusted ? `evt_entitlement_${index}` : null,
+        trusted ? 'customer.subscription.updated' : null, trusted ? item.status : null,
+        new Date(now - cases.length + index).toISOString(), new Date(now - cases.length + index).toISOString());
+  }
+  await db.prepare(`INSERT INTO subscriptions
+    (id,user_id,plan_key,status,stripe_subscription_id,current_period_start,current_period_end,
+     authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
+     latest_stripe_event_type,latest_stripe_event_state,reconciliation_required,reconciliation_started_at,created_at,updated_at)
+    VALUES (?,?,?,'active',?,?,?,0,'reconciliation_required',?,'evt_reconcile','customer.subscription.updated',
+      'active',1,?,?,?)`)
+    .run(`subrec_entitlement_${crypto.randomUUID()}`, owner.userId, 'agency_monthly',
+      `sub_entitlement_${crypto.randomUUID()}`, new Date(now - 86400000).toISOString(),
+      new Date(now + 86400000).toISOString(), 2000,
+      new Date(now).toISOString(), new Date(now).toISOString(), new Date(now).toISOString());
+  await db.prepare(`INSERT INTO subscriptions
+    (id,user_id,plan_key,status,stripe_subscription_id,current_period_start,current_period_end,
+     authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
+     latest_stripe_event_type,latest_stripe_event_state,reconciliation_required,created_at,updated_at)
+    VALUES (?,?,?,'active',?,?,?,1,'stripe_event',3000,'evt_unrelated','customer.subscription.updated',
+      'active',0,?,?)`)
+    .run(`subrec_entitlement_${crypto.randomUUID()}`, unrelated.userId, 'agency_monthly',
+      `sub_entitlement_${crypto.randomUUID()}`, new Date(now - 86400000).toISOString(),
+      new Date(now + 86400000).toISOString(),
+      new Date(now).toISOString(), new Date(now).toISOString());
+
+  const entitlement = await entitlementForUser(owner.userId);
+  assert.equal(entitlement.key, 'community');
+  assert.equal(entitlement.projects, PLAN_ENTITLEMENTS.community.projects);
+  assert.equal(entitlement.apiKeysPerProject, PLAN_ENTITLEMENTS.community.apiKeysPerProject);
+  assert.equal(entitlement.retentionDays, PLAN_ENTITLEMENTS.community.retentionDays);
+  assert.equal(entitlement.runtimeRequestsPerMonth, PLAN_ENTITLEMENTS.community.runtimeRequestsPerMonth);
+  assert.equal(entitlement.runtimeRequestsPerMinute, PLAN_ENTITLEMENTS.community.runtimeRequestsPerMinute);
+  assert.equal((await entitlementForUser(unrelated.userId)).key, 'agency_monthly');
 });
 
 

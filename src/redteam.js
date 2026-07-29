@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, id, nowIso } from './db.js';
 import { config } from './config.js';
+import { subscriptionAccessDecision } from './subscription-access.js';
 export const REDTEAM_SCHEMA = 'arl.redteam.bundle.v1';
 export const REDTEAM_TOKEN_TTL_MS = 15 * 60000;
 export const MAX_REDTEAM_AGE_MS = 24 * 60 * 60000;
@@ -95,7 +96,9 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
         if (Date.parse(authorisation.window_start) > Date.now() + 15 * 60000)
             throw new Error('The authorised testing window has not started yet.');
     }
-    const subscription = await db.prepare(`SELECT plan_key, status FROM subscriptions WHERE user_id = ? AND status IN ('active','trialing') ORDER BY created_at DESC LIMIT 1`).get(userId);
+    const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required
+      FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(userId);
+    const subscription = subscriptions.find((candidate) => subscriptionAccessDecision(candidate).allowed) || null;
     const superuser = Boolean(await db.prepare(`SELECT 1 ok FROM users WHERE id=? AND role='superuser'`).get(userId));
     const recentRuns = (await db.prepare(`SELECT COUNT(*) AS count FROM redteam_runs WHERE user_id = ? AND created_at >= ?`).get(userId, new Date(Date.now() - 30 * 86400000).toISOString())).count;
     const assessmentRuns = (await db.prepare('SELECT COUNT(*) AS count FROM redteam_runs WHERE assessment_id = ?').get(assessmentId)).count;

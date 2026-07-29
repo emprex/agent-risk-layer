@@ -355,6 +355,8 @@ try {
   const subscriptionSessionId = new URL(subscriptionCheckout.url, 'http://example.test').searchParams.get('session_id');
   const subscriptionStatus = await request(`/api/checkout/status?session_id=${subscriptionSessionId}`);
   assert.equal(subscriptionStatus.subscription.status, 'active');
+  const subscriptionAssessment = await request(`/api/assessments/${assessmentId}`);
+  assert.equal(subscriptionAssessment.subscriptionAccess, true);
 
   const dashboard = await request('/api/dashboard');
   assert.equal(dashboard.stats.assessments, 1);

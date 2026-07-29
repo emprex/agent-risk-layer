@@ -13,7 +13,10 @@ import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail
 import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
 import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
-import { fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
+import { bindPendingCheckoutSession, createPendingCheckout, failPendingCheckoutCreation, fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
+import { claimStripeEvent, completeStripeEvent, failStripeEvent, recoverAbandonedStripeEvent } from './src/stripe-events.js';
+import { subscriptionAccessDecision, subscriptionBlocksAccountDeletion, subscriptionBlocksCheckout } from './src/subscription-access.js';
+import { processStripeEvent } from './src/stripe-webhook.js';
 import { enforceRetention, retentionOverview, startRetentionWorker } from './src/retention.js';
 import { authenticateScim, configureIntegration, createScimToken, createWorkspace, deliverSecurityEvent, getWorkspace, listWorkspaces, provisionScimUser, upsertMember } from './src/workspaces.js';
 import { discoverAiAssets } from './src/asset-discovery.js';
@@ -818,6 +821,27 @@ const server = http.createServer(async (req, res) => {
             await insertEvent('admin_reconciliation_run', req.user.id, { fulfilment, jobs, retention });
             return json(res, 200, { fulfilment, jobs, retention });
         }
+        match = url.pathname.match(/^\/api\/admin\/stripe-events\/([^/]+)\/recover$/);
+        if (req.method === 'POST' && match) {
+            if (!requireAdmin(req, res, { requireMfa: true }))
+                return;
+            const body = await readBody(req);
+            try {
+                const event = await recoverAbandonedStripeEvent({
+                    eventId: decodeURIComponent(match[1]),
+                    actorId: req.user.id,
+                    reason: body.reason,
+                    workerStoppedConfirmed: body.workerStoppedConfirmed,
+                });
+                return json(res, 200, { recovered: true, event: {
+                    id: event.id, status: event.status, attemptCount: Number(event.attempt_count || 0),
+                    recoveredAt: event.recovered_at,
+                } });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
         match = url.pathname.match(/^\/api\/admin\/alerts\/([^/]+)\/resolve$/);
         if (req.method === 'POST' && match) {
             if (!requireAdmin(req, res, { requireMfa: true }))
@@ -1032,6 +1056,8 @@ function scimUser(member) {
 }
 function scimError(detail, status) { return { schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'], detail, status: String(status) }; }
 async function handleStripeWebhook(req, res) {
+    if (config.billingWebhookMode !== 'enabled')
+        return text(res, 503, 'Billing webhook processing is in maintenance mode.');
     if (!config.stripeSecretKey || !config.stripeWebhookSecret)
         return text(res, 503, 'Stripe is not configured.');
     const raw = await readRawBody(req, 1000000);
@@ -1044,40 +1070,37 @@ async function handleStripeWebhook(req, res) {
     catch {
         return text(res, 400, 'Invalid webhook JSON.');
     }
+    if (!event?.id || !event?.type)
+        return text(res, 400, 'Stripe event identity is missing.');
+    const stripeEventId = String(event.id);
+    const stripeEventType = String(event.type);
+    if (stripeEventId.length > 200 || stripeEventType.length > 120
+        || !/^[A-Za-z0-9_.-]+$/.test(stripeEventId) || !/^[a-z0-9_.-]+$/.test(stripeEventType))
+        return text(res, 400, 'Stripe event identity is malformed.');
+    event.id = stripeEventId;
+    event.type = stripeEventType;
+    let claim;
     try {
-        const checkoutTypes = new Set(['checkout.session.completed', 'checkout.session.async_payment_succeeded']);
-        const existingEvent = event.id ? await db.prepare('SELECT status FROM stripe_events WHERE id=?').get(event.id) : null;
-        if (existingEvent && !checkoutTypes.has(event.type))
+        claim = await claimStripeEvent(String(event.id), String(event.type));
+        if (claim.state === 'completed')
             return json(res, 200, { received: true, duplicate: true });
-        if (event.id) {
-            await db.prepare(`INSERT INTO stripe_events (id,event_type,processed_at,status,last_error)
-        VALUES (?,?,?,'processing',NULL)
-        ON CONFLICT(id) DO UPDATE SET status='processing',last_error=NULL,processed_at=excluded.processed_at`)
-                .run(event.id, event.type, nowIso());
-        }
-        if (event.type === 'checkout.session.completed') {
-            const session = event.data.object;
-            if (session.mode === 'subscription' || session.payment_status === 'paid' || session.payment_status === 'no_payment_required')
-                await fulfilCheckout(session);
-        }
-        if (event.type === 'checkout.session.async_payment_succeeded')
-            await fulfilCheckout(event.data.object);
-        if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted')
-            await syncSubscription(event.data.object);
-        if (event.type === 'invoice.payment_failed') {
-            const invoice = event.data.object;
-            const subscriptionId = String(invoice.subscription || invoice.parent?.subscription_details?.subscription || '');
-            if (subscriptionId)
-                await db.prepare(`UPDATE subscriptions SET status='past_due',updated_at=? WHERE stripe_subscription_id=?`).run(nowIso(), subscriptionId);
-        }
-        if (event.id)
-            await db.prepare(`UPDATE stripe_events SET status='processed',last_error=NULL,processed_at=? WHERE id=?`).run(nowIso(), event.id);
-        return json(res, 200, { received: true, reconciled: Boolean(existingEvent) });
+        if (claim.state === 'busy')
+            return text(res, 409, 'Stripe event is already being processed.');
+        const result = await processStripeEvent(event);
+        await completeStripeEvent(event.id, result);
+        return json(res, 200, { received: true, outcome: result.outcome,
+            reconciled: Number(claim.event.attempt_count || 0) > 1 });
     }
     catch (error) {
-        if (event?.id)
-            await db.prepare(`UPDATE stripe_events SET status='failed',last_error=?,processed_at=? WHERE id=?`).run(cleanText(error.message, 1000), nowIso(), event.id);
-        console.error('Webhook fulfilment failed:', error);
+        if (claim?.state === 'claimed')
+            await failStripeEvent(event.id, error);
+        console.error(JSON.stringify({
+            event: 'stripe_webhook_failure',
+            stripeEventId: String(event?.id || '').slice(0, 120),
+            stripeEventType: String(event?.type || '').slice(0, 120),
+            error: cleanText(error?.message || 'Unknown webhook failure', 500),
+            timestamp: nowIso(),
+        }));
         return text(res, 500, 'Webhook fulfilment failed.');
     }
 }
@@ -1120,6 +1143,7 @@ async function handleRedTeamUpload(req, res) {
     }
 }
 async function createCheckout(req, res, body) {
+    let pending = null;
     try {
         const productKey = cleanText(body.productKey, 40);
         const plan = plans[productKey];
@@ -1140,21 +1164,52 @@ async function createCheckout(req, res, body) {
         else if (await hasOpenSubscription(req.user.id)) {
             throw new Error('A subscription already exists or requires billing attention. Manage it from the dashboard.');
         }
+        const price = config.demoMode ? `demo_price_${productKey}` : config.stripePrices[productKey];
+        if (!price)
+            throw new Error(`Stripe is not fully configured for ${productKey}.`);
+        pending = await createPendingCheckout({
+            userId: req.user.id,
+            assessmentId: assessment?.id || null,
+            projectId: body.projectId || null,
+            productKey,
+            stripePriceId: price,
+            expectedAmountPence: plan.amountPence,
+            expectedCurrency: 'gbp',
+            checkoutMode: plan.recurring ? 'subscription' : 'payment',
+            expectedCustomerEmail: req.user.email,
+        });
         if (config.demoMode) {
             const sessionId = id('demo_cs_');
-            await fulfilCheckout({
+            const session = {
                 id: sessionId,
                 mode: plan.recurring ? 'subscription' : 'payment',
                 payment_status: 'paid',
+                amount_total: plan.amountPence,
+                currency: 'gbp',
                 customer: `demo_customer_${req.user.id}`,
+                customer_details: { email: req.user.email },
+                client_reference_id: req.user.id,
                 subscription: plan.recurring ? id('demo_sub_') : null,
-                metadata: { user_id: req.user.id, assessment_id: assessment?.id || '', product_key: productKey },
-            });
+                metadata: { purchase_id: pending.id, user_id: req.user.id, assessment_id: assessment?.id || '',
+                    project_id: body.projectId || '', product_key: productKey, price_id: price },
+            };
+            await bindPendingCheckoutSession(pending.id, session);
+            await fulfilCheckout(session);
+            if (plan.recurring) {
+                const createdSeconds = Math.floor(Date.now() / 1000);
+                await processStripeEvent({
+                    id: id('demo_evt_'), created: createdSeconds, type: 'customer.subscription.created',
+                    data: { object: {
+                        id: session.subscription, customer: session.customer, status: 'active',
+                        metadata: { user_id: req.user.id, product_key: productKey },
+                        current_period_start: createdSeconds,
+                        current_period_end: createdSeconds + 30 * 86400,
+                        cancel_at_period_end: false,
+                    } },
+                });
+            }
             return json(res, 200, { url: `/success.html?session_id=${encodeURIComponent(sessionId)}`, demo: true });
         }
-        const price = config.stripePrices[productKey];
-        if (!config.stripeSecretKey || !price)
-            throw new Error(`Stripe is not fully configured for ${productKey}.`);
         const params = new URLSearchParams();
         params.set('mode', plan.recurring ? 'subscription' : 'payment');
         params.set('line_items[0][price]', price);
@@ -1162,21 +1217,26 @@ async function createCheckout(req, res, body) {
         params.set('managed_payments[enabled]', 'true');
         params.set('customer_email', req.user.email);
         params.set('client_reference_id', req.user.id);
-        params.set('allow_promotion_codes', 'true');
         params.set('billing_address_collection', 'auto');
+        if (!plan.recurring) params.set('customer_creation', 'always');
         params.set('success_url', `${config.baseUrl}/success.html?session_id={CHECKOUT_SESSION_ID}`);
         params.set('cancel_url', assessment ? `${config.baseUrl}/result.html?id=${assessment.id}&token=${assessment.access_token}&cancelled=1` : `${config.baseUrl}/pricing.html?cancelled=1`);
+        params.set('metadata[purchase_id]', pending.id);
         params.set('metadata[user_id]', req.user.id);
         params.set('metadata[assessment_id]', assessment?.id || '');
+        params.set('metadata[project_id]', body.projectId || '');
         params.set('metadata[product_key]', productKey);
+        params.set('metadata[price_id]', price);
         if (plan.recurring) {
             params.set('subscription_data[metadata][user_id]', req.user.id);
             params.set('subscription_data[metadata][product_key]', productKey);
         }
         const session = await stripeRequest('POST', '/v1/checkout/sessions', params);
+        await bindPendingCheckoutSession(pending.id, session);
         return json(res, 200, { url: session.url, demo: false });
     }
     catch (error) {
+        if (pending?.id) await failPendingCheckoutCreation(pending.id, error);
         return json(res, 400, { error: error.message });
     }
 }
@@ -1185,17 +1245,18 @@ async function checkoutStatus(req, res, sessionIdValue) {
         const sessionId = cleanText(sessionIdValue, 200);
         let purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
         if (purchase && purchase.fulfilment_state !== 'fulfilled') {
-            const storedSession = JSON.parse(purchase.session_json || '{}');
-            if (storedSession?.id)
-                await fulfilCheckout(storedSession);
+            const session = config.demoMode
+                ? JSON.parse(purchase.session_json || '{}')
+                : await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
+            if (session?.id && session.payment_status === 'paid')
+                await fulfilCheckout(session);
             purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
         }
         if (!purchase && !config.demoMode && sessionId.startsWith('cs_')) {
             const session = await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
             if (session.metadata?.user_id !== req.user.id)
                 throw new Error('Checkout session does not belong to this account.');
-            if (session.mode === 'subscription' || session.payment_status === 'paid' || session.payment_status === 'no_payment_required')
-                await fulfilCheckout(session);
+            await fulfilCheckout(session);
             purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
         }
         if (purchase && !['sent', 'simulated'].includes(purchase.email_state)) {
@@ -1305,7 +1366,7 @@ async function deleteAccount(req, res, body) {
     catch (error) {
         return json(res, 401, { error: error.message });
     }
-    if (await hasOpenSubscription(req.user.id))
+    if (await hasSubscriptionBlockingAccountDeletion(req.user.id))
         return json(res, 409, { error: 'Cancel or resolve the subscription from billing before deleting the account.' });
     const userId = req.user.id;
     try {
@@ -1417,26 +1478,6 @@ async function adminAnalytics(req, res) {
     return json(res, 200, { totals, funnel, recentFailures, riskBands, readiness: launchReadiness(),
         fulfilment: await fulfilmentOperations(), retention: await retentionOverview() });
 }
-async function syncSubscription(subscription) {
-    const subscriptionId = String(subscription.id);
-    const row = await db.prepare('SELECT * FROM subscriptions WHERE stripe_subscription_id = ?').get(subscriptionId);
-    const metadata = subscription.metadata || {};
-    if (!row && (!metadata.user_id || !metadata.product_key))
-        return;
-    const itemPeriodEnds = Array.isArray(subscription.items?.data)
-        ? subscription.items.data.map((item) => Number(item.current_period_end || 0)).filter(Boolean)
-        : [];
-    const periodEnd = Number(subscription.current_period_end || Math.max(0, ...itemPeriodEnds));
-    const end = periodEnd ? new Date(periodEnd * 1000).toISOString() : null;
-    if (row) {
-        await db.prepare(`UPDATE subscriptions SET status = ?, current_period_end = ?, updated_at = ? WHERE stripe_subscription_id = ?`)
-            .run(subscription.status, end, nowIso(), subscriptionId);
-    }
-    else {
-        await db.prepare(`INSERT INTO subscriptions (id, user_id, plan_key, status, stripe_customer_id, stripe_subscription_id, current_period_end, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id('subrec_'), metadata.user_id, metadata.product_key, subscription.status, String(subscription.customer || ''), subscriptionId, end, nowIso(), nowIso());
-    }
-}
 async function stripeRequest(method, endpoint, params = null) {
     if (!config.stripeSecretKey)
         throw new Error('Stripe secret key is missing.');
@@ -1494,12 +1535,20 @@ async function claimAssessmentForUser(assessmentId, token, userId) {
 async function hasActiveSubscription(userId) {
     if (!userId)
         return false;
-    return Boolean(await db.prepare(`SELECT 1 AS ok FROM subscriptions WHERE user_id = ? AND status IN ('active','trialing') LIMIT 1`).get(userId));
+    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
+    return rows.some((subscription) => subscriptionAccessDecision(subscription).allowed);
 }
 async function hasOpenSubscription(userId) {
     if (!userId)
         return false;
-    return Boolean(await db.prepare(`SELECT 1 AS ok FROM subscriptions WHERE user_id = ? AND status IN ('active','trialing','past_due','unpaid','incomplete') LIMIT 1`).get(userId));
+    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
+    return rows.some((subscription) => subscriptionBlocksCheckout(subscription));
+}
+async function hasSubscriptionBlockingAccountDeletion(userId) {
+    if (!userId)
+        return false;
+    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
+    return rows.some((subscription) => subscriptionBlocksAccountDeletion(subscription));
 }
 function parseResult(row) { return typeof row.result_json === 'string' ? JSON.parse(row.result_json) : row.result_json; }
 function publicAssessment(row) {

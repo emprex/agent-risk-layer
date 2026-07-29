@@ -17,7 +17,7 @@ process.env.ADMIN_EMAIL = 'owner@example.com';
 const { db, id, nowIso } = await import('../src/db.js');
 const { registerUser, verifyPassword, beginMfaSetup, enableMfa, authenticateUser, createMfaLoginChallenge, completeMfaLogin, publicUser } = await import('../src/auth.js');
 const { questionnaire, evaluateAssessment } = await import('../src/risk-engine.js');
-const { fulfilCheckout, processFulfilmentJob } = await import('../src/fulfilment.js');
+const { bindPendingCheckoutSession, createPendingCheckout, fulfilCheckout, processFulfilmentJob } = await import('../src/fulfilment.js');
 const { enforceRetention } = await import('../src/retention.js');
 const { createRedTeamAuthorisation, createRedTeamToken, consumeRedTeamUpload } = await import('../src/redteam.js');
 const { runCampaign } = await import('../redteam/agent-risk-redteam.mjs');
@@ -52,7 +52,12 @@ test('public user representations never expose internal session token hashes', (
     assert.doesNotMatch(JSON.stringify(user), /internal-hash/);
 });
 test('paid checkout grants access transactionally and retries report delivery with complete evidence', async () => {
-    const session = { id: 'cs_v42_resilience', mode: 'payment', payment_status: 'paid', amount_total: 7900, currency: 'gbp', customer: 'cus_v42', metadata: { user_id: userId, assessment_id: assessmentId, product_key: 'pro_report' } };
+    const pending = await createPendingCheckout({ userId, assessmentId, productKey: 'pro_report', stripePriceId: 'demo_price_pro_report',
+        expectedAmountPence: 9900, expectedCurrency: 'gbp', checkoutMode: 'payment', expectedCustomerEmail: 'owner@example.com' });
+    const session = { id: 'cs_v42_resilience', mode: 'payment', payment_status: 'paid', amount_total: 9900, currency: 'gbp',
+        customer: 'cus_v42', customer_details: { email: 'owner@example.com' }, client_reference_id: userId,
+        metadata: { purchase_id: pending.id, user_id: userId, assessment_id: assessmentId, project_id: '', product_key: 'pro_report', price_id: 'demo_price_pro_report' } };
+    await bindPendingCheckoutSession(pending.id, session);
     const purchase = await fulfilCheckout(session, { processEmailNow: false });
     assert.equal(purchase.fulfilment_state, 'fulfilled');
     assert.equal((await db.prepare('SELECT paid_tier FROM assessments WHERE id=?').get(assessmentId)).paid_tier, 'pro');
@@ -145,7 +150,20 @@ test('staging evidence is rejected when execution falls outside the authorised t
     await new Promise(resolve => adapter.listen(0, '127.0.0.1', resolve));
     const port = adapter.address().port;
     try {
-        await db.prepare(`INSERT INTO subscriptions (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,current_period_end,created_at,updated_at) VALUES (?,?,?,'active','cus_test','sub_test',?,?,?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,plan_key=excluded.plan_key,status=excluded.status,stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,current_period_end=excluded.current_period_end,updated_at=excluded.updated_at`).run('subrec_v42', userId, 'developer_monthly', new Date(Date.now() + 86400000).toISOString(), nowIso(), nowIso());
+        await db.prepare(`INSERT INTO subscriptions
+          (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,current_period_start,current_period_end,
+           authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
+           latest_stripe_event_type,latest_stripe_event_state,created_at,updated_at)
+          VALUES (?,?,?,'active','cus_test','sub_test',?,?,1,'stripe_event',1,'evt_v42',
+            'customer.subscription.updated','active',?,?)
+          ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,plan_key=excluded.plan_key,status=excluded.status,
+          stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,
+          current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,
+          authoritative_state=1,billing_state_source='stripe_event',latest_stripe_event_created=1,
+          latest_stripe_event_id='evt_v42',latest_stripe_event_type='customer.subscription.updated',
+          latest_stripe_event_state='active',updated_at=excluded.updated_at`)
+            .run('subrec_v42', userId, 'developer_monthly', new Date(Date.now() - 86400000).toISOString(),
+              new Date(Date.now() + 86400000).toISOString(), nowIso(), nowIso());
         const auth = await createRedTeamAuthorisation({ userId, assessmentId, input: { targetName: 'Window-bound local adapter', environment: 'local', authorityBasis: 'owner', authorisedBy: 'Owner', authorisedRole: 'System owner', emergencyContact: 'owner@example.com', windowStart: new Date(Date.now() - 60000).toISOString(), windowEnd: new Date(Date.now() + 3600000).toISOString(), permittedActions: ['Synthetic prompts'], prohibitedActions: ['Production effects'], dataClassification: 'synthetic-only', retentionDays: 7, syntheticDataOnly: true, dryRunToolsOnly: true, noProductionEffects: true, confirmation: 'I AUTHORISE CONTROLLED TESTING' } });
         const issued = await createRedTeamToken({ userId, assessmentId, mode: 'staging', authorisationId: auth.id });
         const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Window test', authorisationId: auth.id, trials: 1 });
