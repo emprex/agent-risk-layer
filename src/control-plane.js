@@ -260,7 +260,8 @@ export async function recordAssetSnapshot({ projectId, userId, documents, source
   const sourceDigest = digest(canonical);
   if (previous?.source_digest === sourceDigest) drift.unchangedSnapshot = true;
   const snapshotId = id('inv_');
-  const timestamp = nowIso();
+  const previousTimestamp = Date.parse(previous?.created_at || '');
+  const timestamp = new Date(Math.max(Date.now(), Number.isFinite(previousTimestamp) ? previousTimestamp + 1 : 0)).toISOString();
   await db.prepare(`INSERT INTO asset_snapshots (id,project_id,source,source_digest,summary_json,assets_json,drift_json,created_by,created_at)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(snapshotId, projectId, clean(source, 40) || 'manual', sourceDigest, JSON.stringify(inventory.summary), canonical, JSON.stringify(drift), userId, timestamp);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'inventory.snapshot_recorded', targetType: 'asset_snapshot', targetId: snapshotId,
@@ -312,15 +313,25 @@ export async function updateRemediationItem({ projectId, itemId, userId, patch =
   const ownerEmail = patch.ownerEmail == null ? current.owner_email : (validEmail(patch.ownerEmail) ? clean(patch.ownerEmail, 254).toLowerCase() : null);
   const dueAt = patch.dueAt == null ? current.due_at : validOptionalDate(patch.dueAt);
   const previousVerification = parseJson(current.verification_json, {});
-  const verification = patch.verification == null ? previousVerification : { ...previousVerification, ...privacySafeObject(patch.verification, 30) };
+  let verification = patch.verification == null ? previousVerification : { ...previousVerification, ...privacySafeObject(patch.verification, 30) };
+  const transitionAt = nowIso();
+  if (status === 'open' && status !== currentStatus) verification = {};
   if (status === 'evidence_attached' && (!clean(verification.reference, 500) || !/^[a-f0-9]{64}$/i.test(clean(verification.integrityHash, 64))))
     throw badRequest('Evidence attachment requires a reference and SHA-256 integrity hash.');
-  if (status === 'retested' && !['passed', 'failed'].includes(verification.retestResult))
-    throw badRequest('Retest status requires a passed or failed retest result.');
+  if (status === 'retested' && (!['passed', 'failed'].includes(verification.retestResult)
+    || !clean(verification.retestReference, 500)
+    || !/^[a-f0-9]{64}$/i.test(clean(verification.retestIntegrityHash, 64))))
+    throw badRequest('Retest status requires a passed or failed result, retest evidence reference and SHA-256 integrity hash.');
   if (status === 'verified_closed' && verification.retestResult !== 'passed')
     throw badRequest('Only a passed retest can be verified closed.');
+  if (status !== currentStatus) {
+    if (status === 'evidence_attached') verification.evidenceAttachedAt = transitionAt;
+    if (status === 'ready_for_retest') verification.readyForRetestAt = transitionAt;
+    if (status === 'retested') verification.retestedAt = transitionAt;
+    if (status === 'verified_closed') verification.verifiedAt = transitionAt;
+  }
   await db.prepare(`UPDATE remediation_items SET title=?,severity=?,status=?,owner_email=?,due_at=?,verification_json=?,updated_at=? WHERE id=? AND project_id=?`)
-    .run(title, severity, status, ownerEmail, dueAt, JSON.stringify(verification), nowIso(), itemId, projectId);
+    .run(title, severity, status, ownerEmail, dueAt, JSON.stringify(verification), transitionAt, itemId, projectId);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.updated', targetType: 'remediation', targetId: itemId, metadata: { status, severity } });
   return db.prepare('SELECT * FROM remediation_items WHERE id=?').get(itemId);
 }
@@ -341,24 +352,43 @@ function projectJourney(project) {
   const hasAllowed = events.some((event) => event.decision === 'allow' && event.observed_decision === 'allow');
   const hasBlocked = events.some((event) => event.decision === 'deny');
   const hasOpenRemediation = (project.remediations || []).some((item) => !['verified_closed', 'accepted_risk'].includes(normaliseRemediationStatus(item.status)));
-  const hasRetest = (project.remediations || []).some((item) => normaliseRemediationStatus(item.status) === 'verified_closed');
+  const hasRemediationEvidence = (project.remediations || []).some((item) => {
+    const verification = item.verification || {};
+    return ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(normaliseRemediationStatus(item.status))
+      && Boolean(verification.reference && verification.integrityHash && verification.evidenceAttachedAt);
+  });
+  const hasRetest = (project.remediations || []).some((item) => {
+    const verification = item.verification || {};
+    return normaliseRemediationStatus(item.status) === 'verified_closed'
+      && verification.retestResult === 'passed'
+      && Boolean(verification.retestReference && verification.retestIntegrityHash && verification.retestedAt && verification.verifiedAt);
+  });
+  const hasPublishedPolicy = Number(project.policyVersion || 1) > 1;
+  const hasActiveKey = (project.apiKeys || []).some((key) => !key.revoked_at);
+  const latestInventory = (project.inventory || [])[0] || null;
+  const riskyInventoryDrift = latestInventory?.drift?.deploymentGate === 'review-required';
   const steps = [
     { id: 'project', label: 'Create project', complete: true, href: '#project' },
-    { id: 'policy', label: 'Publish policy', complete: Number(project.policyVersion || 1) > 1, href: '#policy' },
-    { id: 'key', label: 'Issue key', complete: (project.apiKeys || []).some((key) => !key.revoked_at), href: '#runtime' },
+    { id: 'policy', label: 'Publish policy', complete: hasPublishedPolicy, href: '#policy' },
+    { id: 'key', label: 'Issue key', complete: hasActiveKey, href: '#runtime' },
     { id: 'allowed', label: 'Test allowed action', complete: hasAllowed, href: '#runtime' },
     { id: 'blocked', label: 'Test blocked action', complete: hasBlocked, href: '#runtime' },
-    { id: 'inventory', label: 'Record inventory', complete: (project.inventory || []).length > 0, href: '#inventory' },
+    { id: 'inventory', label: 'Record inventory', complete: Boolean(latestInventory) && !riskyInventoryDrift, href: '#inventory' },
     { id: 'findings', label: 'Review findings', complete: hasBlocked || hasOpenRemediation, href: '#remediation' },
-    { id: 'remediate', label: 'Remediate', complete: hasRetest, href: '#remediation' },
+    { id: 'remediate', label: 'Remediate', complete: hasRemediationEvidence, href: '#remediation' },
     { id: 'retest', label: 'Retest', complete: hasRetest, href: '#remediation' },
   ];
   const next = steps.find((step) => !step.complete) || null;
   const blockingGaps = [];
+  if (!hasPublishedPolicy) blockingGaps.push('No reviewed project policy has been published.');
+  if (!hasActiveKey) blockingGaps.push('No active project API key is available for runtime enforcement.');
+  if (!hasAllowed) blockingGaps.push('No allowed-action control test is recorded.');
   if (!hasBlocked) blockingGaps.push('No enforced blocked-action test is recorded.');
-  if (!(project.inventory || []).length) blockingGaps.push('No inventory evidence is recorded.');
+  if (!latestInventory) blockingGaps.push('No inventory evidence is recorded.');
+  if (riskyInventoryDrift) blockingGaps.push('The latest inventory contains risky drift requiring review.');
   if (hasOpenRemediation) blockingGaps.push('Remediation work remains open.');
-  if (hasBlocked && !hasRetest) blockingGaps.push('The blocked-action finding has not completed remediation and a passed retest.');
+  if (hasBlocked && !hasRemediationEvidence) blockingGaps.push('No integrity-bound remediation evidence is recorded.');
+  if (hasBlocked && !hasRetest) blockingGaps.push('The blocked-action finding has not completed an integrity-bound passed retest and verified closure.');
   return {
     status: blockingGaps.length ? 'evidence-incomplete' : 'ready-for-deployment-review',
     nextAction: next,

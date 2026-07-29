@@ -383,6 +383,8 @@ try {
   const createdProject = await request('/api/projects', { method: 'POST', body: { workspaceId: ownedWorkspace.workspace.id, name: 'Smoke Production Agent', environment: 'production' } });
   assert.equal(createdProject.project.policy.mode, 'enforce');
   const projectId = createdProject.project.id;
+  const publishedProject = await request(`/api/projects/${projectId}`, { method: 'PATCH', body: { policy: { mode: 'enforce' } } });
+  assert.equal(publishedProject.project.policyVersion, '2');
   const issuedKey = await request(`/api/projects/${projectId}/keys`, { method: 'POST', body: { name: 'Smoke runtime key' } });
   assert.match(issuedKey.key.token, /^arl_live_/);
   const guardCall = async (body) => {
@@ -404,10 +406,28 @@ try {
   assert.ok(inventory.snapshot.summary.total >= 1);
   const remediation = await request(`/api/projects/${projectId}/remediations`, { method: 'POST', body: { title: 'Restrict privileged public exposure', severity: 'critical', findingKey: 'smoke-drift' } });
   assert.equal(remediation.remediation.status, 'open');
+  const remediationId = remediation.remediation.id;
+  await request(`/api/projects/${projectId}/remediations/${remediationId}`, { method: 'PATCH', body: {
+    status: 'evidence_attached',
+    verification: { reference: 'artifact:smoke-remediation', integrityHash: 'a'.repeat(64) },
+  } });
+  await request(`/api/projects/${projectId}/remediations/${remediationId}`, { method: 'PATCH', body: { status: 'ready_for_retest' } });
+  await request(`/api/projects/${projectId}/remediations/${remediationId}`, { method: 'PATCH', body: {
+    status: 'retested',
+    verification: { retestReference: 'test:smoke-runtime-retest', retestIntegrityHash: 'b'.repeat(64), retestResult: 'passed' },
+  } });
+  await request(`/api/projects/${projectId}/remediations/${remediationId}`, { method: 'PATCH', body: { status: 'verified_closed' } });
+  await request(`/api/projects/${projectId}/inventory`, { method: 'POST', body: {
+    source: 'smoke-remediated-manifest',
+    documents: { agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] } },
+  } });
   const projectState = await request(`/api/projects/${projectId}`);
   assert.equal(projectState.project.events.length, 2);
-  assert.equal(projectState.project.inventory.length, 1);
+  assert.equal(projectState.project.inventory.length, 2);
   assert.equal(projectState.project.remediations.length, 1);
+  assert.equal(projectState.project.remediations[0].verification.retestResult, 'passed');
+  assert.ok(projectState.project.remediations[0].verification.verifiedAt);
+  assert.equal(projectState.project.journey.deploymentDecision, 'READY FOR HUMAN DEPLOYMENT REVIEW', JSON.stringify(projectState.project.journey.blockingGaps));
   const controlOverview = await request('/api/control-plane/overview');
   assert.equal(controlOverview.totals.projects, 1);
   assert.equal(controlOverview.totals.runtimeRequestsMonth, 2);

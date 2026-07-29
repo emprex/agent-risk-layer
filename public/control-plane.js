@@ -170,7 +170,7 @@ function inventoryHistory(items) {
 
 function remediationRow(item) {
   const verification = item.verification || {};
-  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Evidence:</strong> ${escapeHtml(verification.reference || 'Not attached')}</p><p><strong>Retest:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p><label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
+  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Implementation evidence:</strong> ${escapeHtml(verification.reference || 'Not attached')}</p><p><strong>Retest evidence:</strong> ${escapeHtml(verification.retestReference || 'Not attached')}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p><label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
 }
 
 function nextRemediationOptions(status) {
@@ -275,7 +275,11 @@ async function updateRemediation(event) {
     verification.reference = prompt('Evidence reference (artifact ID, test-result ID, or controlled URL):') || '';
     verification.integrityHash = prompt('SHA-256 integrity hash (64 hexadecimal characters):') || '';
   }
-  if (status === 'retested') verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
+  if (status === 'retested') {
+    verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
+    verification.retestReference = prompt('Retest evidence reference (test-result ID or controlled URL):') || '';
+    verification.retestIntegrityHash = prompt('Retest evidence SHA-256 hash (64 hexadecimal characters):') || '';
+  }
   if (status === 'verified_closed') {
     const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
     Object.assign(verification, item?.verification || {});
