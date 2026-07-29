@@ -9,3 +9,9 @@ test('AI inventory discovers providers, agents, models and privileged exposure',
   assert.ok(result.summary.internetExposed >= 1);
   assert.ok(result.summary.privileged >= 1);
 });
+
+test('nested assets inherit the manifest environment', () => {
+  const result = discoverAiAssets({ name: 'support-agent', type: 'agent', environment: 'development', model: 'gpt-4.1', tools: [{ kind: 'tool', name: 'crm.read' }] });
+  assert.ok(result.assets.length >= 2);
+  assert.ok(result.assets.every((asset) => asset.environment === 'development'));
+});

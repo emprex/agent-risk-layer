@@ -18,7 +18,15 @@ export const PLAN_ENTITLEMENTS = Object.freeze({
 
 const PROJECT_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'production']);
 const PROJECT_STATUSES = new Set(['active', 'paused', 'archived']);
-const REMEDIATION_STATUSES = new Set(['open', 'in_progress', 'ready_for_retest', 'verified', 'accepted_risk', 'closed']);
+const REMEDIATION_STATUSES = new Set(['open', 'evidence_attached', 'ready_for_retest', 'retested', 'verified_closed', 'accepted_risk']);
+const REMEDIATION_TRANSITIONS = Object.freeze({
+  open: new Set(['evidence_attached', 'accepted_risk']),
+  evidence_attached: new Set(['open', 'ready_for_retest']),
+  ready_for_retest: new Set(['evidence_attached', 'retested']),
+  retested: new Set(['ready_for_retest', 'verified_closed']),
+  verified_closed: new Set(['open']),
+  accepted_risk: new Set(['open']),
+});
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 const MANAGE_ROLES = new Set(['developer', 'admin', 'owner']);
 const REVIEW_ROLES = new Set(['analyst', 'developer', 'admin', 'owner']);
@@ -63,7 +71,7 @@ export async function listSecurityProjects(userId) {
       (SELECT MAX(created_at) FROM runtime_events e WHERE e.project_id=p.id) last_runtime_event_at,
       (SELECT MAX(created_at) FROM asset_snapshots a WHERE a.project_id=p.id) last_inventory_at,
       (SELECT summary_json FROM asset_snapshots a WHERE a.project_id=p.id ORDER BY created_at DESC LIMIT 1) latest_inventory_summary,
-      (SELECT COUNT(*) FROM remediation_items r WHERE r.project_id=p.id AND r.status NOT IN ('verified','closed')) open_remediations
+      (SELECT COUNT(*) FROM remediation_items r WHERE r.project_id=p.id AND r.status NOT IN ('verified','closed','verified_closed','accepted_risk')) open_remediations
     FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id
     WHERE m.user_id=? AND m.status='active' ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId);
   return rows.map(publicProject);
@@ -74,7 +82,7 @@ export async function getSecurityProject({ projectId, userId }) {
   if (!access) throw forbidden('Project not found or access denied.');
   const entitlement = await entitlementForUser(access.project.billing_user_id);
   const usage = await projectUsage(projectId);
-  return {
+  const result = {
     ...publicProject({ ...access.project, role: access.role }),
     permissions: permissionsFor(access.role),
     entitlement: publicEntitlement(entitlement, usage),
@@ -84,6 +92,8 @@ export async function getSecurityProject({ projectId, userId }) {
     remediations: await listRemediationItems({ projectId, userId }),
     audit: await listProjectAudit({ projectId, userId, limit: 40 }),
   };
+  result.journey = projectJourney(result);
+  return result;
 }
 
 export async function updateSecurityProject({ projectId, userId, patch = {} }) {
@@ -293,12 +303,22 @@ export async function updateRemediationItem({ projectId, itemId, userId, patch =
   if (!current) throw notFound('Remediation item not found.');
   const status = patch.status == null ? current.status : clean(patch.status, 40).toLowerCase();
   if (!REMEDIATION_STATUSES.has(status)) throw badRequest('Unknown remediation status.');
+  const currentStatus = normaliseRemediationStatus(current.status);
+  if (status !== currentStatus && !REMEDIATION_TRANSITIONS[currentStatus]?.has(status))
+    throw badRequest(`Remediation cannot move from ${currentStatus} to ${status}. Complete the required evidence and retest step first.`);
   const title = patch.title == null ? current.title : clean(patch.title, 240);
   const severity = patch.severity == null ? current.severity : clean(patch.severity, 20).toLowerCase();
   if (!SEVERITIES.has(severity)) throw badRequest('Unknown severity.');
   const ownerEmail = patch.ownerEmail == null ? current.owner_email : (validEmail(patch.ownerEmail) ? clean(patch.ownerEmail, 254).toLowerCase() : null);
   const dueAt = patch.dueAt == null ? current.due_at : validOptionalDate(patch.dueAt);
-  const verification = patch.verification == null ? parseJson(current.verification_json, {}) : privacySafeObject(patch.verification, 30);
+  const previousVerification = parseJson(current.verification_json, {});
+  const verification = patch.verification == null ? previousVerification : { ...previousVerification, ...privacySafeObject(patch.verification, 30) };
+  if (status === 'evidence_attached' && (!clean(verification.reference, 500) || !/^[a-f0-9]{64}$/i.test(clean(verification.integrityHash, 64))))
+    throw badRequest('Evidence attachment requires a reference and SHA-256 integrity hash.');
+  if (status === 'retested' && !['passed', 'failed'].includes(verification.retestResult))
+    throw badRequest('Retest status requires a passed or failed retest result.');
+  if (status === 'verified_closed' && verification.retestResult !== 'passed')
+    throw badRequest('Only a passed retest can be verified closed.');
   await db.prepare(`UPDATE remediation_items SET title=?,severity=?,status=?,owner_email=?,due_at=?,verification_json=?,updated_at=? WHERE id=? AND project_id=?`)
     .run(title, severity, status, ownerEmail, dueAt, JSON.stringify(verification), nowIso(), itemId, projectId);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.updated', targetType: 'remediation', targetId: itemId, metadata: { status, severity } });
@@ -309,7 +329,44 @@ export async function listRemediationItems({ projectId, userId }) {
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
   const rows = await db.prepare(`SELECT * FROM remediation_items WHERE project_id=?
     ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, updated_at DESC`).all(projectId);
-  return rows.map((row) => ({ ...row, verification: parseJson(row.verification_json, {}), verification_json: undefined }));
+  return rows.map((row) => ({ ...row, status: normaliseRemediationStatus(row.status), verification: parseJson(row.verification_json, {}), verification_json: undefined }));
+}
+
+function normaliseRemediationStatus(status) {
+  return ({ in_progress: 'open', verified: 'verified_closed', closed: 'verified_closed' })[status] || status;
+}
+
+function projectJourney(project) {
+  const events = project.events || [];
+  const hasAllowed = events.some((event) => event.decision === 'allow' && event.observed_decision === 'allow');
+  const hasBlocked = events.some((event) => event.decision === 'deny');
+  const hasOpenRemediation = (project.remediations || []).some((item) => !['verified_closed', 'accepted_risk'].includes(normaliseRemediationStatus(item.status)));
+  const hasRetest = (project.remediations || []).some((item) => normaliseRemediationStatus(item.status) === 'verified_closed');
+  const steps = [
+    { id: 'project', label: 'Create project', complete: true, href: '#project' },
+    { id: 'policy', label: 'Publish policy', complete: Number(project.policyVersion || 1) > 1, href: '#policy' },
+    { id: 'key', label: 'Issue key', complete: (project.apiKeys || []).some((key) => !key.revoked_at), href: '#runtime' },
+    { id: 'allowed', label: 'Test allowed action', complete: hasAllowed, href: '#runtime' },
+    { id: 'blocked', label: 'Test blocked action', complete: hasBlocked, href: '#runtime' },
+    { id: 'inventory', label: 'Record inventory', complete: (project.inventory || []).length > 0, href: '#inventory' },
+    { id: 'findings', label: 'Review findings', complete: hasBlocked || hasOpenRemediation, href: '#remediation' },
+    { id: 'remediate', label: 'Remediate', complete: hasRetest, href: '#remediation' },
+    { id: 'retest', label: 'Retest', complete: hasRetest, href: '#remediation' },
+  ];
+  const next = steps.find((step) => !step.complete) || null;
+  const blockingGaps = [];
+  if (!hasBlocked) blockingGaps.push('No enforced blocked-action test is recorded.');
+  if (!(project.inventory || []).length) blockingGaps.push('No inventory evidence is recorded.');
+  if (hasOpenRemediation) blockingGaps.push('Remediation work remains open.');
+  if (hasBlocked && !hasRetest) blockingGaps.push('The blocked-action finding has not completed remediation and a passed retest.');
+  return {
+    status: blockingGaps.length ? 'evidence-incomplete' : 'ready-for-deployment-review',
+    nextAction: next,
+    steps,
+    evidenceCollected: steps.filter((step) => step.complete).length,
+    blockingGaps,
+    deploymentDecision: blockingGaps.length ? 'HOLD FOR EVIDENCE' : 'READY FOR HUMAN DEPLOYMENT REVIEW',
+  };
 }
 
 export async function controlPlaneOverview(userId) {

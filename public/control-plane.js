@@ -6,6 +6,7 @@ let overview = null;
 let project = null;
 let selectedProjectId = sessionStorage.getItem('arl_selected_project') || '';
 let revealedKey = '';
+let refreshTimer = null;
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
 
@@ -22,6 +23,7 @@ async function init() {
     if (selectedProjectId && overview.projects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
     else if (overview.projects[0]) await loadProject(overview.projects[0].id);
     render();
+    startRefresh();
   } catch (error) {
     if (/sign in/i.test(error.message)) location.href = `/auth.html?next=${encodeURIComponent('/control-plane.html')}`;
     else fail(error);
@@ -85,8 +87,9 @@ function emptyProject() {
 function projectView() {
   const usage = project.entitlement.usage;
   const latestInventory = project.inventory[0] || null;
-  const openItems = project.remediations.filter((item) => !['verified', 'closed'].includes(item.status));
+  const openItems = project.remediations.filter((item) => !['verified_closed', 'accepted_risk'].includes(item.status));
   return `
+    ${journeyPanel()}
     <section class="panel project-command-header">
       <div><span class="eyebrow">${escapeHtml(project.environment)} · ${escapeHtml(project.role)}</span><h2>${escapeHtml(project.name)}</h2><p>${escapeHtml(project.slug)} · policy v${escapeHtml(project.policyVersion)} · ${project.retentionDays}-day event retention</p></div>
       <div class="command-status"><span>${project.policy.mode === 'enforce' ? 'Enforcing' : 'Monitoring'}</span><strong>${formatNumber(usage.requests)} / ${formatNumber(project.entitlement.runtimeRequestsPerMonth)}</strong><small>runtime checks this month</small></div>
@@ -117,6 +120,15 @@ function projectView() {
     <section id="audit" class="control-section"><div class="section-heading compact-heading"><div><span class="eyebrow">Tamper-evident operations</span><h2>Security audit trail.</h2></div></div><article class="panel">${auditTable(project.audit)}</article></section>`;
 }
 
+function journeyPanel() {
+  const journey = project.journey;
+  return `<section class="panel journey-panel" id="project">
+    <div class="section-heading compact-heading"><div><span class="eyebrow">Guided security journey</span><h2>${escapeHtml(journey.deploymentDecision)}</h2><p>${journey.nextAction ? `Next required action: ${escapeHtml(journey.nextAction.label)}` : 'Required evidence steps are complete. A human deployment review is still required.'}</p></div><strong>${journey.evidenceCollected}/${journey.steps.length}</strong></div>
+    <div class="journey-steps">${journey.steps.map((step) => `<a class="${step.complete ? 'complete' : step.id === journey.nextAction?.id ? 'current' : ''}" href="${step.href}"><span>${step.complete ? '✓' : '○'}</span>${escapeHtml(step.label)}</a>`).join('')}</div>
+    ${journey.blockingGaps.length ? `<div class="drift-banner warning"><strong>Blocking gaps</strong><span>${journey.blockingGaps.map(escapeHtml).join(' · ')}</span></div>` : ''}
+  </section>`;
+}
+
 function policyForm() {
   const p = project.policy;
   return `<form id="policyForm" class="panel policy-editor">
@@ -138,7 +150,13 @@ function keyRow(key) {
 
 function eventTable(events) {
   if (!events.length) return '<div class="empty-state"><p>No runtime requests have been screened.</p></div>';
-  return `<div class="data-table"><div class="data-table-head"><span>Decision</span><span>Request</span><span>Surface</span><span>Rules</span><span>Latency</span><span>Time</span></div>${events.map((event) => `<div class="data-table-row"><span><b class="decision-chip ${event.decision}">${escapeHtml(event.decision)}</b></span><span><code>${escapeHtml(event.request_id)}</code></span><span>${escapeHtml(event.tool_name || 'content')}</span><span>${event.ruleIds.length ? event.ruleIds.map((id) => `<small class="rule-chip">${escapeHtml(id)}</small>`).join('') : '<small class="safe-text">clean</small>'}</span><span>${Number(event.evaluation_ms).toFixed(2)} ms</span><span>${dateTime(event.created_at)}</span></div>`).join('')}</div>`;
+  return `<div class="data-table"><div class="data-table-head"><span>Decision</span><span>Request</span><span>Surface</span><span>Rules</span><span>Latency</span><span>Time</span></div>${events.map((event) => `<div class="data-table-row"><span>${decisionEvidence(event)}</span><span><code>${escapeHtml(event.request_id)}</code></span><span>${escapeHtml(event.tool_name || 'content')}</span><span>${event.ruleIds.length ? event.ruleIds.map((id) => `<small class="rule-chip">${escapeHtml(id)}</small>`).join('') : '<small class="safe-text">clean</small>'}</span><span>${Number(event.evaluation_ms).toFixed(2)} ms</span><span>${dateTime(event.created_at)}</span></div>`).join('')}</div>`;
+}
+
+function decisionEvidence(event) {
+  if (event.decision === 'allow' && event.observed_decision === 'would-deny')
+    return `<b class="decision-chip allow">Allowed</b><small class="rule-chip">Would deny · ${escapeHtml(event.severity)}</small>`;
+  return `<b class="decision-chip ${escapeHtml(event.decision)}">${event.decision === 'deny' ? 'Denied' : 'Allowed'}</b><small>Policy: ${event.observed_decision === 'would-deny' ? 'would deny' : 'allow'}</small>`;
 }
 
 function inventorySummary(snapshot) {
@@ -151,7 +169,20 @@ function inventoryHistory(items) {
 }
 
 function remediationRow(item) {
-  return `<div class="remediation-row"><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><select data-remediation-status="${escapeHtml(item.id)}" aria-label="Status for ${escapeHtml(item.title)}"><option value="open" ${item.status === 'open' ? 'selected' : ''}>Open</option><option value="in_progress" ${item.status === 'in_progress' ? 'selected' : ''}>In progress</option><option value="ready_for_retest" ${item.status === 'ready_for_retest' ? 'selected' : ''}>Ready for retest</option><option value="verified" ${item.status === 'verified' ? 'selected' : ''}>Verified</option><option value="accepted_risk" ${item.status === 'accepted_risk' ? 'selected' : ''}>Accepted risk</option><option value="closed" ${item.status === 'closed' ? 'selected' : ''}>Closed</option></select></div>`;
+  const verification = item.verification || {};
+  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Evidence:</strong> ${escapeHtml(verification.reference || 'Not attached')}</p><p><strong>Retest:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p><label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
+}
+
+function nextRemediationOptions(status) {
+  const options = {
+    open: [['evidence_attached', 'Attach evidence'], ['accepted_risk', 'Accept risk']],
+    evidence_attached: [['ready_for_retest', 'Ready for retest'], ['open', 'Return to open']],
+    ready_for_retest: [['retested', 'Record retest'], ['evidence_attached', 'Return to evidence']],
+    retested: [['verified_closed', 'Verify closed'], ['ready_for_retest', 'Retest again']],
+    verified_closed: [['open', 'Reopen']],
+    accepted_risk: [['open', 'Reopen']],
+  };
+  return (options[status] || []).map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 }
 
 function auditTable(items) {
@@ -236,8 +267,32 @@ async function createRemediation(event) {
 }
 
 async function updateRemediation(event) {
+  if (!event.currentTarget.value) return;
   event.currentTarget.disabled = true;
-  try { await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, { method: 'PATCH', body: JSON.stringify({ status: event.currentTarget.value }) }); await loadProject(project.id); await loadOverview(); render(); } catch (error) { fail(error); event.currentTarget.disabled = false; }
+  const status = event.currentTarget.value;
+  const verification = {};
+  if (status === 'evidence_attached') {
+    verification.reference = prompt('Evidence reference (artifact ID, test-result ID, or controlled URL):') || '';
+    verification.integrityHash = prompt('SHA-256 integrity hash (64 hexadecimal characters):') || '';
+  }
+  if (status === 'retested') verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
+  if (status === 'verified_closed') {
+    const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
+    Object.assign(verification, item?.verification || {});
+  }
+  try { await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, { method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined }) }); await loadProject(project.id); await loadOverview(); render(); } catch (error) { fail(error); event.currentTarget.disabled = false; }
+}
+
+function startRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(async () => {
+    if (!project || document.hidden || document.querySelector('form:focus-within')) return;
+    try {
+      const previousLatest = project.events[0]?.id;
+      await loadProject(project.id);
+      if (project.events[0]?.id !== previousLatest) { await loadOverview(); render(); }
+    } catch {}
+  }, 5000);
 }
 
 async function copyValue(event) {

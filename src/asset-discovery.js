@@ -5,7 +5,7 @@ export function discoverAiAssets(input = {}) {
     const documents = Array.isArray(input) ? input : [input];
     const assets = new Map();
     for (const document of documents)
-        walk(document, '$', assets);
+        walk(document, '$', assets, 'unknown');
     return {
         schema: 'arl.asset-inventory.v1',
         generatedAt: new Date().toISOString(),
@@ -13,11 +13,12 @@ export function discoverAiAssets(input = {}) {
         summary: summarize([...assets.values()]),
     };
 }
-function walk(value, path, assets) {
+function walk(value, path, assets, inheritedEnvironment) {
     if (!value || typeof value !== 'object')
         return;
     if (Array.isArray(value))
-        return value.forEach((item, index) => walk(item, `${path}[${index}]`, assets));
+        return value.forEach((item, index) => walk(item, `${path}[${index}]`, assets, inheritedEnvironment));
+    const environment = normaliseEnvironment(value.environment || value.stage || inheritedEnvironment);
     const text = JSON.stringify(value).toLowerCase();
     const provider = detectProvider(text);
     const kind = detectKind(value, text);
@@ -27,14 +28,14 @@ function walk(value, path, assets) {
         const id = `asset_${crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 20)}`;
         assets.set(id, {
             id, name, kind: kind || 'agent', provider: provider || 'other', sourcePath: path,
-            environment: normaliseEnvironment(value.environment || value.stage),
+            environment,
             internetExposed: Boolean(value.public || value.internetExposed || value.ingress),
             privileged: Boolean(value.admin || value.privileged || value.write || value.shell),
             model: String(value.model || '').slice(0, 160) || null,
         });
     }
     for (const [key, child] of Object.entries(value))
-        walk(child, `${path}.${key}`, assets);
+        walk(child, `${path}.${key}`, assets, environment);
 }
 function detectProvider(text) {
     const aliases = [['azure-openai', ['azure_openai', 'azure-openai', 'openai.azure']], ['aws-bedrock', ['bedrock', 'amazon.titan']], ['huggingface', ['huggingface', 'transformers']], ['anthropic', ['anthropic', 'claude']], ['openai', ['openai', 'gpt-']], ['google', ['vertexai', 'vertex_ai', 'gemini']], ['local', ['ollama', 'llama.cpp', 'localhost']]];

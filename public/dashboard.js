@@ -35,7 +35,7 @@ async function init() {
           ${data.purchases.length ? data.purchases.slice(0, 12).map(purchaseHtml).join('') : '<p class="muted">No payments yet.</p>'}
         </aside>
       </div>
-      <section class="panel section-gap account-settings">
+      <section id="settings" class="panel section-gap account-settings">
         <div class="section-heading compact-heading"><div><span class="eyebrow">Privacy and security</span><h2>Account settings</h2></div><a class="button ghost small" href="/api/account/export">Download my data</a></div>
         <div id="accountMessage" class="success-box" hidden></div><div id="accountError" class="error-box"></div>
         <div class="settings-grid">
@@ -93,7 +93,7 @@ function assessmentHtml(a) {
 
 function subscriptionHtml(subscription) {
   if (dashboardData?.user?.isSuperuser) return `<div class="subscription-card"><strong>Superuser</strong><p class="muted">All AgentRiskLayer services are enabled for the owner account without checkout.</p><a class="button ghost full" href="/admin.html">Owner operations</a></div>`;
-  if (!subscription) return `<div class="subscription-card"><strong>No active plan</strong><p class="muted">Buy a report or subscribe for repeat assurance.</p><a class="button ghost full" href="/pricing.html">View plans</a></div>`;
+  if (!subscription) return `<div class="subscription-card"><strong>Community plan</strong><p class="muted">1 security project · 10,000 runtime checks/month · 7-day event retention.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></div>`;
   return `<div class="subscription-card"><strong>${escapeHtml(subscription.plan_key.replaceAll('_',' '))}</strong><p class="muted">Status: ${escapeHtml(subscription.status)}${subscription.current_period_end ? `<br>Current period ends ${new Date(subscription.current_period_end).toLocaleDateString('en-GB')}` : ''}</p><button class="button ghost full" id="billingPortal">Manage billing</button>${subscription.stripe_subscription_id?.startsWith('demo_') && subscription.status === 'active' ? '<button class="button danger full" id="cancelDemo">Cancel demo plan</button>' : ''}</div>`;
 }
 

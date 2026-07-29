@@ -38,7 +38,7 @@ function questionsHtml() {
         ${q.options.map((o) => `<label class="option"><input type="radio" name="${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" required><span>${escapeHtml(o.label)}</span></label>`).join('')}
       </div>
       <div class="evidence-row">
-        <label for="evidence_${escapeHtml(q.id)}"><strong>Evidence confidence</strong><span>How well can you prove this answer today?</span></label>
+        <label for="evidence_${escapeHtml(q.id)}"><strong>Evidence state</strong><span>Questionnaire answers are declarations. Tested or reviewed status requires linked technical evidence.</span></label>
         <select id="evidence_${escapeHtml(q.id)}" name="evidence_${escapeHtml(q.id)}" required>
           <option value="">Select evidence level</option>
           ${evidenceOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}

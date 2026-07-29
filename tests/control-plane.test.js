@@ -109,11 +109,18 @@ test('inventory drift blocks deployment review and remediation work is auditable
   assert.equal(snapshots.length, 2);
 
   const item = await createRemediationItem({ projectId: project.id, userId, input: { title: 'Remove public privileged shell access', severity: 'critical', findingKey: 'asset-drift-shell' } });
-  const verified = await updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'verified', verification: { retest: 'passed', prompt: 'excluded' } } });
-  assert.equal(verified.status, 'verified');
+  await assert.rejects(
+    () => updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'verified_closed', verification: { retestResult: 'passed' } } }),
+    /cannot move/
+  );
+  await updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'evidence_attached', verification: { reference: 'artifact:test-shell-policy', integrityHash: 'a'.repeat(64) } } });
+  await updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'ready_for_retest' } });
+  const retested = await updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'retested', verification: { reference: 'test:blocked-shell', integrityHash: 'b'.repeat(64), retestResult: 'passed' } } });
+  assert.equal(retested.status, 'retested');
+  const verified = await updateRemediationItem({ projectId: project.id, itemId: item.id, userId, patch: { status: 'verified_closed' } });
+  assert.equal(verified.status, 'verified_closed');
   const items = await listRemediationItems({ projectId: project.id, userId });
-  assert.equal(items[0].verification.retest, 'passed');
-  assert.equal(Object.hasOwn(items[0].verification, 'prompt'), false);
+  assert.equal(items[0].verification.retestResult, 'passed');
 
   const overview = await controlPlaneOverview(userId);
   assert.ok(overview.totals.assets >= 1);

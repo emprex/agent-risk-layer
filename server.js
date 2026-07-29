@@ -927,7 +927,7 @@ async function handleMetrics(req, res) {
         agentrisk_projects_total: Number((await db.prepare(`SELECT COUNT(*) count FROM security_projects WHERE status!='archived'`).get()).count || 0),
         agentrisk_runtime_requests_month: Number((await db.prepare('SELECT COUNT(*) count FROM runtime_events WHERE created_at>=?').get(month)).count || 0),
         agentrisk_runtime_denied_month: Number((await db.prepare(`SELECT COUNT(*) count FROM runtime_events WHERE decision='deny' AND created_at>=?`).get(month)).count || 0),
-        agentrisk_open_remediations: Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items WHERE status NOT IN ('verified','closed')`).get()).count || 0),
+        agentrisk_open_remediations: Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items WHERE status NOT IN ('verified','closed','verified_closed','accepted_risk')`).get()).count || 0),
         agentrisk_operational_alerts_open: Number((await db.prepare(`SELECT COUNT(*) count FROM operational_alerts WHERE status='open'`).get()).count || 0),
         agentrisk_process_uptime_seconds: Math.floor(process.uptime()),
         agentrisk_process_resident_memory_bytes: process.memoryUsage().rss,

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateAssessment, questionnaire } from '../src/risk-engine.js';
 
-function answersAt(optionIndex, evidence = 'tested') {
+function answersAt(optionIndex, evidence = 'automatically_tested') {
   return Object.fromEntries(questionnaire.map((q) => [q.id, { value: q.options[optionIndex].value, evidence }]));
 }
 
@@ -11,7 +11,8 @@ test('hardened and tested configuration scores as low risk', () => {
   assert.ok(result.score < 10);
   assert.equal(result.riskBand, 'Low');
   assert.equal(result.findings.length, 0);
-  assert.equal(result.evidenceConfidence, 100);
+  assert.equal(result.evidenceConfidence, 85);
+  assert.equal(result.decision, 'PROCEED WITH MONITORING');
 });
 
 test('maximum-risk configuration scores as critical', () => {
@@ -47,10 +48,19 @@ test('moderate configuration produces findings and attack paths', () => {
 });
 
 test('unsupported control claims reduce evidence confidence', () => {
-  const result = evaluateAssessment(answersAt(0, 'claimed'));
+  const result = evaluateAssessment(answersAt(0, 'customer_assertion'));
   assert.equal(result.riskBand, 'Low');
-  assert.equal(result.evidenceConfidence, 35);
+  assert.equal(result.evidenceConfidence, 20);
   assert.ok(result.score > 0);
+  assert.equal(result.decision, 'HOLD FOR EVIDENCE');
+  assert.ok(result.blockingEvidenceGaps.length > 0);
+});
+
+test('legacy tested selections are treated as unsupported customer assertions', () => {
+  const result = evaluateAssessment(answersAt(0, 'tested'));
+  assert.equal(result.evidenceConfidence, 20);
+  assert.equal(result.decision, 'HOLD FOR EVIDENCE');
+  assert.ok(result.controls.every((control) => control.verified === false));
 });
 
 test('invalid or missing answer is rejected', () => {

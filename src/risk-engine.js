@@ -1,8 +1,11 @@
 const EVIDENCE = {
-    none: { label: 'No evidence available', score: 0, multiplier: 1.18 },
-    claimed: { label: 'Owner statement only', score: 35, multiplier: 1.08 },
-    documented: { label: 'Documented policy or configuration', score: 70, multiplier: 1.0 },
-    tested: { label: 'Tested evidence, logs or review record', score: 100, multiplier: 0.92 },
+    none: { label: 'No evidence supplied', score: 0, multiplier: 1.18, verified: false },
+    customer_assertion: { label: 'Customer assertion — not verified', score: 20, multiplier: 1.12, verified: false },
+    configuration_observed: { label: 'Configuration observed', score: 55, multiplier: 1.04, verified: false },
+    artifact_uploaded: { label: 'Artifact uploaded — review pending', score: 60, multiplier: 1.02, verified: false },
+    automatically_tested: { label: 'Automatically tested', score: 85, multiplier: 0.96, verified: true },
+    expert_verified: { label: 'Expert verified', score: 95, multiplier: 0.93, verified: true },
+    independently_reviewed: { label: 'Independently reviewed', score: 100, multiplier: 0.92, verified: true },
 };
 const option = (value, label, points, tags = []) => ({ value, label, points, tags });
 export const questionnaire = [
@@ -32,7 +35,9 @@ export const questionnaire = [
     { id: 'kill_switch', domain: 'Incident response', kind: 'control', title: 'Can the agent be contained quickly and safely?', help: 'Containment should revoke credentials, stop queues and block tools without model cooperation.', options: [option('tested', 'One-step tested containment with credential revocation', 0), option('manual', 'Documented manual shutdown tested periodically', 3, ['incident-response']), option('slow', 'Several manual steps with unclear ownership', 7, ['incident-response']), option('none', 'No reliable emergency stop', 10, ['incident-response', 'critical'])] },
     { id: 'ownership', domain: 'Governance', kind: 'control', title: 'Is one accountable owner responsible for this agent?', help: 'The owner should accept risk, approve changes and coordinate incidents.', options: [option('clear', 'Named business and technical owners with documented duties', 0), option('single', 'A named owner but incomplete responsibilities', 3, ['governance']), option('shared', 'Shared or ambiguous ownership', 7, ['governance']), option('none', 'No accountable owner', 10, ['governance', 'critical'])] },
 ];
-export const evidenceOptions = Object.entries(EVIDENCE).map(([value, item]) => ({ value, label: item.label }));
+// A self-assessment can record only absence of evidence or a customer assertion.
+// Higher evidence states are reserved for linked system tests and reviewed artifacts.
+export const evidenceOptions = ['none', 'customer_assertion'].map((value) => ({ value, label: EVIDENCE[value].label }));
 const guidance = {
     permissions: ['Create a dedicated non-human identity and remove inherited or wildcard permissions.', 'Enforce resource-level deny rules outside the model.'],
     secrets: ['Move all credentials to a managed vault and issue short-lived, task-scoped tokens.', 'Scan prompts, traces, memory and logs for secret leakage.'],
@@ -65,7 +70,13 @@ function band(score) {
     return 'Low';
 }
 function severity(points) { return points >= 9 ? 'critical' : points >= 7 ? 'high' : points >= 4 ? 'medium' : 'low'; }
-function normaliseAnswer(raw) { return typeof raw === 'string' ? { value: raw, evidence: 'claimed' } : { value: raw?.value, evidence: raw?.evidence || 'none' }; }
+function normaliseAnswer(raw) {
+    const answer = typeof raw === 'string' ? { value: raw, evidence: 'customer_assertion' } : { value: raw?.value, evidence: raw?.evidence || 'none' };
+    // Legacy values remain readable, but never inherit their former verified score.
+    if (answer.evidence === 'claimed' || answer.evidence === 'documented' || answer.evidence === 'tested')
+        answer.evidence = 'customer_assertion';
+    return answer;
+}
 function uniq(items) { return [...new Set(items.filter(Boolean))]; }
 function attackPaths(answers) {
     const val = (id) => normaliseAnswer(answers[id]).value;
@@ -120,8 +131,19 @@ export function evaluateAssessment(answers = {}, context = {}) {
             if (!recommendations.some(r => r.text === text))
                 recommendations.push({ tag, priority: tag === 'critical' ? 'Immediate' : count > 1 ? 'High' : 'Standard', text, frameworks: frameworks[tag] || [] });
     const paths = attackPaths(answers);
-    const controls = questionnaire.filter(q => q.kind === 'control').map(q => { const r = responses.find(x => x.id === q.id); return { name: q.title, domain: q.domain, status: r.rawPoints === 0 && r.evidenceScore >= 70 ? 'verified' : r.rawPoints <= 3 ? 'partial' : 'action', evidence: r.evidenceLabel }; });
+    const controls = questionnaire.filter(q => q.kind === 'control').map(q => {
+        const r = responses.find(x => x.id === q.id);
+        const verified = Boolean(EVIDENCE[r.evidence]?.verified);
+        return { name: q.title, domain: q.domain, status: r.rawPoints === 0 && verified ? 'verified' : r.rawPoints <= 3 ? 'evidence-required' : 'action', evidenceState: r.evidence, evidence: r.evidenceLabel, verified };
+    });
     const hasCriticalAttackPath = paths.some(path => path.severity === 'critical');
-    const decision = hasCriticalAttackPath ? 'DO NOT DEPLOY' : score >= 75 ? 'DO NOT DEPLOY' : score >= 50 ? 'DEPLOY ONLY AFTER MATERIAL REMEDIATION' : score >= 25 ? 'PROCEED WITH CONDITIONS' : 'PROCEED WITH MONITORING';
-    return { score, riskBand, inherentRisk, controlGap, evidenceConfidence, decision, headline: riskBand === 'Low' ? 'A strong baseline is present, subject to evidence verification.' : riskBand === 'Moderate' ? 'Targeted weaknesses should be closed before broader deployment.' : riskBand === 'High' ? 'Material attack paths or control gaps could lead to unauthorised actions or data loss.' : 'Critical attack paths make the current deployment posture unsafe.', findings, topFindings: findings.slice(0, 3), attackPaths: paths, recommendations, controls, responses, agentType: context.agentType || '', methodology: 'AgentRiskLayer v3 separates inherent exposure, control weakness and evidence confidence. Residual risk combines exposure (38%), control gaps (62%) and an uncertainty penalty when controls are not evidenced. This is a structured self-assessment, not a technical verification or penetration test.', frameworkSummary: { owasp: uniq(findings.flatMap(f => f.frameworks).filter(x => x.startsWith('OWASP'))), nist: uniq(findings.flatMap(f => f.frameworks).filter(x => x.startsWith('NIST'))) }, scoring: { inherentRisk, controlGap, evidenceConfidence, uncertaintyPenalty } };
+    const blockingEvidenceGaps = controls.filter(control => control.status === 'evidence-required');
+    const decision = hasCriticalAttackPath ? 'DO NOT DEPLOY' : score >= 75 ? 'DO NOT DEPLOY' : score >= 50 ? 'DEPLOY ONLY AFTER MATERIAL REMEDIATION' : blockingEvidenceGaps.length ? 'HOLD FOR EVIDENCE' : score >= 25 ? 'PROCEED WITH CONDITIONS' : 'PROCEED WITH MONITORING';
+    const headline = decision === 'HOLD FOR EVIDENCE'
+        ? 'Do not rely on this assessment for deployment until material controls are evidenced and tested.'
+        : riskBand === 'Low' ? 'The declared risk is low, subject to the verified evidence and stated scope.'
+            : riskBand === 'Moderate' ? 'Targeted weaknesses should be closed before broader deployment.'
+                : riskBand === 'High' ? 'Material attack paths or control gaps could lead to unauthorised actions or data loss.'
+                    : 'Critical attack paths make the current deployment posture unsafe.';
+    return { score, riskBand, inherentRisk, controlGap, evidenceConfidence, decision, headline, blockingEvidenceGaps, findings, topFindings: findings.slice(0, 3), attackPaths: paths, recommendations, controls, responses, agentType: context.agentType || '', methodology: 'AgentRiskLayer v4 separates declared exposure, control weakness and evidence confidence. Questionnaire answers are customer assertions, not technical verification. Deployment decisions remain on hold until material controls are linked to automatically tested or reviewed evidence.', frameworkSummary: { owasp: uniq(findings.flatMap(f => f.frameworks).filter(x => x.startsWith('OWASP'))), nist: uniq(findings.flatMap(f => f.frameworks).filter(x => x.startsWith('NIST'))) }, scoring: { inherentRisk, controlGap, evidenceConfidence, uncertaintyPenalty } };
 }
