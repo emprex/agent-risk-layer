@@ -18,7 +18,7 @@ export const PLAN_ENTITLEMENTS = Object.freeze({
 
 const PROJECT_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'production']);
 const PROJECT_STATUSES = new Set(['active', 'paused', 'archived']);
-const REMEDIATION_STATUSES = new Set(['open', 'evidence_attached', 'ready_for_retest', 'retested', 'verified_closed', 'accepted_risk']);
+const REMEDIATION_STATUSES = new Set(['open', 'evidence_attached', 'ready_for_retest', 'retested', 'verified_closed', 'accepted_risk', 'evidence_upgrade_required']);
 const REMEDIATION_TRANSITIONS = Object.freeze({
   open: new Set(['evidence_attached', 'accepted_risk']),
   evidence_attached: new Set(['open', 'ready_for_retest']),
@@ -26,6 +26,7 @@ const REMEDIATION_TRANSITIONS = Object.freeze({
   retested: new Set(['ready_for_retest', 'verified_closed']),
   verified_closed: new Set(['open']),
   accepted_risk: new Set(['open']),
+  evidence_upgrade_required: new Set(['ready_for_retest', 'open']),
 });
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 const MANAGE_ROLES = new Set(['developer', 'admin', 'owner']);
@@ -54,10 +55,11 @@ export async function createSecurityProject({ userId, workspaceId, name, environ
   const timestamp = nowIso();
   const slug = await availableSlug(workspaceId, slugify(cleanName));
   const policy = compileRuntimePolicy(defaultProjectPolicy(cleanEnvironment));
+  const policyDigest = policyIdentityDigest(policy, projectId);
   await db.prepare(`INSERT INTO security_projects
-    (id,workspace_id,billing_user_id,created_by,name,slug,environment,status,policy_json,policy_version,retention_days,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,'active',?,?,?,?,?)`)
-    .run(projectId, workspaceId, billingUserId, userId, cleanName, slug, cleanEnvironment, JSON.stringify(policy), policy.version,
+    (id,workspace_id,billing_user_id,created_by,name,slug,environment,status,policy_json,policy_version,policy_digest,policy_published_at,retention_days,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,'active',?,?,?,?,?,?,?)`)
+    .run(projectId, workspaceId, billingUserId, userId, cleanName, slug, cleanEnvironment, JSON.stringify(policy), policy.version, policyDigest, timestamp,
       Math.min(entitlement.retentionDays, cleanEnvironment === 'production' ? 90 : entitlement.retentionDays), timestamp, timestamp);
   await audit({ workspaceId, projectId, actorType: 'user', actorId: userId, action: 'project.created', targetType: 'project', targetId: projectId, metadata: { environment: cleanEnvironment } });
   return getSecurityProject({ projectId, userId });
@@ -74,7 +76,10 @@ export async function listSecurityProjects(userId) {
       (SELECT COUNT(*) FROM remediation_items r WHERE r.project_id=p.id AND r.status NOT IN ('verified','closed','verified_closed','accepted_risk')) open_remediations
     FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id
     WHERE m.user_id=? AND m.status='active' ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId);
-  return rows.map(publicProject);
+  return Promise.all(rows.map(async (row) => {
+    const keys = await db.prepare('SELECT expires_at,revoked_at FROM project_api_keys WHERE project_id=?').all(row.id);
+    return publicProject({ ...row, api_key_count: keys.filter((key) => apiKeyStatus(key) === 'active').length });
+  }));
 }
 
 export async function getSecurityProject({ projectId, userId }) {
@@ -109,12 +114,14 @@ export async function updateSecurityProject({ projectId, userId, patch = {} }) {
   const nextVersion = String(Number.parseInt(current.policy_version || '1', 10) + 1);
   const policyInput = patch.policy ? { ...previousPolicy, ...patch.policy, version: nextVersion } : { ...previousPolicy, version: current.policy_version || '1' };
   const policy = compileRuntimePolicy(policyInput);
+  const policyDigest = policyIdentityDigest(policy, projectId);
   const entitlement = await entitlementForUser(current.billing_user_id);
   const requestedRetention = patch.retentionDays == null ? Number(current.retention_days) : Number(patch.retentionDays);
   const retentionDays = Math.max(1, Math.min(entitlement.retentionDays, Number.isFinite(requestedRetention) ? Math.trunc(requestedRetention) : entitlement.retentionDays));
   const timestamp = nowIso();
-  await db.prepare(`UPDATE security_projects SET name=?,environment=?,status=?,policy_json=?,policy_version=?,retention_days=?,updated_at=? WHERE id=?`)
-    .run(name, environment, status, JSON.stringify(policy), policy.version, retentionDays, timestamp, projectId);
+  const policyPublishedAt = patch.policy ? timestamp : current.policy_published_at;
+  await db.prepare(`UPDATE security_projects SET name=?,environment=?,status=?,policy_json=?,policy_version=?,policy_digest=?,policy_published_at=?,retention_days=?,updated_at=? WHERE id=?`)
+    .run(name, environment, status, JSON.stringify(policy), policy.version, policyDigest, policyPublishedAt, retentionDays, timestamp, projectId);
   await audit({ workspaceId: current.workspace_id, projectId, actorType: 'user', actorId: userId, action: patch.policy ? 'policy.updated' : 'project.updated', targetType: 'project', targetId: projectId,
     metadata: { environment, status, policyVersion: policy.version, retentionDays } });
   return getSecurityProject({ projectId, userId });
@@ -123,7 +130,8 @@ export async function updateSecurityProject({ projectId, userId, patch = {} }) {
 export async function createProjectApiKey({ projectId, userId, name = 'Runtime key', expiresAt = null }) {
   const access = await requireProjectRole(projectId, userId, MANAGE_ROLES);
   const entitlement = await entitlementForUser(access.project.billing_user_id);
-  const activeCount = Number((await db.prepare(`SELECT COUNT(*) count FROM project_api_keys WHERE project_id=? AND revoked_at IS NULL`).get(projectId)).count || 0);
+  const existingKeys = await db.prepare('SELECT expires_at,revoked_at FROM project_api_keys WHERE project_id=?').all(projectId);
+  const activeCount = existingKeys.filter((key) => apiKeyStatus(key) === 'active').length;
   if (activeCount >= entitlement.apiKeysPerProject) throw paymentRequired(`${entitlement.name} supports ${entitlement.apiKeysPerProject} active API keys per project.`);
   let cleanExpiry = null;
   if (expiresAt) {
@@ -138,13 +146,15 @@ export async function createProjectApiKey({ projectId, userId, name = 'Runtime k
   await db.prepare(`INSERT INTO project_api_keys (id,project_id,name,key_prefix,token_hash,created_by,created_at,expires_at)
     VALUES (?,?,?,?,?,?,?,?)`).run(keyId, projectId, clean(name, 100) || 'Runtime key', prefix, digest(raw), userId, timestamp, cleanExpiry);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'api_key.created', targetType: 'api_key', targetId: keyId, metadata: { prefix, expiresAt: cleanExpiry } });
-  return { id: keyId, name: clean(name, 100) || 'Runtime key', prefix, token: raw, createdAt: timestamp, expiresAt: cleanExpiry, shownOnce: true };
+  return { id: keyId, name: clean(name, 100) || 'Runtime key', prefix, token: raw, createdAt: timestamp, expiresAt: cleanExpiry,
+    status: 'active', usable: true, shownOnce: true };
 }
 
 export async function listProjectApiKeys({ projectId, userId }) {
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
-  return await db.prepare(`SELECT id,name,key_prefix,created_at,expires_at,last_used_at,revoked_at
+  const rows = await db.prepare(`SELECT id,name,key_prefix,created_at,expires_at,last_used_at,revoked_at
     FROM project_api_keys WHERE project_id=? ORDER BY created_at DESC`).all(projectId);
+  return rows.map((key) => ({ ...key, status: apiKeyStatus(key), usable: apiKeyStatus(key) === 'active' }));
 }
 
 export async function revokeProjectApiKey({ projectId, keyId, userId }) {
@@ -160,9 +170,17 @@ export async function authenticateProjectApiKey(rawToken) {
   if (!/^arl_live_[a-f0-9]{10}_[A-Za-z0-9_-]{32,}$/.test(token)) throw unauthorised('Invalid project API key.');
   const row = await db.prepare(`SELECT k.id api_key_id,k.project_id,k.expires_at,k.revoked_at,p.*
     FROM project_api_keys k JOIN security_projects p ON p.id=k.project_id WHERE k.token_hash=?`).get(digest(token));
-  if (!row || row.revoked_at || row.status !== 'active') throw unauthorised('Invalid or inactive project API key.');
-  if (row.expires_at && Date.parse(row.expires_at) <= Date.now()) throw unauthorised('Project API key has expired.');
+  if (!row || row.status !== 'active' || apiKeyStatus(row) !== 'active') throw unauthorised('Invalid or inactive project API key.');
   return { apiKeyId: row.api_key_id, project: projectColumns(row) };
+}
+
+export function apiKeyStatus(key, timestampMs = Date.now()) {
+  if (key?.revoked_at) return 'revoked';
+  if (key?.expires_at == null) return 'active';
+  if (typeof key.expires_at !== 'string' || !key.expires_at.trim()) return 'invalid';
+  const expiry = Date.parse(key.expires_at);
+  if (!Number.isFinite(expiry)) return 'invalid';
+  return expiry <= timestampMs ? 'expired' : 'active';
 }
 
 export async function screenGuardRequest({ rawToken, body = {}, authenticated = null }) {
@@ -171,11 +189,35 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
   const requestId = clean(body.request_id || body.requestId || crypto.randomUUID(), 100);
   if (!requestId) throw badRequest('A request identifier is required.');
   const policy = compileRuntimePolicy(parseJson(project.policy_json, {}));
+  const authoritativePolicy = {
+    projectId: project.id,
+    version: String(project.policy_version || ''),
+    digest: String(project.policy_digest || ''),
+    publishedAt: project.policy_published_at || null,
+  };
+  const recalculatedDigest = policyIdentityDigest(policy, project.id);
+  if (!authoritativePolicy.version || !authoritativePolicy.publishedAt || !safeEqualDigest(authoritativePolicy.digest, recalculatedDigest))
+    throw forbidden('Project policy identity is missing or invalid. Republish the policy before recording runtime evidence.');
   const started = performance.now();
   const response = await db.transaction(async () => {
     if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(project.id);
-    const existing = await db.prepare(`SELECT response_json FROM runtime_events WHERE project_id=? AND request_id=?`).get(project.id, requestId);
-    if (existing) return { ...parseJson(existing.response_json, {}), replayed: true };
+    const retestCriteriaId = clean(body.retestCriteriaId || body.retest_criteria_id || body.retestRegistrationId || body.retest_registration_id, 100);
+    if (retestCriteriaId && [
+      'retestResult', 'retest_result', 'passed', 'expectedDecision', 'expected_decision',
+      'criteriaDigest', 'criteria_digest', 'artifactDigest', 'artifact_digest',
+      'findingKey', 'finding_key', 'controlId', 'control_id', 'ruleId', 'rule_id',
+      'actionType', 'action_type', 'targetIdentity', 'target_identity',
+    ]
+      .some((field) => Object.hasOwn(body, field)))
+      throw badRequest('Retest criteria, outcome and authoritative digests are server-controlled.');
+    const existing = await db.prepare(`SELECT response_json,retest_criteria_id FROM runtime_events WHERE project_id=? AND request_id=?`)
+      .get(project.id, requestId);
+    if (existing) {
+      if (retestCriteriaId && existing.retest_criteria_id !== retestCriteriaId)
+        throw conflict('A runtime request cannot be rebound to different retest criteria.');
+      return { ...parseJson(existing.response_json, {}), replayed: true };
+    }
+    const retestCriteria = retestCriteriaId ? await resolveActiveRetestCriteria({ project, criteriaId: retestCriteriaId }) : null;
     const entitlement = await entitlementForUser(project.billing_user_id);
     const usage = await projectUsage(project.id);
     if (usage.requests >= entitlement.runtimeRequestsPerMonth) throw paymentRequired('Monthly runtime-screening allowance reached. Upgrade or wait for the next billing month.');
@@ -193,6 +235,10 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     const decision = flagged && enforced ? 'deny' : 'allow';
     const observedDecision = flagged ? 'would-deny' : 'allow';
     const severity = highestSeverity(reasons);
+    const runtimeIdentity = runtimeActionIdentity({ projectId: project.id, inputValue, outputValue, toolCall });
+    const retestSatisfied = retestCriteria ? criteriaSatisfied(retestCriteria, {
+      decision, ruleIds: reasons.map((item) => item.ruleId), ...runtimeIdentity,
+    }) : null;
     const evaluationMs = roundedMs(performance.now() - started);
     const evidence = {
       inputDigest: inputResult?.evidence?.contentDigest || null,
@@ -211,18 +257,36 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       observedDecision,
       flagged,
       severity,
-      policy: { schema: policy.schema, version: policy.version, mode: policy.mode, failMode: policy.failMode },
+      policy: { schema: policy.schema, ...authoritativePolicy, mode: policy.mode, failMode: policy.failMode },
       reasons,
       evidence,
+      retest: retestCriteria ? {
+        criteriaId: retestCriteria.id,
+        remediationId: retestCriteria.remediation_id,
+        result: retestSatisfied ? 'passed' : 'failed',
+      } : null,
       usage: { periodStart: usage.periodStart, requests: usage.requests + 1, limit: entitlement.runtimeRequestsPerMonth },
       evaluationMs,
     };
     const metadata = privacySafeMetadata(body.metadata || {}, body.context || {});
+    const runtimeEventId = id('rte_');
     await db.prepare(`INSERT INTO runtime_events
-      (id,project_id,api_key_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,content_digest,tool_name,argument_digest,evaluation_ms,metadata_json,response_json,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('rte_'), project.id, auth.apiKeyId, requestId, 'guard', decision, observedDecision, severity,
+      (id,project_id,api_key_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,content_digest,tool_name,argument_digest,evaluation_ms,metadata_json,response_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(runtimeEventId, project.id, auth.apiKeyId, requestId, 'guard', decision, observedDecision, severity,
       JSON.stringify(reasons.map((item) => item.ruleId)), evidence.inputDigest || evidence.outputDigest, evidence.tool, evidence.argumentDigest, evaluationMs,
-      JSON.stringify(metadata), JSON.stringify(response), response.timestamp);
+      JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt,
+      retestCriteria?.id || null, retestCriteria?.remediation_id || null, retestCriteria?.criteria_digest || null,
+      retestCriteria ? (retestSatisfied ? 1 : 0) : null, response.timestamp);
+    if (retestCriteria) {
+      const consumed = await db.prepare(`UPDATE remediation_retest_criteria
+        SET status='completed',consumed_at=?,runtime_event_id=?,result=?
+        WHERE id=? AND status='active' AND runtime_event_id IS NULL`).run(
+        response.timestamp, runtimeEventId, retestSatisfied ? 'passed' : 'failed', retestCriteria.id);
+      if (Number(consumed.changes) !== 1) throw conflict('Retest criteria were already consumed.');
+      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId,
+        action: 'remediation.retest_executed', targetType: 'remediation_retest_criteria', targetId: retestCriteria.id,
+        metadata: { remediationId: retestCriteria.remediation_id, runtimeEventId, result: retestSatisfied ? 'passed' : 'failed' } });
+    }
     await db.prepare('UPDATE project_api_keys SET last_used_at=? WHERE id=?').run(response.timestamp, auth.apiKeyId);
     if (decision === 'deny') {
       await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId, action: 'runtime.denied', targetType: 'runtime_request', targetId: requestId,
@@ -244,9 +308,9 @@ export async function listRuntimeEvents({ projectId, userId, limit = 100, decisi
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
   const rows = decision && ['allow', 'deny'].includes(decision)
-    ? await db.prepare(`SELECT id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,created_at
+    ? await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
       FROM runtime_events WHERE project_id=? AND decision=? ORDER BY created_at DESC LIMIT ?`).all(projectId, decision, safeLimit)
-    : await db.prepare(`SELECT id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,created_at
+    : await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
       FROM runtime_events WHERE project_id=? ORDER BY created_at DESC LIMIT ?`).all(projectId, safeLimit);
   return rows.map((row) => ({ ...row, ruleIds: parseJson(row.rule_ids_json, []), metadata: parseJson(row.metadata_json, {}), rule_ids_json: undefined, metadata_json: undefined }));
 }
@@ -260,7 +324,8 @@ export async function recordAssetSnapshot({ projectId, userId, documents, source
   const sourceDigest = digest(canonical);
   if (previous?.source_digest === sourceDigest) drift.unchangedSnapshot = true;
   const snapshotId = id('inv_');
-  const timestamp = nowIso();
+  const previousTimestamp = Date.parse(previous?.created_at || '');
+  const timestamp = new Date(Math.max(Date.now(), Number.isFinite(previousTimestamp) ? previousTimestamp + 1 : 0)).toISOString();
   await db.prepare(`INSERT INTO asset_snapshots (id,project_id,source,source_digest,summary_json,assets_json,drift_json,created_by,created_at)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(snapshotId, projectId, clean(source, 40) || 'manual', sourceDigest, JSON.stringify(inventory.summary), canonical, JSON.stringify(drift), userId, timestamp);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'inventory.snapshot_recorded', targetType: 'asset_snapshot', targetId: snapshotId,
@@ -297,13 +362,65 @@ export async function createRemediationItem({ projectId, userId, input = {} }) {
   return db.prepare('SELECT * FROM remediation_items WHERE id=?').get(itemId);
 }
 
-export async function updateRemediationItem({ projectId, itemId, userId, patch = {} }) {
+export async function registerRemediationEvidenceArtifact({ projectId, itemId, userId, artifactType, sourceId }) {
+  const access = await requireProjectRole(projectId, userId, REVIEW_ROLES);
+  const remediation = await db.prepare('SELECT id,status,verification_json,created_at FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
+  if (!remediation) throw notFound('Remediation item not found.');
+  if (!['implementation', 'retest'].includes(artifactType)) throw badRequest('Evidence artifact type must be implementation or retest.');
+  if (artifactType === 'retest') throw badRequest('Retest evidence must be bound to predeclared criteria during runtime execution.');
+  const cleanSourceId = clean(sourceId, 100);
+  const sourceType = 'asset_snapshot';
+  const source = await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?')
+    .get(cleanSourceId, projectId);
+  if (!source) throw badRequest(`A valid AgentRiskLayer ${sourceType.replace('_', ' ')} from this project is required.`);
+  if (artifactType === 'implementation' && (normaliseRemediationStatus(remediation.status) !== 'open'
+    || Date.parse(source.created_at) < Date.parse(remediation.created_at)))
+    throw badRequest('Implementation evidence must be recorded after this remediation was opened.');
+  const canonical = canonicalJson(source);
+  const artifactId = id('rea_');
+  const timestamp = nowIso();
+  const contentDigest = digest(canonical);
+  await db.prepare(`INSERT INTO remediation_evidence_artifacts
+    (id,workspace_id,project_id,remediation_id,artifact_type,source_type,source_id,lifecycle_state,content_json,content_digest,created_by,created_at)
+    VALUES (?,?,?,?,?,?,?,'active',?,?,?,?)`)
+    .run(artifactId, access.project.workspace_id, projectId, itemId, artifactType, sourceType, source.id, canonical, contentDigest, userId, timestamp);
+  await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.evidence_registered',
+    targetType: 'remediation_evidence_artifact', targetId: artifactId, metadata: { remediationId: itemId, artifactType, contentDigest } });
+  return { id: artifactId, projectId, remediationId: itemId, artifactType, sourceType, sourceId: source.id,
+    lifecycleState: 'active', digest: contentDigest, createdAt: timestamp };
+}
+
+export async function beginLegacyRemediationUpgrade({ projectId, itemId, userId, reason = 'Trusted evidence upgrade required' }) {
   const access = await requireProjectRole(projectId, userId, REVIEW_ROLES);
   const current = await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
   if (!current) throw notFound('Remediation item not found.');
-  const status = patch.status == null ? current.status : clean(patch.status, 40).toLowerCase();
-  if (!REMEDIATION_STATUSES.has(status)) throw badRequest('Unknown remediation status.');
+  const verification = parseJson(current.verification_json, {});
+  if (current.status === 'evidence_upgrade_required') return publicRemediation(current);
+  if (!isLegacyClosedRemediation(current.status, verification)) throw badRequest('Only legacy closed remediation records require this upgrade action.');
+  const timestamp = nowIso();
+  const history = Array.isArray(verification.history) ? [...verification.history] : [];
+  history.push({ action: 'evidence_upgrade_started', actorId: userId, at: timestamp, previousStatus: current.status,
+    newStatus: 'evidence_upgrade_required', reason: clean(reason, 240) || 'Trusted evidence upgrade required' });
+  const nextVerification = { ...verification, legacyStatus: verification.legacyStatus || current.status, history };
+  await db.prepare(`UPDATE remediation_items SET status='evidence_upgrade_required',verification_json=?,updated_at=? WHERE id=? AND project_id=?`)
+    .run(JSON.stringify(nextVerification), timestamp, itemId, projectId);
+  await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.evidence_upgrade_started',
+    targetType: 'remediation', targetId: itemId, metadata: { previousStatus: current.status, newStatus: 'evidence_upgrade_required', reason: clean(reason, 240) } });
+  return publicRemediation(await db.prepare('SELECT * FROM remediation_items WHERE id=?').get(itemId));
+}
+
+export async function updateRemediationItem({ projectId, itemId, userId, patch = {} }) {
+  return db.transaction(() => updateRemediationItemTransaction({ projectId, itemId, userId, patch }));
+}
+
+async function updateRemediationItemTransaction({ projectId, itemId, userId, patch = {} }) {
+  const access = await requireProjectRole(projectId, userId, REVIEW_ROLES);
+  if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(`${projectId}:${itemId}`);
+  const current = await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
+  if (!current) throw notFound('Remediation item not found.');
   const currentStatus = normaliseRemediationStatus(current.status);
+  const status = patch.status == null ? currentStatus : clean(patch.status, 40).toLowerCase();
+  if (!REMEDIATION_STATUSES.has(status)) throw badRequest('Unknown remediation status.');
   if (status !== currentStatus && !REMEDIATION_TRANSITIONS[currentStatus]?.has(status))
     throw badRequest(`Remediation cannot move from ${currentStatus} to ${status}. Complete the required evidence and retest step first.`);
   const title = patch.title == null ? current.title : clean(patch.title, 240);
@@ -312,15 +429,45 @@ export async function updateRemediationItem({ projectId, itemId, userId, patch =
   const ownerEmail = patch.ownerEmail == null ? current.owner_email : (validEmail(patch.ownerEmail) ? clean(patch.ownerEmail, 254).toLowerCase() : null);
   const dueAt = patch.dueAt == null ? current.due_at : validOptionalDate(patch.dueAt);
   const previousVerification = parseJson(current.verification_json, {});
-  const verification = patch.verification == null ? previousVerification : { ...previousVerification, ...privacySafeObject(patch.verification, 30) };
-  if (status === 'evidence_attached' && (!clean(verification.reference, 500) || !/^[a-f0-9]{64}$/i.test(clean(verification.integrityHash, 64))))
-    throw badRequest('Evidence attachment requires a reference and SHA-256 integrity hash.');
-  if (status === 'retested' && !['passed', 'failed'].includes(verification.retestResult))
-    throw badRequest('Retest status requires a passed or failed retest result.');
+  let verification = patch.verification == null ? previousVerification : { ...previousVerification, ...sanitiseVerificationInput(patch.verification) };
+  const transitionAt = nowIso();
+  if (status === 'open' && status !== currentStatus) {
+    const history = Array.isArray(verification.history) ? verification.history : [];
+    verification = { history: [...history, { action: 'reopened', actorId: userId, at: transitionAt, previousStatus: current.status, newStatus: 'open' }],
+      previousVerification: verification };
+  }
+  if (status === 'evidence_attached')
+    verification = { ...verification, ...(await verifiedArtifactEvidence({ access, projectId, itemId, artifactId: verification.artifactId, artifactType: 'implementation' })) };
+  if (status === 'ready_for_retest' && status !== currentStatus) {
+    const criteria = await createRetestCriteria({ access, current, userId, input: patch.retestCriteria, createdAt: transitionAt });
+    verification = { ...verification, retestCriteriaId: criteria.id, retestCriteriaDigest: criteria.criteriaDigest,
+      retestCriteriaCreatedAt: criteria.createdAt, retestCriteriaExpiresAt: criteria.expiresAt };
+  }
+  if (status === 'retested' && status !== currentStatus) {
+    const criteria = await db.prepare(`SELECT * FROM remediation_retest_criteria
+      WHERE id=? AND workspace_id=? AND project_id=? AND remediation_id=?`).get(
+      verification.retestCriteriaId, access.project.workspace_id, projectId, itemId);
+    if (!criteria || criteria.status !== 'completed' || criteria.result !== 'passed' || !criteria.runtime_event_id)
+      throw badRequest('A server-derived passed retest is required.');
+    const artifact = await createRetestEvidenceArtifact({ access, criteria, userId });
+    verification = { ...verification, retestResult: criteria.result, retestArtifactId: artifact.id,
+      retestArtifactDigest: artifact.digest, retestArtifactVerifiedAt: transitionAt, retestArtifactEvidenceType: 'verified_artifact',
+      retestPolicyVersion: criteria.policy_version, retestPolicyDigest: criteria.policy_digest,
+      retestPolicyPublishedAt: criteria.policy_published_at };
+    await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId,
+      action: 'remediation.retest_evidence_registered', targetType: 'remediation_evidence_artifact', targetId: artifact.id,
+      metadata: { remediationId: itemId, criteriaId: criteria.id, runtimeEventId: criteria.runtime_event_id, contentDigest: artifact.digest } });
+  }
   if (status === 'verified_closed' && verification.retestResult !== 'passed')
     throw badRequest('Only a passed retest can be verified closed.');
+  if (status !== currentStatus) {
+    if (status === 'evidence_attached') verification.evidenceAttachedAt = transitionAt;
+    if (status === 'ready_for_retest') verification.readyForRetestAt = transitionAt;
+    if (status === 'retested') verification.retestedAt = transitionAt;
+    if (status === 'verified_closed') verification.verifiedAt = transitionAt;
+  }
   await db.prepare(`UPDATE remediation_items SET title=?,severity=?,status=?,owner_email=?,due_at=?,verification_json=?,updated_at=? WHERE id=? AND project_id=?`)
-    .run(title, severity, status, ownerEmail, dueAt, JSON.stringify(verification), nowIso(), itemId, projectId);
+    .run(title, severity, status, ownerEmail, dueAt, JSON.stringify(verification), transitionAt, itemId, projectId);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.updated', targetType: 'remediation', targetId: itemId, metadata: { status, severity } });
   return db.prepare('SELECT * FROM remediation_items WHERE id=?').get(itemId);
 }
@@ -329,36 +476,202 @@ export async function listRemediationItems({ projectId, userId }) {
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
   const rows = await db.prepare(`SELECT * FROM remediation_items WHERE project_id=?
     ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, updated_at DESC`).all(projectId);
-  return rows.map((row) => ({ ...row, status: normaliseRemediationStatus(row.status), verification: parseJson(row.verification_json, {}), verification_json: undefined }));
+  const artifacts = await db.prepare(`SELECT a.id,a.remediation_id,a.artifact_type,a.content_digest,a.source_id,
+      e.id source_event_id,e.retest_criteria_id,e.remediation_id event_remediation_id,e.retest_criteria_digest,e.retest_satisfied
+    FROM remediation_evidence_artifacts a LEFT JOIN runtime_events e ON e.id=a.source_id AND e.project_id=a.project_id
+    WHERE a.project_id=? AND a.lifecycle_state='active' AND a.invalidated_at IS NULL`).all(projectId);
+  const byId = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+  return rows.map((row) => {
+    const item = publicRemediation(row);
+    const implementation = byId.get(item.verification.artifactId);
+    const retest = byId.get(item.verification.retestArtifactId);
+    item.trustedImplementationEvidence = implementation?.artifact_type === 'implementation'
+      && implementation.remediation_id === item.id && safeEqualDigest(implementation.content_digest, item.verification.artifactDigest);
+    item.trustedRetestEvidence = retest?.artifact_type === 'retest' && retest.remediation_id === item.id
+      && retest.source_event_id && retest.event_remediation_id === item.id && Boolean(retest.retest_satisfied)
+      && retest.retest_criteria_id === item.verification.retestCriteriaId
+      && safeEqualDigest(retest.retest_criteria_digest, item.verification.retestCriteriaDigest)
+      && safeEqualDigest(retest.content_digest, item.verification.retestArtifactDigest);
+    return item;
+  });
+}
+
+async function createRetestCriteria({ access, current, userId, input, createdAt }) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw badRequest('Predeclared retest criteria are required.');
+  const ruleId = clean(input.ruleId || input.rule_id, 100);
+  const expectedDecision = clean(input.expectedDecision || input.expected_decision, 20).toLowerCase();
+  const actionType = clean(input.actionType || input.action_type, 40).toLowerCase();
+  const targetIdentity = clean(input.targetIdentity || input.target_identity, 200).toLowerCase();
+  if (!ruleId || !['allow', 'deny'].includes(expectedDecision)
+    || !['content.input', 'content.output', 'tool'].includes(actionType) || !targetIdentity)
+    throw badRequest('Retest criteria require a rule, expected allow/deny decision, supported action type and constrained target.');
+  const requestedValidity = input.validityMinutes == null ? 60 : Number(input.validityMinutes);
+  if (!Number.isInteger(requestedValidity) || requestedValidity < 1 || requestedValidity > 24 * 60)
+    throw badRequest('Retest criteria validity must be a whole number from 1 to 1440 minutes.');
+  const validityMinutes = requestedValidity;
+  const expiresAt = new Date(Date.parse(createdAt) + validityMinutes * 60000).toISOString();
+  const criteria = {
+    id: id('rtc_'),
+    workspace_id: access.project.workspace_id,
+    project_id: current.project_id,
+    remediation_id: current.id,
+    finding_key: current.finding_key,
+    rule_id: ruleId,
+    expected_decision: expectedDecision,
+    action_type: actionType,
+    target_identity: targetIdentity,
+    policy_version: access.project.policy_version,
+    policy_digest: access.project.policy_digest,
+    policy_published_at: access.project.policy_published_at,
+    created_at: createdAt,
+    expires_at: expiresAt,
+  };
+  criteria.criteria_digest = retestCriteriaDigest(criteria);
+  await db.prepare(`INSERT INTO remediation_retest_criteria
+    (id,workspace_id,project_id,remediation_id,finding_key,rule_id,expected_decision,action_type,target_identity,
+      policy_version,policy_digest,policy_published_at,criteria_digest,status,created_by,created_at,expires_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?,?)`).run(
+    criteria.id, criteria.workspace_id, criteria.project_id, criteria.remediation_id, criteria.finding_key, criteria.rule_id,
+    criteria.expected_decision, criteria.action_type, criteria.target_identity, criteria.policy_version, criteria.policy_digest,
+    criteria.policy_published_at, criteria.criteria_digest, userId, criteria.created_at, criteria.expires_at);
+  await audit({ workspaceId: criteria.workspace_id, projectId: criteria.project_id, actorType: 'user', actorId: userId,
+    action: 'remediation.retest_criteria_created', targetType: 'remediation_retest_criteria', targetId: criteria.id,
+    metadata: { remediationId: current.id, findingKey: current.finding_key, ruleId, expectedDecision, actionType, targetIdentity, expiresAt } });
+  return { id: criteria.id, criteriaDigest: criteria.criteria_digest, createdAt, expiresAt };
+}
+
+async function createRetestEvidenceArtifact({ access, criteria, userId }) {
+  const source = await db.prepare(`SELECT id,request_id,decision,observed_decision,severity,rule_ids_json,policy_version,policy_digest,
+    policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
+    FROM runtime_events WHERE id=? AND project_id=?`).get(criteria.runtime_event_id, criteria.project_id);
+  if (!source || source.retest_criteria_id !== criteria.id || source.remediation_id !== criteria.remediation_id
+    || !safeEqualDigest(source.retest_criteria_digest, criteria.criteria_digest) || !Boolean(source.retest_satisfied))
+    throw badRequest('Bound retest runtime evidence is missing or invalid.');
+  const canonical = canonicalJson(source);
+  const artifactId = id('rea_');
+  const timestamp = nowIso();
+  const contentDigest = digest(canonical);
+  await db.prepare(`INSERT INTO remediation_evidence_artifacts
+    (id,workspace_id,project_id,remediation_id,artifact_type,source_type,source_id,lifecycle_state,content_json,content_digest,created_by,created_at)
+    VALUES (?,?,?,?,?,'runtime_event',?,'active',?,?,?,?)`).run(
+    artifactId, access.project.workspace_id, criteria.project_id, criteria.remediation_id, 'retest', source.id,
+    canonical, contentDigest, userId, timestamp);
+  return { id: artifactId, digest: contentDigest };
+}
+
+async function verifiedArtifactEvidence({ access, projectId, itemId, artifactId, artifactType, prefix = '' }) {
+  const cleanId = clean(artifactId, 100);
+  if (!cleanId) throw badRequest(`A registered ${artifactType} evidence artifact is required.`);
+  const artifact = await db.prepare(`SELECT * FROM remediation_evidence_artifacts
+    WHERE id=? AND workspace_id=? AND project_id=? AND remediation_id=?`).get(cleanId, access.project.workspace_id, projectId, itemId);
+  if (!artifact || artifact.artifact_type !== artifactType || artifact.lifecycle_state !== 'active' || artifact.invalidated_at)
+    throw badRequest(`Registered ${artifactType} evidence artifact is missing, invalid, or outside this remediation.`);
+  const source = artifact.source_type === 'asset_snapshot'
+    ? await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?').get(artifact.source_id, projectId)
+    : artifact.source_type === 'runtime_event'
+      ? await db.prepare(`SELECT id,request_id,decision,observed_decision,severity,rule_ids_json,policy_version,policy_digest,policy_published_at,created_at
+          FROM runtime_events WHERE id=? AND project_id=?`).get(artifact.source_id, projectId)
+      : null;
+  if (!source) throw badRequest('Registered evidence source no longer exists or is outside this project.');
+  if (artifactType === 'retest' && (source.policy_version !== access.project.policy_version
+    || !safeEqualDigest(source.policy_digest, access.project.policy_digest)
+    || source.policy_published_at !== access.project.policy_published_at))
+    throw badRequest('Registered retest evidence is not associated with the current published policy.');
+  const recalculated = digest(canonicalJson(source));
+  if (!safeEqualDigest(artifact.content_digest, recalculated)) throw badRequest('Registered evidence artifact digest verification failed.');
+  const key = prefix ? `${prefix}Artifact` : 'artifact';
+  return {
+    [`${key}Id`]: artifact.id,
+    [`${key}Digest`]: artifact.content_digest,
+    [`${key}VerifiedAt`]: nowIso(),
+    [`${key}EvidenceType`]: 'verified_artifact',
+    ...(artifactType === 'retest' ? {
+      retestPolicyVersion: source.policy_version,
+      retestPolicyDigest: source.policy_digest,
+      retestPolicyPublishedAt: source.policy_published_at,
+    } : {}),
+  };
 }
 
 function normaliseRemediationStatus(status) {
   return ({ in_progress: 'open', verified: 'verified_closed', closed: 'verified_closed' })[status] || status;
 }
 
+function isLegacyClosedRemediation(status, verification) {
+  return ['verified', 'closed', 'verified_closed'].includes(status)
+    && verification.retestArtifactEvidenceType !== 'verified_artifact';
+}
+
+function publicRemediation(row) {
+  const verification = parseJson(row.verification_json, {});
+  const legacyUpgradeRequired = isLegacyClosedRemediation(row.status, verification);
+  return { ...row, status: row.status === 'evidence_upgrade_required' ? row.status : normaliseRemediationStatus(row.status),
+    compatibilityState: legacyUpgradeRequired ? 'evidence_upgrade_required' : null,
+    verification, verification_json: undefined };
+}
+
 function projectJourney(project) {
   const events = project.events || [];
-  const hasAllowed = events.some((event) => event.decision === 'allow' && event.observed_decision === 'allow');
-  const hasBlocked = events.some((event) => event.decision === 'deny');
-  const hasOpenRemediation = (project.remediations || []).some((item) => !['verified_closed', 'accepted_risk'].includes(normaliseRemediationStatus(item.status)));
-  const hasRetest = (project.remediations || []).some((item) => normaliseRemediationStatus(item.status) === 'verified_closed');
+  const currentPolicyVersion = String(project.policyVersion || '');
+  const currentPolicyDigest = String(project.policyDigest || '');
+  const policyPublishedMs = Date.parse(project.policyPublishedAt || '');
+  const eventMatchesCurrentPolicy = (event) => {
+    const eventMs = Date.parse(event.created_at || '');
+    return event.project_id === project.id
+      && event.policy_version === currentPolicyVersion
+      && safeEqualDigest(event.policy_digest, currentPolicyDigest)
+      && Number.isFinite(policyPublishedMs)
+      && Number.isFinite(eventMs)
+      && eventMs >= policyPublishedMs
+      && event.policy_published_at === project.policyPublishedAt;
+  };
+  const hasAllowed = events.some((event) => eventMatchesCurrentPolicy(event) && event.decision === 'allow' && event.observed_decision === 'allow');
+  const hasBlocked = events.some((event) => eventMatchesCurrentPolicy(event) && event.decision === 'deny');
+  const hasOpenRemediation = (project.remediations || []).some((item) =>
+    item.compatibilityState === 'evidence_upgrade_required'
+    || !['verified_closed', 'accepted_risk'].includes(normaliseRemediationStatus(item.status)));
+  const hasRemediationEvidence = (project.remediations || []).some((item) => {
+    const verification = item.verification || {};
+    return ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(normaliseRemediationStatus(item.status))
+      && verification.artifactEvidenceType === 'verified_artifact'
+      && item.trustedImplementationEvidence === true
+      && Boolean(verification.artifactId && verification.artifactDigest && verification.artifactVerifiedAt && verification.evidenceAttachedAt);
+  });
+  const hasRetest = (project.remediations || []).some((item) => {
+    const verification = item.verification || {};
+    return normaliseRemediationStatus(item.status) === 'verified_closed'
+      && verification.retestResult === 'passed'
+      && verification.retestArtifactEvidenceType === 'verified_artifact'
+      && item.trustedRetestEvidence === true
+      && Boolean(verification.retestArtifactId && verification.retestArtifactDigest && verification.retestArtifactVerifiedAt
+        && verification.retestedAt && verification.verifiedAt);
+  });
+  const hasPublishedPolicy = Number(project.policyVersion || 1) > 1;
+  const hasActiveKey = (project.apiKeys || []).some((key) => key.status === 'active' && key.usable === true);
+  const latestInventory = (project.inventory || [])[0] || null;
+  const riskyInventoryDrift = latestInventory?.drift?.deploymentGate === 'review-required';
   const steps = [
     { id: 'project', label: 'Create project', complete: true, href: '#project' },
-    { id: 'policy', label: 'Publish policy', complete: Number(project.policyVersion || 1) > 1, href: '#policy' },
-    { id: 'key', label: 'Issue key', complete: (project.apiKeys || []).some((key) => !key.revoked_at), href: '#runtime' },
+    { id: 'policy', label: 'Publish policy', complete: hasPublishedPolicy, href: '#policy' },
+    { id: 'key', label: 'Issue key', complete: hasActiveKey, href: '#runtime' },
     { id: 'allowed', label: 'Test allowed action', complete: hasAllowed, href: '#runtime' },
     { id: 'blocked', label: 'Test blocked action', complete: hasBlocked, href: '#runtime' },
-    { id: 'inventory', label: 'Record inventory', complete: (project.inventory || []).length > 0, href: '#inventory' },
+    { id: 'inventory', label: 'Record inventory', complete: Boolean(latestInventory) && !riskyInventoryDrift, href: '#inventory' },
     { id: 'findings', label: 'Review findings', complete: hasBlocked || hasOpenRemediation, href: '#remediation' },
-    { id: 'remediate', label: 'Remediate', complete: hasRetest, href: '#remediation' },
+    { id: 'remediate', label: 'Remediate', complete: hasRemediationEvidence, href: '#remediation' },
     { id: 'retest', label: 'Retest', complete: hasRetest, href: '#remediation' },
   ];
   const next = steps.find((step) => !step.complete) || null;
   const blockingGaps = [];
+  if (!hasPublishedPolicy) blockingGaps.push('No reviewed project policy has been published.');
+  if (!hasActiveKey) blockingGaps.push('No active project API key is available for runtime enforcement.');
+  if (!hasAllowed) blockingGaps.push('No allowed-action control test is recorded.');
   if (!hasBlocked) blockingGaps.push('No enforced blocked-action test is recorded.');
-  if (!(project.inventory || []).length) blockingGaps.push('No inventory evidence is recorded.');
+  if (!latestInventory) blockingGaps.push('No inventory evidence is recorded.');
+  if (riskyInventoryDrift) blockingGaps.push('The latest inventory contains risky drift requiring review.');
   if (hasOpenRemediation) blockingGaps.push('Remediation work remains open.');
-  if (hasBlocked && !hasRetest) blockingGaps.push('The blocked-action finding has not completed remediation and a passed retest.');
+  if (hasBlocked && !hasRemediationEvidence) blockingGaps.push('No verified AgentRiskLayer artifact evidence is recorded.');
+  if (hasBlocked && !hasRetest) blockingGaps.push('The blocked-action finding has not completed a verified-artifact passed retest and verified closure.');
   return {
     status: blockingGaps.length ? 'evidence-incomplete' : 'ready-for-deployment-review',
     nextAction: next,
@@ -466,6 +779,7 @@ function publicProject(row) {
   return {
     id: row.id, workspaceId: row.workspace_id, billingUserId: row.billing_user_id, name: row.name, slug: row.slug,
     environment: row.environment, status: row.status, role: row.role, policy, policyVersion: row.policy_version,
+    policyDigest: row.policy_digest || null, policyPublishedAt: row.policy_published_at || null,
     retentionDays: Number(row.retention_days || 30), createdAt: row.created_at, updatedAt: row.updated_at,
     apiKeyCount: Number(row.api_key_count || 0), runtimeRequestsMonth: Number(row.runtime_requests_month || 0),
     deniedMonth: Number(row.denied_month || 0), lastRuntimeEventAt: row.last_runtime_event_at || null,
@@ -478,7 +792,8 @@ function projectColumns(row) {
   return {
     id: row.project_id || row.id, workspace_id: row.workspace_id, billing_user_id: row.billing_user_id,
     created_by: row.created_by, name: row.name, slug: row.slug, environment: row.environment, status: row.status,
-    policy_json: row.policy_json, policy_version: row.policy_version, retention_days: row.retention_days,
+    policy_json: row.policy_json, policy_version: row.policy_version, policy_digest: row.policy_digest, policy_published_at: row.policy_published_at,
+    retention_days: row.retention_days,
     created_at: row.created_at, updated_at: row.updated_at,
   };
 }
@@ -546,6 +861,69 @@ function monthStart() { const date = new Date(); return new Date(Date.UTC(date.g
 function slugify(value) { return clean(value, 100).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60); }
 function clean(value, max) { return String(value ?? '').trim().slice(0, max); }
 function digest(value) { return crypto.createHash('sha256').update(String(value ?? '')).digest('hex'); }
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+function policyIdentityDigest(policy, projectId) {
+  const { version: _version, ...securityPolicy } = policy || {};
+  return digest(canonicalJson({ projectId, policy: securityPolicy }));
+}
+function safeEqualDigest(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (!/^[a-f0-9]{64}$/i.test(a) || !/^[a-f0-9]{64}$/i.test(b)) return false;
+  return crypto.timingSafeEqual(Buffer.from(a.toLowerCase(), 'hex'), Buffer.from(b.toLowerCase(), 'hex'));
+}
+function sanitiseVerificationInput(input) {
+  const safe = privacySafeObject(input, 30);
+  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);
+  return Object.fromEntries(Object.entries(safe).filter(([key]) => allowed.has(key)));
+}
+async function resolveActiveRetestCriteria({ project, criteriaId }) {
+  const criteria = await db.prepare(`SELECT * FROM remediation_retest_criteria
+    WHERE id=? AND workspace_id=? AND project_id=?`).get(criteriaId, project.workspace_id, project.id);
+  if (!criteria || criteria.status !== 'active' || criteria.runtime_event_id) throw badRequest('Retest criteria are missing, inactive or already consumed.');
+  const expiry = Date.parse(criteria.expires_at);
+  if (!Number.isFinite(expiry) || expiry <= Date.now()) throw badRequest('Retest criteria are expired or malformed.');
+  if (criteria.policy_version !== project.policy_version || !safeEqualDigest(criteria.policy_digest, project.policy_digest)
+    || criteria.policy_published_at !== project.policy_published_at)
+    throw badRequest('Retest criteria do not match the current published policy.');
+  const authoritativeDigest = retestCriteriaDigest(criteria);
+  if (!safeEqualDigest(criteria.criteria_digest, authoritativeDigest)) throw badRequest('Retest criteria integrity verification failed.');
+  return criteria;
+}
+function runtimeActionIdentity({ projectId, inputValue, outputValue, toolCall }) {
+  if (toolCall) return { actionType: 'tool', targetIdentity: clean(toolCall.name || toolCall.tool, 200).toLowerCase() };
+  if (inputValue != null) return { actionType: 'content.input', targetIdentity: `project:${projectId}` };
+  if (outputValue != null) return { actionType: 'content.output', targetIdentity: `project:${projectId}` };
+  return { actionType: 'unknown', targetIdentity: `project:${projectId}` };
+}
+function criteriaSatisfied(criteria, actual) {
+  return criteria.expected_decision === actual.decision
+    && criteria.action_type === actual.actionType
+    && criteria.target_identity === actual.targetIdentity
+    && actual.ruleIds.includes(criteria.rule_id);
+}
+function retestCriteriaDigest(criteria) {
+  return digest(canonicalJson({
+    id: criteria.id,
+    workspaceId: criteria.workspace_id,
+    projectId: criteria.project_id,
+    remediationId: criteria.remediation_id,
+    findingKey: criteria.finding_key,
+    ruleId: criteria.rule_id,
+    expectedDecision: criteria.expected_decision,
+    actionType: criteria.action_type,
+    targetIdentity: criteria.target_identity,
+    policyVersion: criteria.policy_version,
+    policyDigest: criteria.policy_digest,
+    policyPublishedAt: criteria.policy_published_at,
+    createdAt: criteria.created_at,
+    expiresAt: criteria.expires_at,
+  }));
+}
 function parseJson(value, fallback) { try { return value && typeof value === 'object' ? value : JSON.parse(value); } catch { return fallback; } }
 function roundedMs(value) { return Math.round(Number(value || 0) * 1000) / 1000; }
 function validEmail(value) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(value || '').trim()); }
@@ -555,4 +933,5 @@ function badRequest(message) { return error(message, 400, 'invalid_request'); }
 function unauthorised(message) { return error(message, 401, 'invalid_api_key'); }
 function forbidden(message) { return error(message, 403, 'forbidden'); }
 function notFound(message) { return error(message, 404, 'not_found'); }
+function conflict(message) { return error(message, 409, 'conflict'); }
 function paymentRequired(message) { return error(message, 402, 'plan_limit'); }

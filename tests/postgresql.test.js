@@ -58,9 +58,9 @@ test('PostgreSQL migrations are complete, portable and checksum-idempotent', asy
   const migrationDir = path.join(root, 'migrations');
   const files = fs.readdirSync(migrationDir).filter((name) => /^\d{3}_.+\.sql$/.test(name)).sort();
   const combined = files.map((name) => fs.readFileSync(path.join(migrationDir, name), 'utf8')).join('\n');
-  assert.equal(files.length, 4);
+  assert.equal(files.length, 6);
   assert.doesNotMatch(combined, /PRAGMA|BEGIN\s+IMMEDIATE|INSERT\s+OR\s+(?:REPLACE|IGNORE)/i);
-  for (const table of ['users','sessions','assessments','purchases','subscriptions','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','asset_snapshots','remediation_items','security_audit_log','sales_prospects','sales_messages','sales_activities']) {
+  for (const table of ['users','sessions','assessments','purchases','subscriptions','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','asset_snapshots','remediation_items','remediation_evidence_artifacts','remediation_retest_criteria','security_audit_log','sales_prospects','sales_messages','sales_activities']) {
     assert.match(combined, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
   }
   const duplicates = [];
