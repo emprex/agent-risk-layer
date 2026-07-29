@@ -28,6 +28,7 @@ const child = spawn(process.execPath, ['server.js'], {
   env: {
     ...process.env,
     PORT: String(APP_PORT),
+    HOST: '127.0.0.1',
     BASE_URL: APP_ORIGIN,
     DEMO_MODE: 'true',
     SESSION_SECRET: 'smoke-test-secret-12345678901234567890',

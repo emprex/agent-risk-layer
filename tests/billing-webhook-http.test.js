@@ -32,6 +32,7 @@ async function startServer({ billingWebhookMode = 'enabled' } = {}) {
       NODE_ENV: 'test',
       DEMO_MODE: 'true',
       PORT: String(port),
+      HOST: '127.0.0.1',
       BASE_URL: origin,
       DATABASE_PATH: databasePath,
       SESSION_SECRET: sessionSecret,

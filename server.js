@@ -1727,8 +1727,9 @@ await db.prepare('DELETE FROM password_reset_tokens WHERE expires_at <= ? OR use
 await enforceRetention();
 await startFulfilmentWorker();
 await startRetentionWorker();
-server.listen(config.port, () => {
-    console.log(JSON.stringify({ event: 'server_started', version: config.appVersion, productStage: config.productStage, baseUrl: config.baseUrl, database: databaseInitialisation.adapter, migrations: databaseInitialisation.migrations || null, demoMode: config.demoMode, timestamp: nowIso() }));
+server.listen(config.port, config.host, () => {
+    const listenerAddress = server.address();
+    console.log(JSON.stringify({ event: 'server_started', version: config.appVersion, productStage: config.productStage, baseUrl: config.baseUrl, bindHost: typeof listenerAddress === 'object' && listenerAddress ? listenerAddress.address : config.host, database: databaseInitialisation.adapter, migrations: databaseInitialisation.migrations || null, demoMode: config.demoMode, timestamp: nowIso() }));
 });
 let shuttingDown = false;
 async function shutdown(signal) {

@@ -6,13 +6,80 @@ import { spawnSync } from 'node:child_process';
 const root = path.resolve(import.meta.dirname, '..');
 
 function runConfig(env, expression) {
+  const cleanEnvironment = { ...process.env };
+  delete cleanEnvironment.HOST;
   return spawnSync(process.execPath, ['--input-type=module', '-e', `import('./src/config.js').then(m => ${expression})`], {
     cwd: root,
-    env: { ...process.env, ...env },
+    env: { ...cleanEnvironment, ...env },
     encoding: 'utf8',
     timeout: 5000,
   });
 }
+
+test('bind host has an explicit production-compatible default', () => {
+  const result = runConfig({}, `console.log(JSON.stringify({ host: m.config.host, defaultHost: m.defaultBindHost }))`);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), {
+    host: '0.0.0.0',
+    defaultHost: '0.0.0.0',
+  });
+});
+
+test('bind host accepts intentional IP and DNS values without inferring from BASE_URL', () => {
+  for (const host of [
+    '127.0.0.1',
+    '0.0.0.0',
+    '192.0.2.10',
+    '::1',
+    '2001:db8::1',
+    'localhost',
+    'internal.example',
+    'api1.example.com',
+    'node-01.internal',
+    'service123',
+    '123service.example',
+  ]) {
+    const result = runConfig({ HOST: host, BASE_URL: 'https://unrelated.example' }, `console.log(m.config.host)`);
+    assert.equal(result.status, 0, `${host}: ${result.stderr}`);
+    assert.equal(result.stdout.trim(), host);
+  }
+});
+
+test('bind host rejects malformed and unsafe values', () => {
+  for (const host of [
+    '',
+    ' 127.0.0.1',
+    '127.0.0.1 ',
+    'http://127.0.0.1',
+    'user@host',
+    'host:3000',
+    'host/path',
+    'bad_host',
+    '-host',
+    'host..example',
+    'host\nexample',
+    '１２７.０.０.１',
+    '0',
+    '00',
+    '0x0',
+    '127.1',
+    '0177.0.0.1',
+    '0x7f000001',
+    '2130706433',
+    '0300.0250.0001.0001',
+    '999.999.999.999',
+    '1.2.3',
+    '1.2.3.4.5',
+    '256.1.1.1',
+    '01.2.3.4',
+    '1..2.3',
+    '0x7f.01.1',
+  ]) {
+    const result = runConfig({ HOST: host }, `console.log(m.config.host)`);
+    assert.notEqual(result.status, 0, host);
+    assert.match(`${result.stdout}${result.stderr}`, /Invalid HOST/, host);
+  }
+});
 
 test('production configuration fails closed before deployment when mandatory controls are absent', () => {
   const result = runConfig({

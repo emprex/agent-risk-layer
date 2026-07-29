@@ -1,6 +1,39 @@
 import path from 'node:path';
+import { isIP } from 'node:net';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
+export const defaultBindHost = '0.0.0.0';
+
+function looksLikeNumericAddress(value) {
+    const numericComponent = /^(?:[0-9]+|0[xX][0-9A-Fa-f]+)$/;
+    const components = value.split('.');
+    return numericComponent.test(value)
+        || (components.length > 1 && components.every((component) => numericComponent.test(component)));
+}
+
+export function parseBindHost(value) {
+    if (value === undefined)
+        return defaultBindHost;
+    if (typeof value !== 'string' || !value.length)
+        throw new Error('Invalid HOST: expected an IP address or DNS hostname');
+    if (value !== value.trim() || /[\u0000-\u0020\u007f]/.test(value))
+        throw new Error('Invalid HOST: whitespace and control characters are not permitted');
+    if (isIP(value))
+        return value;
+    if (looksLikeNumericAddress(value))
+        throw new Error('Invalid HOST: noncanonical numeric address syntax is not permitted');
+    if (value.includes('://') || /[/\\@?#:[\]]/.test(value))
+        throw new Error('Invalid HOST: URL, path, credential and port syntax are not permitted');
+    if (value.length > 253 || value.endsWith('.'))
+        throw new Error('Invalid HOST: malformed DNS hostname');
+    const labels = value.split('.');
+    if (labels.some((label) => !label.length
+        || label.length > 63
+        || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)))
+        throw new Error('Invalid HOST: malformed DNS hostname');
+    return value;
+}
+
 export const config = {
     appVersion: '9.1.0',
     scoringVersion: 'arl-risk-v3.2',
@@ -12,6 +45,7 @@ export const config = {
     legalJurisdiction: (process.env.LEGAL_JURISDICTION || '').trim(),
     supportEmail: (process.env.SUPPORT_EMAIL || '').trim().toLowerCase(),
     port: Number(process.env.PORT || 3000),
+    host: parseBindHost(process.env.HOST),
     baseUrl: String(process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
     nodeEnv: process.env.NODE_ENV || 'development',
     demoMode: String(process.env.DEMO_MODE ?? 'true').toLowerCase() !== 'false',
