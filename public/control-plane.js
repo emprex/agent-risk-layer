@@ -279,6 +279,7 @@ async function updateRemediation(event) {
   event.currentTarget.disabled = true;
   const status = event.currentTarget.value;
   const verification = {};
+  let retestCriteria;
   try {
     if (status === 'evidence_attached') {
       const sourceId = prompt('AgentRiskLayer inventory snapshot ID for the implemented change:') || '';
@@ -286,18 +287,22 @@ async function updateRemediation(event) {
         { method: 'POST', body: JSON.stringify({ artifactType: 'implementation', sourceId }) });
       verification.artifactId = registered.artifact.id;
     }
-    if (status === 'retested') {
-      verification.retestResult = prompt('Retest result: passed or failed')?.trim().toLowerCase() || '';
-      const sourceId = prompt('AgentRiskLayer runtime event or request ID for the retest:') || '';
-      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}/evidence`,
-        { method: 'POST', body: JSON.stringify({ artifactType: 'retest', sourceId }) });
-      verification.retestArtifactId = registered.artifact.id;
+    if (status === 'ready_for_retest') {
+      retestCriteria = {
+        ruleId: prompt('Required rule/control identifier (for example ARL-IN-001):') || '',
+        expectedDecision: prompt('Expected server decision: allow or deny')?.trim().toLowerCase() || '',
+        actionType: prompt('Action type: content.input, content.output or tool')?.trim().toLowerCase() || '',
+        targetIdentity: prompt(`Constrained target (project:${project.id} for content, or exact tool name):`)?.trim().toLowerCase() || '',
+        validityMinutes: 60,
+      };
     }
     if (status === 'verified_closed') {
       const item = project.remediations.find((candidate) => candidate.id === event.currentTarget.dataset.remediationStatus);
       Object.assign(verification, item?.verification || {});
     }
-    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, { method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined }) });
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(event.currentTarget.dataset.remediationStatus)}`, {
+      method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined, retestCriteria }),
+    });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); event.currentTarget.disabled = false; }
 }

@@ -201,8 +201,23 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
   const started = performance.now();
   const response = await db.transaction(async () => {
     if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(project.id);
-    const existing = await db.prepare(`SELECT response_json FROM runtime_events WHERE project_id=? AND request_id=?`).get(project.id, requestId);
-    if (existing) return { ...parseJson(existing.response_json, {}), replayed: true };
+    const retestCriteriaId = clean(body.retestCriteriaId || body.retest_criteria_id || body.retestRegistrationId || body.retest_registration_id, 100);
+    if (retestCriteriaId && [
+      'retestResult', 'retest_result', 'passed', 'expectedDecision', 'expected_decision',
+      'criteriaDigest', 'criteria_digest', 'artifactDigest', 'artifact_digest',
+      'findingKey', 'finding_key', 'controlId', 'control_id', 'ruleId', 'rule_id',
+      'actionType', 'action_type', 'targetIdentity', 'target_identity',
+    ]
+      .some((field) => Object.hasOwn(body, field)))
+      throw badRequest('Retest criteria, outcome and authoritative digests are server-controlled.');
+    const existing = await db.prepare(`SELECT response_json,retest_criteria_id FROM runtime_events WHERE project_id=? AND request_id=?`)
+      .get(project.id, requestId);
+    if (existing) {
+      if (retestCriteriaId && existing.retest_criteria_id !== retestCriteriaId)
+        throw conflict('A runtime request cannot be rebound to different retest criteria.');
+      return { ...parseJson(existing.response_json, {}), replayed: true };
+    }
+    const retestCriteria = retestCriteriaId ? await resolveActiveRetestCriteria({ project, criteriaId: retestCriteriaId }) : null;
     const entitlement = await entitlementForUser(project.billing_user_id);
     const usage = await projectUsage(project.id);
     if (usage.requests >= entitlement.runtimeRequestsPerMonth) throw paymentRequired('Monthly runtime-screening allowance reached. Upgrade or wait for the next billing month.');
@@ -220,6 +235,10 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     const decision = flagged && enforced ? 'deny' : 'allow';
     const observedDecision = flagged ? 'would-deny' : 'allow';
     const severity = highestSeverity(reasons);
+    const runtimeIdentity = runtimeActionIdentity({ projectId: project.id, inputValue, outputValue, toolCall });
+    const retestSatisfied = retestCriteria ? criteriaSatisfied(retestCriteria, {
+      decision, ruleIds: reasons.map((item) => item.ruleId), ...runtimeIdentity,
+    }) : null;
     const evaluationMs = roundedMs(performance.now() - started);
     const evidence = {
       inputDigest: inputResult?.evidence?.contentDigest || null,
@@ -241,15 +260,33 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       policy: { schema: policy.schema, ...authoritativePolicy, mode: policy.mode, failMode: policy.failMode },
       reasons,
       evidence,
+      retest: retestCriteria ? {
+        criteriaId: retestCriteria.id,
+        remediationId: retestCriteria.remediation_id,
+        result: retestSatisfied ? 'passed' : 'failed',
+      } : null,
       usage: { periodStart: usage.periodStart, requests: usage.requests + 1, limit: entitlement.runtimeRequestsPerMonth },
       evaluationMs,
     };
     const metadata = privacySafeMetadata(body.metadata || {}, body.context || {});
+    const runtimeEventId = id('rte_');
     await db.prepare(`INSERT INTO runtime_events
-      (id,project_id,api_key_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,content_digest,tool_name,argument_digest,evaluation_ms,metadata_json,response_json,policy_version,policy_digest,policy_published_at,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('rte_'), project.id, auth.apiKeyId, requestId, 'guard', decision, observedDecision, severity,
+      (id,project_id,api_key_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,content_digest,tool_name,argument_digest,evaluation_ms,metadata_json,response_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(runtimeEventId, project.id, auth.apiKeyId, requestId, 'guard', decision, observedDecision, severity,
       JSON.stringify(reasons.map((item) => item.ruleId)), evidence.inputDigest || evidence.outputDigest, evidence.tool, evidence.argumentDigest, evaluationMs,
-      JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt, response.timestamp);
+      JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt,
+      retestCriteria?.id || null, retestCriteria?.remediation_id || null, retestCriteria?.criteria_digest || null,
+      retestCriteria ? (retestSatisfied ? 1 : 0) : null, response.timestamp);
+    if (retestCriteria) {
+      const consumed = await db.prepare(`UPDATE remediation_retest_criteria
+        SET status='completed',consumed_at=?,runtime_event_id=?,result=?
+        WHERE id=? AND status='active' AND runtime_event_id IS NULL`).run(
+        response.timestamp, runtimeEventId, retestSatisfied ? 'passed' : 'failed', retestCriteria.id);
+      if (Number(consumed.changes) !== 1) throw conflict('Retest criteria were already consumed.');
+      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId,
+        action: 'remediation.retest_executed', targetType: 'remediation_retest_criteria', targetId: retestCriteria.id,
+        metadata: { remediationId: retestCriteria.remediation_id, runtimeEventId, result: retestSatisfied ? 'passed' : 'failed' } });
+    }
     await db.prepare('UPDATE project_api_keys SET last_used_at=? WHERE id=?').run(response.timestamp, auth.apiKeyId);
     if (decision === 'deny') {
       await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId, action: 'runtime.denied', targetType: 'runtime_request', targetId: requestId,
@@ -271,9 +308,9 @@ export async function listRuntimeEvents({ projectId, userId, limit = 100, decisi
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
   const rows = decision && ['allow', 'deny'].includes(decision)
-    ? await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,created_at
+    ? await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
       FROM runtime_events WHERE project_id=? AND decision=? ORDER BY created_at DESC LIMIT ?`).all(projectId, decision, safeLimit)
-    : await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,created_at
+    : await db.prepare(`SELECT id,project_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,tool_name,evaluation_ms,metadata_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
       FROM runtime_events WHERE project_id=? ORDER BY created_at DESC LIMIT ?`).all(projectId, safeLimit);
   return rows.map((row) => ({ ...row, ruleIds: parseJson(row.rule_ids_json, []), metadata: parseJson(row.metadata_json, {}), rule_ids_json: undefined, metadata_json: undefined }));
 }
@@ -330,26 +367,15 @@ export async function registerRemediationEvidenceArtifact({ projectId, itemId, u
   const remediation = await db.prepare('SELECT id,status,verification_json,created_at FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
   if (!remediation) throw notFound('Remediation item not found.');
   if (!['implementation', 'retest'].includes(artifactType)) throw badRequest('Evidence artifact type must be implementation or retest.');
+  if (artifactType === 'retest') throw badRequest('Retest evidence must be bound to predeclared criteria during runtime execution.');
   const cleanSourceId = clean(sourceId, 100);
-  const sourceType = artifactType === 'implementation' ? 'asset_snapshot' : 'runtime_event';
-  const source = artifactType === 'implementation'
-    ? await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?').get(cleanSourceId, projectId)
-    : await db.prepare(`SELECT id,request_id,decision,observed_decision,severity,rule_ids_json,policy_version,policy_digest,policy_published_at,created_at
-        FROM runtime_events WHERE (id=? OR request_id=?) AND project_id=?`).get(cleanSourceId, cleanSourceId, projectId);
+  const sourceType = 'asset_snapshot';
+  const source = await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?')
+    .get(cleanSourceId, projectId);
   if (!source) throw badRequest(`A valid AgentRiskLayer ${sourceType.replace('_', ' ')} from this project is required.`);
   if (artifactType === 'implementation' && (normaliseRemediationStatus(remediation.status) !== 'open'
     || Date.parse(source.created_at) < Date.parse(remediation.created_at)))
     throw badRequest('Implementation evidence must be recorded after this remediation was opened.');
-  if (artifactType === 'retest') {
-    const project = access.project;
-    const verification = parseJson(remediation.verification_json, {});
-    if (normaliseRemediationStatus(remediation.status) !== 'ready_for_retest' || !verification.readyForRetestAt
-      || Date.parse(source.created_at) < Date.parse(verification.readyForRetestAt))
-      throw badRequest('Retest evidence must be recorded after this remediation entered ready for retest.');
-    if (source.policy_version !== project.policy_version || !safeEqualDigest(source.policy_digest, project.policy_digest)
-      || source.policy_published_at !== project.policy_published_at || Date.parse(source.created_at) < Date.parse(project.policy_published_at))
-      throw badRequest('Retest evidence must be a runtime event produced under the current published policy.');
-  }
   const canonical = canonicalJson(source);
   const artifactId = id('rea_');
   const timestamp = nowIso();
@@ -384,7 +410,12 @@ export async function beginLegacyRemediationUpgrade({ projectId, itemId, userId,
 }
 
 export async function updateRemediationItem({ projectId, itemId, userId, patch = {} }) {
+  return db.transaction(() => updateRemediationItemTransaction({ projectId, itemId, userId, patch }));
+}
+
+async function updateRemediationItemTransaction({ projectId, itemId, userId, patch = {} }) {
   const access = await requireProjectRole(projectId, userId, REVIEW_ROLES);
+  if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(`${projectId}:${itemId}`);
   const current = await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
   if (!current) throw notFound('Remediation item not found.');
   const currentStatus = normaliseRemediationStatus(current.status);
@@ -407,9 +438,25 @@ export async function updateRemediationItem({ projectId, itemId, userId, patch =
   }
   if (status === 'evidence_attached')
     verification = { ...verification, ...(await verifiedArtifactEvidence({ access, projectId, itemId, artifactId: verification.artifactId, artifactType: 'implementation' })) };
-  if (status === 'retested') {
-    if (!['passed', 'failed'].includes(verification.retestResult)) throw badRequest('Retest status requires a passed or failed result.');
-    verification = { ...verification, ...(await verifiedArtifactEvidence({ access, projectId, itemId, artifactId: verification.retestArtifactId, artifactType: 'retest', prefix: 'retest' })) };
+  if (status === 'ready_for_retest' && status !== currentStatus) {
+    const criteria = await createRetestCriteria({ access, current, userId, input: patch.retestCriteria, createdAt: transitionAt });
+    verification = { ...verification, retestCriteriaId: criteria.id, retestCriteriaDigest: criteria.criteriaDigest,
+      retestCriteriaCreatedAt: criteria.createdAt, retestCriteriaExpiresAt: criteria.expiresAt };
+  }
+  if (status === 'retested' && status !== currentStatus) {
+    const criteria = await db.prepare(`SELECT * FROM remediation_retest_criteria
+      WHERE id=? AND workspace_id=? AND project_id=? AND remediation_id=?`).get(
+      verification.retestCriteriaId, access.project.workspace_id, projectId, itemId);
+    if (!criteria || criteria.status !== 'completed' || criteria.result !== 'passed' || !criteria.runtime_event_id)
+      throw badRequest('A server-derived passed retest is required.');
+    const artifact = await createRetestEvidenceArtifact({ access, criteria, userId });
+    verification = { ...verification, retestResult: criteria.result, retestArtifactId: artifact.id,
+      retestArtifactDigest: artifact.digest, retestArtifactVerifiedAt: transitionAt, retestArtifactEvidenceType: 'verified_artifact',
+      retestPolicyVersion: criteria.policy_version, retestPolicyDigest: criteria.policy_digest,
+      retestPolicyPublishedAt: criteria.policy_published_at };
+    await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId,
+      action: 'remediation.retest_evidence_registered', targetType: 'remediation_evidence_artifact', targetId: artifact.id,
+      metadata: { remediationId: itemId, criteriaId: criteria.id, runtimeEventId: criteria.runtime_event_id, contentDigest: artifact.digest } });
   }
   if (status === 'verified_closed' && verification.retestResult !== 'passed')
     throw badRequest('Only a passed retest can be verified closed.');
@@ -429,7 +476,87 @@ export async function listRemediationItems({ projectId, userId }) {
   await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
   const rows = await db.prepare(`SELECT * FROM remediation_items WHERE project_id=?
     ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, updated_at DESC`).all(projectId);
-  return rows.map(publicRemediation);
+  const artifacts = await db.prepare(`SELECT a.id,a.remediation_id,a.artifact_type,a.content_digest,a.source_id,
+      e.id source_event_id,e.retest_criteria_id,e.remediation_id event_remediation_id,e.retest_criteria_digest,e.retest_satisfied
+    FROM remediation_evidence_artifacts a LEFT JOIN runtime_events e ON e.id=a.source_id AND e.project_id=a.project_id
+    WHERE a.project_id=? AND a.lifecycle_state='active' AND a.invalidated_at IS NULL`).all(projectId);
+  const byId = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+  return rows.map((row) => {
+    const item = publicRemediation(row);
+    const implementation = byId.get(item.verification.artifactId);
+    const retest = byId.get(item.verification.retestArtifactId);
+    item.trustedImplementationEvidence = implementation?.artifact_type === 'implementation'
+      && implementation.remediation_id === item.id && safeEqualDigest(implementation.content_digest, item.verification.artifactDigest);
+    item.trustedRetestEvidence = retest?.artifact_type === 'retest' && retest.remediation_id === item.id
+      && retest.source_event_id && retest.event_remediation_id === item.id && Boolean(retest.retest_satisfied)
+      && retest.retest_criteria_id === item.verification.retestCriteriaId
+      && safeEqualDigest(retest.retest_criteria_digest, item.verification.retestCriteriaDigest)
+      && safeEqualDigest(retest.content_digest, item.verification.retestArtifactDigest);
+    return item;
+  });
+}
+
+async function createRetestCriteria({ access, current, userId, input, createdAt }) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw badRequest('Predeclared retest criteria are required.');
+  const ruleId = clean(input.ruleId || input.rule_id, 100);
+  const expectedDecision = clean(input.expectedDecision || input.expected_decision, 20).toLowerCase();
+  const actionType = clean(input.actionType || input.action_type, 40).toLowerCase();
+  const targetIdentity = clean(input.targetIdentity || input.target_identity, 200).toLowerCase();
+  if (!ruleId || !['allow', 'deny'].includes(expectedDecision)
+    || !['content.input', 'content.output', 'tool'].includes(actionType) || !targetIdentity)
+    throw badRequest('Retest criteria require a rule, expected allow/deny decision, supported action type and constrained target.');
+  const requestedValidity = input.validityMinutes == null ? 60 : Number(input.validityMinutes);
+  if (!Number.isInteger(requestedValidity) || requestedValidity < 1 || requestedValidity > 24 * 60)
+    throw badRequest('Retest criteria validity must be a whole number from 1 to 1440 minutes.');
+  const validityMinutes = requestedValidity;
+  const expiresAt = new Date(Date.parse(createdAt) + validityMinutes * 60000).toISOString();
+  const criteria = {
+    id: id('rtc_'),
+    workspace_id: access.project.workspace_id,
+    project_id: current.project_id,
+    remediation_id: current.id,
+    finding_key: current.finding_key,
+    rule_id: ruleId,
+    expected_decision: expectedDecision,
+    action_type: actionType,
+    target_identity: targetIdentity,
+    policy_version: access.project.policy_version,
+    policy_digest: access.project.policy_digest,
+    policy_published_at: access.project.policy_published_at,
+    created_at: createdAt,
+    expires_at: expiresAt,
+  };
+  criteria.criteria_digest = retestCriteriaDigest(criteria);
+  await db.prepare(`INSERT INTO remediation_retest_criteria
+    (id,workspace_id,project_id,remediation_id,finding_key,rule_id,expected_decision,action_type,target_identity,
+      policy_version,policy_digest,policy_published_at,criteria_digest,status,created_by,created_at,expires_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?,?)`).run(
+    criteria.id, criteria.workspace_id, criteria.project_id, criteria.remediation_id, criteria.finding_key, criteria.rule_id,
+    criteria.expected_decision, criteria.action_type, criteria.target_identity, criteria.policy_version, criteria.policy_digest,
+    criteria.policy_published_at, criteria.criteria_digest, userId, criteria.created_at, criteria.expires_at);
+  await audit({ workspaceId: criteria.workspace_id, projectId: criteria.project_id, actorType: 'user', actorId: userId,
+    action: 'remediation.retest_criteria_created', targetType: 'remediation_retest_criteria', targetId: criteria.id,
+    metadata: { remediationId: current.id, findingKey: current.finding_key, ruleId, expectedDecision, actionType, targetIdentity, expiresAt } });
+  return { id: criteria.id, criteriaDigest: criteria.criteria_digest, createdAt, expiresAt };
+}
+
+async function createRetestEvidenceArtifact({ access, criteria, userId }) {
+  const source = await db.prepare(`SELECT id,request_id,decision,observed_decision,severity,rule_ids_json,policy_version,policy_digest,
+    policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
+    FROM runtime_events WHERE id=? AND project_id=?`).get(criteria.runtime_event_id, criteria.project_id);
+  if (!source || source.retest_criteria_id !== criteria.id || source.remediation_id !== criteria.remediation_id
+    || !safeEqualDigest(source.retest_criteria_digest, criteria.criteria_digest) || !Boolean(source.retest_satisfied))
+    throw badRequest('Bound retest runtime evidence is missing or invalid.');
+  const canonical = canonicalJson(source);
+  const artifactId = id('rea_');
+  const timestamp = nowIso();
+  const contentDigest = digest(canonical);
+  await db.prepare(`INSERT INTO remediation_evidence_artifacts
+    (id,workspace_id,project_id,remediation_id,artifact_type,source_type,source_id,lifecycle_state,content_json,content_digest,created_by,created_at)
+    VALUES (?,?,?,?,?,'runtime_event',?,'active',?,?,?,?)`).run(
+    artifactId, access.project.workspace_id, criteria.project_id, criteria.remediation_id, 'retest', source.id,
+    canonical, contentDigest, userId, timestamp);
+  return { id: artifactId, digest: contentDigest };
 }
 
 async function verifiedArtifactEvidence({ access, projectId, itemId, artifactId, artifactType, prefix = '' }) {
@@ -507,6 +634,7 @@ function projectJourney(project) {
     const verification = item.verification || {};
     return ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(normaliseRemediationStatus(item.status))
       && verification.artifactEvidenceType === 'verified_artifact'
+      && item.trustedImplementationEvidence === true
       && Boolean(verification.artifactId && verification.artifactDigest && verification.artifactVerifiedAt && verification.evidenceAttachedAt);
   });
   const hasRetest = (project.remediations || []).some((item) => {
@@ -514,6 +642,7 @@ function projectJourney(project) {
     return normaliseRemediationStatus(item.status) === 'verified_closed'
       && verification.retestResult === 'passed'
       && verification.retestArtifactEvidenceType === 'verified_artifact'
+      && item.trustedRetestEvidence === true
       && Boolean(verification.retestArtifactId && verification.retestArtifactDigest && verification.retestArtifactVerifiedAt
         && verification.retestedAt && verification.verifiedAt);
   });
@@ -749,8 +878,51 @@ function safeEqualDigest(left, right) {
 }
 function sanitiseVerificationInput(input) {
   const safe = privacySafeObject(input, 30);
-  const allowed = new Set(['artifactId', 'retestArtifactId', 'retestResult', 'reference', 'retestReference', 'notes']);
+  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);
   return Object.fromEntries(Object.entries(safe).filter(([key]) => allowed.has(key)));
+}
+async function resolveActiveRetestCriteria({ project, criteriaId }) {
+  const criteria = await db.prepare(`SELECT * FROM remediation_retest_criteria
+    WHERE id=? AND workspace_id=? AND project_id=?`).get(criteriaId, project.workspace_id, project.id);
+  if (!criteria || criteria.status !== 'active' || criteria.runtime_event_id) throw badRequest('Retest criteria are missing, inactive or already consumed.');
+  const expiry = Date.parse(criteria.expires_at);
+  if (!Number.isFinite(expiry) || expiry <= Date.now()) throw badRequest('Retest criteria are expired or malformed.');
+  if (criteria.policy_version !== project.policy_version || !safeEqualDigest(criteria.policy_digest, project.policy_digest)
+    || criteria.policy_published_at !== project.policy_published_at)
+    throw badRequest('Retest criteria do not match the current published policy.');
+  const authoritativeDigest = retestCriteriaDigest(criteria);
+  if (!safeEqualDigest(criteria.criteria_digest, authoritativeDigest)) throw badRequest('Retest criteria integrity verification failed.');
+  return criteria;
+}
+function runtimeActionIdentity({ projectId, inputValue, outputValue, toolCall }) {
+  if (toolCall) return { actionType: 'tool', targetIdentity: clean(toolCall.name || toolCall.tool, 200).toLowerCase() };
+  if (inputValue != null) return { actionType: 'content.input', targetIdentity: `project:${projectId}` };
+  if (outputValue != null) return { actionType: 'content.output', targetIdentity: `project:${projectId}` };
+  return { actionType: 'unknown', targetIdentity: `project:${projectId}` };
+}
+function criteriaSatisfied(criteria, actual) {
+  return criteria.expected_decision === actual.decision
+    && criteria.action_type === actual.actionType
+    && criteria.target_identity === actual.targetIdentity
+    && actual.ruleIds.includes(criteria.rule_id);
+}
+function retestCriteriaDigest(criteria) {
+  return digest(canonicalJson({
+    id: criteria.id,
+    workspaceId: criteria.workspace_id,
+    projectId: criteria.project_id,
+    remediationId: criteria.remediation_id,
+    findingKey: criteria.finding_key,
+    ruleId: criteria.rule_id,
+    expectedDecision: criteria.expected_decision,
+    actionType: criteria.action_type,
+    targetIdentity: criteria.target_identity,
+    policyVersion: criteria.policy_version,
+    policyDigest: criteria.policy_digest,
+    policyPublishedAt: criteria.policy_published_at,
+    createdAt: criteria.created_at,
+    expiresAt: criteria.expires_at,
+  }));
 }
 function parseJson(value, fallback) { try { return value && typeof value === 'object' ? value : JSON.parse(value); } catch { return fallback; } }
 function roundedMs(value) { return Math.round(Number(value || 0) * 1000) / 1000; }
@@ -761,4 +933,5 @@ function badRequest(message) { return error(message, 400, 'invalid_request'); }
 function unauthorised(message) { return error(message, 401, 'invalid_api_key'); }
 function forbidden(message) { return error(message, 403, 'forbidden'); }
 function notFound(message) { return error(message, 404, 'not_found'); }
+function conflict(message) { return error(message, 409, 'conflict'); }
 function paymentRequired(message) { return error(message, 402, 'plan_limit'); }
