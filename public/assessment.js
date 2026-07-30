@@ -1,13 +1,21 @@
 import { api, escapeHtml, hideError, qs, setBusy, showError } from './shared.js';
 
 const form = document.querySelector('#assessmentForm');
-const list = document.querySelector('#questionList');
+const profileStep = document.querySelector('#profileStep');
+const questionStage = document.querySelector('#questionStage');
 const errorBox = document.querySelector('#formError');
 const progressBar = document.querySelector('#progressBar');
 const progressText = document.querySelector('#progressText');
-const submit = document.querySelector('#submitAssessment');
+const progressLabel = document.querySelector('#progressLabel');
+const backButton = document.querySelector('#backButton');
+const nextButton = document.querySelector('#nextButton');
+const submitButton = document.querySelector('#submitAssessment');
+const evidenceSelect = document.querySelector('#questionEvidence');
+
 let questionnaire = [];
 let evidenceOptions = [];
+let stepIndex = 0;
+const answers = new Map();
 
 async function init() {
   try {
@@ -17,68 +25,138 @@ async function init() {
     if (cfg.demoMode) document.querySelector('#demoNotice').hidden = false;
     const preset = qs('type');
     if (preset) document.querySelector('#agentType').value = preset;
-    list.innerHTML = questionsHtml();
-    list.addEventListener('change', updateProgress);
-    updateProgress();
+    renderStep();
   } catch (error) {
-    list.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
+    showError(errorBox, error.message);
+    nextButton.disabled = true;
   }
 }
 
-function questionsHtml() {
-  let lastDomain = '';
-  return questionnaire.map((q, index) => {
-    const domain = q.domain !== lastDomain ? `<div class="domain-divider"><span>${escapeHtml(q.domain)}</span></div>` : '';
-    lastDomain = q.domain;
-    return `${domain}<section class="question-card" data-kind="${escapeHtml(q.kind)}">
-      <div class="question-meta"><span>${q.kind === 'exposure' ? 'Exposure' : 'Control'}</span><span>${index + 1} of ${questionnaire.length}</span></div>
-      <h3>${escapeHtml(q.title)}</h3>
-      <p>${escapeHtml(q.help)}</p>
-      <div class="option-grid">
-        ${q.options.map((o) => `<label class="option"><input type="radio" name="${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" required><span>${escapeHtml(o.label)}</span></label>`).join('')}
-      </div>
-      <div class="evidence-row">
-        <label for="evidence_${escapeHtml(q.id)}"><strong>Evidence state</strong><span>Questionnaire answers are declarations. Tested or reviewed status requires linked technical evidence.</span></label>
-        <select id="evidence_${escapeHtml(q.id)}" name="evidence_${escapeHtml(q.id)}" required>
-          <option value="">Select evidence level</option>
-          ${evidenceOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
-        </select>
-      </div>
-    </section>`;
-  }).join('');
+function plainEvidenceLabel(option) {
+  if (option.value === 'none') return "I do not know / no proof yet";
+  if (option.value === 'customer_assertion') return 'My answer only (not verified)';
+  return option.label;
 }
 
-function updateProgress() {
-  const answered = questionnaire.filter((q) => form.querySelector(`input[name="${q.id}"]:checked`) && document.querySelector(`#evidence_${q.id}`)?.value).length;
-  const profile = Number(Boolean(document.querySelector('#agentName').value.trim())) + Number(Boolean(document.querySelector('#agentType').value));
-  const percent = Math.round(((answered + profile) / (questionnaire.length + 2)) * 100);
+function renderStep() {
+  hideError(errorBox);
+  const totalSteps = questionnaire.length + 1;
+  const currentStep = stepIndex + 1;
+  const percent = questionnaire.length ? Math.round((stepIndex / questionnaire.length) * 100) : 0;
   progressBar.style.width = `${percent}%`;
   progressText.textContent = `${percent}%`;
+  backButton.hidden = stepIndex === 0;
+
+  if (stepIndex === 0) {
+    profileStep.hidden = false;
+    questionStage.hidden = true;
+    progressLabel.textContent = `Step 1 of ${totalSteps}`;
+    nextButton.hidden = false;
+    submitButton.hidden = true;
+    return;
+  }
+
+  profileStep.hidden = true;
+  questionStage.hidden = false;
+  const question = questionnaire[stepIndex - 1];
+  const saved = answers.get(question.id);
+  document.querySelector('#questionKind').textContent = question.kind === 'exposure' ? 'What could happen?' : 'What protection is in place?';
+  document.querySelector('#stepCount').textContent = `Step ${currentStep} of ${totalSteps}`;
+  document.querySelector('#questionDomain').textContent = question.domain;
+  document.querySelector('#questionTitle').textContent = question.title;
+  document.querySelector('#questionHelp').textContent = question.help;
+  document.querySelector('#questionOptions').innerHTML = question.options.map((option) => `
+    <label class="guided-option ${option.value === 'unknown' ? 'not-sure' : ''}">
+      <input type="radio" name="currentQuestion" value="${escapeHtml(option.value)}" ${saved?.value === option.value ? 'checked' : ''}>
+      <span>${escapeHtml(option.label)}</span>
+    </label>`).join('');
+
+  evidenceSelect.innerHTML = evidenceOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(plainEvidenceLabel(option))}</option>`).join('');
+  evidenceSelect.value = saved?.evidence || 'customer_assertion';
+  progressLabel.textContent = `${question.domain} · step ${currentStep} of ${totalSteps}`;
+  const last = stepIndex === questionnaire.length;
+  nextButton.hidden = last;
+  submitButton.hidden = !last;
+  questionStage.focus?.();
 }
 
-form.addEventListener('input', updateProgress);
+function validateProfile() {
+  const name = document.querySelector('#agentName').value.trim();
+  const type = document.querySelector('#agentType').value;
+  if (!name) {
+    showError(errorBox, 'Give the agent a name so you can recognise this result later.');
+    document.querySelector('#agentName').focus();
+    return false;
+  }
+  if (!type) {
+    showError(errorBox, 'Choose the closest description of what the agent does.');
+    document.querySelector('#agentType').focus();
+    return false;
+  }
+  return true;
+}
+
+function saveCurrentQuestion() {
+  const question = questionnaire[stepIndex - 1];
+  const selected = form.querySelector('input[name="currentQuestion"]:checked');
+  if (!selected) {
+    showError(errorBox, 'Choose the closest answer, or select “I’m not sure”.');
+    return false;
+  }
+  const evidence = selected.value === 'unknown' ? 'none' : evidenceSelect.value || 'customer_assertion';
+  answers.set(question.id, { value: selected.value, evidence });
+  return true;
+}
+
+nextButton.addEventListener('click', () => {
+  hideError(errorBox);
+  if (stepIndex === 0 && !validateProfile()) return;
+  if (stepIndex > 0 && !saveCurrentQuestion()) return;
+  if (stepIndex < questionnaire.length) {
+    stepIndex += 1;
+    renderStep();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+});
+
+backButton.addEventListener('click', () => {
+  hideError(errorBox);
+  if (stepIndex > 0) {
+    if (stepIndex > 0 && stepIndex <= questionnaire.length) {
+      const selected = form.querySelector('input[name="currentQuestion"]:checked');
+      if (selected) saveCurrentQuestion();
+    }
+    stepIndex -= 1;
+    renderStep();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideError(errorBox);
-  const answers = {};
-  for (const question of questionnaire) {
-    const selected = form.querySelector(`input[name="${question.id}"]:checked`);
-    const evidence = document.querySelector(`#evidence_${question.id}`)?.value;
-    if (!selected) return showError(errorBox, `Please answer: ${question.title}`);
-    if (!evidence) return showError(errorBox, `Select an evidence level for: ${question.title}`);
-    answers[question.id] = { value: selected.value, evidence };
+  if (stepIndex !== questionnaire.length || !saveCurrentQuestion()) return;
+  if (!validateProfile()) {
+    stepIndex = 0;
+    renderStep();
+    return;
   }
-  setBusy(submit, true, 'Analysing attack paths…');
+  const payloadAnswers = Object.fromEntries(questionnaire.map((question) => [question.id, answers.get(question.id)]));
+  setBusy(submitButton, true, 'Building your result…');
   try {
     const payload = await api('/api/assessments', {
       method: 'POST',
-      body: JSON.stringify({ name: document.querySelector('#agentName').value, agentType: document.querySelector('#agentType').value, answers }),
+      body: JSON.stringify({
+        name: document.querySelector('#agentName').value.trim(),
+        agentType: document.querySelector('#agentType').value,
+        answers: payloadAnswers,
+      }),
     });
     sessionStorage.setItem('arl_last_assessment', JSON.stringify({ id: payload.assessment.id, token: payload.accessToken }));
     location.href = `/result.html?id=${encodeURIComponent(payload.assessment.id)}&token=${encodeURIComponent(payload.accessToken)}`;
   } catch (error) {
     showError(errorBox, error.message);
-    setBusy(submit, false);
+    setBusy(submitButton, false);
   }
 });
 

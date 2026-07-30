@@ -6,9 +6,9 @@ const entitlements = {
   agency_monthly: ['50 security projects', '1,000,000 Guard decisions/month', '180-day runtime evidence retention', '30 active keys per project', 'Multi-assessment portfolio and signed integrations', '50 authorised red-team campaigns/30 days'],
 };
 const summaries = {
-  developer_monthly: 'For individual builders protecting several production agents.',
-  team_monthly: 'For engineering and security teams operating a shared AI estate.',
-  agency_monthly: 'For consultancies and agencies managing multiple customer systems.',
+  developer_monthly: 'For one builder who needs to protect and recheck several agents.',
+  team_monthly: 'For a team that needs shared ownership, evidence and live protection.',
+  agency_monthly: 'For a service provider managing security work across customer projects.',
 };
 const errorBox = document.querySelector('#pricingError');
 
@@ -26,14 +26,14 @@ async function init() {
 }
 
 function communityCard() {
-  return `<article class="pricing-card"><h3>Community</h3><div class="price">£0</div><p>Prove the integration with one real agent before buying.</p><ul class="check-list"><li>1 security project</li><li>10,000 Guard decisions/month</li><li>7-day runtime evidence retention</li><li>2 active API keys</li><li>Private assessment and local Inspector</li></ul><p class="plan-next">No payment card required.</p><a class="button ghost full" href="/auth.html?mode=register&next=%2Fcontrol-plane.html">Start free</a></article>`;
+  return `<article class="pricing-card"><h3>Community</h3><div class="price">£0</div><p>Understand the main risks and protect one live agent before buying.</p><ul class="check-list"><li>1 security project</li><li>10,000 Guard decisions/month</li><li>7-day runtime evidence retention</li><li>2 active API keys</li><li>Private security check and optional local code review</li></ul><p class="plan-next">No payment card required.</p><a class="button ghost full" href="/auth.html?mode=register&next=%2Fcontrol-plane.html">Start free</a></article>`;
 }
 function assessmentCard(plan) {
-  return `<article class="pricing-card featured"><span class="badge">One-off review</span><h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence)}</div><p>One evidence-led security review for a launch or customer assurance request.</p><ul class="check-list"><li>Declared risk and technical evidence review</li><li>Controlled red-team campaign</li><li>Prioritised remediation ownership</li><li>Retest and deployment decision</li><li>Signed report and PDF delivery</li></ul><p class="plan-next">Complete the private assessment before checkout.</p><a class="button primary full" href="/assessment.html">Start assessment</a></article>`;
+  return `<article class="pricing-card featured"><span class="badge">One-off review</span><h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence)}</div><p>A reviewed report, practical action plan and deployment decision for one agent.</p><ul class="check-list"><li>Plain-language risk review and technical evidence check</li><li>Controlled attack simulation</li><li>Prioritised fixes with clear ownership</li><li>Check-again result and deployment decision</li><li>Signed report and PDF delivery</li></ul><p class="plan-next">Complete the private security check before checkout.</p><a class="button primary full" href="/assessment.html">Start security check</a></article>`;
 }
 function recurringCard(key, plan) {
   const featured = key === 'team_monthly';
-  return `<article class="pricing-card ${featured ? 'featured' : ''}">${featured ? '<span class="badge">Best for teams</span>' : ''}<h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence).replace('.00', '')}<small>/month</small></div><p>${escapeHtml(summaries[key])}</p><ul class="check-list">${entitlements[key].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="plan-next">Cancel through the Stripe billing portal.</p><button class="button ${featured ? 'primary' : 'ghost'} full" data-checkout="${key}">Review secure checkout</button></article>`;
+  return `<article class="pricing-card ${featured ? 'featured' : ''}">${featured ? '<span class="badge">Best for teams</span>' : ''}<h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence).replace('.00', '')}<small>/month</small></div><p>${escapeHtml(summaries[key])}</p><ul class="check-list">${entitlements[key].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="plan-next">Cancel through the Stripe billing portal.</p><button class="button ${featured ? 'primary' : 'ghost'} full" data-checkout="${key}">Choose this plan</button></article>`;
 }
 function enterpriseCard() {
   return `<article class="pricing-card"><h3>Enterprise</h3><div class="price">From £6,000<small>/year</small></div><p>For procurement, higher limits, deployment support and tailored assurance.</p><ul class="check-list"><li>Up to 500 projects and 10m checks/month</li><li>365-day evidence retention</li><li>SSO/SCIM and signed operational integrations</li><li>Deployment and security-review support</li><li>Custom limits and commercial terms</li></ul><p class="plan-next">Scoped proposal after technical qualification.</p><a class="button ghost full" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20Enterprise">Request enterprise proposal</a></article>`;

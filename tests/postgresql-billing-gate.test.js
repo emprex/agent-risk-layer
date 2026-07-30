@@ -4,11 +4,15 @@ import crypto from 'node:crypto';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL || '';
 const expectedDatabase = 'agentrisklayer_billing_gate1_test';
+const destructiveGateConfirmation = process.env.ARL_POSTGRES_GATE_CONFIRM || '';
 
 test('real PostgreSQL billing writes use native booleans and serialize ordered events', {
-  skip: !testDatabaseUrl ? 'TEST_DATABASE_URL is not configured for the disposable PostgreSQL gate database.' : false,
   timeout: 120000,
 }, async () => {
+  assert.ok(testDatabaseUrl,
+    'TEST_DATABASE_URL is required when explicitly running the isolated PostgreSQL write integration test.');
+  assert.equal(destructiveGateConfirmation, expectedDatabase,
+    `ARL_POSTGRES_GATE_CONFIRM must equal ${expectedDatabase} before this explicit write integration test may reset its isolated schema.`);
   const parsed = new URL(testDatabaseUrl);
   assert.ok(['postgres:', 'postgresql:'].includes(parsed.protocol));
   assert.equal(parsed.pathname.slice(1), expectedDatabase);

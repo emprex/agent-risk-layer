@@ -1,11 +1,68 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Free AI Agent Assessment | AgentRiskLayer</title><meta name="description" content="Complete an evidence-led AI agent security assessment and receive a free risk score."><link rel="stylesheet" href="/styles.css"><script type="module" src="/assessment.js"></script><link rel="stylesheet" href="/analytics.css"></head><body>
-<header class="site-header"><a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a><nav><a href="/dashboard.html">Dashboard</a><a href="/control-plane.html#runtime">Protect</a><a href="/assessment.html">Assess</a><a href="/control-plane.html#inventory">Evidence</a><a href="/help.html">Help</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a></nav></header>
-<main class="app-shell"><div class="page-heading"><span class="eyebrow">Free assessment</span><h1>Assess exposure, controls and evidence confidence.</h1><p>Assess the system as it operates today. Questionnaire responses are customer assertions; technical verification requires linked test or reviewed artifact evidence.</p></div>
-<div id="demoNotice" class="notice demo" hidden>Demo mode is active. Paid checkout will be simulated; no card is charged.</div>
-<form id="assessmentForm">
-<section class="panel"><h2>Agent profile</h2><div class="form-grid"><div class="field"><label for="agentName">Agent or system name</label><input id="agentName" name="name" required maxlength="100" placeholder="Example: Customer inbox agent"></div><div class="field"><label for="agentType">Agent type</label><select id="agentType" name="agentType" required><option value="">Choose one</option><option>Email agent</option><option>Customer support agent</option><option>MCP-enabled agent</option><option>Finance agent</option><option>AI assistant</option><option>Research agent</option><option>Coding agent</option><option>Other</option></select></div></div></section>
-<div class="progress-wrap"><div class="progress-meta"><span>Assessment completion</span><span id="progressText">0%</span></div><div class="progress-track"><div class="progress-bar" id="progressBar"></div></div></div>
-<div id="questionList" class="question-list"><div class="loading"><div class="spinner"></div>Loading control domains…</div></div>
-<div id="formError" class="error-box" role="alert"></div>
-<div class="sticky-actions"><span class="muted">25 security controls · approximately 10–15 minutes</span><button class="button primary" id="submitAssessment" type="submit">Calculate my risk score</button></div>
-</form></main><footer><span>© 2026 AgentRiskLayer</span><span>Your answers are stored only when the assessment is submitted.</span></footer><script type="module" src="/analytics.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Check an AI agent | AgentRiskLayer</title>
+  <meta name="description" content="A guided, plain-English AI-agent security check.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/assessment.js"></script>
+  <link rel="stylesheet" href="/analytics.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a>
+    <nav aria-label="Assessment navigation"><a href="/start.html">Start</a><a href="/pricing.html">Pricing</a><a href="/help.html#assessment">Help</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a></nav>
+  </header>
+  <main class="assessment-shell">
+    <div class="assessment-intro">
+      <span class="eyebrow">Free security check</span>
+      <h1>Tell us about one AI agent.</h1>
+      <p>We will ask one question at a time. Choose what is true today—not what you plan to add later.</p>
+      <div class="assessment-assurance"><span>About 5–10 minutes</span><span>Private by default</span><span>You can choose “I’m not sure”</span></div>
+    </div>
+
+    <form id="assessmentForm" novalidate>
+      <section class="assessment-stage panel" id="profileStep">
+        <div class="question-meta"><span>About the agent</span><span>Step 1</span></div>
+        <h2>Which agent are you checking?</h2>
+        <p class="question-help">Use one agent or one stable deployment. Agents with different permissions should be checked separately.</p>
+        <div class="form-grid">
+          <div class="field"><label for="agentName">Agent or system name</label><input id="agentName" name="name" required maxlength="100" autocomplete="off" placeholder="Example: Customer inbox assistant"></div>
+          <div class="field"><label for="agentType">What does it mainly do?</label><select id="agentType" name="agentType" required><option value="">Choose the closest option</option><option>Email agent</option><option>Customer support agent</option><option>MCP-enabled agent</option><option>Finance agent</option><option>AI assistant</option><option>Research agent</option><option>Coding agent</option><option>Other</option></select></div>
+        </div>
+      </section>
+
+      <section class="assessment-stage panel" id="questionStage" hidden>
+        <div class="question-meta"><span id="questionKind">Security question</span><span id="stepCount">Step 2</span></div>
+        <span class="question-domain" id="questionDomain"></span>
+        <h2 id="questionTitle"></h2>
+        <p class="question-help" id="questionHelp"></p>
+        <div class="guided-option-grid" id="questionOptions"></div>
+        <details class="evidence-details">
+          <summary>Do you have proof for this answer?</summary>
+          <p>Your answer is treated as unverified unless it is linked to a test or reviewed evidence later. Choose “My answer only” for a normal first check.</p>
+          <div class="field"><label for="questionEvidence">Evidence for this answer</label><select id="questionEvidence"></select></div>
+        </details>
+      </section>
+
+      <div class="assessment-progress" aria-live="polite">
+        <div class="progress-meta"><span id="progressLabel">About the agent</span><span id="progressText">0%</span></div>
+        <div class="progress-track" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+
+      <div id="demoNotice" class="notice demo" hidden>Demo mode is active. Paid checkout will be simulated; no card is charged.</div>
+      <div id="formError" class="error-box" role="alert"></div>
+      <div class="assessment-actions">
+        <button class="button ghost" id="backButton" type="button" hidden>Back</button>
+        <button class="button primary" id="nextButton" type="button">Continue</button>
+        <button class="button primary" id="submitAssessment" type="submit" hidden>Show my result</button>
+      </div>
+      <p class="assessment-security-note">Your answers are security-sensitive. They are submitted over the authenticated site connection and assessments remain private unless you explicitly enable sharing.</p>
+    </form>
+  </main>
+  <footer><span>© 2026 AgentRiskLayer</span><span>This check supports a decision; it is not a certification or guarantee.</span></footer>
+  <script type="module" src="/analytics.js"></script>
+</body>
+</html>

@@ -48,11 +48,25 @@ const mimeTypes = {
     '.yaml': 'text/yaml; charset=utf-8',
     '.yml': 'text/yaml; charset=utf-8',
 };
-function publicDatabaseHealth(database) {
+const expectedLatestMigration = fs.readdirSync(path.join(__dirname, 'migrations'))
+    .filter((name) => /^\\d{3}_[a-z0-9_-]+\\.sql$/i.test(name))
+    .sort()
+    .at(-1) || null;
+function publicDatabaseHealth(database, initialisation) {
+    const migrationResult = initialisation?.migrations || {};
+    const migrationVersions = [...new Set([
+        ...(Array.isArray(migrationResult.applied) ? migrationResult.applied : []),
+        ...(Array.isArray(migrationResult.skipped) ? migrationResult.skipped : []),
+    ])].sort();
+    const latestMigration = migrationVersions.at(-1) || null;
     return {
         ok: Boolean(database?.ok),
         adapter: database?.adapter || database?.kind || 'unknown',
         latencyMs: Number.isFinite(Number(database?.latencyMs)) ? Number(database.latencyMs) : null,
+        schemaCurrent: Boolean(expectedLatestMigration && latestMigration === expectedLatestMigration),
+        migrationCount: migrationVersions.length,
+        latestMigration,
+        expectedLatestMigration,
     };
 }
 const server = http.createServer(async (req, res) => {
@@ -65,7 +79,7 @@ const server = http.createServer(async (req, res) => {
         try {
             const database = await db.healthcheck();
             const readiness = launchReadiness();
-            return json(res, readiness.ready ? 200 : 503, { ok: readiness.ready, version: config.appVersion, productStage: config.productStage, database: publicDatabaseHealth(database), readiness, timestamp: nowIso() });
+            return json(res, readiness.ready ? 200 : 503, { ok: readiness.ready, version: config.appVersion, productStage: config.productStage, database: publicDatabaseHealth(database, databaseInitialisation), readiness, timestamp: nowIso() });
         }
         catch (error) {
             return json(res, 503, { ok: false, version: config.appVersion, productStage: config.productStage, database: { ok: false, error: 'database_unavailable' }, timestamp: nowIso() });
@@ -1158,8 +1172,6 @@ async function createCheckout(req, res, body) {
                 throw new Error('Your subscription already provides report access or requires billing attention.');
             if (assessment.paid_tier === 'pro')
                 throw new Error('This assessment already has a Professional report.');
-            if (assessment.paid_tier === 'basic' && productKey === 'basic_report')
-                throw new Error('This assessment already has an Essential report.');
         }
         else if (await hasOpenSubscription(req.user.id)) {
             throw new Error('A subscription already exists or requires billing attention. Manage it from the dashboard.');
@@ -1703,7 +1715,7 @@ function renderRobots() {
     return `User-agent: *\nAllow: /\nDisallow: /dashboard.html\nDisallow: /admin.html\nDisallow: /auth.html\nDisallow: /reset.html\nDisallow: /result.html\nSitemap: ${config.baseUrl}/sitemap.xml\n`;
 }
 function renderSitemap() {
-    const paths = ['/', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
+    const paths = ['/', '/start.html', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
     return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
 }
 function renderSecurityTxt() {
@@ -1718,7 +1730,7 @@ const seoPages = {
     'ai-assistant-permissions-checker': { title: 'AI Assistant Permissions Checker', type: 'AI assistant', description: 'Identify excessive permissions, shared identities, missing action limits and weak emergency controls.' },
 };
 function renderSeoPage(page) {
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${page.title} | AgentRiskLayer</title><meta name="description" content="${page.description}"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css"></head><body><header class="site-header"><a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a><nav><a href="/assessment.html">Assessment</a><a href="/pricing.html">Pricing</a><a href="/auth.html">Sign in</a></nav></header><main><section class="hero compact"><div><span class="eyebrow">Free AI security check</span><h1>${page.title}</h1><p class="hero-copy">${page.description}</p><div class="button-row"><a class="button primary" href="/assessment.html?type=${encodeURIComponent(page.type)}">Start the free assessment</a><a class="button ghost" href="/pricing.html">View reports</a></div></div><div class="score-card"><span>Example residual risk</span><strong>46<small>/100</small></strong><div class="risk-pill moderate">Moderate risk</div></div></section><section class="content-section narrow"><h2>What the assessment covers</h2><div class="feature-grid"><article><h3>Permissions</h3><p>Checks whether the agent has more access than its task requires.</p></article><article><h3>Untrusted input</h3><p>Reviews how external content can influence tools and actions.</p></article><article><h3>Autonomy</h3><p>Measures approval gates, limits and potential blast radius.</p></article><article><h3>Evidence</h3><p>Evaluates logging, testing and incident containment.</p></article></div></section></main><footer><span>© 2026 AgentRiskLayer</span><span>Automated decision support, not a certification.</span></footer></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${page.title} | AgentRiskLayer</title><meta name="description" content="${page.description}"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css"></head><body><header class="site-header"><a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a><nav><a href="/start.html">Start</a><a href="/assessment.html">Check an agent</a><a href="/pricing.html">Pricing</a><a href="/auth.html">Sign in</a></nav></header><main><section class="hero compact"><div><span class="eyebrow">Plain-English AI security check</span><h1>${page.title}</h1><p class="hero-copy">${page.description}</p><div class="button-row"><a class="button primary" href="/assessment.html?type=${encodeURIComponent(page.type)}">Start the free assessment</a><a class="button ghost" href="/pricing.html">View reports</a></div></div><div class="score-card"><span>Example residual risk</span><strong>46<small>/100</small></strong><div class="risk-pill moderate">Moderate risk</div></div></section><section class="content-section narrow"><h2>What the assessment covers</h2><div class="feature-grid"><article><h3>Permissions</h3><p>Checks whether the agent has more access than its task requires.</p></article><article><h3>Untrusted input</h3><p>Reviews how external content can influence tools and actions.</p></article><article><h3>Autonomy</h3><p>Measures approval gates, limits and potential blast radius.</p></article><article><h3>Evidence</h3><p>Evaluates logging, testing and incident containment.</p></article></div></section></main><footer><span>© 2026 AgentRiskLayer</span><span>Automated decision support, not a certification.</span></footer></body></html>`;
 }
 assertSafeProductionConfig();
 const databaseInitialisation = await initialiseDatabase();

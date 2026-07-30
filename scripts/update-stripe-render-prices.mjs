@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+// The first lookup key is retained to reuse the existing live Stripe Price safely.
+// Changing a lookup key would create a parallel billing object and could split fulfilment history.
 const PRICE_SPECS = [
-  { envKey: 'STRIPE_PRICE_PRO_REPORT', lookupKey: 'agentrisklayer_founding_assessment_gbp_99_v900', name: 'Founding Security Assessment', amount: 9900, description: 'One-off AgentRiskLayer founding security assessment.' },
+  { envKey: 'STRIPE_PRICE_PRO_REPORT', lookupKey: 'agentrisklayer_founding_assessment_gbp_99_v900', name: 'AI Agent Security Assessment', amount: 9900, description: 'One-off AgentRiskLayer AI agent security assessment.' },
   { envKey: 'STRIPE_PRICE_DEVELOPER_MONTHLY', lookupKey: 'agentrisklayer_developer_gbp_29_monthly_v900', name: 'Developer', amount: 2900, recurring: true, description: 'Monthly AgentRiskLayer Developer plan.' },
   { envKey: 'STRIPE_PRICE_TEAM_MONTHLY', lookupKey: 'agentrisklayer_team_gbp_99_monthly_v900', name: 'Team', amount: 9900, recurring: true, description: 'Monthly AgentRiskLayer Team plan.' },
   { envKey: 'STRIPE_PRICE_AGENCY_MONTHLY', lookupKey: 'agentrisklayer_agency_gbp_249_monthly_v900', name: 'Agency', amount: 24900, recurring: true, description: 'Monthly AgentRiskLayer Agency plan.' },
