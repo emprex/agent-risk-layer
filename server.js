@@ -49,7 +49,7 @@ const mimeTypes = {
     '.yml': 'text/yaml; charset=utf-8',
 };
 const expectedLatestMigration = fs.readdirSync(path.join(__dirname, 'migrations'))
-    .filter((name) => /^\\d{3}_[a-z0-9_-]+\\.sql$/i.test(name))
+    .filter((name) => /^[0-9]{3}_[a-z0-9_-]+[.]sql$/i.test(name))
     .sort()
     .at(-1) || null;
 function publicDatabaseHealth(database, initialisation) {

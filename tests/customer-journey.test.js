@@ -179,4 +179,5 @@ test('release validation isolates credentials and live readiness exposes real Po
   assert.match(server, /schemaCurrent/);
   assert.match(server, /latestMigration/);
   assert.match(server, /migrationCount/);
+  assert.ok(server.includes("filter((name) => /^[0-9]{3}_[a-z0-9_-]+[.]sql$/i.test(name))"));
 });
