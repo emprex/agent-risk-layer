@@ -3,7 +3,8 @@ export const RUNTIME_POLICY_SCHEMA = 'arl.runtime.policy.v1';
 export const RUNTIME_EVENT_SCHEMA = 'arl.runtime.event.v1';
 const DEFAULT_DENIED_TOOLS = ['shell', 'exec', 'terminal', 'delete', 'drop_database'];
 const SECRET_KEYS = /(?:secret|password|passwd|token|api[_-]?key|private[_-]?key|authorization)/i;
-const WRITE_ACTION = /(?:write|create|update|delete|remove|send|publish|deploy|execute|exec|shell|transfer|payment)/i;
+const WRITE_ACTION = /(?:write|create|update|delete|remove|send|publish|deploy|execute|exec|shell|transfer|payment|refund)/i;
+
 export function compileRuntimePolicy(input = {}) {
     const policy = {
         schema: RUNTIME_POLICY_SCHEMA,
@@ -17,7 +18,7 @@ export function compileRuntimePolicy(input = {}) {
             '..', '/etc/', '/proc/', '/root/', '.ssh/', '.env', 'credentials',
         ], 100),
         requireApprovalFor: list(input.requireApprovalFor?.length ? input.requireApprovalFor : [
-            'write', 'delete', 'send', 'deploy', 'execute', 'payment', 'transfer',
+            'write', 'delete', 'send', 'deploy', 'execute', 'payment', 'transfer', 'refund',
         ], 100),
         maxArgumentBytes: clamp(input.maxArgumentBytes, 256, 262144, 32768),
         blockSecretLikeValues: input.blockSecretLikeValues !== false,
@@ -29,6 +30,14 @@ export function compileRuntimePolicy(input = {}) {
         throw new Error('Policy version is required.');
     return Object.freeze(policy);
 }
+
+export function runtimeActionRequiresApproval(toolInput, contextInput = {}, policyInput = {}) {
+    const policy = policyInput.schema === RUNTIME_POLICY_SCHEMA ? policyInput : compileRuntimePolicy(policyInput);
+    const tool = clean(toolInput, 160).toLowerCase();
+    const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
+    return policy.requireApprovalFor.some((term) => tool.includes(term)) || WRITE_ACTION.test(String(context.action || ''));
+}
+
 export function evaluateRuntimeAction(action, policyInput = {}) {
     const policy = policyInput.schema === RUNTIME_POLICY_SCHEMA ? policyInput : compileRuntimePolicy(policyInput);
     const started = performance.now();
@@ -36,6 +45,7 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
     const tool = clean(action?.tool, 160).toLowerCase();
     const args = action?.arguments;
     const context = action?.context && typeof action.context === 'object' ? action.context : {};
+    const approval = action?.approval && typeof action.approval === 'object' ? action.approval : {};
     const rules = [];
     if (!tool)
         rules.push(block('ARL-RUN-001', 'Tool identity is missing.'));
@@ -68,11 +78,19 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
     if (policy.blockSecretLikeValues && containsSecretLikeMaterial(args)) {
         rules.push(block('ARL-RUN-008', 'Arguments contain secret-like material.'));
     }
-    const needsApproval = policy.requireApprovalFor.some((term) => tool.includes(term)) || WRITE_ACTION.test(String(context.action || ''));
-    if (needsApproval && context.humanApproved !== true)
-        rules.push(block('ARL-RUN-009', 'This action requires explicit human approval.'));
-    if (context.environment === 'production' && context.productionApproved !== true)
-        rules.push(block('ARL-RUN-010', 'Production action lacks explicit production approval.'));
+    const needsApproval = runtimeActionRequiresApproval(tool, context, policy);
+    if (needsApproval && approval.valid !== true) {
+        const reason = clean(approval.reason || 'missing', 80).toLowerCase();
+        const ruleId = reason === 'replayed' || reason === 'consumed' ? 'ARL-RUN-012'
+            : reason === 'expired' || reason === 'revoked' ? 'ARL-RUN-011'
+                : 'ARL-RUN-009';
+        const message = ruleId === 'ARL-RUN-012' ? 'The exact-action approval has already been consumed.'
+            : ruleId === 'ARL-RUN-011' ? 'The exact-action approval is expired or revoked.'
+                : 'This action requires a server-verified, exact-action human approval.';
+        rules.push(block(ruleId, message));
+    }
+    if (needsApproval && approval.valid === true && clean(approval.environment, 40).toLowerCase() !== clean(context.environment, 40).toLowerCase())
+        rules.push(block('ARL-RUN-010', 'The approval is not bound to the authoritative project environment.'));
     const blocked = rules.length > 0;
     const enforced = policy.mode === 'enforce';
     return {
@@ -83,12 +101,20 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
         observedDecision: blocked ? 'would-deny' : 'allow',
         policy: { schema: policy.schema, version: policy.version, mode: policy.mode, failMode: policy.failMode },
         reasons: rules,
+        approval: {
+            required: needsApproval,
+            valid: needsApproval ? approval.valid === true : null,
+            approvalId: approval.valid === true ? clean(approval.approvalId, 160) || null : null,
+            status: needsApproval ? (approval.valid === true ? 'verified' : clean(approval.reason || 'missing', 80).toLowerCase()) : 'not-required',
+        },
         evidence: {
             tool: tool || 'unknown',
             argumentDigest: crypto.createHash('sha256').update(serialised).digest('hex'),
             argumentBytes: Buffer.byteLength(serialised),
             rawArgumentsRetained: false,
             destinations: hosts,
+            approvalRequired: needsApproval,
+            approvalId: approval.valid === true ? clean(approval.approvalId, 160) || null : null,
         },
         evaluationMs: Math.round((performance.now() - started) * 1000) / 1000,
     };

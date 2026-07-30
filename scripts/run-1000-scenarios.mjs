@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { evaluateAssessment, questionnaire } from '../src/risk-engine.js';
 
 const outDir = process.argv[2] || '.';
+const release = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const evidence = ['none', 'claimed', 'documented', 'tested'];
 let state = 0x5a17c0de;
 const random = () => ((state = (1664525 * state + 1013904223) >>> 0) / 2 ** 32);
@@ -48,7 +49,7 @@ for (let index = 0; index < 1000; index += 1) {
 
 const failures = rows.filter((row) => !row.pass);
 const summary = {
-    release: '9.1.0',
+  release,
   seed: '0x5a17c0de',
   generatedAt: new Date().toISOString(),
   scenarios: rows.length,
@@ -60,8 +61,8 @@ const summary = {
 };
 
 fs.mkdirSync(outDir, { recursive: true });
-fs.writeFileSync(`${outDir}/AgentRiskLayer-v9.1.0-1000-scenario-results.json`, `${JSON.stringify({ summary, scenarios: rows }, null, 2)}\n`);
-fs.writeFileSync(`${outDir}/AgentRiskLayer-v9.1.0-1000-scenario-report.md`, `# AgentRiskLayer v9.1.0 — 1,000-scenario gate
+fs.writeFileSync(`${outDir}/AgentRiskLayer-v${release}-1000-scenario-results.json`, `${JSON.stringify({ summary, scenarios: rows }, null, 2)}\n`);
+fs.writeFileSync(`${outDir}/AgentRiskLayer-v${release}-1000-scenario-report.md`, `# AgentRiskLayer v${release} — 1,000-scenario gate
 
 Generated: ${summary.generatedAt}
 

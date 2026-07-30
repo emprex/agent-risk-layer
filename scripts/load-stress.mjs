@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+const release = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const users = Number(process.argv[2] || 100);
 const requestsPerUser = Number(process.argv[3] || 50);
 const port = Number(process.env.STRESS_PORT || 3299);
@@ -96,7 +97,7 @@ try {
     scope: 'Local mixed public-read and per-user CSRF/session traffic; no real payments, emails, or external services.',
   };
   fs.mkdirSync('test-artifacts', { recursive: true });
-  fs.writeFileSync(`test-artifacts/AgentRiskLayer-v9.1.0-load-stress-${users}x${requestsPerUser}.json`, `${JSON.stringify(summary, null, 2)}\n`);
+  fs.writeFileSync(`test-artifacts/AgentRiskLayer-v${release}-load-stress-${users}x${requestsPerUser}.json`, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(JSON.stringify(summary));
   if (errors) process.exitCode = 1;
 } finally {

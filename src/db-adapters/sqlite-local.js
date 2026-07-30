@@ -534,6 +534,31 @@ CREATE TABLE IF NOT EXISTS runtime_events (
   FOREIGN KEY (api_key_id) REFERENCES project_api_keys(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS runtime_approvals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  approver_id TEXT,
+  tool_name TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  action_digest TEXT NOT NULL,
+  token_digest TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','consumed','revoked')),
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  consumed_request_id TEXT,
+  runtime_event_id TEXT,
+  revoked_at TEXT,
+  CHECK (length(action_digest) = 64),
+  CHECK (length(token_digest) = 64),
+  UNIQUE(project_id, consumed_request_id),
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES security_projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (approver_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (runtime_event_id) REFERENCES runtime_events(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS asset_snapshots (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -712,6 +737,8 @@ CREATE INDEX IF NOT EXISTS idx_security_projects_workspace ON security_projects(
 CREATE INDEX IF NOT EXISTS idx_project_api_keys_project ON project_api_keys(project_id, revoked_at, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runtime_events_project_created ON runtime_events(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runtime_events_project_decision ON runtime_events(project_id, decision, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runtime_approvals_project_status ON runtime_approvals(project_id, status, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runtime_approvals_project_action ON runtime_approvals(project_id, action_digest, issued_at DESC);
 CREATE INDEX IF NOT EXISTS idx_asset_snapshots_project ON asset_snapshots(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_remediation_project_status ON remediation_items(project_id, status, severity, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_security_audit_workspace ON security_audit_log(workspace_id, created_at DESC);

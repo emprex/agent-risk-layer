@@ -409,7 +409,7 @@ footer { max-width: var(--max); margin: 0 auto; min-height: 74px; padding: 22px 
 .demo-v2-outcome-card dt { color:var(--muted);font-size:12px; }
 .demo-v2-outcome-card dd { margin:0;color:#e0ece6;font-size:12px;font-weight:800;text-align:right; }
 .demo-v2-workbench { scroll-margin-top:25px;border:1px solid #24312b;border-radius:26px;background:#090d11;box-shadow:0 35px 100px rgba(0,0,0,.35);overflow:hidden; }
-.demo-v2-steps { display:grid;grid-template-columns:repeat(5,1fr);margin:0;padding:0;border-bottom:1px solid #202b26;list-style:none;background:#0c1216; }
+.demo-v2-steps { display:grid;grid-template-columns:repeat(8,1fr);margin:0;padding:0;border-bottom:1px solid #202b26;list-style:none;background:#0c1216; }
 .demo-v2-steps li { position:relative; }
 .demo-v2-steps li+li::before { content:"";position:absolute;left:-50%;top:27px;width:100%;height:1px;background:#26332d; }
 .demo-v2-steps li.complete+li::before { background:var(--green); }

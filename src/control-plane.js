@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { db, id, nowIso } from './db.js';
-import { compileRuntimePolicy, evaluateRuntimeAction } from './runtime-policy.js';
+import { config } from './config.js';
+import { approvalTokenDigest, issueApproval, runtimeApprovalActionDigest, verifyApproval } from './access-control.js';
+import { compileRuntimePolicy, evaluateRuntimeAction, runtimeActionRequiresApproval } from './runtime-policy.js';
 import { inspectContent } from './content-security.js';
 import { discoverAiAssets } from './asset-discovery.js';
 import { deliverSecurityEventSystem } from './workspaces.js';
@@ -32,6 +34,7 @@ const REMEDIATION_TRANSITIONS = Object.freeze({
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 const MANAGE_ROLES = new Set(['developer', 'admin', 'owner']);
 const REVIEW_ROLES = new Set(['analyst', 'developer', 'admin', 'owner']);
+const APPROVER_ROLES = new Set(['admin', 'owner']);
 
 export async function entitlementForUser(userId) {
   const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required,updated_at
@@ -94,6 +97,7 @@ export async function getSecurityProject({ projectId, userId }) {
     permissions: permissionsFor(access.role),
     entitlement: publicEntitlement(entitlement, usage),
     apiKeys: await listProjectApiKeys({ projectId, userId }),
+    approvals: await listRuntimeApprovals({ projectId, userId, limit: 25 }),
     events: await listRuntimeEvents({ projectId, userId, limit: 50 }),
     inventory: await listAssetSnapshots({ projectId, userId, limit: 10 }),
     remediations: await listRemediationItems({ projectId, userId }),
@@ -167,6 +171,76 @@ export async function revokeProjectApiKey({ projectId, keyId, userId }) {
   return { ok: true };
 }
 
+
+export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSeconds = 600 }) {
+  const access = await requireProjectRole(projectId, userId, APPROVER_ROLES);
+  if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) throw badRequest('An exact tool call is required for approval.');
+  const tool = clean(toolCall.name || toolCall.tool, 200).toLowerCase();
+  if (!tool) throw badRequest('Tool identity is required for approval.');
+  const args = Object.hasOwn(toolCall, 'arguments') ? toolCall.arguments : (Object.hasOwn(toolCall, 'args') ? toolCall.args : {});
+  const actionDigest = runtimeApprovalActionDigest({
+    workspaceId: access.project.workspace_id,
+    projectId: access.project.id,
+    environment: access.project.environment,
+    tool,
+    arguments: args,
+  });
+  const approvalId = id('apr_');
+  const lifetime = Math.max(30, Math.min(3600, Number(ttlSeconds) || 600));
+  const token = issueApproval({
+    approvalId,
+    workspaceId: access.project.workspace_id,
+    projectId: access.project.id,
+    actionDigest,
+    tool,
+    environment: access.project.environment,
+  }, config.sessionSecret, lifetime);
+  const verified = verifyApproval(token, { approvalId }, config.sessionSecret);
+  if (!verified.valid) throw new Error('New approval failed integrity verification.');
+  const issuedAt = verified.approval.issuedAt;
+  const expiresAt = verified.approval.expiresAt;
+  await db.prepare(`INSERT INTO runtime_approvals
+    (id,workspace_id,project_id,approver_id,tool_name,environment,action_digest,token_digest,status,issued_at,expires_at)
+    VALUES (?,?,?,?,?,?,?,?, 'active',?,?)`)
+    .run(approvalId, access.project.workspace_id, access.project.id, userId, tool, access.project.environment,
+      actionDigest, approvalTokenDigest(token), issuedAt, expiresAt);
+  await audit({ workspaceId: access.project.workspace_id, projectId: access.project.id, actorType: 'user', actorId: userId,
+    action: 'runtime_approval.issued', targetType: 'runtime_approval', targetId: approvalId,
+    metadata: { tool, environment: access.project.environment, actionDigest, expiresAt } });
+  return {
+    id: approvalId,
+    projectId: access.project.id,
+    tool,
+    environment: access.project.environment,
+    actionDigest,
+    status: 'active',
+    issuedAt,
+    expiresAt,
+    token,
+    shownOnce: true,
+  };
+}
+
+export async function listRuntimeApprovals({ projectId, userId, limit = 50 }) {
+  await requireProjectRole(projectId, userId, new Set(['viewer', 'analyst', 'developer', 'admin', 'owner']));
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+  const rows = await db.prepare(`SELECT id,project_id,approver_id,tool_name,environment,action_digest,status,issued_at,expires_at,
+    consumed_at,consumed_request_id,runtime_event_id,revoked_at
+    FROM runtime_approvals WHERE project_id=? ORDER BY issued_at DESC LIMIT ?`).all(projectId, safeLimit);
+  return rows.map(publicRuntimeApproval);
+}
+
+export async function revokeRuntimeApproval({ projectId, approvalId, userId }) {
+  const access = await requireProjectRole(projectId, userId, APPROVER_ROLES);
+  const timestamp = nowIso();
+  const result = await db.prepare(`UPDATE runtime_approvals SET status='revoked',revoked_at=?
+    WHERE id=? AND project_id=? AND status='active'`).run(timestamp, approvalId, projectId);
+  if (Number(result.changes) !== 1) throw notFound('Active runtime approval not found.');
+  await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId,
+    action: 'runtime_approval.revoked', targetType: 'runtime_approval', targetId: approvalId });
+  return { ok: true, revokedAt: timestamp };
+}
+
 export async function authenticateProjectApiKey(rawToken) {
   const token = String(rawToken || '').trim();
   if (!/^arl_live_[a-f0-9]{10}_[A-Za-z0-9_-]{32,}$/.test(token)) throw unauthorised('Invalid project API key.');
@@ -202,7 +276,6 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     throw forbidden('Project policy identity is missing or invalid. Republish the policy before recording runtime evidence.');
   const started = performance.now();
   const response = await db.transaction(async () => {
-    if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(project.id);
     const retestCriteriaId = clean(body.retestCriteriaId || body.retest_criteria_id || body.retestRegistrationId || body.retest_registration_id, 100);
     if (retestCriteriaId && [
       'retestResult', 'retest_result', 'passed', 'expectedDecision', 'expected_decision',
@@ -227,10 +300,17 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     const inputValue = extractInput(body);
     const outputValue = extractOutput(body);
     const toolCall = body.tool_call || body.toolCall || null;
+    const trustedContext = trustedRuntimeContext(project, body, toolCall);
+    const approvalDecision = await resolveRuntimeApproval({ project, body, toolCall, policy, trustedContext });
     const inputResult = inputValue == null || policy.inspectInput === false ? null : inspectContent({ direction: 'input', content: inputValue, requestId, maxBytes: policy.maxResponseBytes });
     const outputResult = outputValue == null || policy.inspectOutput === false ? null : inspectContent({ direction: 'output', content: outputValue, requestId, maxBytes: policy.maxResponseBytes });
-    const toolResult = toolCall ? evaluateRuntimeAction({ requestId, tool: toolCall.name || toolCall.tool, arguments: toolCall.arguments || toolCall.args,
-      context: { ...(body.context || {}), ...(toolCall.context || {}) } }, policy) : null;
+    const toolResult = toolCall ? evaluateRuntimeAction({
+      requestId,
+      tool: toolCall.name || toolCall.tool,
+      arguments: toolCallArguments(toolCall),
+      context: trustedContext,
+      approval: approvalDecision,
+    }, policy) : null;
     const reasons = normaliseReasons(inputResult, outputResult, toolResult);
     const flagged = reasons.length > 0;
     const enforced = policy.mode === 'enforce';
@@ -241,12 +321,16 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     const retestSatisfied = retestCriteria ? criteriaSatisfied(retestCriteria, {
       decision, ruleIds: reasons.map((item) => item.ruleId), ...runtimeIdentity,
     }) : null;
+    const shouldConsumeApproval = Boolean(approvalDecision.required && approvalDecision.valid
+      && decision === 'allow' && observedDecision === 'allow');
     const evaluationMs = roundedMs(performance.now() - started);
     const evidence = {
       inputDigest: inputResult?.evidence?.contentDigest || null,
       outputDigest: outputResult?.evidence?.contentDigest || null,
       argumentDigest: toolResult?.evidence?.argumentDigest || null,
       tool: toolResult?.evidence?.tool || null,
+      approvalActionDigest: approvalDecision.actionDigest || null,
+      approvalId: approvalDecision.valid ? approvalDecision.approvalId : null,
       rawContentRetained: false,
       rawArgumentsRetained: false,
     };
@@ -262,6 +346,15 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       policy: { schema: policy.schema, ...authoritativePolicy, mode: policy.mode, failMode: policy.failMode },
       reasons,
       evidence,
+      approval: {
+        required: approvalDecision.required,
+        status: approvalDecision.required
+          ? (shouldConsumeApproval ? 'consumed' : approvalDecision.valid ? 'verified-not-consumed' : approvalDecision.reason)
+          : 'not-required',
+        approvalId: approvalDecision.valid ? approvalDecision.approvalId : null,
+        actionDigest: approvalDecision.actionDigest || null,
+        singleUse: approvalDecision.required,
+      },
       retest: retestCriteria ? {
         criteriaId: retestCriteria.id,
         remediationId: retestCriteria.remediation_id,
@@ -279,6 +372,16 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt,
       retestCriteria?.id || null, retestCriteria?.remediation_id || null, retestCriteria?.criteria_digest || null,
       retestCriteria ? (retestSatisfied ? 1 : 0) : null, response.timestamp);
+    if (shouldConsumeApproval) {
+      const consumed = await db.prepare(`UPDATE runtime_approvals
+        SET status='consumed',consumed_at=?,consumed_request_id=?,runtime_event_id=?
+        WHERE id=? AND project_id=? AND token_digest=? AND status='active' AND revoked_at IS NULL AND expires_at>?`)
+        .run(response.timestamp, requestId, runtimeEventId, approvalDecision.approvalId, project.id, approvalDecision.tokenDigest, response.timestamp);
+      if (Number(consumed.changes) !== 1) throw conflict('Runtime approval was already consumed, expired or revoked.');
+      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId,
+        action: 'runtime_approval.consumed', targetType: 'runtime_approval', targetId: approvalDecision.approvalId,
+        metadata: { requestId, runtimeEventId, tool: evidence.tool, actionDigest: approvalDecision.actionDigest } });
+    }
     if (retestCriteria) {
       const consumed = await db.prepare(`UPDATE remediation_retest_criteria
         SET status='completed',consumed_at=?,runtime_event_id=?,result=?
@@ -292,7 +395,7 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     await db.prepare('UPDATE project_api_keys SET last_used_at=? WHERE id=?').run(response.timestamp, auth.apiKeyId);
     if (decision === 'deny') {
       await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId, action: 'runtime.denied', targetType: 'runtime_request', targetId: requestId,
-        metadata: { severity, ruleIds: reasons.map((item) => item.ruleId) } });
+        metadata: { severity, ruleIds: reasons.map((item) => item.ruleId), approvalStatus: response.approval.status } });
     }
     return response;
   });
@@ -704,12 +807,17 @@ export async function controlPlaneOverview(userId) {
 export async function purgeExpiredRuntimeEvents() {
   const projects = await db.prepare(`SELECT id,retention_days FROM security_projects WHERE status!='archived'`).all();
   let deleted = 0;
+  let approvalsDeleted = 0;
   for (const project of projects) {
     const cutoff = new Date(Date.now() - Math.max(1, Number(project.retention_days || 30)) * 86400000).toISOString();
+    const approvals = await db.prepare(`DELETE FROM runtime_approvals WHERE project_id=?
+      AND (status!='active' OR expires_at<=?)
+      AND COALESCE(consumed_at,revoked_at,expires_at)<?`).run(project.id, cutoff, cutoff);
+    approvalsDeleted += Number(approvals.changes || 0);
     const result = await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff);
     deleted += Number(result.changes || 0);
   }
-  return { deleted };
+  return { deleted, approvalsDeleted };
 }
 
 async function projectUsage(projectId) {
@@ -771,7 +879,7 @@ function defaultProjectPolicy(environment) {
     version: '1', mode: environment === 'development' ? 'monitor' : 'enforce',
     allowedTools: [], deniedTools: ['shell', 'exec', 'terminal', 'delete', 'drop_database'], allowedHosts: [],
     deniedPathPatterns: ['..', '/etc/', '/proc/', '/root/', '.ssh/', '.env', 'credentials'],
-    requireApprovalFor: ['write', 'delete', 'send', 'deploy', 'execute', 'payment', 'transfer'],
+    requireApprovalFor: ['write', 'delete', 'send', 'deploy', 'execute', 'payment', 'transfer', 'refund'],
     blockSecretLikeValues: true, inspectInput: true, inspectOutput: true,
   };
 }
@@ -801,7 +909,7 @@ function projectColumns(row) {
 }
 
 function permissionsFor(role) {
-  return { read: true, review: REVIEW_ROLES.has(role), manage: MANAGE_ROLES.has(role), rotateKeys: MANAGE_ROLES.has(role) };
+  return { read: true, review: REVIEW_ROLES.has(role), manage: MANAGE_ROLES.has(role), rotateKeys: MANAGE_ROLES.has(role), approveActions: APPROVER_ROLES.has(role) };
 }
 
 function publicEntitlement(entitlement, usage) {
@@ -819,6 +927,108 @@ function extractOutput(body) {
   if (Array.isArray(body.messages)) return [...body.messages].reverse().find((message) => String(message?.role || '').toLowerCase() === 'assistant') || null;
   return null;
 }
+
+function toolCallArguments(toolCall) {
+  if (!toolCall || typeof toolCall !== 'object') return {};
+  if (Object.hasOwn(toolCall, 'arguments')) return toolCall.arguments;
+  if (Object.hasOwn(toolCall, 'args')) return toolCall.args;
+  return {};
+}
+
+function trustedRuntimeContext(project, body, toolCall) {
+  const supplied = {
+    ...(body?.context && typeof body.context === 'object' && !Array.isArray(body.context) ? body.context : {}),
+    ...(toolCall?.context && typeof toolCall.context === 'object' && !Array.isArray(toolCall.context) ? toolCall.context : {}),
+  };
+  return {
+    action: clean(supplied.action, 160),
+    environment: clean(project.environment, 40).toLowerCase(),
+  };
+}
+
+async function resolveRuntimeApproval({ project, body, toolCall, policy, trustedContext }) {
+  if (!toolCall) return { required: false, valid: false, reason: 'not-required', actionDigest: null };
+  const tool = clean(toolCall.name || toolCall.tool, 200).toLowerCase();
+  const args = toolCallArguments(toolCall);
+  const required = runtimeActionRequiresApproval(tool, trustedContext, policy);
+  if (!required) return { required: false, valid: false, reason: 'not-required', actionDigest: null };
+  let actionDigest;
+  try {
+    actionDigest = runtimeApprovalActionDigest({
+      workspaceId: project.workspace_id,
+      projectId: project.id,
+      environment: project.environment,
+      tool,
+      arguments: args,
+    });
+  } catch {
+    return { required: true, valid: false, reason: 'action-invalid', actionDigest: null };
+  }
+  const token = clean(body.approval_token || body.approvalToken || toolCall.approval_token || toolCall.approvalToken, 8192);
+  if (!token) return { required: true, valid: false, reason: 'missing', actionDigest };
+  const verified = verifyApproval(token, {
+    workspaceId: project.workspace_id,
+    projectId: project.id,
+    actionDigest,
+    tool,
+    environment: clean(project.environment, 40).toLowerCase(),
+  }, config.sessionSecret);
+  if (!verified.valid) {
+    const reason = verified.reason === 'expired' ? 'expired'
+      : String(verified.reason || '').startsWith('binding-') ? 'binding-mismatch'
+        : 'invalid';
+    return { required: true, valid: false, reason, actionDigest };
+  }
+  const approvalQuery = `SELECT id,workspace_id,project_id,approver_id,tool_name,environment,action_digest,token_digest,status,
+    issued_at,expires_at,consumed_at,consumed_request_id,runtime_event_id,revoked_at
+    FROM runtime_approvals WHERE id=? AND project_id=?${db.kind === 'postgres' ? ' FOR UPDATE' : ''}`;
+  const row = await db.prepare(approvalQuery).get(verified.approval.approvalId, project.id);
+  if (!row || !safeEqualDigest(row.token_digest, approvalTokenDigest(token)))
+    return { required: true, valid: false, reason: 'unrecognised', actionDigest };
+  const status = runtimeApprovalStatus(row);
+  if (status !== 'active')
+    return { required: true, valid: false, reason: status === 'consumed' ? 'replayed' : status, actionDigest };
+  if (row.workspace_id !== project.workspace_id || row.project_id !== project.id || row.tool_name !== tool
+    || row.environment !== clean(project.environment, 40).toLowerCase() || !safeEqualDigest(row.action_digest, actionDigest))
+    return { required: true, valid: false, reason: 'ledger-mismatch', actionDigest };
+  return {
+    required: true,
+    valid: true,
+    reason: 'verified',
+    approvalId: row.id,
+    environment: row.environment,
+    actionDigest,
+    tokenDigest: row.token_digest,
+    expiresAt: row.expires_at,
+  };
+}
+
+function runtimeApprovalStatus(row, timestampMs = Date.now()) {
+  if (row?.status === 'consumed' || row?.consumed_at) return 'consumed';
+  if (row?.status === 'revoked' || row?.revoked_at) return 'revoked';
+  const expiry = Date.parse(row?.expires_at || '');
+  if (!Number.isFinite(expiry) || expiry <= timestampMs) return 'expired';
+  return row?.status === 'active' ? 'active' : 'invalid';
+}
+
+function publicRuntimeApproval(row) {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    approverId: row.approver_id,
+    tool: row.tool_name,
+    environment: row.environment,
+    actionDigest: row.action_digest,
+    status: runtimeApprovalStatus(row),
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    consumedAt: row.consumed_at || null,
+    consumedRequestId: row.consumed_request_id || null,
+    runtimeEventId: row.runtime_event_id || null,
+    revokedAt: row.revoked_at || null,
+  };
+}
+
 function normaliseReasons(input, output, tool) {
   const values = [];
   for (const item of input?.findings || []) values.push({ ruleId: item.ruleId, severity: item.severity, title: item.title, surface: 'input' });

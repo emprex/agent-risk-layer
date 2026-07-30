@@ -1,0 +1,182 @@
+TAP version 13
+# Subtest: workspace RBAC prevents cross-tenant and excessive actions
+ok 1 - workspace RBAC prevents cross-tenant and excessive actions
+  ---
+  duration_ms: 0.880679
+  type: 'test'
+  ...
+# Subtest: approval tokens are signed, expiring and bound to the exact project action
+ok 2 - approval tokens are signed, expiring and bound to the exact project action
+  ---
+  duration_ms: 1.669708
+  type: 'test'
+  ...
+# Subtest: action digests are canonical but change with target or value
+ok 3 - action digests are canonical but change with target or value
+  ---
+  duration_ms: 0.307039
+  type: 'test'
+  ...
+# (node:10759) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: hosted guard is idempotent, enforces content and never retains raw prompts
+ok 4 - hosted guard is idempotent, enforces content and never retains raw prompts
+  ---
+  duration_ms: 18.506966
+  type: 'test'
+  ...
+# Subtest: runtime policy supports monitor mode, tool approvals and immediate key revocation
+ok 5 - runtime policy supports monitor mode, tool approvals and immediate key revocation
+  ---
+  duration_ms: 12.425894
+  type: 'test'
+  ...
+# Subtest: runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+ok 6 - runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+  ---
+  duration_ms: 13.875352
+  type: 'test'
+  ...
+# Subtest: inventory drift blocks deployment review and remediation work is auditable
+ok 7 - inventory drift blocks deployment review and remediation work is auditable
+  ---
+  duration_ms: 28.232403
+  type: 'test'
+  ...
+# Subtest: community project allowance is enforced server-side
+ok 8 - community project allowance is enforced server-side
+  ---
+  duration_ms: 2.07758
+  type: 'test'
+  ...
+# Subtest: workspace members cannot bypass the billing owner project allowance
+ok 9 - workspace members cannot bypass the billing owner project allowance
+  ---
+  duration_ms: 2.482887
+  type: 'test'
+  ...
+# Subtest: all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+ok 10 - all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+  ---
+  duration_ms: 3.631681
+  type: 'test'
+  ...
+# Subtest: published plan entitlements match server-enforced commercial allowances
+ok 11 - published plan entitlements match server-enforced commercial allowances
+  ---
+  duration_ms: 0.18946
+  type: 'test'
+  ...
+# (node:10765) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: PostgreSQL placeholder translation preserves literals and comments
+ok 12 - PostgreSQL placeholder translation preserves literals and comments
+  ---
+  duration_ms: 1.306737
+  type: 'test'
+  ...
+# Subtest: PostgreSQL adapter uses parameterised pool queries and transaction-bound clients
+ok 13 - PostgreSQL adapter uses parameterised pool queries and transaction-bound clients
+  ---
+  duration_ms: 2.283763
+  type: 'test'
+  ...
+# Subtest: PostgreSQL adapter rejects SQLite-only statements
+ok 14 - PostgreSQL adapter rejects SQLite-only statements
+  ---
+  duration_ms: 2.065713
+  type: 'test'
+  ...
+# Subtest: PostgreSQL migrations are complete, portable and checksum-idempotent
+ok 15 - PostgreSQL migrations are complete, portable and checksum-idempotent
+  ---
+  duration_ms: 44.821347
+  type: 'test'
+  ...
+# Subtest: runtime approval integrity migration is additive and enforces a single-use ledger
+ok 16 - runtime approval integrity migration is additive and enforces a single-use ledger
+  ---
+  duration_ms: 0.475446
+  type: 'test'
+  ...
+# Subtest: billing integrity migration is additive and preserves legacy purchases
+ok 17 - billing integrity migration is additive and preserves legacy purchases
+  ---
+  duration_ms: 0.870833
+  type: 'test'
+  ...
+# Subtest: real SQLite adapter rebuild preserves legacy subscriptions and enforces lifecycle classifications
+ok 18 - real SQLite adapter rebuild preserves legacy subscriptions and enforces lifecycle classifications
+  ---
+  duration_ms: 212.000925
+  type: 'test'
+  ...
+# Subtest: SQLite subscription rebuild failure rolls back to the usable original table
+ok 19 - SQLite subscription rebuild failure rolls back to the usable original table
+  ---
+  duration_ms: 94.654784
+  type: 'test'
+  ...
+# Subtest: release infrastructure contains PostgreSQL only and no persistent SQLite disk
+ok 20 - release infrastructure contains PostgreSQL only and no persistent SQLite disk
+  ---
+  duration_ms: 3.277831
+  type: 'test'
+  ...
+# Subtest: allows a narrow allowlisted read action without retaining arguments
+ok 21 - allows a narrow allowlisted read action without retaining arguments
+  ---
+  duration_ms: 4.95532
+  type: 'test'
+  ...
+# Subtest: blocks denied tools even when their names are namespaced
+ok 22 - blocks denied tools even when their names are namespaced
+  ---
+  duration_ms: 0.527197
+  type: 'test'
+  ...
+# Subtest: blocks traversal and sensitive filesystem targets
+ok 23 - blocks traversal and sensitive filesystem targets
+  ---
+  duration_ms: 0.422409
+  type: 'test'
+  ...
+# Subtest: blocks destinations outside the network allowlist
+ok 24 - blocks destinations outside the network allowlist
+  ---
+  duration_ms: 0.27181
+  type: 'test'
+  ...
+# Subtest: blocks secret-like fields
+ok 25 - blocks secret-like fields
+  ---
+  duration_ms: 1.104419
+  type: 'test'
+  ...
+# Subtest: requires server-verified approval for material actions and ignores caller assertions
+ok 26 - requires server-verified approval for material actions and ignores caller assertions
+  ---
+  duration_ms: 0.679193
+  type: 'test'
+  ...
+# Subtest: monitor mode records would-deny but does not block
+ok 27 - monitor mode records would-deny but does not block
+  ---
+  duration_ms: 0.22193
+  type: 'test'
+  ...
+# Subtest: approval environment must match the authoritative runtime environment
+ok 28 - approval environment must match the authoritative runtime environment
+  ---
+  duration_ms: 0.139557
+  type: 'test'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 453.173542

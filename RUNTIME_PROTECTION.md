@@ -1,57 +1,73 @@
-# AgentRiskLayer Runtime Gateway
+# AgentRiskLayer Runtime Protection
 
-Version 5.2.0 adds customer-operated runtime enforcement for HTTP-based agent
-tool calls. It is a narrow gateway, not a claim that arbitrary code execution
-is intercepted automatically.
+AgentRiskLayer provides two runtime enforcement paths with different approval boundaries.
 
-## What it enforces
+## Hosted Guard API
+
+The hosted `POST /v1/guard` endpoint provides:
+
+- project-scoped, immediately revocable API keys;
+- prompt/input and model-output inspection;
+- tool allowlists and denylists;
+- filesystem path boundaries;
+- network destination allowlists;
+- secret-like argument blocking;
+- exact-action human approvals issued by project admins or owners;
+- atomic single-use approval consumption;
+- idempotent request identifiers;
+- policy version and digest binding;
+- privacy-safe runtime and audit evidence;
+- account-export and project-retention coverage for approval ledger records.
+
+For an approval-required action, create the approval through the authenticated control plane. Send the returned one-time token with the exact tool call:
+
+```json
+{
+  "request_id": "refund-demo-001",
+  "tool_call": {
+    "name": "refund_order",
+    "arguments": {
+      "orderId": "demo_order_4821",
+      "amountPence": 17500,
+      "currency": "GBP"
+    },
+    "approval_token": "server-issued-token"
+  }
+}
+```
+
+The Guard ignores caller-controlled `approved`, `humanApproved` and `productionApproved` booleans. The authenticated approver is recorded in the protected server ledger and audit trail, while the short-lived bearer token intentionally omits the internal approver identifier. The token must match the workspace, project, authoritative environment, tool and canonical argument digest. A different target or value is denied. Expired, revoked and replayed approvals are denied.
+
+## Customer-operated local gateway
+
+The local gateway is a narrow HTTP proxy for systems where runtime content must remain inside the customer environment. It enforces:
 
 - tool allowlists and denylists;
 - filesystem path boundaries;
 - network destination allowlists;
 - secret-like argument blocking;
-- human approval for write, send, deploy, execute, payment and transfer actions;
-- separate approval for production actions;
-- request-size boundaries;
-- fail-closed behaviour by default;
+- request and response size boundaries;
+- input and output inspection;
+- fail-closed behaviour;
 - monitor-only rollout mode;
-- redacted JSONL audit events containing hashes, not raw arguments.
+- redacted JSONL audit events containing hashes rather than raw arguments.
 
-## Five-minute integration
+Start it with:
 
-1. Copy `runtime/runtime-policy.example.json` and edit the allowlists.
-2. Start the customer's existing agent/tool HTTP service locally.
-3. Start the gateway:
+```bash
+node runtime/agent-risk-runtime.mjs \
+  --policy runtime/runtime-policy.example.json \
+  --upstream http://127.0.0.1:3000 \
+  --port 8787 \
+  --audit runtime-audit.jsonl
+```
 
-   ```bash
-   node runtime/agent-risk-runtime.mjs \
-     --policy runtime/runtime-policy.example.json \
-     --upstream http://127.0.0.1:3000 \
-     --port 8787 \
-     --audit runtime-audit.jsonl
-   ```
+Send `x-arl-tool-name` on each call, or include `tool` in the JSON body.
 
-4. Point the agent's tool base URL to `http://127.0.0.1:8787`.
-5. Send `x-arl-tool-name` on each call, or include `tool` in the JSON body.
-6. For approved material actions, include:
+### Approval limitation
 
-   ```json
-   {
-     "runtimeContext": {
-       "humanApproved": true,
-       "environment": "production",
-       "productionApproved": true
-     }
-   }
-   ```
-
-Start with `"mode": "monitor"` to measure false positives. Move to
-`"mode": "enforce"` only after reviewing the audit stream.
+The local gateway does not contain the hosted PostgreSQL approval ledger and does not accept self-asserted approval booleans. Actions matched by `requireApprovalFor` fail closed in enforce mode. Use the hosted Guard API for AgentRiskLayer-issued, database-backed, single-use approvals, or integrate a separately reviewed customer approval service before enabling equivalent local high-impact actions.
 
 ## Security boundary
 
-The gateway protects requests that are actually routed through it. Direct
-connections to the upstream service must be blocked with network policy,
-firewall rules or service authentication; otherwise an agent could bypass the
-gateway. The gateway binds to loopback by default and never uploads raw
-arguments.
+Protection applies only to traffic routed through the Guard API or local gateway. Direct connections to protected tools must be blocked with network controls, firewall rules or service authentication. Neither path replaces least privilege, sandboxing, secure tool design, independent testing, monitoring, rollback or recovery controls.

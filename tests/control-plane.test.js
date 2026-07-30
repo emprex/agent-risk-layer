@@ -9,15 +9,18 @@ import {
   controlPlaneOverview,
   createProjectApiKey,
   createRemediationItem,
+  createRuntimeApproval,
   createSecurityProject,
   entitlementForUser,
   getSecurityProject,
   listAssetSnapshots,
   listRemediationItems,
+  listRuntimeApprovals,
   listRuntimeEvents,
   recordAssetSnapshot,
   registerRemediationEvidenceArtifact,
   revokeProjectApiKey,
+  revokeRuntimeApproval,
   screenGuardRequest,
   updateRemediationItem,
   updateSecurityProject,
@@ -93,6 +96,82 @@ test('runtime policy supports monitor mode, tool approvals and immediate key rev
   await revokeProjectApiKey({ projectId: project.id, keyId: key.id, userId });
   await assert.rejects(() => authenticateProjectApiKey(key.token), /invalid or inactive/i);
   await assert.rejects(() => screenGuardRequest({ rawToken: key.token, body: { request_id: 'revoked-1', input: 'hello' } }), /invalid or inactive/i);
+});
+
+
+test('runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored', async () => {
+  const { userId, workspace, project, key } = await fixture('production');
+  const toolCall = { name: 'refund_order', arguments: { orderId: 'demo_order_4821', amountPence: 17500, currency: 'GBP' } };
+
+  const developer = await createUser();
+  await upsertMember({ workspaceId: workspace.id, actorId: userId, email: developer.email, role: 'developer' });
+  await assert.rejects(
+    () => createRuntimeApproval({ projectId: project.id, userId: developer.userId, toolCall, ttlSeconds: 600 }),
+    /permission denied/i,
+  );
+
+  const asserted = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-asserted',
+    tool_call: { ...toolCall, context: { humanApproved: true, productionApproved: true, environment: 'staging' } },
+  } });
+  assert.equal(asserted.decision, 'deny');
+  assert.equal(asserted.approval.status, 'missing');
+  assert.ok(asserted.reasons.some((item) => item.ruleId === 'ARL-RUN-009'));
+
+  const approval = await createRuntimeApproval({ projectId: project.id, userId, toolCall, ttlSeconds: 600 });
+  assert.match(approval.token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  assert.equal(approval.shownOnce, true);
+
+  const changedAmount = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-wrong-amount',
+    tool_call: { ...toolCall, arguments: { ...toolCall.arguments, amountPence: 17600 }, approval_token: approval.token },
+  } });
+  assert.equal(changedAmount.decision, 'deny');
+  assert.equal(changedAmount.approval.status, 'binding-mismatch');
+
+  const changedTarget = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-wrong-target',
+    tool_call: { ...toolCall, arguments: { ...toolCall.arguments, orderId: 'demo_order_9999' }, approval_token: approval.token },
+  } });
+  assert.equal(changedTarget.decision, 'deny');
+  assert.equal(changedTarget.approval.status, 'binding-mismatch');
+
+  const allowed = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-exact',
+    tool_call: { ...toolCall, approval_token: approval.token },
+  } });
+  assert.equal(allowed.decision, 'allow');
+  assert.equal(allowed.approval.status, 'consumed');
+  assert.equal(allowed.approval.approvalId, approval.id);
+  assert.equal(allowed.evidence.rawArgumentsRetained, false);
+
+  const replayedApproval = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-replay',
+    tool_call: { ...toolCall, approval_token: approval.token },
+  } });
+  assert.equal(replayedApproval.decision, 'deny');
+  assert.equal(replayedApproval.approval.status, 'replayed');
+  assert.ok(replayedApproval.reasons.some((item) => item.ruleId === 'ARL-RUN-012'));
+
+  const revoked = await createRuntimeApproval({ projectId: project.id, userId, toolCall, ttlSeconds: 600 });
+  await revokeRuntimeApproval({ projectId: project.id, approvalId: revoked.id, userId });
+  const revokedAttempt = await screenGuardRequest({ rawToken: key.token, body: {
+    request_id: 'approval-revoked',
+    tool_call: { ...toolCall, approval_token: revoked.token },
+  } });
+  assert.equal(revokedAttempt.decision, 'deny');
+  assert.equal(revokedAttempt.approval.status, 'revoked');
+  assert.ok(revokedAttempt.reasons.some((item) => item.ruleId === 'ARL-RUN-011'));
+
+  const approvals = await listRuntimeApprovals({ projectId: project.id, userId });
+  assert.equal(approvals.find((item) => item.id === approval.id).status, 'consumed');
+  assert.equal(approvals.find((item) => item.id === approval.id).approverId, userId);
+  assert.equal(approvals.find((item) => item.id === revoked.id).status, 'revoked');
+
+  const stored = await db.prepare('SELECT status,consumed_request_id,runtime_event_id FROM runtime_approvals WHERE id=?').get(approval.id);
+  assert.equal(stored.status, 'consumed');
+  assert.equal(stored.consumed_request_id, 'approval-exact');
+  assert.match(stored.runtime_event_id, /^rte_/);
 });
 
 test('inventory drift blocks deployment review and remediation work is auditable', async () => {

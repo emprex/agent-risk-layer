@@ -1,85 +1,83 @@
 {
-  "schema": "arl.release-validation.v3",
+  "schema": "arl.release-validation.v4",
   "product": "AgentRiskLayer",
-  "version": "9.1.0",
-  "releaseStatus": "deployment-ready-owner-controlled-live-verification-required",
-  "generatedAt": "2026-07-27T14:02:52.382205Z",
-  "publicExperience": {
-    "publicRegistration": true,
-    "invitationFieldPresent": false,
-    "publicBetaLanguagePresent": false,
-    "guidedWelcomeRoute": "/dashboard.html?welcome=1",
-    "companyPage": true,
-    "statusPage": true,
-    "demoPage": true,
-    "csrfAutomaticRecovery": true
-  },
-  "productionPersistence": {
-    "engine": "PostgreSQL",
-    "requiredEnvironmentVariable": "DATABASE_URL",
-    "filesystemDatabaseSupportedInProduction": false,
-    "renderPersistentDisk": false,
-    "renderRegion": "oregon",
-    "postgresMajorVersion": "18"
+  "version": "9.2.0",
+  "sourceBaselineCommit": "a9bfdc156ea2b8a7f94181a12baf187ecabf6919",
+  "releaseStatus": "implementation-validated-production-deployment-and-verification-required",
+  "generatedAt": "2026-07-30T19:54:10.852Z",
+  "securityChange": {
+    "title": "Server-issued exact-action runtime approvals",
+    "rootCause": "Hosted Guard previously accepted caller-controlled approval booleans and did not maintain a consumable approval ledger.",
+    "controlOutcome": "Approval-required actions now require a server-issued token bound to workspace, project, authoritative environment, tool and canonical arguments, with database-backed expiry, revocation and single-use consumption.",
+    "migration": "008_runtime_approval_integrity.sql",
+    "migrationType": "additive",
+    "dataDeletionOrRewrite": false,
+    "privacyOutcome": "Authenticated approver identity remains in the protected ledger and audit trail; the signed bearer token omits the internal approver identifier."
   },
   "automatedGate": {
     "command": "npm run validate",
+    "productionCredentialsExcluded": true,
     "passed": true,
     "tests": {
-      "total": 89,
-      "passed": 89,
-      "failed": 0
+      "total": 157,
+      "passed": 157,
+      "failed": 0,
+      "skipped": 0
     },
-    "syntaxCheck": true,
-    "customerPaymentSecuritySmoke": true,
+    "syntaxAndSourceChecks": true,
+    "endToEndSmoke": {
+      "passed": true,
+      "exactActionApprovalIssuedByAuthenticatedOwner": true,
+      "callerApprovalAssertionsIgnored": true,
+      "changedValueDenied": true,
+      "exactActionAllowedAndConsumed": true,
+      "consumedApprovalReplayDenied": true,
+      "approvalLedgerIncludedInAccountExport": true,
+      "rawToolArgumentsRetained": false,
+      "approvalBearerOmitsInternalApproverId": true,
+      "approvalIssuanceRestrictedToAdminOrOwner": true
+    },
+    "focusedApprovalGate": {
+      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/postgresql.test.js",
+      "tests": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
     "detectionBenchmark": {
       "cases": 20,
       "passed": 20,
       "falsePositives": 0,
       "falseNegatives": 0,
-      "scope": "Limited public synthetic English dataset; not independent or production-representative."
+      "scope": "Small internal synthetic English regression set; not independent or production-representative."
     },
     "safetyScenarios": {
       "total": 1000,
       "passed": 1000,
       "failed": 0,
-      "unsafeDecisions": 0
-    },
-    "controlledRedTeam": {
-      "cases": 32,
-      "passed": 32,
-      "failed": 0,
-      "decision": "CONTROLLED TESTS PASSED"
-    },
-    "selfInspection": {
-      "postureScore": 100,
-      "technicalRisk": 0,
-      "grade": "A",
-      "activeFindings": 0,
-      "reviewedFalsePositives": 1,
-      "boundary": "Static inspection does not prove runtime, cloud or production security."
-    },
-    "load": {
-      "virtualUsers": 100,
-      "requestsPerUser": 50,
-      "totalRequests": 5000,
-      "errors": 0,
-      "requestsPerSecond": 3388.4,
-      "latencyMs": {
-        "p50": 25.8,
-        "p95": 44.1,
-        "p99": 102.2,
-        "max": 120.3
-      },
-      "scope": "Local mixed public-read and per-user CSRF/session traffic; no real external services."
+      "unsafeDecisions": 0,
+      "seed": "0x5a17c0de"
     }
   },
+  "evidenceFiles": [
+    "validation/AgentRiskLayer-v9.2.0-validation-console.log",
+    "validation/AgentRiskLayer-v9.2.0-approval-focused.log",
+    "test-artifacts/detection-benchmark-v9.2.0.json",
+    "test-artifacts/AgentRiskLayer-v9.2.0-1000-scenario-results.json",
+    "public/downloads/agentrisklayer-controlled-support-agent-proof.json"
+  ],
+  "limitations": [
+    "The automated gate used isolated local test persistence and did not connect to the production PostgreSQL service.",
+    "PostgreSQL migration portability and row-lock SQL were inspected and tested through the adapter contract; live concurrent production behaviour is not yet verified.",
+    "No Render deployment, live migration application, live browser journey, real payment or production email was performed in this environment.",
+    "Internal engineering validation is not independent penetration testing, accredited certification or a guarantee that the system is risk-free."
+  ],
   "liveVerificationRequired": [
-    "Deploy commit to Render and verify /api/ready reports version 9.1.0 and production stage.",
-    "Create and verify a real public account through agentrisklayer.com.",
-    "Complete live Stripe checkout, webhook entitlement and billing portal tests.",
-    "Confirm Resend verification, password-reset and report-delivery email.",
-    "Exercise PostgreSQL backup and restore into a separate non-production database.",
-    "Complete independent penetration testing and obtain real customer evidence."
+    "Apply migration 008 through the normal deployment migration process and verify its checksum record.",
+    "Verify /api/ready reports version 9.2.0, production stage and a healthy PostgreSQL adapter.",
+    "Issue an exact refund approval as a project owner or admin in production.",
+    "Verify changed target and value are denied, the exact action is allowed once, and a new-request replay is denied.",
+    "Verify the runtime event, approval ledger and audit records correlate without raw arguments.",
+    "Verify monitoring, rollback and database backup status after deployment."
   ]
 }

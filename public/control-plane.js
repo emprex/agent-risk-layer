@@ -6,6 +6,7 @@ let overview = null;
 let project = null;
 let selectedProjectId = sessionStorage.getItem('arl_selected_project') || '';
 let revealedKey = '';
+let revealedApproval = null;
 let refreshTimer = null;
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
@@ -98,9 +99,14 @@ function projectView() {
     <section id="runtime" class="control-section">
       <div class="section-heading compact-heading"><div><span class="eyebrow">Runtime API</span><h2>Screen every agent step.</h2></div><button id="createKeyButton" class="button primary small" ${project.permissions.rotateKeys ? '' : 'disabled'}>Issue API key</button></div>
       ${revealedKey ? oneTimeKey(revealedKey) : ''}
+      ${revealedApproval ? oneTimeApproval(revealedApproval) : ''}
       <div class="runtime-grid">
-        <article class="panel"><h3>Integration request</h3><p class="muted">Send input, output and tool context. The response returns allow or deny with precise rule evidence. Raw content is never stored.</p><pre><code>${escapeHtml(curlExample())}</code></pre><button class="button ghost small" data-copy="curl">Copy example</button></article>
+        <article class="panel"><h3>Integration request</h3><p class="muted">Send input, output and tool context. Sensitive actions require a server-issued token bound to the exact project, environment, tool and arguments. Raw content is never stored.</p><pre><code>${escapeHtml(curlExample())}</code></pre><button class="button ghost small" data-copy="curl">Copy example</button></article>
         <article class="panel"><h3>Active API keys</h3><div class="key-list">${project.apiKeys.length ? project.apiKeys.map(keyRow).join('') : '<p class="muted">No API key yet. Issue one to integrate a staging system.</p>'}</div></article>
+      </div>
+      <div class="runtime-grid section-gap">
+        <article class="panel"><h3>Approve one exact action</h3><p class="muted">Admins and owners can issue a short-lived token after reviewing the exact tool arguments. Tokens are stored only as hashes and consumed atomically on the first allowed request.</p>${approvalForm()}</article>
+        <article class="panel"><h3>Approval ledger</h3><div class="key-list">${project.approvals?.length ? project.approvals.map(approvalRow).join('') : '<p class="muted">No runtime approvals have been issued.</p>'}</div></article>
       </div>
       <article class="panel section-gap"><div class="section-heading compact-heading"><div><h3>Recent security decisions</h3><p class="muted">Only digests, rule identifiers, bounded metadata and timing are retained.</p></div><span class="status-pill">${project.events.length} recent</span></div>${eventTable(project.events)}</article>
     </section>
@@ -141,6 +147,25 @@ function policyForm() {
 
 function oneTimeKey(value) {
   return `<div class="one-time-key"><div><strong>Copy this key now.</strong><span>It will never be shown again.</span></div><pre>${escapeHtml(value)}</pre><button class="button primary small" data-copy="key">Copy key</button></div>`;
+}
+
+
+function oneTimeApproval(approval) {
+  return `<div class="one-time-key"><div><strong>Copy this approval token now.</strong><span>It authorises only ${escapeHtml(approval.tool)} with action digest ${escapeHtml(approval.actionDigest.slice(0, 16))}… and will never be shown again.</span></div><pre>${escapeHtml(approval.token)}</pre><button class="button primary small" data-copy="approval">Copy approval</button></div>`;
+}
+
+function approvalForm() {
+  return `<form id="approvalForm" class="auth-form">
+    <div class="field"><label for="approvalTool">Tool name</label><input id="approvalTool" required maxlength="200" value="refund_order" placeholder="refund_order"></div>
+    <div class="field"><label for="approvalArguments">Exact JSON arguments</label><textarea id="approvalArguments" rows="7" required>{"orderId":"demo_order_4821","amountPence":17500,"currency":"GBP"}</textarea></div>
+    <div class="field"><label for="approvalTtl">Validity</label><select id="approvalTtl"><option value="300">5 minutes</option><option value="600" selected>10 minutes</option><option value="1800">30 minutes</option><option value="3600">60 minutes</option></select></div>
+    <button class="button primary" type="submit" ${project.permissions.approveActions ? '' : 'disabled'}>${project.permissions.approveActions ? 'Issue exact-action approval' : 'Admin or owner required'}</button>
+  </form>`;
+}
+
+function approvalRow(approval) {
+  const status = approval.status || 'invalid';
+  return `<div class="key-row"><div><strong>${escapeHtml(approval.tool)}</strong><span>${escapeHtml(approval.actionDigest.slice(0, 24))}…</span><small>Issued ${dateTime(approval.issuedAt)} · expires ${dateTime(approval.expiresAt)}${approval.consumedRequestId ? ` · request ${escapeHtml(approval.consumedRequestId)}` : ''}</small></div><div><span class="status-dot ${status === 'active' ? 'active' : status === 'consumed' ? 'revoked' : 'warning'}">${escapeHtml(status)}</span>${status === 'active' && project.permissions.approveActions ? `<button class="icon-button" title="Revoke approval" data-revoke-approval="${escapeHtml(approval.id)}">×</button>` : ''}</div></div>`;
 }
 
 function keyRow(key) {
@@ -199,14 +224,16 @@ function auditTable(items) {
 
 function bind() {
   document.querySelectorAll('[data-project-id]').forEach((button) => button.addEventListener('click', async () => {
-    try { await loadProject(button.dataset.projectId); revealedKey = ''; render(); } catch (error) { fail(error); }
+    try { await loadProject(button.dataset.projectId); revealedKey = ''; revealedApproval = null; render(); } catch (error) { fail(error); }
   }));
   document.querySelector('#createProject')?.addEventListener('submit', createProject);
   document.querySelector('#createKeyButton')?.addEventListener('click', createKey);
+  document.querySelector('#approvalForm')?.addEventListener('submit', createApproval);
   document.querySelector('#policyForm')?.addEventListener('submit', savePolicy);
   document.querySelector('#inventoryForm')?.addEventListener('submit', saveInventory);
   document.querySelector('#remediationForm')?.addEventListener('submit', createRemediation);
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
+  document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
   document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
@@ -234,6 +261,39 @@ async function createKey(event) {
 async function revokeKey(event) {
   if (!confirm('Revoke this API key immediately? Requests using it will be rejected.')) return;
   try { await api(`/api/projects/${encodeURIComponent(project.id)}/keys/${encodeURIComponent(event.currentTarget.dataset.revokeKey)}/revoke`, { method: 'POST', body: '{}' }); await loadProject(project.id); render(); } catch (error) { fail(error); }
+}
+
+
+async function createApproval(event) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  setBusy(button, true, 'Issuing…');
+  try {
+    const args = JSON.parse(document.querySelector('#approvalArguments').value);
+    const result = await api(`/api/projects/${encodeURIComponent(project.id)}/approvals`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ttlSeconds: Number(document.querySelector('#approvalTtl').value),
+        toolCall: { name: document.querySelector('#approvalTool').value, arguments: args },
+      }),
+    });
+    revealedApproval = { ...result.approval, arguments: args };
+    await loadProject(project.id);
+    render();
+  } catch (error) {
+    fail(error instanceof SyntaxError ? new Error('Approval arguments must be valid JSON.') : error);
+    setBusy(button, false);
+  }
+}
+
+async function revokeApproval(event) {
+  if (!confirm('Revoke this exact-action approval immediately?')) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(project.id)}/approvals/${encodeURIComponent(event.currentTarget.dataset.revokeApproval)}/revoke`, { method: 'POST', body: '{}' });
+    if (revealedApproval?.id === event.currentTarget.dataset.revokeApproval) revealedApproval = null;
+    await loadProject(project.id);
+    render();
+  } catch (error) { fail(error); }
 }
 
 async function savePolicy(event) {
@@ -331,7 +391,8 @@ function startRefresh() {
 }
 
 async function copyValue(event) {
-  const value = event.currentTarget.dataset.copy === 'key' ? revealedKey : curlExample();
+  const type = event.currentTarget.dataset.copy;
+  const value = type === 'key' ? revealedKey : type === 'approval' ? revealedApproval?.token || '' : curlExample();
   await navigator.clipboard.writeText(value);
   const original = event.currentTarget.textContent;
   event.currentTarget.textContent = 'Copied';
@@ -339,7 +400,10 @@ async function copyValue(event) {
 }
 
 function curlExample() {
-  return `curl -sS https://agentrisklayer.com/v1/guard \\\n  -H "Authorization: Bearer ${revealedKey || 'arl_live_YOUR_KEY'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "request_id": "agent-step-123",\n    "input": "Customer request and retrieved context",\n    "tool_call": {\n      "name": "crm.read",\n      "arguments": {"customer_id": "cust_123"},\n      "context": {"environment": "${project.environment}"}\n    },\n    "metadata": {"application": "support-agent"}\n  }'`;
+  const tool = revealedApproval?.tool || 'crm.read';
+  const args = revealedApproval?.arguments || { customer_id: 'cust_123' };
+  const approvalLine = revealedApproval?.token ? `,\n      \"approval_token\": \"${revealedApproval.token}\"` : '';
+  return `curl -sS https://agentrisklayer.com/v1/guard \\\n  -H "Authorization: Bearer ${revealedKey || 'arl_live_YOUR_KEY'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "request_id": "agent-step-123",\n    "input": "Customer request and retrieved context",\n    "tool_call": {\n      "name": "${tool}",\n      "arguments": ${JSON.stringify(args)}${approvalLine}\n    },\n    "metadata": {"application": "support-agent"}\n  }'`;
 }
 
 function fail(error) {

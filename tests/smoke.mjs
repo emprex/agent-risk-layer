@@ -125,7 +125,7 @@ async function rawJsonRequest(route, rawBody) {
 try {
   const health = await wait();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '9.1.0');
+  assert.equal(health.version, '9.2.0');
   assert.equal(health.productStage, 'production');
   const authPage = await anonymousRequest('/auth.html');
   assert.match(authPage, /Create free account/i);
@@ -152,8 +152,13 @@ try {
   assert.match(demoPage, /See AgentRiskLayer stop a dangerous AI-agent action/i);
   assert.match(demoPage, /synthetic data/i);
   const demoScript = await anonymousRequest('/demo.js');
-  assert.match(demoScript, /unsafe tool call denied/i);
-  assert.match(demoScript, /Privacy-safe evidence is recorded/i);
+  assert.match(demoScript, /rule: ARL-RUN-009/i);
+  assert.match(demoScript, /Atomic consumption/i);
+  assert.match(demoScript, /production_verified: false/i);
+  const proofManifest = await anonymousRequest('/downloads/agentrisklayer-controlled-support-agent-proof.json');
+  assert.equal(proofManifest.schema, 'arl.public-proof.v1');
+  assert.equal(proofManifest.assessment.platformVersion, '9.2.0');
+  assert.match(proofManifest.limitations.join(' '), /not an accredited certification/i);
   const quickstartPage = await anonymousRequest('/quickstart.html');
   assert.match(quickstartPage, /Developer quick start/i);
   assert.match(quickstartPage, /agentrisk-results\.sarif/i);
@@ -405,6 +410,45 @@ try {
   const replayedGuard = await guardCall({ request_id: 'smoke-deny', input: 'This changed content must not be billed twice.' });
   assert.equal(replayedGuard.payload.replayed, true);
   assert.equal(replayedGuard.payload.usage.requests, 2);
+
+  const approvedRefund = { name: 'refund_order', arguments: { orderId: 'demo_order_4821', amountPence: 17500, currency: 'GBP', dryRun: true } };
+  const selfAssertedApproval = await guardCall({
+    request_id: 'smoke-approval-self-asserted',
+    tool_call: approvedRefund,
+    context: { humanApproved: true, productionApproved: true },
+  });
+  assert.equal(selfAssertedApproval.payload.decision, 'deny');
+  assert.ok(selfAssertedApproval.payload.reasons.some((reason) => reason.ruleId === 'ARL-RUN-009'));
+
+  const issuedApproval = await request(`/api/projects/${projectId}/approvals`, {
+    method: 'POST', body: { toolCall: approvedRefund, ttlSeconds: 600 },
+  });
+  assert.match(issuedApproval.approval.token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  assert.equal(issuedApproval.approval.shownOnce, true);
+
+  const changedAmount = await guardCall({
+    request_id: 'smoke-approval-changed-amount',
+    tool_call: { ...approvedRefund, arguments: { ...approvedRefund.arguments, amountPence: 17600 } },
+    approval_token: issuedApproval.approval.token,
+  });
+  assert.equal(changedAmount.payload.decision, 'deny');
+  assert.ok(changedAmount.payload.reasons.some((reason) => reason.ruleId === 'ARL-RUN-009'));
+
+  const exactApproved = await guardCall({
+    request_id: 'smoke-approval-exact', tool_call: approvedRefund, approval_token: issuedApproval.approval.token,
+  });
+  assert.equal(exactApproved.payload.decision, 'allow');
+  assert.equal(exactApproved.payload.approval.status, 'consumed');
+
+  const approvalReplay = await guardCall({
+    request_id: 'smoke-approval-replay', tool_call: approvedRefund, approval_token: issuedApproval.approval.token,
+  });
+  assert.equal(approvalReplay.payload.decision, 'deny');
+  assert.ok(approvalReplay.payload.reasons.some((reason) => reason.ruleId === 'ARL-RUN-012'));
+  const approvalLedger = await request(`/api/projects/${projectId}/approvals`);
+  assert.equal(approvalLedger.approvals.length, 1);
+  assert.equal(approvalLedger.approvals[0].status, 'consumed');
+  assert.equal(Object.hasOwn(approvalLedger.approvals[0], 'token'), false);
   const inventory = await request(`/api/projects/${projectId}/inventory`, { method: 'POST', body: { source: 'smoke', documents: { services: [{ name: 'smoke-agent', type: 'agent', model: 'gpt-5', environment: 'production', public: true, privileged: true }] } } });
   assert.ok(inventory.snapshot.summary.total >= 1);
   const remediation = await request(`/api/projects/${projectId}/remediations`, { method: 'POST', body: { title: 'Restrict privileged public exposure', severity: 'critical', findingKey: 'smoke-drift' } });
@@ -442,7 +486,7 @@ try {
     documents: { agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] } },
   } });
   const projectState = await request(`/api/projects/${projectId}`);
-  assert.equal(projectState.project.events.length, 3);
+  assert.equal(projectState.project.events.length, 7);
   assert.equal(projectState.project.inventory.length, 3);
   assert.equal(projectState.project.remediations.length, 1);
   assert.equal(projectState.project.remediations[0].verification.retestResult, 'passed');
@@ -450,13 +494,16 @@ try {
   assert.equal(projectState.project.journey.deploymentDecision, 'READY FOR HUMAN DEPLOYMENT REVIEW', JSON.stringify(projectState.project.journey.blockingGaps));
   const controlOverview = await request('/api/control-plane/overview');
   assert.equal(controlOverview.totals.projects, 1);
-  assert.equal(controlOverview.totals.runtimeRequestsMonth, 3);
-  assert.equal(controlOverview.totals.deniedMonth, 2);
+  assert.equal(controlOverview.totals.runtimeRequestsMonth, 7);
+  assert.equal(controlOverview.totals.deniedMonth, 5);
   const runtimeDashboard = await request('/api/dashboard');
   assert.equal(runtimeDashboard.controlPlane.totals.projects, 1);
   const runtimeExport = await request('/api/account/export');
   assert.equal(runtimeExport.projects.length, 1);
-  assert.equal(runtimeExport.projects[0].runtimeEvents.length, 3);
+  assert.equal(runtimeExport.projects[0].runtimeEvents.length, 7);
+  assert.equal(runtimeExport.projects[0].runtimeApprovals.length, 1);
+  assert.equal(runtimeExport.projects[0].runtimeApprovals[0].status, 'consumed');
+  assert.equal(Object.hasOwn(runtimeExport.projects[0].runtimeApprovals[0], 'token'), false);
 
   const resetRequest = await request('/api/auth/password-reset/request', { method: 'POST', body: { email: 'owner@example.com' } });
   assert.ok(resetRequest.demoResetUrl);
@@ -494,6 +541,7 @@ try {
     redTeamRetestComparison: true,
     hostedRuntimeGuard: true,
     guardReplayProtection: true,
+    exactActionApprovalIntegrity: true,
     privacySafeRuntimeEvidence: true,
     inventoryDriftWorkflow: true,
     remediationWorkflow: true,

@@ -39,9 +39,11 @@ test('blocks secret-like fields', () => {
   assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-008'));
 });
 
-test('requires explicit approval for material actions', () => {
+test('requires server-verified approval for material actions and ignores caller assertions', () => {
   assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' } }, policy).decision, 'deny');
-  assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' }, context:{ humanApproved:true } }, policy).decision, 'allow');
+  assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' }, context:{ humanApproved:true, productionApproved:true } }, policy).decision, 'deny');
+  assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' }, context:{ environment:'staging' },
+    approval:{ valid:true, approvalId:'apr_1', environment:'staging' } }, policy).decision, 'allow');
 });
 
 test('monitor mode records would-deny but does not block', () => {
@@ -51,8 +53,9 @@ test('monitor mode records would-deny but does not block', () => {
   assert.equal(result.observedDecision, 'would-deny');
 });
 
-test('production actions require separate production approval', () => {
-  const result = evaluateRuntimeAction({ tool:'search', arguments:{}, context:{ environment:'production' } }, policy);
+test('approval environment must match the authoritative runtime environment', () => {
+  const result = evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' }, context:{ environment:'production' },
+    approval:{ valid:true, approvalId:'apr_1', environment:'staging' } }, policy);
   assert.equal(result.decision, 'deny');
   assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-010'));
 });

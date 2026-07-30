@@ -22,9 +22,9 @@ import { authenticateScim, configureIntegration, createScimToken, createWorkspac
 import { discoverAiAssets } from './src/asset-discovery.js';
 import { analyseModelArtifact } from './src/model-artifact-analysis.js';
 import {
-    authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createSecurityProject, entitlementForUser, getSecurityProject,
-    listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeEvents, recordAssetSnapshot,
-    registerRemediationEvidenceArtifact, revokeProjectApiKey, screenGuardRequest, updateRemediationItem, updateSecurityProject,
+    authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createRuntimeApproval, createSecurityProject, entitlementForUser, getSecurityProject,
+    listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeApprovals, listRuntimeEvents, recordAssetSnapshot,
+    registerRemediationEvidenceArtifact, revokeProjectApiKey, revokeRuntimeApproval, screenGuardRequest, updateRemediationItem, updateSecurityProject,
 } from './src/control-plane.js';
 import {
     buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
@@ -711,6 +711,48 @@ const server = http.createServer(async (req, res) => {
                 return;
             try {
                 return json(res, 200, await revokeProjectApiKey({ projectId: decodeURIComponent(match[1]), keyId: decodeURIComponent(match[2]), userId: req.user.id }));
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/approvals$/);
+        if (req.method === 'GET' && match) {
+            if (!requireUser(req, res))
+                return;
+            try {
+                return json(res, 200, { approvals: await listRuntimeApprovals({ projectId: decodeURIComponent(match[1]), userId: req.user.id, limit: url.searchParams.get('limit') }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 201, { approval: await createRuntimeApproval({
+                    projectId: decodeURIComponent(match[1]),
+                    userId: req.user.id,
+                    toolCall: body.toolCall || body.tool_call,
+                    ttlSeconds: body.ttlSeconds || body.ttl_seconds,
+                }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/approvals\/([^/]+)\/revoke$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            try {
+                return json(res, 200, await revokeRuntimeApproval({
+                    projectId: decodeURIComponent(match[1]),
+                    approvalId: decodeURIComponent(match[2]),
+                    userId: req.user.id,
+                }));
             }
             catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
@@ -1441,7 +1483,9 @@ async function listSecurityProjectsForExport(userId) {
             .map((row) => ({ id: row.id, source: row.source, sourceDigest: row.source_digest, summary: parseJson(row.summary_json, {}), assets: parseJson(row.assets_json, []), drift: parseJson(row.drift_json, {}), createdAt: row.created_at }));
         const remediations = (await db.prepare(`SELECT id,assessment_id,finding_key,title,severity,status,owner_email,due_at,verification_json,created_at,updated_at FROM remediation_items WHERE project_id=? ORDER BY updated_at DESC`).all(project.id))
             .map((row) => ({ ...row, verification: parseJson(row.verification_json, {}), verification_json: undefined }));
-        output.push({ ...project, policy: parseJson(project.policy_json, {}), policy_json: undefined, runtimeEvents: events, inventory, remediations });
+        const runtimeApprovals = await db.prepare(`SELECT id,approver_id,tool_name,environment,action_digest,status,issued_at,expires_at,
+          consumed_at,consumed_request_id,runtime_event_id,revoked_at FROM runtime_approvals WHERE project_id=? ORDER BY issued_at DESC`).all(project.id);
+        output.push({ ...project, policy: parseJson(project.policy_json, {}), policy_json: undefined, runtimeEvents: events, runtimeApprovals, inventory, remediations });
     }
     return output;
 }

@@ -61,9 +61,9 @@ test('PostgreSQL migrations are complete, portable and checksum-idempotent', asy
   const migrationDir = path.join(root, 'migrations');
   const files = fs.readdirSync(migrationDir).filter((name) => /^\d{3}_.+\.sql$/.test(name)).sort();
   const combined = files.map((name) => fs.readFileSync(path.join(migrationDir, name), 'utf8')).join('\n');
-  assert.equal(files.length, 7);
+  assert.equal(files.length, 8);
   assert.doesNotMatch(combined, /PRAGMA|BEGIN\s+IMMEDIATE|INSERT\s+OR\s+(?:REPLACE|IGNORE)/i);
-  for (const table of ['users','sessions','assessments','purchases','subscriptions','stripe_event_recoveries','stripe_subscription_conflicts','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','asset_snapshots','remediation_items','remediation_evidence_artifacts','remediation_retest_criteria','security_audit_log','sales_prospects','sales_messages','sales_activities']) {
+  for (const table of ['users','sessions','assessments','purchases','subscriptions','stripe_event_recoveries','stripe_subscription_conflicts','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','runtime_approvals','asset_snapshots','remediation_items','remediation_evidence_artifacts','remediation_retest_criteria','security_audit_log','sales_prospects','sales_messages','sales_activities']) {
     assert.match(combined, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
   }
   const duplicates = [];
@@ -95,6 +95,21 @@ test('PostgreSQL migrations are complete, portable and checksum-idempotent', asy
   const second = await runMigrations(fakeDb);
   assert.deepEqual(first.applied, files);
   assert.deepEqual(second.skipped, files);
+});
+
+
+test('runtime approval integrity migration is additive and enforces a single-use ledger', () => {
+  const migration = fs.readFileSync(path.join(root, 'migrations', '008_runtime_approval_integrity.sql'), 'utf8');
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS runtime_approvals/);
+  assert.match(migration, /token_digest TEXT NOT NULL UNIQUE/);
+  assert.match(migration, /status IN \('active','consumed','revoked'\)/);
+  assert.match(migration, /consumed_request_id/);
+  assert.match(migration, /runtime_event_id TEXT REFERENCES runtime_events/);
+  assert.match(migration, /approver_id TEXT REFERENCES users\(id\) ON DELETE SET NULL/);
+  assert.doesNotMatch(migration, /approver_id TEXT NOT NULL/);
+  assert.match(migration, /WHERE consumed_request_id IS NOT NULL/);
+  assert.doesNotMatch(migration, /\bDROP\s+(?:TABLE|COLUMN)\b/i);
+  assert.doesNotMatch(migration, /\bDELETE\s+FROM\b/i);
 });
 
 test('billing integrity migration is additive and preserves legacy purchases', () => {
