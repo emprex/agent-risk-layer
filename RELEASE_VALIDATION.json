@@ -1,46 +1,52 @@
 {
   "schema": "arl.release-validation.v4",
   "product": "AgentRiskLayer",
-  "version": "9.2.0",
-  "sourceBaselineCommit": "a9bfdc156ea2b8a7f94181a12baf187ecabf6919",
-  "releaseStatus": "implementation-validated-production-deployment-and-verification-required",
-  "generatedAt": "2026-07-30T19:54:10.852Z",
-  "securityChange": {
-    "title": "Server-issued exact-action runtime approvals",
-    "rootCause": "Hosted Guard previously accepted caller-controlled approval booleans and did not maintain a consumable approval ledger.",
-    "controlOutcome": "Approval-required actions now require a server-issued token bound to workspace, project, authoritative environment, tool and canonical arguments, with database-backed expiry, revocation and single-use consumption.",
-    "migration": "008_runtime_approval_integrity.sql",
-    "migrationType": "additive",
+  "version": "9.3.0",
+  "sourceBaselineCommit": "1b13b1938c492e83370d585074ba08e25c1bb37a",
+  "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
+  "releaseStatus": "implementation-validated-production-deployment-and-browser-verification-required",
+  "generatedAt": "2026-07-30T22:29:45.407Z",
+  "customerJourneyChange": {
+    "title": "Guided customer protection journey",
+    "rootCause": "The post-sign-in control plane exposed specialist projects, policies, keys, approvals and terminal integration steps before giving an ordinary customer a clear goal or next action.",
+    "controlOutcome": "The default view now presents one recommended next action and a browser-run synthetic protection check, while retaining advanced controls behind explicit progressive disclosure.",
+    "databaseMigration": null,
     "dataDeletionOrRewrite": false,
-    "privacyOutcome": "Authenticated approver identity remains in the protected ledger and audit trail; the signed bearer token omits the internal approver identifier."
+    "usageDisclosure": "Each guided run consumes four monthly protection checks.",
+    "evidenceBoundary": "Guided events are synthetic, labelled guided_demo and excluded from customer integration and deployment-readiness evidence."
   },
   "automatedGate": {
     "command": "npm run validate",
     "productionCredentialsExcluded": true,
     "passed": true,
     "tests": {
-      "total": 157,
-      "passed": 157,
+      "total": 159,
+      "passed": 159,
       "failed": 0,
       "skipped": 0
     },
     "syntaxAndSourceChecks": true,
     "endToEndSmoke": {
       "passed": true,
-      "exactActionApprovalIssuedByAuthenticatedOwner": true,
-      "callerApprovalAssertionsIgnored": true,
-      "changedValueDenied": true,
-      "exactActionAllowedAndConsumed": true,
-      "consumedApprovalReplayDenied": true,
-      "approvalLedgerIncludedInAccountExport": true,
-      "rawToolArgumentsRetained": false,
-      "approvalBearerOmitsInternalApproverId": true,
-      "approvalIssuanceRestrictedToAdminOrOwner": true
+      "guidedProtectionCheck": true,
+      "decisions": [
+        "deny",
+        "deny",
+        "allow",
+        "deny"
+      ],
+      "apiKeyReturned": false,
+      "approvalTokenReturned": false,
+      "externalToolExecuted": false,
+      "publishedProjectPolicyChanged": false,
+      "syntheticEvidenceExcludedFromReadiness": true,
+      "existingExactActionApprovalFlowPreserved": true,
+      "accountExportAndDeletionPreserved": true
     },
-    "focusedApprovalGate": {
-      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/postgresql.test.js",
-      "tests": 28,
-      "passed": 28,
+    "focusedGuidedJourneyGate": {
+      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/customer-journey.test.js",
+      "tests": 33,
+      "passed": 33,
       "failed": 0,
       "skipped": 0
     },
@@ -60,24 +66,26 @@
     }
   },
   "evidenceFiles": [
-    "validation/AgentRiskLayer-v9.2.0-validation-console.log",
-    "validation/AgentRiskLayer-v9.2.0-approval-focused.log",
-    "test-artifacts/detection-benchmark-v9.2.0.json",
-    "test-artifacts/AgentRiskLayer-v9.2.0-1000-scenario-results.json",
-    "public/downloads/agentrisklayer-controlled-support-agent-proof.json"
+    "validation/AgentRiskLayer-v9.3.0-validation-console.log",
+    "validation/AgentRiskLayer-v9.3.0-guided-ux-focused.log",
+    "test-artifacts/detection-benchmark-v9.3.0.json",
+    "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-results.json",
+    "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-report.md"
   ],
   "limitations": [
     "The automated gate used isolated local test persistence and did not connect to the production PostgreSQL service.",
-    "PostgreSQL migration portability and row-lock SQL were inspected and tested through the adapter contract; live concurrent production behaviour is not yet verified.",
-    "No Render deployment, live migration application, live browser journey, real payment or production email was performed in this environment.",
-    "Internal engineering validation is not independent penetration testing, accredited certification or a guarantee that the system is risk-free."
+    "No Render deployment, live authenticated customer journey, live payment or production email was performed in this environment.",
+    "Automated screenshot rendering was unavailable because local browser navigation was blocked by administrator policy.",
+    "The guided check proves the hosted synthetic decision path, not customer integration or direct-tool network containment.",
+    "Internal engineering validation is not independent usability research, penetration testing, accredited certification or a guarantee that the system is risk-free."
   ],
   "liveVerificationRequired": [
-    "Apply migration 008 through the normal deployment migration process and verify its checksum record.",
-    "Verify /api/ready reports version 9.2.0, production stage and a healthy PostgreSQL adapter.",
-    "Issue an exact refund approval as a project owner or admin in production.",
-    "Verify changed target and value are denied, the exact action is allowed once, and a new-request replay is denied.",
-    "Verify the runtime event, approval ledger and audit records correlate without raw arguments.",
-    "Verify monitoring, rollback and database backup status after deployment."
+    "Verify /api/ready reports version 9.3.0, production stage and healthy PostgreSQL with migration 008 current.",
+    "Verify an ordinary authenticated owner lands on the guided control-plane view.",
+    "Run the safe protection check and confirm missing approval denied, changed amount denied, exact action allowed once and replay denied.",
+    "Verify the browser receives no project API key or approval bearer token from the guided route.",
+    "Verify the published customer policy remains unchanged and guided_demo events do not satisfy deployment readiness.",
+    "Verify Technical controls preserve policy, key, inventory, remediation, approval and audit workflows.",
+    "Perform desktop and mobile visual checks and review logs, usage, monitoring and rollback readiness."
   ]
 }

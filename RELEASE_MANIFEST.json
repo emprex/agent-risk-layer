@@ -1,12 +1,13 @@
 {
   "schema": "arl.release-manifest.v3",
   "product": "AgentRiskLayer",
-  "version": "9.2.0",
-  "sourceBaselineCommit": "a9bfdc156ea2b8a7f94181a12baf187ecabf6919",
-  "generatedAt": "2026-07-30T19:54:10.852Z",
+  "version": "9.3.0",
+  "sourceBaselineCommit": "1b13b1938c492e83370d585074ba08e25c1bb37a",
+  "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
+  "generatedAt": "2026-07-30T22:29:45.407Z",
   "algorithm": "SHA-256",
   "selfExcluded": true,
-  "fileCount": 224,
+  "fileCount": 230,
   "files": [
     {
       "path": ".agentrisk.json",
@@ -50,8 +51,8 @@
     },
     {
       "path": "CONTROL_PLANE_API.md",
-      "bytes": 5969,
-      "sha256": "255dc1abb2609668f1fa99e3c91ea789e726ec7656e779669e8b5d31cde3f033"
+      "bytes": 6893,
+      "sha256": "0af2ee75aeed8f5605b1679b281d4dc544d9d50f415f0287ca73da3232a974dc"
     },
     {
       "path": "DEPLOYMENT.md",
@@ -105,8 +106,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6063,
-      "sha256": "65bfd58dafa1bba346fab56f8d4392962f87595556d1a275736817d602d53785"
+      "bytes": 6292,
+      "sha256": "eb1768d83d67db12a3a5fbddbc89f305191e9da306438872146f8891e3359e30"
     },
     {
       "path": "REDTEAM_ADAPTER_PROTOCOL.md",
@@ -120,8 +121,8 @@
     },
     {
       "path": "RELEASE_NOTES.md",
-      "bytes": 20890,
-      "sha256": "7ef129e46c2c89637e4c6e9599ee12fb97cafffc54e4ed6b6979385deb4b1cb5"
+      "bytes": 24934,
+      "sha256": "8b944305bd2994c0eddd7788dcf9d4689a8db1b23e3e5e59bacfecd5ecc93556"
     },
     {
       "path": "RELEASE_NOTES_V9_1.md",
@@ -134,19 +135,24 @@
       "sha256": "62039be7b3538598ed6a30b7c3c66cd6aaa0e2e902dafc31dd0742e9847cc77b"
     },
     {
+      "path": "RELEASE_NOTES_V9_3.md",
+      "bytes": 4057,
+      "sha256": "a15757cbb7b424c8823239d058132a16e0953f50cea45d9a59decdcb3b3bf8e1"
+    },
+    {
       "path": "RELEASE_VALIDATION.json",
-      "bytes": 4054,
-      "sha256": "28aa668be6559c8aa5276117de8a96da2b19269b505f39beed44e52bb47b5c84"
+      "bytes": 4459,
+      "sha256": "8e939f50957dceb9d6ea26b82f8172e7d5432099af4edda52a7fb70984e21336"
     },
     {
       "path": "RELEASE_VALIDATION.md",
-      "bytes": 2704,
-      "sha256": "1f0ab72750bea652c4c455bc46bc2a3d0d5a9e7128f55590ae6ec088d4e4d1b2"
+      "bytes": 3972,
+      "sha256": "e4d3fae9a261edda0802ae02cbd9e7cb7b8ce0673d3a22adba14dfae47d72d5b"
     },
     {
       "path": "RUNTIME_PROTECTION.md",
-      "bytes": 3169,
-      "sha256": "e5e7cf7dcf8343992e315e9934c19370d5d92f6a37616011b107256fb93012a6"
+      "bytes": 3985,
+      "sha256": "4c68fbf61d21223b76222bd98cf48aab8872c93385f84a16fb282cf5418313d4"
     },
     {
       "path": "SALES_AGENT.md",
@@ -156,7 +162,7 @@
     {
       "path": "SBOM.spdx.json",
       "bytes": 2091,
-      "sha256": "bcdb35e9abd3afd46917b75aef62b3bbda68b67e1e329b78368fe99e14142ac6"
+      "sha256": "c8c7bf51ad3a190fdfd102377e0234b1ff296d53b3f4e3fe53e4a646d80933c9"
     },
     {
       "path": "SECURITY.md",
@@ -236,12 +242,12 @@
     {
       "path": "package-lock.json",
       "bytes": 5697,
-      "sha256": "f3a9a43ad8087a57631c8543ec3e5a63eaf9dbd1310a6ba9c47565336c03e22e"
+      "sha256": "a9f09339d6117b70b29036416fcc1be949067b87094602756f45c685887fe5f8"
     },
     {
       "path": "package.json",
       "bytes": 2943,
-      "sha256": "32dfcf3af08996408d21754bdfdf1632e69e751972ec67ed27c45f78de445a24"
+      "sha256": "e694f4efd33682fef6654cbac693b0fb1dd355a3f871d50025fccea6f012e5ac"
     },
     {
       "path": "public/404.html",
@@ -300,13 +306,13 @@
     },
     {
       "path": "public/control-plane.html",
-      "bytes": 1990,
-      "sha256": "716ec6f678564d6ac4cb8dacea2b0f68cbcf0b2268723873f336573a69e4df52"
+      "bytes": 1923,
+      "sha256": "def7b7db2f6baced06704c755cb813207a70147a9d4b2c84de20b1f41896611d"
     },
     {
       "path": "public/control-plane.js",
-      "bytes": 34089,
-      "sha256": "b6eaebcbf66b881ad68040d54c0564050709e27c8774a8dec14a29b09e7ecf20"
+      "bytes": 44842,
+      "sha256": "9343149295109023bba1be022b1b68126f16080bb8bc9fd3c8dbbc0918e249a0"
     },
     {
       "path": "public/dashboard.html",
@@ -321,7 +327,7 @@
     {
       "path": "public/demo.html",
       "bytes": 8449,
-      "sha256": "12e83da2ff400435810599d31d74dfcbf002a059e384f275ea79327638a91392"
+      "sha256": "9e1206b9af61c525fea0e76e37076aaee8bd0d54679a0ce8a0910f2768d6199a"
     },
     {
       "path": "public/demo.js",
@@ -420,8 +426,8 @@
     },
     {
       "path": "public/help.html",
-      "bytes": 19642,
-      "sha256": "82bfec804d0270805e878e0d2655807aa757649d2bd36a3df859b507c73ef0e6"
+      "bytes": 19871,
+      "sha256": "cdd4eb1fe73bec2edbe28e19ce4858337bd9684932c5e64b22ce9ee014e785c0"
     },
     {
       "path": "public/help.js",
@@ -590,8 +596,8 @@
     },
     {
       "path": "public/styles.css",
-      "bytes": 97144,
-      "sha256": "e700c445109b7b1bb59c9e2450cca4c93a1c398ca8735fec94f77dd6eaa59e78"
+      "bytes": 104259,
+      "sha256": "a36c50f76304c7175e127f02ead6aaa9ca90b5ddfaa8ec57c42d2a0acfd2f281"
     },
     {
       "path": "public/success.html",
@@ -725,8 +731,8 @@
     },
     {
       "path": "server.js",
-      "bytes": 118994,
-      "sha256": "db66885d8e155b3883cd65c32d99e38985a1130bdb22f0033d84e4d0e0380284"
+      "bytes": 119891,
+      "sha256": "c512bbd6b6a546cea10ae264cc8653fb3fe2376e014c6b24247c8f8652ecb7e0"
     },
     {
       "path": "src/access-control.js",
@@ -746,7 +752,7 @@
     {
       "path": "src/config.js",
       "bytes": 9046,
-      "sha256": "ad32f566d7809ac0eaacdc6dc4bc64fb5c9c7db2feeee7012ce589c596f2f25d"
+      "sha256": "08c3caeb542a5531245b8d6b03056027c11ae8c6c7b8696aa2be6f45ad342ad6"
     },
     {
       "path": "src/content-security.js",
@@ -755,8 +761,8 @@
     },
     {
       "path": "src/control-plane.js",
-      "bytes": 77582,
-      "sha256": "8407b9408b8f2455dbdfa1955904653108ae0de8d534cecd3ef1e54fa0d0e671"
+      "bytes": 81953,
+      "sha256": "01cc62fd98cc4d5f66c5220db3a759034517b64b45c41eb9f647823e96e61d9c"
     },
     {
       "path": "src/db-adapters/postgres.js",
@@ -904,6 +910,16 @@
       "sha256": "ad0404ef64a51929ec59febb3d315ada6b0be077769d0f587c099e8bdce218c3"
     },
     {
+      "path": "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-report.md",
+      "bytes": 861,
+      "sha256": "881a643f32b7208ebe900e1b6d7cf874a8e8f9345c535036cb3211d1aec45ac5"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-results.json",
+      "bytes": 517576,
+      "sha256": "7a84b7b52ea3272f2e892c84929826545f26dca0215e5e929fa2afdc340595a6"
+    },
+    {
       "path": "test-artifacts/detection-benchmark-v9.1.json",
       "bytes": 3895,
       "sha256": "be2e3068762f8363a66d8e29b97dbb73357b36ad522276bb709d8f054c5cfc50"
@@ -912,6 +928,11 @@
       "path": "test-artifacts/detection-benchmark-v9.2.0.json",
       "bytes": 3906,
       "sha256": "bb648b2d4e9b5767074275c3c6268f2ceac1aa09fed76b7da667d059c7fce76e"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v9.3.0.json",
+      "bytes": 3909,
+      "sha256": "fd50eedbf0a2024134e0a8cc22334e081d9dbe613dcbc4cdfac0072875e594d8"
     },
     {
       "path": "tests/access-control.test.js",
@@ -945,8 +966,8 @@
     },
     {
       "path": "tests/control-plane.test.js",
-      "bytes": 21032,
-      "sha256": "4029d40d45f7a1c47413f37b62be452549a9a687495588e5ea4d680f3627f021"
+      "bytes": 23572,
+      "sha256": "264a446aafe5c23ecbfce2981f81895c8242b3f0f1b7efe7f68ff45ea4bcf546"
     },
     {
       "path": "tests/csrf-origin.test.js",
@@ -955,8 +976,8 @@
     },
     {
       "path": "tests/customer-journey.test.js",
-      "bytes": 8847,
-      "sha256": "d6f4502efa25807e07609d5f9e66de52e51222ecf4f0ed751af576debb280afe"
+      "bytes": 9805,
+      "sha256": "0928b2041bb55aed87900f16d881c84a304baf7e7329ffaf495ae6abb4fc8c43"
     },
     {
       "path": "tests/enterprise-security.test.js",
@@ -1060,8 +1081,8 @@
     },
     {
       "path": "tests/smoke.mjs",
-      "bytes": 33444,
-      "sha256": "9955845b6f86371e27756fd4a2e2449bb8ff83c6d3ed5c5a283edee361acdbe1"
+      "bytes": 34210,
+      "sha256": "409bb2f0865bcf281ff3d6ff26728deb69dfce425715939b31849a4f6fbb435f"
     },
     {
       "path": "tests/stripe-webhook-shapes.test.js",
@@ -1127,6 +1148,16 @@
       "path": "validation/AgentRiskLayer-v9.2.0-validation-console.log",
       "bytes": 40121,
       "sha256": "15463e6771d0ff43b31304815b7bb835328acce357bee415178a98337fdb25fa"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.3.0-guided-ux-focused.log",
+      "bytes": 7326,
+      "sha256": "65a6c0bcf25da29da1c07367f048071d062d14f96fbbda1b883302a04c60fd05"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.3.0-validation-console.log",
+      "bytes": 40776,
+      "sha256": "8fb37049f2ecb2a0f3b08a1b31cca5fe4639cbb0633a3ef3e196ea87119c201e"
     }
   ]
 }

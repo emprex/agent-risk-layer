@@ -1,6 +1,6 @@
 {
   "name": "agent-risk-layer",
-  "version": "9.2.0",
+  "version": "9.3.0",
   "private": true,
   "type": "module",
   "description": "Production AI-agent security platform with public onboarding, PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, payments, signed evidence, and operational recovery.",

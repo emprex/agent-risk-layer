@@ -10,6 +10,7 @@ import { subscriptionAccessDecision } from './subscription-access.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
+export const GUIDED_PROTECTION_CHECK_SCHEMA = 'arl.guided-protection-check.v1';
 
 export const PLAN_ENTITLEMENTS = Object.freeze({
   community: Object.freeze({ projects: 1, runtimeRequestsPerMonth: 10_000, runtimeRequestsPerMinute: 60, retentionDays: 7, apiKeysPerProject: 2, name: 'Community' }),
@@ -259,8 +260,10 @@ export function apiKeyStatus(key, timestampMs = Date.now()) {
   return expiry <= timestampMs ? 'expired' : 'active';
 }
 
-export async function screenGuardRequest({ rawToken, body = {}, authenticated = null }) {
+export async function screenGuardRequest({ rawToken, body = {}, authenticated = null, eventType = 'guard', notifyOnDeny = true }) {
   const auth = authenticated || await authenticateProjectApiKey(rawToken);
+  const actorType = authenticated?.actorType || 'api_key';
+  const actorId = authenticated?.actorId || auth.apiKeyId || null;
   const project = auth.project;
   const requestId = clean(body.request_id || body.requestId || crypto.randomUUID(), 100);
   if (!requestId) throw badRequest('A request identifier is required.');
@@ -367,7 +370,7 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     const runtimeEventId = id('rte_');
     await db.prepare(`INSERT INTO runtime_events
       (id,project_id,api_key_id,request_id,event_type,decision,observed_decision,severity,rule_ids_json,content_digest,tool_name,argument_digest,evaluation_ms,metadata_json,response_json,policy_version,policy_digest,policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(runtimeEventId, project.id, auth.apiKeyId, requestId, 'guard', decision, observedDecision, severity,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(runtimeEventId, project.id, auth.apiKeyId || null, requestId, clean(eventType, 40) || 'guard', decision, observedDecision, severity,
       JSON.stringify(reasons.map((item) => item.ruleId)), evidence.inputDigest || evidence.outputDigest, evidence.tool, evidence.argumentDigest, evaluationMs,
       JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt,
       retestCriteria?.id || null, retestCriteria?.remediation_id || null, retestCriteria?.criteria_digest || null,
@@ -378,7 +381,7 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
         WHERE id=? AND project_id=? AND token_digest=? AND status='active' AND revoked_at IS NULL AND expires_at>?`)
         .run(response.timestamp, requestId, runtimeEventId, approvalDecision.approvalId, project.id, approvalDecision.tokenDigest, response.timestamp);
       if (Number(consumed.changes) !== 1) throw conflict('Runtime approval was already consumed, expired or revoked.');
-      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId,
+      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType, actorId,
         action: 'runtime_approval.consumed', targetType: 'runtime_approval', targetId: approvalDecision.approvalId,
         metadata: { requestId, runtimeEventId, tool: evidence.tool, actionDigest: approvalDecision.actionDigest } });
     }
@@ -392,14 +395,14 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
         action: 'remediation.retest_executed', targetType: 'remediation_retest_criteria', targetId: retestCriteria.id,
         metadata: { remediationId: retestCriteria.remediation_id, runtimeEventId, result: retestSatisfied ? 'passed' : 'failed' } });
     }
-    await db.prepare('UPDATE project_api_keys SET last_used_at=? WHERE id=?').run(response.timestamp, auth.apiKeyId);
+    if (auth.apiKeyId) await db.prepare('UPDATE project_api_keys SET last_used_at=? WHERE id=?').run(response.timestamp, auth.apiKeyId);
     if (decision === 'deny') {
-      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType: 'api_key', actorId: auth.apiKeyId, action: 'runtime.denied', targetType: 'runtime_request', targetId: requestId,
+      await audit({ workspaceId: project.workspace_id, projectId: project.id, actorType, actorId, action: 'runtime.denied', targetType: 'runtime_request', targetId: requestId,
         metadata: { severity, ruleIds: reasons.map((item) => item.ruleId), approvalStatus: response.approval.status } });
     }
     return response;
   });
-  if (response.decision === 'deny' && !response.replayed) {
+  if (notifyOnDeny && response.decision === 'deny' && !response.replayed) {
     void deliverSecurityEventSystem({ workspaceId: project.workspace_id, event: {
       type: 'runtime_denied', severity: response.severity, title: 'AI runtime action denied',
       projectId: project.id, requestId: response.requestId, decision: response.decision,
@@ -407,6 +410,119 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
     } }).catch((error) => console.error('Runtime integration delivery failed:', error.message));
   }
   return response;
+}
+
+export async function runGuidedProtectionCheck({ projectId, userId }) {
+  const access = await requireProjectRole(projectId, userId, APPROVER_ROLES);
+  const sampleTool = 'arl_demo.refund_order';
+  const sampleArguments = Object.freeze({ orderId: 'demo_order_4821', amountPence: 17500, currency: 'GBP' });
+  const changedArguments = Object.freeze({ ...sampleArguments, amountPence: 17600 });
+  const startedAt = nowIso();
+  const version = `guided-${Date.now()}`;
+  const currentPolicy = parseJson(access.project.policy_json, {});
+  const demoPolicy = compileRuntimePolicy({
+    ...currentPolicy,
+    version,
+    mode: 'enforce',
+    allowedTools: [...new Set([...(currentPolicy.allowedTools || []), sampleTool])],
+    requireApprovalFor: [...new Set([...(currentPolicy.requireApprovalFor || []), sampleTool])],
+  });
+  const demoProject = projectColumns({
+    ...access.project,
+    policy_json: JSON.stringify(demoPolicy),
+    policy_version: demoPolicy.version,
+    policy_digest: policyIdentityDigest(demoPolicy, projectId),
+    policy_published_at: startedAt,
+  });
+  const authenticated = { apiKeyId: null, actorType: 'user', actorId: userId, project: demoProject };
+  const requestPrefix = `guided-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const screen = (suffix, toolCall) => screenGuardRequest({
+    authenticated,
+    eventType: 'guided_demo',
+    notifyOnDeny: false,
+    body: {
+      request_id: `${requestPrefix}-${suffix}`,
+      input: 'Fictional customer asks the support agent for a refund.',
+      tool_call: toolCall,
+      metadata: { application: 'agentrisklayer-guided-check', synthetic: true },
+    },
+  });
+
+  const withoutApproval = await screen('without-approval', { name: sampleTool, arguments: sampleArguments });
+  const approval = await createRuntimeApproval({
+    projectId,
+    userId,
+    toolCall: { name: sampleTool, arguments: sampleArguments },
+    ttlSeconds: 300,
+  });
+  const changedAmount = await screen('changed-amount', {
+    name: sampleTool,
+    arguments: changedArguments,
+    approval_token: approval.token,
+  });
+  const exactAction = await screen('exact-action', {
+    name: sampleTool,
+    arguments: sampleArguments,
+    approval_token: approval.token,
+  });
+  const replay = await screen('replay', {
+    name: sampleTool,
+    arguments: sampleArguments,
+    approval_token: approval.token,
+  });
+
+  const results = [
+    guidedResult('No human approval', 'deny', withoutApproval),
+    guidedResult('Changed amount', 'deny', changedAmount),
+    guidedResult('Exact approved action', 'allow', exactAction),
+    guidedResult('Reused approval', 'deny', replay),
+  ];
+  const passed = results.every((result) => result.passed);
+  await audit({
+    workspaceId: access.project.workspace_id,
+    projectId,
+    actorType: 'user',
+    actorId: userId,
+    action: 'guided_protection_check.completed',
+    targetType: 'project',
+    targetId: projectId,
+    metadata: { passed, requestIds: results.map((result) => result.requestId), sampleTool },
+  });
+  return {
+    schema: GUIDED_PROTECTION_CHECK_SCHEMA,
+    projectId,
+    completedAt: nowIso(),
+    passed,
+    simulation: {
+      syntheticData: true,
+      externalToolExecuted: false,
+      sampleTool,
+      sampleArguments,
+    },
+    approval: {
+      id: approval.id,
+      actionDigest: approval.actionDigest,
+      status: exactAction.approval?.status || 'unknown',
+      singleUse: true,
+    },
+    results,
+    limitations: [
+      'This guided check evaluates fictional data inside AgentRiskLayer and does not call a customer tool or refund system.',
+      'It proves the hosted policy and approval path for this controlled check; it does not prove that a customer agent is integrated correctly.',
+    ],
+  };
+}
+
+function guidedResult(label, expectedDecision, response) {
+  return {
+    label,
+    expectedDecision,
+    decision: response.decision,
+    approvalStatus: response.approval?.status || 'not-required',
+    requestId: response.requestId,
+    ruleIds: (response.reasons || []).map((reason) => reason.ruleId),
+    passed: response.decision === expectedDecision,
+  };
 }
 
 export async function listRuntimeEvents({ projectId, userId, limit = 100, decision = '' }) {

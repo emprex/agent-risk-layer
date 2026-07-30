@@ -1,4 +1,4 @@
-# AgentRiskLayer v9.2.0
+# AgentRiskLayer v9.3.0
 
 AgentRiskLayer is an evidence-first AI-agent security control plane for teams that need to discover AI assets, inspect code and model artefacts, test agent behaviour, enforce runtime policy, assign remediation, and make a defensible deployment decision from one auditable workflow.
 
@@ -6,6 +6,7 @@ This release is the production package for public self-service onboarding. Produ
 
 ## What is included
 
+- **Guided protection journey:** customers start with one clear next action and a one-click fictional protection check; policies, keys, inventory, remediation and audit evidence remain behind an explicit technical-controls view.
 - **Hosted security control plane:** scoped projects, versioned policy, one-time API keys, immediate revocation, server-side plan quotas, runtime decisions, privacy-safe event evidence and audit history.
 - **Hosted Guard API:** `POST /v1/guard` screens prompt/input, output and tool-call metadata in monitor or enforce mode. Production, staging and test projects default to enforcement.
 - **AI asset inventory and drift:** agents, models, MCP servers, tools, gateways and vector stores can be recorded as signed snapshots. Risky drift changes the deployment gate to `review-required`.

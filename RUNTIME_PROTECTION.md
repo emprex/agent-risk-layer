@@ -2,6 +2,12 @@
 
 AgentRiskLayer provides two runtime enforcement paths with different approval boundaries.
 
+## Guided browser protection check
+
+Project administrators and owners can run a safe protection check directly from `/control-plane.html`. The browser calls the authenticated `POST /api/projects/:projectId/guided-protection-check` route; no project API key, terminal command or approval token is shown to the customer.
+
+Each run uses fictional refund data and sends four decisions through the same hosted policy and exact-action approval engine: missing approval denial, changed-value denial, exact-action allow-and-consume and replay denial. The check never executes an external tool, leaves the published project policy unchanged and consumes four of the project’s monthly protection checks. Synthetic events are labelled `guided_demo` and do not count as customer integration or deployment-readiness evidence.
+
 ## Hosted Guard API
 
 The hosted `POST /v1/guard` endpoint provides:

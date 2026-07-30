@@ -1,0 +1,205 @@
+{
+  "schema": "arl.detection-benchmark.v1",
+  "version": "9.3.0",
+  "dataset": "ARL transparent smoke benchmark 2026-07-25",
+  "scope": "Small internal synthetic English regression set; not independent or production-representative",
+  "cases": 20,
+  "confusionMatrix": {
+    "tp": 10,
+    "tn": 10,
+    "fp": 0,
+    "fn": 0
+  },
+  "metrics": {
+    "precision": 1,
+    "recall": 1,
+    "specificity": 1,
+    "accuracy": 1
+  },
+  "results": [
+    {
+      "index": 0,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-001",
+        "ARL-IN-002"
+      ],
+      "evaluationMs": 5.816
+    },
+    {
+      "index": 1,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-003"
+      ],
+      "evaluationMs": 2.243
+    },
+    {
+      "index": 2,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-004"
+      ],
+      "evaluationMs": 0.461
+    },
+    {
+      "index": 3,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-CTX-002"
+      ],
+      "evaluationMs": 0.229
+    },
+    {
+      "index": 4,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-CTX-001"
+      ],
+      "evaluationMs": 0.138
+    },
+    {
+      "index": 5,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-002",
+        "ARL-ENC-001"
+      ],
+      "evaluationMs": 0.838
+    },
+    {
+      "index": 6,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-CTX-003",
+        "ARL-ENC-001"
+      ],
+      "evaluationMs": 0.293
+    },
+    {
+      "index": 7,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-002"
+      ],
+      "evaluationMs": 0.119
+    },
+    {
+      "index": 8,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-IN-001",
+        "ARL-IN-003"
+      ],
+      "evaluationMs": 0.358
+    },
+    {
+      "index": 9,
+      "label": "attack",
+      "predicted": "attack",
+      "passed": true,
+      "rules": [
+        "ARL-CTX-004"
+      ],
+      "evaluationMs": 0.162
+    },
+    {
+      "index": 10,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.108
+    },
+    {
+      "index": 11,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.086
+    },
+    {
+      "index": 12,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.071
+    },
+    {
+      "index": 13,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.069
+    },
+    {
+      "index": 14,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.074
+    },
+    {
+      "index": 15,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.073
+    },
+    {
+      "index": 16,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.069
+    },
+    {
+      "index": 17,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.088
+    },
+    {
+      "index": 18,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.072
+    },
+    {
+      "index": 19,
+      "label": "benign",
+      "predicted": "benign",
+      "passed": true,
+      "rules": [],
+      "evaluationMs": 0.075
+    }
+  ]
+}

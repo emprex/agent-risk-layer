@@ -86,6 +86,25 @@ test('dashboard leads with customer tasks and keeps specialist tools secondary',
 });
 
 
+
+
+test('control plane defaults to one human next step and hides specialist controls until requested', () => {
+  const html = read('public/control-plane.html');
+  const js = read('public/control-plane.js');
+  assert.match(html, /What should your agent be allowed to do\?/);
+  assert.match(html, /Start with a safe example/i);
+  assert.doesNotMatch(html, /AI security control plane/i);
+  assert.match(js, /Run safe protection check/);
+  assert.match(js, /No terminal, API key or real refund system is needed/);
+  assert.match(js, /uses four of your monthly protection checks/i);
+  assert.match(js, /guided-protection-check/);
+  assert.match(js, /technicalMode = sessionStorage\.getItem\('arl_control_plane_mode'\) === 'technical'/);
+  assert.match(js, /technicalMode \? technicalProjectView\(\) : ''/);
+  assert.match(js, /You are already using/);
+  assert.match(js, /Show technical controls/);
+  assert.match(js, /Four automatic checks\. One button\./);
+});
+
 test('customer entry pages keep one plain navigation and explain account value without API jargon', () => {
   for (const name of ['auth.html', 'demo.html', 'trust.html', 'compare.html', 'security-center.html', 'company.html', 'status.html']) {
     const html = read(`public/${name}`);

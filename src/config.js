@@ -35,7 +35,7 @@ export function parseBindHost(value) {
 }
 
 export const config = {
-    appVersion: '9.2.0',
+    appVersion: '9.3.0',
     scoringVersion: 'arl-risk-v3.2',
     termsVersion: process.env.TERMS_VERSION || '2026-07-22',
     productStage: process.env.PRODUCT_STAGE || 'production',

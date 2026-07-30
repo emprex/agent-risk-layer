@@ -24,7 +24,7 @@ import { analyseModelArtifact } from './src/model-artifact-analysis.js';
 import {
     authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createRuntimeApproval, createSecurityProject, entitlementForUser, getSecurityProject,
     listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeApprovals, listRuntimeEvents, recordAssetSnapshot,
-    registerRemediationEvidenceArtifact, revokeProjectApiKey, revokeRuntimeApproval, screenGuardRequest, updateRemediationItem, updateSecurityProject,
+    registerRemediationEvidenceArtifact, revokeProjectApiKey, revokeRuntimeApproval, runGuidedProtectionCheck, screenGuardRequest, updateRemediationItem, updateSecurityProject,
 } from './src/control-plane.js';
 import {
     buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
@@ -711,6 +711,20 @@ const server = http.createServer(async (req, res) => {
                 return;
             try {
                 return json(res, 200, await revokeProjectApiKey({ projectId: decodeURIComponent(match[1]), keyId: decodeURIComponent(match[2]), userId: req.user.id }));
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/guided-protection-check$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const projectId = decodeURIComponent(match[1]);
+            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 5, bucket: 'guided-protection-check', identity: `${req.user.id}:${projectId}` }))
+                return json(res, 429, { error: 'Too many guided checks. Wait a minute and try again.' });
+            try {
+                return json(res, 200, { check: await runGuidedProtectionCheck({ projectId, userId: req.user.id }) });
             }
             catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });

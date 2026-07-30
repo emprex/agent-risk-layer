@@ -21,6 +21,7 @@ import {
   registerRemediationEvidenceArtifact,
   revokeProjectApiKey,
   revokeRuntimeApproval,
+  runGuidedProtectionCheck,
   screenGuardRequest,
   updateRemediationItem,
   updateSecurityProject,
@@ -172,6 +173,51 @@ test('runtime approvals are exact-action, server-issued, single-use and caller a
   assert.equal(stored.status, 'consumed');
   assert.equal(stored.consumed_request_id, 'approval-exact');
   assert.match(stored.runtime_event_id, /^rte_/);
+});
+
+test('guided protection check proves the hosted approval path without API keys, terminal commands or policy changes', async () => {
+  const { userId, workspace, project } = await fixture('production');
+  const before = await getSecurityProject({ projectId: project.id, userId });
+  const check = await runGuidedProtectionCheck({ projectId: project.id, userId });
+
+  assert.equal(check.schema, 'arl.guided-protection-check.v1');
+  assert.equal(check.passed, true);
+  assert.equal(check.simulation.syntheticData, true);
+  assert.equal(check.simulation.externalToolExecuted, false);
+  assert.equal(check.simulation.sampleTool, 'arl_demo.refund_order');
+  assert.deepEqual(check.results.map((item) => [item.label, item.decision, item.passed]), [
+    ['No human approval', 'deny', true],
+    ['Changed amount', 'deny', true],
+    ['Exact approved action', 'allow', true],
+    ['Reused approval', 'deny', true],
+  ]);
+  assert.equal(check.approval.status, 'consumed');
+  assert.equal(check.approval.singleUse, true);
+  assert.doesNotMatch(JSON.stringify(check), /eyJ|arl_live_/);
+
+  const after = await getSecurityProject({ projectId: project.id, userId });
+  assert.equal(after.policyVersion, before.policyVersion);
+  assert.deepEqual(after.policy, before.policy);
+  assert.equal(after.journey.steps.find((step) => step.id === 'allowed').complete, false);
+  assert.equal(after.journey.steps.find((step) => step.id === 'blocked').complete, false);
+
+  const events = await db.prepare(`SELECT event_type,api_key_id,decision,request_id FROM runtime_events
+    WHERE project_id=? AND event_type='guided_demo' ORDER BY created_at`).all(project.id);
+  assert.equal(events.length, 4);
+  assert.ok(events.every((event) => event.api_key_id == null));
+  assert.deepEqual(events.map((event) => event.decision).sort(), ['allow', 'deny', 'deny', 'deny']);
+  const audit = await db.prepare(`SELECT actor_type,actor_id,action,metadata_json FROM security_audit_log
+    WHERE project_id=? AND action='guided_protection_check.completed' ORDER BY created_at DESC LIMIT 1`).get(project.id);
+  assert.equal(audit.actor_type, 'user');
+  assert.equal(audit.actor_id, userId);
+  assert.equal(JSON.parse(audit.metadata_json).passed, true);
+
+  const developer = await createUser();
+  await upsertMember({ workspaceId: workspace.id, actorId: userId, email: developer.email, role: 'developer' });
+  await assert.rejects(
+    () => runGuidedProtectionCheck({ projectId: project.id, userId: developer.userId }),
+    /permission denied/i,
+  );
 });
 
 test('inventory drift blocks deployment review and remediation work is auditable', async () => {

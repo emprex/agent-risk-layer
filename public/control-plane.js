@@ -8,6 +8,8 @@ let selectedProjectId = sessionStorage.getItem('arl_selected_project') || '';
 let revealedKey = '';
 let revealedApproval = null;
 let refreshTimer = null;
+let technicalMode = sessionStorage.getItem('arl_control_plane_mode') === 'technical';
+let guidedCheck = null;
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
 
@@ -19,6 +21,7 @@ document.querySelector('#logout').addEventListener('click', async () => {
 init();
 
 async function init() {
+  if (['#runtime', '#policy', '#inventory', '#remediation', '#audit'].includes(location.hash)) technicalMode = true;
   try {
     await loadOverview();
     if (selectedProjectId && overview.projects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
@@ -44,19 +47,9 @@ async function loadProject(projectId) {
 function render() {
   root.className = '';
   root.innerHTML = `
-    ${overviewHeader()}
-    <div class="control-plane-layout">
-      <aside class="project-rail">
-        <div class="rail-heading"><span class="eyebrow">Projects</span><small>${overview.projects.length}/${overview.entitlement.projects} active allowance</small></div>
-        <div class="project-list">${overview.projects.map(projectButton).join('') || '<p class="muted small-copy">No security projects yet.</p>'}</div>
-        <form id="createProject" class="mini-form rail-form">
-          <label for="projectName">New security project</label>
-          <input id="projectName" name="name" required minlength="2" maxlength="100" placeholder="Customer support agent">
-          <select id="projectEnvironment" name="environment"><option value="development">Development</option><option value="test">Test</option><option value="staging">Staging</option><option value="production">Production</option></select>
-          <button class="button primary small" type="submit">Create project</button>
-        </form>
-        <div class="entitlement-card"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${formatNumber(overview.entitlement.runtimeRequestsPerMonth)} runtime checks/month</span><span>${overview.entitlement.retentionDays}-day event retention</span><a href="/pricing.html">Compare plans →</a></div>
-      </aside>
+    ${technicalMode ? overviewHeader() : ''}
+    <div class="control-plane-layout ${technicalMode ? 'technical-mode' : 'guided-mode'}">
+      ${projectRail()}
       <section class="control-plane-main">${project ? projectView() : emptyProject()}</section>
     </div>`;
   bind();
@@ -64,7 +57,7 @@ function render() {
 
 function overviewHeader() {
   const totals = overview.totals;
-  return `<section class="control-overview">
+  return `<section class="control-overview" aria-label="Technical account totals">
     <article><span>Security projects</span><strong>${totals.projects}</strong><small>Scoped by workspace</small></article>
     <article><span>Runtime checks this month</span><strong>${formatNumber(totals.runtimeRequestsMonth)}</strong><small>${formatPercent(totals.deniedMonth, totals.runtimeRequestsMonth)} denied</small></article>
     <article><span>Threats blocked</span><strong>${formatNumber(totals.deniedMonth)}</strong><small>Policy-enforced decisions</small></article>
@@ -72,66 +65,167 @@ function overviewHeader() {
   </section>`;
 }
 
+function projectRail() {
+  const canCreate = overview.projects.length < overview.entitlement.projects;
+  const planMessage = canCreate
+    ? `${overview.entitlement.name} includes ${overview.entitlement.projects} active project${overview.entitlement.projects === 1 ? '' : 's'}.`
+    : `${overview.entitlement.name} includes ${overview.entitlement.projects} active project${overview.entitlement.projects === 1 ? '' : 's'}. You are already using ${overview.entitlement.projects === 1 ? 'it' : 'them'}.`;
+  return `<aside class="project-rail customer-project-rail">
+    <div class="rail-heading"><span class="eyebrow">Your protected agents</span><small>${overview.projects.length || '0'} active</small></div>
+    <div class="project-list">${overview.projects.map(projectButton).join('') || '<p class="muted small-copy">Your first protected agent will appear here.</p>'}</div>
+    ${canCreate && overview.projects.length ? `<details class="rail-create-details"><summary>Add another agent</summary>${projectCreateForm()}</details>` : ''}
+    <div class="entitlement-card plain-plan-card"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${escapeHtml(planMessage)}</span><span>${formatNumber(overview.entitlement.runtimeRequestsPerMonth)} protection checks each month</span>${canCreate ? '' : '<a href="/pricing.html">Need more projects? Compare plans →</a>'}</div>
+  </aside>`;
+}
+
 function projectButton(item) {
   const active = item.id === selectedProjectId ? 'active' : '';
   return `<button class="project-button ${active}" data-project-id="${escapeHtml(item.id)}">
     <span class="project-icon">${escapeHtml(item.name.slice(0, 2).toUpperCase())}</span>
-    <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.environment)} · ${formatNumber(item.runtimeRequestsMonth)} checks</small></span>
+    <span><strong>${escapeHtml(item.name)}</strong><small>${plainEnvironment(item.environment)} · ${formatNumber(item.runtimeRequestsMonth)} checks</small></span>
     <i class="project-health ${item.deniedMonth ? 'warning' : ''}"></i>
   </button>`;
 }
 
+function projectCreateForm() {
+  return `<form id="createProject" class="mini-form rail-form">
+    <label for="projectName">What do you call this agent?</label>
+    <input id="projectName" name="name" required minlength="2" maxlength="100" placeholder="Customer support agent">
+    <label for="projectEnvironment">Where is it used?</label>
+    <select id="projectEnvironment" name="environment"><option value="development">Still being built</option><option value="test">Test environment</option><option value="staging">Staging</option><option value="production">Live production</option></select>
+    <button class="button primary small" type="submit">Create protected agent</button>
+  </form>`;
+}
+
 function emptyProject() {
-  return `<section class="panel empty-state"><span class="eyebrow">Start here</span><h2>Create the security boundary for your first AI system.</h2><p>A project owns its runtime policy, API keys, inventory snapshots, drift history, remediation work and security audit trail.</p></section>`;
+  return `<section class="panel empty-state customer-empty-project">
+    <span class="eyebrow">Start here</span>
+    <h2>Protect one AI agent.</h2>
+    <p>Give it a name and tell us whether it is still being built, being tested or already live. You can see protection work before connecting any code.</p>
+    ${projectCreateForm()}
+  </section>`;
 }
 
 function projectView() {
+  return `${guidedProjectHome()}${technicalMode ? technicalProjectView() : ''}`;
+}
+
+function guidedProjectHome() {
+  const hasGuidedEvents = project.events.some((event) => event.event_type === 'guided_demo');
+  const hasRealEvents = project.events.some((event) => event.event_type === 'guard');
+  const hasActiveKey = project.apiKeys.some((key) => key.status === 'active');
+  const canApprove = project.permissions.approveActions;
+  const next = !hasGuidedEvents
+    ? { title: 'See the protection work', text: 'Run a controlled example with fictional refund data. AgentRiskLayer will prove that missing approval, a changed amount and a reused approval are blocked.', action: 'guided' }
+    : !hasActiveKey
+      ? { title: 'Connect your own agent when you are ready', text: 'The safe example worked. The next technical step is to create a connection key and place one Guard check before your agent performs an action.', action: 'connect' }
+      : !hasRealEvents
+        ? { title: 'Send the first request from your agent', text: 'Your connection key exists. Use the integration example, then return here to see the decision in plain language.', action: 'connect' }
+        : { title: 'Review what AgentRiskLayer decided', text: 'Your agent is sending requests. Review blocks and allowed actions, then address anything that needs attention.', action: 'review' };
+  return `<div class="customer-control-home">
+    <section class="panel human-project-header">
+      <div><span class="eyebrow">${escapeHtml(plainEnvironment(project.environment))}</span><h2>${escapeHtml(project.name)}</h2><p>AgentRiskLayer checks what this agent tries to do and records evidence without storing raw prompts or tool arguments.</p></div>
+      <span class="plain-status ${project.policy.mode === 'enforce' ? 'active' : 'warning'}">${project.policy.mode === 'enforce' ? 'Blocking unsafe actions' : 'Watching only'}</span>
+    </section>
+
+    <section class="panel human-next-card">
+      <div class="human-next-copy"><span class="eyebrow">Your next step</span><h2>${escapeHtml(next.title)}</h2><p>${escapeHtml(next.text)}</p></div>
+      <div class="human-next-action">${nextActionButton(next, canApprove)}</div>
+    </section>
+
+    <section class="human-choice-grid" aria-label="Choose what you want to do">
+      <article class="panel"><span>1</span><h3>Check the risk</h3><p>Answer ordinary questions and get a clear decision about what could happen and what to fix first.</p><a class="button ghost full" href="/assessment.html">Check this agent</a></article>
+      <article class="panel recommended"><span>2</span><h3>See protection work</h3><p>Run four safe browser checks. No terminal, API key or real refund system is needed. This uses four of your monthly protection checks.</p><button class="button primary full" id="runGuidedCheck" ${canApprove ? '' : 'disabled'}>${canApprove ? 'Run safe protection check' : 'Owner or admin required'}</button></article>
+      <article class="panel"><span>3</span><h3>Connect your agent</h3><p>When a developer is ready, reveal the API key, policy and integration controls.</p><button class="button ghost full" id="showTechnicalControls">Show technical controls</button></article>
+    </section>
+
+    ${guidedResultPanel()}
+    ${plainRecentActivity()}
+
+    <section class="human-technical-toggle">
+      <div><strong>Need the specialist controls?</strong><span>Policies, keys, approvals, inventory, remediation and audit evidence remain available.</span></div>
+      <button class="button ghost" id="toggleTechnicalMode">${technicalMode ? 'Hide technical controls' : 'Show technical controls'}</button>
+    </section>
+  </div>`;
+}
+
+function nextActionButton(next, canApprove) {
+  if (next.action === 'guided') return `<button class="button primary button-xl" id="nextGuidedCheck" ${canApprove ? '' : 'disabled'}>${canApprove ? 'Run the safe example' : 'Ask an owner or admin'}</button>`;
+  if (next.action === 'connect') return '<button class="button primary button-xl" data-open-technical="runtime">Connect my agent</button>';
+  return '<button class="button primary button-xl" data-open-technical="runtime">Review decisions</button>';
+}
+
+function guidedResultPanel() {
+  if (!guidedCheck) return `<section class="panel guided-explainer"><div><span class="eyebrow">What the safe check does</span><h2>Four automatic checks. One button.</h2></div><ol><li><strong>No approval</strong><span>must be blocked</span></li><li><strong>Changed amount</strong><span>must be blocked</span></li><li><strong>Exact approved action</strong><span>may be allowed once</span></li><li><strong>Reused approval</strong><span>must be blocked</span></li></ol><p>No external tool is called. The order and money are fictional.</p></section>`;
+  return `<section class="panel guided-result ${guidedCheck.passed ? 'passed' : 'failed'}" aria-live="polite">
+    <div class="guided-result-heading"><div><span class="eyebrow">Safe protection check</span><h2>${guidedCheck.passed ? 'Protection behaved as expected.' : 'One or more protections did not behave as expected.'}</h2><p>${guidedCheck.passed ? 'The exact action was allowed once. Missing, changed and reused approvals were blocked.' : 'Do not rely on this control until the failed check is investigated.'}</p></div><strong>${guidedCheck.results.filter((item) => item.passed).length}/${guidedCheck.results.length}</strong></div>
+    <div class="guided-result-list">${guidedCheck.results.map((item) => `<div class="${item.passed ? 'passed' : 'failed'}"><span>${item.passed ? '✓' : '!'}</span><div><strong>${escapeHtml(item.label)}</strong><small>Expected ${escapeHtml(item.expectedDecision)} · received ${escapeHtml(item.decision)}${item.approvalStatus ? ` · approval ${escapeHtml(item.approvalStatus)}` : ''}</small></div></div>`).join('')}</div>
+    <div class="guided-proof-note"><strong>What this proves</strong><span>${escapeHtml(guidedCheck.limitations[0])}</span><span>${escapeHtml(guidedCheck.limitations[1])}</span></div>
+  </section>`;
+}
+
+function plainRecentActivity() {
+  const events = project.events.slice(0, 5);
+  return `<section class="panel plain-activity"><div class="section-heading compact-heading"><div><span class="eyebrow">Latest decisions</span><h2>What happened recently</h2></div>${events.length ? `<button class="button ghost small" data-open-technical="runtime">View technical evidence</button>` : ''}</div>${events.length ? `<div class="plain-event-list">${events.map((event) => `<div><span class="plain-decision ${event.decision}">${event.decision === 'deny' ? 'Blocked' : 'Allowed'}</span><div><strong>${escapeHtml(event.tool_name || 'Content check')}</strong><small>${plainEventReason(event)} · ${dateTime(event.created_at)}</small></div></div>`).join('')}</div>` : '<div class="empty-state"><p>No decisions yet. Run the safe protection check to see the first results.</p></div>'}</section>`;
+}
+
+function plainEventReason(event) {
+  if (event.event_type === 'guided_demo') return 'Safe fictional test';
+  if (event.ruleIds?.includes('ARL-RUN-009')) return 'Human approval was missing or invalid';
+  if (event.ruleIds?.includes('ARL-RUN-011')) return 'Approval expired or was revoked';
+  if (event.ruleIds?.includes('ARL-RUN-012')) return 'Approval had already been used';
+  if (event.decision === 'deny') return 'Policy stopped the action';
+  return 'Policy allowed the action';
+}
+
+function technicalProjectView() {
   const usage = project.entitlement.usage;
   const latestInventory = project.inventory[0] || null;
   const openItems = project.remediations.filter((item) => !['verified_closed', 'accepted_risk'].includes(item.status));
-  return `
+  return `<section id="technicalControls" class="technical-controls-wrap">
     ${journeyPanel()}
     <section class="panel project-command-header">
-      <div><span class="eyebrow">${escapeHtml(project.environment)} · ${escapeHtml(project.role)}</span><h2>${escapeHtml(project.name)}</h2><p>${escapeHtml(project.slug)} · policy v${escapeHtml(project.policyVersion)} · ${project.retentionDays}-day event retention</p></div>
+      <div><span class="eyebrow">${escapeHtml(project.environment)} · ${escapeHtml(project.role)}</span><h2>Technical controls</h2><p>${escapeHtml(project.slug)} · policy v${escapeHtml(project.policyVersion)} · ${project.retentionDays}-day event retention</p></div>
       <div class="command-status"><span>${project.policy.mode === 'enforce' ? 'Enforcing' : 'Monitoring'}</span><strong>${formatNumber(usage.requests)} / ${formatNumber(project.entitlement.runtimeRequestsPerMonth)}</strong><small>runtime checks this month</small></div>
     </section>
-    <nav class="control-tabs" aria-label="Project sections"><a href="#runtime">Runtime</a><a href="#policy">Policy</a><a href="#inventory">Inventory</a><a href="#remediation">Remediation</a><a href="#audit">Audit</a></nav>
+    <nav class="control-tabs" aria-label="Technical project sections"><a href="#runtime">Connect</a><a href="#policy">Rules</a><a href="#inventory">Access map</a><a href="#remediation">Fix and retest</a><a href="#audit">Audit</a></nav>
     <section id="runtime" class="control-section">
-      <div class="section-heading compact-heading"><div><span class="eyebrow">Runtime API</span><h2>Screen every agent step.</h2></div><button id="createKeyButton" class="button primary small" ${project.permissions.rotateKeys ? '' : 'disabled'}>Issue API key</button></div>
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Connect your agent</span><h2>Screen every agent step.</h2></div><button id="createKeyButton" class="button primary small" ${project.permissions.rotateKeys ? '' : 'disabled'}>Create connection key</button></div>
       ${revealedKey ? oneTimeKey(revealedKey) : ''}
       ${revealedApproval ? oneTimeApproval(revealedApproval) : ''}
       <div class="runtime-grid">
-        <article class="panel"><h3>Integration request</h3><p class="muted">Send input, output and tool context. Sensitive actions require a server-issued token bound to the exact project, environment, tool and arguments. Raw content is never stored.</p><pre><code>${escapeHtml(curlExample())}</code></pre><button class="button ghost small" data-copy="curl">Copy example</button></article>
-        <article class="panel"><h3>Active API keys</h3><div class="key-list">${project.apiKeys.length ? project.apiKeys.map(keyRow).join('') : '<p class="muted">No API key yet. Issue one to integrate a staging system.</p>'}</div></article>
+        <article class="panel"><h3>Developer integration</h3><p class="muted">Place this Guard request before the agent reaches a model, tool or customer. This section is for the person connecting the software.</p><pre><code>${escapeHtml(curlExample())}</code></pre><button class="button ghost small" data-copy="curl">Copy developer example</button></article>
+        <article class="panel"><h3>Connection keys</h3><div class="key-list">${project.apiKeys.length ? project.apiKeys.map(keyRow).join('') : '<p class="muted">No connection key yet. Create one only when a developer is ready to integrate the agent.</p>'}</div></article>
       </div>
       <div class="runtime-grid section-gap">
-        <article class="panel"><h3>Approve one exact action</h3><p class="muted">Admins and owners can issue a short-lived token after reviewing the exact tool arguments. Tokens are stored only as hashes and consumed atomically on the first allowed request.</p>${approvalForm()}</article>
-        <article class="panel"><h3>Approval ledger</h3><div class="key-list">${project.approvals?.length ? project.approvals.map(approvalRow).join('') : '<p class="muted">No runtime approvals have been issued.</p>'}</div></article>
+        <article class="panel"><h3>Approve one exact action</h3><p class="muted">For specialist testing or operations. The guided check above performs this automatically with fictional data.</p>${approvalForm()}</article>
+        <article class="panel"><h3>Approval evidence</h3><div class="key-list">${project.approvals?.length ? project.approvals.map(approvalRow).join('') : '<p class="muted">No runtime approvals have been issued.</p>'}</div></article>
       </div>
-      <article class="panel section-gap"><div class="section-heading compact-heading"><div><h3>Recent security decisions</h3><p class="muted">Only digests, rule identifiers, bounded metadata and timing are retained.</p></div><span class="status-pill">${project.events.length} recent</span></div>${eventTable(project.events)}</article>
+      <article class="panel section-gap"><div class="section-heading compact-heading"><div><h3>Technical decision evidence</h3><p class="muted">Only digests, rule identifiers, bounded metadata and timing are retained.</p></div><span class="status-pill">${project.events.length} recent</span></div>${eventTable(project.events)}</article>
     </section>
     <section id="policy" class="control-section">
-      <div class="section-heading compact-heading"><div><span class="eyebrow">Policy as control</span><h2>Define what the agent may do.</h2></div></div>
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Rules</span><h2>Define what the agent may do.</h2></div></div>
       ${policyForm()}
     </section>
     <section id="inventory" class="control-section">
-      <div class="section-heading compact-heading"><div><span class="eyebrow">Continuous posture</span><h2>Detect attack-surface drift.</h2></div></div>
-      <div class="runtime-grid"><article class="panel"><h3>Record inventory snapshot</h3><p class="muted">Paste a deployment manifest or configuration export. AgentRiskLayer stores the derived asset inventory, not credentials.</p><form id="inventoryForm" class="auth-form"><div class="field"><label for="inventorySource">Source label</label><input id="inventorySource" value="deployment-manifest" maxlength="40"></div><div class="field"><label for="inventoryJson">JSON manifest</label><textarea id="inventoryJson" rows="12" required placeholder='{"agent":{"name":"support-agent","model":"gpt-4.1","environment":"staging","tools":[{"kind":"tool","name":"crm.read"}]}}'></textarea></div><button class="button primary" type="submit">Analyse and compare</button></form></article><article class="panel"><h3>Latest posture</h3>${latestInventory ? inventorySummary(latestInventory) : '<div class="empty-state"><p>No inventory snapshot yet.</p></div>'}</article></div>
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Access map</span><h2>Record what the agent can reach.</h2></div></div>
+      <div class="runtime-grid"><article class="panel"><h3>Import a technical inventory</h3><p class="muted">A developer or security specialist can paste a deployment manifest. AgentRiskLayer stores the derived asset inventory, not credentials.</p><form id="inventoryForm" class="auth-form"><div class="field"><label for="inventorySource">Source label</label><input id="inventorySource" value="deployment-manifest" maxlength="40"></div><div class="field"><label for="inventoryJson">JSON manifest</label><textarea id="inventoryJson" rows="12" required placeholder='{"agent":{"name":"support-agent","model":"gpt-4.1","environment":"staging","tools":[{"kind":"tool","name":"crm.read"}]}}'></textarea></div><button class="button primary" type="submit">Analyse and compare</button></form></article><article class="panel"><h3>Latest access picture</h3>${latestInventory ? inventorySummary(latestInventory) : '<div class="empty-state"><p>No technical inventory has been imported.</p></div>'}</article></div>
       ${project.inventory.length ? `<article class="panel section-gap"><h3>Inventory history</h3>${inventoryHistory(project.inventory)}</article>` : ''}
     </section>
     <section id="remediation" class="control-section">
-      <div class="section-heading compact-heading"><div><span class="eyebrow">Close the loop</span><h2>Own, fix and retest.</h2></div><span class="status-pill">${openItems.length} open</span></div>
-      <div class="runtime-grid"><article class="panel"><h3>Create remediation item</h3><form id="remediationForm" class="auth-form"><div class="field"><label for="remediationTitle">Required control or fix</label><input id="remediationTitle" required maxlength="240" placeholder="Remove shell access from support agent"></div><div class="form-grid"><div class="field"><label for="remediationSeverity">Severity</label><select id="remediationSeverity"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select></div><div class="field"><label for="remediationOwner">Owner email</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div><button class="button primary" type="submit">Add remediation</button></form></article><article class="panel"><h3>Remediation queue</h3><div class="remediation-list">${project.remediations.length ? project.remediations.map(remediationRow).join('') : '<p class="muted">No remediation work recorded.</p>'}</div></article></div>
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Fix and check again</span><h2>Own, fix and retest.</h2></div><span class="status-pill">${openItems.length} open</span></div>
+      <div class="runtime-grid"><article class="panel"><h3>Add a required fix</h3><form id="remediationForm" class="auth-form"><div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" placeholder="Remove shell access from support agent"></div><div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div><button class="button primary" type="submit">Add required fix</button></form></article><article class="panel"><h3>Fixes and retests</h3><div class="remediation-list">${project.remediations.length ? project.remediations.map(remediationRow).join('') : '<p class="muted">No remediation work recorded.</p>'}</div></article></div>
     </section>
-    <section id="audit" class="control-section"><div class="section-heading compact-heading"><div><span class="eyebrow">Tamper-evident operations</span><h2>Security audit trail.</h2></div></div><article class="panel">${auditTable(project.audit)}</article></section>`;
+    <section id="audit" class="control-section"><div class="section-heading compact-heading"><div><span class="eyebrow">Audit evidence</span><h2>Who changed what and when.</h2></div></div><article class="panel">${auditTable(project.audit)}</article></section>
+  </section>`;
 }
 
 function journeyPanel() {
   const journey = project.journey;
   return `<section class="panel journey-panel" id="project">
-    <div class="section-heading compact-heading"><div><span class="eyebrow">Guided security journey</span><h2>${escapeHtml(journey.deploymentDecision)}</h2><p>${journey.nextAction ? `Next required action: ${escapeHtml(journey.nextAction.label)}` : 'Required evidence steps are complete. A human deployment review is still required.'}</p></div><strong>${journey.evidenceCollected}/${journey.steps.length}</strong></div>
+    <div class="section-heading compact-heading"><div><span class="eyebrow">Technical evidence journey</span><h2>${escapeHtml(journey.deploymentDecision)}</h2><p>${journey.nextAction ? `Next technical evidence step: ${escapeHtml(journey.nextAction.label)}` : 'Required evidence steps are complete. A human deployment review is still required.'}</p></div><strong>${journey.evidenceCollected}/${journey.steps.length}</strong></div>
     <div class="journey-steps">${journey.steps.map((step) => `<a class="${step.complete ? 'complete' : step.id === journey.nextAction?.id ? 'current' : ''}" href="${step.href}"><span>${step.complete ? '✓' : '○'}</span>${escapeHtml(step.label)}</a>`).join('')}</div>
-    ${journey.blockingGaps.length ? `<div class="drift-banner warning"><strong>Blocking gaps</strong><span>${journey.blockingGaps.map(escapeHtml).join(' · ')}</span></div>` : ''}
+    ${journey.blockingGaps.length ? `<div class="drift-banner warning"><strong>Evidence still needed</strong><span>${journey.blockingGaps.map(escapeHtml).join(' · ')}</span></div>` : ''}
   </section>`;
 }
 
@@ -237,6 +331,43 @@ function bind() {
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
   document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
+  document.querySelectorAll('#runGuidedCheck, #nextGuidedCheck').forEach((button) => button.addEventListener('click', runGuidedCheck));
+  document.querySelectorAll('#toggleTechnicalMode, #showTechnicalControls').forEach((button) => button.addEventListener('click', toggleTechnicalMode));
+  document.querySelectorAll('[data-open-technical]').forEach((button) => button.addEventListener('click', openTechnicalSection));
+}
+
+async function runGuidedCheck(event) {
+  const button = event.currentTarget;
+  setBusy(button, true, 'Running four safe checks…');
+  errorBox.classList.remove('show');
+  try {
+    const result = await api(`/api/projects/${encodeURIComponent(project.id)}/guided-protection-check`, { method: 'POST', body: '{}' });
+    guidedCheck = result.check;
+    await loadProject(project.id);
+    await loadOverview();
+    render();
+    document.querySelector('.guided-result')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (error) {
+    fail(error);
+    setBusy(button, false);
+  }
+}
+
+function toggleTechnicalMode() {
+  technicalMode = !technicalMode;
+  sessionStorage.setItem('arl_control_plane_mode', technicalMode ? 'technical' : 'guided');
+  render();
+  if (technicalMode) document.querySelector('#technicalControls')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  else document.querySelector('.customer-control-home')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openTechnicalSection(event) {
+  technicalMode = true;
+  sessionStorage.setItem('arl_control_plane_mode', 'technical');
+  const section = event.currentTarget.dataset.openTechnical || 'runtime';
+  render();
+  history.replaceState(null, '', `#${section}`);
+  document.querySelector(`#${CSS.escape(section)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function createProject(event) {
@@ -411,6 +542,7 @@ function fail(error) {
   errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function csv(value) { return [...new Set(String(value || '').split(',').map((item) => item.trim()).filter(Boolean))]; }
+function plainEnvironment(value) { return ({ development: 'Still being built', test: 'Test environment', staging: 'Staging', production: 'Live production' })[String(value || '').toLowerCase()] || String(value || 'Project'); }
 function formatNumber(value) { return new Intl.NumberFormat('en-GB').format(Number(value || 0)); }
 function formatPercent(part, total) { return total ? `${((Number(part) / Number(total)) * 100).toFixed(1)}%` : '0%'; }
 function date(value) { return value ? new Date(value).toLocaleDateString('en-GB') : '—'; }

@@ -10,6 +10,17 @@ Authorization: Bearer arl_live_<prefix>_<secret>
 
 A project key is shown once, stored only as a SHA-256 hash and can be revoked immediately. Use separate keys per environment and integration. Never place a key in browser code, URLs, logs or source control.
 
+## Guided browser protection check
+
+`POST /api/projects/:projectId/guided-protection-check` is an authenticated browser workflow for project `admin` and `owner` roles. It runs four fictional checks through the same hosted policy and approval engine without requiring a project API key or terminal command:
+
+1. missing approval must be denied;
+2. changed amount must be denied;
+3. the exact approved action may be allowed once;
+4. the same approval reused under a new request ID must be denied.
+
+The route creates a short-lived exact-action approval internally, never returns the bearer token and never calls an external customer tool. Each run consumes four of the project’s monthly protection checks. Events are recorded as `guided_demo` evidence and are deliberately excluded from the current-policy deployment-readiness journey. The response states that the check is synthetic and does not prove customer integration.
+
 ## Issue an exact-action approval
 
 `POST /api/projects/:projectId/approvals` requires an authenticated project `admin` or `owner`.

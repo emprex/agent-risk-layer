@@ -125,7 +125,7 @@ async function rawJsonRequest(route, rawBody) {
 try {
   const health = await wait();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '9.2.0');
+  assert.equal(health.version, '9.3.0');
   assert.equal(health.productStage, 'production');
   const authPage = await anonymousRequest('/auth.html');
   assert.match(authPage, /Create free account/i);
@@ -140,7 +140,7 @@ try {
   assert.match(trustPage, /Trust centre/i);
   assert.match(await anonymousRequest('/compare.html'), /Compare by operational outcome/i);
   const controlPlanePage = await anonymousRequest('/control-plane.html');
-  assert.match(controlPlanePage, /AI security control plane/i);
+  assert.match(controlPlanePage, /What should your agent be allowed to do\?/i);
   assert.match(await anonymousRequest('/runtime.html'), /Hosted Guard API/i);
   const helpPage = await anonymousRequest('/help.html');
   assert.match(helpPage, /Help Centre/i);
@@ -391,6 +391,13 @@ try {
   const createdProject = await request('/api/projects', { method: 'POST', body: { workspaceId: ownedWorkspace.workspace.id, name: 'Smoke Production Agent', environment: 'production' } });
   assert.equal(createdProject.project.policy.mode, 'enforce');
   const projectId = createdProject.project.id;
+  const guidedProtection = await request(`/api/projects/${projectId}/guided-protection-check`, { method: 'POST', body: {} });
+  assert.equal(guidedProtection.check.schema, 'arl.guided-protection-check.v1');
+  assert.equal(guidedProtection.check.passed, true);
+  assert.equal(guidedProtection.check.simulation.externalToolExecuted, false);
+  assert.deepEqual(guidedProtection.check.results.map((item) => item.decision), ['deny', 'deny', 'allow', 'deny']);
+  assert.equal(Object.hasOwn(guidedProtection.check, 'token'), false);
+  assert.doesNotMatch(JSON.stringify(guidedProtection.check), /arl_live_|eyJ/);
   const publishedProject = await request(`/api/projects/${projectId}`, { method: 'PATCH', body: { policy: { mode: 'enforce' } } });
   assert.equal(publishedProject.project.policyVersion, '2');
   const issuedKey = await request(`/api/projects/${projectId}/keys`, { method: 'POST', body: { name: 'Smoke runtime key' } });
@@ -409,7 +416,7 @@ try {
   assert.equal(deniedGuard.payload.evidence.rawContentRetained, false);
   const replayedGuard = await guardCall({ request_id: 'smoke-deny', input: 'This changed content must not be billed twice.' });
   assert.equal(replayedGuard.payload.replayed, true);
-  assert.equal(replayedGuard.payload.usage.requests, 2);
+  assert.equal(replayedGuard.payload.usage.requests, 6);
 
   const approvedRefund = { name: 'refund_order', arguments: { orderId: 'demo_order_4821', amountPence: 17500, currency: 'GBP', dryRun: true } };
   const selfAssertedApproval = await guardCall({
@@ -446,9 +453,9 @@ try {
   assert.equal(approvalReplay.payload.decision, 'deny');
   assert.ok(approvalReplay.payload.reasons.some((reason) => reason.ruleId === 'ARL-RUN-012'));
   const approvalLedger = await request(`/api/projects/${projectId}/approvals`);
-  assert.equal(approvalLedger.approvals.length, 1);
-  assert.equal(approvalLedger.approvals[0].status, 'consumed');
-  assert.equal(Object.hasOwn(approvalLedger.approvals[0], 'token'), false);
+  assert.equal(approvalLedger.approvals.length, 2);
+  assert.ok(approvalLedger.approvals.every((approval) => approval.status === 'consumed'));
+  assert.ok(approvalLedger.approvals.every((approval) => Object.hasOwn(approval, 'token') === false));
   const inventory = await request(`/api/projects/${projectId}/inventory`, { method: 'POST', body: { source: 'smoke', documents: { services: [{ name: 'smoke-agent', type: 'agent', model: 'gpt-5', environment: 'production', public: true, privileged: true }] } } });
   assert.ok(inventory.snapshot.summary.total >= 1);
   const remediation = await request(`/api/projects/${projectId}/remediations`, { method: 'POST', body: { title: 'Restrict privileged public exposure', severity: 'critical', findingKey: 'smoke-drift' } });
@@ -486,7 +493,7 @@ try {
     documents: { agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] } },
   } });
   const projectState = await request(`/api/projects/${projectId}`);
-  assert.equal(projectState.project.events.length, 7);
+  assert.equal(projectState.project.events.length, 11);
   assert.equal(projectState.project.inventory.length, 3);
   assert.equal(projectState.project.remediations.length, 1);
   assert.equal(projectState.project.remediations[0].verification.retestResult, 'passed');
@@ -494,16 +501,16 @@ try {
   assert.equal(projectState.project.journey.deploymentDecision, 'READY FOR HUMAN DEPLOYMENT REVIEW', JSON.stringify(projectState.project.journey.blockingGaps));
   const controlOverview = await request('/api/control-plane/overview');
   assert.equal(controlOverview.totals.projects, 1);
-  assert.equal(controlOverview.totals.runtimeRequestsMonth, 7);
-  assert.equal(controlOverview.totals.deniedMonth, 5);
+  assert.equal(controlOverview.totals.runtimeRequestsMonth, 11);
+  assert.equal(controlOverview.totals.deniedMonth, 8);
   const runtimeDashboard = await request('/api/dashboard');
   assert.equal(runtimeDashboard.controlPlane.totals.projects, 1);
   const runtimeExport = await request('/api/account/export');
   assert.equal(runtimeExport.projects.length, 1);
-  assert.equal(runtimeExport.projects[0].runtimeEvents.length, 7);
-  assert.equal(runtimeExport.projects[0].runtimeApprovals.length, 1);
-  assert.equal(runtimeExport.projects[0].runtimeApprovals[0].status, 'consumed');
-  assert.equal(Object.hasOwn(runtimeExport.projects[0].runtimeApprovals[0], 'token'), false);
+  assert.equal(runtimeExport.projects[0].runtimeEvents.length, 11);
+  assert.equal(runtimeExport.projects[0].runtimeApprovals.length, 2);
+  assert.ok(runtimeExport.projects[0].runtimeApprovals.every((approval) => approval.status === 'consumed'));
+  assert.ok(runtimeExport.projects[0].runtimeApprovals.every((approval) => Object.hasOwn(approval, 'token') === false));
 
   const resetRequest = await request('/api/auth/password-reset/request', { method: 'POST', body: { email: 'owner@example.com' } });
   assert.ok(resetRequest.demoResetUrl);
@@ -542,6 +549,7 @@ try {
     hostedRuntimeGuard: true,
     guardReplayProtection: true,
     exactActionApprovalIntegrity: true,
+    guidedProtectionCheck: true,
     privacySafeRuntimeEvidence: true,
     inventoryDriftWorkflow: true,
     remediationWorkflow: true,
