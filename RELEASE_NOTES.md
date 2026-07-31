@@ -1,3 +1,10 @@
+# AgentRiskLayer v10.0.1 — Mobile navigation and usability polish
+
+- Restored visible mobile navigation links by isolating legacy responsive rules from the v10 shell.
+- Added accessible open/close labels, focus containment, Escape and backdrop dismissal, scroll lock and responsive menu sizing.
+- Improved small-screen hero, form and support-contact presentation without changing security capabilities.
+- See `RELEASE_NOTES_V10_0_1.md` for scope and evidence limits.
+
 # AgentRiskLayer — Release notes
 
 ## v10.0.0 — Human-centred website and customer journey
@@ -348,3 +355,7 @@ Live Stripe, Resend, tax, legal, monitoring and independent security validation 
 - Added decoding-aware and context-composed runtime detection.
 - Added signed SSO state, SCIM user lifecycle normalisation, signed webhooks, and Slack/Jira-ready event builders.
 - Preserved existing payments, invitations, MFA, assessments, Inspector, adaptive red-team, runtime gateway, reports and release gates.
+
+## Release validation correction
+
+- Aligned the end-to-end smoke assertion with the v10.0.1 application version so release validation checks the deployed version consistently.

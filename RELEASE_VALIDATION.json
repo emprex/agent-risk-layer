@@ -1,129 +1,102 @@
 {
   "schema": "arl.release-validation.v4",
   "product": "AgentRiskLayer",
-  "version": "10.0.0",
-  "sourceBaselineCommit": "58170bd0852d2c667008b7c9a324166325dd8a2b",
+  "version": "10.0.1",
+  "sourceBaselineCommit": "dbbcc13bd2069babb47f0eb9534cc1bbdc9cb574",
   "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
-  "releaseStatus": "implementation-validated-production-deployment-and-human-browser-verification-required",
-  "generatedAt": "2026-07-31T01:56:59.675Z",
+  "releaseStatus": "locally-validated-production-deployment-and-device-retest-required",
+  "generatedAt": "2026-07-31T10:42:36.060Z",
   "experienceChange": {
-    "title": "Human-centred website and customer journey",
-    "assessedScope": "All 34 public and authenticated HTML pages, shared navigation, onboarding, assessment, results, dashboard, live protection, evidence workspaces, pricing, trust, help, owner operations and responsive source rules.",
-    "observedBaseline": {
-      "htmlPages": 34,
-      "primaryNavigationVariants": 25,
-      "pagesWithoutSkipLink": 31,
-      "pagesWithoutMetaDescription": 14,
-      "source": "Inspected v9.3.0 source baseline; these counts are not analytics or independent usability-research results."
-    },
+    "title": "Mobile navigation and usability polish",
+    "assessedScope": "Shared v10 navigation shell, responsive CSS, homepage small-screen presentation, company support contact and regression coverage.",
+    "observedDefect": "On the owner\u2019s Android production review, the menu icon changed to X but the links remained hidden; the support label and address lacked clear separation.",
+    "rootCause": "Legacy responsive link-hiding selectors were still applying to the v10 primary navigation.",
     "implementedOutcome": {
-      "htmlPages": 34,
-      "roleAwareNavigationVariants": 4,
-      "pagesMissingRequiredShellElements": 0,
-      "duplicateHtmlIdsDetected": 0,
-      "publicExperience": "Learn: Product, See it work, Pricing, Trust, Help, Sign in, Check an agent free.",
-      "customerExperience": "Protect: Overview, Check risk, Live protection, Evidence, Help, Account.",
-      "defaultCustomerPattern": "One recommended next action with advanced controls available through deliberate progressive disclosure.",
+      "mobileNavigationLinksExpected": 7,
+      "legacySelectorsScopedAwayFromV10": true,
+      "escapeToClose": true,
+      "focusContainment": true,
+      "backgroundScrollLock": true,
+      "supportEmailTappable": true,
       "databaseMigration": null,
       "dataDeletionOrRewrite": false
     },
-    "preservedCapabilities": [
-      "Authentication, MFA, roles and tenant isolation",
-      "Assessments, results and reports",
-      "Hosted Guard and local runtime gateway",
-      "Server-issued exact-action approvals",
-      "AI asset inventory and drift",
-      "Local Inspector and controlled red-team workflows",
-      "Remediation, retesting and deployment decisions",
-      "Workspace, billing, account, owner and sales workflows",
-      "Evidence exports and operational controls"
-    ],
-    "evidenceBoundary": "The redesign changes explanation, hierarchy, navigation and progressive disclosure. It does not reduce controls or claim independent usability research, accessibility certification or improved conversion."
+    "evidenceBoundary": "This patch corrects observed navigation and presentation defects. It does not claim independent accessibility certification, universal device compatibility or improved conversion."
   },
   "automatedGate": {
     "command": "npm run validate",
     "productionCredentialsExcluded": true,
     "passed": true,
     "tests": {
-      "total": 164,
-      "passed": 164,
+      "total": 165,
+      "passed": 165,
       "failed": 0,
       "skipped": 0
     },
     "syntaxAndSourceChecks": true,
     "endToEndSmoke": {
       "passed": true,
-      "version": "10.0.0",
-      "guidedProtectionCheck": true,
-      "authenticationAndAccountJourneys": true,
-      "billingAndFulfilmentJourneys": true,
-      "inspectionAndRedTeamJourneys": true,
-      "runtimeAndExactApprovalJourneys": true,
-      "inventoryRemediationAndDeletionJourneys": true,
+      "version": "10.0.1",
       "productionCredentialsUsed": false
     },
     "focusedExperienceAndSecurityGate": {
       "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/customer-journey.test.js tests/experience-design.test.js",
-      "tests": 38,
-      "passed": 38,
+      "tests": 39,
+      "passed": 39,
       "failed": 0,
       "skipped": 0
     },
-    "structuralExperienceAudit": {
-      "pages": 34,
-      "navigationVariants": 4,
-      "missingTitles": 0,
-      "missingDescriptions": 0,
-      "missingSkipLinks": 0,
-      "missingMainLandmarks": 0,
-      "missingMainHeadings": 0,
-      "duplicateIds": 0,
-      "inlineCustomerScriptsHandlersOrStyleBlocks": 0,
-      "mobileMenuSourceChecks": true,
-      "minimumInteractiveTargetSourceCheck": true,
-      "reducedMotionSourceCheck": true
+    "browserSourceCheck": {
+      "environment": "Headless Chromium with in-memory exact HTML, CSS and module shell",
+      "viewports": [
+        360,
+        768,
+        1440
+      ],
+      "representativePages": 8,
+      "publicNavigationLinksVisibleAt360": 7,
+      "escapeClosesMenu": true,
+      "focusReturnsToToggle": true,
+      "horizontalOverflowObserved": false,
+      "liveProductionNavigation": false
     },
     "detectionBenchmark": {
       "cases": 20,
       "passed": 20,
+      "scope": "Small internal synthetic English regression set; not independent or production-representative.",
       "falsePositives": 0,
-      "falseNegatives": 0,
-      "scope": "Small internal synthetic English regression set; not independent or production-representative."
+      "falseNegatives": 0
     },
     "safetyScenarios": {
       "total": 1000,
       "passed": 1000,
       "failed": 0,
       "unsafeDecisions": 0,
+      "seed": "0x5a17c0de",
       "criticalPathScenarios": 387,
-      "averageScore": 72,
-      "seed": "0x5a17c0de"
+      "averageScore": 72
     }
   },
   "evidenceFiles": [
-    "UX_AUDIT_V10.md",
-    "CUSTOMER_JOURNEY_V10.md",
-    "validation/AgentRiskLayer-v10.0.0-validation-console.log",
-    "validation/AgentRiskLayer-v10.0.0-human-experience-focused.log",
-    "test-artifacts/detection-benchmark-v10.0.0.json",
-    "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-results.json",
-    "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-report.md"
+    "UX_POLISH_V10_0_1.md",
+    "RELEASE_NOTES_V10_0_1.md",
+    "validation/AgentRiskLayer-v10.0.1-mobile-ux-focused.log",
+    "validation/AgentRiskLayer-v10.0.1-validation-console.log",
+    "test-artifacts/detection-benchmark-v10.0.1.json",
+    "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-results.json",
+    "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-report.md"
   ],
   "limitations": [
-    "The automated gate used isolated local test persistence and did not connect to production PostgreSQL, Stripe, Resend or Render services.",
-    "No production deployment, live payment, production email or production customer-data action was performed in this environment.",
-    "Automated screenshot rendering was unavailable because local browser navigation was blocked by administrator policy.",
-    "Source-level responsive and accessibility checks do not replace manual keyboard, screen-reader, zoom, browser and physical-device testing.",
-    "The audit is internal engineering evidence, not independent usability research, accessibility certification, penetration testing or proof of conversion improvement.",
+    "The automated gate excludes production credentials and does not connect to production PostgreSQL, Stripe, Resend or Render.",
+    "The build-environment browser check uses in-memory page content because direct localhost browser navigation is blocked.",
+    "Physical-device, keyboard, zoom and representative screen-reader retesting remain required after deployment.",
     "This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free."
   ],
   "liveVerificationRequired": [
-    "Verify /api/ready reports version 10.0.0, production stage, healthy PostgreSQL and migration 008 current.",
-    "Review the public homepage, start, pricing, trust, help, demo and sign-in journeys on desktop and mobile.",
-    "Verify an ordinary customer sees one recommended action after sign-in and can complete the safe protection check without a terminal.",
-    "Verify advanced policy, key, approval, inventory, remediation, retest and audit workflows remain available to authorised roles.",
-    "Test keyboard navigation, focus order, menu Escape behaviour, zoom, reduced motion and representative screen readers.",
-    "Review privacy-respecting journey analytics and support signals before claiming improved usability or conversion.",
-    "Review logs, alerts and rollback readiness before recording a deployment decision."
+    "Verify /api/ready reports version 10.0.1, production stage, healthy PostgreSQL and migration 008 current.",
+    "On Android, open and close the public menu and confirm all navigation links are visible and tappable.",
+    "Confirm the support label and email are separated and the email opens the device mail application.",
+    "Review homepage, pricing, help, sign-in, dashboard and live protection at phone and desktop widths.",
+    "Complete keyboard and representative screen-reader checks before recording the deployment decision."
   ]
 }

@@ -55,18 +55,34 @@ test('public and signed-in navigation use stable human labels and one primary ac
   }
 });
 
-test('mobile navigation is keyboard-operable and touch targets meet the product baseline', () => {
+test('mobile navigation is visible, keyboard-operable and protected from legacy responsive rules', () => {
   const shell = read('public/site-shell.js');
   const css = read('public/styles.css');
   assert.match(shell, /aria-expanded/);
   assert.match(shell, /event\.key === 'Escape'/);
-  assert.match(shell, /menu-open/);
-  assert.match(shell, /window\.innerWidth > 900/);
+  assert.match(shell, /event\.key !== 'Tab'/);
+  assert.match(shell, /Close menu/);
+  assert.match(shell, /dataset\.menuScrim/);
+  assert.match(shell, /toggleAttribute\('inert'/);
+  assert.match(shell, /matchMedia\('\(max-width: 900px\)'\)/);
   assert.match(css, /\.button, button, select, input\[type="checkbox"\], input\[type="radio"\]\s*\{\s*min-height:\s*44px/);
   assert.match(css, /\.menu-toggle\s*\{[^}]*min-height:\s*46px/s);
+  assert.match(css, /\.site-header-v10\.menu-open \.primary-navigation a[\s\S]*display:\s*inline-flex !important/);
+  assert.match(css, /\.site-header:not\(\.site-header-v10\) nav a:not\(\.nav-cta\)/);
+  assert.doesNotMatch(css, /(^|\n)\s*nav a:not\(\.nav-cta\)\s*\{\s*display:\s*none/);
+  assert.match(css, /body\.site-menu-open\s*\{[^}]*overflow:\s*hidden[^}]*touch-action:\s*none/s);
   assert.match(css, /@media \(max-width:\s*900px\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test('support contact is separated, tappable and safe to wrap on narrow screens', () => {
+  const company = read('public/company.html');
+  const css = read('public/styles.css');
+  assert.match(company, /<span>Support email<\/span><strong><a href="mailto:support@agentrisklayer\.com">support@agentrisklayer\.com<\/a><\/strong>/);
+  assert.match(css, /\.company-facts\s*\{[^}]*display:\s*grid[^}]*gap:\s*10px/s);
+  assert.match(css, /\.company-facts > div\s*\{[^}]*display:\s*grid[^}]*gap:\s*6px/s);
+  assert.match(css, /overflow-wrap:\s*anywhere/);
 });
 
 test('progressive disclosure preserves the complete specialist capability set', () => {

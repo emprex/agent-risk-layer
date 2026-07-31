@@ -1,0 +1,1186 @@
+
+> agent-risk-layer@10.0.1 validate
+> node scripts/validate-release.mjs
+
+
+=== Build release assets ===
+
+> agent-risk-layer@10.0.1 build:release-assets
+> npm run build:inspector-release && npm run build:redteam-release && npm run build:sample-report
+
+
+> agent-risk-layer@10.0.1 build:inspector-release
+> node scripts/build-inspector-release.mjs
+
+{
+  "version": "4.0.0",
+  "policyVersion": "arl-inspector-policy-2026.09",
+  "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
+}
+
+> agent-risk-layer@10.0.1 build:redteam-release
+> node scripts/build-redteam-release.mjs
+
+{
+  "version": "5.1.0",
+  "policyVersion": "arl-redteam-policy-2026.09",
+  "runnerSha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5",
+  "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
+  "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7"
+}
+
+> agent-risk-layer@10.0.1 build:sample-report
+> node scripts/build-sample-report.mjs
+
+{
+  "sampleReport": "public/downloads/agentrisklayer-sample-professional-report.pdf",
+  "bytes": 109880
+}
+
+=== Complete isolated test suite ===
+
+> agent-risk-layer@10.0.1 pretest
+> npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json
+
+
+> agent-risk-layer@10.0.1 build:inspector-release
+> node scripts/build-inspector-release.mjs
+
+{
+  "version": "4.0.0",
+  "policyVersion": "arl-inspector-policy-2026.09",
+  "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
+}
+
+> agent-risk-layer@10.0.1 build:redteam-release
+> node scripts/build-redteam-release.mjs
+
+{
+  "version": "5.1.0",
+  "policyVersion": "arl-redteam-policy-2026.09",
+  "runnerSha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5",
+  "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
+  "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7"
+}
+
+> agent-risk-layer@10.0.1 test
+> NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' ! -name 'postgresql-billing-gate.test.js' -print | sort)
+
+TAP version 13
+# Subtest: workspace RBAC prevents cross-tenant and excessive actions
+ok 1 - workspace RBAC prevents cross-tenant and excessive actions
+  ---
+  duration_ms: 3.528777
+  type: 'test'
+  ...
+# Subtest: approval tokens are signed, expiring and bound to the exact project action
+ok 2 - approval tokens are signed, expiring and bound to the exact project action
+  ---
+  duration_ms: 7.16255
+  type: 'test'
+  ...
+# Subtest: action digests are canonical but change with target or value
+ok 3 - action digests are canonical but change with target or value
+  ---
+  duration_ms: 1.798258
+  type: 'test'
+  ...
+# Subtest: AI inventory discovers providers, agents, models and privileged exposure
+ok 4 - AI inventory discovers providers, agents, models and privileged exposure
+  ---
+  duration_ms: 40.480796
+  type: 'test'
+  ...
+# Subtest: nested assets inherit the manifest environment
+ok 5 - nested assets inherit the manifest environment
+  ---
+  duration_ms: 1.818608
+  type: 'test'
+  ...
+# Subtest: PostgreSQL backup creates a verified archive and redacted manifest
+ok 6 - PostgreSQL backup creates a verified archive and redacted manifest
+  ---
+  duration_ms: 15.329691
+  type: 'test'
+  ...
+# Subtest: restore verifies checksum, requires force, and uses atomic PostgreSQL restore flags
+ok 7 - restore verifies checksum, requires force, and uses atomic PostgreSQL restore flags
+  ---
+  duration_ms: 6.206961
+  type: 'test'
+  ...
+# [email simulated] Your AgentRiskLayer report — Billing integrity assessment -> billing-4b68827f-7518-42ff-b7ed-5dfd3f76cf51@example.com
+# [email simulated] Your AgentRiskLayer report — Billing integrity assessment -> billing-5c91aeb3-989a-47de-ae0e-acd607a51611@example.com
+# (node:240070) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: a correctly bound one-off purchase grants only its intended entitlement
+ok 8 - a correctly bound one-off purchase grants only its intended entitlement
+  ---
+  duration_ms: 14.344273
+  type: 'test'
+  ...
+# Subtest: both supported Checkout event types invoke verified one-off fulfilment
+ok 9 - both supported Checkout event types invoke verified one-off fulfilment
+  ---
+  duration_ms: 82.283489
+  type: 'test'
+  ...
+# Subtest: subscription Checkout creates only a non-entitled pending binding
+ok 10 - subscription Checkout creates only a non-entitled pending binding
+  ---
+  duration_ms: 6.189161
+  type: 'test'
+  ...
+# Subtest: customer.subscription.created establishes access only for a verified bound purchase
+ok 11 - customer.subscription.created establishes access only for a verified bound purchase
+  ---
+  duration_ms: 7.943708
+  type: 'test'
+  ...
+# Subtest: poisoned or unbound subscription events cannot create provisional access
+ok 12 - poisoned or unbound subscription events cannot create provisional access
+  ---
+  duration_ms: 7.87463
+  type: 'test'
+  ...
+# Subtest: underpaid, wrong-price, product, currency, amount and mode sessions fail closed
+ok 13 - underpaid, wrong-price, product, currency, amount and mode sessions fail closed
+  ---
+  duration_ms: 47.03516
+  type: 'test'
+  ...
+# Subtest: a stored price outside the current server catalogue is quarantined
+ok 14 - a stored price outside the current server catalogue is quarantined
+  ---
+  duration_ms: 4.418134
+  type: 'test'
+  ...
+# Subtest: wrong user, customer, assessment and missing pending purchase cannot grant access
+ok 15 - wrong user, customer, assessment and missing pending purchase cannot grant access
+  ---
+  duration_ms: 433.369476
+  type: 'test'
+  ...
+# Subtest: expired pending purchases cannot grant access
+ok 16 - expired pending purchases cannot grant access
+  ---
+  duration_ms: 11.673895
+  type: 'test'
+  ...
+# Subtest: client-controlled metadata cannot change entitlement
+ok 17 - client-controlled metadata cannot change entitlement
+  ---
+  duration_ms: 6.790362
+  type: 'test'
+  ...
+# Subtest: completed and concurrent duplicate deliveries are idempotent
+ok 18 - completed and concurrent duplicate deliveries are idempotent
+  ---
+  duration_ms: 11.656304
+  type: 'test'
+  ...
+# Subtest: failed Stripe events are reclaimable while completed events remain duplicates
+ok 19 - failed Stripe events are reclaimable while completed events remain duplicates
+  ---
+  duration_ms: 17.569544
+  type: 'test'
+  ...
+# Subtest: failed subscription updates, deletions and payment failures are retried through real handlers
+ok 20 - failed subscription updates, deletions and payment failures are retried through real handlers
+  ---
+  duration_ms: 48.828027
+  type: 'test'
+  ...
+# Subtest: subscription event ordering prevents strictly older access changes
+ok 21 - subscription event ordering prevents strictly older access changes
+  ---
+  duration_ms: 25.14225
+  type: 'test'
+  ...
+# Subtest: equal-time material conflicts fail closed in both arrival orders and newer state reconciles
+ok 22 - equal-time material conflicts fail closed in both arrival orders and newer state reconciles
+  ---
+  duration_ms: 73.213
+  type: 'test'
+  ...
+# Subtest: equal-time equivalent state and exact event duplicates are idempotent without reconciliation
+ok 23 - equal-time equivalent state and exact event duplicates are idempotent without reconciliation
+  ---
+  duration_ms: 5.082058
+  type: 'test'
+  ...
+# Subtest: stale subscription events are completed with an explicit auditable outcome
+ok 24 - stale subscription events are completed with an explicit auditable outcome
+  ---
+  duration_ms: 5.973033
+  type: 'test'
+  ...
+# Subtest: concurrent conflicting subscription events serialize to authoritative Stripe order
+ok 25 - concurrent conflicting subscription events serialize to authoritative Stripe order
+  ---
+  duration_ms: 9.069344
+  type: 'test'
+  ...
+# Subtest: unsupported and misspelled events are explicitly ignored without access changes
+ok 26 - unsupported and misspelled events are explicitly ignored without access changes
+  ---
+  duration_ms: 2.294281
+  type: 'test'
+  ...
+# Subtest: an in-progress Stripe event prevents concurrent workers
+ok 27 - an in-progress Stripe event prevents concurrent workers
+  ---
+  duration_ms: 2.388771
+  type: 'test'
+  ...
+# Subtest: abandoned event recovery is explicit, audited and makes the event retryable
+ok 28 - abandoned event recovery is explicit, audited and makes the event retryable
+  ---
+  duration_ms: 513.859307
+  type: 'test'
+  ...
+# Subtest: worker completion and operator recovery cannot overwrite each other
+ok 29 - worker completion and operator recovery cannot overwrite each other
+  ---
+  duration_ms: 88.999444
+  type: 'test'
+  ...
+# Subtest: active cancellation-at-period-end remains entitled but actual cancelled status fails closed
+ok 30 - active cancellation-at-period-end remains entitled but actual cancelled status fails closed
+  ---
+  duration_ms: 1.863165
+  type: 'test'
+  ...
+# Subtest: assessment, control-plane and red-team consumers share actual-cancellation denial
+ok 31 - assessment, control-plane and red-team consumers share actual-cancellation denial
+  ---
+  duration_ms: 19.064091
+  type: 'test'
+  ...
+# Subtest: SQLite billing lifecycle constraints reject malformed states
+ok 32 - SQLite billing lifecycle constraints reject malformed states
+  ---
+  duration_ms: 9.719916
+  type: 'test'
+  ...
+# (node:240071) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: signed webhook HTTP outcomes are explicit and retry-safe
+ok 33 - signed webhook HTTP outcomes are explicit and retry-safe
+  ---
+  duration_ms: 2224.578915
+  type: 'test'
+  ...
+# Subtest: billing maintenance mode fails closed before webhook processing
+ok 34 - billing maintenance mode fails closed before webhook processing
+  ---
+  duration_ms: 1312.403486
+  type: 'test'
+  ...
+# Subtest: blocks prompt injection without retaining raw content
+ok 35 - blocks prompt injection without retaining raw content
+  ---
+  duration_ms: 17.130789
+  type: 'test'
+  ...
+# Subtest: allows benign input and blocks secret-like model output
+ok 36 - allows benign input and blocks secret-like model output
+  ---
+  duration_ms: 7.486689
+  type: 'test'
+  ...
+# Subtest: detects encoded and context-composed attacks
+ok 37 - detects encoded and context-composed attacks
+  ---
+  duration_ms: 2.997326
+  type: 'test'
+  ...
+# Subtest: allows benign credential-settings navigation without weakening extraction blocking
+ok 38 - allows benign credential-settings navigation without weakening extraction blocking
+  ---
+  duration_ms: 1.461428
+  type: 'test'
+  ...
+# (node:240097) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: hosted guard is idempotent, enforces content and never retains raw prompts
+ok 39 - hosted guard is idempotent, enforces content and never retains raw prompts
+  ---
+  duration_ms: 72.493009
+  type: 'test'
+  ...
+# Subtest: runtime policy supports monitor mode, tool approvals and immediate key revocation
+ok 40 - runtime policy supports monitor mode, tool approvals and immediate key revocation
+  ---
+  duration_ms: 54.100565
+  type: 'test'
+  ...
+# Subtest: runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+ok 41 - runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+  ---
+  duration_ms: 74.650846
+  type: 'test'
+  ...
+# Subtest: guided protection check proves the hosted approval path without API keys, terminal commands or policy changes
+ok 42 - guided protection check proves the hosted approval path without API keys, terminal commands or policy changes
+  ---
+  duration_ms: 59.18839
+  type: 'test'
+  ...
+# Subtest: inventory drift blocks deployment review and remediation work is auditable
+ok 43 - inventory drift blocks deployment review and remediation work is auditable
+  ---
+  duration_ms: 169.19485
+  type: 'test'
+  ...
+# Subtest: community project allowance is enforced server-side
+ok 44 - community project allowance is enforced server-side
+  ---
+  duration_ms: 11.984899
+  type: 'test'
+  ...
+# Subtest: workspace members cannot bypass the billing owner project allowance
+ok 45 - workspace members cannot bypass the billing owner project allowance
+  ---
+  duration_ms: 11.901564
+  type: 'test'
+  ...
+# Subtest: all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+ok 46 - all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+  ---
+  duration_ms: 515.034322
+  type: 'test'
+  ...
+# Subtest: published plan entitlements match server-enforced commercial allowances
+ok 47 - published plan entitlements match server-enforced commercial allowances
+  ---
+  duration_ms: 1.117248
+  type: 'test'
+  ...
+# (node:240107) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: CSRF accepts the canonical host and the current Render/custom host but rejects unrelated origins
+ok 48 - CSRF accepts the canonical host and the current Render/custom host but rejects unrelated origins
+  ---
+  duration_ms: 3.926946
+  type: 'test'
+  ...
+# Subtest: homepage explains the product, audience, value and first action in plain language
+ok 49 - homepage explains the product, audience, value and first action in plain language
+  ---
+  duration_ms: 3.61017
+  type: 'test'
+  ...
+# Subtest: task chooser lets beginners select a situation without learning product architecture
+ok 50 - task chooser lets beginners select a situation without learning product architecture
+  ---
+  duration_ms: 0.786579
+  type: 'test'
+  ...
+# Subtest: assessment presents one guided question at a time and treats proof honestly
+ok 51 - assessment presents one guided question at a time and treats proof honestly
+  ---
+  duration_ms: 1.028283
+  type: 'test'
+  ...
+# Subtest: unknown answers fail closed instead of inventing a protection
+ok 52 - unknown answers fail closed instead of inventing a protection
+  ---
+  duration_ms: 5.625774
+  type: 'test'
+  ...
+# Subtest: result page puts the decision and practical fixes before technical scoring
+ok 53 - result page puts the decision and practical fixes before technical scoring
+  ---
+  duration_ms: 3.53457
+  type: 'test'
+  ...
+# Subtest: dashboard calculates one recommended next action and keeps other work secondary
+ok 54 - dashboard calculates one recommended next action and keeps other work secondary
+  ---
+  duration_ms: 1.094628
+  type: 'test'
+  ...
+# Subtest: control plane defaults to one human next step and preserves specialist controls on demand
+ok 55 - control plane defaults to one human next step and preserves specialist controls on demand
+  ---
+  duration_ms: 1.679825
+  type: 'test'
+  ...
+# Subtest: public entry pages use one plain navigation and one consistent primary action
+ok 56 - public entry pages use one plain navigation and one consistent primary action
+  ---
+  duration_ms: 1.995344
+  type: 'test'
+  ...
+# Subtest: customer-facing pages use external scripts and preserve security boundaries
+ok 57 - customer-facing pages use external scripts and preserve security boundaries
+  ---
+  duration_ms: 2.866305
+  type: 'test'
+  ...
+# Subtest: the public sitemap includes the customer task chooser
+ok 58 - the public sitemap includes the customer task chooser
+  ---
+  duration_ms: 1.806287
+  type: 'test'
+  ...
+# Subtest: commercial catalogue contains only the approved current prices
+ok 59 - commercial catalogue contains only the approved current prices
+  ---
+  duration_ms: 4.858721
+  type: 'test'
+  ...
+# Subtest: legacy checkout branch and stale public validation counters are removed safely
+ok 60 - legacy checkout branch and stale public validation counters are removed safely
+  ---
+  duration_ms: 3.331134
+  type: 'test'
+  ...
+# Subtest: release validation isolates credentials and live readiness exposes real PostgreSQL schema state
+ok 61 - release validation isolates credentials and live readiness exposes real PostgreSQL schema state
+  ---
+  duration_ms: 1.267317
+  type: 'test'
+  ...
+# Subtest: SSO state is signed, expiring and safe-return bound
+ok 62 - SSO state is signed, expiring and safe-return bound
+  ---
+  duration_ms: 5.004981
+  type: 'test'
+  ...
+# Subtest: SCIM users are normalised and deprovisioning is preserved
+ok 63 - SCIM users are normalised and deprovisioning is preserved
+  ---
+  duration_ms: 2.501969
+  type: 'test'
+  ...
+# Subtest: Slack and Jira notifications contain portable canonical metadata
+ok 64 - Slack and Jira notifications contain portable canonical metadata
+  ---
+  duration_ms: 1.268271
+  type: 'test'
+  ...
+# Subtest: webhook signatures reject tampering and stale deliveries
+ok 65 - webhook signatures reject tampering and stale deliveries
+  ---
+  duration_ms: 1.044998
+  type: 'test'
+  ...
+# Subtest: every page has one purpose, an accessible landmark shell and reusable navigation
+ok 66 - every page has one purpose, an accessible landmark shell and reusable navigation
+  ---
+  duration_ms: 22.001924
+  type: 'test'
+  ...
+# Subtest: public and signed-in navigation use stable human labels and one primary action
+ok 67 - public and signed-in navigation use stable human labels and one primary action
+  ---
+  duration_ms: 1.817196
+  type: 'test'
+  ...
+# Subtest: mobile navigation is visible, keyboard-operable and protected from legacy responsive rules
+ok 68 - mobile navigation is visible, keyboard-operable and protected from legacy responsive rules
+  ---
+  duration_ms: 5.673337
+  type: 'test'
+  ...
+# Subtest: support contact is separated, tappable and safe to wrap on narrow screens
+ok 69 - support contact is separated, tappable and safe to wrap on narrow screens
+  ---
+  duration_ms: 3.571948
+  type: 'test'
+  ...
+# Subtest: progressive disclosure preserves the complete specialist capability set
+ok 70 - progressive disclosure preserves the complete specialist capability set
+  ---
+  duration_ms: 3.21898
+  type: 'test'
+  ...
+# Subtest: trust and conversion pages state evidence boundaries instead of unsupported assurance
+ok 71 - trust and conversion pages state evidence boundaries instead of unsupported assurance
+  ---
+  duration_ms: 2.268044
+  type: 'test'
+  ...
+# Subtest: local inspector produces signed, redacted evidence with high-risk findings
+ok 72 - local inspector produces signed, redacted evidence with high-risk findings
+  ---
+  duration_ms: 99.290084
+  type: 'test'
+  ...
+# Subtest: bundle tampering invalidates the Ed25519 integrity proof
+ok 73 - bundle tampering invalidates the Ed25519 integrity proof
+  ---
+  duration_ms: 29.677744
+  type: 'test'
+  ...
+# Subtest: baseline comparison reports resolved and unchanged findings
+ok 74 - baseline comparison reports resolved and unchanged findings
+  ---
+  duration_ms: 52.631916
+  type: 'test'
+  ...
+# Subtest: framework coverage is derived from actual findings
+ok 75 - framework coverage is derived from actual findings
+  ---
+  duration_ms: 24.173798
+  type: 'test'
+  ...
+# Subtest: inspection requires explicit operator authorisation in CLI mode
+ok 76 - inspection requires explicit operator authorisation in CLI mode
+  ---
+  duration_ms: 22.87364
+  type: 'test'
+  ...
+# Subtest: accepted-risk review remains visible and does not reduce technical risk
+ok 77 - accepted-risk review remains visible and does not reduce technical risk
+  ---
+  duration_ms: 53.010424
+  type: 'test'
+  ...
+# Subtest: secret fingerprints are scan-local and cannot correlate a credential across scans
+ok 78 - secret fingerprints are scan-local and cannot correlate a credential across scans
+  ---
+  duration_ms: 59.818694
+  type: 'test'
+  ...
+# Subtest: named false positives remain visible but do not inflate technical risk
+ok 79 - named false positives remain visible but do not inflate technical risk
+  ---
+  duration_ms: 60.223679
+  type: 'test'
+  ...
+# Subtest: public image badge CORS is not reported as an application wildcard CORS weakness
+ok 80 - public image badge CORS is not reported as an application wildcard CORS weakness
+  ---
+  duration_ms: 22.333752
+  type: 'test'
+  ...
+# Subtest: real application listener binds exclusively to configured loopback host
+ok 81 - real application listener binds exclusively to configured loopback host
+  ---
+  duration_ms: 1194.413012
+  type: 'test'
+  ...
+# Subtest: invalid HOST fails before the application starts listening
+ok 82 - invalid HOST fails before the application starts listening
+  ---
+  duration_ms: 243.764692
+  type: 'test'
+  ...
+# Subtest: ambiguous HOST=0 fails before startup and cannot open an all-interface listener
+ok 83 - ambiguous HOST=0 fails before startup and cannot open an all-interface listener
+  ---
+  duration_ms: 261.608613
+  type: 'test'
+  ...
+# Subtest: Stripe Checkout explicitly enables Managed Payments
+ok 84 - Stripe Checkout explicitly enables Managed Payments
+  ---
+  duration_ms: 3.305556
+  type: 'test'
+  ...
+# Subtest: Stripe requests pin a Managed Payments-compatible API version
+ok 85 - Stripe requests pin a Managed Payments-compatible API version
+  ---
+  duration_ms: 1.239998
+  type: 'test'
+  ...
+# Subtest: model analysis rejects executable serialization and digest tampering
+ok 86 - model analysis rejects executable serialization and digest tampering
+  ---
+  duration_ms: 5.09982
+  type: 'test'
+  ...
+# Subtest: valid bounded SafeTensors metadata is accepted
+ok 87 - valid bounded SafeTensors metadata is accepted
+  ---
+  duration_ms: 1.638068
+  type: 'test'
+  ...
+# Subtest: allows an approved immutable safe model manifest
+ok 88 - allows an approved immutable safe model manifest
+  ---
+  duration_ms: 4.197809
+  type: 'test'
+  ...
+# Subtest: quarantines digest mismatch, unknown publisher and executable payload
+ok 89 - quarantines digest mismatch, unknown publisher and executable payload
+  ---
+  duration_ms: 1.243426
+  type: 'test'
+  ...
+# Subtest: sample Professional PDF includes metadata, section bookmarks and bounded pagination
+ok 90 - sample Professional PDF includes metadata, section bookmarks and bounded pagination
+  ---
+  duration_ms: 5.100303
+  type: 'test'
+  ...
+# (node:240233) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: PostgreSQL placeholder translation preserves literals and comments
+ok 91 - PostgreSQL placeholder translation preserves literals and comments
+  ---
+  duration_ms: 3.920246
+  type: 'test'
+  ...
+# Subtest: PostgreSQL adapter uses parameterised pool queries and transaction-bound clients
+ok 92 - PostgreSQL adapter uses parameterised pool queries and transaction-bound clients
+  ---
+  duration_ms: 5.365225
+  type: 'test'
+  ...
+# Subtest: PostgreSQL adapter rejects SQLite-only statements
+ok 93 - PostgreSQL adapter rejects SQLite-only statements
+  ---
+  duration_ms: 2.315607
+  type: 'test'
+  ...
+# Subtest: PostgreSQL migrations are complete, portable and checksum-idempotent
+ok 94 - PostgreSQL migrations are complete, portable and checksum-idempotent
+  ---
+  duration_ms: 55.381387
+  type: 'test'
+  ...
+# Subtest: runtime approval integrity migration is additive and enforces a single-use ledger
+ok 95 - runtime approval integrity migration is additive and enforces a single-use ledger
+  ---
+  duration_ms: 1.096548
+  type: 'test'
+  ...
+# Subtest: billing integrity migration is additive and preserves legacy purchases
+ok 96 - billing integrity migration is additive and preserves legacy purchases
+  ---
+  duration_ms: 2.06109
+  type: 'test'
+  ...
+# Subtest: real SQLite adapter rebuild preserves legacy subscriptions and enforces lifecycle classifications
+ok 97 - real SQLite adapter rebuild preserves legacy subscriptions and enforces lifecycle classifications
+  ---
+  duration_ms: 3539.774004
+  type: 'test'
+  ...
+# Subtest: SQLite subscription rebuild failure rolls back to the usable original table
+ok 98 - SQLite subscription rebuild failure rolls back to the usable original table
+  ---
+  duration_ms: 1664.81499
+  type: 'test'
+  ...
+# Subtest: release infrastructure contains PostgreSQL only and no persistent SQLite disk
+ok 99 - release infrastructure contains PostgreSQL only and no persistent SQLite disk
+  ---
+  duration_ms: 7.986788
+  type: 'test'
+  ...
+# Subtest: bind host has an explicit production-compatible default
+ok 100 - bind host has an explicit production-compatible default
+  ---
+  duration_ms: 107.659051
+  type: 'test'
+  ...
+# Subtest: bind host accepts intentional IP and DNS values without inferring from BASE_URL
+ok 101 - bind host accepts intentional IP and DNS values without inferring from BASE_URL
+  ---
+  duration_ms: 1064.234104
+  type: 'test'
+  ...
+# Subtest: bind host rejects malformed and unsafe values
+ok 102 - bind host rejects malformed and unsafe values
+  ---
+  duration_ms: 2494.018409
+  type: 'test'
+  ...
+# Subtest: production configuration fails closed before deployment when mandatory controls are absent
+ok 103 - production configuration fails closed before deployment when mandatory controls are absent
+  ---
+  duration_ms: 87.9959
+  type: 'test'
+  ...
+# Subtest: launch readiness passes when all required production settings exist
+ok 104 - launch readiness passes when all required production settings exist
+  ---
+  duration_ms: 92.256541
+  type: 'test'
+  ...
+# Subtest: production readiness rejects local or non-PostgreSQL persistence URLs
+ok 105 - production readiness rejects local or non-PostgreSQL persistence URLs
+  ---
+  duration_ms: 251.220241
+  type: 'test'
+  ...
+# Subtest: public experience contains no invitation-only or beta language
+ok 106 - public experience contains no invitation-only or beta language
+  ---
+  duration_ms: 30.502384
+  type: 'test'
+  ...
+# Subtest: public brand does not expose an internal release-number badge
+ok 107 - public brand does not expose an internal release-number badge
+  ---
+  duration_ms: 6.371429
+  type: 'test'
+  ...
+# Subtest: company and status pages provide public trust routes
+ok 108 - company and status pages provide public trust routes
+  ---
+  duration_ms: 1.331674
+  type: 'test'
+  ...
+# Subtest: controlled support-agent proof has a reproducible digest and honest limitations
+ok 109 - controlled support-agent proof has a reproducible digest and honest limitations
+  ---
+  duration_ms: 6.061137
+  type: 'test'
+  ...
+# (node:240611) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ordinary users can register securely without an invitation through the public signup path
+ok 110 - ordinary users can register securely without an invitation through the public signup path
+  ---
+  duration_ms: 112.872814
+  type: 'test'
+  ...
+# (node:240622) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: runtime readiness evidence is bound to the exact current policy identity and publication time
+ok 111 - runtime readiness evidence is bound to the exact current policy identity and publication time
+  ---
+  duration_ms: 236.403325
+  type: 'test'
+  ...
+# Subtest: API key status fails closed at expiry boundaries and is shared by authentication and readiness
+ok 112 - API key status fails closed at expiry boundaries and is shared by authentication and readiness
+  ---
+  duration_ms: 132.144234
+  type: 'test'
+  ...
+# Subtest: only valid registered project-scoped artifacts can satisfy remediation readiness
+ok 113 - only valid registered project-scoped artifacts can satisfy remediation readiness
+  ---
+  duration_ms: 43.678532
+  type: 'test'
+  ...
+# Subtest: legacy closed remediation upgrade is explicit, idempotent, authorised, and preserves history
+ok 114 - legacy closed remediation upgrade is explicit, idempotent, authorised, and preserves history
+  ---
+  duration_ms: 486.702034
+  type: 'test'
+  ...
+# Subtest: historical events, an expired key, and self-asserted hashes cannot combine into readiness
+ok 115 - historical events, an expired key, and self-asserted hashes cannot combine into readiness
+  ---
+  duration_ms: 60.163507
+  type: 'test'
+  ...
+# Subtest: retests fail closed for unrelated, post-hoc, client-forged and mismatched runtime events
+ok 116 - retests fail closed for unrelated, post-hoc, client-forged and mismatched runtime events
+  ---
+  duration_ms: 130.562558
+  type: 'test'
+  ...
+# Subtest: retest criteria enforce policy, tenant, expiry, immutability and single-use execution binding
+ok 117 - retest criteria enforce policy, tenant, expiry, immutability and single-use execution binding
+  ---
+  duration_ms: 673.18643
+  type: 'test'
+  ...
+# Subtest: server-derived retest completion is atomic, preserves legacy evidence, and controls readiness
+ok 118 - server-derived retest completion is atomic, preserves legacy evidence, and controls readiness
+  ---
+  duration_ms: 36.030903
+  type: 'test'
+  ...
+# (node:240629) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: hardened simulation passes the complete non-destructive catalogue
+ok 119 - hardened simulation passes the complete non-destructive catalogue
+  ---
+  duration_ms: 67.079971
+  type: 'test'
+  ...
+# Subtest: vulnerable simulation reproduces injection, tool, memory and limit failures
+ok 120 - vulnerable simulation reproduces injection, tool, memory and limit failures
+  ---
+  duration_ms: 64.573839
+  type: 'test'
+  ...
+# Subtest: runner refuses production targets and unauthorised execution
+ok 121 - runner refuses production targets and unauthorised execution
+  ---
+  duration_ms: 12.524691
+  type: 'test'
+  ...
+# Subtest: uploaded bundle excludes raw prompts, raw responses and secret canaries
+ok 122 - uploaded bundle excludes raw prompts, raw responses and secret canaries
+  ---
+  duration_ms: 31.389273
+  type: 'test'
+  ...
+# Subtest: red-team outcomes export as SARIF without raw target content
+ok 123 - red-team outcomes export as SARIF without raw target content
+  ---
+  duration_ms: 21.241606
+  type: 'test'
+  ...
+# Subtest: tampering invalidates red-team evidence
+ok 124 - tampering invalidates red-team evidence
+  ---
+  duration_ms: 20.704387
+  type: 'test'
+  ...
+# Subtest: expanded catalogue supports repeated trials with stable confidence metrics
+ok 125 - expanded catalogue supports repeated trials with stable confidence metrics
+  ---
+  duration_ms: 51.67964
+  type: 'test'
+  ...
+# Subtest: adaptive campaigns mutate trials and record response-dependent rounds without raw transcripts
+ok 126 - adaptive campaigns mutate trials and record response-dependent rounds without raw transcripts
+  ---
+  duration_ms: 172.897699
+  type: 'test'
+  ...
+# Subtest: adaptive vulnerable campaigns stop after reproducing a failure
+ok 127 - adaptive vulnerable campaigns stop after reproducing a failure
+  ---
+  duration_ms: 4.161085
+  type: 'test'
+  ...
+# Subtest: staging adapter execution requires a Rules of Engagement identifier
+ok 128 - staging adapter execution requires a Rules of Engagement identifier
+  ---
+  duration_ms: 1.778883
+  type: 'test'
+  ...
+# Subtest: hardened and tested configuration scores as low risk
+ok 129 - hardened and tested configuration scores as low risk
+  ---
+  duration_ms: 9.732028
+  type: 'test'
+  ...
+# Subtest: maximum-risk configuration scores as critical
+ok 130 - maximum-risk configuration scores as critical
+  ---
+  duration_ms: 4.073471
+  type: 'test'
+  ...
+# Subtest: critical attack path always overrides aggregate score and blocks deployment
+ok 131 - critical attack path always overrides aggregate score and blocks deployment
+  ---
+  duration_ms: 1.592817
+  type: 'test'
+  ...
+# Subtest: moderate configuration produces findings and attack paths
+ok 132 - moderate configuration produces findings and attack paths
+  ---
+  duration_ms: 1.91096
+  type: 'test'
+  ...
+# Subtest: unsupported control claims reduce evidence confidence
+ok 133 - unsupported control claims reduce evidence confidence
+  ---
+  duration_ms: 1.390209
+  type: 'test'
+  ...
+# Subtest: legacy tested selections are treated as unsupported customer assertions
+ok 134 - legacy tested selections are treated as unsupported customer assertions
+  ---
+  duration_ms: 1.053763
+  type: 'test'
+  ...
+# Subtest: invalid or missing answer is rejected
+ok 135 - invalid or missing answer is rejected
+  ---
+  duration_ms: 1.980519
+  type: 'test'
+  ...
+# Subtest: runtime gateway forwards allowed calls and prevents denied calls reaching upstream
+ok 136 - runtime gateway forwards allowed calls and prevents denied calls reaching upstream
+  ---
+  duration_ms: 438.877303
+  type: 'test'
+  ...
+# Subtest: allows a narrow allowlisted read action without retaining arguments
+ok 137 - allows a narrow allowlisted read action without retaining arguments
+  ---
+  duration_ms: 12.811111
+  type: 'test'
+  ...
+# Subtest: blocks denied tools even when their names are namespaced
+ok 138 - blocks denied tools even when their names are namespaced
+  ---
+  duration_ms: 2.106104
+  type: 'test'
+  ...
+# Subtest: blocks traversal and sensitive filesystem targets
+ok 139 - blocks traversal and sensitive filesystem targets
+  ---
+  duration_ms: 2.403216
+  type: 'test'
+  ...
+# Subtest: blocks destinations outside the network allowlist
+ok 140 - blocks destinations outside the network allowlist
+  ---
+  duration_ms: 1.473627
+  type: 'test'
+  ...
+# Subtest: blocks secret-like fields
+ok 141 - blocks secret-like fields
+  ---
+  duration_ms: 1.731074
+  type: 'test'
+  ...
+# Subtest: requires server-verified approval for material actions and ignores caller assertions
+ok 142 - requires server-verified approval for material actions and ignores caller assertions
+  ---
+  duration_ms: 2.365564
+  type: 'test'
+  ...
+# Subtest: monitor mode records would-deny but does not block
+ok 143 - monitor mode records would-deny but does not block
+  ---
+  duration_ms: 1.236928
+  type: 'test'
+  ...
+# Subtest: approval environment must match the authoritative runtime environment
+ok 144 - approval environment must match the authoritative runtime environment
+  ---
+  duration_ms: 1.238369
+  type: 'test'
+  ...
+# (node:240666) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: qualification score is transparent and based only on recorded evidence
+ok 145 - qualification score is transparent and based only on recorded evidence
+  ---
+  duration_ms: 134.001298
+  type: 'test'
+  ...
+# Subtest: prospect workflow drafts evidence-based messages and requires approval before sent
+ok 146 - prospect workflow drafts evidence-based messages and requires approval before sent
+  ---
+  duration_ms: 11.726154
+  type: 'test'
+  ...
+# Subtest: pipeline overview and demo brief support the commercial workflow
+ok 147 - pipeline overview and demo brief support the commercial workflow
+  ---
+  duration_ms: 7.352743
+  type: 'test'
+  ...
+# Subtest: sales UI remains private and contains the approval boundary
+ok 148 - sales UI remains private and contains the approval boundary
+  ---
+  duration_ms: 1.289379
+  type: 'test'
+  ...
+# Subtest: exports portable CEF and OCSF security events
+ok 149 - exports portable CEF and OCSF security events
+  ---
+  duration_ms: 3.432327
+  type: 'test'
+  ...
+# Subtest: supports Dahlia invoice parent subscription references
+ok 150 - supports Dahlia invoice parent subscription references
+  ---
+  duration_ms: 2.461371
+  type: 'test'
+  ...
+# Subtest: supports subscription item-level billing periods
+ok 151 - supports subscription item-level billing periods
+  ---
+  duration_ms: 0.570581
+  type: 'test'
+  ...
+# Subtest: every required billing event is mapped to an explicit handler
+ok 152 - every required billing event is mapped to an explicit handler
+  ---
+  duration_ms: 1.649674
+  type: 'test'
+  ...
+# (node:240687) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: public user representations never expose internal session token hashes
+ok 153 - public user representations never expose internal session token hashes
+  ---
+  duration_ms: 109.296664
+  type: 'test'
+  ...
+# Subtest: paid checkout grants access transactionally and retries report delivery with complete evidence
+ok 154 - paid checkout grants access transactionally and retries report delivery with complete evidence
+  ---
+  duration_ms: 67.790504
+  type: 'test'
+  ...
+# Subtest: password verification uses asynchronous scrypt without monopolising the event loop
+ok 155 - password verification uses asynchronous scrypt without monopolising the event loop
+  ---
+  duration_ms: 282.408291
+  type: 'test'
+  ...
+# Subtest: email-verified accounts can enable TOTP MFA and complete a protected sign-in
+ok 156 - email-verified accounts can enable TOTP MFA and complete a protected sign-in
+  ---
+  duration_ms: 281.070865
+  type: 'test'
+  ...
+# Subtest: primary rate policy keeps health and public reads available during bounded bursts
+ok 157 - primary rate policy keeps health and public reads available during bounded bursts
+  ---
+  duration_ms: 1059.531183
+  type: 'test'
+  ...
+# Subtest: trusted-proxy rate limiting cannot be bypassed by changing the left-most forwarded address
+ok 158 - trusted-proxy rate limiting cannot be bypassed by changing the left-most forwarded address
+  ---
+  duration_ms: 1.723682
+  type: 'test'
+  ...
+# Subtest: expired red-team evidence is deleted with a receipt while legal hold is preserved
+ok 159 - expired red-team evidence is deleted with a receipt while legal hold is preserved
+  ---
+  duration_ms: 4.742399
+  type: 'test'
+  ...
+# Subtest: staging evidence is rejected when execution falls outside the authorised time window
+ok 160 - staging evidence is rejected when execution falls outside the authorised time window
+  ---
+  duration_ms: 284.343909
+  type: 'test'
+  ...
+# Subtest: CSP forbids inline styles and public pages contain no inline style attributes
+ok 161 - CSP forbids inline styles and public pages contain no inline style attributes
+  ---
+  duration_ms: 9.81843
+  type: 'test'
+  ...
+# Subtest: Agency pricing makes no unimplemented workspace claim
+ok 162 - Agency pricing makes no unimplemented workspace claim
+  ---
+  duration_ms: 0.912821
+  type: 'test'
+  ...
+# (node:240695) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: workspace roles enforce boundaries and preserve an owner
+ok 163 - workspace roles enforce boundaries and preserve an owner
+  ---
+  duration_ms: 14.818648
+  type: 'test'
+  ...
+# Subtest: SCIM token provisions and deprovisions users
+ok 164 - SCIM token provisions and deprovisions users
+  ---
+  duration_ms: 8.25523
+  type: 'test'
+  ...
+# Subtest: signed integration delivery records success
+ok 165 - signed integration delivery records success
+  ---
+  duration_ms: 7.538845
+  type: 'test'
+  ...
+1..165
+# tests 165
+# suites 0
+# pass 165
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 14913.727335
+
+=== Syntax and source checks ===
+
+> agent-risk-layer@10.0.1 check
+> node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs runtime/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check "$f"; done
+
+
+=== End-to-end smoke journey ===
+
+> agent-risk-layer@10.0.1 smoke
+> node tests/smoke.mjs
+
+{
+  "health": true,
+  "version": "10.0.1",
+  "score": 85,
+  "riskBand": "Critical",
+  "paidTier": "pro",
+  "pdfBytes": 176866,
+  "subscription": "active",
+  "sharing": true,
+  "publicTokenIsolation": true,
+  "dataExport": true,
+  "passwordRecovery": true,
+  "localInspection": true,
+  "inspectionReplayProtection": true,
+  "atomicInspectionTokenClaim": true,
+  "serverSideInspectionRecalculation": true,
+  "inspectionDriftComparison": true,
+  "scannerReleaseDigestCheck": true,
+  "controlledRedTeam": true,
+  "rulesOfEngagement": true,
+  "repeatedTrials": true,
+  "malformedJsonHandled": true,
+  "redTeamReplayProtection": true,
+  "redTeamRetestComparison": true,
+  "hostedRuntimeGuard": true,
+  "guardReplayProtection": true,
+  "exactActionApprovalIntegrity": true,
+  "guidedProtectionCheck": true,
+  "privacySafeRuntimeEvidence": true,
+  "inventoryDriftWorkflow": true,
+  "remediationWorkflow": true,
+  "ownedWorkspaceDeletion": true,
+  "accountDeletion": true,
+  "analytics": {
+    "users": 1,
+    "verifiedUsers": 1,
+    "mfaUsers": 0,
+    "assessments": 1,
+    "purchases": 2,
+    "fulfilledPurchases": 2,
+    "revenuePence": 12800,
+    "activeSubscriptions": 1,
+    "inspections": 3,
+    "redTeamRuns": 2,
+    "openAlerts": 0
+  }
+}
+
+=== Internal detection regression ===
+
+> agent-risk-layer@10.0.1 test:detection-benchmark
+> node scripts/run-detection-benchmark.mjs
+
+{
+  "schema": "arl.detection-benchmark.v1",
+  "version": "10.0.1",
+  "dataset": "ARL transparent smoke benchmark 2026-07-25",
+  "scope": "Small internal synthetic English regression set; not independent or production-representative",
+  "cases": 20,
+  "confusionMatrix": {
+    "tp": 10,
+    "tn": 10,
+    "fp": 0,
+    "fn": 0
+  },
+  "metrics": {
+    "precision": 1,
+    "recall": 1,
+    "specificity": 1,
+    "accuracy": 1
+  }
+}
+
+=== One-thousand scenario regression ===
+
+> agent-risk-layer@10.0.1 test:scenarios
+> node scripts/run-1000-scenarios.mjs test-artifacts
+
+{"release":"10.0.1","seed":"0x5a17c0de","generatedAt":"2026-07-31T10:42:36.060Z","scenarios":1000,"passed":1000,"failed":0,"unsafeDecisions":0,"criticalPathScenarios":387,"averageScore":72}
+
+RELEASE VALIDATION PASSED
+All ordinary tests ran without production credentials and with zero skips.
