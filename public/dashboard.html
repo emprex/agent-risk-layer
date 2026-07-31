@@ -1,27 +1,23 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>My security work | AgentRiskLayer</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/dashboard.js"></script>
-  <link rel="stylesheet" href="/analytics.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Security overview | AgentRiskLayer</title>
+  <meta name="description" content="See the next AI-agent security action, open risks, live protection and saved evidence in one guided workspace.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/analytics.css">
+  <script type="module" src="/dashboard.js"></script><script type="module" src="/site-shell.js"></script>
 </head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="/"><span class="brand-mark">AR</span>AgentRiskLayer</a>
-    <nav aria-label="Account navigation"><a href="/dashboard.html">My work</a><a href="/assessment.html">Check an agent</a><a href="/help.html">Help</a><a href="#settings">Account</a><button class="button ghost small" id="logout">Log out</button></nav>
+<body data-shell="app">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="site-header site-header-v10 app-header-v10" data-site-header>
+    <a class="brand brand-v10" href="/dashboard.html" aria-label="AgentRiskLayer overview"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Security workspace</small></span></a><button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Workspace navigation"><a href="/dashboard.html">Overview</a><a href="/assessment.html">Check risk</a><a href="/control-plane.html">Live protection</a><a href="/inspector.html">Evidence</a><a href="/help.html">Help</a><a href="/dashboard.html#settings">Account</a><button class="button ghost small" id="logout" type="button">Log out</button></nav>
   </header>
-  <main class="app-shell wide">
-    <div class="page-heading customer-dashboard-heading">
-      <span class="eyebrow">Your security workspace</span>
-      <h1 id="welcome">What do you want to do today?</h1>
-      <p>Start a check, fix an open risk or review whether an agent is ready.</p>
-    </div>
-    <div id="dashboardRoot" class="loading"><div class="spinner"></div>Loading your work…</div>
+  <main id="main-content" class="app-shell wide v10-dashboard-shell">
+    <div class="page-heading app-page-heading"><div><span class="eyebrow">Security overview</span><h1 id="welcome">Your next security step</h1><p>One recommended action first. Detailed tools and evidence remain available when you need them.</p></div><a class="context-help-link" href="/help.html#start"><span>New here?</span><strong>Open the getting-started guide →</strong></a></div>
+    <div id="dashboardRoot" class="loading"><div class="spinner"></div>Loading your security work…</div>
   </main>
-  <footer><span>© 2026 AgentRiskLayer</span><span>Technical tools are available when you need them.</span></footer>
+  <footer class="site-footer-v10 app-footer-v10"><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span><a href="/help.html">Help</a> · <a href="/trust.html">Trust</a> · <a href="/status.html">Status</a> · <a href="mailto:support@agentrisklayer.com">Contact support</a></span></div></footer>
   <script type="module" src="/analytics.js"></script>
 </body>
 </html>

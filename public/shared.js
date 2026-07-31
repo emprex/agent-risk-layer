@@ -138,7 +138,7 @@ export function hydrateHelpLink() {
 
 export function hydrateFooterLinks() {
   const footer = document.querySelector('footer');
-  if (!footer || footer.querySelector('.footer-links')) return;
+  if (!footer || footer.classList.contains('site-footer-v10') || footer.querySelector('.footer-links')) return;
   const links = document.createElement('span');
   links.className = 'footer-links';
   links.innerHTML = '<a href="/company.html">Company</a><a href="/status.html">Status</a><a href="/security-center.html">Security</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a>';

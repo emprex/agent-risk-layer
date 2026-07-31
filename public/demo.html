@@ -1,138 +1,131 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>90-second Product Demo | AgentRiskLayer</title>
-  <meta name="description" content="See how AgentRiskLayer stops an unsafe AI-agent tool call, requires human approval and creates privacy-safe evidence in a guided synthetic demonstration.">
-  <meta property="og:title" content="See AgentRiskLayer stop an unsafe AI-agent action">
-  <meta property="og:description" content="A clear 90-second guided product demonstration using synthetic data and dry-run tools.">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/demo.js"></script>
-<link rel="stylesheet" href="/analytics.css"></head>
-<body class="demo-v2-page">
-  <a class="skip-link" href="#demo">Skip to demonstration</a>
-  <header class="site-header premium-nav">
-    <a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span></a>
-    <nav aria-label="Primary navigation"><a href="/start.html">Start</a><a href="/#how-it-works">How it works</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a><a class="button primary small" href="/start.html">Check my agent</a></nav>
-  </header>
-
-  <main id="demo" class="demo-v2-shell">
-    <section class="demo-v2-hero">
-      <div>
-        <span class="eyebrow">Interactive product demonstration · no login</span>
-        <h1>See AgentRiskLayer stop a dangerous AI-agent action.</h1>
-        <p>A fictional support agent receives a hidden instruction inside a customer email and attempts a £2,500 dry-run refund. Follow the complete evidence chain from declared controls to retest and deployment decision.</p>
-        <div class="button-row">
-          <button id="playDemo" class="button primary button-xl" type="button">Play the 90-second demo</button>
-          <a class="button glass button-xl" href="#customerJourney">What the customer does</a>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>90-second Product Demo | AgentRiskLayer</title>
+<meta content="See how AgentRiskLayer stops an unsafe AI-agent tool call, requires human approval and creates privacy-safe evidence in a guided synthetic demonstration." name="description"/>
+<meta content="See AgentRiskLayer stop an unsafe AI-agent action" property="og:title"/>
+<meta content="A clear 90-second guided product demonstration using synthetic data and dry-run tools." property="og:description"/>
+<link href="/favicon.svg" rel="icon" type="image/svg+xml"/>
+<link href="/styles.css" rel="stylesheet"/>
+<script src="/demo.js" type="module"></script>
+<link href="/analytics.css" rel="stylesheet"/><script src="/site-shell.js" type="module"></script></head>
+<body class="demo-v2-page" data-shell="public"><a class="skip-link" href="#main-content">Skip to main content</a>
+<header class="site-header site-header-v10" data-site-header="">
+<a aria-label="AgentRiskLayer home" class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a>
+<button aria-controls="primaryNavigation" aria-expanded="false" class="menu-toggle" data-menu-toggle="" type="button"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+<nav aria-label="Primary navigation" class="primary-navigation" data-primary-navigation="" id="primaryNavigation">
+<a href="/#product">Product</a><a href="/demo.html">See it work</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a>
+<a class="nav-signin" data-auth-link="" href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a>
+</nav>
+</header>
+<main class="demo-v2-shell" id="main-content">
+<section class="demo-v2-hero">
+<div>
+<span class="eyebrow">Interactive product demonstration · no login</span>
+<h1>See AgentRiskLayer stop a dangerous AI-agent action.</h1>
+<p>A fictional support agent receives a hidden instruction inside a customer email and attempts a £2,500 dry-run refund. Follow the complete evidence chain from declared controls to retest and deployment decision.</p>
+<div class="button-row">
+<button class="button primary button-xl" id="playDemo" type="button">Play the 90-second demo</button>
+<a class="button glass button-xl" href="#customerJourney">What the customer does</a>
+</div>
+<div class="demo-v2-safety-note">
+<strong>Safe demonstration:</strong> synthetic customer, fake email, dry-run refund tool and no real payment action.
         </div>
-        <div class="demo-v2-safety-note">
-          <strong>Safe demonstration:</strong> synthetic customer, fake email, dry-run refund tool and no real payment action.
-        </div>
-      </div>
-      <aside class="demo-v2-outcome-card" aria-label="Demonstration outcome summary">
-        <span>Final outcome</span>
-        <strong>EXACT ACTION CONTROLLED</strong>
-        <dl>
-          <div><dt>Decision time</dt><dd>18 ms</dd></div>
-          <div><dt>Required control</dt><dd>Human approval</dd></div>
-          <div><dt>Raw content stored</dt><dd>No</dd></div>
-        </dl>
-      </aside>
-    </section>
-
-    <section class="demo-v2-workbench" aria-label="Interactive AgentRiskLayer product demonstration">
-      <ol class="demo-v2-steps" id="demoSteps" aria-label="Demonstration steps">
-        <li><button type="button" data-step="0" aria-current="step"><b>1</b><span>Scope</span></button></li>
-        <li><button type="button" data-step="1"><b>2</b><span>Inspect</span></button></li>
-        <li><button type="button" data-step="2"><b>3</b><span>Attack</span></button></li>
-        <li><button type="button" data-step="3"><b>4</b><span>Deny</span></button></li>
-        <li><button type="button" data-step="4"><b>5</b><span>Approve</span></button></li>
-        <li><button type="button" data-step="5"><b>6</b><span>Negative tests</span></button></li>
-        <li><button type="button" data-step="6"><b>7</b><span>Retest</span></button></li>
-        <li><button type="button" data-step="7"><b>8</b><span>Decide</span></button></li>
-      </ol>
-
-      <div class="demo-v2-console">
-        <div class="demo-v2-console-top">
-          <div><i></i><i></i><i></i></div>
-          <span id="consoleTitle">Support agent · scenario overview</span>
-          <b id="policyStatus"><i></i> MONITORING</b>
-        </div>
-
-        <div class="demo-v2-console-grid">
-          <section class="demo-v2-panel demo-v2-input" aria-labelledby="inputTitle">
-            <span class="demo-v2-label">WHAT THE AGENT RECEIVES</span>
-            <h2 id="inputTitle">A customer support request</h2>
-            <div id="inputContent" class="demo-v2-content" aria-live="polite"></div>
-          </section>
-
-          <section class="demo-v2-panel demo-v2-decision" aria-labelledby="decisionTitle">
-            <span class="demo-v2-label">AGENTRISKLAYER DECISION</span>
-            <h2 id="decisionTitle">Understanding the agent</h2>
-            <div id="decisionContent" class="demo-v2-content" aria-live="polite"></div>
-          </section>
-
-          <section class="demo-v2-panel demo-v2-result" aria-labelledby="resultTitle">
-            <span class="demo-v2-label">WHAT HAPPENS NEXT</span>
-            <h2 id="resultTitle">No action yet</h2>
-            <div id="resultContent" class="demo-v2-content" aria-live="polite"></div>
-          </section>
-        </div>
-
-        <div class="demo-v2-controls">
-          <button id="previousStep" class="button ghost" type="button">Previous</button>
-          <div class="demo-v2-progress-wrap">
-            <span id="stepCounter">Step 1 of 8</span>
-            <div class="progress-track"><div id="demoProgress" class="progress-bar"></div></div>
-          </div>
-          <button id="nextStep" class="button primary" type="button">Show the attack</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="demo-v2-explainer" id="customerJourney">
-      <div class="section-heading vertical">
-        <span class="eyebrow">What a real customer actually does</span>
-        <h2>Four practical steps—not a mysterious security dashboard.</h2>
-        <p>AgentRiskLayer connects the agent, policy decision, evidence and remediation in one repeatable workflow.</p>
-      </div>
-      <div class="demo-v2-journey-grid">
-        <article><b>01</b><h3>Create a project</h3><p>Name the agent, describe its tools and choose whether policy starts in monitor or enforce mode.</p><span>About 2 minutes</span></article>
-        <article><b>02</b><h3>Connect the Guard API</h3><p>Send prompts, outputs and proposed tool calls to AgentRiskLayer before your application acts.</p><span>One API integration</span></article>
-        <article><b>03</b><h3>Set the rules</h3><p>Allow safe actions, block dangerous patterns and require a server-issued approval bound to the exact sensitive operation.</p><span>Versioned policy</span></article>
-        <article><b>04</b><h3>Review and improve</h3><p>See blocked events, assign fixes, retest the same attack and retain signed privacy-safe evidence.</p><span>Auditable result</span></article>
-      </div>
-    </section>
-
-    <section class="demo-v2-plain-language">
-      <div>
-        <span class="eyebrow">In plain English</span>
-        <h2>AgentRiskLayer sits between an AI agent and the action it wants to take.</h2>
-        <p>It checks the request against your policy. A safe action can continue. A dangerous action is blocked. A sensitive action can pause until an authorised person approves the exact customer, amount and expiry.</p>
-      </div>
-      <div class="demo-v2-flow" aria-label="AgentRiskLayer runtime flow">
-        <span>AI agent</span><i>→</i><strong>AgentRiskLayer</strong><i>→</i><span>Tool or API</span>
-        <small>allow · block · require approval · record evidence</small>
-      </div>
-    </section>
-
-    <section class="demo-v2-final">
-      <div>
-        <span class="eyebrow">Try it with one real agent</span>
-        <h2>Start free, connect one project and see the first policy decision.</h2>
-        <p>Community includes one project and 10,000 Guard decisions each month. No card is required.</p>
-      </div>
-      <div class="button-row">
-        <a class="button primary button-xl" href="/assessment.html">Start free project</a>
-        <a class="button ghost button-xl" href="/quickstart.html">Open developer quick start</a>
-        <a class="button ghost button-xl" href="/downloads/agentrisklayer-controlled-support-agent-proof.json" download>Download proof manifest</a>
-      </div>
-    </section>
-  </main>
-
-  <footer><span>© 2026 AgentRiskLayer</span><span>Illustrative controlled demonstration using synthetic data and dry-run tools. It is not an accredited certification or proof of production deployment.</span></footer>
-<script type="module" src="/analytics.js"></script></body>
+</div>
+<aside aria-label="Demonstration outcome summary" class="demo-v2-outcome-card">
+<span>Final outcome</span>
+<strong>EXACT ACTION CONTROLLED</strong>
+<dl>
+<div><dt>Decision time</dt><dd>18 ms</dd></div>
+<div><dt>Required control</dt><dd>Human approval</dd></div>
+<div><dt>Raw content stored</dt><dd>No</dd></div>
+</dl>
+</aside>
+</section>
+<section aria-label="Interactive AgentRiskLayer product demonstration" class="demo-v2-workbench">
+<ol aria-label="Demonstration steps" class="demo-v2-steps" id="demoSteps">
+<li><button aria-current="step" data-step="0" type="button"><b>1</b><span>Scope</span></button></li>
+<li><button data-step="1" type="button"><b>2</b><span>Inspect</span></button></li>
+<li><button data-step="2" type="button"><b>3</b><span>Attack</span></button></li>
+<li><button data-step="3" type="button"><b>4</b><span>Deny</span></button></li>
+<li><button data-step="4" type="button"><b>5</b><span>Approve</span></button></li>
+<li><button data-step="5" type="button"><b>6</b><span>Negative tests</span></button></li>
+<li><button data-step="6" type="button"><b>7</b><span>Retest</span></button></li>
+<li><button data-step="7" type="button"><b>8</b><span>Decide</span></button></li>
+</ol>
+<div class="demo-v2-console">
+<div class="demo-v2-console-top">
+<div><i></i><i></i><i></i></div>
+<span id="consoleTitle">Support agent · scenario overview</span>
+<b id="policyStatus"><i></i> MONITORING</b>
+</div>
+<div class="demo-v2-console-grid">
+<section aria-labelledby="inputTitle" class="demo-v2-panel demo-v2-input">
+<span class="demo-v2-label">WHAT THE AGENT RECEIVES</span>
+<h2 id="inputTitle">A customer support request</h2>
+<div aria-live="polite" class="demo-v2-content" id="inputContent"></div>
+</section>
+<section aria-labelledby="decisionTitle" class="demo-v2-panel demo-v2-decision">
+<span class="demo-v2-label">AGENTRISKLAYER DECISION</span>
+<h2 id="decisionTitle">Understanding the agent</h2>
+<div aria-live="polite" class="demo-v2-content" id="decisionContent"></div>
+</section>
+<section aria-labelledby="resultTitle" class="demo-v2-panel demo-v2-result">
+<span class="demo-v2-label">WHAT HAPPENS NEXT</span>
+<h2 id="resultTitle">No action yet</h2>
+<div aria-live="polite" class="demo-v2-content" id="resultContent"></div>
+</section>
+</div>
+<div class="demo-v2-controls">
+<button class="button ghost" id="previousStep" type="button">Previous</button>
+<div class="demo-v2-progress-wrap">
+<span id="stepCounter">Step 1 of 8</span>
+<div class="progress-track"><div class="progress-bar" id="demoProgress"></div></div>
+</div>
+<button class="button primary" id="nextStep" type="button">Show the attack</button>
+</div>
+</div>
+</section>
+<section class="demo-v2-explainer" id="customerJourney">
+<div class="section-heading vertical">
+<span class="eyebrow">What a real customer actually does</span>
+<h2>Four practical steps—not a mysterious security dashboard.</h2>
+<p>AgentRiskLayer connects the agent, policy decision, evidence and remediation in one repeatable workflow.</p>
+</div>
+<div class="demo-v2-journey-grid">
+<article><b>01</b><h3>Create a project</h3><p>Name the agent, describe its tools and choose whether policy starts in monitor or enforce mode.</p><span>About 2 minutes</span></article>
+<article><b>02</b><h3>Connect the Guard API</h3><p>Send prompts, outputs and proposed tool calls to AgentRiskLayer before your application acts.</p><span>One API integration</span></article>
+<article><b>03</b><h3>Set the rules</h3><p>Allow safe actions, block dangerous patterns and require a server-issued approval bound to the exact sensitive operation.</p><span>Versioned policy</span></article>
+<article><b>04</b><h3>Review and improve</h3><p>See blocked events, assign fixes, retest the same attack and retain signed privacy-safe evidence.</p><span>Auditable result</span></article>
+</div>
+</section>
+<section class="demo-v2-plain-language">
+<div>
+<span class="eyebrow">In plain English</span>
+<h2>AgentRiskLayer sits between an AI agent and the action it wants to take.</h2>
+<p>It checks the request against your policy. A safe action can continue. A dangerous action is blocked. A sensitive action can pause until an authorised person approves the exact customer, amount and expiry.</p>
+</div>
+<div aria-label="AgentRiskLayer runtime flow" class="demo-v2-flow">
+<span>AI agent</span><i>→</i><strong>AgentRiskLayer</strong><i>→</i><span>Tool or API</span>
+<small>allow · block · require approval · record evidence</small>
+</div>
+</section>
+<section class="demo-v2-final">
+<div>
+<span class="eyebrow">Try it with one real agent</span>
+<h2>Start free, connect one project and see the first policy decision.</h2>
+<p>Community includes one project and 10,000 Guard decisions each month. No card is required.</p>
+</div>
+<div class="button-row">
+<a class="button primary button-xl" href="/assessment.html">Start free project</a>
+<a class="button ghost button-xl" href="/quickstart.html">Open developer quick start</a>
+<a class="button ghost button-xl" download="" href="/downloads/agentrisklayer-controlled-support-agent-proof.json">Download proof manifest</a>
+</div>
+</section>
+</main>
+<footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
+<script src="/analytics.js" type="module"></script></body>
 </html>

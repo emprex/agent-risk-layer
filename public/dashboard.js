@@ -53,26 +53,38 @@ function todayActions(data) {
   const projects = data.controlPlane?.projects || [];
   const openFixes = Number(data.controlPlane?.totals?.openRemediations || 0);
   const highest = [...assessments].sort((a, b) => Number(b.score) - Number(a.score))[0];
-  const reviewHref = highest ? `/result.html?id=${encodeURIComponent(highest.id)}&token=${encodeURIComponent(highest.access_token)}` : '/assessment.html';
-  return `<section class="today-actions" aria-labelledby="todayActionsTitle">
-    <div class="section-heading compact-heading"><div><span class="eyebrow">Start here</span><h2 id="todayActionsTitle">What do you want to do today?</h2></div></div>
-    <div class="dashboard-action-grid">
-      <a class="dashboard-action primary-action" href="/assessment.html"><span>1</span><div><strong>Check an agent</strong><p>Answer simple questions and get a clear next action.</p></div></a>
-      <a class="dashboard-action" href="${reviewHref}"><span>2</span><div><strong>${assessments.length ? 'Review my most important risk' : 'See what a result looks like'}</strong><p>${assessments.length ? `${escapeHtml(highest.name)} currently has the highest recorded risk.` : 'Complete your first private security check.'}</p></div></a>
-      <a class="dashboard-action" href="/control-plane.html#remediation"><span>3</span><div><strong>Fix open risks</strong><p>${openFixes ? `${openFixes} fix${openFixes === 1 ? '' : 'es'} currently need attention.` : 'Assign a fix, attach proof and check again.'}</p></div></a>
-      <a class="dashboard-action" href="/control-plane.html"><span>4</span><div><strong>Protect a running agent</strong><p>${projects.length ? `${projects.length} live security project${projects.length === 1 ? '' : 's'} available.` : 'Create a protected runtime boundary for one agent.'}</p></div></a>
+  const critical = assessments.filter((item) => String(item.risk_band || item.riskBand || '').toLowerCase() === 'critical').length;
+  let recommended;
+  if (!assessments.length) recommended = { eyebrow: 'Recommended first step', title: 'Check one AI agent', text: 'Answer simple questions about access, data, actions and recovery. You will receive a clear decision and the first risks to address.', href: '/assessment.html', action: 'Start the free check', time: 'About 5–10 minutes' };
+  else if (critical || (highest && Number(highest.score) >= 75)) recommended = { eyebrow: 'Urgent review', title: `Review ${highest.name}`, text: 'This is currently your highest recorded risk. Read the decision first, then assign the most important fix.', href: `/result.html?id=${encodeURIComponent(highest.id)}&token=${encodeURIComponent(highest.access_token)}`, action: 'Review the result', time: 'Start with the first finding' };
+  else if (openFixes) recommended = { eyebrow: 'Work in progress', title: `Close ${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}`, text: 'Confirm the owner, attach implementation evidence and retest the same risk before marking it closed.', href: '/control-plane.html#remediation', action: 'Open required fixes', time: 'Evidence required before closure' };
+  else if (!projects.length) recommended = { eyebrow: 'Next protection step', title: 'See live protection work', text: 'Run the safe built-in example before connecting code. It shows missing, changed and reused approvals being blocked.', href: '/control-plane.html', action: 'Run the safe example', time: 'About 30 seconds' };
+  else recommended = { eyebrow: 'Keep control current', title: 'Review your latest agent decisions', text: 'Check what the runtime policy allowed or blocked and whether any new access or behaviour needs attention.', href: '/control-plane.html', action: 'Review live protection', time: 'No terminal required' };
+
+  return `<section class="v10-dashboard-next" aria-labelledby="todayActionsTitle">
+    <article class="dashboard-recommended-action"><div><span class="eyebrow">${escapeHtml(recommended.eyebrow)}</span><h2 id="todayActionsTitle">${escapeHtml(recommended.title)}</h2><p>${escapeHtml(recommended.text)}</p><small>${escapeHtml(recommended.time)}</small></div><a class="button primary button-xl" href="${recommended.href}">${escapeHtml(recommended.action)} →</a></article>
+    <div class="dashboard-secondary-actions" aria-label="Other security tasks">
+      <a href="/assessment.html"><span>Check</span><strong>Assess another agent</strong><small>Understand risk and the next action</small></a>
+      <a href="${highest ? `/result.html?id=${encodeURIComponent(highest.id)}&token=${encodeURIComponent(highest.access_token)}` : '/sample-report.html'}"><span>Review</span><strong>${highest ? 'Open the latest result' : 'See an example result'}</strong><small>Decision, priority risks and proof</small></a>
+      <a href="/control-plane.html"><span>Protect</span><strong>Open live protection</strong><small>Safe example, policies and decisions</small></a>
     </div>
   </section>`;
 }
 
 function progressOverview(data) {
   const totals = data.controlPlane?.totals || {};
-  return `<section class="plain-progress-overview">
-    <article><span>Agents checked</span><strong>${Number(data.stats.assessments || 0)}</strong><small>Saved security checks</small></article>
-    <article><span>Need urgent attention</span><strong>${Number(data.stats.critical || 0)}</strong><small>Critical results</small></article>
-    <article><span>Open fixes</span><strong>${Number(totals.openRemediations || 0)}</strong><small>Not yet verified closed</small></article>
-    <article><span>Live checks this month</span><strong>${Number(totals.runtimeRequestsMonth || 0).toLocaleString('en-GB')}</strong><small>Runtime decisions</small></article>
-  </section>`;
+  const assessed = Number(data.stats.assessments || 0) > 0;
+  const urgent = Number(data.stats.critical || 0);
+  const openFixes = Number(totals.openRemediations || 0);
+  const protectedRequests = Number(totals.runtimeRequestsMonth || 0);
+  const steps = [
+    { label: 'Check the risk', complete: assessed, detail: assessed ? `${Number(data.stats.assessments || 0)} saved ${Number(data.stats.assessments || 0) === 1 ? 'check' : 'checks'}` : 'No agent checked yet', href: '/assessment.html' },
+    { label: 'Address urgent findings', complete: assessed && urgent === 0, detail: urgent ? `${urgent} critical ${urgent === 1 ? 'result needs' : 'results need'} attention` : assessed ? 'No critical result recorded' : 'Complete a check first', href: '#risks' },
+    { label: 'Track and verify fixes', complete: assessed && openFixes === 0, detail: openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
+    { label: 'Protect live actions', complete: protectedRequests > 0, detail: protectedRequests ? `${protectedRequests.toLocaleString('en-GB')} decisions this month` : 'No live decision recorded yet', href: '/control-plane.html' },
+  ];
+  const complete = steps.filter((step) => step.complete).length;
+  return `<section class="v10-progress-panel"><div class="progress-panel-heading"><div><span class="eyebrow">Your progress</span><h2>${complete} of ${steps.length} security steps active</h2><p>This is a guide, not an automatic deployment approval.</p></div><strong>${Math.round((complete / steps.length) * 100)}%</strong></div><ol class="v10-task-list">${steps.map((step, index) => `<li class="${step.complete ? 'complete' : ''}"><a href="${step.href}"><span>${step.complete ? '✓' : index + 1}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.detail)}</small></div><b>${step.complete ? 'Active' : 'Next'}</b></a></li>`).join('')}</ol></section>`;
 }
 
 function emptyAssessments() {

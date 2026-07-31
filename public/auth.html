@@ -1,74 +1,72 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Sign in or create an account | AgentRiskLayer</title>
-  <meta name="description" content="Sign in to AgentRiskLayer or create a free account to protect an AI agent.">
-  <meta name="robots" content="noindex">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/auth-page.js"></script>
-<link rel="stylesheet" href="/analytics.css"></head>
-<body class="auth-page">
-  <a class="skip-link" href="#authPanel">Skip to account form</a>
-  <header class="site-header premium-nav">
-    <a class="brand" href="/"><span class="brand-mark">AR</span><span>AgentRiskLayer</span></a>
-    <nav aria-label="Primary navigation"><a href="/start.html">Start</a><a href="/#how-it-works">How it works</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a><a class="nav-cta" data-auth-link href="/auth.html">Sign in</a><a class="button primary small" href="/start.html">Check my agent</a></nav>
-  </header>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Sign in or create an account | AgentRiskLayer</title>
+<meta content="Sign in to AgentRiskLayer or create a free account to protect an AI agent." name="description"/>
+<meta content="noindex" name="robots"/>
+<link href="/favicon.svg" rel="icon" type="image/svg+xml"/>
+<link href="/styles.css" rel="stylesheet"/>
+<script src="/auth-page.js" type="module"></script>
+<link href="/analytics.css" rel="stylesheet"/><script src="/site-shell.js" type="module"></script></head>
+<body class="auth-page" data-shell="public"><a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <main class="auth-professional-shell">
-    <section class="auth-value-panel" aria-labelledby="authValueTitle">
-      <span class="eyebrow">Your private security workspace</span>
-      <h1 id="authValueTitle">Save your checks and keep improving.</h1>
-      <p>Create a free account to keep results, track fixes and check an agent again after changes. No payment card is required.</p>
-      <ol class="auth-steps">
-        <li><span>1</span><div><strong>Create your account</strong><p>Use your work or personal email and verify it securely.</p></div></li>
-        <li><span>2</span><div><strong>Check one AI agent</strong><p>Answer one simple question at a time and receive a clear next action.</p></div></li>
-        <li><span>3</span><div><strong>Fix and check again</strong><p>Keep the result, track the important risks and repeat the check after changes.</p></div></li>
-      </ol>
-      <div class="auth-trust-row"><span>Private by default</span><span>No payment card</span><span>Optional MFA</span></div>
-      <a class="text-link" href="/sample-report.html">See an example result →</a>
-    </section>
-
-    <section id="authPanel" class="auth-panel panel" aria-labelledby="authTitle">
-      <div class="auth-panel-heading">
-        <span class="eyebrow">Secure account access</span>
-        <h2 id="authTitle">Welcome to AgentRiskLayer</h2>
-        <p>Sign in to an existing workspace or create your free account.</p>
-      </div>
-
-      <div class="auth-tabs" role="tablist" aria-label="Account access">
-        <button id="loginTab" class="auth-tab active" data-tab="login" type="button" role="tab" aria-selected="true" aria-controls="loginForm">Sign in</button>
-        <button id="registerTab" class="auth-tab" data-tab="register" type="button" role="tab" aria-selected="false" aria-controls="registerForm">Create free account</button>
-      </div>
-
-      <div id="authNotice" class="notice" role="status" hidden></div>
-      <div id="authError" class="error-box" role="alert" aria-live="assertive"></div>
-
-      <form id="loginForm" class="auth-form" aria-labelledby="loginTab">
-        <div class="field"><label for="loginEmail">Email address</label><input id="loginEmail" type="email" required autocomplete="email" inputmode="email"></div>
-        <div class="field password-field"><label for="loginPassword">Password</label><div class="password-input"><input id="loginPassword" type="password" required autocomplete="current-password"><button class="password-toggle" type="button" data-toggle-password="loginPassword" aria-label="Show password">Show</button></div></div>
-        <button class="button primary full" type="submit">Sign in securely</button>
-        <a class="text-link center" href="/reset.html">Forgot your password?</a>
-      </form>
-
-      <form id="mfaForm" class="auth-form" hidden>
-        <div class="field"><label for="mfaCode">Authenticator or recovery code</label><input id="mfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" required maxlength="20"></div>
-        <button class="button primary full" type="submit">Verify and continue</button>
-        <button id="backToLogin" class="button ghost full" type="button">Back to sign in</button>
-      </form>
-
-      <form id="registerForm" class="auth-form" aria-labelledby="registerTab" hidden>
-        <div class="field"><label for="registerEmail">Email address</label><input id="registerEmail" type="email" required autocomplete="email" inputmode="email"></div>
-        <div class="field password-field"><label for="registerPassword">Create a password</label><div class="password-input"><input id="registerPassword" type="password" minlength="12" maxlength="200" required autocomplete="new-password" aria-describedby="passwordHelp"><button class="password-toggle" type="button" data-toggle-password="registerPassword" aria-label="Show password">Show</button></div></div>
-        <p id="passwordHelp" class="muted small-copy">Use at least 12 characters. Passwords are salted and hashed with scrypt.</p>
-        <label class="consent-row" for="termsAccepted"><input id="termsAccepted" type="checkbox" required><span>I accept the <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and acknowledge the <a href="/privacy.html" target="_blank" rel="noopener">Privacy Notice</a>.</span></label>
-        <button class="button primary full" type="submit">Create my free account</button>
-        <p class="auth-form-footnote">No payment card required. Verify your email to unlock security operations.</p>
-      </form>
-    </section>
-  </main>
-  <footer><span>© 2026 AgentRiskLayer</span><span>Secure sessions, email verification and optional MFA protect accounts.</span></footer>
-<script type="module" src="/analytics.js"></script></body>
+<header class="site-header site-header-v10" data-site-header="">
+<a aria-label="AgentRiskLayer home" class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a>
+<button aria-controls="primaryNavigation" aria-expanded="false" class="menu-toggle" data-menu-toggle="" type="button"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+<nav aria-label="Primary navigation" class="primary-navigation" data-primary-navigation="" id="primaryNavigation">
+<a href="/#product">Product</a><a href="/demo.html">See it work</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a>
+<a class="nav-signin" data-auth-link="" href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a>
+</nav>
+</header>
+<main class="auth-professional-shell" id="main-content">
+<section aria-labelledby="authValueTitle" class="auth-value-panel">
+<span class="eyebrow">Your private security workspace</span>
+<h1 id="authValueTitle">Save your checks and keep improving.</h1>
+<p>Create a free account to keep results, track fixes and check an agent again after changes. No payment card is required.</p>
+<ol class="auth-steps">
+<li><span>1</span><div><strong>Create your account</strong><p>Use your work or personal email and verify it securely.</p></div></li>
+<li><span>2</span><div><strong>Check one AI agent</strong><p>Answer one simple question at a time and receive a clear next action.</p></div></li>
+<li><span>3</span><div><strong>Fix and check again</strong><p>Keep the result, track the important risks and repeat the check after changes.</p></div></li>
+</ol>
+<div class="auth-trust-row"><span>Private by default</span><span>No payment card</span><span>Optional MFA</span></div>
+<a class="text-link" href="/sample-report.html">See an example result →</a>
+</section>
+<section aria-labelledby="authTitle" class="auth-panel panel" id="authPanel">
+<div class="auth-panel-heading">
+<span class="eyebrow">Secure account access</span>
+<h2 id="authTitle">Welcome to AgentRiskLayer</h2>
+<p>Sign in to an existing workspace or create your free account.</p>
+</div>
+<div aria-label="Account access" class="auth-tabs" role="tablist">
+<button aria-controls="loginForm" aria-selected="true" class="auth-tab active" data-tab="login" id="loginTab" role="tab" type="button">Sign in</button>
+<button aria-controls="registerForm" aria-selected="false" class="auth-tab" data-tab="register" id="registerTab" role="tab" type="button">Create free account</button>
+</div>
+<div class="notice" hidden="" id="authNotice" role="status"></div>
+<div aria-live="assertive" class="error-box" id="authError" role="alert"></div>
+<form aria-labelledby="loginTab" class="auth-form" id="loginForm">
+<div class="field"><label for="loginEmail">Email address</label><input autocomplete="email" id="loginEmail" inputmode="email" required="" type="email"/></div>
+<div class="field password-field"><label for="loginPassword">Password</label><div class="password-input"><input autocomplete="current-password" id="loginPassword" required="" type="password"/><button aria-label="Show password" class="password-toggle" data-toggle-password="loginPassword" type="button">Show</button></div></div>
+<button class="button primary full" type="submit">Sign in securely</button>
+<a class="text-link center" href="/reset.html">Forgot your password?</a>
+</form>
+<form class="auth-form" hidden="" id="mfaForm">
+<div class="field"><label for="mfaCode">Authenticator or recovery code</label><input autocomplete="one-time-code" id="mfaCode" inputmode="numeric" maxlength="20" required="" type="text"/></div>
+<button class="button primary full" type="submit">Verify and continue</button>
+<button class="button ghost full" id="backToLogin" type="button">Back to sign in</button>
+</form>
+<form aria-labelledby="registerTab" class="auth-form" hidden="" id="registerForm">
+<div class="field"><label for="registerEmail">Email address</label><input autocomplete="email" id="registerEmail" inputmode="email" required="" type="email"/></div>
+<div class="field password-field"><label for="registerPassword">Create a password</label><div class="password-input"><input aria-describedby="passwordHelp" autocomplete="new-password" id="registerPassword" maxlength="200" minlength="12" required="" type="password"/><button aria-label="Show password" class="password-toggle" data-toggle-password="registerPassword" type="button">Show</button></div></div>
+<p class="muted small-copy" id="passwordHelp">Use at least 12 characters. Passwords are salted and hashed with scrypt.</p>
+<label class="consent-row" for="termsAccepted"><input id="termsAccepted" required="" type="checkbox"/><span>I accept the <a href="/terms.html" rel="noopener" target="_blank">Terms of Service</a> and acknowledge the <a href="/privacy.html" rel="noopener" target="_blank">Privacy Notice</a>.</span></label>
+<button class="button primary full" type="submit">Create my free account</button>
+<p class="auth-form-footnote">No payment card required. Verify your email to unlock security operations.</p>
+</form>
+</section>
+</main>
+<footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
+<script src="/analytics.js" type="module"></script></body>
 </html>

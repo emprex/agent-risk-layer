@@ -1,0 +1,240 @@
+TAP version 13
+# Subtest: workspace RBAC prevents cross-tenant and excessive actions
+ok 1 - workspace RBAC prevents cross-tenant and excessive actions
+  ---
+  duration_ms: 2.398952
+  type: 'test'
+  ...
+# Subtest: approval tokens are signed, expiring and bound to the exact project action
+ok 2 - approval tokens are signed, expiring and bound to the exact project action
+  ---
+  duration_ms: 371.397548
+  type: 'test'
+  ...
+# Subtest: action digests are canonical but change with target or value
+ok 3 - action digests are canonical but change with target or value
+  ---
+  duration_ms: 1.186532
+  type: 'test'
+  ...
+# (node:231314) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: hosted guard is idempotent, enforces content and never retains raw prompts
+ok 4 - hosted guard is idempotent, enforces content and never retains raw prompts
+  ---
+  duration_ms: 47.044325
+  type: 'test'
+  ...
+# Subtest: runtime policy supports monitor mode, tool approvals and immediate key revocation
+ok 5 - runtime policy supports monitor mode, tool approvals and immediate key revocation
+  ---
+  duration_ms: 36.161395
+  type: 'test'
+  ...
+# Subtest: runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+ok 6 - runtime approvals are exact-action, server-issued, single-use and caller assertions are ignored
+  ---
+  duration_ms: 53.883984
+  type: 'test'
+  ...
+# Subtest: guided protection check proves the hosted approval path without API keys, terminal commands or policy changes
+ok 7 - guided protection check proves the hosted approval path without API keys, terminal commands or policy changes
+  ---
+  duration_ms: 45.089694
+  type: 'test'
+  ...
+# Subtest: inventory drift blocks deployment review and remediation work is auditable
+ok 8 - inventory drift blocks deployment review and remediation work is auditable
+  ---
+  duration_ms: 110.368696
+  type: 'test'
+  ...
+# Subtest: community project allowance is enforced server-side
+ok 9 - community project allowance is enforced server-side
+  ---
+  duration_ms: 9.706438
+  type: 'test'
+  ...
+# Subtest: workspace members cannot bypass the billing owner project allowance
+ok 10 - workspace members cannot bypass the billing owner project allowance
+  ---
+  duration_ms: 8.206816
+  type: 'test'
+  ...
+# Subtest: all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+ok 11 - all control-plane entitlements use the shared fail-closed subscription decision and tenant scope
+  ---
+  duration_ms: 342.599121
+  type: 'test'
+  ...
+# Subtest: published plan entitlements match server-enforced commercial allowances
+ok 12 - published plan entitlements match server-enforced commercial allowances
+  ---
+  duration_ms: 2.314944
+  type: 'test'
+  ...
+# Subtest: homepage explains the product, audience, value and first action in plain language
+ok 13 - homepage explains the product, audience, value and first action in plain language
+  ---
+  duration_ms: 3.707607
+  type: 'test'
+  ...
+# Subtest: task chooser lets beginners select a situation without learning product architecture
+ok 14 - task chooser lets beginners select a situation without learning product architecture
+  ---
+  duration_ms: 0.761313
+  type: 'test'
+  ...
+# Subtest: assessment presents one guided question at a time and treats proof honestly
+ok 15 - assessment presents one guided question at a time and treats proof honestly
+  ---
+  duration_ms: 1.117012
+  type: 'test'
+  ...
+# Subtest: unknown answers fail closed instead of inventing a protection
+ok 16 - unknown answers fail closed instead of inventing a protection
+  ---
+  duration_ms: 26.52539
+  type: 'test'
+  ...
+# Subtest: result page puts the decision and practical fixes before technical scoring
+ok 17 - result page puts the decision and practical fixes before technical scoring
+  ---
+  duration_ms: 9.266313
+  type: 'test'
+  ...
+# Subtest: dashboard calculates one recommended next action and keeps other work secondary
+ok 18 - dashboard calculates one recommended next action and keeps other work secondary
+  ---
+  duration_ms: 0.951874
+  type: 'test'
+  ...
+# Subtest: control plane defaults to one human next step and preserves specialist controls on demand
+ok 19 - control plane defaults to one human next step and preserves specialist controls on demand
+  ---
+  duration_ms: 1.511866
+  type: 'test'
+  ...
+# Subtest: public entry pages use one plain navigation and one consistent primary action
+ok 20 - public entry pages use one plain navigation and one consistent primary action
+  ---
+  duration_ms: 1.79685
+  type: 'test'
+  ...
+# Subtest: customer-facing pages use external scripts and preserve security boundaries
+ok 21 - customer-facing pages use external scripts and preserve security boundaries
+  ---
+  duration_ms: 3.928124
+  type: 'test'
+  ...
+# Subtest: the public sitemap includes the customer task chooser
+ok 22 - the public sitemap includes the customer task chooser
+  ---
+  duration_ms: 2.263013
+  type: 'test'
+  ...
+# Subtest: commercial catalogue contains only the approved current prices
+ok 23 - commercial catalogue contains only the approved current prices
+  ---
+  duration_ms: 375.383019
+  type: 'test'
+  ...
+# Subtest: legacy checkout branch and stale public validation counters are removed safely
+ok 24 - legacy checkout branch and stale public validation counters are removed safely
+  ---
+  duration_ms: 220.356225
+  type: 'test'
+  ...
+# Subtest: release validation isolates credentials and live readiness exposes real PostgreSQL schema state
+ok 25 - release validation isolates credentials and live readiness exposes real PostgreSQL schema state
+  ---
+  duration_ms: 1.24664
+  type: 'test'
+  ...
+# Subtest: every page has one purpose, an accessible landmark shell and reusable navigation
+ok 26 - every page has one purpose, an accessible landmark shell and reusable navigation
+  ---
+  duration_ms: 16.514825
+  type: 'test'
+  ...
+# Subtest: public and signed-in navigation use stable human labels and one primary action
+ok 27 - public and signed-in navigation use stable human labels and one primary action
+  ---
+  duration_ms: 1.203933
+  type: 'test'
+  ...
+# Subtest: mobile navigation is keyboard-operable and touch targets meet the product baseline
+ok 28 - mobile navigation is keyboard-operable and touch targets meet the product baseline
+  ---
+  duration_ms: 3.19195
+  type: 'test'
+  ...
+# Subtest: progressive disclosure preserves the complete specialist capability set
+ok 29 - progressive disclosure preserves the complete specialist capability set
+  ---
+  duration_ms: 2.733854
+  type: 'test'
+  ...
+# Subtest: trust and conversion pages state evidence boundaries instead of unsupported assurance
+ok 30 - trust and conversion pages state evidence boundaries instead of unsupported assurance
+  ---
+  duration_ms: 1.801592
+  type: 'test'
+  ...
+# Subtest: allows a narrow allowlisted read action without retaining arguments
+ok 31 - allows a narrow allowlisted read action without retaining arguments
+  ---
+  duration_ms: 12.492389
+  type: 'test'
+  ...
+# Subtest: blocks denied tools even when their names are namespaced
+ok 32 - blocks denied tools even when their names are namespaced
+  ---
+  duration_ms: 1.508639
+  type: 'test'
+  ...
+# Subtest: blocks traversal and sensitive filesystem targets
+ok 33 - blocks traversal and sensitive filesystem targets
+  ---
+  duration_ms: 1.916626
+  type: 'test'
+  ...
+# Subtest: blocks destinations outside the network allowlist
+ok 34 - blocks destinations outside the network allowlist
+  ---
+  duration_ms: 1.363878
+  type: 'test'
+  ...
+# Subtest: blocks secret-like fields
+ok 35 - blocks secret-like fields
+  ---
+  duration_ms: 1.096938
+  type: 'test'
+  ...
+# Subtest: requires server-verified approval for material actions and ignores caller assertions
+ok 36 - requires server-verified approval for material actions and ignores caller assertions
+  ---
+  duration_ms: 1.574715
+  type: 'test'
+  ...
+# Subtest: monitor mode records would-deny but does not block
+ok 37 - monitor mode records would-deny but does not block
+  ---
+  duration_ms: 0.628738
+  type: 'test'
+  ...
+# Subtest: approval environment must match the authoritative runtime environment
+ok 38 - approval environment must match the authoritative runtime environment
+  ---
+  duration_ms: 0.610534
+  type: 'test'
+  ...
+1..38
+# tests 38
+# suites 0
+# pass 38
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2677.095818

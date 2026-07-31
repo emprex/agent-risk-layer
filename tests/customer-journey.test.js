@@ -15,22 +15,25 @@ function safestAnswers() {
   }]));
 }
 
-test('homepage starts with a plain-language customer decision and one primary task', () => {
+test('homepage explains the product, audience, value and first action in plain language', () => {
   const html = read('public/index.html');
-  assert.match(html, /Is your AI agent safe to use\?/);
-  assert.match(html, /what it can access, what could go wrong and what to fix first/i);
-  assert.match(html, /href="\/start\.html">Check my agent/);
-  assert.match(html, /Check\. Understand\. Fix\./);
+  assert.match(html, /Know what your agent can do\. Stop what it should not\./);
+  assert.match(html, /helps you understand an AI agent’s access, block unsafe actions/i);
+  assert.match(html, /Business owners/);
+  assert.match(html, /Developers/);
+  assert.match(html, /Security teams/);
+  assert.match(html, /href="\/assessment\.html">Check an agent free/);
+  assert.match(html, /Four steps from uncertainty to a controlled decision/);
   assert.match(html, /not an accredited certification or guarantee/i);
 });
 
-test('task chooser orients customers before exposing technical tools', () => {
+test('task chooser lets beginners select a situation without learning product architecture', () => {
   const html = read('public/start.html');
-  assert.match(html, /What do you need to do today\?/);
-  assert.match(html, /Check an AI agent/);
-  assert.match(html, /Fix identified risks/);
-  assert.match(html, /Protect a live agent/);
-  assert.match(html, /private by default/i);
+  assert.match(html, /Where are you with your AI agent\?/);
+  assert.match(html, /I need to understand the risk/);
+  assert.match(html, /I need to fix and prove progress/);
+  assert.match(html, /I need live protection/);
+  assert.match(html, /Start the free check/);
 });
 
 test('assessment presents one guided question at a time and treats proof honestly', () => {
@@ -73,46 +76,45 @@ test('result page puts the decision and practical fixes before technical scoring
   assert.match(js, /escapeHtml\(finding\.observed\)/);
 });
 
-test('dashboard leads with customer tasks and keeps specialist tools secondary', () => {
+test('dashboard calculates one recommended next action and keeps other work secondary', () => {
   const html = read('public/dashboard.html');
   const js = read('public/dashboard.js');
-  assert.match(html, /What do you want to do today\?/);
-  assert.match(js, /Check an agent/);
-  assert.match(js, /Review my most important risk/);
-  assert.match(js, /Fix open risks/);
-  assert.match(js, /Protect a running agent/);
-  assert.match(js, /<details class="panel section-gap advanced-tools">/);
-  assert.match(js, /Technical tools/);
+  assert.match(html, /Your next security step/);
+  assert.match(js, /Recommended first step/);
+  assert.match(js, /Urgent review/);
+  assert.match(js, /Work in progress/);
+  assert.match(js, /Next protection step/);
+  assert.match(js, /dashboard-recommended-action/);
+  assert.match(js, /Other security tasks/);
+  assert.match(js, /This is a guide, not an automatic deployment approval/);
 });
 
-
-
-
-test('control plane defaults to one human next step and hides specialist controls until requested', () => {
+test('control plane defaults to one human next step and preserves specialist controls on demand', () => {
   const html = read('public/control-plane.html');
   const js = read('public/control-plane.js');
-  assert.match(html, /What should your agent be allowed to do\?/);
-  assert.match(html, /Start with a safe example/i);
+  assert.match(html, /Stop unsafe actions before they reach your systems/);
+  assert.match(html, /Begin with one safe built-in example/);
   assert.doesNotMatch(html, /AI security control plane/i);
-  assert.match(js, /Run safe protection check/);
-  assert.match(js, /No terminal, API key or real refund system is needed/);
-  assert.match(js, /uses four of your monthly protection checks/i);
-  assert.match(js, /guided-protection-check/);
-  assert.match(js, /technicalMode = sessionStorage\.getItem\('arl_control_plane_mode'\) === 'technical'/);
-  assert.match(js, /technicalMode \? technicalProjectView\(\) : ''/);
-  assert.match(js, /You are already using/);
-  assert.match(js, /Show technical controls/);
+  assert.match(js, /Do this next/);
+  assert.match(js, /Run the safe example/);
+  assert.match(js, /No terminal or real system is involved/);
   assert.match(js, /Four automatic checks\. One button\./);
+  assert.match(js, /guided-protection-check/);
+  assert.match(js, /sessionStorage\.getItem\('arl_control_plane_mode'\) === 'technical'/);
+  assert.match(js, /Open specialist view/);
+  assert.match(js, /Policies, keys, approvals, access inventory, remediation and audit records are preserved/);
+  assert.match(js, /Open technical controls/);
 });
 
-test('customer entry pages keep one plain navigation and explain account value without API jargon', () => {
+test('public entry pages use one plain navigation and one consistent primary action', () => {
   for (const name of ['auth.html', 'demo.html', 'trust.html', 'compare.html', 'security-center.html', 'company.html', 'status.html']) {
     const html = read(`public/${name}`);
-    assert.match(html, /href="\/start\.html">Start</, name);
+    assert.match(html, />Product</, name);
+    assert.match(html, />See it work</, name);
     assert.match(html, /href="\/pricing\.html">Pricing</, name);
     assert.match(html, /href="\/trust\.html">Trust</, name);
     assert.match(html, /href="\/help\.html">Help</, name);
-    assert.match(html, />Check my agent</, name);
+    assert.match(html, />Check an agent free</, name);
   }
   const auth = read('public/auth.html');
   assert.match(auth, /Save your checks and keep improving/);
@@ -169,7 +171,8 @@ test('legacy checkout branch and stale public validation counters are removed sa
 
   const securityCentre = read('public/security-center.html');
   assert.doesNotMatch(securityCentre, /\b(?:20|86|89|141|150)\s*\/\s*(?:20|86|89|142|151)\b/);
-  assert.match(securityCentre, /Synthetic regression data is not presented as customer or independent performance evidence/);
+  assert.match(securityCentre, /No invented certification/);
+  assert.match(securityCentre, /independent penetration testing and formal certification are not claimed/i);
 
   const packageJson = JSON.parse(read('package.json'));
   assert.equal(packageJson.scripts.validate, 'node scripts/validate-release.mjs');

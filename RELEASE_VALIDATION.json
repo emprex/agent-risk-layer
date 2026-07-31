@@ -1,54 +1,87 @@
 {
   "schema": "arl.release-validation.v4",
   "product": "AgentRiskLayer",
-  "version": "9.3.0",
-  "sourceBaselineCommit": "1b13b1938c492e83370d585074ba08e25c1bb37a",
+  "version": "10.0.0",
+  "sourceBaselineCommit": "58170bd0852d2c667008b7c9a324166325dd8a2b",
   "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
-  "releaseStatus": "implementation-validated-production-deployment-and-browser-verification-required",
-  "generatedAt": "2026-07-30T22:29:45.407Z",
-  "customerJourneyChange": {
-    "title": "Guided customer protection journey",
-    "rootCause": "The post-sign-in control plane exposed specialist projects, policies, keys, approvals and terminal integration steps before giving an ordinary customer a clear goal or next action.",
-    "controlOutcome": "The default view now presents one recommended next action and a browser-run synthetic protection check, while retaining advanced controls behind explicit progressive disclosure.",
-    "databaseMigration": null,
-    "dataDeletionOrRewrite": false,
-    "usageDisclosure": "Each guided run consumes four monthly protection checks.",
-    "evidenceBoundary": "Guided events are synthetic, labelled guided_demo and excluded from customer integration and deployment-readiness evidence."
+  "releaseStatus": "implementation-validated-production-deployment-and-human-browser-verification-required",
+  "generatedAt": "2026-07-31T01:56:59.675Z",
+  "experienceChange": {
+    "title": "Human-centred website and customer journey",
+    "assessedScope": "All 34 public and authenticated HTML pages, shared navigation, onboarding, assessment, results, dashboard, live protection, evidence workspaces, pricing, trust, help, owner operations and responsive source rules.",
+    "observedBaseline": {
+      "htmlPages": 34,
+      "primaryNavigationVariants": 25,
+      "pagesWithoutSkipLink": 31,
+      "pagesWithoutMetaDescription": 14,
+      "source": "Inspected v9.3.0 source baseline; these counts are not analytics or independent usability-research results."
+    },
+    "implementedOutcome": {
+      "htmlPages": 34,
+      "roleAwareNavigationVariants": 4,
+      "pagesMissingRequiredShellElements": 0,
+      "duplicateHtmlIdsDetected": 0,
+      "publicExperience": "Learn: Product, See it work, Pricing, Trust, Help, Sign in, Check an agent free.",
+      "customerExperience": "Protect: Overview, Check risk, Live protection, Evidence, Help, Account.",
+      "defaultCustomerPattern": "One recommended next action with advanced controls available through deliberate progressive disclosure.",
+      "databaseMigration": null,
+      "dataDeletionOrRewrite": false
+    },
+    "preservedCapabilities": [
+      "Authentication, MFA, roles and tenant isolation",
+      "Assessments, results and reports",
+      "Hosted Guard and local runtime gateway",
+      "Server-issued exact-action approvals",
+      "AI asset inventory and drift",
+      "Local Inspector and controlled red-team workflows",
+      "Remediation, retesting and deployment decisions",
+      "Workspace, billing, account, owner and sales workflows",
+      "Evidence exports and operational controls"
+    ],
+    "evidenceBoundary": "The redesign changes explanation, hierarchy, navigation and progressive disclosure. It does not reduce controls or claim independent usability research, accessibility certification or improved conversion."
   },
   "automatedGate": {
     "command": "npm run validate",
     "productionCredentialsExcluded": true,
     "passed": true,
     "tests": {
-      "total": 159,
-      "passed": 159,
+      "total": 164,
+      "passed": 164,
       "failed": 0,
       "skipped": 0
     },
     "syntaxAndSourceChecks": true,
     "endToEndSmoke": {
       "passed": true,
+      "version": "10.0.0",
       "guidedProtectionCheck": true,
-      "decisions": [
-        "deny",
-        "deny",
-        "allow",
-        "deny"
-      ],
-      "apiKeyReturned": false,
-      "approvalTokenReturned": false,
-      "externalToolExecuted": false,
-      "publishedProjectPolicyChanged": false,
-      "syntheticEvidenceExcludedFromReadiness": true,
-      "existingExactActionApprovalFlowPreserved": true,
-      "accountExportAndDeletionPreserved": true
+      "authenticationAndAccountJourneys": true,
+      "billingAndFulfilmentJourneys": true,
+      "inspectionAndRedTeamJourneys": true,
+      "runtimeAndExactApprovalJourneys": true,
+      "inventoryRemediationAndDeletionJourneys": true,
+      "productionCredentialsUsed": false
     },
-    "focusedGuidedJourneyGate": {
-      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/customer-journey.test.js",
-      "tests": 33,
-      "passed": 33,
+    "focusedExperienceAndSecurityGate": {
+      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/customer-journey.test.js tests/experience-design.test.js",
+      "tests": 38,
+      "passed": 38,
       "failed": 0,
       "skipped": 0
+    },
+    "structuralExperienceAudit": {
+      "pages": 34,
+      "navigationVariants": 4,
+      "missingTitles": 0,
+      "missingDescriptions": 0,
+      "missingSkipLinks": 0,
+      "missingMainLandmarks": 0,
+      "missingMainHeadings": 0,
+      "duplicateIds": 0,
+      "inlineCustomerScriptsHandlersOrStyleBlocks": 0,
+      "mobileMenuSourceChecks": true,
+      "minimumInteractiveTargetSourceCheck": true,
+      "reducedMotionSourceCheck": true
     },
     "detectionBenchmark": {
       "cases": 20,
@@ -62,30 +95,35 @@
       "passed": 1000,
       "failed": 0,
       "unsafeDecisions": 0,
+      "criticalPathScenarios": 387,
+      "averageScore": 72,
       "seed": "0x5a17c0de"
     }
   },
   "evidenceFiles": [
-    "validation/AgentRiskLayer-v9.3.0-validation-console.log",
-    "validation/AgentRiskLayer-v9.3.0-guided-ux-focused.log",
-    "test-artifacts/detection-benchmark-v9.3.0.json",
-    "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-results.json",
-    "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-report.md"
+    "UX_AUDIT_V10.md",
+    "CUSTOMER_JOURNEY_V10.md",
+    "validation/AgentRiskLayer-v10.0.0-validation-console.log",
+    "validation/AgentRiskLayer-v10.0.0-human-experience-focused.log",
+    "test-artifacts/detection-benchmark-v10.0.0.json",
+    "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-results.json",
+    "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-report.md"
   ],
   "limitations": [
-    "The automated gate used isolated local test persistence and did not connect to the production PostgreSQL service.",
-    "No Render deployment, live authenticated customer journey, live payment or production email was performed in this environment.",
+    "The automated gate used isolated local test persistence and did not connect to production PostgreSQL, Stripe, Resend or Render services.",
+    "No production deployment, live payment, production email or production customer-data action was performed in this environment.",
     "Automated screenshot rendering was unavailable because local browser navigation was blocked by administrator policy.",
-    "The guided check proves the hosted synthetic decision path, not customer integration or direct-tool network containment.",
-    "Internal engineering validation is not independent usability research, penetration testing, accredited certification or a guarantee that the system is risk-free."
+    "Source-level responsive and accessibility checks do not replace manual keyboard, screen-reader, zoom, browser and physical-device testing.",
+    "The audit is internal engineering evidence, not independent usability research, accessibility certification, penetration testing or proof of conversion improvement.",
+    "This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free."
   ],
   "liveVerificationRequired": [
-    "Verify /api/ready reports version 9.3.0, production stage and healthy PostgreSQL with migration 008 current.",
-    "Verify an ordinary authenticated owner lands on the guided control-plane view.",
-    "Run the safe protection check and confirm missing approval denied, changed amount denied, exact action allowed once and replay denied.",
-    "Verify the browser receives no project API key or approval bearer token from the guided route.",
-    "Verify the published customer policy remains unchanged and guided_demo events do not satisfy deployment readiness.",
-    "Verify Technical controls preserve policy, key, inventory, remediation, approval and audit workflows.",
-    "Perform desktop and mobile visual checks and review logs, usage, monitoring and rollback readiness."
+    "Verify /api/ready reports version 10.0.0, production stage, healthy PostgreSQL and migration 008 current.",
+    "Review the public homepage, start, pricing, trust, help, demo and sign-in journeys on desktop and mobile.",
+    "Verify an ordinary customer sees one recommended action after sign-in and can complete the safe protection check without a terminal.",
+    "Verify advanced policy, key, approval, inventory, remediation, retest and audit workflows remain available to authorised roles.",
+    "Test keyboard navigation, focus order, menu Escape behaviour, zoom, reduced motion and representative screen readers.",
+    "Review privacy-respecting journey analytics and support signals before claiming improved usability or conversion.",
+    "Review logs, alerts and rollback readiness before recording a deployment decision."
   ]
 }

@@ -46,13 +46,18 @@ async function loadProject(projectId) {
 
 function render() {
   root.className = '';
-  root.innerHTML = `
-    ${technicalMode ? overviewHeader() : ''}
-    <div class="control-plane-layout ${technicalMode ? 'technical-mode' : 'guided-mode'}">
-      ${projectRail()}
-      <section class="control-plane-main">${project ? projectView() : emptyProject()}</section>
-    </div>`;
+  root.innerHTML = technicalMode
+    ? `${overviewHeader()}<div class="control-plane-layout technical-mode">${projectRail()}<section class="control-plane-main">${project ? projectView() : emptyProject()}</section></div>`
+    : `<div class="guided-control-layout">${project ? `${guidedProjectContext()}${projectView()}` : emptyProject()}</div>`;
   bind();
+}
+
+function guidedProjectContext() {
+  const canCreate = overview.projects.length < overview.entitlement.projects;
+  return `<section class="guided-project-context" aria-label="Current protected agent">
+    <div class="guided-project-identity"><span class="project-icon">${escapeHtml(project.name.slice(0, 2).toUpperCase())}</span><div><small>Protected agent</small><strong>${escapeHtml(project.name)}</strong><span>${escapeHtml(plainEnvironment(project.environment))} · ${formatNumber(project.entitlement?.usage?.requests || 0)} checks this month</span></div></div>
+    ${overview.projects.length > 1 ? `<label class="guided-project-switcher">Change agent<select id="guidedProjectSelect">${overview.projects.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === project.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>` : `<div class="guided-plan-summary"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${canCreate ? 'You can add another project.' : 'Your plan includes one active project.'}</span>${canCreate ? '<button class="text-button" data-open-technical="project">Add another agent</button>' : '<a href="/pricing.html">Need more projects?</a>'}</div>`}
+  </section>`;
 }
 
 function overviewHeader() {
@@ -115,38 +120,41 @@ function guidedProjectHome() {
   const hasRealEvents = project.events.some((event) => event.event_type === 'guard');
   const hasActiveKey = project.apiKeys.some((key) => key.status === 'active');
   const canApprove = project.permissions.approveActions;
-  const next = !hasGuidedEvents
-    ? { title: 'See the protection work', text: 'Run a controlled example with fictional refund data. AgentRiskLayer will prove that missing approval, a changed amount and a reused approval are blocked.', action: 'guided' }
-    : !hasActiveKey
-      ? { title: 'Connect your own agent when you are ready', text: 'The safe example worked. The next technical step is to create a connection key and place one Guard check before your agent performs an action.', action: 'connect' }
-      : !hasRealEvents
-        ? { title: 'Send the first request from your agent', text: 'Your connection key exists. Use the integration example, then return here to see the decision in plain language.', action: 'connect' }
-        : { title: 'Review what AgentRiskLayer decided', text: 'Your agent is sending requests. Review blocks and allowed actions, then address anything that needs attention.', action: 'review' };
+  const stage = !hasGuidedEvents ? 1 : !hasActiveKey ? 2 : !hasRealEvents ? 3 : 4;
+  const next = stage === 1
+    ? { title: 'Watch the protection make four decisions', text: 'Use fictional refund data to prove that missing approval, a changed amount and a reused approval are blocked. No terminal or real system is involved.', action: 'guided' }
+    : stage === 2
+      ? { title: 'Connect your own agent when a developer is ready', text: 'The safe example passed. A developer can now create one connection key and add a Guard check before the agent performs an action.', action: 'connect' }
+      : stage === 3
+        ? { title: 'Send the first protected request', text: 'The connection key exists. Use the integration example once, then return here to see the real decision.', action: 'connect' }
+        : { title: 'Review decisions and close the next risk', text: 'Your agent is sending protected requests. Review what was allowed or blocked and assign any required fix.', action: 'review' };
   return `<div class="customer-control-home">
-    <section class="panel human-project-header">
-      <div><span class="eyebrow">${escapeHtml(plainEnvironment(project.environment))}</span><h2>${escapeHtml(project.name)}</h2><p>AgentRiskLayer checks what this agent tries to do and records evidence without storing raw prompts or tool arguments.</p></div>
-      <span class="plain-status ${project.policy.mode === 'enforce' ? 'active' : 'warning'}">${project.policy.mode === 'enforce' ? 'Blocking unsafe actions' : 'Watching only'}</span>
-    </section>
-
-    <section class="panel human-next-card">
-      <div class="human-next-copy"><span class="eyebrow">Your next step</span><h2>${escapeHtml(next.title)}</h2><p>${escapeHtml(next.text)}</p></div>
+    ${guidedProgress(stage)}
+    <section class="panel human-next-card v10-next-card">
+      <div class="human-next-copy"><span class="eyebrow">Do this next</span><h2>${escapeHtml(next.title)}</h2><p>${escapeHtml(next.text)}</p><span class="next-time">${stage === 1 ? 'About 30 seconds' : stage === 2 ? 'Developer task · about 10 minutes' : 'Review whenever your agent is active'}</span></div>
       <div class="human-next-action">${nextActionButton(next, canApprove)}</div>
     </section>
 
-    <section class="human-choice-grid" aria-label="Choose what you want to do">
-      <article class="panel"><span>1</span><h3>Check the risk</h3><p>Answer ordinary questions and get a clear decision about what could happen and what to fix first.</p><a class="button ghost full" href="/assessment.html">Check this agent</a></article>
-      <article class="panel recommended"><span>2</span><h3>See protection work</h3><p>Run four safe browser checks. No terminal, API key or real refund system is needed. This uses four of your monthly protection checks.</p><button class="button primary full" id="runGuidedCheck" ${canApprove ? '' : 'disabled'}>${canApprove ? 'Run safe protection check' : 'Owner or admin required'}</button></article>
-      <article class="panel"><span>3</span><h3>Connect your agent</h3><p>When a developer is ready, reveal the API key, policy and integration controls.</p><button class="button ghost full" id="showTechnicalControls">Show technical controls</button></article>
+    ${guidedResultPanel()}
+
+    <section class="v10-control-choices" aria-label="Other actions">
+      <article><span>Understand</span><h3>Check the agent’s wider risk</h3><p>Review access, data, autonomy, approvals and recovery in plain English.</p><a class="button ghost full" href="/assessment.html">Check this agent</a></article>
+      <article><span>Connect</span><h3>Open developer controls</h3><p>Create keys, publish policy rules and connect the real agent only when ready.</p><button class="button ghost full" data-open-technical="runtime">Open technical controls</button></article>
+      <article><span>Review</span><h3>See recent decisions</h3><p>Understand what was allowed, blocked or waiting for evidence.</p><button class="button ghost full" data-open-technical="runtime">Review decision evidence</button></article>
     </section>
 
-    ${guidedResultPanel()}
     ${plainRecentActivity()}
 
-    <section class="human-technical-toggle">
-      <div><strong>Need the specialist controls?</strong><span>Policies, keys, approvals, inventory, remediation and audit evidence remain available.</span></div>
-      <button class="button ghost" id="toggleTechnicalMode">${technicalMode ? 'Hide technical controls' : 'Show technical controls'}</button>
+    <section class="human-technical-toggle v10-specialist-note">
+      <div><strong>For developers, security teams and auditors</strong><span>Policies, keys, approvals, access inventory, remediation and audit records are preserved in the specialist view.</span></div>
+      <button class="button ghost" id="toggleTechnicalMode">Open specialist view</button>
     </section>
   </div>`;
+}
+
+function guidedProgress(stage) {
+  const labels = ['Try a safe example', 'Connect the agent', 'Send a protected request', 'Review and improve'];
+  return `<section class="guided-progress-v10" aria-label="Live protection progress"><div><span class="eyebrow">Your live-protection journey</span><strong>Step ${stage} of 4</strong></div><ol>${labels.map((label, index) => `<li class="${index + 1 < stage ? 'complete' : index + 1 === stage ? 'current' : ''}"><span>${index + 1 < stage ? '✓' : index + 1}</span><b>${escapeHtml(label)}</b></li>`).join('')}</ol></section>`;
 }
 
 function nextActionButton(next, canApprove) {
@@ -317,6 +325,9 @@ function auditTable(items) {
 }
 
 function bind() {
+  document.querySelector('#guidedProjectSelect')?.addEventListener('change', async (event) => {
+    try { await loadProject(event.currentTarget.value); revealedKey = ''; revealedApproval = null; guidedCheck = null; render(); } catch (error) { fail(error); }
+  });
   document.querySelectorAll('[data-project-id]').forEach((button) => button.addEventListener('click', async () => {
     try { await loadProject(button.dataset.projectId); revealedKey = ''; revealedApproval = null; render(); } catch (error) { fail(error); }
   }));

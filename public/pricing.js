@@ -26,17 +26,47 @@ async function init() {
 }
 
 function communityCard() {
-  return `<article class="pricing-card"><h3>Community</h3><div class="price">£0</div><p>Understand the main risks and protect one live agent before buying.</p><ul class="check-list"><li>1 security project</li><li>10,000 Guard decisions/month</li><li>7-day runtime evidence retention</li><li>2 active API keys</li><li>Private security check and optional local code review</li></ul><p class="plan-next">No payment card required.</p><a class="button ghost full" href="/auth.html?mode=register&next=%2Fcontrol-plane.html">Start free</a></article>`;
+  return `<article class="pricing-card-v10">
+    <div class="plan-heading"><span class="plan-purpose">START HERE</span><h3>Community</h3><p>Understand one agent and try live protection before buying.</p></div>
+    <div class="plan-price">£0 <small>forever</small></div>
+    <a class="button ghost full" href="/assessment.html">Check an agent free</a>
+    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Find the first risks and protect one active project.</span></div>
+    <ul class="plain-plan-list"><li>1 security project</li><li>10,000 Guard decisions each month</li><li>7-day runtime evidence retention</li><li>2 active API keys</li><li>Private risk check and local Inspector</li></ul>
+    <p class="plan-note">No payment card required.</p>
+  </article>`;
 }
 function assessmentCard(plan) {
-  return `<article class="pricing-card featured"><span class="badge">One-off review</span><h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence)}</div><p>A reviewed report, practical action plan and deployment decision for one agent.</p><ul class="check-list"><li>Plain-language risk review and technical evidence check</li><li>Controlled attack simulation</li><li>Prioritised fixes with clear ownership</li><li>Check-again result and deployment decision</li><li>Signed report and PDF delivery</li></ul><p class="plan-next">Complete the private security check before checkout.</p><a class="button primary full" href="/assessment.html">Start security check</a></article>`;
+  return `<article class="pricing-card-v10 recommended">
+    <div class="plan-heading"><span class="plan-purpose">REVIEWED DECISION</span><span class="plan-badge">Recommended first purchase</span><h3>${escapeHtml(plan.name)}</h3><p>Evidence-led review and a decision for one agent.</p></div>
+    <div class="plan-price">${money(plan.amountPence)} <small>one time</small></div>
+    <a class="button primary full" href="/assessment.html">Start with the free check</a>
+    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Support a launch, customer review or accountable go/no-go decision.</span></div>
+    <ul class="plain-plan-list"><li>Complete risk and evidence review</li><li>Controlled attack simulation</li><li>Prioritised fixes with named ownership</li><li>Retest criteria and deployment decision</li><li>Signed report and PDF delivery</li></ul>
+    <p class="plan-note">Complete the private check before checkout.</p>
+  </article>`;
 }
 function recurringCard(key, plan) {
   const featured = key === 'team_monthly';
-  return `<article class="pricing-card ${featured ? 'featured' : ''}">${featured ? '<span class="badge">Best for teams</span>' : ''}<h3>${escapeHtml(plan.name)}</h3><div class="price">${money(plan.amountPence).replace('.00', '')}<small>/month</small></div><p>${escapeHtml(summaries[key])}</p><ul class="check-list">${entitlements[key].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="plan-next">Cancel through the Stripe billing portal.</p><button class="button ${featured ? 'primary' : 'ghost'} full" data-checkout="${key}">Choose this plan</button></article>`;
+  const purpose = key === 'developer_monthly' ? 'FOR BUILDERS' : key === 'team_monthly' ? 'FOR SHARED OWNERSHIP' : 'FOR CLIENT WORK';
+  const outcome = key === 'developer_monthly' ? 'Protect several agents as one builder.' : key === 'team_monthly' ? 'Share projects, roles and evidence across a team.' : 'Manage a larger portfolio of customer security work.';
+  return `<article class="pricing-card-v10 ${featured ? 'recommended' : ''}">
+    <div class="plan-heading"><span class="plan-purpose">${purpose}</span>${featured ? '<span class="plan-badge">Best for teams</span>' : ''}<h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(summaries[key])}</p></div>
+    <div class="plan-price">${money(plan.amountPence).replace('.00', '')} <small>per month</small></div>
+    <button class="button ${featured ? 'primary' : 'ghost'} full" data-checkout="${key}">Choose ${escapeHtml(plan.name)}</button>
+    <div class="plan-outcome"><strong>Best when you need to:</strong><span>${escapeHtml(outcome)}</span></div>
+    <ul class="plain-plan-list">${entitlements[key].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+    <p class="plan-note">Cancel through the Stripe billing portal.</p>
+  </article>`;
 }
 function enterpriseCard() {
-  return `<article class="pricing-card"><h3>Enterprise</h3><div class="price">From £6,000<small>/year</small></div><p>For procurement, higher limits, deployment support and tailored assurance.</p><ul class="check-list"><li>Up to 500 projects and 10m checks/month</li><li>365-day evidence retention</li><li>SSO/SCIM and signed operational integrations</li><li>Deployment and security-review support</li><li>Custom limits and commercial terms</li></ul><p class="plan-next">Scoped proposal after technical qualification.</p><a class="button ghost full" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20Enterprise">Request enterprise proposal</a></article>`;
+  return `<article class="pricing-card-v10 enterprise-plan">
+    <div class="plan-heading"><span class="plan-purpose">SCOPED ASSURANCE</span><h3>Enterprise</h3><p>Higher limits, procurement support and tailored deployment work.</p></div>
+    <div class="plan-price">From £6,000 <small>per year</small></div>
+    <a class="button ghost full" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20Enterprise">Request a scoped proposal</a>
+    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Qualify a larger deployment and agree exact operational requirements.</span></div>
+    <ul class="plain-plan-list"><li>Up to 500 projects and 10m checks/month</li><li>365-day evidence retention</li><li>SSO, SCIM and signed integrations</li><li>Deployment and security-review support</li><li>Custom limits and commercial terms</li></ul>
+    <p class="plan-note">Proposal only after technical qualification.</p>
+  </article>`;
 }
 
 async function startCheckout(event) {
