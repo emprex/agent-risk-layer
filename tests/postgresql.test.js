@@ -61,9 +61,10 @@ test('PostgreSQL migrations are complete, portable and checksum-idempotent', asy
   const migrationDir = path.join(root, 'migrations');
   const files = fs.readdirSync(migrationDir).filter((name) => /^\d{3}_.+\.sql$/.test(name)).sort();
   const combined = files.map((name) => fs.readFileSync(path.join(migrationDir, name), 'utf8')).join('\n');
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 12);
   assert.doesNotMatch(combined, /PRAGMA|BEGIN\s+IMMEDIATE|INSERT\s+OR\s+(?:REPLACE|IGNORE)/i);
-  for (const table of ['users','sessions','assessments','purchases','subscriptions','stripe_event_recoveries','stripe_subscription_conflicts','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','runtime_approvals','asset_snapshots','remediation_items','remediation_evidence_artifacts','remediation_retest_criteria','security_audit_log','sales_prospects','sales_messages','sales_activities']) {
+  assert.doesNotMatch(combined, /^(?:BEGIN|COMMIT|ROLLBACK)(?:\s+TRANSACTION)?\s*;/gim);
+  for (const table of ['users','sessions','assessments','purchases','subscriptions','stripe_event_recoveries','stripe_subscription_conflicts','inspections','redteam_runs','beta_invites','workspaces','workspace_members','workspace_integrations','security_projects','project_api_keys','runtime_events','runtime_approvals','asset_snapshots','remediation_items','remediation_evidence_artifacts','remediation_retest_criteria','security_audit_log','sales_prospects','sales_messages','sales_activities','risk_knowledge_entries','risk_knowledge_checks','risk_knowledge_solutions','risk_knowledge_references','risk_knowledge_mappings','risk_knowledge_links','risk_knowledge_applicability_rules','risk_knowledge_operational_metadata','project_risk_knowledge_states']) {
     assert.match(combined, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
   }
   const duplicates = [];

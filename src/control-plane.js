@@ -7,6 +7,7 @@ import { inspectContent } from './content-security.js';
 import { discoverAiAssets } from './asset-discovery.js';
 import { deliverSecurityEventSystem } from './workspaces.js';
 import { subscriptionAccessDecision } from './subscription-access.js';
+import { prepareRiskKnowledgeRuntimeEvidencePurge, prepareRiskKnowledgeSubjectPurge } from './risk-knowledge.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
@@ -926,12 +927,22 @@ export async function purgeExpiredRuntimeEvents() {
   let approvalsDeleted = 0;
   for (const project of projects) {
     const cutoff = new Date(Date.now() - Math.max(1, Number(project.retention_days || 30)) * 86400000).toISOString();
-    const approvals = await db.prepare(`DELETE FROM runtime_approvals WHERE project_id=?
-      AND (status!='active' OR expires_at<=?)
-      AND COALESCE(consumed_at,revoked_at,expires_at)<?`).run(project.id, cutoff, cutoff);
-    approvalsDeleted += Number(approvals.changes || 0);
-    const result = await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff);
-    deleted += Number(result.changes || 0);
+    await db.transaction(async () => {
+      const approvalRows = await db.prepare(`SELECT id FROM runtime_approvals WHERE project_id=?
+        AND (status!='active' OR expires_at<=?)
+        AND COALESCE(consumed_at,revoked_at,expires_at)<?`).all(project.id, cutoff, cutoff);
+      await prepareRiskKnowledgeSubjectPurge({ projectId: project.id,
+        subjects: approvalRows.map((row) => ({ type: 'approval', id: row.id })), reason: 'runtime approval retention expired' });
+      const approvals = await db.prepare(`DELETE FROM runtime_approvals WHERE project_id=?
+        AND (status!='active' OR expires_at<=?)
+        AND COALESCE(consumed_at,revoked_at,expires_at)<?`).run(project.id, cutoff, cutoff);
+      approvalsDeleted += Number(approvals.changes || 0);
+      const eventRows = await db.prepare('SELECT id FROM runtime_events WHERE project_id=? AND created_at<?').all(project.id, cutoff);
+      await prepareRiskKnowledgeRuntimeEvidencePurge({ projectId: project.id, eventIds: eventRows.map((row) => row.id),
+        reason: 'runtime event retention expired' });
+      const result = await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff);
+      deleted += Number(result.changes || 0);
+    });
   }
   return { deleted, approvalsDeleted };
 }

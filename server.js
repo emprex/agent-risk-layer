@@ -30,6 +30,12 @@ import {
     buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
     recordActivity, salesOverview, updateMessage, updateProspect,
 } from './src/sales-agent.js';
+import {
+    applyProjectRiskKnowledgeProfile, exportRiskKnowledgeEntry, getProjectEvidenceReadiness,
+    getPublicRiskKnowledgeEntry, getRiskKnowledgeEntry, linkRiskKnowledge, listRiskKnowledge,
+    profileRiskKnowledge, setProjectRiskKnowledgeState,
+} from './src/risk-knowledge.js';
+import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
 const mimeTypes = {
@@ -120,6 +126,62 @@ const server = http.createServer(async (req, res) => {
         }
         if (req.method === 'GET' && url.pathname === '/api/questionnaire')
             return json(res, 200, { questionnaire, evidenceOptions });
+        if (req.method === 'GET' && url.pathname === '/api/risk-knowledge') {
+            const entries = await listRiskKnowledge({
+                query: url.searchParams.get('query') || '',
+                category: url.searchParams.get('category') || '',
+                severity: url.searchParams.get('severity') || '',
+                framework: url.searchParams.get('framework') || '',
+                owner: url.searchParams.get('owner') || '',
+                testMode: url.searchParams.get('testMode') || '',
+                automationStatus: url.searchParams.get('automationStatus') || '',
+                limit: url.searchParams.get('limit') || 100,
+                offset: url.searchParams.get('offset') || 0,
+            });
+            return json(res, 200, { entries, knowledgeVersion: 'ARL-RKA-1.1.0' }, { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' });
+        }
+        if (req.method === 'POST' && url.pathname === '/api/risk-knowledge/profile') {
+            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 30, bucket: 'risk-profiler' }))
+                return json(res, 429, { error: 'Too many risk-profile requests. Wait a minute and try again.' });
+            const body = await readBody(req);
+            try {
+                return json(res, 200, { results: await profileRiskKnowledge(body.facts || {}) });
+            } catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        let riskKnowledgeMatch = url.pathname.match(/^\/api\/risk-knowledge\/([^/]+)\/detail$/);
+        if (req.method === 'GET' && riskKnowledgeMatch) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const entry = await getRiskKnowledgeEntry(decodeURIComponent(riskKnowledgeMatch[1]));
+            if (!entry) return json(res, 404, { error: 'Risk knowledge entry not found.' });
+            return json(res, 200, { entry });
+        }
+        riskKnowledgeMatch = url.pathname.match(/^\/api\/risk-knowledge\/([^/]+)\/export$/);
+        if (req.method === 'GET' && riskKnowledgeMatch) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            try {
+                const format = String(url.searchParams.get('format') || 'json').toLowerCase();
+                const output = await exportRiskKnowledgeEntry(decodeURIComponent(riskKnowledgeMatch[1]), format);
+                const filename = `agentrisklayer-${safeFilename(decodeURIComponent(riskKnowledgeMatch[1]))}-control-manifest.${output.extension}`;
+                res.writeHead(200, {
+                    'Content-Type': `${output.contentType}; charset=utf-8`,
+                    'Content-Disposition': `attachment; filename="${filename}"`,
+                    'Content-Length': Buffer.byteLength(output.body),
+                    'Cache-Control': 'no-store',
+                    'X-Content-Type-Options': 'nosniff',
+                });
+                return res.end(output.body);
+            } catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        riskKnowledgeMatch = url.pathname.match(/^\/api\/risk-knowledge\/([^/]+)$/);
+        if (req.method === 'GET' && riskKnowledgeMatch) {
+            const entry = await getPublicRiskKnowledgeEntry(decodeURIComponent(riskKnowledgeMatch[1]));
+            if (!entry) return json(res, 404, { error: 'Risk knowledge entry not found.' });
+            return json(res, 200, { entry }, { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' });
+        }
         if (req.method === 'GET' && url.pathname === '/api/auth/me')
             return json(res, 200, { user: req.user });
         if (req.method === 'POST' && url.pathname === '/api/discovery/analyse') {
@@ -680,6 +742,80 @@ const server = http.createServer(async (req, res) => {
                 return json(res, 200, { project: await updateSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id, patch: body }) });
             }
             catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge-readiness$/);
+        if (req.method === 'GET' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            try {
+                const project = await getSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id });
+                return json(res, 200, await getProjectEvidenceReadiness({ workspaceId: project.workspaceId, projectId: project.id }));
+            } catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge-profile$/);
+        if (req.method === 'PUT' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability']) {
+                if (Object.hasOwn(body, forbiddenField)) return json(res, 400, { error: `Caller-supplied ${forbiddenField} is not accepted.` });
+            }
+            try {
+                const project = await getSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id });
+                if (!['developer','admin','owner'].includes(project.role)) return json(res, 403, { error: 'Project developer, admin or owner access is required.' });
+                return json(res, 200, await applyProjectRiskKnowledgeProfile({ workspaceId: project.workspaceId, projectId: project.id, architectureFacts: body.facts || {}, userId: req.user.id }));
+            } catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge-links$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const forbiddenField of ['workspaceId','userId']) {
+                if (Object.hasOwn(body, forbiddenField)) return json(res, 400, { error: `Caller-supplied ${forbiddenField} is not accepted.` });
+            }
+            try {
+                const project = await getSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id });
+                if (!['admin','owner'].includes(project.role)) return json(res, 403, { error: 'Project admin or owner access is required.' });
+                const link = await linkRiskKnowledge({
+                    workspaceId: project.workspaceId,
+                    projectId: project.id,
+                    subjectType: String(body.subjectType || ''),
+                    subjectId: String(body.subjectId || ''),
+                    entryId: String(body.entryId || ''),
+                    linkRole: String(body.linkRole || 'primary'),
+                    userId: req.user.id,
+                    subjectResolver: resolveRiskKnowledgeSubject,
+                });
+                return json(res, link.duplicate ? 200 : 201, { link });
+            } catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge\/([^/]+)\/state$/);
+        if (req.method === 'PUT' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability']) {
+                if (Object.hasOwn(body, forbiddenField)) return json(res, 400, { error: `Caller-supplied ${forbiddenField} is not accepted.` });
+            }
+            try {
+                const project = await getSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id });
+                if (!['admin','owner'].includes(project.role)) return json(res, 403, { error: 'Project admin or owner access is required.' });
+                const state = await setProjectRiskKnowledgeState({
+                    workspaceId: project.workspaceId,
+                    projectId: project.id,
+                    entryId: decodeURIComponent(match[2]),
+                    architectureFacts: Object.hasOwn(body, 'architectureFacts') ? body.architectureFacts : null,
+                    evidenceState: body.evidenceState || 'not_assessed',
+                    stateReason: body.stateReason || '',
+                    userId: req.user.id,
+                });
+                return json(res, 200, { state });
+            } catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
             }
         }
@@ -1499,7 +1635,18 @@ async function listSecurityProjectsForExport(userId) {
             .map((row) => ({ ...row, verification: parseJson(row.verification_json, {}), verification_json: undefined }));
         const runtimeApprovals = await db.prepare(`SELECT id,approver_id,tool_name,environment,action_digest,status,issued_at,expires_at,
           consumed_at,consumed_request_id,runtime_event_id,revoked_at FROM runtime_approvals WHERE project_id=? ORDER BY issued_at DESC`).all(project.id);
-        output.push({ ...project, policy: parseJson(project.policy_json, {}), policy_json: undefined, runtimeEvents: events, runtimeApprovals, inventory, remediations });
+        const riskKnowledgeStates = await db.prepare(`SELECT s.entry_id,e.knowledge_version,e.content_digest,e.title,e.category,
+          s.applicability_status,s.applicability_reason,s.architecture_facts_digest,s.evidence_state,s.deployment_gate,
+          s.critical_gate_failed,s.state_reason,s.last_assessed_at,s.updated_at
+          FROM project_risk_knowledge_states s JOIN risk_knowledge_entries e ON e.id=s.entry_id
+          WHERE s.project_id=? AND s.workspace_id=? ORDER BY e.category,e.title`).all(project.id, project.workspace_id);
+        const riskKnowledgeLinks = await db.prepare(`SELECT subject_type,subject_id,entry_id,link_role,knowledge_version,entry_digest,created_at
+          FROM risk_knowledge_links WHERE project_id=? AND workspace_id=? ORDER BY created_at DESC`).all(project.id, project.workspace_id);
+        output.push({ ...project, policy: parseJson(project.policy_json, {}), policy_json: undefined, runtimeEvents: events,
+          runtimeApprovals, inventory, remediations, riskKnowledge: {
+            states: riskKnowledgeStates.map((state) => ({ ...state, critical_gate_failed: Boolean(state.critical_gate_failed) })),
+            links: riskKnowledgeLinks,
+          } });
     }
     return output;
 }
@@ -1706,9 +1853,9 @@ async function readBody(req, limit = 100000) {
         return Object.fromEntries(new URLSearchParams(raw.toString('utf8')));
     return {};
 }
-function json(res, status, payload) {
+function json(res, status, payload, headers = {}) {
     const body = JSON.stringify(payload);
-    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store', ...headers });
     res.end(body);
 }
 function html(res, status, body) {
@@ -1763,7 +1910,7 @@ function legalShell(title, content) {
 }
 function renderPrivacyPage() {
     const operator = legalOperator();
-    return legalShell('Privacy Notice', `<h1 class="legal-title">Privacy notice</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Who operates the service</h2><p>${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Privacy contact: ${escapeXml(operator.email)}.</p><h2>Information we process</h2><ul><li>Account email address, password hash, consent record and session records.</li><li>Assessment answers, scores, reports, sharing settings and timestamps.</li><li>Customer-authorised inspection and red-team summaries, redacted finding metadata, cryptographic integrity data and declared scope. The official tools are designed not to upload source code, raw prompts, target responses, credentials or matched secret values.</li><li>Purchase, subscription and transactional-email references.</li><li>Security and product events used to prevent abuse and operate the service.</li></ul><h2>Why we process it</h2><p>We process this information to provide requested assessments and reports, perform the contract, secure accounts, fulfil payments, maintain records and improve service reliability.</p><h2>Processors and optional analytics</h2><p>Stripe processes live payments, subscriptions and billing. Resend delivers transactional email. The selected hosting provider stores and serves application data. Card details are not stored by AgentRiskLayer.</p><p>Google Analytics is optional and does not load until you accept analytics. If accepted, it processes usage events, page paths, device and approximate location information to help us understand and improve the service. We disable advertising signals and do not send form contents, credentials, assessment answers, prompts, source code or payment details. You can withdraw consent at any time by clearing the site preference in your browser and selecting “Reject optional analytics” on your next visit.</p><h2>Sharing and public results</h2><p>Assessments are private by default. A public summary and badge are exposed only after the account owner enables public sharing. Sharing can be disabled from the result page.</p><h2>Retention and your controls</h2><p>Account holders can download a structured data export and permanently delete their account from the dashboard. Billing records may need to be retained by payment providers or the operator where law requires it.</p><h2>Your rights</h2><p>Depending on applicable law, you may request access, correction, deletion, restriction, portability or objection. Contact ${escapeXml(operator.email)}. You may also complain to the relevant supervisory authority.</p><h2>International processing and security</h2><p>Processors may operate internationally under their own data-protection terms. We use salted password hashing, HTTP-only sessions, CSRF controls, access checks and encrypted HTTPS transport in production.</p><h2>Changes</h2><p>Material changes to this notice will be published with a revised effective date. Where required, account holders will also be notified directly.</p>`);
+    return legalShell('Privacy Notice', `<h1 class="legal-title">Privacy notice</h1><p class="muted">Effective ${escapeXml(config.termsVersion)}</p><h2>Who operates the service</h2><p>${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Privacy contact: ${escapeXml(operator.email)}.</p><h2>Information we process</h2><ul><li>Account email address, password hash, consent record and session records.</li><li>Assessment answers, scores, reports, sharing settings and timestamps.</li><li>Saved project risk profiles, architecture applicability outcomes, evidence-state links and versioned knowledge digests. Public profiler answers are not retained unless an authenticated user explicitly saves them to a project.</li><li>Customer-authorised inspection and red-team summaries, redacted finding metadata, cryptographic integrity data and declared scope. The official tools are designed not to upload source code, raw prompts, target responses, credentials or matched secret values.</li><li>Purchase, subscription and transactional-email references.</li><li>Security and product events used to prevent abuse and operate the service.</li></ul><h2>Why we process it</h2><p>We process this information to provide requested assessments and reports, perform the contract, secure accounts, fulfil payments, maintain records and improve service reliability.</p><h2>Processors and optional analytics</h2><p>Stripe processes live payments, subscriptions and billing. Resend delivers transactional email. The selected hosting provider stores and serves application data. Card details are not stored by AgentRiskLayer.</p><p>Google Analytics is optional and does not load until you accept analytics. If accepted, it processes usage events, page paths, device and approximate location information to help us understand and improve the service. We disable advertising signals and do not send form contents, credentials, assessment answers, prompts, source code or payment details. You can withdraw consent at any time by clearing the site preference in your browser and selecting “Reject optional analytics” on your next visit.</p><h2>Sharing and public results</h2><p>Assessments are private by default. A public summary and badge are exposed only after the account owner enables public sharing. Sharing can be disabled from the result page.</p><h2>Retention and your controls</h2><p>Account holders can download a structured data export and permanently delete their account from the dashboard. Billing records may need to be retained by payment providers or the operator where law requires it.</p><h2>Your rights</h2><p>Depending on applicable law, you may request access, correction, deletion, restriction, portability or objection. Contact ${escapeXml(operator.email)}. You may also complain to the relevant supervisory authority.</p><h2>International processing and security</h2><p>Processors may operate internationally under their own data-protection terms. We use salted password hashing, HTTP-only sessions, CSRF controls, access checks and encrypted HTTPS transport in production.</p><h2>Changes</h2><p>Material changes to this notice will be published with a revised effective date. Where required, account holders will also be notified directly.</p>`);
 }
 function renderTermsPage() {
     const operator = legalOperator();
@@ -1773,7 +1920,7 @@ function renderRobots() {
     return `User-agent: *\nAllow: /\nDisallow: /dashboard.html\nDisallow: /admin.html\nDisallow: /auth.html\nDisallow: /reset.html\nDisallow: /result.html\nSitemap: ${config.baseUrl}/sitemap.xml\n`;
 }
 function renderSitemap() {
-    const paths = ['/', '/start.html', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
+    const paths = ['/', '/start.html', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/risk-library.html', '/risk-profiler.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
     return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
 }
 function renderSecurityTxt() {

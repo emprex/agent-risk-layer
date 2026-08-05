@@ -18,7 +18,14 @@ The public website and authenticated workspace now organise the complete platfor
 - **Controlled red teaming:** 32 non-destructive cases, repeated/adaptive trials, written Rules of Engagement and signed redacted evidence.
 - **Local runtime gateway:** customer-operated enforcement is available where content must remain entirely inside the customer boundary.
 - **Enterprise foundations:** workspaces, five roles, MFA, SCIM, signed HTTPS/Slack/Jira/CEF/OCSF/SARIF outputs and tenant isolation.
+- **Risk knowledge and Evidence Readiness:** 108 versioned AI-agent risk entries connect a problem to a bounded check and remediation, with tri-state applicability, informative framework mappings, project evidence links, retention-aware state and server-derived deployment gates.
 - **Commercial operations:** Stripe Managed Payments, Resend transactional email, reports, subscriptions, public self-service onboarding, metrics, retention, backups and controlled restoration.
+
+## Risk knowledge boundary
+
+The public Risk Library exposes plain-English problems, impacts, high-level controls and informative framework mappings. Exact check methods, required evidence, pass/fail criteria and exports require a verified account. Project Evidence Readiness is derived from authoritative project links; declarations alone do not count as tested controls, generic artefacts do not prove a test passed, and runtime approval for one exact action is not residual-risk acceptance.
+
+ARL-RKA-1.1.0 contains 108 expert-authored candidate entries. Framework mappings are informative and do not establish compliance or certification. The catalogue requires continuing customer, incident, source and practitioner validation.
 
 ## Runtime privacy boundary
 

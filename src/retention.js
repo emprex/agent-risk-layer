@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { db, id, insertEvent, nowIso } from './db.js';
+import { prepareRiskKnowledgeRuntimeEvidencePurge } from './risk-knowledge.js';
 let timer = null;
 let running = false;
 export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
@@ -47,7 +48,12 @@ export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
     const projects = await db.prepare(`SELECT id,retention_days FROM security_projects WHERE status!='archived'`).all();
     for (const project of projects) {
         const cutoff = new Date(now.getTime() - Math.max(1, Number(project.retention_days || 30)) * 86400000).toISOString();
-        summary.runtimeEventsPurged += Number((await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff)).changes || 0);
+        await db.transaction(async () => {
+            const events = await db.prepare('SELECT id FROM runtime_events WHERE project_id=? AND created_at<?').all(project.id, cutoff);
+            await prepareRiskKnowledgeRuntimeEvidencePurge({ projectId: project.id, eventIds: events.map((row) => row.id),
+                reason: 'runtime event retention expired', timestamp: nowValue });
+            summary.runtimeEventsPurged += Number((await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff)).changes || 0);
+        });
     }
     return summary;
 }

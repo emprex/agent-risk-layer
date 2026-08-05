@@ -93,7 +93,9 @@ function emptyAssessments() {
 
 function advancedTools(data) {
   const totals = data.controlPlane?.totals || {};
+  const projects = data.controlPlane?.projects || [];
   const entitlement = data.controlPlane?.entitlement || { name: 'Community', runtimeRequestsPerMonth: 10000, retentionDays: 7 };
+  const readinessLinks = projects.slice(0, 5).map((project) => `<a href="/risk-readiness.html?projectId=${encodeURIComponent(project.id)}"><strong>${escapeHtml(project.name)} evidence readiness</strong><span>Applicability, evidence states and deployment gates</span></a>`).join('');
   return `<details class="panel section-gap advanced-tools">
     <summary><span><strong>Technical tools</strong><small>Inspector, attack simulation, runtime policies, API keys, inventory and audit evidence</small></span><span>Open advanced tools</span></summary>
     <div class="advanced-tools-body">
@@ -103,6 +105,8 @@ function advancedTools(data) {
         <a href="/inspector.html"><strong>Code and configuration check</strong><span>Local, read-only technical evidence</span></a>
         <a href="/redteam.html"><strong>Attack simulation</strong><span>Controlled tests for authorised systems</span></a>
         <a href="/workspaces.html"><strong>Team access</strong><span>Roles, workspaces and integrations</span></a>
+        <a href="/risk-library.html"><strong>Risk library</strong><span>Problem, bounded check and remediation guidance</span></a>
+        ${readinessLinks}
       </div>
       <div class="technical-usage-line"><span>${escapeHtml(entitlement.name)} plan</span><span>${Number(totals.projects || 0)} projects</span><span>${Number(totals.assets || 0)} assets tracked</span><span>${entitlement.retentionDays || 7}-day retention</span></div>
     </div>

@@ -853,6 +853,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_retest_criteria_event ON remediation_retes
 CREATE INDEX IF NOT EXISTS idx_retest_criteria_scope ON remediation_retest_criteria(workspace_id,project_id,remediation_id,status,expires_at);
 `);
 
+// Risk knowledge migrations are intentionally loaded into the test-only SQLite
+// adapter so route and tenant-isolation tests exercise the same schema and seed
+// content used by PostgreSQL production migrations.
+for (const migrationName of [
+  '009_risk_knowledge_asset.sql',
+  '010_seed_risk_knowledge_v1.sql',
+  '011_risk_knowledge_v1_1.sql',
+  '012_seed_risk_knowledge_v1_1.sql',
+]) {
+  const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
+  if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
+  rawDb.exec(fs.readFileSync(migrationPath, 'utf8'));
+}
+
 if (config.adminEmail) rawDb.prepare(`UPDATE users SET role='superuser' WHERE email=?`).run(config.adminEmail);
 
 
