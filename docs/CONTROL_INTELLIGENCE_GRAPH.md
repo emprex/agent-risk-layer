@@ -50,6 +50,8 @@ Graph nodes and edges are safe serializers over explicit domain records. An edge
 
 Migration `015_control_intelligence_graph.sql` adds `system_snapshots`, `control_snapshot_evaluations`, `control_test_executions`, `control_evidence_items`, `control_deployment_decisions`, `deployment_decision_evidence` and `control_snapshot_runtime_bindings`. The last table binds runtime decisions and exact-action approvals to the system snapshot current at creation. It adds only tables and indexes. There is no destructive update, delete, truncate, table replacement or second persistence system.
 
+The hardened migration also adds narrowly scoped `control_finding_bindings`, `control_approval_requirements`, `runtime_control_mappings`, and `control_integrity_audit_dedup` records. Legacy findings, approvals and runtime events remain available as history but cannot qualify for a current control unless a server-authorized, digest-bound snapshot/control relationship exists.
+
 ## System snapshots and staleness
 
 The server canonicalizes a bounded structure containing architecture, models, tools/MCP servers, identities, data sources, network access, autonomy, approval configuration, current runtime-policy identity and assessment configuration. SHA-256 is calculated server-side over canonical JSON. Client digests and sensitive fields are rejected.
@@ -79,8 +81,19 @@ Only project admins and owners can record a decision. The caller supplies ration
 - `proceed` requires current applicability, current verified evidence for applicable controls and no open blocker. It remains accountable decision support, not automatic deployment authorization.
 - Material changes stale prior decisions; old decisions cannot authorize a new snapshot.
 - A partial unique index permits one current decision for a project/snapshot. Recording locks the project, checks `expectedCurrentDecisionId`, re-derives within the transaction, preserves the prior immutable decision as stale, and inserts the successor atomically.
-- Required approvals come only from the snapshot's explicit `approvalConfiguration.requiredControlIds`. They must be current-snapshot, control-bound, active, unexpired and unconsumed. Historical project links never complete the current approval stage.
+- Required approvals come only from the snapshot's explicit server-bound action requirements. They must be current-snapshot, control-bound, active, unexpired and unconsumed. Historical project links never complete the current approval stage.
+- Exact requirements use `approvalConfiguration.requiredActions`. The canonical requirement binds action, full parameters, target, value/amount, currency/unit, requesting actor where specified, control, snapshot, policy version/digest, reuse scope and requirement digest. A generic approval row or caller-supplied digest never qualifies. Parameter, target, amount, currency, policy, snapshot or control substitution fails closed.
 - A retest is distinct from an ordinary pass. It binds the original failed execution, finding/remediation, vulnerable snapshot and different remediated snapshot. Missing or mismatched provenance remains a hold.
+
+## Runtime attribution and integrity audit
+
+Ordinary runtime events are not assigned from a caller-provided control ID. A snapshot may contain versioned `runtimeControlMappings` from server-owned Guard rule IDs and the published policy version/digest to a Risk Knowledge control. Runtime insertion resolves the server-generated decision reasons against that mapping inside the existing transaction. Missing or stale mappings leave the event unbound and therefore unable to support deployment.
+
+Digest verification covers snapshots, evaluations, executions, evidence, runtime/approval bindings and decisions. A mismatch fails the read or decision closed and attempts a safe `control_intelligence.integrity_failure` audit event. The event contains record type/ID and tenant/snapshot/control scope, never the descriptor or private payload. A digest fingerprint deduplicates repeated reads while retaining an occurrence counter. Audit-write failure is emitted as a structured server error and never converts the failed record into acceptable evidence.
+
+## Report integration
+
+Existing customer assessment reports include Control Intelligence only when an assessment is explicitly linked to the project through its existing finding/remediation relationship. The section records exact snapshot and control-profile digests, scope/exclusions, applicable and unevaluated controls, observed evidence, missing evidence, open findings, runtime/approval evidence and the current decision. Projects without graph records continue to use the existing report. The report retains the required proprietary-assessment and non-certification wording.
 
 ## Authorization, privacy and performance
 
@@ -104,6 +117,6 @@ PostgreSQL evidence must use a dedicated destructive-test URL, never `DATABASE_U
 TEST_DATABASE_URL='postgresql://.../arl_disposable_test' DATABASE_URL='' NODE_ENV=test npm test
 ```
 
-The test harness must reject equality with `DATABASE_URL` and obvious production targets, create an isolated test schema, apply migrations 001–015, use separate connections for concurrency, and remove only that verified schema. Static parsing or SQLite is not equivalent evidence.
+The `scripts/test-control-intelligence-postgres.mjs` harness rejects equality with `DATABASE_URL`, non-loopback and production-like targets, and database names without an explicit test/disposable marker. It applies migrations 001–015, verifies checksum-idempotent restart, exercises independent transaction concurrency and malformed relational writes, and removes only the disposable database schema. Static parsing or SQLite is not equivalent evidence.
 
 Limitations: pre-015 evidence has no exact snapshot binding and is not promoted into current evidence; project-bound inspection/red-team detail depends on existing resolvers; severity editing remains deferred and client severity is rejected; cross-customer analytics are excluded pending privacy/consent design; framework mappings remain informative and do not establish compliance.

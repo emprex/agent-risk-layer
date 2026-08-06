@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db, id, nowIso } from './db.js';
 import { getSeveritySemantics } from './risk-knowledge-core.js';
+import { runtimeApprovalActionDigest } from './access-control.js';
 
 const VIEW_ROLES = new Set(['viewer','analyst','developer','admin','owner']);
 const RECORD_ROLES = new Set(['analyst','developer','admin','owner']);
@@ -29,7 +30,7 @@ export async function createSystemSnapshot({ projectId, userId, input = {} }) {
     if (Buffer.byteLength(canonicalJson(payload)) > 262144) throw badRequest('System snapshot exceeds the 256 KiB safe limit.');
     const contentDigest = intelligenceDigest(payload);
     const existing = await db.prepare('SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND content_digest=?').get(project.workspace_id, projectId, contentDigest);
-    if (existing) { verifySnapshot(existing); result = { snapshot: serializeSnapshot(existing), created: false }; return; }
+    if (existing) { await verifySnapshot(existing); result = { snapshot: serializeSnapshot(existing), created: false }; return; }
     const current = await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current'").get(project.workspace_id, projectId);
     if (input.expectedCurrentSnapshotId != null && clean(input.expectedCurrentSnapshotId,100) !== (current?.id || '')) throw conflict('The system snapshot changed after this page was loaded. Reload and reassess before replacing it.');
     const timestamp = nowIso();
@@ -45,10 +46,28 @@ export async function createSystemSnapshot({ projectId, userId, input = {} }) {
       JSON.stringify(payload.dataSources), JSON.stringify(payload.networkAccess), payload.autonomyLevel, JSON.stringify(payload.approvalConfiguration),
       payload.runtimePolicyVersion, payload.runtimePolicyDigest, JSON.stringify(payload.assessmentConfiguration), contentDigest, payload.source, userId, timestamp, canonicalJson(payload));
     await bindControlEvaluations({ access, snapshotId, userId, timestamp });
+    await bindApprovalRequirements({access,snapshotId,userId,timestamp,payload});
+    await bindRuntimeMappings({access,snapshotId,userId,timestamp,payload});
     await audit(access, userId, 'control_intelligence.snapshot_created', 'system_snapshot', snapshotId, { contentDigest, version: `v${count + 1}` });
     result = { snapshot: serializeSnapshot(await db.prepare('SELECT * FROM system_snapshots WHERE id=?').get(snapshotId)), created: true };
   });
   return result;
+}
+
+async function bindRuntimeMappings({access,snapshotId,userId,timestamp,payload}){
+  const mappings=Array.isArray(payload.approvalConfiguration?.runtimeControlMappings)?payload.approvalConfiguration.runtimeControlMappings:[];
+  for(const item of mappings){const entryId=clean(item?.controlId,80);const ruleId=clean(item?.ruleId,160);if(!entryId||!ruleId)throw badRequest('Runtime control mapping requires a control and server rule ID.');const evaluation=await db.prepare('SELECT id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(access.project.workspace_id,access.project.id,snapshotId,entryId);if(!evaluation||!payload.runtimePolicyVersion||!payload.runtimePolicyDigest)throw badRequest('Runtime control mapping requires a current control and published runtime policy.');const descriptor={schema:'arl.runtime-control-mapping.v1',workspaceId:access.project.workspace_id,projectId:access.project.id,systemSnapshotId:snapshotId,entryId,ruleId,policyVersion:payload.runtimePolicyVersion,policyDigest:payload.runtimePolicyDigest,createdBy:userId,createdAt:timestamp};await db.prepare(`INSERT INTO runtime_control_mappings (id,workspace_id,project_id,system_snapshot_id,entry_id,rule_id,policy_version,policy_digest,descriptor_json,mapping_digest,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('rcm_'),access.project.workspace_id,access.project.id,snapshotId,entryId,ruleId,payload.runtimePolicyVersion,payload.runtimePolicyDigest,canonicalJson(descriptor),intelligenceDigest(descriptor),userId,timestamp);}
+}
+
+async function bindApprovalRequirements({access,snapshotId,userId,timestamp,payload}) {
+  const requirements=Array.isArray(payload.approvalConfiguration?.requiredActions)?payload.approvalConfiguration.requiredActions:[];
+  for(const item of requirements){
+    const entryId=clean(item?.controlId,80);const evaluation=await db.prepare('SELECT id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(access.project.workspace_id,access.project.id,snapshotId,entryId);
+    if(!evaluation)throw badRequest('Approval requirement references an unknown control.');
+    const descriptor={schema:'arl.approval-requirement.v1',workspaceId:access.project.workspace_id,projectId:access.project.id,systemSnapshotId:snapshotId,controlId:entryId,action:clean(item.action,200).toLowerCase(),parameters:item.parameters||{},target:clean(item.target,300)||null,value:item.value??null,currency:clean(item.currency,12).toUpperCase()||null,actor:clean(item.actor,200)||null,policyVersion:payload.runtimePolicyVersion,policyDigest:payload.runtimePolicyDigest,validity:{reuseScope:item.reuseScope==='bounded_reuse'?'bounded_reuse':'one_time'}};
+    if(!descriptor.action)throw badRequest('Approval requirement action is required.');rejectSensitive(descriptor);const actionDigest=intelligenceDigest({action:descriptor.action,parameters:descriptor.parameters,target:descriptor.target,value:descriptor.value,currency:descriptor.currency,actor:descriptor.actor,policyVersion:descriptor.policyVersion,policyDigest:descriptor.policyDigest});
+    await db.prepare(`INSERT INTO control_approval_requirements (id,workspace_id,project_id,system_snapshot_id,entry_id,action_type,action_digest,policy_version,policy_digest,reuse_scope,descriptor_json,requirement_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('car_'),access.project.workspace_id,access.project.id,snapshotId,entryId,descriptor.action,actionDigest,descriptor.policyVersion,descriptor.policyDigest,descriptor.validity.reuseScope,canonicalJson(descriptor),intelligenceDigest(descriptor),timestamp);
+  }
 }
 
 async function bindControlEvaluations({ access, snapshotId, userId, timestamp }) {
@@ -94,6 +113,9 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
     remediation=await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=? AND finding_key=?').get(clean(input.remediationId,100),projectId,finding?.finding_key||'');
     if (!finding || finding.id!==original.finding_id || !remediation || remediation.id!==finding.id) throw conflict('Retest provenance must identify the original finding and its remediation.');
     if (snapshot.id===original.system_snapshot_id) throw conflict('A retest must execute against a remediated snapshot, not the vulnerable snapshot.');
+    const binding=await db.prepare('SELECT id FROM control_finding_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND finding_id=?').get(access.project.workspace_id,projectId,original.system_snapshot_id,controlId,finding.id);
+    const implementation=await db.prepare("SELECT id FROM remediation_evidence_artifacts WHERE workspace_id=? AND project_id=? AND remediation_id=? AND lifecycle_state='active' AND invalidated_at IS NULL ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id,projectId,remediation.id);
+    if(!binding||!implementation)throw conflict('Retest requires the exact scoped finding binding and active remediation implementation evidence.');
   }
   const timestamp = nowIso();
   const descriptor = { schema: 'arl.control-test-execution.v2', workspaceId:access.project.workspace_id,projectId, systemSnapshotId: snapshot.id,evaluationId:evaluation.id, entryId: controlId, checkId: check.id,
@@ -105,12 +127,13 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
   rejectSensitive(descriptor);
   const executionId = id('ctx_');
   const contentDigest = intelligenceDigest(descriptor);
-  await db.prepare(`INSERT INTO control_test_executions
+  await db.transaction(async()=>{await db.prepare(`INSERT INTO control_test_executions
     (id,workspace_id,project_id,system_snapshot_id,evaluation_id,entry_id,check_id,check_digest,execution_kind,retest_of_execution_id,remediation_id,original_snapshot_id,execution_method,result,expected_result,observed_result,input_reference,limitations,failure_reason,finding_id,executor_id,started_at,completed_at,content_digest,descriptor_json,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(executionId, access.project.workspace_id, projectId, snapshot.id,evaluation.id, controlId, check.id, check.content_digest,executionKind,original?.id||null,remediation?.id||null,original?.system_snapshot_id||null,
     descriptor.executionMethod, result, descriptor.expectedResult, descriptor.observedResult, descriptor.inputReference, descriptor.limitations, descriptor.failureReason,
-    descriptor.findingId, userId, descriptor.startedAt, descriptor.completedAt, contentDigest, JSON.stringify(descriptor), timestamp);
-  await audit(access, userId, 'control_intelligence.test_recorded', 'control_test_execution', executionId, { controlId, result, contentDigest });
+    descriptor.findingId, userId, descriptor.startedAt, descriptor.completedAt, contentDigest, canonicalJson(descriptor), timestamp);
+  if(finding&&executionKind==='initial'){const bindingDescriptor={schema:'arl.control-finding-binding.v1',workspaceId:access.project.workspace_id,projectId,systemSnapshotId:snapshot.id,entryId:controlId,findingId:finding.id,bindingMethod:'failed_test',boundBy:userId,createdAt:timestamp};const sourceDigest=intelligenceDigest({id:finding.id,projectId:finding.project_id,findingKey:finding.finding_key,title:finding.title,status:finding.status,createdAt:finding.created_at});await db.prepare(`INSERT INTO control_finding_bindings (id,workspace_id,project_id,system_snapshot_id,entry_id,finding_id,source_digest,binding_method,bound_by,descriptor_json,content_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('cfb_'),access.project.workspace_id,projectId,snapshot.id,controlId,finding.id,sourceDigest,'failed_test',userId,canonicalJson(bindingDescriptor),intelligenceDigest(bindingDescriptor),timestamp);}
+  await audit(access, userId, 'control_intelligence.test_recorded', 'control_test_execution', executionId, { controlId, result, contentDigest });});
   return { id: executionId, ...descriptor, contentDigest };
 }
 
@@ -189,15 +212,16 @@ export async function recordDeploymentDecision({ projectId, userId, input = {} }
 
 async function deriveDeploymentDecision(access, snapshot) {
   const evaluations = await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id, access.project.id, snapshot.id);
-  verifyRows(evaluations,'content_digest','evaluation');
-  verifySnapshot(snapshot);
+  await verifyRows(evaluations,'content_digest','evaluation');
+  await verifySnapshot(snapshot);
   const tests = await db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id, access.project.id, snapshot.id);
   const evidence = await db.prepare("SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?").all(access.project.workspace_id, access.project.id, snapshot.id);
-  verifyRows(tests,'content_digest','test'); verifyRows(evidence,'integrity_digest','evidence');
+  await verifyRows(tests,'content_digest','test'); await verifyRows(evidence,'integrity_digest','evidence');
   const findings = await db.prepare(`SELECT r.id,r.finding_key,r.status,c.entry_id,c.contextual_severity,c.severity_status
-    FROM remediation_items r LEFT JOIN control_snapshot_evaluations c ON c.project_id=r.project_id AND c.system_snapshot_id=?
-      AND (c.entry_id=r.finding_key OR r.finding_key LIKE c.entry_id || '%')
-    WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk')`).all(snapshot.id, access.project.id);
+    FROM remediation_items r JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=r.project_id AND b.system_snapshot_id=?
+    JOIN control_snapshot_evaluations c ON c.workspace_id=b.workspace_id AND c.project_id=b.project_id AND c.system_snapshot_id=b.system_snapshot_id AND c.entry_id=b.entry_id
+    WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk')`).all(access.project.workspace_id,snapshot.id,access.project.id);
+  const unboundFindings=Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items r WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk') AND NOT EXISTS (SELECT 1 FROM control_finding_bindings b WHERE b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=?)`).get(access.project.id,access.project.workspace_id,access.project.id,snapshot.id)).count||0);
   const applicable = evaluations.filter((row) => row.applicability_status === 'applicable');
   const unknown = evaluations.filter((row) => row.applicability_status === 'unknown');
   const tested = new Set(tests.filter((row) => row.result === 'passed' && (row.execution_kind==='initial'||validRetest(row,tests,findings))).map((row) => row.entry_id));
@@ -205,14 +229,14 @@ async function deriveDeploymentDecision(access, snapshot) {
   const missingEvidence = applicable.filter((row) => !tested.has(row.entry_id) || !observed.has(row.entry_id)).length;
   const criticalBlockers = findings.filter((row) => row.contextual_severity === 'critical' && row.severity_status === 'evaluated').length;
   const requiredApprovals=requiredApprovalControls(snapshot,applicable);
-  const approvals=await db.prepare(`SELECT b.entry_id,a.* FROM control_snapshot_runtime_bindings b JOIN runtime_approvals a ON a.id=b.approval_id WHERE b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? AND b.binding_type='exact_action_approval'`).all(access.project.workspace_id,access.project.id,snapshot.id);
+  const approvals=await db.prepare(`SELECT b.entry_id,b.descriptor_json binding_descriptor,b.content_digest binding_digest,b.approval_requirement_id,a.*,q.descriptor_json requirement_descriptor,q.requirement_digest,q.action_digest requirement_action_digest,q.reuse_scope FROM control_snapshot_runtime_bindings b JOIN runtime_approvals a ON a.id=b.approval_id JOIN control_approval_requirements q ON q.id=b.approval_requirement_id AND q.workspace_id=b.workspace_id AND q.project_id=b.project_id AND q.system_snapshot_id=b.system_snapshot_id AND q.entry_id=b.entry_id WHERE b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? AND b.binding_type='exact_action_approval'`).all(access.project.workspace_id,access.project.id,snapshot.id);
   const validApprovals=new Set(approvals.filter(validApproval).map(x=>x.entry_id));
   const missingApprovals=requiredApprovals.filter(x=>!validApprovals.has(x));
   const summary = { applicableControls: applicable.length, controlsNeedingAssessment: unknown.length,
     controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, openFindings: findings.length,
     criticalBlockers, failedTests: tests.filter((row) => row.result === 'failed').length,
-    completedRetests: tests.filter((row) => validRetest(row,tests,findings)).length,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length };
-  const reasons=[]; if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(findings.length)reasons.push('open_findings'); if(missingApprovals.length)reasons.push('required_approval_missing');
+    completedRetests: tests.filter((row) => validRetest(row,tests,findings)).length,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
+  const reasons=[]; if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
   const common={summary,reasons,evidenceIds:evidence.filter(x=>x.verification_state==='verified'&&x.retention_status==='active').map(x=>x.id).sort(),requiredApprovals,controlProfileDigest:intelligenceDigest(evaluations.map(x=>({id:x.entry_id,digest:x.entry_digest})).sort((a,b)=>a.id.localeCompare(b.id)))};
   if (criticalBlockers) return { ...common,decision: 'do_not_deploy', rationale: 'An open evaluated Critical finding blocks deployment.' };
   if (reasons.length || tests.some((row) => row.result === 'failed' && !tests.some(r=>r.execution_kind==='retest'&&r.result==='passed'&&r.retest_of_execution_id===row.id))) return { ...common,decision: 'hold', rationale: 'Material context, evidence, findings, retesting or approvals remain unresolved.' };
@@ -225,16 +249,16 @@ export async function getControlIntelligence({ projectId, userId, limit = 25, of
   const safeOffset = Math.max(0, Number(offset) || 0);
   const snapshot = await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id, projectId);
   if (!snapshot) return emptyGraph(access, safeLimit, safeOffset);
-  verifySnapshot(snapshot);
+  await verifySnapshot(snapshot);
   const allEvaluations = await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY entry_id').all(access.project.workspace_id, projectId, snapshot.id);
-  verifyRows(allEvaluations,'content_digest','evaluation');
+  await verifyRows(allEvaluations,'content_digest','evaluation');
   const derived = await loadDerivedRows(access, snapshot, allEvaluations);
   const chains = deriveChains(allEvaluations, derived);
   const filtered = status ? chains.filter((chain) => chain.chainStatus === status) : chains;
   const page = filtered.slice(safeOffset, safeOffset + safeLimit);
   const graph = buildGraph(access, snapshot, page, derived);
   const latestDecision = derived.decisions[0] || null;
-  if(latestDecision) verifyRows([latestDecision],'decision_digest','decision');
+  if(latestDecision) await verifyRows([latestDecision],'decision_digest','decision');
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
     controlProfileVersion: 'ARL-RKA-1.2.0', summary: summarizeChains(chains, derived), deploymentState: latestDecision ? serializeDecision(latestDecision) : null,
     items: page, total: filtered.length, limit: safeLimit, offset: safeOffset, hasMore: safeOffset + page.length < filtered.length,
@@ -245,7 +269,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
   const access = await requireAccess(projectId, userId, VIEW_ROLES);
   const snapshot = await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id, projectId);
   if (!snapshot) throw notFound('Create a system snapshot before opening control intelligence detail.');
-  verifySnapshot(snapshot);
+  await verifySnapshot(snapshot);
   const evaluation = await db.prepare(`SELECT c.*,e.title,e.category,e.problem_json,e.content_digest knowledge_digest,k.objective,k.method,k.required_evidence_json,k.pass_condition,k.fail_condition,k.limitations,k.content_digest check_digest,k.id check_id,
       COALESCE(v.lifecycle_status,'candidate') lifecycle_status,
       (SELECT default_owner FROM risk_knowledge_solutions s WHERE s.entry_id=e.id ORDER BY s.priority,s.id LIMIT 1) accountable_owner
@@ -253,7 +277,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
     WHERE c.workspace_id=? AND c.project_id=? AND c.system_snapshot_id=? AND c.entry_id=? ORDER BY k.id LIMIT 1`).get(access.project.workspace_id, projectId, snapshot.id, clean(controlId, 80));
   if (!evaluation) throw notFound('Control evaluation not found for the current snapshot.');
-  verifyRows([evaluation],'content_digest','evaluation');
+  await verifyRows([evaluation],'content_digest','evaluation');
   const limit = Math.max(1, Math.min(50, Number(historyLimit) || 25));
   const [tests,evidence,links,remediations,runtime,approvals,decisions,mappings] = await Promise.all([
     db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, controlId, limit),
@@ -263,15 +287,17 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     db.prepare(`SELECT r.id,r.decision,r.observed_decision,r.severity,r.rule_ids_json,r.tool_name,r.argument_digest,r.policy_version,r.policy_digest,r.retest_criteria_id,r.remediation_id,r.retest_satisfied,r.created_at
       FROM runtime_events r JOIN control_snapshot_runtime_bindings b ON b.runtime_event_id=r.id AND b.system_snapshot_id=?
       JOIN risk_knowledge_links l ON l.subject_type='runtime_event' AND l.subject_id=r.id AND l.project_id=r.project_id WHERE r.project_id=? AND l.entry_id=? ORDER BY r.created_at DESC LIMIT ?`).all(snapshot.id, projectId, controlId, limit),
-    db.prepare(`SELECT b.entry_id,a.id,a.tool_name,a.environment,a.action_digest,a.status,a.issued_at,a.expires_at,a.consumed_at,a.runtime_event_id
-      FROM runtime_approvals a JOIN control_snapshot_runtime_bindings b ON b.approval_id=a.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? AND b.entry_id=?
+    db.prepare(`SELECT b.entry_id,b.workspace_id,b.project_id,b.approval_requirement_id,b.descriptor_json binding_descriptor,b.content_digest binding_digest,a.id,a.tool_name,a.environment,a.action_digest,a.status,a.issued_at,a.expires_at,a.consumed_at,a.revoked_at,a.runtime_event_id,q.descriptor_json requirement_descriptor,q.requirement_digest,q.action_digest requirement_action_digest,q.reuse_scope
+      FROM runtime_approvals a JOIN control_snapshot_runtime_bindings b ON b.approval_id=a.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? AND b.entry_id=? JOIN control_approval_requirements q ON q.id=b.approval_requirement_id
       WHERE a.workspace_id=b.workspace_id AND a.project_id=b.project_id ORDER BY a.issued_at DESC LIMIT ?`).all(access.project.workspace_id,projectId,snapshot.id,controlId,limit),
     db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY decided_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, limit),
     db.prepare('SELECT framework,framework_version,framework_reference,mapping_status,mapping_limit FROM risk_knowledge_mappings WHERE entry_id=? ORDER BY framework,framework_reference').all(controlId),
   ]);
-  verifyRows(tests, 'content_digest','test');
-  verifyRows(evidence, 'integrity_digest','evidence');
-  verifyRows(decisions,'decision_digest','decision');
+  await verifyRows(tests, 'content_digest','test');
+  await verifyRows(evidence, 'integrity_digest','evidence');
+  await verifyRows(decisions,'decision_digest','decision');
+  const bindings=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY created_at DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id);
+  await verifyRows(bindings,'content_digest','binding');
   const derived = { tests, evidence, links, remediations, runtime, approvals, decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
@@ -303,15 +329,15 @@ async function loadDerivedRows(access, snapshot, evaluations) {
     db.prepare('SELECT * FROM remediation_items WHERE project_id=? ORDER BY updated_at DESC LIMIT 250').all(access.project.id),
     db.prepare(`SELECT r.id,r.decision,r.observed_decision,r.severity,r.rule_ids_json,r.tool_name,r.argument_digest,r.policy_version,r.policy_digest,r.retest_criteria_id,r.remediation_id,r.retest_satisfied,r.created_at
       FROM runtime_events r JOIN control_snapshot_runtime_bindings b ON b.runtime_event_id=r.id AND b.system_snapshot_id=? WHERE r.project_id=? ORDER BY r.created_at DESC LIMIT 250`).all(snapshot.id, access.project.id),
-    db.prepare(`SELECT b.entry_id,a.id,a.tool_name,a.environment,a.action_digest,a.status,a.issued_at,a.expires_at,a.consumed_at,a.runtime_event_id
-      FROM runtime_approvals a JOIN control_snapshot_runtime_bindings b ON b.approval_id=a.id AND b.system_snapshot_id=? WHERE a.workspace_id=? AND a.project_id=? ORDER BY a.issued_at DESC LIMIT 250`).all(snapshot.id, access.project.workspace_id, access.project.id),
+    db.prepare(`SELECT b.entry_id,b.workspace_id,b.project_id,b.approval_requirement_id,b.descriptor_json binding_descriptor,b.content_digest binding_digest,a.id,a.tool_name,a.environment,a.action_digest,a.status,a.issued_at,a.expires_at,a.consumed_at,a.revoked_at,a.runtime_event_id,q.descriptor_json requirement_descriptor,q.requirement_digest,q.action_digest requirement_action_digest,q.reuse_scope
+      FROM runtime_approvals a JOIN control_snapshot_runtime_bindings b ON b.approval_id=a.id AND b.system_snapshot_id=? JOIN control_approval_requirements q ON q.id=b.approval_requirement_id WHERE a.workspace_id=? AND a.project_id=? ORDER BY a.issued_at DESC LIMIT 250`).all(snapshot.id, access.project.workspace_id, access.project.id),
     db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? ORDER BY decided_at DESC LIMIT 25').all(access.project.workspace_id, access.project.id),
     db.prepare(`SELECT de.decision_id,de.evidence_id,de.relationship FROM deployment_decision_evidence de
       JOIN control_deployment_decisions d ON d.id=de.decision_id WHERE d.workspace_id=? AND d.project_id=? AND d.system_snapshot_id=? LIMIT 500`).all(access.project.workspace_id,access.project.id,snapshot.id),
   ]);
-  verifyRows(tests, 'content_digest','test');
-  verifyRows(evidence, 'integrity_digest','evidence');
-  verifyRows(decisions,'decision_digest','decision');
+  await verifyRows(tests, 'content_digest','test');
+  await verifyRows(evidence, 'integrity_digest','evidence');
+  await verifyRows(decisions,'decision_digest','decision');
   return { entries,checks,tests,evidence,links,remediations,runtime,approvals,decisions,decisionEvidence };
 }
 
@@ -324,6 +350,17 @@ export async function prepareControlIntelligenceSourcePurge({ projectId, runtime
     if (runtimeIds.length || approvals.length) await db.prepare("UPDATE control_deployment_decisions SET status='stale',reassessment_trigger='evidence_source_retention' WHERE project_id=? AND status='current'").run(projectId);
   });
   return { runtimeEvents: runtimeIds.length, approvals: approvals.length, timestamp };
+}
+
+export async function getControlIntelligenceReportSummary({projectId}){
+  const project=await db.prepare('SELECT id,workspace_id,name FROM security_projects WHERE id=?').get(clean(projectId,100));if(!project)return null;
+  const snapshot=await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current'").get(project.workspace_id,project.id);if(!snapshot)return null;await verifySnapshot(snapshot);
+  const evaluations=await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY entry_id').all(project.workspace_id,project.id,snapshot.id);await verifyRows(evaluations,'content_digest','evaluation');
+  const evidence=await db.prepare('SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY observed_at DESC LIMIT 250').all(project.workspace_id,project.id,snapshot.id);await verifyRows(evidence,'integrity_digest','evidence');
+  const decisions=await db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY decided_at DESC LIMIT 1').all(project.workspace_id,project.id,snapshot.id);await verifyRows(decisions,'decision_digest','decision');
+  const findings=await db.prepare(`SELECT r.id,r.status,r.severity,b.entry_id FROM remediation_items r JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? ORDER BY r.updated_at DESC LIMIT 250`).all(project.workspace_id,project.id,snapshot.id);
+  const applicable=evaluations.filter(row=>row.applicability_status==='applicable');const observed=new Set(evidence.filter(row=>row.verification_state==='verified'&&row.retention_status==='active').map(row=>row.entry_id));const currentDecision=decisions[0]||null;
+  return {statement:'AgentRiskLayer Security Assessment — assessed against AgentRiskLayer Control Profile ARL-RKA-1.2.0.',disclaimer:'This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free.',project:{id:project.id,name:project.name},systemSnapshot:{id:snapshot.id,version:snapshot.version_identifier,digest:snapshot.content_digest},controlProfileVersion:'ARL-RKA-1.2.0',controlProfileDigest:intelligenceDigest(evaluations.map(row=>({id:row.entry_id,digest:row.entry_digest}))),scope:{included:'Current snapshot-bound controls and evidence.',exclusions:'Historical or unbound evidence does not qualify.'},applicableControls:applicable.length,unevaluatedApplicableControls:applicable.filter(row=>row.severity_status==='not_evaluated').length,observedControls:observed.size,missingEvidence:applicable.filter(row=>!observed.has(row.entry_id)).map(row=>row.entry_id),openFindings:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).map(row=>({id:row.id,controlId:row.entry_id,status:row.status,severity:row.severity})),retestStatus:{required:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).length},runtimeEvidence:evidence.filter(row=>row.evidence_class==='runtime').length,approvalEvidence:evidence.filter(row=>row.approval_id).length,deploymentDecision:currentDecision?serializeDecision(currentDecision):null,stale:Boolean(currentDecision&&currentDecision.status!=='current'),integrityFailures:0,limitations:['Candidate controls remain candidate content.','Framework mappings are informative and do not establish compliance.']};
 }
 
 function deriveChains(evaluations, data) {
@@ -463,7 +500,7 @@ async function requireCurrentSnapshot(access, requestedId) {
     ? await db.prepare("SELECT * FROM system_snapshots WHERE id=? AND workspace_id=? AND project_id=? AND status='current'").get(clean(requestedId, 100), access.project.workspace_id, access.project.id)
     : await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id, access.project.id);
   if (!row) throw conflict('A current project system snapshot is required; stale snapshots cannot receive new evidence or decisions.');
-  verifySnapshot(row);
+  await verifySnapshot(row);
   return row;
 }
 function emptyGraph(access, limit, offset) { return { graphVersion: '1.0', project: { id: access.project.id, name: access.project.name, role: access.role }, systemSnapshot: null,
@@ -494,17 +531,18 @@ function dedupe(items) { return [...new Map(items.map((item) => [item.id, item])
 function countValues(values) { return [...values.reduce((map, value) => map.set(value, (map.get(value) || 0) + 1), new Map())].map(([value,count]) => ({ value,count })).sort((a,b) => a.value.localeCompare(b.value)); }
 function snapshotDescriptor({project,input}) { return {schema:'arl.system-snapshot.v1',workspaceId:project.workspace_id,projectId:project.id,architecture:input.architecture||{},models:input.models||[],tools:input.tools||[],identities:input.identities||[],dataSources:input.dataSources||[],networkAccess:input.networkAccess||[],autonomyLevel:clean(input.autonomyLevel,40)||'unknown',approvalConfiguration:input.approvalConfiguration||{},runtimePolicyVersion:project.policy_version||null,runtimePolicyDigest:project.policy_digest||null,assessmentConfiguration:input.assessmentConfiguration||{},source:clean(input.source,40)||'manual'}; }
 function descriptorFromSnapshot(row){return {schema:'arl.system-snapshot.v1',workspaceId:row.workspace_id,projectId:row.project_id,architecture:parseJson(row.architecture_json,{}),models:parseJson(row.models_json,[]),tools:parseJson(row.tools_json,[]),identities:parseJson(row.identities_json,[]),dataSources:parseJson(row.data_sources_json,[]),networkAccess:parseJson(row.network_access_json,[]),autonomyLevel:row.autonomy_level,approvalConfiguration:parseJson(row.approval_configuration_json,{}),runtimePolicyVersion:row.runtime_policy_version||null,runtimePolicyDigest:row.runtime_policy_digest||null,assessmentConfiguration:parseJson(row.assessment_configuration_json,{}),source:row.source};}
-function verifySnapshot(row){const stored=parseJson(row.descriptor_json,null);const normalized=descriptorFromSnapshot(row);if(!stored||canonicalJson(stored)!==canonicalJson(normalized)||intelligenceDigest(normalized)!==row.content_digest)integrityFailure();}
+async function verifySnapshot(row){const stored=parseJson(row.descriptor_json,null);const normalized=descriptorFromSnapshot(row);if(!stored||canonicalJson(stored)!==canonicalJson(normalized)||intelligenceDigest(normalized)!==row.content_digest)await integrityFailure(row,'system_snapshot','descriptor_or_normalized_mismatch');}
 function descriptorFromTest(row){return {schema:'arl.control-test-execution.v2',workspaceId:row.workspace_id,projectId:row.project_id,systemSnapshotId:row.system_snapshot_id,evaluationId:row.evaluation_id,entryId:row.entry_id,checkId:row.check_id,checkDigest:row.check_digest,executionMethod:row.execution_method,result:row.result,expectedResult:row.expected_result,observedResult:row.observed_result,inputReference:row.input_reference||null,limitations:row.limitations,failureReason:row.failure_reason||null,findingId:row.finding_id||null,executionKind:row.execution_kind,retestOfExecutionId:row.retest_of_execution_id||null,remediationId:row.remediation_id||null,originalSnapshotId:row.original_snapshot_id||null,executorId:row.executor_id||null,startedAt:row.started_at,completedAt:row.completed_at||null};}
 function descriptorFromEvaluation(row){return {schema:'arl.control-evaluation.v1',workspaceId:row.workspace_id,projectId:row.project_id,systemSnapshotId:row.system_snapshot_id,entryId:row.entry_id,controlProfileVersion:row.control_profile_version,entryDigest:row.entry_digest,applicabilityStatus:row.applicability_status,applicabilityReason:row.applicability_reason,contextualSeverity:row.contextual_severity||null,severityStatus:row.severity_status,evaluatorId:row.evaluator_id||null,decisionMethod:row.decision_method,evaluatedAt:row.evaluated_at};}
 function descriptorFromEvidence(row){const d=parseJson(row.descriptor_json,{});return {...d,workspaceId:row.workspace_id,projectId:row.project_id,systemSnapshotId:row.system_snapshot_id,controlId:row.entry_id,testExecutionId:row.test_execution_id||null,findingId:row.finding_id||null,runtimeEventId:row.runtime_event_id||null,approvalId:row.approval_id||null,remediationArtifactId:row.remediation_artifact_id||null,remediationId:row.remediation_id||null,evidenceClass:row.evidence_class,sourceType:row.source_type,sourceReference:row.source_reference,observedAt:row.observed_at,collectorId:row.collector_id||null,sensitivityClassification:row.sensitivity_classification,retentionStatus:row.retention_status,verificationState:row.verification_state,limitations:row.limitations};}
 function descriptorFromDecision(row){const d=parseJson(row.descriptor_json,{});return {...d,workspaceId:row.workspace_id,projectId:row.project_id,systemSnapshotId:row.system_snapshot_id,controlProfileVersion:row.control_profile_version,decision:row.decision,summary:parseJson(row.summary_json,{}),rationale:row.rationale,decisionMethod:row.decision_method,decisionMakerId:row.decision_maker_id||null,decidedAt:row.decided_at,expiresAt:row.expires_at||null,supersedesDecisionId:row.supersedes_decision_id||null,reassessmentTrigger:d.reassessmentTrigger||null};}
-function verifyRows(rows,digestField,type){for(const row of rows){const stored=parseJson(row.descriptor_json,null);const normalized=type==='test'?descriptorFromTest(row):type==='evidence'?descriptorFromEvidence(row):type==='decision'?descriptorFromDecision(row):type==='evaluation'?descriptorFromEvaluation(row):stored;if(!stored||canonicalJson(stored)!==canonicalJson(normalized)||intelligenceDigest(normalized)!==row[digestField])integrityFailure();}}
-function integrityFailure(){throw Object.assign(new Error('Control Intelligence digest verification failed.'),{statusCode:503,code:'CONTROL_INTELLIGENCE_INTEGRITY_FAILURE'});}
+function descriptorFromBinding(row){const d=parseJson(row.descriptor_json,{});const base={...d,workspaceId:row.workspace_id,projectId:row.project_id,systemSnapshotId:row.system_snapshot_id,entryId:row.entry_id,bindingType:row.binding_type,createdAt:row.created_at};if(row.runtime_event_id)base.runtimeEventId=row.runtime_event_id;if(row.approval_id)base.approvalId=row.approval_id;if(row.approval_requirement_id)base.approvalRequirementId=row.approval_requirement_id;if(row.attribution_mapping_id)base.attributionMappingId=row.attribution_mapping_id;return base;}
+async function verifyRows(rows,digestField,type){for(const row of rows){const stored=parseJson(row.descriptor_json,null);const normalized=type==='test'?descriptorFromTest(row):type==='evidence'?descriptorFromEvidence(row):type==='decision'?descriptorFromDecision(row):type==='evaluation'?descriptorFromEvaluation(row):type==='binding'?descriptorFromBinding(row):stored;if(!stored||canonicalJson(stored)!==canonicalJson(normalized)||intelligenceDigest(normalized)!==row[digestField])await integrityFailure(row,type,'descriptor_or_normalized_mismatch');}}
+async function integrityFailure(row,recordType,reason){const workspaceId=row?.workspace_id||null;const projectId=row?.project_id||null;const recordId=row?.id||null;const fingerprint=intelligenceDigest({workspaceId,projectId,recordType,recordId,reason});const timestamp=nowIso();try{const inserted=await db.prepare(`INSERT INTO control_integrity_audit_dedup (fingerprint,workspace_id,project_id,record_type,record_id,first_seen_at,last_seen_at,occurrence_count) VALUES (?,?,?,?,?,?,?,1) ON CONFLICT(fingerprint) DO NOTHING`).run(fingerprint,workspaceId,projectId,recordType,recordId,timestamp,timestamp);if(Number(inserted.changes)===1)await db.prepare(`INSERT INTO security_audit_log (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('aud_'),workspaceId,projectId,'system',null,'control_intelligence.integrity_failure',recordType,recordId,JSON.stringify({integrityStatus:'failed',reason,systemSnapshotId:row?.system_snapshot_id||(recordType==='system_snapshot'?recordId:null),controlId:row?.entry_id||null}),timestamp);else await db.prepare('UPDATE control_integrity_audit_dedup SET last_seen_at=?,occurrence_count=occurrence_count+1 WHERE fingerprint=?').run(timestamp,fingerprint);}catch(auditError){console.error(JSON.stringify({event:'control_intelligence_integrity_audit_failed',recordType,recordId,projectId,errorCode:auditError?.code||'AUDIT_WRITE_FAILED'}));}throw Object.assign(new Error('Control Intelligence digest verification failed.'),{statusCode:503,code:'CONTROL_INTELLIGENCE_INTEGRITY_FAILURE'});}
 async function findingForControl(access,snapshot,controlId,findingId,allowHistorical=false){if(!findingId)return null;const row=await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=? AND (finding_key=? OR finding_key LIKE ?)').get(clean(findingId,100),access.project.id,controlId,`${controlId}-%`);if(!row)return null;if(!allowHistorical){const failure=await db.prepare('SELECT id FROM control_test_executions WHERE finding_id=? AND workspace_id=? AND project_id=? AND entry_id=? AND system_snapshot_id=?').get(row.id,access.project.workspace_id,access.project.id,controlId,snapshot.id);if(!failure&&snapshot.status!=='current')return null;}return row;}
 function validRetest(row,tests,findings){if(row.execution_kind!=='retest'||row.result!=='passed'||!row.retest_of_execution_id||!row.finding_id||!row.remediation_id||!row.original_snapshot_id)return false;const original=tests.find(x=>x.id===row.retest_of_execution_id);return Boolean(original&&original.result==='failed'&&original.entry_id===row.entry_id&&original.finding_id===row.finding_id&&original.system_snapshot_id===row.original_snapshot_id&&row.system_snapshot_id!==row.original_snapshot_id&&findings.some(f=>f.id===row.finding_id));}
-function requiredApprovalControls(snapshot,applicable){const config=parseJson(snapshot.approval_configuration_json,{});const ids=Array.isArray(config.requiredControlIds)?config.requiredControlIds.map(x=>clean(x,80)):[];return [...new Set(ids.filter(x=>applicable.some(e=>e.entry_id===x)))].sort();}
-function validApproval(row){return row.status==='active'&&!row.consumed_at&&!row.revoked_at&&Date.parse(row.expires_at)>Date.now()&&Boolean(row.action_digest);}
+function requiredApprovalControls(snapshot,applicable){const config=parseJson(snapshot.approval_configuration_json,{});const legacy=Array.isArray(config.requiredControlIds)?config.requiredControlIds:[];const actions=Array.isArray(config.requiredActions)?config.requiredActions.map(item=>item?.controlId):[];const ids=[...legacy,...actions].map(value=>clean(value,80)).filter(Boolean);return [...new Set(ids.filter(value=>applicable.some(e=>e.entry_id===value)))].sort();}
+function validApproval(row){if(row.status!=='active'||row.consumed_at||row.revoked_at||Date.parse(row.expires_at)<=Date.now()||!row.approval_requirement_id)return false;const requirement=parseJson(row.requirement_descriptor,null);const binding=parseJson(row.binding_descriptor,null);if(!requirement||!binding||intelligenceDigest(requirement)!==row.requirement_digest||intelligenceDigest(binding)!==row.binding_digest||binding.requirementDigest!==row.requirement_digest||binding.actionDigest!==row.requirement_action_digest)return false;const expected=runtimeApprovalActionDigest({workspaceId:row.workspace_id,projectId:row.project_id,environment:row.environment,tool:requirement.action,arguments:requirement.parameters});return expected===row.action_digest;}
 function parseJson(value, fallback) { try { return JSON.parse(value); } catch { return fallback; } }
 function clean(value, max = 200) { return String(value ?? '').trim().slice(0, max); }
 function safeTime(value) { if (!value) return null; const time = Date.parse(value); return Number.isFinite(time) ? new Date(time).toISOString() : null; }

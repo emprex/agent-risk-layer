@@ -937,12 +937,15 @@ const server = http.createServer(async (req, res) => {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
                 return;
             const body = await readBody(req);
+            for (const field of ['approvalDigest','actionDigest','requirementDigest','workspaceId','userId']) if (Object.hasOwn(body,field)) return json(res,400,{error:`Caller-supplied ${field} is not accepted.`});
             try {
                 return json(res, 201, { approval: await createRuntimeApproval({
                     projectId: decodeURIComponent(match[1]),
                     userId: req.user.id,
                     toolCall: body.toolCall || body.tool_call,
                     ttlSeconds: body.ttlSeconds || body.ttl_seconds,
+                    controlId: body.controlId,
+                    systemSnapshotId: body.systemSnapshotId,
                 }) });
             }
             catch (error) {

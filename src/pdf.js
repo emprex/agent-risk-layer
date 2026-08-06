@@ -62,6 +62,16 @@ export async function renderReportPdf(report) {
         add(report.evidenceSummary.statement, 10);
         add(`${report.evidenceSummary.verifiedControls}/${report.evidenceSummary.totalControls} controls are supported as verified low-risk controls.`, 9, true);
     }
+    if (report.controlIntelligence) {
+        const ci=report.controlIntelligence;
+        heading('Control Intelligence evidence', 2);
+        add(ci.statement,10,true);
+        add(`Project: ${ci.project.name} | Snapshot: ${ci.systemSnapshot.version} | Digest: ${ci.systemSnapshot.digest}`,8,false,0,3,'muted');
+        add(`Control profile: ${ci.controlProfileVersion} | Profile digest: ${ci.controlProfileDigest}`,8,false,0,5,'muted');
+        add(`Applicable: ${ci.applicableControls} | Unevaluated: ${ci.unevaluatedApplicableControls} | Observed: ${ci.observedControls} | Missing evidence: ${ci.missingEvidence.length} | Open findings: ${ci.openFindings.length}`,9,true);
+        add(`Deployment decision: ${ci.deploymentDecision?.decision||'not recorded'}${ci.stale?' — stale; reassessment required':''}. Runtime evidence: ${ci.runtimeEvidence}. Approval evidence: ${ci.approvalEvidence}.`,9);
+        add(ci.disclaimer,8,false,0,4,'muted');
+    }
     pageBreak();
     heading('2. Risk composition', 1);
     add('Residual risk is not a single checklist total. The model separates what the agent is exposed to, how weak the controls are, and how much reliable evidence supports the answers.', 10);

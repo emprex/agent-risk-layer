@@ -9,8 +9,9 @@ import { createRuntimeApproval, createSecurityProject } from '../src/control-pla
 import { applyProjectRiskKnowledgeProfile } from '../src/risk-knowledge.js';
 import {
   canonicalJson, createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl,
-  intelligenceDigest, recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
+  getControlIntelligenceReportSummary, intelligenceDigest, recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
 } from '../src/control-intelligence.js';
+import { buildAssessmentReport } from '../src/report-service.js';
 
 const randomId = (prefix) => `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
 const root=path.resolve(import.meta.dirname,'..');
@@ -78,10 +79,13 @@ test('control chain requires evidence, links failed tests to findings and derive
 
 test('runtime evidence and exact-action approvals cannot cross snapshot boundaries',async()=>{
   const f=await fixture('runtime-binding');
-  const first=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Approval-bound agent'},tools:[{name:'synthetic.transfer'}],source:'test'}});
+  const first=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Approval-bound agent'},tools:[{name:'synthetic.transfer'}],approvalConfiguration:{requiredActions:[{controlId:'ARL-KB-053',action:'synthetic.transfer',parameters:{target:'test-recipient',value:10},target:'test-recipient',value:10,reuseScope:'one_time'}]},source:'test'}});
   const approval=await createRuntimeApproval({projectId:f.project.id,userId:f.userId,controlId:'ARL-KB-053',systemSnapshotId:first.snapshot.id,toolCall:{name:'synthetic.transfer',arguments:{target:'test-recipient',value:10}}});
   const binding=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE approval_id=?').get(approval.id);
   assert.equal(binding.system_snapshot_id,first.snapshot.id);
+  assert.ok(binding.approval_requirement_id);assert.match(binding.content_digest,/^[a-f0-9]{64}$/);
+  await assert.rejects(()=>createRuntimeApproval({projectId:f.project.id,userId:f.userId,controlId:'ARL-KB-053',systemSnapshotId:first.snapshot.id,toolCall:{name:'synthetic.transfer',arguments:{target:'changed-recipient',value:10}}}),/exact action/i);
+  assert.equal((await db.prepare('SELECT COUNT(*) count FROM runtime_approvals WHERE project_id=?').get(f.project.id)).count,1);
   const second=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Changed approval-bound agent'},tools:[{name:'synthetic.transfer',scope:'expanded'}],source:'test'}});
   await assert.rejects(()=>recordControlEvidence({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:second.snapshot.id,evidenceClass:'observed',sourceType:'runtime_approval',sourceReference:'Exact action approval record',approvalId:approval.id}}),/not bound to this project snapshot/i);
 });
@@ -141,6 +145,18 @@ test('same-project cross-control sources and normalized digest mutations are rej
   const planned=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'passed',observedResult:'safe result'}});
   await db.prepare("UPDATE control_test_executions SET observed_result='tampered' WHERE id=?").run(planned.id);
   await assert.rejects(()=>getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId}),/digest verification/i);
+  assert.equal((await db.prepare("SELECT COUNT(*) count FROM security_audit_log WHERE project_id=? AND action='control_intelligence.integrity_failure' AND target_id=?").get(f.project.id,planned.id)).count,1);
+  await assert.rejects(()=>getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId}),/digest verification/i);
+  assert.equal((await db.prepare("SELECT COUNT(*) count FROM security_audit_log WHERE project_id=? AND action='control_intelligence.integrity_failure' AND target_id=?").get(f.project.id,planned.id)).count,1);
   await db.prepare("UPDATE system_snapshots SET autonomy_level='tampered' WHERE id=?").run(snapshot.id);
   await assert.rejects(()=>getControlIntelligence({projectId:f.project.id,userId:f.userId}),/digest verification/i);
+});
+
+test('customer report includes exact Control Intelligence scope without certification claims',async()=>{
+  const f=await fixture('report');const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Report-bound agent'},source:'test'}});const timestamp=nowIso();const assessmentId=randomId('asm_');
+  const result={score:55,riskBand:'Moderate',headline:'Review required.',decision:'HOLD',methodology:'Evidence-driven contextual assessment.',responses:[],findings:[],attackPaths:[],controls:[],recommendations:[]};
+  await db.prepare(`INSERT INTO assessments (id,user_id,name,agent_type,answers_json,score,risk_band,result_json,paid_tier,access_token,share_token,public_enabled,scoring_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'pro',?,?,0,?,?,?)`).run(assessmentId,f.userId,'Report agent','Test agent','{}',55,'Moderate',JSON.stringify(result),randomId('access_'),randomId('share_'),'arl-risk-v3.2',timestamp,timestamp);
+  await db.prepare(`INSERT INTO remediation_items (id,project_id,assessment_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,'open','{}',?,?,?)`).run(randomId('rem_'),f.project.id,assessmentId,'ARL-KB-053-report','Report linkage','high',f.userId,timestamp,timestamp);
+  const summary=await getControlIntelligenceReportSummary({projectId:f.project.id});assert.equal(summary.systemSnapshot.id,snapshot.id);assert.equal(summary.controlProfileVersion,'ARL-RKA-1.2.0');assert.match(summary.disclaimer,/not an accredited certification/i);
+  const {report}=await buildAssessmentReport(assessmentId,'pro');assert.equal(report.controlIntelligence.systemSnapshot.digest,snapshot.contentDigest);assert.equal(report.controlIntelligence.deploymentDecision,null);assert.ok(report.controlIntelligence.missingEvidence.length>=0);assert.doesNotMatch(JSON.stringify(report.controlIntelligence),/certified|guaranteed security/i);
 });
