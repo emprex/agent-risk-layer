@@ -8,7 +8,7 @@ import { createWorkspace } from '../src/workspaces.js';
 import { createRuntimeApproval, createSecurityProject } from '../src/control-plane.js';
 import { applyProjectRiskKnowledgeProfile } from '../src/risk-knowledge.js';
 import {
-  canonicalJson, createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
+  canonicalJson, createSystemSnapshot, createControlFinding, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
   getControlIntelligenceReportSummary, intelligenceDigest, recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
 } from '../src/control-intelligence.js';
 import { buildAssessmentReport } from '../src/report-service.js';
@@ -48,12 +48,10 @@ test('system snapshots are deterministic, immutable and bind all control evaluat
 test('control chain requires evidence, links failed tests to findings and derives deployment decisions',async()=>{
   const f=await fixture('chain');
   const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Tool agent',components:[]},tools:[{name:'synthetic_tool'}],source:'test'}});
-  await assert.rejects(()=>recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'Unsafe action reached the dry-run adapter.'}}),/must link an existing project finding/i);
-  const findingId=randomId('rem_');const timestamp=nowIso();
-  await db.prepare(`INSERT INTO remediation_items (id,project_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'open','{}',?,?,?)`)
-    .run(findingId,f.project.id,'ARL-KB-053-test','Unsafe synthetic action','high',f.userId,timestamp,timestamp);
-  const failed=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',executionMethod:'bounded_dry_run',observedResult:'Unsafe action reached the dry-run adapter.',failureReason:'Expected denial was absent.',findingId}});
-  assert.equal(failed.findingId,findingId);
+  const draftFailure=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'Unsafe action reached the dry-run adapter.'}});assert.equal(draftFailure.findingId,null);
+  const finding=await createControlFinding({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,testExecutionId:draftFailure.id,title:'Unsafe synthetic action',narrative:'The synthetic action reached the dry-run adapter.',impact:'A protected operation could execute without the expected denial.',affectedAsset:'synthetic tool',impactFacts:{approvalBypass:true}}});const findingId=finding.id;
+  const failed=draftFailure;
+  assert.equal((await db.prepare('SELECT finding_id FROM control_test_executions WHERE id=?').get(failed.id)).finding_id,findingId);assert.equal(finding.contextualSeverity,'high');
   const declared=await recordControlEvidence({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,testExecutionId:failed.id,findingId,evidenceClass:'declared',sourceType:'review_note',sourceReference:'Reviewer statement',limitations:'Not independently observed.'}});
   assert.equal(declared.verificationState,'declared');
   const firstPage=await getControlIntelligence({projectId:f.project.id,userId:f.userId,limit:50});
@@ -151,7 +149,7 @@ test('current records are unique and stale compare-and-swap writers fail closed'
 test('same-project cross-control sources and normalized digest mutations are rejected',async()=>{
   const f=await fixture('scope');const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'scope'},source:'test'}});const timestamp=nowIso();
   const findingId=randomId('rem_');await db.prepare(`INSERT INTO remediation_items (id,project_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'open','{}',?,?,?)`).run(findingId,f.project.id,'ARL-KB-054-test','Other control','high',f.userId,timestamp,timestamp);
-  await assert.rejects(()=>recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'failure',findingId}}),/must link/i);
+  await assert.rejects(()=>recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'failure',findingId}}),/not bound/i);
   const planned=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'passed',observedResult:'safe result'}});
   await db.prepare("UPDATE control_test_executions SET observed_result='tampered' WHERE id=?").run(planned.id);
   await assert.rejects(()=>getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId}),/digest verification/i);

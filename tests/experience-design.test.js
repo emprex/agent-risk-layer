@@ -21,7 +21,7 @@ function primaryNavSignature(html) {
 }
 
 test('every page has one purpose, an accessible landmark shell and reusable navigation', () => {
-  assert.equal(htmlFiles.length, 40);
+  assert.equal(htmlFiles.length, 41);
   const navVariants = new Set();
   for (const name of htmlFiles) {
     const html = read(`public/${name}`);
@@ -41,7 +41,7 @@ test('every page has one purpose, an accessible landmark shell and reusable navi
     assert.equal(new Set(pageIds).size, pageIds.length, `${name} has duplicate IDs`);
     navVariants.add(primaryNavSignature(html));
   }
-  assert.ok(navVariants.size <= 4, `expected at most four role-aware navigation variants, got ${navVariants.size}`);
+  assert.ok(navVariants.size <= 5, `expected at most five role-aware navigation variants, got ${navVariants.size}`);
 });
 
 test('public and signed-in navigation use stable human labels and one primary action', () => {

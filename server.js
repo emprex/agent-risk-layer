@@ -38,7 +38,7 @@ import {
 import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
 import {
     createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
-    recordControlEvidence, recordControlTestExecution, recordDeploymentDecision, closeControlFinding,
+    recordControlEvidence, recordControlTestExecution, recordDeploymentDecision, createControlFinding, closeControlFinding, getControlIntelligenceReportSummary,
 } from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
@@ -779,6 +779,8 @@ const server = http.createServer(async (req, res) => {
                 return json(res, 201, await createSystemSnapshot({ projectId: decodeURIComponent(match[1]), userId: req.user.id, input: body }), { 'Cache-Control': 'private, no-store' });
             } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
         }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/report$/);
+        if(req.method==='GET'&&match){if(!requireUser(req,res)||!requireVerifiedEmail(req,res))return;try{const project=await getSecurityProject({projectId:decodeURIComponent(match[1]),userId:req.user.id});return json(res,200,{report:await getControlIntelligenceReportSummary({projectId:project.id})},{'Cache-Control':'private, no-store'});}catch(error){return json(res,error.statusCode||400,{error:error.message},{'Cache-Control':'private, no-store'});}}
         match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)$/);
         if (req.method === 'GET' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
@@ -810,6 +812,8 @@ const server = http.createServer(async (req, res) => {
             try { return json(res, 201, { evidence: await recordControlEvidence({ projectId: decodeURIComponent(match[1]), controlId: decodeURIComponent(match[2]), userId: req.user.id, input: body }) }); }
             catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
         }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)\/findings$/);
+        if(req.method==='POST'&&match){if(!requireUser(req,res)||!requireVerifiedEmail(req,res))return;const body=await readBody(req);for(const field of ['severity','creatorId','workspaceId','projectId','controlDigest','profileVersion','createdAt','integrityDigest','deploymentImpact'])if(Object.hasOwn(body,field))return json(res,400,{error:`Caller-supplied ${field} is not accepted.`});try{return json(res,201,{finding:await createControlFinding({projectId:decodeURIComponent(match[1]),controlId:decodeURIComponent(match[2]),userId:req.user.id,input:body})},{'Cache-Control':'private, no-store'});}catch(error){return json(res,error.statusCode||400,{error:error.message,code:error.code||undefined},{'Cache-Control':'private, no-store'});}}
         match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/deployment-decisions$/);
         if (req.method === 'POST' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;

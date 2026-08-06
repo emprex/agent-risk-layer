@@ -127,8 +127,7 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
   if (!['initial','retest'].includes(executionKind)) throw badRequest('Execution kind must be initial or retest.');
   let finding = null; let original=null; let remediation=null;
   if (result === 'failed') {
-    finding = await findingForControl(access,snapshot,controlId,input.findingId);
-    if (!finding) throw conflict('A failed test must link an existing project finding/remediation record.');
+    if(input.findingId){finding = await findingForControl(access,snapshot,controlId,input.findingId);if (!finding) throw conflict('The selected finding is not bound to this control and snapshot.');}
   }
   if (executionKind==='retest') {
     original=await db.prepare("SELECT * FROM control_test_executions WHERE id=? AND workspace_id=? AND project_id=? AND entry_id=? AND result='failed'").get(clean(input.retestOfExecutionId,100),access.project.workspace_id,projectId,controlId);
@@ -159,6 +158,24 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
   if(finding&&executionKind==='initial'){const bindingDescriptor={schema:'arl.control-finding-binding.v1',workspaceId:access.project.workspace_id,projectId,systemSnapshotId:snapshot.id,entryId:controlId,findingId:finding.id,bindingMethod:'failed_test',boundBy:userId,createdAt:timestamp};const sourceDigest=intelligenceDigest({id:finding.id,projectId:finding.project_id,findingKey:finding.finding_key,title:finding.title,status:finding.status,createdAt:finding.created_at});await db.prepare(`INSERT INTO control_finding_bindings (id,workspace_id,project_id,system_snapshot_id,entry_id,finding_id,source_digest,binding_method,bound_by,descriptor_json,content_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('cfb_'),access.project.workspace_id,projectId,snapshot.id,controlId,finding.id,sourceDigest,'failed_test',userId,canonicalJson(bindingDescriptor),intelligenceDigest(bindingDescriptor),timestamp);}
   await audit(access, userId, 'control_intelligence.test_recorded', 'control_test_execution', executionId, { controlId, result, contentDigest });});
   return { id: executionId, ...descriptor, contentDigest };
+}
+
+export async function createControlFinding({projectId,controlId,userId,input={}}){
+  let result;
+  await db.transaction(async()=>{
+    const access=await requireAccess(projectId,userId,RECORD_ROLES,true),snapshot=await requireCurrentSnapshot(access,input.systemSnapshotId);
+    const execution=await db.prepare("SELECT * FROM control_test_executions WHERE id=? AND workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND result='failed' AND execution_kind='initial'").get(clean(input.testExecutionId,100),access.project.workspace_id,projectId,snapshot.id,controlId);
+    if(!execution)throw conflict('Create a finding from an executed failed test for this control and snapshot.');
+    if(execution.finding_id)throw conflict('An active finding already exists for this failed execution.');
+    const title=clean(input.title,240),narrative=clean(input.narrative,2000),impact=clean(input.impact,2000);if(title.length<3||narrative.length<10||impact.length<5)throw badRequest('Finding title, what happened and impact are required.');
+    const {impactFacts:rawImpactFacts,...customerFields}=input;rejectSensitive(customerFields);const allowedImpactFacts=['crossTenantAccess','secretExposure','financialAction','administrativeAction','irreversibleSideEffect','approvalBypass','availabilityImpact'];const suppliedFlags=rawImpactFacts&&typeof rawImpactFacts==='object'?rawImpactFacts:{};const flags=Object.fromEntries(allowedImpactFacts.filter(key=>suppliedFlags[key]===true).map(key=>[key,true]));const severe=['crossTenantAccess','secretExposure','financialAction','administrativeAction','irreversibleSideEffect','approvalBypass'].filter(key=>flags[key]);const severity=severe.length>=2?'critical':severe.length===1?'high':flags.availabilityImpact?'medium':'low';
+    const findingId=id('rem_'),timestamp=nowIso(),findingKey=`${controlId}-${execution.id}`;const verification={schema:'arl.control-finding.v1',failedExecutionId:execution.id,expectedResult:execution.expected_result,observedResult:execution.observed_result,narrative,affectedAsset:clean(input.affectedAsset,500),impact,sideEffectOutcome:clean(input.sideEffectOutcome,50),reproductionSummary:clean(input.reproductionSummary,1000),containment:clean(input.containment,1000),limitations:clean(input.limitations,1000),impactFacts:Object.keys(flags),creatorId:userId,createdAt:timestamp};verification.integrityDigest=intelligenceDigest(verification);
+    await db.prepare(`INSERT INTO remediation_items (id,project_id,finding_key,title,severity,status,owner_email,due_at,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?,?,?)`).run(findingId,projectId,findingKey,title,severity,clean(input.ownerEmail,254)||null,safeTime(input.dueAt),JSON.stringify(verification),userId,timestamp,timestamp);
+    const bindingDescriptor={schema:'arl.control-finding-binding.v1',workspaceId:access.project.workspace_id,projectId,systemSnapshotId:snapshot.id,entryId:controlId,findingId,bindingMethod:'failed_test',confirmationMethod:'customer_confirmed',boundBy:userId,createdAt:timestamp};const sourceDigest=intelligenceDigest({id:findingId,projectId,findingKey,title,status:'open',createdAt:timestamp});
+    await db.prepare(`INSERT INTO control_finding_bindings (id,workspace_id,project_id,system_snapshot_id,entry_id,finding_id,source_digest,binding_method,bound_by,descriptor_json,content_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id('cfb_'),access.project.workspace_id,projectId,snapshot.id,controlId,findingId,sourceDigest,'failed_test',userId,canonicalJson(bindingDescriptor),intelligenceDigest(bindingDescriptor),timestamp);
+    const descriptor={...parseJson(execution.descriptor_json,{}),findingId};await db.prepare('UPDATE control_test_executions SET finding_id=?,descriptor_json=?,content_digest=? WHERE id=?').run(findingId,canonicalJson(descriptor),intelligenceDigest(descriptor),execution.id);
+    await audit(access,userId,'control_intelligence.finding_created','remediation',findingId,{controlId,testExecutionId:execution.id,severityStatus:'evaluated',contextualSeverity:severity});result={id:findingId,title,status:'open',contextualSeverity:severity,severityStatus:'evaluated',failedTestExecutionId:execution.id,snapshotId:snapshot.id,controlId,owner:clean(input.ownerEmail,254)||null,createdAt:timestamp};
+  });return result;
 }
 
 export async function recordControlEvidence({ projectId, controlId, userId, input = {} }) {
@@ -352,7 +369,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
   await verifyRows(decisions,'decision_digest','decision');
   const bindings=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY created_at DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id);
   await verifyRows(bindings,'content_digest','binding');
-  const derived = { tests:testHistory, evidence, links, remediations, runtime, approvals, decisions };
+  const derived = { tests:testHistory, evidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
     control: { id: evaluation.entry_id, title: evaluation.title, category: evaluation.category, problem: parseJson(evaluation.problem_json, {}),
@@ -369,9 +386,9 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
 
 async function loadDerivedRows(access, snapshot, evaluations) {
   const entryIds = evaluations.map((row) => row.entry_id);
-  if (!entryIds.length) return { entries: [], checks: [], tests: [], evidence: [], links: [], remediations: [], runtime: [], approvals: [], decisions: [], decisionEvidence: [] };
+  if (!entryIds.length) return { entries: [], checks: [], tests: [], evidence: [], links: [], remediations: [], runtime: [], approvals: [], requirements:[], decisions: [], decisionEvidence: [] };
   const marks = entryIds.map(() => '?').join(',');
-  const [entries,checks,tests,evidence,links,remediations,runtime,approvals,decisions,decisionEvidence] = await Promise.all([
+  const [entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence] = await Promise.all([
     db.prepare(`SELECT e.id,e.title,e.category,e.problem_json,e.knowledge_version,e.content_digest,COALESCE(v.lifecycle_status,'candidate') lifecycle_status,
       (SELECT default_owner FROM risk_knowledge_solutions s WHERE s.entry_id=e.id ORDER BY s.priority,s.id LIMIT 1) accountable_owner
       FROM risk_knowledge_entries e LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
@@ -385,6 +402,7 @@ async function loadDerivedRows(access, snapshot, evaluations) {
       FROM runtime_events r JOIN control_snapshot_runtime_bindings b ON b.runtime_event_id=r.id AND b.system_snapshot_id=? WHERE r.project_id=? ORDER BY r.created_at DESC LIMIT 250`).all(snapshot.id, access.project.id),
     db.prepare(`SELECT b.entry_id,b.workspace_id,b.project_id,b.approval_requirement_id,b.descriptor_json binding_descriptor,b.content_digest binding_digest,a.id,a.tool_name,a.environment,a.action_digest,a.status,a.issued_at,a.expires_at,a.consumed_at,a.revoked_at,a.runtime_event_id,q.descriptor_json requirement_descriptor,q.requirement_digest,q.action_digest requirement_action_digest,q.reuse_scope
       FROM runtime_approvals a JOIN control_snapshot_runtime_bindings b ON b.approval_id=a.id AND b.system_snapshot_id=? JOIN control_approval_requirements q ON q.id=b.approval_requirement_id WHERE a.workspace_id=? AND a.project_id=? ORDER BY a.issued_at DESC LIMIT 250`).all(snapshot.id, access.project.workspace_id, access.project.id),
+    db.prepare('SELECT entry_id,requirement_digest FROM control_approval_requirements WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id,access.project.id,snapshot.id),
     db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? ORDER BY decided_at DESC LIMIT 25').all(access.project.workspace_id, access.project.id),
     db.prepare(`SELECT de.decision_id,de.evidence_id,de.relationship FROM deployment_decision_evidence de
       JOIN control_deployment_decisions d ON d.id=de.decision_id WHERE d.workspace_id=? AND d.project_id=? AND d.system_snapshot_id=? LIMIT 500`).all(access.project.workspace_id,access.project.id,snapshot.id),
@@ -392,7 +410,7 @@ async function loadDerivedRows(access, snapshot, evaluations) {
   await verifyRows(tests, 'content_digest','test');
   await verifyRows(evidence, 'integrity_digest','evidence');
   await verifyRows(decisions,'decision_digest','decision');
-  return { entries,checks,tests,evidence,links,remediations,runtime,approvals,decisions,decisionEvidence };
+  return { entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence };
 }
 
 export async function prepareControlIntelligenceSourcePurge({ projectId, runtimeEventIds = [], approvalIds = [], timestamp = nowIso() }) {
@@ -418,7 +436,7 @@ export async function getControlIntelligenceReportSummary({projectId}){
   const decisions=await db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY decided_at DESC LIMIT 1').all(project.workspace_id,project.id,snapshot.id);await verifyRows(decisions,'decision_digest','decision');
   const findings=await db.prepare(`SELECT r.id,r.status,r.severity,b.entry_id FROM remediation_items r JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? ORDER BY r.updated_at DESC LIMIT 250`).all(project.workspace_id,project.id,snapshot.id);
   const applicable=evaluations.filter(row=>row.applicability_status==='applicable');const observed=new Set(evidence.filter(row=>row.verification_state==='verified'&&row.retention_status==='active').map(row=>row.entry_id));const currentDecision=decisions[0]||null;
-  const applicabilityDecisions=applicabilityRevisions.map(row=>({controlId:row.entry_id,decision:row.decision,reason:row.reason,architectureFacts:parse(row.architecture_facts_json,[]),evaluatedAt:row.evaluated_at,evaluatorRole:row.evaluator_role}));
+  const applicabilityDecisions=applicabilityRevisions.map(row=>({controlId:row.entry_id,decision:row.decision,reason:row.reason,architectureFacts:parseJson(row.architecture_facts_json,[]),evaluatedAt:row.evaluated_at,evaluatorRole:row.evaluator_role}));
   return {statement:'AgentRiskLayer Security Assessment — assessed against AgentRiskLayer Control Profile ARL-RKA-1.2.0.',disclaimer:'This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free.',project:{id:project.id,name:project.name},systemSnapshot:{id:snapshot.id,version:snapshot.version_identifier,digest:snapshot.content_digest},controlProfileVersion:'ARL-RKA-1.2.0',controlProfileDigest:intelligenceDigest(evaluations.map(row=>({id:row.entry_id,digest:row.entry_digest}))),scope:{included:'Current snapshot-bound controls and evidence.',exclusions:'Historical or unbound evidence does not qualify.'},controlsReviewed:applicabilityDecisions.length,applicabilityDecisions,applicableControls:applicable.length,notApplicableControls:applicabilityDecisions.filter(row=>row.decision==='not_applicable').length,contextRequiredControls:applicabilityDecisions.filter(row=>row.decision==='context_required').length,unevaluatedApplicableControls:applicable.filter(row=>row.severity_status==='not_evaluated').length,observedControls:observed.size,missingEvidence:applicable.filter(row=>!observed.has(row.entry_id)).map(row=>row.entry_id),openFindings:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).map(row=>({id:row.id,controlId:row.entry_id,status:row.status,severity:row.severity})),retestStatus:{required:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).length},runtimeEvidence:evidence.filter(row=>row.evidence_class==='runtime').length,approvalEvidence:evidence.filter(row=>row.approval_id).length,deploymentDecision:currentDecision?serializeDecision(currentDecision):null,stale:Boolean(currentDecision&&currentDecision.status!=='current'),integrityFailures:0,limitations:['Candidate controls remain candidate content.','Framework mappings are informative and do not establish compliance.']};
 }
 
@@ -436,7 +454,7 @@ function deriveChains(evaluations, data) {
     const passed = tests.some((row) => row.result === 'passed');
     const activeEvidence = evidence.some((row) => row.retention_status === 'active' && row.verification_state === 'verified');
     const runtimeRegression = links.some((row) => row.subject_type === 'runtime_event') && data.runtime.some((row) => row.decision === 'deny' && links.some((link) => link.subject_id === row.id));
-    const approvalRequired=data.approvals.some(row=>row.entry_id===controlId)||false;
+    const approvalRequired=(data.requirements||[]).some(row=>row.entry_id===controlId);
     const executed=tests.filter(row=>row.result!=='planned');const latest=tests[0];const verifiedEvidence=evidence.some(row=>row.retention_status==='active'&&row.verification_state==='verified');
     let chainStatus = 'applicable_unassessed';
     if (evaluation.stale_at) chainStatus = 'reassessment_required';
