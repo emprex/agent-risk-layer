@@ -1,4 +1,4 @@
-# Risk knowledge API contract — ARL-RKA-1.1.0
+# Risk knowledge API contract — ARL-RKA-1.2.0
 
 This contract describes the implementation in this repository. It reuses the existing session, verified-email, CSRF, workspace/project-role, audit, rate-limit, retention and error-handling paths. It does not create a parallel identity, findings or evidence system.
 
@@ -6,7 +6,9 @@ This contract describes the implementation in this repository. It reuses the exi
 
 ### `GET /api/risk-knowledge`
 
-Query fields: `query`, `category`, `severity`, `framework`, `owner`, `testMode`, `automationStatus`, `limit`, `offset`.
+Query fields: `query`, `category`, `severity`, `framework`, `owner`, `validationStatus`, `testMode`, `automationStatus`, `sort`, `limit`, `offset`.
+
+Returns `items`, compatibility alias `entries`, `total`, `limit`, `offset`, `hasMore`, dynamic filter options with counts, and `knowledgeVersion`. The maximum page size is 250. Search covers ID, title, category, problem, remediation and framework names/references.
 
 Returns active entries with public problem information, category, default severity, high-level owner/remediation summary, operational classification and informative mappings. It does not return exact check methods, required evidence, pass/fail criteria, retest acceptance or project evidence. The response is versioned and publicly cacheable for five minutes.
 
@@ -45,7 +47,11 @@ Requires an authenticated account with a verified email.
 
 - JSON and YAML include the knowledge version, entry digest, limitations and control manifest.
 - Rego returns 409 unless the entry has a reviewed executable rule, `machine_rule_status='verified'`, and Rego export is explicitly enabled.
-- No entry in ARL-RKA-1.1.0 is represented as having a verified machine rule.
+- No entry in ARL-RKA-1.2.0 is represented as having a verified machine rule or verified automation.
+
+### `GET /api/risk-knowledge-predicates`
+
+Returns the authoritative 66-predicate registry, including provenance classification, dependencies, conditional-display rules and the justification for facts that require observation, metadata or manual review.
 
 ## Project workflow
 

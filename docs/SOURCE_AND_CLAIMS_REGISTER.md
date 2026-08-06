@@ -22,7 +22,7 @@ The catalogue is original AgentRiskLayer content. External standards and guidanc
 
 ## Review date
 
-- Retrieved/reviewed: 2026-08-05
+- Retrieved/reviewed: 2026-08-05; catalogue engineering review: 2026-08-06
 - Earliest scheduled entry review: 2026-10-04 (critical entries); each entry follows its own risk-based interval
 - Earlier review is required after a material source update, new attack evidence, customer incident, control bypass or architecture change.
 
@@ -35,10 +35,12 @@ The catalogue is original AgentRiskLayer content. External standards and guidanc
 - Do not claim accreditation, regulatory approval, government approval, EU AI Act certification or guaranteed security.
 
 
-## ARL-RKA-1.1.0 metric correction
+## ARL-RKA-1.2.0 metric and validation boundary
 
 - OWASP Agentic Top 10: 57 mapping records across 56 unique entries.
 - The earlier figure of 82 mapped controls is unsupported and must not be used.
 - Mapping counts are informative alignments, not proof that the mapped framework requirement is fully implemented or satisfied.
 - Structured applicability predicates are derived from the existing applicability labels. Unknown architecture facts remain review-required.
 - Operational metadata is expert-authored candidate metadata. No control is marked as having a verified machine rule or verified full automation in this release.
+- All 108 entries remain `candidate`. No age, view, usage or test count promotes lifecycle state. Customer exercise requires a real assessment reference; independent review requires an identified reviewer or organisation and evidence.
+- The enriched test content is original expert-authored guidance and has not been represented as an incident history, customer benchmark or independent validation.

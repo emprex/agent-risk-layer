@@ -10,6 +10,7 @@ import {
   assertRegoExportAllowed,
   validateArchitectureFacts,
   ARCHITECTURE_FACT_KEYS,
+  ARCHITECTURE_PREDICATE_REGISTRY,
 } from '../src/risk-knowledge-core.js';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '..');
@@ -29,9 +30,9 @@ function read(name) {
   return fs.readFileSync(found, 'utf8');
 }
 
-test('v1.1 asset has complete unique records and corrected metrics', () => {
-  assert.equal(asset.schema, 'arl.risk-knowledge-asset.v1.1');
-  assert.equal(asset.asset.version, 'ARL-RKA-1.1.0');
+test('v1.2 asset has complete unique candidate records and corrected metrics', () => {
+  assert.equal(asset.schema, 'arl.risk-knowledge-asset.v1.2');
+  assert.equal(asset.asset.version, 'ARL-RKA-1.2.0');
   assert.equal(asset.entries.length, 108);
   assert.equal(new Set(asset.entries.map((entry) => entry.id)).size, 108);
   assert.equal(asset.asset.verified_metrics.framework_mapping_records['OWASP Agentic Top 10 2026'], 57);
@@ -39,7 +40,8 @@ test('v1.1 asset has complete unique records and corrected metrics', () => {
   assert.match(asset.asset.verified_metrics.metric_note, /82 mapped controls is not supported/i);
   for (const entry of asset.entries) {
     assert.match(entry.content_digest, /^[a-f0-9]{64}$/);
-    assert.equal(entry.knowledge_version, 'ARL-RKA-1.1.0');
+    assert.equal(entry.knowledge_version, 'ARL-RKA-1.2.0');
+    assert.equal(entry.validation.status, 'candidate');
     assert.ok(entry.applicability_profile.clauses.length >= 1);
     assert.equal(entry.applicability_profile.unknown_fact_behavior, 'include_for_review');
     assert.ok(['automated','hybrid','manual'].includes(entry.operational_metadata.test_mode));
@@ -48,6 +50,26 @@ test('v1.1 asset has complete unique records and corrected metrics', () => {
     assert.equal(entry.operational_metadata.export_capabilities.rego, false);
     assert.ok(entry.operational_metadata.review_interval_days >= 1);
     assert.match(entry.claims_boundary, /not an accredited certification/i);
+  }
+});
+
+test('all applicability predicates have an authoritative provenance classification', () => {
+  assert.equal(ARCHITECTURE_PREDICATE_REGISTRY.length, 66);
+  assert.deepEqual(new Set(ARCHITECTURE_PREDICATE_REGISTRY.map((item) => item.key)), new Set(ARCHITECTURE_FACT_KEYS));
+  const allowed = new Set(['user-answerable','derived-from-answer','system-observed','project-metadata-derived','manual-review-only']);
+  for (const item of ARCHITECTURE_PREDICATE_REGISTRY) {
+    assert.ok(allowed.has(item.classification), item.key);
+    assert.ok(item.justification.length > 20, item.key);
+  }
+});
+
+test('all 108 controls have distinct evidence and retest blocks with complete test fields', () => {
+  for (const field of ['pass_condition','fail_condition']) assert.equal(new Set(asset.entries.map((entry) => entry.check[field])).size, 108, field);
+  for (const field of ['required_evidence']) assert.equal(new Set(asset.entries.map((entry) => JSON.stringify(entry.check[field]))).size, 108, field);
+  for (const field of ['implementation_principles','retest_acceptance']) assert.equal(new Set(asset.entries.map((entry) => JSON.stringify(entry.solution[field]))).size, 108, field);
+  for (const entry of asset.entries) {
+    for (const field of ['preconditions','positive_test','negative_test','required_identities','required_inputs_and_expected_outputs','safe_testing_constraints']) assert.ok(entry.check[field]?.length, `${entry.id} ${field}`);
+    for (const field of ['immediate_containment','root_cause_remediation','preventive_control','monitoring','rollback_considerations','retest_requirements','evidence_required_to_close']) assert.ok(entry.solution[field]?.length, `${entry.id} ${field}`);
   }
 });
 
@@ -96,12 +118,14 @@ test('manifest exports preserve limitations and Rego remains blocked without ver
   assert.doesNotThrow(() => assertRegoExportAllowed({ operationalMetadata: { machineRuleStatus: 'verified', exportCapabilities: { rego: true } } }));
 });
 
-test('migrations are additive and create normalized v1.1 tables', () => {
+test('migrations are additive and create normalized lifecycle tables', () => {
   const base = read('009_risk_knowledge_asset.sql');
   const v11 = read('011_risk_knowledge_v1_1.sql');
+  const lifecycle = read('013_risk_knowledge_evidence_lifecycle.sql');
   for (const table of ['risk_knowledge_entries','risk_knowledge_checks','risk_knowledge_solutions','risk_knowledge_references','risk_knowledge_mappings','risk_knowledge_links']) assert.match(base, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
   for (const table of ['risk_knowledge_applicability_rules','risk_knowledge_operational_metadata','project_risk_knowledge_states']) assert.match(v11, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
-  const all = `${base}\n${v11}`;
+  for (const table of ['risk_knowledge_validation_records','risk_knowledge_predicate_registry','project_risk_context','risk_knowledge_entry_classification']) assert.match(lifecycle, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
+  const all = `${base}\n${v11}\n${lifecycle}`;
   assert.doesNotMatch(all, /\bDROP\s+(?:TABLE|COLUMN)\b/i);
   assert.doesNotMatch(all, /\bTRUNCATE\b/i);
 });

@@ -3,9 +3,9 @@
 ## Inspected baseline
 
 - Source archive: `agent-risk-layer-fix-main.zip`
-- Archive baseline recorded by the owner workflow: repository commit `7e31f0d`
-- Local inspection repository: `/mnt/data/arl-repo`
-- Existing latest migration before this change: `008_runtime_approval_integrity.sql`
+- Verified repository baseline: commit `02271bf`
+- Local inspection repository: `/home/guillaume/agent-risk-layer-fix`
+- Existing latest migration before this change: `012_seed_risk_knowledge_v1_1.sql`
 - Application shape: Node.js HTTP server, PostgreSQL production adapter, isolated SQLite test adapter, existing workspace/project roles and evidence workflow
 
 The source archive contains committed files only. It does not prove the state of the live Render service or any uncommitted work on the owner’s Debian machine.
@@ -16,6 +16,8 @@ The source archive contains committed files only. It does not prove the state of
 - `migrations/010_seed_risk_knowledge_v1.sql`
 - `migrations/011_risk_knowledge_v1_1.sql`
 - `migrations/012_seed_risk_knowledge_v1_1.sql`
+- `migrations/013_risk_knowledge_evidence_lifecycle.sql`
+- `migrations/014_seed_risk_knowledge_v1_2.sql`
 
 The migrations are additive. Seed transaction-control statements were removed because the existing PostgreSQL migration runner already wraps the complete migration sequence in one advisory-lock transaction. Tests reject future top-level `BEGIN`, `COMMIT` or `ROLLBACK` statements in migration files.
 
@@ -26,6 +28,7 @@ Created structures:
 - structured applicability predicates
 - operational metadata
 - per-project evidence-readiness state
+- lifecycle review records, a predicate provenance registry and contextual project-risk records
 
 ## Integrated server and service changes
 
@@ -73,4 +76,4 @@ Local validation exercises the SQLite compatibility adapter, fake PostgreSQL ada
 3. Run migrations against a disposable PostgreSQL database and verify rollback/restore before production.
 4. Review the intended diff and secret scan; stage only intended files.
 5. Commit, pull with rebase, push through the existing HTTPS token workflow and verify the remote commit.
-6. Verify Render readiness reports migrations 009–012 and test the public, authenticated and cross-tenant journeys in production.
+6. Verify Render readiness reports migrations 009–014 and test the public, authenticated and cross-tenant journeys in production.

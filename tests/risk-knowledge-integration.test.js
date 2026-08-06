@@ -47,8 +47,10 @@ async function insertRuntimeEvent(projectId, { id = randomId('rte_'), createdAt 
 }
 
 test('risk knowledge seed, public boundary, profiling and project state are integrated', async () => {
-  const entries = await listRiskKnowledge({ limit: 250 });
+  const { items: entries, total, hasMore } = await listRiskKnowledge({ limit: 250 });
   assert.equal(entries.length, 108);
+  assert.equal(total, 108);
+  assert.equal(hasMore, false);
   assert.equal(entries.some((entry) => Object.hasOwn(entry, 'checks')), false);
   assert.equal(entries.some((entry) => entry.operationalMetadata?.machineRule), false);
 
@@ -80,6 +82,35 @@ test('risk knowledge seed, public boundary, profiling and project state are inte
   const readiness = await getProjectEvidenceReadiness({ workspaceId: workspace.id, projectId: project.id });
   assert.equal(readiness.states.length, 108);
   assert.equal(readiness.states.find((state) => state.entryId === 'ARL-KB-053').applicabilityStatus, 'applicable');
+});
+
+test('pagination exposes controls 101 through 108 with complete result semantics', async () => {
+  const first = await listRiskKnowledge({ limit: 100, offset: 0 });
+  assert.equal(first.items.length, 100);
+  assert.equal(first.total, 108);
+  assert.equal(first.hasMore, true);
+  const final = await listRiskKnowledge({ limit: 100, offset: 100 });
+  assert.equal(final.items.length, 8);
+  assert.equal(final.total, 108);
+  assert.equal(final.offset, 100);
+  assert.equal(final.hasMore, false);
+  assert.deepEqual(final.items.map((entry) => entry.id), ['ARL-KB-101','ARL-KB-102','ARL-KB-103','ARL-KB-104','ARL-KB-105','ARL-KB-106','ARL-KB-107','ARL-KB-108']);
+});
+
+test('knowledge digest and linked evidence version mismatches fail safely', async () => {
+  const original = await db.prepare('SELECT knowledge_version,content_digest FROM risk_knowledge_entries WHERE id=?').get('ARL-KB-001');
+  try {
+    await db.prepare('UPDATE risk_knowledge_entries SET content_digest=? WHERE id=?').run('0'.repeat(64), 'ARL-KB-001');
+    await assert.rejects(() => getRiskKnowledgeEntry('ARL-KB-001'), /integrity verification/i);
+  } finally {
+    await db.prepare('UPDATE risk_knowledge_entries SET knowledge_version=?,content_digest=? WHERE id=?').run(original.knowledge_version, original.content_digest, 'ARL-KB-001');
+  }
+  const scope = await fixture('digest-link');
+  await applyProjectRiskKnowledgeProfile({ workspaceId: scope.workspace.id, projectId: scope.project.id, architectureFacts: { uses_tools: true }, userId: scope.userId });
+  const eventId = await insertRuntimeEvent(scope.project.id);
+  await linkRiskKnowledge({ workspaceId: scope.workspace.id, projectId: scope.project.id, subjectType: 'runtime_event', subjectId: eventId, entryId: 'ARL-KB-053', userId: scope.userId, subjectResolver: resolveRiskKnowledgeSubject });
+  await db.prepare('UPDATE risk_knowledge_links SET knowledge_version=? WHERE project_id=? AND entry_id=?').run('ARL-RKA-stale', scope.project.id, 'ARL-KB-053');
+  await assert.rejects(() => getProjectEvidenceReadiness({ workspaceId: scope.workspace.id, projectId: scope.project.id }), /integrity verification/i);
 });
 
 test('evidence links are tenant-bound and state advancement requires authoritative evidence', async () => {

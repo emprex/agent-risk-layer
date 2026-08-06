@@ -36,16 +36,18 @@
       <form id="riskFilters" class="risk-filter-grid">
         <div class="field"><label for="riskQuery">Search</label><input id="riskQuery" name="query" type="search" maxlength="160" placeholder="Prompt injection, tenant isolation, approval…"></div>
         <div class="field"><label for="riskCategory">Category</label><select id="riskCategory" name="category"><option value="">All categories</option></select></div>
-        <div class="field"><label for="riskSeverity">Severity</label><select id="riskSeverity" name="severity"><option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+        <div class="field"><label for="riskSeverity">Default severity</label><select id="riskSeverity" name="severity"><option value="">All severities</option></select></div>
         <div class="field"><label for="riskFramework">Framework</label><select id="riskFramework" name="framework"><option value="">All frameworks</option></select></div>
         <div class="field"><label for="riskOwner">Owner</label><select id="riskOwner" name="owner"><option value="">All owners</option></select></div>
-        <div class="field"><label for="riskTestMode">Test mode</label><select id="riskTestMode" name="testMode"><option value="">All modes</option><option value="hybrid">Hybrid</option><option value="manual">Manual</option><option value="automated">Automated</option></select></div>
-        <div class="field"><label for="riskAutomationStatus">Automation status</label><select id="riskAutomationStatus" name="automationStatus"><option value="">All statuses</option><option value="verified">Verified</option><option value="candidate">Candidate</option><option value="unsupported">Unsupported</option></select></div>
+        <div class="field"><label for="riskValidationStatus">Validation status</label><select id="riskValidationStatus" name="validationStatus"><option value="">All validation states</option></select></div>
+        <div class="field"><label for="riskTestMode">Test mode</label><select id="riskTestMode" name="testMode"><option value="">All modes</option></select></div>
+        <div class="field"><label for="riskAutomationStatus">Automation status</label><select id="riskAutomationStatus" name="automationStatus"><option value="">All statuses</option></select></div>
+        <div class="field"><label for="riskSort">Sort</label><select id="riskSort" name="sort"><option value="id">Control ID</option><option value="relevance">Relevance</option><option value="severity">Default severity</option><option value="reviewDate">Review date</option></select></div>
         <button class="button primary" type="submit">Search</button>
       </form>
     </section>
     <div id="riskLibraryStatus" class="risk-library-status" role="status">Loading risk knowledge…</div>
-    <section id="riskLibraryResults" class="risk-library-grid" aria-live="polite"></section>
+    <section id="riskLibraryResults" class="risk-library-grid" aria-live="polite"></section><div class="button-row"><button id="riskLoadMore" class="button ghost" type="button" hidden>Load more controls</button></div>
   </main>
   <footer class="site-footer-v10">
     <div class="footer-grid">

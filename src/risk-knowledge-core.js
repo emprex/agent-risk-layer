@@ -17,6 +17,44 @@ export const ARCHITECTURE_FACT_KEYS = Object.freeze([
   'uses_state_changing_tools','uses_text_filters','uses_tools','uses_vector_or_embedding_store',
 ]);
 
+const SYSTEM_OBSERVED_FACTS = new Set(['has_runtime_policy','is_assessed','is_containerized','is_deployable']);
+const PROJECT_METADATA_FACTS = new Set(['has_enterprise_workspaces','has_multiple_environments','is_hosted','is_production']);
+const DERIVED_FACTS = Object.freeze({
+  handles_files_messages_or_browser_data: ['uses_filesystem_tools','creates_messages_or_logs','uses_external_content'],
+  is_consequential: ['performs_high_impact_actions','supports_high_impact_decisions'],
+  is_financial_administrative_or_safety_impacting: ['performs_money_deletion_deployment_or_access_changes','affects_people_rights_safety_or_regulated_activity'],
+  is_high_value: ['processes_non_public_data','performs_high_impact_actions'],
+  is_knowledge_or_decision_support: ['uses_rag','supports_high_impact_decisions'],
+  has_stateful_runtime: ['uses_memory','uses_state_changing_tools'],
+});
+const MANUAL_REVIEW_FACTS = new Set(['has_accountable_decisions','has_confidential_context','has_decentralized_ai_adoption','has_support_or_delegation','requires_defensible_evidence']);
+const CONDITIONAL_PARENT = Object.freeze({
+  uses_state_changing_tools: 'uses_tools', uses_dynamic_tools: 'uses_tools', uses_network_tools: 'uses_tools', uses_filesystem_tools: 'uses_tools', uses_code_execution: 'uses_tools', uses_mcp: 'uses_tools',
+  uses_rag: 'uses_external_content', uses_vector_or_embedding_store: 'uses_rag', uses_multiple_context_sources: 'uses_rag',
+  uses_memory: 'has_stateful_runtime', uses_custom_or_finetuned_model: 'is_model_backed', uses_self_hosted_or_imported_model: 'is_model_backed', uses_multiple_model_providers: 'is_model_backed', uses_changeable_models: 'is_model_backed',
+  requires_human_approval: 'performs_high_impact_actions', performs_money_deletion_deployment_or_access_changes: 'performs_high_impact_actions',
+  has_multiple_roles: 'is_multi_user', has_enterprise_workspaces: 'is_multi_tenant', outputs_to_web: 'is_public',
+});
+
+export const ARCHITECTURE_PREDICATE_REGISTRY = Object.freeze(ARCHITECTURE_FACT_KEYS.map((key) => {
+  const classification = DERIVED_FACTS[key] ? 'derived-from-answer'
+    : SYSTEM_OBSERVED_FACTS.has(key) ? 'system-observed'
+      : PROJECT_METADATA_FACTS.has(key) ? 'project-metadata-derived'
+        : MANUAL_REVIEW_FACTS.has(key) ? 'manual-review-only' : 'user-answerable';
+  return Object.freeze({
+    key,
+    label: key.replaceAll('_', ' ').replace(/^./, (value) => value.toUpperCase()),
+    classification,
+    dependsOn: DERIVED_FACTS[key] || [],
+    displayWhen: CONDITIONAL_PARENT[key] ? { fact: CONDITIONAL_PARENT[key], equals: true } : null,
+    justification: classification === 'user-answerable' ? 'A project owner can answer this architecture fact as Yes, No or Unknown.'
+      : classification === 'derived-from-answer' ? `Derived conservatively from: ${DERIVED_FACTS[key].join(', ')}; Unknown inputs preserve Unknown.`
+        : classification === 'system-observed' ? 'Resolved from server-side inspection or runtime evidence; absent observation remains Unknown.'
+          : classification === 'project-metadata-derived' ? 'Resolved from authorised project metadata; missing metadata remains Unknown.'
+            : 'Requires an accountable reviewer because a safe automatic or binary inference is not available.',
+  });
+}));
+
 export function validateArchitectureFacts(facts = {}) {
   if (!facts || typeof facts !== 'object' || Array.isArray(facts)) {
     const error = new Error('Architecture facts must be an object.');
@@ -37,6 +75,17 @@ export function validateArchitectureFacts(facts = {}) {
     }
   }
   return facts;
+}
+
+export function resolveArchitectureFacts(facts = {}) {
+  validateArchitectureFacts(facts);
+  const resolved = { ...facts };
+  for (const [key, dependencies] of Object.entries(DERIVED_FACTS)) {
+    if (Object.hasOwn(resolved, key) && resolved[key] !== null) continue;
+    const values = dependencies.map((dependency) => Object.hasOwn(resolved, dependency) ? resolved[dependency] : null);
+    resolved[key] = values.some((value) => value === true) ? true : values.every((value) => value === false) ? false : null;
+  }
+  return resolved;
 }
 
 export const EVIDENCE_STATES = Object.freeze([
@@ -119,6 +168,14 @@ export function summarizeEvidenceReadiness(states = []) {
   else if (summary.openFindings > 0 || summary.expiredEvidence > 0) summary.deploymentGate = 'hold';
   else if (summary.unknown > 0 || summary.evidenceStates.not_assessed > 0) summary.deploymentGate = 'review_required';
   else if (summary.applicable > 0 && summary.evidenceStates.retest_passed + summary.evidenceStates.test_passed + summary.evidenceStates.risk_accepted >= summary.applicable) summary.deploymentGate = 'proceed_candidate';
+  summary.declaredControls = summary.evidenceStates.declared;
+  summary.observedControls = summary.evidenceStates.observed;
+  summary.testedControls = summary.evidenceStates.test_passed + summary.evidenceStates.retest_passed;
+  summary.criticalBlockers = summary.failedCriticalGates;
+  summary.remediationInProgress = summary.evidenceStates.remediation_in_progress;
+  summary.retestsPassed = summary.evidenceStates.retest_passed;
+  summary.residualRisks = summary.evidenceStates.risk_accepted;
+  summary.deploymentDecision = summary.deploymentGate;
   return summary;
 }
 

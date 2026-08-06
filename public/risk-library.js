@@ -1,96 +1,55 @@
 import { api, escapeHtml } from './shared.js';
 
 const form = document.querySelector('#riskFilters');
-const fieldNames = ['query','category','severity','framework','owner','testMode','automationStatus'];
+const fieldNames = ['query','category','severity','framework','owner','validationStatus','testMode','automationStatus','sort'];
 const fields = Object.fromEntries(fieldNames.map((name) => [name, document.querySelector(`[name="${name}"]`)]));
 const status = document.querySelector('#riskLibraryStatus');
 const results = document.querySelector('#riskLibraryResults');
-let catalogue = [];
+const loadMore = document.querySelector('#riskLoadMore');
+const PAGE_SIZE = 24;
+let offset = 0;
+let currentItems = [];
 
 function severityClass(value) { return ['critical','high','medium','low'].includes(value) ? value : 'none'; }
-function operational(entry) {
-  return entry.operationalMetadata || {
-    testMode: entry.operational_summary?.test_mode,
-    automationStatus: entry.operational_summary?.automation_status,
-    customerValidationStatus: entry.operational_summary?.customer_validation_status,
-  };
-}
-function owner(entry) { return entry.solutionSummary?.defaultOwner || entry.solution_summary?.default_owner || ''; }
+function operational(entry) { return entry.operationalMetadata || {}; }
+function owner(entry) { return entry.solutionSummary?.defaultOwner || ''; }
 function card(entry) {
   const level = entry.problem?.default_severity || 'unknown';
-  const op = operational(entry);
-  return `<article class="panel risk-library-card">
-    <div class="finding-head"><span class="eyebrow">${escapeHtml(entry.category)}</span><span class="severity ${severityClass(level)}">${escapeHtml(level)}</span></div>
-    <h2>${escapeHtml(entry.title)}</h2><h3>Problem</h3><p>${escapeHtml(entry.problem?.statement || '')}</p>
-    <div class="risk-card-meta"><span>${escapeHtml(op.testMode || 'unclassified')} test</span><span>${escapeHtml(op.customerValidationStatus || 'unvalidated')}</span>${owner(entry) ? `<span>${escapeHtml(owner(entry))}</span>` : ''}</div>
-    <div class="button-row"><a class="button ghost small" href="/risk-library-detail.html?id=${encodeURIComponent(entry.id)}">Review the control</a></div>
-    <p class="muted">${escapeHtml(entry.id)} · ${escapeHtml(entry.knowledgeVersion || entry.knowledge_version || '')}</p></article>`;
+  const validation = entry.validation?.status || 'candidate';
+  return `<article class="panel risk-library-card" tabindex="0"><div class="finding-head"><span class="eyebrow">${escapeHtml(entry.category)}</span><span class="severity ${severityClass(level)}">${escapeHtml(level)} guidance</span></div><h2>${escapeHtml(entry.title)}</h2><h3>Problem</h3><p>${escapeHtml(entry.problem?.statement || '')}</p><div class="risk-card-meta"><span>${escapeHtml(operational(entry).testMode || 'unclassified')} test</span><span>${escapeHtml(validation.replaceAll('_', ' '))}</span>${owner(entry) ? `<span>${escapeHtml(owner(entry))}</span>` : ''}</div><div class="button-row"><a class="button ghost small" href="/risk-library-detail.html?id=${encodeURIComponent(entry.id)}">Review the control</a></div><p class="muted">${escapeHtml(entry.id)} · ${escapeHtml(entry.knowledgeVersion || '')}</p></article>`;
 }
-function fillSelect(select, values) {
+function fillSelect(select, options) {
+  const selected = select.value;
   const first = select.options[0]?.outerHTML || '<option value="">All</option>';
-  select.innerHTML = first + values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+  select.innerHTML = first + (options || []).filter((option) => option.count > 0).map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(option.value.replaceAll('_', ' '))} (${option.count})</option>`).join('');
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
 }
-function normalizeStatic(entry) {
-  return {
-    ...entry,
-    knowledgeVersion: entry.knowledge_version,
-    solutionSummary: entry.solution_summary ? {
-      defaultOwner: entry.solution_summary.default_owner,
-      priority: entry.solution_summary.priority,
-    } : null,
-    operationalMetadata: entry.operational_summary ? {
-      testMode: entry.operational_summary.test_mode,
-      automationStatus: entry.operational_summary.automation_status,
-      customerValidationStatus: entry.operational_summary.customer_validation_status,
-    } : null,
-  };
-}
-async function loadCatalogue() {
-  try {
-    const data = await api('/api/risk-knowledge?limit=250');
-    catalogue = Array.isArray(data.entries) ? data.entries : [];
-  } catch {
-    const response = await fetch('/risk-knowledge-public-v1.1.json', { credentials: 'same-origin' });
-    if (!response.ok) throw new Error('The risk library could not be loaded.');
-    const data = await response.json();
-    catalogue = (data.entries || []).map(normalizeStatic);
-  }
-  fillSelect(fields.category, [...new Set(catalogue.map((entry) => entry.category).filter(Boolean))].sort());
-  fillSelect(fields.framework, [...new Set(catalogue.flatMap((entry) => (entry.mappings || []).map((mapping) => mapping.framework)).filter(Boolean))].sort());
-  fillSelect(fields.owner, [...new Set(catalogue.map(owner).filter(Boolean))].sort());
-}
-function localFilter(entries) {
-  const term = fields.query.value.trim().toLowerCase();
-  return entries.filter((entry) => (!term || `${entry.title} ${entry.category} ${entry.problem?.statement}`.toLowerCase().includes(term))
-    && (!fields.category.value || entry.category === fields.category.value)
-    && (!fields.severity.value || entry.problem?.default_severity === fields.severity.value)
-    && (!fields.framework.value || (entry.mappings || []).some((mapping) => mapping.framework === fields.framework.value))
-    && (!fields.owner.value || owner(entry) === fields.owner.value)
-    && (!fields.testMode.value || operational(entry)?.testMode === fields.testMode.value)
-    && (!fields.automationStatus.value || operational(entry)?.automationStatus === fields.automationStatus.value));
-}
-async function load() {
-  status.hidden = false;
-  status.textContent = 'Loading risk knowledge…';
-  results.innerHTML = '';
-  const params = new URLSearchParams();
+function parameters() {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
   for (const [name, element] of Object.entries(fields)) if (element?.value?.trim()) params.set(name, element.value.trim());
+  return params;
+}
+async function load({ append = false } = {}) {
+  status.textContent = 'Loading risk knowledge…';
+  if (!append) { offset = 0; currentItems = []; results.innerHTML = ''; }
   try {
-    let entries;
-    try {
-      const data = await api(`/api/risk-knowledge?${params.toString()}`);
-      entries = Array.isArray(data.entries) ? data.entries : [];
-    } catch {
-      entries = localFilter(catalogue);
-    }
-    status.textContent = `${entries.length} risk ${entries.length === 1 ? 'entry' : 'entries'} found.`;
-    results.innerHTML = entries.map(card).join('') || '<div class="panel risk-empty"><p>No matching risks.</p></div>';
+    const data = await api(`/api/risk-knowledge?${parameters()}`);
+    const items = Array.isArray(data.items) ? data.items : [];
+    currentItems = append ? [...currentItems, ...items] : items;
+    results.innerHTML = currentItems.map(card).join('') || '<div class="panel risk-empty"><p>No controls match these filters. Clear a filter or broaden the search.</p></div>';
+    status.textContent = `Showing ${currentItems.length} of ${Number(data.total || 0)} active controls. Default severity is catalogue guidance, not customer-specific risk.`;
+    loadMore.hidden = !data.hasMore;
+    loadMore.dataset.nextOffset = String(Number(data.offset || 0) + items.length);
+    const filters = data.filters || {};
+    for (const name of ['category','severity','framework','owner','validationStatus','testMode','automationStatus']) fillSelect(fields[name], filters[name]);
   } catch (error) {
     status.textContent = 'The risk library could not be loaded.';
     results.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
+    loadMore.hidden = true;
   }
 }
 
 form.addEventListener('submit', (event) => { event.preventDefault(); load(); });
-await loadCatalogue();
+form.addEventListener('change', () => load());
+loadMore.addEventListener('click', () => { offset = Number(loadMore.dataset.nextOffset || currentItems.length); load({ append: true }); });
 await load();

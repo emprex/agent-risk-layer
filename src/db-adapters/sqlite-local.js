@@ -861,6 +861,8 @@ for (const migrationName of [
   '010_seed_risk_knowledge_v1.sql',
   '011_risk_knowledge_v1_1.sql',
   '012_seed_risk_knowledge_v1_1.sql',
+  '013_risk_knowledge_evidence_lifecycle.sql',
+  '014_seed_risk_knowledge_v1_2.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);

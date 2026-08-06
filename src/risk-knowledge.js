@@ -1,13 +1,36 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { db, id, nowIso } from './db.js';
 import {
+  ARCHITECTURE_PREDICATE_REGISTRY,
   buildControlManifest,
   evaluateApplicability,
+  resolveArchitectureFacts,
   summarizeEvidenceReadiness,
   toYaml,
   assertRegoExportAllowed,
   validateArchitectureFacts,
 } from './risk-knowledge-core.js';
+
+const knowledgeAsset = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'risk-knowledge/risk-knowledge-v1.json'), 'utf8'));
+const knowledgeRecords = new Map(knowledgeAsset.entries.map((entry) => [entry.id, entry]));
+
+export function riskKnowledgeFilterOptions() {
+  const count = (values) => [...values.reduce((map, value) => value ? map.set(value, (map.get(value) || 0) + 1) : map, new Map())]
+    .map(([value, resultCount]) => ({ value, count: resultCount })).sort((a, b) => a.value.localeCompare(b.value));
+  return {
+    category: count(knowledgeAsset.entries.map((entry) => entry.category)),
+    severity: count(knowledgeAsset.entries.map((entry) => entry.problem.default_severity)),
+    owner: count(knowledgeAsset.entries.map((entry) => entry.solution.default_owner)),
+    framework: count(knowledgeAsset.entries.flatMap((entry) => [...new Set(entry.mappings.map((mapping) => mapping.framework))])),
+    validationStatus: count(knowledgeAsset.entries.map((entry) => entry.validation?.status || 'candidate')),
+    testMode: count(knowledgeAsset.entries.map((entry) => entry.operational_metadata.test_mode)),
+    automationStatus: count(knowledgeAsset.entries.map((entry) => entry.operational_metadata.automation_status)),
+  };
+}
+
+export function architecturePredicateRegistry() { return ARCHITECTURE_PREDICATE_REGISTRY; }
 
 const ALLOWED_SUBJECT_TYPES = new Set([
   'assessment_finding','inspection_finding','redteam_case','runtime_event',
@@ -53,8 +76,24 @@ function canonicalJson(value) {
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
+function integrityError(entryId, reason) {
+  console.error(JSON.stringify({ event: 'risk_knowledge.integrity_mismatch', entryId: bounded(entryId, 80), reason, timestamp: nowIso() }));
+  return Object.assign(new Error('Versioned risk knowledge content failed integrity verification.'), { statusCode: 503, code: 'RISK_KNOWLEDGE_INTEGRITY_FAILURE' });
+}
+function verifyAuthoritativeRecord(row) {
+  const expected = knowledgeRecords.get(row?.id);
+  if (!expected) throw integrityError(row?.id || 'unknown', 'missing_record');
+  if (!row.content_digest || !/^[a-f0-9]{64}$/.test(row.content_digest)) throw integrityError(row.id, 'missing_or_invalid_digest');
+  const unsigned = { ...expected };
+  delete unsigned.content_digest;
+  const calculated = crypto.createHash('sha256').update(canonicalJson(unsigned)).digest('hex');
+  if (calculated !== expected.content_digest || row.content_digest !== expected.content_digest) throw integrityError(row.id, 'digest_mismatch');
+  if (row.knowledge_version !== expected.knowledge_version) throw integrityError(row.id, 'stale_version');
+  return expected;
+}
 function publicEntry(row) {
   if (!row) return null;
+  verifyAuthoritativeRecord(row);
   return {
     id: row.id,
     slug: row.slug,
@@ -193,20 +232,23 @@ async function removeRiskKnowledgeLinks({ workspaceId, projectId, subjects, reas
   return { linksRemoved, entriesAffected: new Set(affectedEntries).size };
 }
 
-export async function listRiskKnowledge({ query = '', category = '', severity = '', framework = '', owner = '', testMode = '', automationStatus = '', limit = 100, offset = 0 } = {}) {
+export async function listRiskKnowledge({ query = '', category = '', severity = '', framework = '', owner = '', validationStatus = '', testMode = '', automationStatus = '', sort = 'id', limit = 24, offset = 0 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
   const safeOffset = Math.max(0, Number(offset) || 0);
   const clauses = ["e.status = 'active'"];
   const values = [];
   if (category) { clauses.push('e.category = ?'); values.push(bounded(category, 120)); }
   if (query) {
-    clauses.push('(LOWER(e.title) LIKE ? OR LOWER(e.category) LIKE ? OR LOWER(e.problem_json) LIKE ?)');
+    clauses.push(`(LOWER(e.id) LIKE ? OR LOWER(e.title) LIKE ? OR LOWER(e.category) LIKE ? OR LOWER(e.problem_json) LIKE ?
+      OR EXISTS (SELECT 1 FROM risk_knowledge_solutions sq WHERE sq.entry_id=e.id AND LOWER(sq.recommended_remediation) LIKE ?)
+      OR EXISTS (SELECT 1 FROM risk_knowledge_mappings mq WHERE mq.entry_id=e.id AND (LOWER(mq.framework) LIKE ? OR LOWER(mq.framework_reference) LIKE ?)))`);
     const term = `%${bounded(query, 160).toLowerCase()}%`;
-    values.push(term, term, term);
+    values.push(term, term, term, term, term, term, term);
   }
-  if (severity) { clauses.push('LOWER(e.problem_json) LIKE ?'); values.push(`%"default_severity": "${bounded(severity, 20).toLowerCase()}"%`); }
+  if (severity) { clauses.push('c.default_severity = ?'); values.push(bounded(severity, 20).toLowerCase()); }
   if (testMode) { clauses.push('o.test_mode = ?'); values.push(bounded(testMode, 20)); }
   if (automationStatus) { clauses.push('o.automation_status = ?'); values.push(bounded(automationStatus, 20)); }
+  if (validationStatus) { clauses.push('v.lifecycle_status = ?'); values.push(bounded(validationStatus, 40)); }
   if (owner) {
     clauses.push('EXISTS (SELECT 1 FROM risk_knowledge_solutions s WHERE s.entry_id = e.id AND s.default_owner = ?)');
     values.push(bounded(owner, 120));
@@ -215,16 +257,29 @@ export async function listRiskKnowledge({ query = '', category = '', severity = 
     clauses.push('EXISTS (SELECT 1 FROM risk_knowledge_mappings m WHERE m.entry_id = e.id AND m.framework = ?)');
     values.push(bounded(framework, 160));
   }
+  const where = clauses.join(' AND ');
+  const totalRow = await db.prepare(`SELECT COUNT(DISTINCT e.id) AS total FROM risk_knowledge_entries e
+    LEFT JOIN risk_knowledge_operational_metadata o ON o.entry_id=e.id
+    LEFT JOIN risk_knowledge_entry_classification c ON c.entry_id=e.id
+    LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
+    WHERE ${where}`).get(...values);
+  const sortSql = sort === 'severity' ? `CASE c.default_severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, e.id`
+    : sort === 'reviewDate' ? `c.review_date DESC, e.id`
+      : sort === 'relevance' && query ? 'e.title, e.id' : 'e.id';
   const rows = await db.prepare(`
     SELECT e.*, o.test_mode, o.test_families_json, o.automation_status, o.remediation_effort,
       o.evidence_types_json, o.review_interval_days, o.machine_rule_status, o.machine_rule_json,
-      o.control_dependencies_json, o.customer_validation_status, o.export_capabilities_json
+      o.control_dependencies_json, o.customer_validation_status, o.export_capabilities_json,
+      v.lifecycle_status AS validation_status, v.reviewer_name, v.reviewer_organisation, v.reviewed_at AS validation_reviewed_at, v.evidence_reference AS validation_evidence_reference
     FROM risk_knowledge_entries e
     LEFT JOIN risk_knowledge_operational_metadata o ON o.entry_id = e.id
-    WHERE ${clauses.join(' AND ')}
-    ORDER BY e.category, e.title LIMIT ? OFFSET ?
+    LEFT JOIN risk_knowledge_entry_classification c ON c.entry_id=e.id
+    LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
+    WHERE ${where}
+    ORDER BY ${sortSql} LIMIT ? OFFSET ?
   `).all(...values, safeLimit, safeOffset);
-  if (!rows.length) return [];
+  const total = Number(totalRow?.total || 0);
+  if (!rows.length) return { items: [], total, limit: safeLimit, offset: safeOffset, hasMore: false };
   const entryIds = rows.map((row) => row.id);
   const solutionRows = await db.prepare(`SELECT entry_id, default_owner, priority FROM risk_knowledge_solutions WHERE entry_id IN (${placeholders(entryIds.length)}) ORDER BY entry_id, priority, id`).all(...entryIds);
   const mappingRows = await db.prepare(`SELECT entry_id, framework, framework_version, framework_reference, mapping_status, mapping_limit FROM risk_knowledge_mappings WHERE entry_id IN (${placeholders(entryIds.length)}) ORDER BY entry_id, framework, framework_reference`).all(...entryIds);
@@ -235,7 +290,8 @@ export async function listRiskKnowledge({ query = '', category = '', severity = 
     if (!mappings.has(row.entry_id)) mappings.set(row.entry_id, []);
     mappings.get(row.entry_id).push({ framework: row.framework, version: row.framework_version, reference: row.framework_reference, mappingStatus: row.mapping_status, mappingLimit: row.mapping_limit });
   }
-  return rows.map((row) => ({ ...publicEntry(row), solutionSummary: solutions.get(row.id) || null, mappings: mappings.get(row.id) || [] }));
+  const items = rows.map((row) => ({ ...publicEntry(row), validation: { status: row.validation_status || 'candidate', reviewer: row.reviewer_name || null, reviewerOrganisation: row.reviewer_organisation || null, reviewedAt: row.validation_reviewed_at || null, evidenceReference: row.validation_evidence_reference || null }, solutionSummary: solutions.get(row.id) || null, mappings: mappings.get(row.id) || [] }));
+  return { items, total, limit: safeLimit, offset: safeOffset, hasMore: safeOffset + items.length < total };
 }
 
 export async function getRiskKnowledgeEntry(identifier) {
@@ -249,14 +305,17 @@ export async function getRiskKnowledgeEntry(identifier) {
     WHERE (e.id = ? OR e.slug = ?) AND e.status = 'active' LIMIT 1
   `).get(key, key);
   if (!row) return null;
+  const sourceRecord = verifyAuthoritativeRecord(row);
   const entry = publicEntry(row);
   entry.operationalMetadata = fullOperationalMetadata(row);
-  const [profiles, checks, solutions, mappings] = await Promise.all([
+  const [profiles, checks, solutions, mappings, validation] = await Promise.all([
     loadApplicabilityProfiles([row.id]),
     db.prepare('SELECT * FROM risk_knowledge_checks WHERE entry_id = ? ORDER BY id').all(row.id),
     db.prepare('SELECT * FROM risk_knowledge_solutions WHERE entry_id = ? ORDER BY priority, id').all(row.id),
     db.prepare(`SELECT m.*, r.title AS reference_title, r.url AS reference_url FROM risk_knowledge_mappings m LEFT JOIN risk_knowledge_references r ON r.id = m.reference_id WHERE m.entry_id = ? ORDER BY m.framework, m.framework_reference`).all(row.id),
+    db.prepare('SELECT * FROM risk_knowledge_validation_records WHERE entry_id=? AND knowledge_version=?').get(row.id, row.knowledge_version),
   ]);
+  entry.validation = validation ? { status: validation.lifecycle_status, reviewer: validation.reviewer_name, reviewerOrganisation: validation.reviewer_organisation, reviewedAt: validation.reviewed_at, evidenceReference: validation.evidence_reference, version: validation.knowledge_version } : { status: 'candidate', version: row.knowledge_version };
   entry.applicabilityProfile = profiles.get(row.id) || { clauseMatch: 'any', clauses: [], unknownFactBehavior: 'include_for_review' };
   entry.checks = checks.map((check) => ({
     id: check.id,
@@ -268,6 +327,12 @@ export async function getRiskKnowledgeEntry(identifier) {
     failCondition: check.fail_condition,
     limitations: check.limitations,
     contentDigest: check.content_digest,
+    preconditions: sourceRecord.check.preconditions,
+    positiveTest: sourceRecord.check.positive_test,
+    negativeTest: sourceRecord.check.negative_test,
+    requiredIdentities: sourceRecord.check.required_identities,
+    requiredInputsAndExpectedOutputs: sourceRecord.check.required_inputs_and_expected_outputs,
+    safeTestingConstraints: sourceRecord.check.safe_testing_constraints,
   }));
   entry.solutions = solutions.map((solution) => ({
     id: solution.id,
@@ -280,6 +345,13 @@ export async function getRiskKnowledgeEntry(identifier) {
     containment: solution.containment,
     retestAcceptance: parseJson(solution.retest_acceptance_json, []),
     contentDigest: solution.content_digest,
+    immediateContainment: sourceRecord.solution.immediate_containment,
+    rootCauseRemediation: sourceRecord.solution.root_cause_remediation,
+    preventiveControl: sourceRecord.solution.preventive_control,
+    implementationDependencies: sourceRecord.solution.implementation_dependencies,
+    rollbackConsiderations: sourceRecord.solution.rollback_considerations,
+    retestRequirements: sourceRecord.solution.retest_requirements,
+    evidenceRequiredToClose: sourceRecord.solution.evidence_required_to_close,
   }));
   entry.mappings = mappings.map((mapping) => ({
     id: mapping.id,
@@ -324,13 +396,13 @@ export async function getPublicRiskKnowledgeEntry(identifier) {
 }
 
 export async function profileRiskKnowledge(facts = {}) {
-  validateArchitectureFacts(facts);
-  const entries = await listRiskKnowledge({ limit: 250 });
+  const resolvedFacts = resolveArchitectureFacts(facts);
+  const { items: entries } = await listRiskKnowledge({ limit: 250 });
   const profiles = await loadApplicabilityProfiles(entries.map((entry) => entry.id));
   const order = { applicable: 0, unknown: 1, not_applicable: 2 };
   return entries.map((entry) => ({
     entry,
-    applicability: evaluateApplicability({ applicabilityProfile: profiles.get(entry.id) }, facts),
+    applicability: evaluateApplicability({ applicabilityProfile: profiles.get(entry.id) }, resolvedFacts),
   })).sort((left, right) => order[left.applicability.status] - order[right.applicability.status]);
 }
 
@@ -345,6 +417,7 @@ export async function linkRiskKnowledge({ workspaceId, projectId, subjectType, s
   }
   const entry = await db.prepare("SELECT id, knowledge_version, content_digest FROM risk_knowledge_entries WHERE id = ? AND status = 'active'").get(bounded(entryId, 80));
   if (!entry) throw Object.assign(new Error('Active risk knowledge entry not found.'), { statusCode: 404 });
+  verifyAuthoritativeRecord(entry);
   const linkId = id('rkl');
   const createdAt = nowIso();
   const result = await db.prepare(`
@@ -366,8 +439,8 @@ export async function setProjectRiskKnowledgeState({ workspaceId, projectId, ent
   let applicabilityReason = previous?.applicability_reason || 'Architecture facts have not been assessed.';
   let factsDigest = previous?.architecture_facts_digest || null;
   if (architectureFacts !== null) {
-    validateArchitectureFacts(architectureFacts);
-    const applicability = evaluateApplicability(entry, architectureFacts);
+    const resolvedFacts = resolveArchitectureFacts(architectureFacts);
+    const applicability = evaluateApplicability(entry, resolvedFacts);
     applicabilityStatus = applicability.status;
     applicabilityReason = applicability.reason;
     factsDigest = crypto.createHash('sha256').update(canonicalJson(architectureFacts)).digest('hex');
@@ -406,16 +479,16 @@ export async function setProjectRiskKnowledgeState({ workspaceId, projectId, ent
 }
 
 export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId, architectureFacts, userId }) {
-  validateArchitectureFacts(architectureFacts);
+  const resolvedFacts = resolveArchitectureFacts(architectureFacts);
   await requireProject(workspaceId, projectId);
-  const entries = await listRiskKnowledge({ limit: 250 });
+  const { items: entries } = await listRiskKnowledge({ limit: 250 });
   const profiles = await loadApplicabilityProfiles(entries.map((entry) => entry.id));
   const factsDigest = crypto.createHash('sha256').update(canonicalJson(architectureFacts)).digest('hex');
   const timestamp = nowIso();
   const results = [];
   await db.transaction(async () => {
     for (const entry of entries) {
-      const applicability = evaluateApplicability({ applicabilityProfile: profiles.get(entry.id) }, architectureFacts);
+      const applicability = evaluateApplicability({ applicabilityProfile: profiles.get(entry.id) }, resolvedFacts);
       const current = await db.prepare('SELECT evidence_state,state_reason,evidence_count,created_at FROM project_risk_knowledge_states WHERE project_id=? AND entry_id=?').get(projectId, entry.id);
       const evidenceState = current?.evidence_state || 'not_assessed';
       const severity = entry.problem?.default_severity || 'unknown';
@@ -442,11 +515,16 @@ export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId,
 export async function getProjectEvidenceReadiness({ workspaceId, projectId }) {
   await requireProject(workspaceId, projectId);
   const rows = await db.prepare(`
-    SELECT s.*, e.title, e.category, e.problem_json,
-      (SELECT COUNT(*) FROM risk_knowledge_links l WHERE l.workspace_id=s.workspace_id AND l.project_id=s.project_id AND l.entry_id=s.entry_id) live_evidence_count
+    SELECT s.*, e.title, e.category, e.problem_json, e.knowledge_version, e.content_digest,
+      (SELECT COUNT(*) FROM risk_knowledge_links l WHERE l.workspace_id=s.workspace_id AND l.project_id=s.project_id AND l.entry_id=s.entry_id) live_evidence_count,
+      (SELECT COUNT(*) FROM risk_knowledge_links l WHERE l.workspace_id=s.workspace_id AND l.project_id=s.project_id AND l.entry_id=s.entry_id AND (l.knowledge_version<>e.knowledge_version OR l.entry_digest<>e.content_digest)) invalid_evidence_links
     FROM project_risk_knowledge_states s
     JOIN risk_knowledge_entries e ON e.id = s.entry_id WHERE s.project_id = ? AND s.workspace_id = ? ORDER BY e.category, e.title
   `).all(projectId, workspaceId);
+  for (const row of rows) {
+    verifyAuthoritativeRecord({ id: row.entry_id, knowledge_version: row.knowledge_version, content_digest: row.content_digest });
+    if (Number(row.invalid_evidence_links || 0) > 0) throw integrityError(row.entry_id, 'evidence_link_version_or_digest_mismatch');
+  }
   const states = rows.map((row) => ({
     entryId: row.entry_id,
     title: row.title,

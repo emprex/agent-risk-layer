@@ -25,7 +25,9 @@ The public website and authenticated workspace now organise the complete platfor
 
 The public Risk Library exposes plain-English problems, impacts, high-level controls and informative framework mappings. Exact check methods, required evidence, pass/fail criteria and exports require a verified account. Project Evidence Readiness is derived from authoritative project links; declarations alone do not count as tested controls, generic artefacts do not prove a test passed, and runtime approval for one exact action is not residual-risk acceptance.
 
-ARL-RKA-1.1.0 contains 108 expert-authored candidate entries. Framework mappings are informative and do not establish compliance or certification. The catalogue requires continuing customer, incident, source and practitioner validation.
+ARL-RKA-1.2.0 contains 108 expert-authored candidate entries. Each entry now defines a bounded problem, identities, abuse tests, evidence, pass/fail conditions, containment, remediation, monitoring and retest requirements. Candidate content is not customer-exercised, independently reviewed or verified automation unless a lifecycle record supplies the required reviewer and evidence. Framework mappings are informative and do not establish compliance or certification.
+
+The catalogue API uses `items`, `total`, `limit`, `offset` and `hasMore`; records 101–108 are reachable through pagination. All 66 applicability predicates are classified as user-answerable, derived, system-observed, project-metadata-derived or manual-review-only. Unknown remains review-required. Default severity is catalogue guidance; project severity and the deployment gate are separate, server-derived decisions.
 
 ## Runtime privacy boundary
 

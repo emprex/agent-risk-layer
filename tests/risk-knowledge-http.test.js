@@ -111,8 +111,18 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
     assert.equal(listResponse.status, 200);
     const list = await listResponse.json();
     assert.ok(list.entries.length > 0);
+    assert.equal(list.total > list.entries.length, false);
+    assert.equal(list.limit, 250);
+    assert.equal(list.offset, 0);
+    assert.equal(list.hasMore, false);
     assert.equal(list.entries.some((entry) => Object.hasOwn(entry, 'checks')), false);
     assert.match(listResponse.headers.get('cache-control') || '', /public/);
+
+    const firstPage = await (await fetch(`${instance.origin}/api/risk-knowledge?limit=100`)).json();
+    const lastPage = await (await fetch(`${instance.origin}/api/risk-knowledge?limit=100&offset=100`)).json();
+    assert.equal(firstPage.total, 108);
+    assert.equal(firstPage.hasMore, true);
+    assert.deepEqual(lastPage.items.map((entry) => entry.id), ['ARL-KB-101','ARL-KB-102','ARL-KB-103','ARL-KB-104','ARL-KB-105','ARL-KB-106','ARL-KB-107','ARL-KB-108']);
 
     const publicDetail = await fetch(`${instance.origin}/api/risk-knowledge/ARL-KB-053`);
     assert.equal(publicDetail.status, 200);

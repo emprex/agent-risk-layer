@@ -33,7 +33,7 @@ import {
 import {
     applyProjectRiskKnowledgeProfile, exportRiskKnowledgeEntry, getProjectEvidenceReadiness,
     getPublicRiskKnowledgeEntry, getRiskKnowledgeEntry, linkRiskKnowledge, listRiskKnowledge,
-    profileRiskKnowledge, setProjectRiskKnowledgeState,
+    profileRiskKnowledge, setProjectRiskKnowledgeState, riskKnowledgeFilterOptions, architecturePredicateRegistry,
 } from './src/risk-knowledge.js';
 import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'GET' && url.pathname === '/api/questionnaire')
             return json(res, 200, { questionnaire, evidenceOptions });
         if (req.method === 'GET' && url.pathname === '/api/risk-knowledge') {
-            const entries = await listRiskKnowledge({
+            const page = await listRiskKnowledge({
                 query: url.searchParams.get('query') || '',
                 category: url.searchParams.get('category') || '',
                 severity: url.searchParams.get('severity') || '',
@@ -135,11 +135,15 @@ const server = http.createServer(async (req, res) => {
                 owner: url.searchParams.get('owner') || '',
                 testMode: url.searchParams.get('testMode') || '',
                 automationStatus: url.searchParams.get('automationStatus') || '',
+                validationStatus: url.searchParams.get('validationStatus') || '',
+                sort: url.searchParams.get('sort') || 'id',
                 limit: url.searchParams.get('limit') || 100,
                 offset: url.searchParams.get('offset') || 0,
             });
-            return json(res, 200, { entries, knowledgeVersion: 'ARL-RKA-1.1.0' }, { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' });
+            return json(res, 200, { ...page, items: page.items, entries: page.items, filters: riskKnowledgeFilterOptions(), knowledgeVersion: 'ARL-RKA-1.2.0' }, { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600' });
         }
+        if (req.method === 'GET' && url.pathname === '/api/risk-knowledge-predicates')
+            return json(res, 200, { predicates: architecturePredicateRegistry() }, { 'Cache-Control': 'public, max-age=300' });
         if (req.method === 'POST' && url.pathname === '/api/risk-knowledge/profile') {
             if (!await rateLimitAllowed(req, { windowMs: 60000, max: 30, bucket: 'risk-profiler' }))
                 return json(res, 429, { error: 'Too many risk-profile requests. Wait a minute and try again.' });
