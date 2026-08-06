@@ -234,6 +234,32 @@ export async function recordDeploymentDecision({ projectId, userId, input = {} }
   return output;
 }
 
+export async function closeControlFinding({projectId,controlId,findingId,userId,input={}}){
+  let result;
+  await db.transaction(async()=>{
+    const access=await requireAccess(projectId,userId,DECISION_ROLES,true);
+    const snapshot=await requireCurrentSnapshot(access,input.systemSnapshotId);
+    const finding=await db.prepare(`SELECT r.*,b.entry_id,b.system_snapshot_id original_snapshot_id FROM remediation_items r
+      JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.entry_id=?
+      WHERE r.id=? AND r.project_id=?`).get(access.project.workspace_id,projectId,controlId,clean(findingId,100),projectId);
+    if(!finding)throw notFound('Finding is not bound to this control.');
+    if(input.expectedUpdatedAt&&input.expectedUpdatedAt!==finding.updated_at)throw conflict('The finding changed after this page was loaded. Reload before reviewing closure.');
+    const retest=await db.prepare(`SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND finding_id=? AND execution_kind='retest' AND result='passed' ORDER BY completed_at DESC LIMIT 1`).get(access.project.workspace_id,projectId,snapshot.id,controlId,finding.id);
+    if(!retest||!retest.retest_of_execution_id||!retest.remediation_id||retest.original_snapshot_id===snapshot.id)throw conflict('Finding closure requires a passed exact retest against the remediated snapshot.');
+    await verifyRows([retest],'content_digest','test');
+    const evidence=await db.prepare(`SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND test_execution_id=? AND finding_id=? AND remediation_id=? AND verification_state='verified' AND retention_status='active' ORDER BY observed_at DESC LIMIT 1`).get(access.project.workspace_id,projectId,snapshot.id,controlId,retest.id,finding.id,finding.id);
+    if(!evidence)throw conflict('Finding closure requires verified evidence for the exact retest.');
+    await verifyRows([evidence],'integrity_digest','evidence');
+    const artifact=await db.prepare("SELECT id FROM remediation_evidence_artifacts WHERE workspace_id=? AND project_id=? AND remediation_id=? AND artifact_type='implementation' AND lifecycle_state='active' AND invalidated_at IS NULL LIMIT 1").get(access.project.workspace_id,projectId,finding.id);
+    if(!artifact)throw conflict('Finding closure requires active remediation implementation evidence.');
+    const timestamp=nowIso();const verification={...parseJson(finding.verification_json,{}),controlIntelligenceClosure:{reviewerId:userId,reviewerRole:access.role,retestId:retest.id,evidenceId:evidence.id,remediatedSnapshotId:snapshot.id,reviewedAt:timestamp,limitations:clean(input.limitations,1000)}};
+    verification.controlIntelligenceClosure.digest=intelligenceDigest(verification.controlIntelligenceClosure);
+    await db.prepare("UPDATE remediation_items SET status='verified_closed',verification_json=?,updated_at=? WHERE id=? AND project_id=?").run(JSON.stringify(verification),timestamp,finding.id,projectId);
+    await audit(access,userId,'control_intelligence.finding_closed','remediation',finding.id,{controlId,retestId:retest.id,evidenceId:evidence.id,snapshotId:snapshot.id});
+    result={id:finding.id,status:'verified_closed',reviewedAt:timestamp,closureDigest:verification.controlIntelligenceClosure.digest};
+  });return result;
+}
+
 async function deriveDeploymentDecision(access, snapshot) {
   const evaluations = await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id, access.project.id, snapshot.id);
   await verifyRows(evaluations,'content_digest','evaluation');
@@ -304,7 +330,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
   if (!evaluation) throw notFound('Control evaluation not found for the current snapshot.');
   await verifyRows([evaluation],'content_digest','evaluation');
   const limit = Math.max(1, Math.min(50, Number(historyLimit) || 25));
-  const [tests,evidence,links,remediations,runtime,approvals,decisions,mappings,revisions] = await Promise.all([
+  const [tests,evidence,links,remediations,runtime,approvals,decisions,mappings,revisions,requirements,testHistory] = await Promise.all([
     db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, controlId, limit),
     db.prepare('SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY observed_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, controlId, limit),
     db.prepare('SELECT subject_type,subject_id,link_role,knowledge_version,entry_digest,created_at FROM risk_knowledge_links WHERE workspace_id=? AND project_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id, projectId, controlId, limit),
@@ -318,13 +344,15 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY decided_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, limit),
     db.prepare('SELECT framework,framework_version,framework_reference,mapping_status,mapping_limit FROM risk_knowledge_mappings WHERE entry_id=? ORDER BY framework,framework_reference').all(controlId),
     db.prepare('SELECT id,decision,reason,architecture_facts_json,evaluator_id,evaluator_role,evaluated_at,evaluation_digest,previous_revision_id FROM control_applicability_revisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY evaluated_at DESC,id DESC LIMIT ?').all(access.project.workspace_id,projectId,snapshot.id,controlId,limit),
+    db.prepare('SELECT id,action_type,reuse_scope,descriptor_json,requirement_digest,created_at FROM control_approval_requirements WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id,projectId,snapshot.id,controlId,limit),
+    db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id,projectId,controlId,limit),
   ]);
   await verifyRows(tests, 'content_digest','test');
   await verifyRows(evidence, 'integrity_digest','evidence');
   await verifyRows(decisions,'decision_digest','decision');
   const bindings=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY created_at DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id);
   await verifyRows(bindings,'content_digest','binding');
-  const derived = { tests, evidence, links, remediations, runtime, approvals, decisions };
+  const derived = { tests:testHistory, evidence, links, remediations, runtime, approvals, decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
     control: { id: evaluation.entry_id, title: evaluation.title, category: evaluation.category, problem: parseJson(evaluation.problem_json, {}),
@@ -333,10 +361,10 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     severity: { value: evaluation.contextual_severity, status: evaluation.severity_status, scope: 'project', model: 'project_contextual' },
     testDefinition: { id: evaluation.check_id, digest: evaluation.check_digest, objective: evaluation.objective, method: evaluation.method,
       requiredEvidence: parseJson(evaluation.required_evidence_json, []), passCondition: evaluation.pass_condition, failCondition: evaluation.fail_condition, limitations: evaluation.limitations },
-    threatScenarios: threatScenarios(evaluation), tests: tests.map(serializeTest), evidence: evidence.map(serializeEvidence),
+    threatScenarios: threatScenarios(evaluation), tests: tests.map(serializeTest), testHistory:testHistory.map(serializeTest), evidence: evidence.map(serializeEvidence),
     findings: remediations.map((row) => serializeFinding(row, evaluation)), runtimeDecisions: runtime.map(serializeRuntime), approvals: approvals.map(serializeApproval),
     remediation: remediations.map((row) => serializeFinding(row, evaluation)), retests: runtime.filter((row) => row.retest_criteria_id).map(serializeRuntime),
-    deploymentDecisions: decisions.map(serializeDecision), frameworkMappings: mappings, chain, architectureFacts:snapshotFacts(snapshot), suggestion:suggestionForControl(evaluation.entry_id,snapshot) };
+    deploymentDecisions: decisions.map(serializeDecision), approvalRequirements:requirements.map(row=>({id:row.id,actionType:row.action_type,reuseScope:row.reuse_scope,requirementDigest:row.requirement_digest,details:parseJson(row.descriptor_json,{})})), frameworkMappings: mappings, chain, architectureFacts:snapshotFacts(snapshot), suggestion:suggestionForControl(evaluation.entry_id,snapshot) };
 }
 
 async function loadDerivedRows(access, snapshot, evaluations) {
@@ -549,8 +577,8 @@ function emptyGraph(access, limit, offset) { return { graphVersion: '1.0', proje
   deploymentState: null, items: [], total: 0, limit, offset, hasMore: false, filters: { chainStatus: [] }, nodes: [], edges: [], emptyState: ['Describe the agent architecture.','Confirm applicable controls.','Run or record tests.','Review evidence and findings.','Fix and retest.','Make a deployment decision.'] }; }
 function serializeSnapshot(row) { return { id: row.id, projectId: row.project_id, versionIdentifier: row.version_identifier, status: row.status, contentDigest: row.content_digest,
   runtimePolicyVersion: row.runtime_policy_version, runtimePolicyDigest: row.runtime_policy_digest, autonomyLevel: row.autonomy_level, source: row.source, createdAt: row.created_at,
-  architecture: parseJson(row.architecture_json, {}), models: parseJson(row.models_json, []), tools: parseJson(row.tools_json, []), identities: parseJson(row.identities_json, []), dataSources: parseJson(row.data_sources_json, []), networkAccess: parseJson(row.network_access_json, []) }; }
-function serializeTest(row) { return { id: row.id, systemSnapshotId: row.system_snapshot_id, controlId: row.entry_id, checkId: row.check_id, checkDigest: row.check_digest, executionMethod: row.execution_method, result: row.result,
+  architecture: parseJson(row.architecture_json, {}), models: parseJson(row.models_json, []), tools: parseJson(row.tools_json, []), identities: parseJson(row.identities_json, []), dataSources: parseJson(row.data_sources_json, []), networkAccess: parseJson(row.network_access_json, []), approvalConfiguration:parseJson(row.approval_configuration_json,{}),assessmentConfiguration:parseJson(row.assessment_configuration_json,{}) }; }
+function serializeTest(row) { return { id: row.id, systemSnapshotId: row.system_snapshot_id, controlId: row.entry_id, checkId: row.check_id, checkDigest: row.check_digest, executionMethod: row.execution_method, result: row.result,executionKind:row.execution_kind,retestOfExecutionId:row.retest_of_execution_id,remediationId:row.remediation_id,originalSnapshotId:row.original_snapshot_id,
   expectedResult: row.expected_result, observedResult: row.observed_result, inputReference: row.input_reference, limitations: row.limitations, failureReason: row.failure_reason, findingId: row.finding_id, executorId: row.executor_id, startedAt: row.started_at, completedAt: row.completed_at, contentDigest: row.content_digest }; }
 function serializeEvidence(row) { return { id: row.id, systemSnapshotId: row.system_snapshot_id, controlId: row.entry_id, testExecutionId: row.test_execution_id, findingId: row.finding_id,
   evidenceClass: row.evidence_class, sourceType: row.source_type, sourceReference: row.source_reference, observedAt: row.observed_at, integrityDigest: row.integrity_digest,

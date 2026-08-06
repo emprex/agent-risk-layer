@@ -156,4 +156,6 @@ Generic implementation evidence is not proof that a test passed. Runtime approva
 
 ## Mandatory negative tests
 
+`POST /api/projects/:projectId/control-intelligence/controls/:controlId/findings/:findingId/closure` reviews an existing project finding for closure. Admin/owner authorization, the current snapshot, exact retest provenance, verified retest evidence, implementation evidence and the expected finding timestamp are checked server-side. Reviewer identity, role, review time and closure digest are never accepted from the client.
+
 The integrated test set covers public/full content separation, unauthenticated detail, unverified/low-role writes, CSRF, cross-workspace project access, caller-supplied gate/count fields, unsupported subjects, duplicate links, missing evidence, invalid state promotion, action-approval/risk-acceptance separation, retest integrity, retention expiry, unsupported Rego export and account export.

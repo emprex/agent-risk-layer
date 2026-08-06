@@ -38,7 +38,7 @@ import {
 import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
 import {
     createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
-    recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
+    recordControlEvidence, recordControlTestExecution, recordDeploymentDecision, closeControlFinding,
 } from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
@@ -817,6 +817,14 @@ const server = http.createServer(async (req, res) => {
             for (const field of ['workspaceId','userId','decision','decisionDigest','summary','criticalBlockers','deploymentGate']) if (Object.hasOwn(body, field)) return json(res, 400, { error: `Caller-supplied ${field} is not accepted.` });
             try { return json(res, 201, { deploymentDecision: await recordDeploymentDecision({ projectId: decodeURIComponent(match[1]), userId: req.user.id, input: body }) }); }
             catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)\/findings\/([^/]+)\/closure$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body=await readBody(req);
+            for(const field of ['reviewerId','reviewerRole','reviewedAt','closureDigest','status','severity'])if(Object.hasOwn(body,field))return json(res,400,{error:`Caller-supplied ${field} is not accepted.`});
+            try{return json(res,200,{finding:await closeControlFinding({projectId:decodeURIComponent(match[1]),controlId:decodeURIComponent(match[2]),findingId:decodeURIComponent(match[3]),userId:req.user.id,input:body})},{'Cache-Control':'private, no-store'});}
+            catch(error){return json(res,error.statusCode||400,{error:error.message,code:error.code||undefined},{'Cache-Control':'private, no-store'});}
         }
         match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge-profile$/);
         if (req.method === 'PUT' && match) {
