@@ -154,6 +154,12 @@ Generic implementation evidence is not proof that a test passed. Runtime approva
 - Account export includes project risk states and links with knowledge version and digest.
 - Project/workspace deletion cascades risk state and links; user deletion nulls reviewer/creator references where projects are preserved.
 
+### Control Intelligence suggestions and bulk applicability
+
+`GET /api/projects/:projectId/control-intelligence` returns a bounded, snapshot-bound `suggestionProfile` and a suggestion on each item. Suggestion level, rationale, triggering facts, profile identity and control digest are server-derived. They require evaluator confirmation and are not applicability decisions.
+
+`POST /api/projects/:projectId/control-intelligence/applicability/batch` accepts the current `snapshotId`, `expectedSnapshotDigest`, and 1–20 individual items. Each item contains `controlId`, `decision`, control-specific `reason`, confirmed `architectureFactIds`, optional missing-information text for `context_required`, and `expectedEvaluationDigest`. The operation is transactional and has no partial-success mode. It rejects duplicate controls, generic rationales, facts absent from the current snapshot, stale revisions, cross-project access and caller-supplied evaluator, severity, profile or digest fields. Responses are authenticated and `Cache-Control: private, no-store`.
+
 ## Mandatory negative tests
 
 `POST /api/projects/:projectId/control-intelligence/controls/:controlId/findings/:findingId/closure` reviews an existing project finding for closure. Admin/owner authorization, the current snapshot, exact retest provenance, verified retest evidence, implementation evidence and the expected finding timestamp are checked server-side. Reviewer identity, role, review time and closure digest are never accepted from the client.

@@ -37,7 +37,7 @@ import {
 } from './src/risk-knowledge.js';
 import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
 import {
-    createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
+    createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability, assessControlApplicabilityBatch,
     recordControlEvidence, recordControlTestExecution, recordDeploymentDecision, createControlFinding, closeControlFinding, getControlIntelligenceReportSummary,
 } from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -796,6 +796,8 @@ const server = http.createServer(async (req, res) => {
             try { return json(res,200,await assessControlApplicability({projectId:decodeURIComponent(match[1]),controlId:decodeURIComponent(match[2]),userId:req.user.id,input:body}),{'Cache-Control':'private, no-store'}); }
             catch(error){ return json(res,error.statusCode||400,{error:error.message,code:error.code||undefined},{'Cache-Control':'private, no-store'}); }
         }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/applicability\/batch$/);
+        if(req.method==='POST'&&match){if(!requireUser(req,res)||!requireVerifiedEmail(req,res))return;const body=await readBody(req);try{return json(res,200,await assessControlApplicabilityBatch({projectId:decodeURIComponent(match[1]),userId:req.user.id,input:body}),{'Cache-Control':'private, no-store'});}catch(error){return json(res,error.statusCode||400,{error:error.message,code:error.code||undefined},{'Cache-Control':'private, no-store'});}}
         match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)\/tests$/);
         if (req.method === 'POST' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;

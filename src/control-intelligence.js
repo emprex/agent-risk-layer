@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { db, id, nowIso } from './db.js';
 import { getSeveritySemantics } from './risk-knowledge-core.js';
 import { runtimeApprovalActionDigest } from './access-control.js';
+import { ARCHITECTURE_FACTS, suggestControls, suggestionProfile } from './control-suggestions.js';
 
 const VIEW_ROLES = new Set(['viewer','analyst','developer','admin','owner']);
 const RECORD_ROLES = new Set(['analyst','developer','admin','owner']);
@@ -12,6 +13,7 @@ const SENSITIVITY = new Set(['public','internal','confidential','restricted']);
 const SAFE_SNAPSHOT_KEYS = new Set(['architecture','models','tools','identities','dataSources','networkAccess','autonomyLevel','approvalConfiguration','assessmentConfiguration','source','expectedCurrentSnapshotId']);
 const SECRET_KEY = /(?:password|secret|token|api.?key|private.?key|credential)/i;
 const APPLICABILITY_DECISIONS = new Set(['applicable','not_applicable','context_required']);
+const BULK_APPLICABILITY_LIMIT = 20;
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -56,26 +58,30 @@ export async function createSystemSnapshot({ projectId, userId, input = {} }) {
 }
 
 export async function assessControlApplicability({projectId,controlId,userId,input={}}) {
-  for (const key of ['evaluatorId','evaluatorRole','evaluatedAt','evaluationDigest','profileVersion','controlDigest','severity','chainStatus','nextAction']) if (Object.hasOwn(input,key)) throw badRequest(`Caller-supplied ${key} is not accepted.`);
-  const decision=clean(input.decision,30);const reason=clean(input.reason,2000);const facts=[...new Set((Array.isArray(input.architectureFactIds)?input.architectureFactIds:[]).map(value=>clean(value,100)).filter(Boolean))].sort();
-  if(!APPLICABILITY_DECISIONS.has(decision))throw badRequest('Decision must be applicable, not_applicable or context_required.');
-  if(reason.length<10)throw badRequest('A specific applicability reason of at least 10 characters is required.');
-  if(!facts.length)throw badRequest('Select at least one supporting or missing architecture fact.');
   let output;
   await db.transaction(async()=>{
     const access=await requireAccess(projectId,userId,RECORD_ROLES,true);const snapshot=await requireCurrentSnapshot(access,input.snapshotId);
-    const evaluation=await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(access.project.workspace_id,projectId,snapshot.id,clean(controlId,80));
-    if(!evaluation)throw notFound('Current snapshot control evaluation not found.');
-    const previous=await db.prepare('SELECT * FROM control_applicability_revisions WHERE evaluation_id=? ORDER BY evaluated_at DESC,id DESC LIMIT 1').get(evaluation.id);
-    const expected=clean(input.expectedEvaluationDigest,64);if(expected && expected!==(previous?.evaluation_digest||evaluation.content_digest))throw conflict('Applicability changed after this page loaded. Reload before saving.');
-    const timestamp=nowIso();const descriptor={schema:'arl.control-applicability.v1',workspaceId:access.project.workspace_id,projectId,systemSnapshotId:snapshot.id,evaluationId:evaluation.id,controlId:evaluation.entry_id,controlProfileVersion:evaluation.control_profile_version,controlDigest:evaluation.entry_digest,decision,reason,architectureFactIds:facts,evaluatorId:userId,evaluatorRole:access.role,evaluatedAt:timestamp,previousRevisionId:previous?.id||null};const digest=intelligenceDigest(descriptor);const revisionId=id('cap_');
-    await db.prepare(`INSERT INTO control_applicability_revisions (id,workspace_id,project_id,system_snapshot_id,evaluation_id,entry_id,decision,reason,architecture_facts_json,evaluator_id,evaluator_role,evaluated_at,previous_revision_id,descriptor_json,evaluation_digest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(revisionId,access.project.workspace_id,projectId,snapshot.id,evaluation.id,evaluation.entry_id,decision,reason,canonicalJson(facts),userId,access.role,timestamp,previous?.id||null,canonicalJson(descriptor),digest);
-    const storedDecision=decision==='context_required'?'unknown':decision;const semantics=getSeveritySemantics({scope:'project',applicability:storedDecision,evaluatedSeverity:null});const currentDescriptor={...descriptorFromEvaluation(evaluation),applicabilityStatus:storedDecision,applicabilityReason:reason,contextualSeverity:null,severityStatus:semantics.severityStatus,evaluatorId:userId,decisionMethod:'guided_customer_review',evaluatedAt:timestamp};
-    await db.prepare('UPDATE control_snapshot_evaluations SET applicability_status=?,applicability_reason=?,contextual_severity=NULL,severity_status=?,evaluator_id=?,decision_method=?,evaluated_at=?,descriptor_json=?,content_digest=? WHERE id=?').run(storedDecision,reason,semantics.severityStatus,userId,'guided_customer_review',timestamp,canonicalJson(currentDescriptor),intelligenceDigest(currentDescriptor),evaluation.id);
-    await audit(access,userId,'control_intelligence.applicability_assessed','control_evaluation',evaluation.id,{controlId:evaluation.entry_id,previousState:previous?.decision||'context_required',newState:decision,revisionId});
-    output={id:revisionId,systemSnapshotId:snapshot.id,controlId:evaluation.entry_id,decision,reason,architectureFactIds:facts,evaluator:{id:userId,role:access.role},evaluatedAt:timestamp,evaluationDigest:digest,previousRevisionId:previous?.id||null};
+    output=await writeApplicability({access,snapshot,controlId,userId,input});
   });
   const detail=await getControlIntelligenceControl({projectId,controlId,userId});return {evaluation:output,controlStatus:detail.chain,projectProgress:(await getControlIntelligence({projectId,userId,limit:1})).summary};
+}
+
+export async function assessControlApplicabilityBatch({projectId,userId,input={}}){
+  for(const key of ['workspaceId','evaluatorId','evaluatorRole','evaluatedAt','profileVersion','suggestionProfileDigest','severity'])if(Object.hasOwn(input,key))throw badRequest(`Caller-supplied ${key} is not accepted.`);
+  const items=Array.isArray(input.items)?input.items:[];if(!items.length||items.length>BULK_APPLICABILITY_LIMIT)throw badRequest(`Bulk applicability requires 1 to ${BULK_APPLICABILITY_LIMIT} controls.`);
+  const ids=items.map(item=>clean(item?.controlId,80));if(new Set(ids).size!==ids.length)throw badRequest('Duplicate control IDs are not allowed in one bulk review.');
+  let evaluations,snapshotId;
+  await db.transaction(async()=>{const access=await requireAccess(projectId,userId,RECORD_ROLES,true);const snapshot=await requireCurrentSnapshot(access,input.snapshotId);snapshotId=snapshot.id;if(clean(input.expectedSnapshotDigest,64)!==snapshot.content_digest)throw conflict('The system snapshot changed after this bulk review loaded. Reload before saving.');evaluations=[];for(const item of items){if(!/^[a-f0-9]{64}$/.test(String(item.expectedEvaluationDigest||'')))throw conflict(`Control ${clean(item.controlId,80)} changed or lacks an optimistic concurrency token. Reload before saving.`);const missingInformation=clean(item.missingInformation,1000);if(item.decision==='context_required'&&missingInformation.length<10)throw badRequest(`Control ${clean(item.controlId,80)} must identify the missing architecture information.`);const assessedInput={...item,reason:item.decision==='context_required'?`${clean(item.reason,1000)} Missing information: ${missingInformation}`:item.reason};delete assessedInput.missingInformation;evaluations.push(await writeApplicability({access,snapshot,controlId:item.controlId,userId,input:assessedInput}));}await audit(access,userId,'control_intelligence.applicability_bulk_assessed','system_snapshot',snapshot.id,{controlIds:ids,count:ids.length});});
+  return {snapshotId,evaluations,count:evaluations.length,projectProgress:(await getControlIntelligence({projectId,userId,limit:1})).summary};
+}
+
+async function writeApplicability({access,snapshot,controlId,userId,input}){
+  for(const key of ['workspaceId','projectId','systemSnapshotId','evaluatorId','evaluatorRole','evaluatedAt','evaluationDigest','profileVersion','controlDigest','severity','chainStatus','nextAction','suggestionLevel','suggestionRationale','suggestionProfileDigest'])if(Object.hasOwn(input,key))throw badRequest(`Caller-supplied ${key} is not accepted.`);
+  const decision=clean(input.decision,30),reason=clean(input.reason,2000),facts=[...new Set((Array.isArray(input.architectureFactIds)?input.architectureFactIds:[]).map(value=>clean(value,100)).filter(Boolean))].sort();
+  if(!APPLICABILITY_DECISIONS.has(decision))throw badRequest('Decision must be applicable, not_applicable or context_required.');if(reason.length<10||/^(not relevant|not applicable|n\/a|none)$/i.test(reason))throw badRequest('A specific control-level applicability reason of at least 10 characters is required.');if(decision==='not_applicable'&&(!/\b(?:no|absent|disabled|cannot|never|without|does not|not configured)\b/i.test(reason)||!/\b(?:agent|system|capability|input|data|tool|access|authority|identity|network|boundary|action)\b/i.test(reason)))throw badRequest('Not-applicable reasons must identify the absent capability, data, authority, identity or trust boundary.');if(!facts.length)throw badRequest('Select at least one supporting or missing architecture fact.');const snapshotFactsSet=new Set(snapshotFacts(snapshot));if(facts.some(fact=>!ARCHITECTURE_FACTS.includes(fact)||!snapshotFactsSet.has(fact)))throw badRequest('Architecture facts must be confirmed facts from the current snapshot.');
+  const evaluation=await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(access.project.workspace_id,access.project.id,snapshot.id,clean(controlId,80));if(!evaluation)throw notFound('Current snapshot control evaluation not found.');const previous=await db.prepare('SELECT * FROM control_applicability_revisions WHERE evaluation_id=? ORDER BY evaluated_at DESC,id DESC LIMIT 1').get(evaluation.id);const expected=clean(input.expectedEvaluationDigest,64);if(expected&&expected!==(previous?.evaluation_digest||evaluation.content_digest))throw conflict('Applicability changed after this page loaded. Reload before saving.');
+  const timestamp=nowIso(),descriptor={schema:'arl.control-applicability.v1',workspaceId:access.project.workspace_id,projectId:access.project.id,systemSnapshotId:snapshot.id,evaluationId:evaluation.id,controlId:evaluation.entry_id,controlProfileVersion:evaluation.control_profile_version,controlDigest:evaluation.entry_digest,decision,reason,architectureFactIds:facts,evaluatorId:userId,evaluatorRole:access.role,evaluatedAt:timestamp,previousRevisionId:previous?.id||null},digest=intelligenceDigest(descriptor),revisionId=id('cap_');await db.prepare(`INSERT INTO control_applicability_revisions (id,workspace_id,project_id,system_snapshot_id,evaluation_id,entry_id,decision,reason,architecture_facts_json,evaluator_id,evaluator_role,evaluated_at,previous_revision_id,descriptor_json,evaluation_digest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(revisionId,access.project.workspace_id,access.project.id,snapshot.id,evaluation.id,evaluation.entry_id,decision,reason,canonicalJson(facts),userId,access.role,timestamp,previous?.id||null,canonicalJson(descriptor),digest);
+  const storedDecision=decision==='context_required'?'unknown':decision,semantics=getSeveritySemantics({scope:'project',applicability:storedDecision,evaluatedSeverity:null}),currentDescriptor={...descriptorFromEvaluation(evaluation),applicabilityStatus:storedDecision,applicabilityReason:reason,contextualSeverity:null,severityStatus:semantics.severityStatus,evaluatorId:userId,decisionMethod:'guided_customer_review',evaluatedAt:timestamp};await db.prepare('UPDATE control_snapshot_evaluations SET applicability_status=?,applicability_reason=?,contextual_severity=NULL,severity_status=?,evaluator_id=?,decision_method=?,evaluated_at=?,descriptor_json=?,content_digest=? WHERE id=?').run(storedDecision,reason,semantics.severityStatus,userId,'guided_customer_review',timestamp,canonicalJson(currentDescriptor),intelligenceDigest(currentDescriptor),evaluation.id);await audit(access,userId,'control_intelligence.applicability_assessed','control_evaluation',evaluation.id,{controlId:evaluation.entry_id,previousState:previous?.decision||'context_required',newState:decision,revisionId});return{id:revisionId,systemSnapshotId:snapshot.id,controlId:evaluation.entry_id,decision,reason,architectureFactIds:facts,evaluator:{id:userId,role:access.role},evaluatedAt:timestamp,evaluationDigest:digest,previousRevisionId:previous?.id||null};
 }
 
 async function bindRuntimeMappings({access,snapshotId,userId,timestamp,payload}){
@@ -321,6 +327,7 @@ export async function getControlIntelligence({ projectId, userId, limit = 25, of
   await verifyRows(allEvaluations,'content_digest','evaluation');
   const derived = await loadDerivedRows(access, snapshot, allEvaluations);
   derived.snapshotAssessmentConfiguration=snapshot.assessment_configuration_json;
+  derived.suggestions=suggestControls(derived.entries,snapshotFacts(snapshot),snapshot.id);
   const chains = deriveChains(allEvaluations, derived);
   const filtered = status ? chains.filter((chain) => chain.chainStatus === status) : chains;
   const page = filtered.slice(safeOffset, safeOffset + safeLimit);
@@ -328,7 +335,7 @@ export async function getControlIntelligence({ projectId, userId, limit = 25, of
   const latestDecision = derived.decisions[0] || null;
   if(latestDecision) await verifyRows([latestDecision],'decision_digest','decision');
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
-    controlProfileVersion: 'ARL-RKA-1.2.0', summary: summarizeChains(chains, derived), deploymentState: latestDecision ? serializeDecision(latestDecision) : null,
+    controlProfileVersion: 'ARL-RKA-1.2.0', suggestionProfile:suggestionProfile(), summary: summarizeChains(chains, derived), deploymentState: latestDecision ? serializeDecision(latestDecision) : null,
     items: page, total: filtered.length, limit: safeLimit, offset: safeOffset, hasMore: safeOffset + page.length < filtered.length,
     filters: { chainStatus: countValues(chains.map((chain) => chain.chainStatus)) }, nodes: graph.nodes, edges: graph.edges };
 }
@@ -369,6 +376,10 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
   await verifyRows(decisions,'decision_digest','decision');
   const bindings=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY created_at DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id);
   await verifyRows(bindings,'content_digest','binding');
+  const [previousControl,nextControl]=await Promise.all([
+    db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
+    db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id>? ORDER BY entry_id LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
+  ]);
   const derived = { tests:testHistory, evidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
@@ -381,14 +392,14 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     threatScenarios: threatScenarios(evaluation), tests: tests.map(serializeTest), testHistory:testHistory.map(serializeTest), evidence: evidence.map(serializeEvidence),
     findings: remediations.map((row) => serializeFinding(row, evaluation)), runtimeDecisions: runtime.map(serializeRuntime), approvals: approvals.map(serializeApproval),
     remediation: remediations.map((row) => serializeFinding(row, evaluation)), retests: runtime.filter((row) => row.retest_criteria_id).map(serializeRuntime),
-    deploymentDecisions: decisions.map(serializeDecision), approvalRequirements:requirements.map(row=>({id:row.id,actionType:row.action_type,reuseScope:row.reuse_scope,requirementDigest:row.requirement_digest,details:parseJson(row.descriptor_json,{})})), frameworkMappings: mappings, chain, architectureFacts:snapshotFacts(snapshot), suggestion:suggestionForControl(evaluation.entry_id,snapshot) };
+    deploymentDecisions: decisions.map(serializeDecision), approvalRequirements:requirements.map(row=>({id:row.id,actionType:row.action_type,reuseScope:row.reuse_scope,requirementDigest:row.requirement_digest,details:parseJson(row.descriptor_json,{})})), frameworkMappings: mappings, chain, architectureFacts:snapshotFacts(snapshot), suggestion:suggestControls([{id:evaluation.entry_id,title:evaluation.title,category:evaluation.category,problem_json:evaluation.problem_json,content_digest:evaluation.entry_digest}],snapshotFacts(snapshot),snapshot.id)[0],suggestionProfile:suggestionProfile(),navigation:{previousControlId:previousControl?.entry_id||null,nextControlId:nextControl?.entry_id||null} };
 }
 
 async function loadDerivedRows(access, snapshot, evaluations) {
   const entryIds = evaluations.map((row) => row.entry_id);
   if (!entryIds.length) return { entries: [], checks: [], tests: [], evidence: [], links: [], remediations: [], runtime: [], approvals: [], requirements:[], decisions: [], decisionEvidence: [] };
   const marks = entryIds.map(() => '?').join(',');
-  const [entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence] = await Promise.all([
+  const [entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence,revisions] = await Promise.all([
     db.prepare(`SELECT e.id,e.title,e.category,e.problem_json,e.knowledge_version,e.content_digest,COALESCE(v.lifecycle_status,'candidate') lifecycle_status,
       (SELECT default_owner FROM risk_knowledge_solutions s WHERE s.entry_id=e.id ORDER BY s.priority,s.id LIMIT 1) accountable_owner
       FROM risk_knowledge_entries e LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
@@ -406,11 +417,12 @@ async function loadDerivedRows(access, snapshot, evaluations) {
     db.prepare('SELECT * FROM control_deployment_decisions WHERE workspace_id=? AND project_id=? ORDER BY decided_at DESC LIMIT 25').all(access.project.workspace_id, access.project.id),
     db.prepare(`SELECT de.decision_id,de.evidence_id,de.relationship FROM deployment_decision_evidence de
       JOIN control_deployment_decisions d ON d.id=de.decision_id WHERE d.workspace_id=? AND d.project_id=? AND d.system_snapshot_id=? LIMIT 500`).all(access.project.workspace_id,access.project.id,snapshot.id),
+    db.prepare('SELECT entry_id,evaluation_digest,evaluated_at FROM control_applicability_revisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY evaluated_at DESC,id DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id),
   ]);
   await verifyRows(tests, 'content_digest','test');
   await verifyRows(evidence, 'integrity_digest','evidence');
   await verifyRows(decisions,'decision_digest','decision');
-  return { entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence };
+  return { entries,checks,tests,evidence,links,remediations,runtime,approvals,requirements,decisions,decisionEvidence,revisions };
 }
 
 export async function prepareControlIntelligenceSourcePurge({ projectId, runtimeEventIds = [], approvalIds = [], timestamp = nowIso() }) {
@@ -428,6 +440,7 @@ export async function getControlIntelligenceReportSummary({projectId}){
   const project=await db.prepare('SELECT id,workspace_id,name FROM security_projects WHERE id=?').get(clean(projectId,100));if(!project)return null;
   const snapshot=await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current'").get(project.workspace_id,project.id);if(!snapshot)return null;await verifySnapshot(snapshot);
   const evaluations=await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY entry_id').all(project.workspace_id,project.id,snapshot.id);await verifyRows(evaluations,'content_digest','evaluation');
+  const suggestionEntries=await db.prepare('SELECT id,title,category,problem_json,content_digest FROM risk_knowledge_entries WHERE status=\'active\' ORDER BY id').all();const suggestions=suggestControls(suggestionEntries,snapshotFacts(snapshot),snapshot.id);
   const applicabilityRevisions=await db.prepare(`SELECT r.* FROM control_applicability_revisions r
     JOIN (SELECT entry_id,MAX(evaluated_at) AS evaluated_at FROM control_applicability_revisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? GROUP BY entry_id) latest
       ON latest.entry_id=r.entry_id AND latest.evaluated_at=r.evaluated_at
@@ -437,7 +450,7 @@ export async function getControlIntelligenceReportSummary({projectId}){
   const findings=await db.prepare(`SELECT r.id,r.status,r.severity,b.entry_id FROM remediation_items r JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? ORDER BY r.updated_at DESC LIMIT 250`).all(project.workspace_id,project.id,snapshot.id);
   const applicable=evaluations.filter(row=>row.applicability_status==='applicable');const observed=new Set(evidence.filter(row=>row.verification_state==='verified'&&row.retention_status==='active').map(row=>row.entry_id));const currentDecision=decisions[0]||null;
   const applicabilityDecisions=applicabilityRevisions.map(row=>({controlId:row.entry_id,decision:row.decision,reason:row.reason,architectureFacts:parseJson(row.architecture_facts_json,[]),evaluatedAt:row.evaluated_at,evaluatorRole:row.evaluator_role}));
-  return {statement:'AgentRiskLayer Security Assessment — assessed against AgentRiskLayer Control Profile ARL-RKA-1.2.0.',disclaimer:'This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free.',project:{id:project.id,name:project.name},systemSnapshot:{id:snapshot.id,version:snapshot.version_identifier,digest:snapshot.content_digest},controlProfileVersion:'ARL-RKA-1.2.0',controlProfileDigest:intelligenceDigest(evaluations.map(row=>({id:row.entry_id,digest:row.entry_digest}))),scope:{included:'Current snapshot-bound controls and evidence.',exclusions:'Historical or unbound evidence does not qualify.'},controlsReviewed:applicabilityDecisions.length,applicabilityDecisions,applicableControls:applicable.length,notApplicableControls:applicabilityDecisions.filter(row=>row.decision==='not_applicable').length,contextRequiredControls:applicabilityDecisions.filter(row=>row.decision==='context_required').length,unevaluatedApplicableControls:applicable.filter(row=>row.severity_status==='not_evaluated').length,observedControls:observed.size,missingEvidence:applicable.filter(row=>!observed.has(row.entry_id)).map(row=>row.entry_id),openFindings:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).map(row=>({id:row.id,controlId:row.entry_id,status:row.status,severity:row.severity})),retestStatus:{required:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).length},runtimeEvidence:evidence.filter(row=>row.evidence_class==='runtime').length,approvalEvidence:evidence.filter(row=>row.approval_id).length,deploymentDecision:currentDecision?serializeDecision(currentDecision):null,stale:Boolean(currentDecision&&currentDecision.status!=='current'),integrityFailures:0,limitations:['Candidate controls remain candidate content.','Framework mappings are informative and do not establish compliance.']};
+  return {statement:'AgentRiskLayer Security Assessment — assessed against AgentRiskLayer Control Profile ARL-RKA-1.2.0.',disclaimer:'This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free.',project:{id:project.id,name:project.name},systemSnapshot:{id:snapshot.id,version:snapshot.version_identifier,digest:snapshot.content_digest},controlProfileVersion:'ARL-RKA-1.2.0',controlProfileDigest:intelligenceDigest(evaluations.map(row=>({id:row.entry_id,digest:row.entry_digest}))),suggestionProfile:suggestionProfile(),suggestions,scope:{included:'Current snapshot-bound controls and evidence.',exclusions:'Historical or unbound evidence does not qualify.'},controlsReviewed:applicabilityDecisions.length,applicabilityDecisions,applicableControls:applicable.length,notApplicableControls:applicabilityDecisions.filter(row=>row.decision==='not_applicable').length,contextRequiredControls:applicabilityDecisions.filter(row=>row.decision==='context_required').length,unevaluatedApplicableControls:applicable.filter(row=>row.severity_status==='not_evaluated').length,observedControls:observed.size,missingEvidence:applicable.filter(row=>!observed.has(row.entry_id)).map(row=>row.entry_id),openFindings:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).map(row=>({id:row.id,controlId:row.entry_id,status:row.status,severity:row.severity})),retestStatus:{required:findings.filter(row=>!['verified_closed','accepted_risk'].includes(row.status)).length},runtimeEvidence:evidence.filter(row=>row.evidence_class==='runtime').length,approvalEvidence:evidence.filter(row=>row.approval_id).length,deploymentDecision:currentDecision?serializeDecision(currentDecision):null,stale:Boolean(currentDecision&&currentDecision.status!=='current'),integrityFailures:0,limitations:['Architecture suggestions require evaluator confirmation and are not observed controls.','Candidate controls remain candidate content.','Framework mappings are informative and do not establish compliance.']};
 }
 
 function deriveChains(evaluations, data) {
@@ -474,16 +487,12 @@ function deriveChains(evaluations, data) {
     else {completedStages.push('test');if(!verifiedEvidence){currentStage='evidence';nextAction='Attach observed evidence for the executed test.';deploymentImpact='hold';}else{completedStages.push('evidence');if(failed||open.length){if(!findings.length){currentStage='finding';nextAction='Create or link a finding for the failed test.';}else if(!remediating){completedStages.push('finding');currentStage='remediation';nextAction='Record and implement remediation.';}else if(!passedRetest){completedStages.push('finding','remediation');currentStage='retest';nextAction='Retest the exact original failure against the remediated snapshot.';}else{completedStages.push('finding','remediation','retest');currentStage=approvalRequired?'approval':'deployment_decision';nextAction=approvalRequired?'Complete the required exact-action approval.':'Review the project deployment decision.';}deploymentImpact='blocker';}else{notRequiredStages.push('finding','remediation','retest');currentStage=approvalRequired?'approval':'deployment_decision';nextAction=approvalRequired?'Complete the required exact-action approval.':'Review the project deployment decision.';deploymentImpact=approvalRequired?'hold':'satisfied';}}}
     if(approvalRequired&&data.approvals.some(row=>row.entry_id===controlId&&validApproval(row))){completedStages.push('approval');if(currentStage==='approval'){currentStage='deployment_decision';nextAction='Review the project deployment decision.';}}
     const stages=['applicability','test','evidence','finding','remediation','retest','approval','deployment_decision'];const stageStates=Object.fromEntries(stages.map(stage=>[stage,notRequiredStages.includes(stage)?'not_required':completedStages.includes(stage)?'complete':stage===currentStage?'current':'blocked']));
-    const entry=data.entries?.find(row=>row.id===controlId);return { controlId,controlTitle:entry?.title||controlId,suggested:suggestionForControl(controlId,{assessment_configuration_json:data.snapshotAssessmentConfiguration||'{}'}), systemSnapshotId: evaluation.system_snapshot_id, applicabilityStatus: evaluation.applicability_status,
+    const entry=data.entries?.find(row=>row.id===controlId),revision=data.revisions?.find(row=>row.entry_id===controlId);return { controlId,controlTitle:entry?.title||controlId,category:entry?.category||'Uncategorised',suggestion:data.suggestions?.find(row=>row.controlId===controlId),suggested:data.suggestions?.find(row=>row.controlId===controlId),applicabilityDigest:revision?.evaluation_digest||evaluation.content_digest, systemSnapshotId: evaluation.system_snapshot_id, applicabilityStatus: evaluation.applicability_status,
       severity: evaluation.contextual_severity, severityStatus: evaluation.severity_status, chainStatus, currentStage,nextAction,availableActions:currentStage==='applicability'?['assess_applicability']:currentStage==='test'?['record_test']:currentStage==='evidence'?['record_evidence']:[],completedStages,blockedStages:stages.filter(stage=>stageStates[stage]==='blocked'),notRequiredStages,missingRequirements:stageStates[currentStage]==='current'?[nextAction]:[],deploymentImpact,stageStates,missingStages:stages.filter(stage=>stageStates[stage]==='current'), stale: Boolean(evaluation.stale_at) };
   });
 }
 
 function snapshotFacts(snapshot){const config=parseJson(snapshot.assessment_configuration_json,{});return Array.isArray(config.architectureFacts)?config.architectureFacts:[];}
-function suggestionForControl(controlId,snapshot){const facts=snapshotFacts(snapshot);const triggered=[];const wanted={
-  'ARL-KB-031':['input:user_messages','input:retrieved_documents','input:uploaded_files'],
-  'ARL-KB-053':['tool:write','authority:financial','safeguard:human_approval'],
-};for(const fact of wanted[controlId]||[])if(facts.includes(fact))triggered.push(fact);return {status:'suggested',requiresConfirmation:true,reasons:triggered.length?triggered:['Catalogue control requires customer confirmation against this snapshot.']};}
 
 function buildGraph(access, snapshot, chains, data) {
   const nodes = [{ id: `project:${access.project.id}`, type: 'agent_system', label: access.project.name, status: access.project.status, href: `/control-intelligence.html?projectId=${encodeURIComponent(access.project.id)}` },

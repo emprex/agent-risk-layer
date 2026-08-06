@@ -117,7 +117,7 @@ PostgreSQL evidence must use a dedicated destructive-test URL, never `DATABASE_U
 TEST_DATABASE_URL='postgresql://.../arl_disposable_test' DATABASE_URL='' NODE_ENV=test npm test
 ```
 
-The `scripts/test-control-intelligence-postgres.mjs` harness rejects equality with `DATABASE_URL`, non-loopback and production-like targets, and database names without an explicit test/disposable marker. It applies migrations 001–015, verifies checksum-idempotent restart, exercises independent transaction concurrency and malformed relational writes, and removes only the disposable database schema. Static parsing or SQLite is not equivalent evidence.
+The `scripts/test-control-intelligence-postgres.mjs` harness rejects equality with `DATABASE_URL`, non-loopback and production-like targets, and database names without an explicit test/disposable marker. It applies migrations 001–016, verifies checksum-idempotent restart, exercises independent transaction concurrency and malformed relational writes, and removes only the disposable database schema. Static parsing or SQLite is not equivalent evidence.
 
 Limitations: pre-015 evidence has no exact snapshot binding and is not promoted into current evidence; project-bound inspection/red-team detail depends on existing resolvers; severity editing remains deferred and client severity is rejected; cross-customer analytics are excluded pending privacy/consent design; framework mappings remain informative and do not establish compliance.
 
@@ -132,3 +132,9 @@ The project control workspace exposes the remaining evidence-chain actions throu
 Failed tests are saved before a finding exists. The customer must review and submit the separate finding form; the server then binds the finding to the failed execution and derives project-contextual severity from asserted impact facts. The visible **Generate assessment report** action opens the authenticated, `private, no-store` project report after a deployment decision has been derived. The report preserves snapshot/profile identity, applicability reasons, evidence state, finding and retest status, approval evidence, decision limitations and the proprietary non-certification wording.
 
 The release browser validator advances the journey only by focusing, typing into and activating visible controls. Its source guard rejects direct application API mutation, database access, browser-storage forgery and internal service invocation. Customer-submitted evidence remains unverified unless an authorised server workflow establishes verification.
+
+### Architecture suggestions and bulk review
+
+Suggestion Profile `ARL-SUGGEST-1.0.0` is a server-owned deterministic mapping over structured snapshot facts and canonical Risk Knowledge metadata. Its SHA-256 digest binds the version, supported fact keys, ordered rules, priorities and rationale templates. The same snapshot and catalogue version produce the same ordered suggestions. Every structured fact has a deterministic rule; every active control remains reachable through a strong match, possible-relevance result or manual-review fallback. Suggestions do not modify applicability and are not observed evidence.
+
+The overview permits at most 20 selected controls per bulk review. Each row requires its own decision, specific reason and confirmed fact references; `context_required` also records missing information. A project-scoped transaction authorizes the current snapshot, validates every row, inserts one immutable revision per control, updates current evaluations and writes a bounded audit event. Duplicate or unknown controls, unconfirmed facts, stale snapshot/evaluation digests and caller-owned identity or risk fields reject and roll back the complete batch. Previous revisions remain reportable history.

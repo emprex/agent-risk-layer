@@ -8,7 +8,7 @@ import { createWorkspace } from '../src/workspaces.js';
 import { createRuntimeApproval, createSecurityProject } from '../src/control-plane.js';
 import { applyProjectRiskKnowledgeProfile } from '../src/risk-knowledge.js';
 import {
-  canonicalJson, createSystemSnapshot, createControlFinding, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
+  canonicalJson, createSystemSnapshot, createControlFinding, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability, assessControlApplicabilityBatch,
   getControlIntelligenceReportSummary, intelligenceDigest, recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
 } from '../src/control-intelligence.js';
 import { buildAssessmentReport } from '../src/report-service.js';
@@ -99,6 +99,9 @@ test('Control Intelligence enforces roles, tenant boundaries, bounded pagination
   assert.equal((await getControlIntelligence({projectId:owner.project.id,userId:viewerId,limit:10000})).limit,50);
   await assert.rejects(()=>recordControlTestExecution({projectId:owner.project.id,controlId:'ARL-KB-001',userId:viewerId,input:{systemSnapshotId:snapshot.id,result:'planned'}}),/permission denied/i);
   await assert.rejects(()=>recordDeploymentDecision({projectId:owner.project.id,userId:viewerId,input:{systemSnapshotId:snapshot.id,decision:'proceed'}}),/permission denied/i);
+  const batch={snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[{controlId:'ARL-KB-001',decision:'applicable',reason:'This agent includes the assessed capability and requires review.',architectureFactIds:['input:user_messages']}]};
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:owner.project.id,userId:viewerId,input:batch}),/permission denied/i);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:owner.project.id,userId:outsider.userId,input:batch}),/permission denied/i);
 });
 
 test('migration is additive, foreign-keyed and SQLite has no orphan graph records',async()=>{
@@ -115,10 +118,12 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   const detail=fs.readFileSync(path.join(root,'public/control-intelligence-control.html'),'utf8');
   const css=fs.readFileSync(path.join(root,'public/control-intelligence.css'),'utf8');
   const script=fs.readFileSync(path.join(root,'public/control-intelligence.js'),'utf8');
+  const detailScript=fs.readFileSync(path.join(root,'public/control-intelligence-control.js'),'utf8');
   assert.equal((overview.match(/>Control Intelligence<\/a>/g)||[]).length,0);
   assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
   assert.match(script,/Assessment progress/);assert.match(script,/Review suggested controls/);
+  assert.match(detailScript,/Previous control/);assert.match(detailScript,/Save and next/);assert.match(detailScript,/beforeunload/);
   assert.doesNotMatch(script,/href=\\?"#controls/);assert.match(script,/expectedCurrentSnapshotId/);assert.match(script,/expectedCurrentDecisionId/);
   assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/overflow-x:auto/);
   for(const html of [overview,detail]){assert.match(html,/name="viewport"/);assert.match(html,/skip-link/);assert.match(html,/aria-label/);assert.doesNotMatch(html,/runtime_event|action_digest|workspace_id|token_digest/);}
@@ -130,7 +135,7 @@ test('guided applicability is snapshot-bound, revisioned, role-enforced and driv
   const first=await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'applicable',reason:'Untrusted customer messages reach the interactive refund agent.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:before.applicability.evaluationDigest}});assert.equal(first.evaluation.evaluator.id,f.userId);
   const after=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(after.chain.currentStage,'test');assert.ok(after.chain.notRequiredStages.includes('remediation'));
   await assert.rejects(()=>assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'The capability is absent from this isolated agent.',architectureFactIds:['tool:payment'],expectedEvaluationDigest:before.applicability.evaluationDigest}}),/changed after this page/i);
-  await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'This revised system accepts no untrusted messages or retrieved content.',architectureFactIds:['architecture:manual-review'],expectedEvaluationDigest:after.applicability.evaluationDigest}});
+  await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'This revised system accepts no untrusted messages or retrieved content.',architectureFactIds:['tool:payment'],expectedEvaluationDigest:after.applicability.evaluationDigest}});
   const final=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(final.applicability.history.length,2);assert.equal(final.chain.deploymentImpact,'not_applicable');assert.deepEqual(final.chain.notRequiredStages,['test','evidence','finding','remediation','retest','approval']);
 });
 
@@ -167,4 +172,27 @@ test('customer report includes exact Control Intelligence scope without certific
   await db.prepare(`INSERT INTO remediation_items (id,project_id,assessment_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,'open','{}',?,?,?)`).run(randomId('rem_'),f.project.id,assessmentId,'ARL-KB-053-report','Report linkage','high',f.userId,timestamp,timestamp);
   const summary=await getControlIntelligenceReportSummary({projectId:f.project.id});assert.equal(summary.systemSnapshot.id,snapshot.id);assert.equal(summary.controlProfileVersion,'ARL-RKA-1.2.0');assert.match(summary.disclaimer,/not an accredited certification/i);assert.ok(Array.isArray(summary.applicabilityDecisions));
   const {report}=await buildAssessmentReport(assessmentId,'pro');assert.equal(report.controlIntelligence.systemSnapshot.digest,snapshot.contentDigest);assert.equal(report.controlIntelligence.deploymentDecision,null);assert.ok(report.controlIntelligence.missingEvidence.length>=0);assert.doesNotMatch(JSON.stringify(report.controlIntelligence),/certified|guaranteed security/i);
+});
+
+test('bulk applicability is atomic, bounded, revisioned and server-derived',async()=>{
+  const f=await fixture('bulk');const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Customer refund agent'},assessmentConfiguration:{architectureFacts:['input:user_messages','tool:payment','safeguard:human_approval']},source:'test'}});
+  const one=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId}),two=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId});
+  const saved=await assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[
+    {controlId:'ARL-KB-031',decision:'applicable',reason:'Untrusted customer messages can influence the refund workflow.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:one.applicability.evaluationDigest},
+    {controlId:'ARL-KB-053',decision:'context_required',reason:'The exact approval enforcement point still requires confirmation.',missingInformation:'Confirm the runtime policy enforcement point and failure behavior.',architectureFactIds:['safeguard:human_approval'],expectedEvaluationDigest:two.applicability.evaluationDigest},
+  ]}});
+  assert.equal(saved.count,2);assert.equal((await db.prepare('SELECT COUNT(*) count FROM control_applicability_revisions WHERE system_snapshot_id=?').get(snapshot.id)).count,2);
+  assert.equal((await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId})).applicability.status,'applicable');
+  const three=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-032',userId:f.userId});
+  const before=Number((await db.prepare('SELECT COUNT(*) count FROM control_applicability_revisions WHERE system_snapshot_id=?').get(snapshot.id)).count);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[
+    {controlId:'ARL-KB-032',decision:'applicable',reason:'Retrieved content crosses an untrusted boundary in this agent.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:three.applicability.evaluationDigest},
+    {controlId:'ARL-KB-999',decision:'applicable',reason:'This invalid control must roll back the complete batch.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:'0'.repeat(64)},
+  ]}}),/not found/i);
+  assert.equal(Number((await db.prepare('SELECT COUNT(*) count FROM control_applicability_revisions WHERE system_snapshot_id=?').get(snapshot.id)).count),before);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[{controlId:'ARL-KB-031'},{controlId:'ARL-KB-031'}]}}),/Duplicate control IDs/i);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[{controlId:'ARL-KB-032',decision:'applicable',reason:'A caller without a revision token must not overwrite this control.',architectureFactIds:['input:user_messages']}]}}),/optimistic concurrency token/i);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,suggestionProfileDigest:'0'.repeat(64),items:[{controlId:'ARL-KB-032',decision:'applicable',reason:'A forged suggestion profile must not influence this decision.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:three.applicability.evaluationDigest}]}}),/Caller-supplied suggestionProfileDigest/i);
+  await assert.rejects(()=>assessControlApplicabilityBatch({projectId:f.project.id,userId:f.userId,input:{snapshotId:snapshot.id,expectedSnapshotDigest:snapshot.contentDigest,items:[{controlId:'ARL-KB-032',decision:'not_applicable',reason:'This is not relevant to us.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:three.applicability.evaluationDigest}]}}),/Not-applicable reasons/i);
+  assert.equal((await db.prepare("SELECT COUNT(*) count FROM security_audit_log WHERE project_id=? AND action='control_intelligence.applicability_bulk_assessed'").get(f.project.id)).count,1);
 });

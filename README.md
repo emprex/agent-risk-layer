@@ -33,6 +33,8 @@ The catalogue API uses `items`, `total`, `limit`, `offset` and `hasMore`; record
 
 Authenticated projects can create immutable, server-digested system snapshots and review a bounded evidence chain linking ARL-RKA-1.2.0 controls to canonical tests, executions, classified evidence, existing findings/remediation, runtime decisions, exact-action approvals, retests and exact-snapshot deployment decisions. This is a typed relational model over the existing PostgreSQL/SQLite adapters—not a second graph database. See [Control Intelligence Graph](docs/CONTROL_INTELLIGENCE_GRAPH.md).
 
+Versioned deterministic architecture suggestions help customers prioritize all 108 controls without deciding applicability for them. The guided bulk review records a separate reason, confirmed facts, evaluator identity and immutable revision for every selected control; one stale or invalid item rejects the bounded batch instead of being silently counted as reviewed.
+
 Control Intelligence is proprietary evidence-linked decision support, not an accredited certification or a guarantee that an agent is risk-free.
 
 ## Runtime privacy boundary
