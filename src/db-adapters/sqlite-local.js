@@ -863,11 +863,14 @@ for (const migrationName of [
   '012_seed_risk_knowledge_v1_1.sql',
   '013_risk_knowledge_evidence_lifecycle.sql',
   '014_seed_risk_knowledge_v1_2.sql',
+  '015_control_intelligence_graph.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
   rawDb.exec(fs.readFileSync(migrationPath, 'utf8'));
 }
+ensureColumn('control_test_executions', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
+ensureColumn('control_evidence_items', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
 
 if (config.adminEmail) rawDb.prepare(`UPDATE users SET role='superuser' WHERE email=?`).run(config.adminEmail);
 

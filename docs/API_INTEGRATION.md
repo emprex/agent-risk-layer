@@ -70,6 +70,19 @@ Requires an authenticated account with a verified email.
 
 Returns the authoritative 66-predicate registry, including provenance classification, dependencies, conditional-display rules and the justification for facts that require observation, metadata or manual review.
 
+## Control Intelligence Graph
+
+All routes require an authenticated, verified account and resolve the project/workspace server-side. Responses are `private, no-store`.
+
+- `GET /api/projects/:projectId/control-intelligence?limit=25&offset=0&status=` returns snapshot summary, server-derived metrics, deployment state, paginated chain states, bounded nodes/edges and status counts. Maximum page size is 50.
+- `POST /api/projects/:projectId/control-intelligence` creates or reuses an immutable server-digested system snapshot for developer/admin/owner roles.
+- `GET /api/projects/:projectId/control-intelligence/controls/:controlId?limit=25` returns the current snapshot-bound control, applicability, severity semantics, canonical check, threat scenario, executions, evidence, findings, runtime observations, approvals, remediation/retests, mappings and deployment impact.
+- `POST /api/projects/:projectId/control-intelligence/controls/:controlId/tests` records a bounded execution against the canonical check digest. Failed executions must link an existing project finding/remediation record.
+- `POST /api/projects/:projectId/control-intelligence/controls/:controlId/evidence` records a classified, privacy-minimized descriptor; server-side source resolution determines verification state.
+- `POST /api/projects/:projectId/control-intelligence/deployment-decisions` records the server-derived decision for the exact current snapshot. Caller-supplied decisions, gates, severities, scores and counts are rejected.
+
+Graph schema `1.0` safe nodes expose only ID, type, label, status, optional version/digest and an authorized UI link. Edges expose ID, endpoints and a documented relationship type. See `CONTROL_INTELLIGENCE_GRAPH.md`.
+
 ## Project workflow
 
 ### `PUT /api/projects/:projectId/risk-knowledge-profile`

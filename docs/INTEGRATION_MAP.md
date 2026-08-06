@@ -1,5 +1,11 @@
 # Risk knowledge repository integration record
 
+## Control Intelligence integration
+
+`security_projects` → immutable `system_snapshots` → `control_snapshot_evaluations` → canonical `risk_knowledge_checks` → `control_test_executions` → `control_evidence_items` → existing remediation/runtime/approval/retest records → `control_deployment_decisions`.
+
+The derived service is `src/control-intelligence.js`; authenticated routes are in `server.js`; accessible overview/detail surfaces are `public/control-intelligence*`. Existing workspace roles, CSRF, sessions, audit, runtime approval integrity, remediation transitions, retention and Risk Knowledge digest verification remain authoritative.
+
 ## Inspected baseline
 
 - Source archive: `agent-risk-layer-fix-main.zip`

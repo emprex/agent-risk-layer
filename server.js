@@ -36,6 +36,10 @@ import {
     profileRiskKnowledge, setProjectRiskKnowledgeState, riskKnowledgeFilterOptions, architecturePredicateRegistry,
 } from './src/risk-knowledge.js';
 import { resolveRiskKnowledgeSubject } from './src/risk-knowledge-subjects.js';
+import {
+    createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl,
+    recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
+} from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
 const mimeTypes = {
@@ -759,6 +763,53 @@ const server = http.createServer(async (req, res) => {
             } catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
             }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence$/);
+        if (req.method === 'GET' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            try {
+                return json(res, 200, await getControlIntelligence({ projectId: decodeURIComponent(match[1]), userId: req.user.id,
+                    limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset'), status: url.searchParams.get('status') || '' }), { 'Cache-Control': 'private, no-store' });
+            } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            try {
+                return json(res, 201, await createSystemSnapshot({ projectId: decodeURIComponent(match[1]), userId: req.user.id, input: body }), { 'Cache-Control': 'private, no-store' });
+            } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)$/);
+        if (req.method === 'GET' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            try {
+                return json(res, 200, await getControlIntelligenceControl({ projectId: decodeURIComponent(match[1]), controlId: decodeURIComponent(match[2]), userId: req.user.id,
+                    historyLimit: url.searchParams.get('limit') }), { 'Cache-Control': 'private, no-store' });
+            } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)\/tests$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const field of ['workspaceId','userId','contentDigest','checkDigest','chainStatus','severity','severityStatus']) if (Object.hasOwn(body, field)) return json(res, 400, { error: `Caller-supplied ${field} is not accepted.` });
+            try { return json(res, 201, { execution: await recordControlTestExecution({ projectId: decodeURIComponent(match[1]), controlId: decodeURIComponent(match[2]), userId: req.user.id, input: body }) }); }
+            catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/controls\/([^/]+)\/evidence$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const field of ['workspaceId','userId','integrityDigest','verificationState','chainStatus','severity','severityStatus']) if (Object.hasOwn(body, field)) return json(res, 400, { error: `Caller-supplied ${field} is not accepted.` });
+            try { return json(res, 201, { evidence: await recordControlEvidence({ projectId: decodeURIComponent(match[1]), controlId: decodeURIComponent(match[2]), userId: req.user.id, input: body }) }); }
+            catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)\/control-intelligence\/deployment-decisions$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
+            const body = await readBody(req);
+            for (const field of ['workspaceId','userId','decision','decisionDigest','summary','criticalBlockers','deploymentGate']) if (Object.hasOwn(body, field)) return json(res, 400, { error: `Caller-supplied ${field} is not accepted.` });
+            try { return json(res, 201, { deploymentDecision: await recordDeploymentDecision({ projectId: decodeURIComponent(match[1]), userId: req.user.id, input: body }) }); }
+            catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
         }
         match = url.pathname.match(/^\/api\/projects\/([^/]+)\/risk-knowledge-profile$/);
         if (req.method === 'PUT' && match) {

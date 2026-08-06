@@ -38,6 +38,8 @@ Rollback should restore the application and database from a verified pre-migrati
 
 ## Known limitations and exclusions
 
+Control Intelligence migration 015 adds immutable system snapshots and snapshot-bound evaluations, executions, evidence and deployment decisions for new records. Existing pre-015 project-risk and evidence records remain historical and are not silently transferred. See `CONTROL_INTELLIGENCE_GRAPH.md`.
+
 - No entry has customer-exercised, independent-review or verified-automation evidence in this repository.
 - PostgreSQL migration execution requires a disposable or test PostgreSQL service; the SQLite test adapter is compatibility evidence, not production migration evidence.
 - Contextual project-risk storage is additive, but an owner-reviewed write UI/API is intentionally deferred rather than accepting client-derived severity.

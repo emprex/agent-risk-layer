@@ -101,6 +101,7 @@ function advancedTools(data) {
     <div class="advanced-tools-body">
       <p>These tools are for developers, security teams and auditors. You do not need them to understand your first result.</p>
       <div class="technical-tool-grid">
+        <a href="/control-intelligence.html"><strong>Control Intelligence</strong><span>Architecture, controls, evidence chain and deployment decision</span></a>
         <a href="/control-plane.html"><strong>Live protection</strong><span>Policies, keys and runtime decisions</span></a>
         <a href="/inspector.html"><strong>Code and configuration check</strong><span>Local, read-only technical evidence</span></a>
         <a href="/redteam.html"><strong>Attack simulation</strong><span>Controlled tests for authorised systems</span></a>

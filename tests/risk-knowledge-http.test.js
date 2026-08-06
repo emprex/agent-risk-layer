@@ -198,6 +198,33 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
 
     const authCsrf = await csrf(instance.origin);
     const writeCookie = `${authCookie}; ${authCsrf.cookie}`;
+    const unauthenticatedGraph = await fetch(`${instance.origin}/api/projects/${auth.projectId}/control-intelligence`);
+    assert.equal(unauthenticatedGraph.status, 401);
+    const snapshotResponse = await fetch(`${instance.origin}/api/projects/${auth.projectId}/control-intelligence`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': authCsrf.token, Cookie: writeCookie, Origin: instance.origin },
+      body: JSON.stringify({ architecture: { summary: 'HTTP test agent', components: [{ id: 'agent', label: 'Agent runtime' }] }, tools: [{ name: 'synthetic_tool' }], source: 'test' }),
+    });
+    assert.equal(snapshotResponse.status, 201);
+    const snapshot = (await snapshotResponse.json()).snapshot;
+    assert.match(snapshot.contentDigest, /^[a-f0-9]{64}$/);
+    const graphResponse = await fetch(`${instance.origin}/api/projects/${auth.projectId}/control-intelligence?limit=10000`, { headers: { Cookie: authCookie } });
+    assert.equal(graphResponse.status, 200);
+    assert.match(graphResponse.headers.get('cache-control') || '', /no-store/);
+    const graph = await graphResponse.json();
+    assert.equal(graph.total, 108);
+    assert.equal(graph.limit, 50);
+    assert.equal(graph.graphVersion, '1.0');
+    assert.ok(graph.edges.every((edge) => graph.nodes.some((node) => node.id === edge.from) && graph.nodes.some((node) => node.id === edge.to)));
+    const detailGraph = await fetch(`${instance.origin}/api/projects/${auth.projectId}/control-intelligence/controls/ARL-KB-053`, { headers: { Cookie: authCookie } });
+    assert.equal(detailGraph.status, 200);
+    assert.equal((await detailGraph.json()).control.id, 'ARL-KB-053');
+    const crossProjectGraph = await fetch(`${instance.origin}/api/projects/${auth.otherProjectId}/control-intelligence`, { headers: { Cookie: authCookie } });
+    assert.equal(crossProjectGraph.status, 403);
+    const forgedDecision = await fetch(`${instance.origin}/api/projects/${auth.projectId}/control-intelligence/deployment-decisions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': authCsrf.token, Cookie: writeCookie, Origin: instance.origin },
+      body: JSON.stringify({ systemSnapshotId: snapshot.id, decision: 'proceed' }),
+    });
+    assert.equal(forgedDecision.status, 400);
     const forbidden = await fetch(`${instance.origin}/api/projects/${auth.projectId}/risk-knowledge-profile`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': authCsrf.token, Cookie: writeCookie, Origin: instance.origin },
       body: JSON.stringify({ facts: { uses_tools: true }, criticalGateFailed: false }),

@@ -29,6 +29,12 @@ ARL-RKA-1.2.0 contains 108 expert-authored candidate entries. Each entry now def
 
 The catalogue API uses `items`, `total`, `limit`, `offset` and `hasMore`; records 101–108 are reachable through pagination. All 66 applicability predicates are classified as user-answerable, derived, system-observed, project-metadata-derived or manual-review-only. Unknown remains review-required. Risk severity is contextual: a null catalogue severity means project context is required, not that risk is low or absent. Priority remains separate from project severity and server-derived deployment decisions.
 
+## Control Intelligence
+
+Authenticated projects can create immutable, server-digested system snapshots and review a bounded evidence chain linking ARL-RKA-1.2.0 controls to canonical tests, executions, classified evidence, existing findings/remediation, runtime decisions, exact-action approvals, retests and exact-snapshot deployment decisions. This is a typed relational model over the existing PostgreSQL/SQLite adapters—not a second graph database. See [Control Intelligence Graph](docs/CONTROL_INTELLIGENCE_GRAPH.md).
+
+Control Intelligence is proprietary evidence-linked decision support, not an accredited certification or a guarantee that an agent is risk-free.
+
 ## Runtime privacy boundary
 
 The hosted Guard API does **not retain raw prompts, model responses or tool arguments**. It stores the decision, matched rule identifiers, digests, bounded metadata, timestamps and policy context needed for audit and remediation. Customers that cannot transmit content to a hosted screening service can run the packaged local gateway instead.

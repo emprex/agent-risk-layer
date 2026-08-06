@@ -1,5 +1,11 @@
 # Source and claims register
 
+## Control Intelligence Graph
+
+Permitted claim: “AgentRiskLayer Control Intelligence connects a project’s versioned agent architecture to applicable candidate controls, canonical tests, recorded evidence, existing findings, runtime decisions, approvals, remediation, retesting and an evidence-bound deployment decision.” Evidence: migration 015, server implementation and integration/authorization tests.
+
+Boundary: this does not establish certification, accreditation, exhaustive coverage, regulatory approval, independent validation or guaranteed security. Controls remain candidate content. Framework mappings remain informative. No customer outcome, benchmark or time-saved claim is supported.
+
 ## Design basis
 
 The catalogue is original AgentRiskLayer content. External standards and guidance are used as informative mappings, not copied control text and not proof of compliance.

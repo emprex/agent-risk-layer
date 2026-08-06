@@ -8,6 +8,7 @@ import { discoverAiAssets } from './asset-discovery.js';
 import { deliverSecurityEventSystem } from './workspaces.js';
 import { subscriptionAccessDecision } from './subscription-access.js';
 import { prepareRiskKnowledgeRuntimeEvidencePurge, prepareRiskKnowledgeSubjectPurge } from './risk-knowledge.js';
+import { prepareControlIntelligenceSourcePurge } from './control-intelligence.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
@@ -206,6 +207,11 @@ export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSe
     VALUES (?,?,?,?,?,?,?,?, 'active',?,?)`)
     .run(approvalId, access.project.workspace_id, access.project.id, userId, tool, access.project.environment,
       actionDigest, approvalTokenDigest(token), issuedAt, expiresAt);
+  const snapshot = await db.prepare("SELECT id FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1")
+    .get(access.project.workspace_id, access.project.id);
+  if (snapshot) await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
+    (id,workspace_id,project_id,system_snapshot_id,approval_id,binding_type,created_at)
+    VALUES (?,?,?,?,?,'exact_action_approval',?)`).run(id('crb_'), access.project.workspace_id, access.project.id, snapshot.id, approvalId, issuedAt);
   await audit({ workspaceId: access.project.workspace_id, projectId: access.project.id, actorType: 'user', actorId: userId,
     action: 'runtime_approval.issued', targetType: 'runtime_approval', targetId: approvalId,
     metadata: { tool, environment: access.project.environment, actionDigest, expiresAt } });
@@ -376,6 +382,11 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       JSON.stringify(metadata), JSON.stringify(response), authoritativePolicy.version, authoritativePolicy.digest, authoritativePolicy.publishedAt,
       retestCriteria?.id || null, retestCriteria?.remediation_id || null, retestCriteria?.criteria_digest || null,
       retestCriteria ? (retestSatisfied ? 1 : 0) : null, response.timestamp);
+    const snapshot = await db.prepare("SELECT id FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1")
+      .get(project.workspace_id, project.id);
+    if (snapshot) await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
+      (id,workspace_id,project_id,system_snapshot_id,runtime_event_id,binding_type,created_at)
+      VALUES (?,?,?,?,?,'runtime_decision',?)`).run(id('crb_'), project.workspace_id, project.id, snapshot.id, runtimeEventId, response.timestamp);
     if (shouldConsumeApproval) {
       const consumed = await db.prepare(`UPDATE runtime_approvals
         SET status='consumed',consumed_at=?,consumed_request_id=?,runtime_event_id=?
@@ -933,11 +944,13 @@ export async function purgeExpiredRuntimeEvents() {
         AND COALESCE(consumed_at,revoked_at,expires_at)<?`).all(project.id, cutoff, cutoff);
       await prepareRiskKnowledgeSubjectPurge({ projectId: project.id,
         subjects: approvalRows.map((row) => ({ type: 'approval', id: row.id })), reason: 'runtime approval retention expired' });
+      await prepareControlIntelligenceSourcePurge({ projectId: project.id, approvalIds: approvalRows.map((row) => row.id) });
       const approvals = await db.prepare(`DELETE FROM runtime_approvals WHERE project_id=?
         AND (status!='active' OR expires_at<=?)
         AND COALESCE(consumed_at,revoked_at,expires_at)<?`).run(project.id, cutoff, cutoff);
       approvalsDeleted += Number(approvals.changes || 0);
       const eventRows = await db.prepare('SELECT id FROM runtime_events WHERE project_id=? AND created_at<?').all(project.id, cutoff);
+      await prepareControlIntelligenceSourcePurge({ projectId: project.id, runtimeEventIds: eventRows.map((row) => row.id) });
       await prepareRiskKnowledgeRuntimeEvidencePurge({ projectId: project.id, eventIds: eventRows.map((row) => row.id),
         reason: 'runtime event retention expired' });
       const result = await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff);

@@ -6,6 +6,14 @@ const navigation = document.querySelector('[data-primary-navigation]');
 const mobileNavigation = window.matchMedia('(max-width: 900px)');
 let lastFocusedElement = null;
 
+if (document.body.dataset.shell === 'app' && navigation && !navigation.querySelector('a[href^="/control-intelligence"]')) {
+  const link = document.createElement('a');
+  link.href = '/control-intelligence.html';
+  link.textContent = 'Control Intelligence';
+  const liveProtection = navigation.querySelector('a[href="/control-plane.html"]');
+  navigation.insertBefore(link, liveProtection || navigation.firstElementChild);
+}
+
 function normalisePath(value) {
   try {
     const url = new URL(value, location.origin);
