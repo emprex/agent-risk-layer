@@ -6,6 +6,7 @@ import {
   ARCHITECTURE_PREDICATE_REGISTRY,
   buildControlManifest,
   evaluateApplicability,
+  getSeveritySemantics,
   resolveArchitectureFacts,
   summarizeEvidenceReadiness,
   toYaml,
@@ -21,7 +22,8 @@ export function riskKnowledgeFilterOptions() {
     .map(([value, resultCount]) => ({ value, count: resultCount })).sort((a, b) => a.value.localeCompare(b.value));
   return {
     category: count(knowledgeAsset.entries.map((entry) => entry.category)),
-    severity: count(knowledgeAsset.entries.map((entry) => entry.problem.default_severity)),
+    severity: [],
+    severityStatus: [{ value: 'context_required', count: knowledgeAsset.entries.length }],
     owner: count(knowledgeAsset.entries.map((entry) => entry.solution.default_owner)),
     framework: count(knowledgeAsset.entries.flatMap((entry) => [...new Set(entry.mappings.map((mapping) => mapping.framework))])),
     validationStatus: count(knowledgeAsset.entries.map((entry) => entry.validation?.status || 'candidate')),
@@ -94,6 +96,7 @@ function verifyAuthoritativeRecord(row) {
 function publicEntry(row) {
   if (!row) return null;
   verifyAuthoritativeRecord(row);
+  const lifecycleStatus = row.validation_status || 'candidate';
   return {
     id: row.id,
     slug: row.slug,
@@ -101,6 +104,9 @@ function publicEntry(row) {
     status: row.status,
     category: row.category,
     title: row.title,
+    ...getSeveritySemantics({ scope: 'catalogue' }),
+    defaultPriority: null,
+    lifecycleStatus,
     problem: parseJson(row.problem_json, {}),
     evidenceChain: parseJson(row.evidence_chain_json, []),
     review: parseJson(row.review_json, {}),
@@ -195,6 +201,12 @@ function deriveRiskState({ applicabilityStatus, applicabilityReason, evidenceSta
   };
 }
 
+async function loadProjectSeverity(workspaceId, projectId, entryId) {
+  const context = await db.prepare(`SELECT project_severity FROM project_risk_context
+    WHERE workspace_id=? AND project_id=? AND entry_id=?`).get(workspaceId, projectId, entryId);
+  return context?.project_severity && context.project_severity !== 'unassessed' ? context.project_severity : null;
+}
+
 async function reconcileEvidenceStatesAfterLinkRemoval({ workspaceId, projectId, entryIds, reason, timestamp }) {
   for (const entryId of [...new Set(entryIds)]) {
     const state = await db.prepare('SELECT evidence_state FROM project_risk_knowledge_states WHERE workspace_id=? AND project_id=? AND entry_id=?').get(workspaceId, projectId, entryId);
@@ -232,7 +244,7 @@ async function removeRiskKnowledgeLinks({ workspaceId, projectId, subjects, reas
   return { linksRemoved, entriesAffected: new Set(affectedEntries).size };
 }
 
-export async function listRiskKnowledge({ query = '', category = '', severity = '', framework = '', owner = '', validationStatus = '', testMode = '', automationStatus = '', sort = 'id', limit = 24, offset = 0 } = {}) {
+export async function listRiskKnowledge({ query = '', category = '', severity = '', severityStatus = '', framework = '', owner = '', validationStatus = '', testMode = '', automationStatus = '', sort = 'id', limit = 24, offset = 0 } = {}) {
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
   const safeOffset = Math.max(0, Number(offset) || 0);
   const clauses = ["e.status = 'active'"];
@@ -245,7 +257,8 @@ export async function listRiskKnowledge({ query = '', category = '', severity = 
     const term = `%${bounded(query, 160).toLowerCase()}%`;
     values.push(term, term, term, term, term, term, term);
   }
-  if (severity) { clauses.push('c.default_severity = ?'); values.push(bounded(severity, 20).toLowerCase()); }
+  if (severity) clauses.push('1 = 0');
+  if (severityStatus && bounded(severityStatus, 40) !== 'context_required') clauses.push('1 = 0');
   if (testMode) { clauses.push('o.test_mode = ?'); values.push(bounded(testMode, 20)); }
   if (automationStatus) { clauses.push('o.automation_status = ?'); values.push(bounded(automationStatus, 20)); }
   if (validationStatus) { clauses.push('v.lifecycle_status = ?'); values.push(bounded(validationStatus, 40)); }
@@ -263,7 +276,7 @@ export async function listRiskKnowledge({ query = '', category = '', severity = 
     LEFT JOIN risk_knowledge_entry_classification c ON c.entry_id=e.id
     LEFT JOIN risk_knowledge_validation_records v ON v.entry_id=e.id AND v.knowledge_version=e.knowledge_version
     WHERE ${where}`).get(...values);
-  const sortSql = sort === 'severity' ? `CASE c.default_severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END DESC, e.id`
+  const sortSql = sort === 'severity' ? 'e.id'
     : sort === 'reviewDate' ? `c.review_date DESC, e.id`
       : sort === 'relevance' && query ? 'e.title, e.id' : 'e.id';
   const rows = await db.prepare(`
@@ -290,7 +303,10 @@ export async function listRiskKnowledge({ query = '', category = '', severity = 
     if (!mappings.has(row.entry_id)) mappings.set(row.entry_id, []);
     mappings.get(row.entry_id).push({ framework: row.framework, version: row.framework_version, reference: row.framework_reference, mappingStatus: row.mapping_status, mappingLimit: row.mapping_limit });
   }
-  const items = rows.map((row) => ({ ...publicEntry(row), validation: { status: row.validation_status || 'candidate', reviewer: row.reviewer_name || null, reviewerOrganisation: row.reviewer_organisation || null, reviewedAt: row.validation_reviewed_at || null, evidenceReference: row.validation_evidence_reference || null }, solutionSummary: solutions.get(row.id) || null, mappings: mappings.get(row.id) || [] }));
+  const items = rows.map((row) => {
+    const solutionSummary = solutions.get(row.id) || null;
+    return { ...publicEntry(row), defaultPriority: solutionSummary?.priority || null, validation: { status: row.validation_status || 'candidate', reviewer: row.reviewer_name || null, reviewerOrganisation: row.reviewer_organisation || null, reviewedAt: row.validation_reviewed_at || null, evidenceReference: row.validation_evidence_reference || null }, solutionSummary, mappings: mappings.get(row.id) || [] };
+  });
   return { items, total, limit: safeLimit, offset: safeOffset, hasMore: safeOffset + items.length < total };
 }
 
@@ -316,6 +332,7 @@ export async function getRiskKnowledgeEntry(identifier) {
     db.prepare('SELECT * FROM risk_knowledge_validation_records WHERE entry_id=? AND knowledge_version=?').get(row.id, row.knowledge_version),
   ]);
   entry.validation = validation ? { status: validation.lifecycle_status, reviewer: validation.reviewer_name, reviewerOrganisation: validation.reviewer_organisation, reviewedAt: validation.reviewed_at, evidenceReference: validation.evidence_reference, version: validation.knowledge_version } : { status: 'candidate', version: row.knowledge_version };
+  entry.lifecycleStatus = entry.validation.status;
   entry.applicabilityProfile = profiles.get(row.id) || { clauseMatch: 'any', clauses: [], unknownFactBehavior: 'include_for_review' };
   entry.checks = checks.map((check) => ({
     id: check.id,
@@ -353,6 +370,7 @@ export async function getRiskKnowledgeEntry(identifier) {
     retestRequirements: sourceRecord.solution.retest_requirements,
     evidenceRequiredToClose: sourceRecord.solution.evidence_required_to_close,
   }));
+  entry.defaultPriority = entry.solutions[0]?.priority || null;
   entry.mappings = mappings.map((mapping) => ({
     id: mapping.id,
     framework: mapping.framework,
@@ -377,6 +395,12 @@ export async function getPublicRiskKnowledgeEntry(identifier) {
     status: entry.status,
     category: entry.category,
     title: entry.title,
+    severity: entry.severity,
+    severityStatus: entry.severityStatus,
+    severityModel: entry.severityModel,
+    severityScope: entry.severityScope,
+    defaultPriority: entry.defaultPriority,
+    lifecycleStatus: entry.lifecycleStatus,
     problem: entry.problem,
     claimsBoundary: entry.claimsBoundary,
     contentDigest: entry.contentDigest,
@@ -462,7 +486,7 @@ export async function setProjectRiskKnowledgeState({ workspaceId, projectId, ent
     throw Object.assign(new Error(`Evidence state ${evidenceState} requires a linked authoritative record.`), { statusCode: 409 });
   }
 
-  const severity = entry.problem?.default_severity || 'unknown';
+  const severity = await loadProjectSeverity(workspaceId, projectId, entryId);
   const derived = deriveRiskState({ applicabilityStatus, applicabilityReason, evidenceState, severity });
   applicabilityStatus = derived.applicabilityStatus;
   applicabilityReason = derived.applicabilityReason;
@@ -475,7 +499,7 @@ export async function setProjectRiskKnowledgeState({ workspaceId, projectId, ent
     ON CONFLICT(project_id,entry_id) DO UPDATE SET applicability_status=excluded.applicability_status,applicability_reason=excluded.applicability_reason,architecture_facts_digest=excluded.architecture_facts_digest,evidence_state=excluded.evidence_state,deployment_gate=excluded.deployment_gate,critical_gate_failed=excluded.critical_gate_failed,state_reason=excluded.state_reason,evidence_count=excluded.evidence_count,last_assessed_at=excluded.last_assessed_at,assessed_by=excluded.assessed_by,updated_at=excluded.updated_at
   `).run(stateId, workspaceId, projectId, entryId, applicabilityStatus, applicabilityReason, factsDigest, evidenceState, deploymentGate, boolInt(criticalGateFailed), bounded(stateReason, 2000), links.length, createdAt, userId || null, createdAt, createdAt);
   await auditRiskKnowledge({ workspaceId, projectId, actorId: userId, action: 'risk_knowledge.state_updated', targetType: 'risk_knowledge_entry', targetId: entryId, metadata: { applicabilityStatus, evidenceState, deploymentGate, criticalGateFailed, evidenceCount: links.length, stateReason: bounded(stateReason, 500) } });
-  return { entryId, applicabilityStatus, applicabilityReason, evidenceState, deploymentGate, criticalGateFailed, architectureFactsDigest: factsDigest, evidenceCount: links.length };
+  return { entryId, ...getSeveritySemantics({ scope: 'project', applicability: applicabilityStatus, evaluatedSeverity: severity }), applicabilityStatus, applicabilityReason, evidenceState, deploymentGate, criticalGateFailed, architectureFactsDigest: factsDigest, evidenceCount: links.length };
 }
 
 export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId, architectureFacts, userId }) {
@@ -486,12 +510,14 @@ export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId,
   const factsDigest = crypto.createHash('sha256').update(canonicalJson(architectureFacts)).digest('hex');
   const timestamp = nowIso();
   const results = [];
+  const severityRows = await db.prepare('SELECT entry_id,project_severity FROM project_risk_context WHERE workspace_id=? AND project_id=?').all(workspaceId, projectId);
+  const projectSeverities = new Map(severityRows.map((row) => [row.entry_id, row.project_severity === 'unassessed' ? null : row.project_severity]));
   await db.transaction(async () => {
     for (const entry of entries) {
       const applicability = evaluateApplicability({ applicabilityProfile: profiles.get(entry.id) }, resolvedFacts);
       const current = await db.prepare('SELECT evidence_state,state_reason,evidence_count,created_at FROM project_risk_knowledge_states WHERE project_id=? AND entry_id=?').get(projectId, entry.id);
       const evidenceState = current?.evidence_state || 'not_assessed';
-      const severity = entry.problem?.default_severity || 'unknown';
+      const severity = projectSeverities.get(entry.id) || null;
       const derived = deriveRiskState({
         applicabilityStatus: applicability.status,
         applicabilityReason: applicability.reason,
@@ -505,7 +531,7 @@ export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId,
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(project_id,entry_id) DO UPDATE SET applicability_status=excluded.applicability_status,applicability_reason=excluded.applicability_reason,architecture_facts_digest=excluded.architecture_facts_digest,deployment_gate=excluded.deployment_gate,critical_gate_failed=excluded.critical_gate_failed,last_assessed_at=excluded.last_assessed_at,assessed_by=excluded.assessed_by,updated_at=excluded.updated_at`)
         .run(stateId, workspaceId, projectId, entry.id, applicabilityStatus, applicabilityReason, factsDigest, evidenceState, deploymentGate, boolInt(criticalGateFailed), current?.state_reason || '', Number(current?.evidence_count || 0), timestamp, userId || null, timestamp, current?.created_at || timestamp);
-      results.push({ entryId: entry.id, applicabilityStatus, applicabilityReason, evidenceState, deploymentGate, criticalGateFailed });
+      results.push({ entryId: entry.id, ...getSeveritySemantics({ scope: 'project', applicability: applicabilityStatus, evaluatedSeverity: severity }), applicabilityStatus, applicabilityReason, evidenceState, deploymentGate, criticalGateFailed });
     }
   });
   await auditRiskKnowledge({ workspaceId, projectId, actorId: userId, action: 'risk_knowledge.profile_applied', targetType: 'project', targetId: projectId, metadata: { factsDigest, entries: results.length, applicable: results.filter((item) => item.applicabilityStatus === 'applicable').length, unknown: results.filter((item) => item.applicabilityStatus === 'unknown').length } });
@@ -515,29 +541,50 @@ export async function applyProjectRiskKnowledgeProfile({ workspaceId, projectId,
 export async function getProjectEvidenceReadiness({ workspaceId, projectId }) {
   await requireProject(workspaceId, projectId);
   const rows = await db.prepare(`
-    SELECT s.*, e.title, e.category, e.problem_json, e.knowledge_version, e.content_digest,
+    SELECT s.*, e.title, e.category, e.knowledge_version, e.content_digest,
+      c.project_severity, c.rationale AS severity_rationale, c.assessed_by AS severity_assessed_by,
+      c.assessed_at AS severity_assessed_at, c.updated_at AS severity_updated_at,
       (SELECT COUNT(*) FROM risk_knowledge_links l WHERE l.workspace_id=s.workspace_id AND l.project_id=s.project_id AND l.entry_id=s.entry_id) live_evidence_count,
       (SELECT COUNT(*) FROM risk_knowledge_links l WHERE l.workspace_id=s.workspace_id AND l.project_id=s.project_id AND l.entry_id=s.entry_id AND (l.knowledge_version<>e.knowledge_version OR l.entry_digest<>e.content_digest)) invalid_evidence_links
     FROM project_risk_knowledge_states s
-    JOIN risk_knowledge_entries e ON e.id = s.entry_id WHERE s.project_id = ? AND s.workspace_id = ? ORDER BY e.category, e.title
+    JOIN risk_knowledge_entries e ON e.id = s.entry_id
+    LEFT JOIN project_risk_context c ON c.workspace_id=s.workspace_id AND c.project_id=s.project_id AND c.entry_id=s.entry_id
+    WHERE s.project_id = ? AND s.workspace_id = ? ORDER BY e.category, e.title
   `).all(projectId, workspaceId);
   for (const row of rows) {
     verifyAuthoritativeRecord({ id: row.entry_id, knowledge_version: row.knowledge_version, content_digest: row.content_digest });
     if (Number(row.invalid_evidence_links || 0) > 0) throw integrityError(row.entry_id, 'evidence_link_version_or_digest_mismatch');
   }
-  const states = rows.map((row) => ({
-    entryId: row.entry_id,
-    title: row.title,
-    category: row.category,
-    severity: parseJson(row.problem_json, {}).default_severity || 'unknown',
-    applicabilityStatus: row.applicability_status,
-    evidenceState: row.evidence_state,
-    deploymentGate: row.deployment_gate,
-    criticalGateFailed: Boolean(row.critical_gate_failed),
-    stateReason: row.state_reason,
-    evidenceCount: Number(row.live_evidence_count || 0),
-    lastAssessedAt: row.last_assessed_at,
-  }));
+  const states = rows.map((row) => {
+    const severity = getSeveritySemantics({
+      scope: 'project',
+      applicability: row.applicability_status,
+      evaluatedSeverity: row.project_severity === 'unassessed' ? null : row.project_severity,
+    });
+    return {
+      entryId: row.entry_id,
+      title: row.title,
+      category: row.category,
+      ...severity,
+      severityContext: row.project_severity ? {
+        workspaceId: row.workspace_id,
+        projectId: row.project_id,
+        controlProfileVersion: row.knowledge_version,
+        rationale: row.severity_rationale || null,
+        evaluatorId: row.severity_assessed_by || null,
+        evaluatedAt: row.severity_assessed_at || null,
+        updatedAt: row.severity_updated_at || null,
+        decisionMethod: 'project_risk_context',
+      } : null,
+      applicabilityStatus: row.applicability_status,
+      evidenceState: row.evidence_state,
+      deploymentGate: row.deployment_gate,
+      criticalGateFailed: Boolean(row.critical_gate_failed),
+      stateReason: row.state_reason,
+      evidenceCount: Number(row.live_evidence_count || 0),
+      lastAssessedAt: row.last_assessed_at,
+    };
+  });
   return { states, summary: summarizeEvidenceReadiness(states) };
 }
 

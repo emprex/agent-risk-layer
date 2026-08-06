@@ -1,10 +1,13 @@
 import { api, escapeHtml, qs } from './shared.js';
+import { getSeveritySemantics, severityPresentation } from './risk-knowledge-core.js';
 
 const root = document.querySelector('#riskDetail');
 function list(items) { return `<ul>${(items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`; }
 function downloadLink(id, format) { return `/api/risk-knowledge/${encodeURIComponent(id)}/export?format=${encodeURIComponent(format)}`; }
 function normalizedPublic(entry) {
+  const catalogueSeverity = getSeveritySemantics();
   return {
+    ...catalogueSeverity,
     ...entry,
     knowledgeVersion: entry.knowledgeVersion || entry.knowledge_version,
     claimsBoundary: entry.claimsBoundary || entry.claims_boundary,
@@ -74,7 +77,7 @@ function renderPublic(entry) {
     root.className = 'risk-detail-layout';
     const exportActions = full ? `<div class="button-row"><a class="button ghost small" href="${downloadLink(entry.id, 'json')}">Export JSON manifest</a><a class="button ghost small" href="${downloadLink(entry.id, 'yaml')}">Export YAML manifest</a></div>` : '';
     root.innerHTML = `<section class="page-heading risk-knowledge-hero"><span class="eyebrow">${escapeHtml(entry.category)}</span><h1>${escapeHtml(entry.title)}</h1><p>${escapeHtml(entry.claimsBoundary || '')}</p>${exportActions}</section>
-      <section class="panel risk-detail-section"><h2>Problem</h2><p>${escapeHtml(entry.problem?.statement || '')}</p><h3>Why it matters</h3><p>${escapeHtml(entry.problem?.operational_impact || entry.problem?.credible_failure_or_attack || '')}</p><p><strong>Default severity guidance:</strong> ${escapeHtml(entry.problem?.default_severity || '')}. Project severity is assessed separately from reachable assets, impact, exposure, evidence and compensating controls.</p><h3>Applicable architectures</h3>${list(entry.problem?.applicability)}<h3>Assets and trust boundaries</h3>${list(entry.problem?.affected_assets)}<p>${escapeHtml(entry.problem?.trust_boundary || '')}</p></section>
+      <section class="panel risk-detail-section"><h2>Problem</h2><p>${escapeHtml(entry.problem?.statement || '')}</p><h3>Why it matters</h3><p>${escapeHtml(entry.problem?.operational_impact || entry.problem?.credible_failure_or_attack || '')}</p><p><strong>${escapeHtml(severityPresentation(entry))}</strong></p><p class="muted">Catalogue controls do not carry a universal severity. AgentRiskLayer assigns severity after evaluating the control against a specific agent’s access, data, authority, exposure, safeguards and potential impact.</p><h3>Applicable architectures</h3>${list(entry.problem?.applicability)}<h3>Assets and trust boundaries</h3>${list(entry.problem?.affected_assets)}<p>${escapeHtml(entry.problem?.trust_boundary || '')}</p></section>
       ${full ? renderFull(entry) : renderPublic(entry)}
       <section class="panel risk-detail-section"><h2>Reference alignment</h2>${renderMappings(entry)}<p class="risk-knowledge-disclaimer">Mappings are informative and do not prove compliance, certification or absence of risk.</p></section>`;
   } catch (error) {

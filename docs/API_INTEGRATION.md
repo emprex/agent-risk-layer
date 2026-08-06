@@ -6,11 +6,28 @@ This contract describes the implementation in this repository. It reuses the exi
 
 ### `GET /api/risk-knowledge`
 
-Query fields: `query`, `category`, `severity`, `framework`, `owner`, `validationStatus`, `testMode`, `automationStatus`, `sort`, `limit`, `offset`.
+Query fields: `query`, `category`, `severity`, `severityStatus`, `framework`, `owner`, `validationStatus`, `testMode`, `automationStatus`, `sort`, `limit`, `offset`.
 
 Returns `items`, compatibility alias `entries`, `total`, `limit`, `offset`, `hasMore`, dynamic filter options with counts, and `knowledgeVersion`. The maximum page size is 250. Search covers ID, title, category, problem, remediation and framework names/references.
 
-Returns active entries with public problem information, category, default severity, high-level owner/remediation summary, operational classification and informative mappings. It does not return exact check methods, required evidence, pass/fail criteria, retest acceptance or project evidence. The response is versioned and publicly cacheable for five minutes.
+Returns active entries with public problem information, category, contextual-severity metadata, high-level owner/remediation summary, operational classification and informative mappings. It does not return exact check methods, required evidence, pass/fail criteria, retest acceptance or project evidence. The response is versioned and publicly cacheable for five minutes.
+
+Risk severity is contextual. Catalogue controls do not carry a universal severity rating. AgentRiskLayer assigns severity only after evaluating the control against a specific agent’s access, data, authority, exposure, safeguards and potential impact. A null catalogue severity means project context is required; it does not mean the risk is low or absent.
+
+Every catalogue item preserves the nullable `severity` string for compatibility and returns:
+
+```json
+{
+  "severity": null,
+  "severityStatus": "context_required",
+  "severityModel": "project_contextual",
+  "severityScope": "project",
+  "defaultPriority": "P1",
+  "lifecycleStatus": "candidate"
+}
+```
+
+`severity`, when evaluated, is one of `critical`, `high`, `medium` or `low`. `severityStatus` is one of `context_required`, `not_evaluated`, `evaluated`, `not_applicable` or `insufficient_information`. Priority is operational ordering and is never converted into severity. The legacy `severity` query parameter remains accepted, but a public catalogue request such as `severity=critical` returns no entries because none are evaluated project records. Use `severityStatus=context_required` to retrieve catalogue entries by their honest state. Public `sort=severity` remains accepted for compatibility and falls back to control ID; null is not ranked as Low.
 
 ### `GET /api/risk-knowledge/:id`
 
@@ -65,11 +82,11 @@ Accepted body:
 { "facts": { "uses_tools": true, "is_production": true } }
 ```
 
-The server resolves the project and workspace, validates all facts, hashes the canonical architecture profile, evaluates all 108 entries and upserts project applicability state. Existing evidence state and reason are preserved. Caller-supplied workspace/user IDs, manual applicability, evidence counts, critical flags or deployment gates are rejected.
+The server resolves the project and workspace, validates all facts, hashes the canonical architecture profile, evaluates all 108 entries and upserts project applicability state. Existing evidence state and reason are preserved. Caller-supplied workspace/user IDs, severity fields, manual applicability, evidence counts, critical flags or deployment gates are rejected.
 
 ### `GET /api/projects/:projectId/risk-knowledge-readiness`
 
-Requires an authenticated verified user with access to the exact project. Returns per-entry applicability, evidence state, live evidence-link count and server-derived gate, plus aggregate Evidence Readiness.
+Requires an authenticated verified user with access to the exact project. Returns per-entry applicability, evidence state, live evidence-link count, project severity semantics and server-derived gate, plus aggregate Evidence Readiness. Applicable controls without an assessment return `not_evaluated`; unknown applicability returns `insufficient_information`; excluded controls return `not_applicable`; and a tenant-bound `project_risk_context` assessment returns `evaluated` with its real severity. Available attribution is returned without fabricating absent evidence or system-version values.
 
 This is not a certification, breach probability or checkbox compliance score. A critical open finding can produce `do_not_deploy` and is not averaged away by passing lower-impact controls.
 

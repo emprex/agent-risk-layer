@@ -44,6 +44,29 @@ export const EVIDENCE_STATES = Object.freeze([
   'remediation_in_progress','retest_passed','risk_accepted','expired',
 ]);
 
+export const SEVERITY_VALUES = Object.freeze(['critical', 'high', 'medium', 'low']);
+
+export function getSeveritySemantics({ scope = 'catalogue', applicability = 'unknown', evaluatedSeverity = null } = {}) {
+  const severity = typeof evaluatedSeverity === 'string' ? evaluatedSeverity.toLowerCase() : null;
+  const base = { severity: null, severityModel: 'project_contextual', severityScope: 'project' };
+  if (scope !== 'project') return { ...base, severityStatus: 'context_required' };
+  if (applicability === 'not_applicable') return { ...base, severityStatus: 'not_applicable' };
+  if (applicability !== 'applicable') return { ...base, severityStatus: 'insufficient_information' };
+  if (SEVERITY_VALUES.includes(severity)) return { ...base, severity, severityStatus: 'evaluated' };
+  return { ...base, severityStatus: 'not_evaluated' };
+}
+
+export function severityPresentation(record = {}, { project = false } = {}) {
+  const semantics = project ? getSeveritySemantics({ scope: 'project', applicability: record.applicabilityStatus, evaluatedSeverity: record.severity }) : getSeveritySemantics();
+  const status = record.severityStatus || semantics.severityStatus;
+  const severity = record.severity || semantics.severity;
+  if (status === 'evaluated' && severity) return `Project severity: ${severity[0].toUpperCase()}${severity.slice(1)}`;
+  if (status === 'not_applicable') return 'Severity: Not applicable to this project';
+  if (status === 'insufficient_information') return 'Severity: Not determined — more architecture information required';
+  if (status === 'not_evaluated') return 'Severity: Not evaluated for this project';
+  return 'Severity: Contextual — assess this control against your agent';
+}
+
 function normalizeFacts(facts = {}) {
   const out = {};
   for (const [key, value] of Object.entries(facts || {})) {

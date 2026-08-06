@@ -27,7 +27,7 @@ The public Risk Library exposes plain-English problems, impacts, high-level cont
 
 ARL-RKA-1.2.0 contains 108 expert-authored candidate entries. Each entry now defines a bounded problem, identities, abuse tests, evidence, pass/fail conditions, containment, remediation, monitoring and retest requirements. Candidate content is not customer-exercised, independently reviewed or verified automation unless a lifecycle record supplies the required reviewer and evidence. Framework mappings are informative and do not establish compliance or certification.
 
-The catalogue API uses `items`, `total`, `limit`, `offset` and `hasMore`; records 101–108 are reachable through pagination. All 66 applicability predicates are classified as user-answerable, derived, system-observed, project-metadata-derived or manual-review-only. Unknown remains review-required. Default severity is catalogue guidance; project severity and the deployment gate are separate, server-derived decisions.
+The catalogue API uses `items`, `total`, `limit`, `offset` and `hasMore`; records 101–108 are reachable through pagination. All 66 applicability predicates are classified as user-answerable, derived, system-observed, project-metadata-derived or manual-review-only. Unknown remains review-required. Risk severity is contextual: a null catalogue severity means project context is required, not that risk is low or absent. Priority remains separate from project severity and server-derived deployment decisions.
 
 ## Runtime privacy boundary
 

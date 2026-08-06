@@ -79,9 +79,28 @@ test('risk knowledge seed, public boundary, profiling and project state are inte
   assert.equal(applied.results.length, 108);
   assert.equal(applied.summary.total, 108);
   assert.equal(applied.summary.deploymentGate, 'review_required');
+  await setProjectRiskKnowledgeState({
+    workspaceId: workspace.id,
+    projectId: project.id,
+    entryId: 'ARL-KB-001',
+    manualApplicability: { status: 'not_applicable', reason: 'An authorised reviewer confirmed this architecture boundary is absent.' },
+    userId,
+  });
   const readiness = await getProjectEvidenceReadiness({ workspaceId: workspace.id, projectId: project.id });
   assert.equal(readiness.states.length, 108);
-  assert.equal(readiness.states.find((state) => state.entryId === 'ARL-KB-053').applicabilityStatus, 'applicable');
+  const applicableState = readiness.states.find((state) => state.entryId === 'ARL-KB-053');
+  assert.equal(applicableState.applicabilityStatus, 'applicable');
+  assert.equal(applicableState.severity, null);
+  assert.equal(applicableState.severityStatus, 'not_evaluated');
+  const unknownState = readiness.states.find((state) => state.applicabilityStatus === 'unknown');
+  assert.ok(unknownState);
+  assert.equal(unknownState.severity, null);
+  assert.equal(unknownState.severityStatus, 'insufficient_information');
+  assert.notEqual(unknownState.deploymentGate, 'proceed_candidate');
+  const notApplicableState = readiness.states.find((state) => state.applicabilityStatus === 'not_applicable');
+  assert.ok(notApplicableState);
+  assert.equal(notApplicableState.severity, null);
+  assert.equal(notApplicableState.severityStatus, 'not_applicable');
 });
 
 test('pagination exposes controls 101 through 108 with complete result semantics', async () => {
@@ -163,6 +182,12 @@ test('evidence links are tenant-bound and state advancement requires authoritati
   });
   assert.equal(duplicate.duplicate, true);
 
+  const severityTimestamp = nowIso();
+  await db.prepare(`INSERT INTO project_risk_context
+    (id,workspace_id,project_id,entry_id,project_severity,rationale,assessed_by,assessed_at,updated_at,created_at)
+    VALUES (?,?,?,?, 'critical','Authoritative project testing established critical action impact.',?,?,?,?)`)
+    .run(randomId('prc_'), first.workspace.id, first.project.id, 'ARL-KB-053', first.userId, severityTimestamp, severityTimestamp, severityTimestamp);
+
   const open = await setProjectRiskKnowledgeState({
     workspaceId: first.workspace.id,
     projectId: first.project.id,
@@ -172,6 +197,8 @@ test('evidence links are tenant-bound and state advancement requires authoritati
     userId: first.userId,
   });
   assert.equal(open.criticalGateFailed, true);
+  assert.equal(open.severity, 'critical');
+  assert.equal(open.severityStatus, 'evaluated');
   assert.equal(open.deploymentGate, 'do_not_deploy');
 
   const attemptedScopeRemoval = await applyProjectRiskKnowledgeProfile({
@@ -191,7 +218,7 @@ test('evidence links are tenant-bound and state advancement requires authoritati
   await db.prepare(`INSERT INTO runtime_approvals
     (id,workspace_id,project_id,approver_id,tool_name,environment,action_digest,token_digest,status,issued_at,expires_at)
     VALUES (?,?,?,?,?,?,?,?,'active',?,?)`)
-    .run(approvalId, first.workspace.id, first.project.id, first.userId, 'refund_order', 'production', digest('action'), digest('token'), timestamp,
+    .run(approvalId, first.workspace.id, first.project.id, first.userId, 'refund_order', 'production', digest(`action:${approvalId}`), digest(`token:${approvalId}`), timestamp,
       new Date(Date.now() + 600000).toISOString());
   await linkRiskKnowledge({
     workspaceId: first.workspace.id,
@@ -324,6 +351,11 @@ test('runtime retention removes risk links without silently clearing an open cri
     userId,
     subjectResolver: resolveRiskKnowledgeSubject,
   });
+  const severityTimestamp = nowIso();
+  await db.prepare(`INSERT INTO project_risk_context
+    (id,workspace_id,project_id,entry_id,project_severity,rationale,assessed_by,assessed_at,updated_at,created_at)
+    VALUES (?,?,?,?, 'critical','Project runtime evidence established critical impact.',?,?,?,?)`)
+    .run(randomId('prc_'), workspace.id, project.id, 'ARL-KB-053', userId, severityTimestamp, severityTimestamp, severityTimestamp);
   await setProjectRiskKnowledgeState({
     workspaceId: workspace.id,
     projectId: project.id,

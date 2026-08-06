@@ -93,6 +93,21 @@ export const EVIDENCE_STATES = Object.freeze([
   'remediation_in_progress','retest_passed','risk_accepted','expired',
 ]);
 
+export const SEVERITY_VALUES = Object.freeze(['critical', 'high', 'medium', 'low']);
+export const SEVERITY_STATUSES = Object.freeze([
+  'context_required', 'not_evaluated', 'evaluated', 'not_applicable', 'insufficient_information',
+]);
+
+export function getSeveritySemantics({ scope = 'catalogue', applicability = 'unknown', evaluatedSeverity = null } = {}) {
+  const severity = typeof evaluatedSeverity === 'string' ? evaluatedSeverity.toLowerCase() : null;
+  const base = { severity: null, severityModel: 'project_contextual', severityScope: 'project' };
+  if (scope !== 'project') return { ...base, severityStatus: 'context_required' };
+  if (applicability === 'not_applicable') return { ...base, severityStatus: 'not_applicable' };
+  if (applicability !== 'applicable') return { ...base, severityStatus: 'insufficient_information' };
+  if (SEVERITY_VALUES.includes(severity)) return { ...base, severity, severityStatus: 'evaluated' };
+  return { ...base, severityStatus: 'not_evaluated' };
+}
+
 function normalizeFacts(facts = {}) {
   const out = {};
   for (const [key, value] of Object.entries(facts || {})) {

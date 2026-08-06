@@ -11,6 +11,7 @@ import {
   validateArchitectureFacts,
   ARCHITECTURE_FACT_KEYS,
   ARCHITECTURE_PREDICATE_REGISTRY,
+  getSeveritySemantics,
 } from '../src/risk-knowledge-core.js';
 
 const repositoryRoot = path.resolve(import.meta.dirname, '..');
@@ -86,6 +87,32 @@ test('unknown architecture facts remain review-required and camelCase database p
   assert.equal(evaluateApplicability(entry, { uses_state_changing_tools: true }).status, 'applicable');
   assert.equal(evaluateApplicability(entry, { uses_state_changing_tools: false }).status, 'not_applicable');
   assert.equal(evaluateApplicability({ applicabilityProfile: entry.applicability_profile }, { uses_state_changing_tools: true }).status, 'applicable');
+});
+
+test('severity semantics keep catalogue null contextual and project states distinct', () => {
+  assert.deepEqual(getSeveritySemantics(), {
+    severity: null, severityModel: 'project_contextual', severityScope: 'project', severityStatus: 'context_required',
+  });
+  assert.equal(getSeveritySemantics({ scope: 'project', applicability: 'applicable' }).severityStatus, 'not_evaluated');
+  assert.deepEqual(getSeveritySemantics({ scope: 'project', applicability: 'applicable', evaluatedSeverity: 'critical' }), {
+    severity: 'critical', severityModel: 'project_contextual', severityScope: 'project', severityStatus: 'evaluated',
+  });
+  assert.equal(getSeveritySemantics({ scope: 'project', applicability: 'unknown' }).severityStatus, 'insufficient_information');
+  assert.equal(getSeveritySemantics({ scope: 'project', applicability: 'unknown', evaluatedSeverity: 'high' }).severity, null);
+  assert.equal(getSeveritySemantics({ scope: 'project', applicability: 'not_applicable' }).severityStatus, 'not_applicable');
+});
+
+test('risk library UI renders semantic labels and never falls back from null to Low', () => {
+  const library = read('risk-library.js');
+  const detail = read('risk-library-detail.js');
+  const readiness = read('risk-readiness.js');
+  for (const source of [library, detail, readiness]) {
+    assert.doesNotMatch(source, /severity\s*\|\|\s*['"]low['"]/i);
+    assert.doesNotMatch(source, /escapeHtml\([^)]*\.severity\)/);
+  }
+  assert.match(library, /severityPresentation/);
+  assert.match(detail, /Severity: Contextual|severityPresentation/);
+  assert.match(readiness, /severityPresentation/);
 });
 
 test('architecture fact API rejects malformed and unknown values', () => {

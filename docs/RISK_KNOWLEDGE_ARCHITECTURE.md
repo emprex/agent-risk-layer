@@ -10,7 +10,7 @@ The library is decision support, not an accredited certification, proof of compl
 
 ## Content, access and lifecycle
 
-Public responses contain the control ID, title, category, plain-English problem and impact, default severity guidance, high-level remediation, informative mappings, version, candidate status and review information. Verified accounts can read exact methods, evidence, positive and negative tests, pass/fail criteria, containment, monitoring, retest requirements and JSON/YAML manifests. No paid restriction was added: the existing billing service is capable but there is no documented product entitlement specifically for risk-knowledge detail. That commercial decision remains unresolved.
+Public responses contain the control ID, title, category, plain-English problem and impact, explicit context-required severity metadata, distinct default priority, high-level remediation, informative mappings, version, candidate status and review information. Verified accounts can read exact methods, evidence, positive and negative tests, pass/fail criteria, containment, monitoring, retest requirements and JSON/YAML manifests. No paid restriction was added: the existing billing service is capable but there is no documented product entitlement specifically for risk-knowledge detail. That commercial decision remains unresolved.
 
 Lifecycle states are `candidate`, `internally_reviewed`, `customer_exercised`, `independently_reviewed`, `verified_automation`, `deprecated` and `retired`. Customer exercise requires a real assessment reference. Independent review requires an identified reviewer or organisation and evidence. Verified automation additionally requires executable semantics and fixtures. Entries never promote because of age or usage. All 108 entries migrate to `candidate` because the repository contains no qualifying customer or independent review evidence.
 
@@ -18,7 +18,11 @@ Lifecycle states are `candidate`, `internally_reviewed`, `customer_exercised`, `
 
 The authoritative predicate registry classifies all 66 facts as user-answerable, derived from answers, system-observed, project-metadata-derived or manual-review-only. Answers are tri-state. Missing inputs and unresolved sources remain Unknown and therefore review-required. Conditional questions reduce irrelevant prompts without fabricating answers. An open finding or active remediation preserves applicability even if a later profile would otherwise exclude the control.
 
-`defaultSeverity` is catalogue guidance. Project context has separate fields for asset sensitivity, reachable systems, action impact, data classification, user population, exploitability, reversibility, exposure, compensating controls, observed evidence, project severity and residual risk. Critical open findings directly cause `do_not_deploy`; lower-impact passing controls cannot average them away. Clients cannot submit readiness scores, evidence counts or deployment gates.
+Risk severity is contextual. Catalogue controls do not carry a universal severity rating. AgentRiskLayer assigns severity only after evaluating the control against a specific agent’s access, data, authority, exposure, safeguards and potential impact. A null catalogue severity means project context is required; it does not mean the risk is low or absent.
+
+The shared semantic model keeps catalogue `severity` nullable for compatibility and adds `severityStatus`, `severityModel='project_contextual'` and `severityScope='project'`. Status transitions are scope-driven: catalogue entries are `context_required`; applicable but unassessed project controls are `not_evaluated`; assessed values are `evaluated`; missing architecture facts are `insufficient_information`; excluded controls are `not_applicable`. `defaultPriority` remains the existing P0/P1/P2 operational priority and is not a severity proxy. Null values are neither filtered nor sorted as Low.
+
+Existing tenant-bound `project_risk_context` records supply evaluated project severity and available attribution. The model already stores asset sensitivity, reachable systems, action impact, data classification, user population, exploitability, reversibility, exposure, compensating controls, observed evidence, project severity, rationale, evaluator, evaluation time and residual risk. No second severity store or migration is required. Evaluated Critical open findings directly cause `do_not_deploy`; an open finding without evaluated severity remains on hold and cannot pass. Lower-impact passing controls cannot average blockers away. Unknown context remains review-required. Clients cannot submit severity through the current API, readiness scores, evidence counts or deployment gates.
 
 ## Integrity, export and policy-as-code
 
@@ -37,6 +41,7 @@ Rollback should restore the application and database from a verified pre-migrati
 - No entry has customer-exercised, independent-review or verified-automation evidence in this repository.
 - PostgreSQL migration execution requires a disposable or test PostgreSQL service; the SQLite test adapter is compatibility evidence, not production migration evidence.
 - Contextual project-risk storage is additive, but an owner-reviewed write UI/API is intentionally deferred rather than accepting client-derived severity.
+- Existing project severity records are not yet bound to a stored assessed-agent configuration version or scoring-policy version. Architecture changes preserve the assessment conservatively and require reviewer reassessment; the API does not fabricate those unavailable attribution fields.
 - The public fallback filename retains `v1.1` for URL compatibility while its embedded schema and knowledge version are 1.2.
 - Framework mappings remain pinned, informative and subject to the source and claims register.
 

@@ -11,6 +11,8 @@
 
 Scope included additive database migrations, seed integrity, public and authenticated website routes, project authorization, tenant isolation, evidence-link integrity, retention behaviour, account export, control-manifest export, customer-facing HTML/JavaScript, source checks and the existing release regression suite.
 
+The contextual-severity clarification was implemented without a new migration. Public catalogue records remain `severity: null` with `context_required`; project readiness reads evaluated values only from the existing tenant-bound `project_risk_context` model. Priority, lifecycle state and catalogue content were not promoted or converted into severity.
+
 Excluded and unverified: the owner machine's uncommitted files, the current GitHub remote, a real PostgreSQL server, Render production configuration, production migration execution, live Stripe/Resend journeys, DNS, browser/device visual review, push and deployment.
 
 ## Database validation
@@ -36,7 +38,7 @@ The verified starting commit already contained migrations 009 through 012. This 
 
 ### Validation commands
 
-- Complete isolated Node test suite (`npm test`): **189/189 passed, 0 failed, 0 skipped**
+- Complete isolated Node test suite (`npm test`): **191/191 passed, 0 failed, 0 skipped**
 - JavaScript syntax/source checks (`npm run check`): passed
 - End-to-end customer journey (`npm run smoke`): passed
 - Deterministic scenario regression: **1,000/1,000 passed**, `unsafeDecisions=0`, `criticalPathScenarios=387`, `averageScore=72`
@@ -69,6 +71,10 @@ Tests exercised:
 - re-profiling not bypassing an existing critical finding
 - account export containing project risk states and versioned evidence links
 - public pages containing no inline styles under the existing CSP policy
+- public catalogue null severity returning `context_required` rather than Low
+- project `not_evaluated`, `evaluated`, `insufficient_information` and `not_applicable` semantics
+- public severity filtering excluding context-required records and explicit `severityStatus` filtering
+- rejection of caller-supplied project severity fields and cross-project readiness denial
 
 ## Dependency-installation limitation
 

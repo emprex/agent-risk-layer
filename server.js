@@ -131,6 +131,7 @@ const server = http.createServer(async (req, res) => {
                 query: url.searchParams.get('query') || '',
                 category: url.searchParams.get('category') || '',
                 severity: url.searchParams.get('severity') || '',
+                severityStatus: url.searchParams.get('severityStatus') || '',
                 framework: url.searchParams.get('framework') || '',
                 owner: url.searchParams.get('owner') || '',
                 testMode: url.searchParams.get('testMode') || '',
@@ -763,7 +764,7 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'PUT' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
             const body = await readBody(req);
-            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability']) {
+            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability','severity','severityStatus','evaluatedSeverity','projectSeverity']) {
                 if (Object.hasOwn(body, forbiddenField)) return json(res, 400, { error: `Caller-supplied ${forbiddenField} is not accepted.` });
             }
             try {
@@ -803,7 +804,7 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'PUT' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res)) return;
             const body = await readBody(req);
-            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability']) {
+            for (const forbiddenField of ['workspaceId','userId','deploymentGate','criticalGateFailed','evidenceCount','manualApplicability','severity','severityStatus','evaluatedSeverity','projectSeverity']) {
                 if (Object.hasOwn(body, forbiddenField)) return json(res, 400, { error: `Caller-supplied ${forbiddenField} is not accepted.` });
             }
             try {

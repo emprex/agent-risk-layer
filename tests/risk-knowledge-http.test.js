@@ -80,6 +80,10 @@ function seedAuthenticatedProject(databasePath) {
     (id,workspace_id,project_id,entry_id,applicability_status,applicability_reason,evidence_state,deployment_gate,critical_gate_failed,state_reason,evidence_count,updated_at,created_at)
     VALUES (?,?,?,?, 'applicable','Project uses tools','not_assessed','review_required',0,'',0,?,?)`)
     .run('rks_risk_http', workspaceId, projectId, 'ARL-KB-053', timestamp, timestamp);
+  sqlite.prepare(`INSERT INTO project_risk_context
+    (id,workspace_id,project_id,entry_id,project_severity,rationale,assessed_by,assessed_at,updated_at,created_at)
+    VALUES (?,?,?,?, 'critical','Project assessment established material authority impact.',?,?,?,?)`)
+    .run('prc_risk_http', workspaceId, projectId, 'ARL-KB-053', userId, timestamp, timestamp, timestamp);
 
   sqlite.prepare('INSERT INTO workspaces (id,name,created_by,created_at,updated_at) VALUES (?,?,?,?,?)')
     .run(otherWorkspaceId, 'Other workspace', userId, timestamp, timestamp);
@@ -110,13 +114,25 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
     const listResponse = await fetch(`${instance.origin}/api/risk-knowledge?severity=critical&limit=250`);
     assert.equal(listResponse.status, 200);
     const list = await listResponse.json();
-    assert.ok(list.entries.length > 0);
+    assert.equal(list.entries.length, 0);
     assert.equal(list.total > list.entries.length, false);
     assert.equal(list.limit, 250);
     assert.equal(list.offset, 0);
     assert.equal(list.hasMore, false);
     assert.equal(list.entries.some((entry) => Object.hasOwn(entry, 'checks')), false);
     assert.match(listResponse.headers.get('cache-control') || '', /public/);
+
+    const contextualResponse = await fetch(`${instance.origin}/api/risk-knowledge?severityStatus=context_required&limit=1`);
+    const contextual = await contextualResponse.json();
+    assert.equal(contextual.total, 108);
+    assert.deepEqual({
+      severity: contextual.items[0].severity,
+      severityStatus: contextual.items[0].severityStatus,
+      severityModel: contextual.items[0].severityModel,
+      severityScope: contextual.items[0].severityScope,
+    }, { severity: null, severityStatus: 'context_required', severityModel: 'project_contextual', severityScope: 'project' });
+    assert.match(contextual.items[0].defaultPriority, /^P[0-2]$/);
+    assert.equal(contextual.items[0].lifecycleStatus, 'candidate');
 
     const firstPage = await (await fetch(`${instance.origin}/api/risk-knowledge?limit=100`)).json();
     const lastPage = await (await fetch(`${instance.origin}/api/risk-knowledge?limit=100&offset=100`)).json();
@@ -126,7 +142,15 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
 
     const publicDetail = await fetch(`${instance.origin}/api/risk-knowledge/ARL-KB-053`);
     assert.equal(publicDetail.status, 200);
-    assert.equal(Object.hasOwn((await publicDetail.json()).entry, 'checks'), false);
+    const publicEntry = (await publicDetail.json()).entry;
+    assert.equal(Object.hasOwn(publicEntry, 'checks'), false);
+    assert.equal(publicEntry.severity, null);
+    assert.equal(publicEntry.severityStatus, 'context_required');
+    assert.notEqual(publicEntry.defaultPriority, publicEntry.severity);
+
+    const promptSearch = await (await fetch(`${instance.origin}/api/risk-knowledge?query=prompt%20injection&limit=10`)).json();
+    assert.ok(promptSearch.items.length > 0);
+    assert.ok(promptSearch.items.every((entry) => entry.severity === null && entry.severityStatus === 'context_required'));
     assert.equal((await fetch(`${instance.origin}/api/risk-knowledge/ARL-KB-053/detail`)).status, 401);
 
     const deniedProfile = await fetch(`${instance.origin}/api/risk-knowledge/profile`, {
@@ -164,7 +188,11 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
 
     const readiness = await fetch(`${instance.origin}/api/projects/${auth.projectId}/risk-knowledge-readiness`, { headers: { Cookie: authCookie } });
     assert.equal(readiness.status, 200);
-    assert.equal((await readiness.json()).states.length, 1);
+    const readinessPayload = await readiness.json();
+    assert.equal(readinessPayload.states.length, 1);
+    assert.equal(readinessPayload.states[0].severity, 'critical');
+    assert.equal(readinessPayload.states[0].severityStatus, 'evaluated');
+    assert.equal(readinessPayload.states[0].severityScope, 'project');
     const other = await fetch(`${instance.origin}/api/projects/${auth.otherProjectId}/risk-knowledge-readiness`, { headers: { Cookie: authCookie } });
     assert.equal(other.status, 403);
 
@@ -175,6 +203,12 @@ test('risk knowledge HTTP routes preserve public/private boundaries and project 
       body: JSON.stringify({ facts: { uses_tools: true }, criticalGateFailed: false }),
     });
     assert.equal(forbidden.status, 400);
+    const forgedSeverity = await fetch(`${instance.origin}/api/projects/${auth.projectId}/risk-knowledge-profile`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': authCsrf.token, Cookie: writeCookie, Origin: instance.origin },
+      body: JSON.stringify({ facts: { uses_tools: true }, projectSeverity: 'low' }),
+    });
+    assert.equal(forgedSeverity.status, 400);
+    assert.match((await forgedSeverity.json()).error, /projectSeverity is not accepted/);
     const applied = await fetch(`${instance.origin}/api/projects/${auth.projectId}/risk-knowledge-profile`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': authCsrf.token, Cookie: writeCookie, Origin: instance.origin },
       body: JSON.stringify({ facts: { uses_tools: true } }),
