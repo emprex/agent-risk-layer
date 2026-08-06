@@ -1,5 +1,9 @@
 # Risk knowledge API contract — ARL-RKA-1.2.0
 
+## Guided applicability
+
+`POST /api/projects/:projectId/control-intelligence/controls/:controlId/applicability` accepts the current `snapshotId`, `applicable`, `not_applicable`, or `context_required`, a mandatory reason, supporting architecture fact IDs, and the last `expectedEvaluationDigest`. The server supplies evaluator identity and role, evaluation time, Control Profile version, control digest and the new evaluation digest. Stale writes return `409`; authenticated project responses remain private and `no-store`.
+
 This contract describes the implementation in this repository. It reuses the existing session, verified-email, CSRF, workspace/project-role, audit, rate-limit, retention and error-handling paths. It does not create a parallel identity, findings or evidence system.
 
 ## Public-safe routes

@@ -68,7 +68,8 @@ export async function renderReportPdf(report) {
         add(ci.statement,10,true);
         add(`Project: ${ci.project.name} | Snapshot: ${ci.systemSnapshot.version} | Digest: ${ci.systemSnapshot.digest}`,8,false,0,3,'muted');
         add(`Control profile: ${ci.controlProfileVersion} | Profile digest: ${ci.controlProfileDigest}`,8,false,0,5,'muted');
-        add(`Applicable: ${ci.applicableControls} | Unevaluated: ${ci.unevaluatedApplicableControls} | Observed: ${ci.observedControls} | Missing evidence: ${ci.missingEvidence.length} | Open findings: ${ci.openFindings.length}`,9,true);
+        add(`Reviewed: ${ci.controlsReviewed||0} | Applicable: ${ci.applicableControls} | Not applicable: ${ci.notApplicableControls||0} | Needs context: ${ci.contextRequiredControls||0} | Observed: ${ci.observedControls} | Missing evidence: ${ci.missingEvidence.length} | Open findings: ${ci.openFindings.length}`,9,true);
+        for (const decision of (ci.applicabilityDecisions||[]).slice(0,20)) add(`${decision.controlId}: ${decision.decision.replaceAll('_',' ')} — ${decision.reason}`,8,false,0,2);
         add(`Deployment decision: ${ci.deploymentDecision?.decision||'not recorded'}${ci.stale?' — stale; reassessment required':''}. Runtime evidence: ${ci.runtimeEvidence}. Approval evidence: ${ci.approvalEvidence}.`,9);
         add(ci.disclaimer,8,false,0,4,'muted');
     }

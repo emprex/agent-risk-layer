@@ -8,7 +8,7 @@ import { createWorkspace } from '../src/workspaces.js';
 import { createRuntimeApproval, createSecurityProject } from '../src/control-plane.js';
 import { applyProjectRiskKnowledgeProfile } from '../src/risk-knowledge.js';
 import {
-  canonicalJson, createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl,
+  canonicalJson, createSystemSnapshot, getControlIntelligence, getControlIntelligenceControl, assessControlApplicability,
   getControlIntelligenceReportSummary, intelligenceDigest, recordControlEvidence, recordControlTestExecution, recordDeploymentDecision,
 } from '../src/control-intelligence.js';
 import { buildAssessmentReport } from '../src/report-service.js';
@@ -120,10 +120,20 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   assert.equal((overview.match(/>Control Intelligence<\/a>/g)||[]).length,0);
   assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
-  assert.match(script,/Relationships/);assert.match(script,/Nodes/);
+  assert.match(script,/Assessment progress/);assert.match(script,/Review suggested controls/);
   assert.doesNotMatch(script,/href=\\?"#controls/);assert.match(script,/expectedCurrentSnapshotId/);assert.match(script,/expectedCurrentDecisionId/);
   assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/overflow-x:auto/);
   for(const html of [overview,detail]){assert.match(html,/name="viewport"/);assert.match(html,/skip-link/);assert.match(html,/aria-label/);assert.doesNotMatch(html,/runtime_event|action_digest|workspace_id|token_digest/);}
+});
+
+test('guided applicability is snapshot-bound, revisioned, role-enforced and drives progressive stages',async()=>{
+  const f=await fixture('applicability');const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Customer-facing refund agent'},assessmentConfiguration:{architectureFacts:['input:user_messages','tool:payment']},source:'test'}});
+  const before=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(before.applicability.status,'context_required');assert.equal(before.chain.currentStage,'applicability');assert.ok(before.chain.notRequiredStages.includes('finding'));
+  const first=await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'applicable',reason:'Untrusted customer messages reach the interactive refund agent.',architectureFactIds:['input:user_messages'],expectedEvaluationDigest:before.applicability.evaluationDigest}});assert.equal(first.evaluation.evaluator.id,f.userId);
+  const after=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(after.chain.currentStage,'test');assert.ok(after.chain.notRequiredStages.includes('remediation'));
+  await assert.rejects(()=>assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'The capability is absent from this isolated agent.',architectureFactIds:['tool:payment'],expectedEvaluationDigest:before.applicability.evaluationDigest}}),/changed after this page/i);
+  await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'This revised system accepts no untrusted messages or retrieved content.',architectureFactIds:['architecture:manual-review'],expectedEvaluationDigest:after.applicability.evaluationDigest}});
+  const final=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(final.applicability.history.length,2);assert.equal(final.chain.deploymentImpact,'not_applicable');assert.deepEqual(final.chain.notRequiredStages,['test','evidence','finding','remediation','retest','approval']);
 });
 
 test('current records are unique and stale compare-and-swap writers fail closed',async()=>{
@@ -157,6 +167,6 @@ test('customer report includes exact Control Intelligence scope without certific
   const result={score:55,riskBand:'Moderate',headline:'Review required.',decision:'HOLD',methodology:'Evidence-driven contextual assessment.',responses:[],findings:[],attackPaths:[],controls:[],recommendations:[]};
   await db.prepare(`INSERT INTO assessments (id,user_id,name,agent_type,answers_json,score,risk_band,result_json,paid_tier,access_token,share_token,public_enabled,scoring_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'pro',?,?,0,?,?,?)`).run(assessmentId,f.userId,'Report agent','Test agent','{}',55,'Moderate',JSON.stringify(result),randomId('access_'),randomId('share_'),'arl-risk-v3.2',timestamp,timestamp);
   await db.prepare(`INSERT INTO remediation_items (id,project_id,assessment_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,'open','{}',?,?,?)`).run(randomId('rem_'),f.project.id,assessmentId,'ARL-KB-053-report','Report linkage','high',f.userId,timestamp,timestamp);
-  const summary=await getControlIntelligenceReportSummary({projectId:f.project.id});assert.equal(summary.systemSnapshot.id,snapshot.id);assert.equal(summary.controlProfileVersion,'ARL-RKA-1.2.0');assert.match(summary.disclaimer,/not an accredited certification/i);
+  const summary=await getControlIntelligenceReportSummary({projectId:f.project.id});assert.equal(summary.systemSnapshot.id,snapshot.id);assert.equal(summary.controlProfileVersion,'ARL-RKA-1.2.0');assert.match(summary.disclaimer,/not an accredited certification/i);assert.ok(Array.isArray(summary.applicabilityDecisions));
   const {report}=await buildAssessmentReport(assessmentId,'pro');assert.equal(report.controlIntelligence.systemSnapshot.digest,snapshot.contentDigest);assert.equal(report.controlIntelligence.deploymentDecision,null);assert.ok(report.controlIntelligence.missingEvidence.length>=0);assert.doesNotMatch(JSON.stringify(report.controlIntelligence),/certified|guaranteed security/i);
 });

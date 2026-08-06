@@ -125,7 +125,7 @@ async function rawJsonRequest(route, rawBody) {
 try {
   const health = await wait();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '10.1.0');
+  assert.equal(health.version, '10.1.1');
   assert.equal(health.productStage, 'production');
   const authPage = await anonymousRequest('/auth.html');
   assert.match(authPage, /Create free account/i);

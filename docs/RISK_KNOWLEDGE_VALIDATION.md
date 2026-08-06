@@ -5,7 +5,7 @@
 - Source supplied by owner: `agent-risk-layer-fix-main.zip`
 - Recorded source baseline: repository commit `02271bf`
 - Local inspection repository: `/home/guillaume/agent-risk-layer-fix`
-- Application version in source: `10.1.0`
+- Application version in source: `10.1.1`
 - Risk knowledge profile: `ARL-RKA-1.2.0`
 - Assessment date: 2026-08-06
 

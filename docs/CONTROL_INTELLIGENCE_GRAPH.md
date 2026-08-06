@@ -120,3 +120,9 @@ TEST_DATABASE_URL='postgresql://.../arl_disposable_test' DATABASE_URL='' NODE_EN
 The `scripts/test-control-intelligence-postgres.mjs` harness rejects equality with `DATABASE_URL`, non-loopback and production-like targets, and database names without an explicit test/disposable marker. It applies migrations 001–015, verifies checksum-idempotent restart, exercises independent transaction concurrency and malformed relational writes, and removes only the disposable database schema. Static parsing or SQLite is not equivalent evidence.
 
 Limitations: pre-015 evidence has no exact snapshot binding and is not promoted into current evidence; project-bound inspection/red-team detail depends on existing resolvers; severity editing remains deferred and client severity is rejected; cross-customer analytics are excluded pending privacy/consent design; framework mappings remain informative and do not establish compliance.
+
+## Guided customer journey (10.1.1)
+
+Migration `016_control_intelligence_journey.sql` adds immutable applicability revisions without changing deployed migration 015. Each revision is bound to the workspace, project, snapshot, control profile, control digest, server-resolved evaluator and supporting architecture facts. The current evaluation remains the efficient project view; revision history preserves prior decisions and an optimistic-concurrency digest.
+
+The server derives the progressive applicability, test, evidence, conditional finding/remediation/retest, conditional approval and project-decision stages. Structured snapshot facts are customer declarations, not observed evidence. Suggestions require customer confirmation and are not automatic applicability decisions. Referenced evidence remains unverified unless an existing trusted collector or integrity-bound source verifies it. Application rollback may leave both additive migrations 015 and 016 present; rollback must not delete customer evidence.
