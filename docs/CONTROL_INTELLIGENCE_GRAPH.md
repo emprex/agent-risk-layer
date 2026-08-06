@@ -58,6 +58,12 @@ Submitting identical material state returns the existing snapshot. A material ch
 
 SHA-256 binds versions and detects inconsistent records; it does not prove author identity or make storage tamper-proof.
 
+Snapshot creation is serialized by locking the authorized `security_projects` row inside the transaction on PostgreSQL; SQLite uses its adapter's immediate write transaction. A partial unique index independently enforces one `current` snapshot per project. The API accepts `expectedCurrentSnapshotId` as a compare-and-swap guard: a stale editor receives `409` and must reload. Identical concurrent submissions converge on the project/digest unique record; different submissions serialize, preserve history and leave exactly one current version.
+
+Evaluations, executions, evidence, runtime bindings and deployment evidence use composite scope keys so a relationship cannot change workspace, project, snapshot or control. Legacy finding/remediation/runtime/approval records are admitted only through the shared server-side scope checks; a project match alone is insufficient.
+
+Canonical descriptors include normalized security-relevant fields, provenance IDs, actor, timestamps, verification, sensitivity and retention state. Reads used by the graph or deployment derivation rebuild that canonical representation from normalized columns and compare it with both the stored descriptor and server digest. A mismatch fails closed with `CONTROL_INTELLIGENCE_INTEGRITY_FAILURE`, does not qualify as evidence, and prevents a proceed decision without exposing raw content.
+
 ## Evidence and chain semantics
 
 Evidence classes are `declared`, `observed`, `test_generated`, `runtime`, `human_provided` and `imported`. Declaration remains `declared`; a reference remains `unverified`; only an existing project-bound and snapshot-bound runtime event or approval, or a project-bound remediation artifact, is serialized as `verified`. Descriptors contain privacy-safe references and digests, not raw prompts, tool payloads, secrets or API keys.
@@ -72,6 +78,9 @@ Only project admins and owners can record a decision. The caller supplies ration
 - An open evaluated Critical snapshot-bound finding produces `do_not_deploy`.
 - `proceed` requires current applicability, current verified evidence for applicable controls and no open blocker. It remains accountable decision support, not automatic deployment authorization.
 - Material changes stale prior decisions; old decisions cannot authorize a new snapshot.
+- A partial unique index permits one current decision for a project/snapshot. Recording locks the project, checks `expectedCurrentDecisionId`, re-derives within the transaction, preserves the prior immutable decision as stale, and inserts the successor atomically.
+- Required approvals come only from the snapshot's explicit `approvalConfiguration.requiredControlIds`. They must be current-snapshot, control-bound, active, unexpired and unconsumed. Historical project links never complete the current approval stage.
+- A retest is distinct from an ordinary pass. It binds the original failed execution, finding/remediation, vulnerable snapshot and different remediated snapshot. Missing or mismatched provenance remains a hold.
 
 ## Authorization, privacy and performance
 
@@ -86,5 +95,15 @@ Summary responses page controls with a maximum of 50. Evidence/runtime/approval/
 One primary Control Intelligence entry opens Overview, Controls, Evidence chain and Deployment decision. A readable chain/list is the default and the node/relationship view has a keyboard-readable text alternative. Mobile layout collapses to one column.
 
 Application rollback may stop exposing routes/UI while retaining migration 015 tables. Dropping them is not the default because it destroys locally recorded graph evidence; use a verified backup for physical rollback.
+
+### Disposable PostgreSQL verification
+
+PostgreSQL evidence must use a dedicated destructive-test URL, never `DATABASE_URL`. The supported invocation is:
+
+```bash
+TEST_DATABASE_URL='postgresql://.../arl_disposable_test' DATABASE_URL='' NODE_ENV=test npm test
+```
+
+The test harness must reject equality with `DATABASE_URL` and obvious production targets, create an isolated test schema, apply migrations 001–015, use separate connections for concurrency, and remove only that verified schema. Static parsing or SQLite is not equivalent evidence.
 
 Limitations: pre-015 evidence has no exact snapshot binding and is not promoted into current evidence; project-bound inspection/red-team detail depends on existing resolvers; severity editing remains deferred and client severity is rejected; cross-customer analytics are excluded pending privacy/consent design; framework mappings remain informative and do not establish compliance.

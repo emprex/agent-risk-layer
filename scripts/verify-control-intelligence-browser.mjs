@@ -1,0 +1,15 @@
+const pages=await fetch(process.env.CDP_LIST_URL||'http://127.0.0.1:9223/json/list').then(response=>response.json());
+const page=pages.find(item=>item.type==='page'&&item.url.includes('/control-intelligence.html'));
+if(!page)throw new Error('Control Intelligence browser page not found.');
+const socket=new WebSocket(page.webSocketDebuggerUrl);
+await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+let sequence=0;
+const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence;const listener=event=>{const message=JSON.parse(event.data);if(message.id!==id)return;socket.removeEventListener('message',listener);message.error?reject(message.error):resolve(message.result);};socket.addEventListener('message',listener);socket.send(JSON.stringify({id,method,params}));});
+const evaluate=async expression=>(await call('Runtime.evaluate',{expression,returnByValue:true})).result.value;
+await call('Runtime.enable');
+const desktop=await evaluate(`({title:document.title,controlIntelligenceEntries:[...document.querySelectorAll('a')].filter(link=>link.textContent.trim()==='Control Intelligence').length,horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth,literalNull:/\\bnull\\b/.test(document.body.innerText),emptyState:document.body.innerText.includes('Select a project'),privateLeak:/approval digest|private test result|raw prompt/i.test(document.body.innerText)})`);
+await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+const mobile=await evaluate(`({horizontalOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth,focusable:[...document.querySelectorAll('a,button,select,textarea')].filter(element=>!element.disabled).length})`);
+socket.close();
+if(desktop.controlIntelligenceEntries!==1||desktop.horizontalOverflow||desktop.literalNull||desktop.privateLeak||mobile.horizontalOverflow||mobile.focusable<1)throw new Error(`Browser verification failed: ${JSON.stringify({desktop,mobile})}`);
+console.log(JSON.stringify({desktop,mobile}));

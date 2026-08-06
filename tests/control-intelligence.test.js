@@ -69,6 +69,9 @@ test('control chain requires evidence, links failed tests to findings and derive
   assert.equal(decision.decision,'hold');
   assert.notEqual(decision.decision,'proceed');
   await db.prepare("UPDATE control_snapshot_evaluations SET contextual_severity='critical',severity_status='evaluated' WHERE system_snapshot_id=? AND entry_id='ARL-KB-053'").run(snapshot.id);
+  const evaluation=await db.prepare("SELECT * FROM control_snapshot_evaluations WHERE system_snapshot_id=? AND entry_id='ARL-KB-053'").get(snapshot.id);
+  const evaluationDescriptor={...JSON.parse(evaluation.descriptor_json),contextualSeverity:'critical',severityStatus:'evaluated'};
+  await db.prepare('UPDATE control_snapshot_evaluations SET descriptor_json=?,content_digest=? WHERE id=?').run(canonicalJson(evaluationDescriptor),intelligenceDigest(evaluationDescriptor),evaluation.id);
   const blocked=await recordDeploymentDecision({projectId:f.project.id,userId:f.userId,input:{systemSnapshotId:snapshot.id,rationale:'The evaluated Critical finding remains open.'}});
   assert.equal(blocked.decision,'do_not_deploy');
 });
@@ -76,7 +79,7 @@ test('control chain requires evidence, links failed tests to findings and derive
 test('runtime evidence and exact-action approvals cannot cross snapshot boundaries',async()=>{
   const f=await fixture('runtime-binding');
   const first=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Approval-bound agent'},tools:[{name:'synthetic.transfer'}],source:'test'}});
-  const approval=await createRuntimeApproval({projectId:f.project.id,userId:f.userId,toolCall:{name:'synthetic.transfer',arguments:{target:'test-recipient',value:10}}});
+  const approval=await createRuntimeApproval({projectId:f.project.id,userId:f.userId,controlId:'ARL-KB-053',systemSnapshotId:first.snapshot.id,toolCall:{name:'synthetic.transfer',arguments:{target:'test-recipient',value:10}}});
   const binding=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE approval_id=?').get(approval.id);
   assert.equal(binding.system_snapshot_id,first.snapshot.id);
   const second=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Changed approval-bound agent'},tools:[{name:'synthetic.transfer',scope:'expanded'}],source:'test'}});
@@ -114,6 +117,30 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
   assert.match(script,/Relationships/);assert.match(script,/Nodes/);
+  assert.doesNotMatch(script,/href=\\?"#controls/);assert.match(script,/expectedCurrentSnapshotId/);assert.match(script,/expectedCurrentDecisionId/);
   assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/overflow-x:auto/);
   for(const html of [overview,detail]){assert.match(html,/name="viewport"/);assert.match(html,/skip-link/);assert.match(html,/aria-label/);assert.doesNotMatch(html,/runtime_event|action_digest|workspace_id|token_digest/);}
+});
+
+test('current records are unique and stale compare-and-swap writers fail closed',async()=>{
+  const f=await fixture('cas');const one=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'one'},source:'test'}});
+  const two=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'two'},source:'test',expectedCurrentSnapshotId:one.snapshot.id}});
+  await assert.rejects(()=>createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'stale writer'},source:'test',expectedCurrentSnapshotId:one.snapshot.id}}),/changed after this page/i);
+  assert.equal((await db.prepare("SELECT COUNT(*) count FROM system_snapshots WHERE project_id=? AND status='current'").get(f.project.id)).count,1);
+  const d1=await recordDeploymentDecision({projectId:f.project.id,userId:f.userId,input:{systemSnapshotId:two.snapshot.id,rationale:'first'}});
+  const d2=await recordDeploymentDecision({projectId:f.project.id,userId:f.userId,input:{systemSnapshotId:two.snapshot.id,expectedCurrentDecisionId:d1.id,rationale:'second'}});
+  await assert.rejects(()=>recordDeploymentDecision({projectId:f.project.id,userId:f.userId,input:{systemSnapshotId:two.snapshot.id,expectedCurrentDecisionId:d1.id,rationale:'stale'}}),/changed after this page/i);
+  assert.equal((await db.prepare("SELECT COUNT(*) count FROM control_deployment_decisions WHERE project_id=? AND system_snapshot_id=? AND status='current'").get(f.project.id,two.snapshot.id)).count,1);
+  assert.equal((await db.prepare('SELECT supersedes_decision_id FROM control_deployment_decisions WHERE id=?').get(d2.id)).supersedes_decision_id,d1.id);
+});
+
+test('same-project cross-control sources and normalized digest mutations are rejected',async()=>{
+  const f=await fixture('scope');const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'scope'},source:'test'}});const timestamp=nowIso();
+  const findingId=randomId('rem_');await db.prepare(`INSERT INTO remediation_items (id,project_id,finding_key,title,severity,status,verification_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'open','{}',?,?,?)`).run(findingId,f.project.id,'ARL-KB-054-test','Other control','high',f.userId,timestamp,timestamp);
+  await assert.rejects(()=>recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'failure',findingId}}),/must link/i);
+  const planned=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'passed',observedResult:'safe result'}});
+  await db.prepare("UPDATE control_test_executions SET observed_result='tampered' WHERE id=?").run(planned.id);
+  await assert.rejects(()=>getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId}),/digest verification/i);
+  await db.prepare("UPDATE system_snapshots SET autonomy_level='tampered' WHERE id=?").run(snapshot.id);
+  await assert.rejects(()=>getControlIntelligence({projectId:f.project.id,userId:f.userId}),/digest verification/i);
 });

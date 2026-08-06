@@ -175,21 +175,17 @@ export async function revokeProjectApiKey({ projectId, keyId, userId }) {
 }
 
 
-export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSeconds = 600 }) {
-  const access = await requireProjectRole(projectId, userId, APPROVER_ROLES);
+export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSeconds = 600, controlId = null, systemSnapshotId = null }) {
   if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) throw badRequest('An exact tool call is required for approval.');
   const tool = clean(toolCall.name || toolCall.tool, 200).toLowerCase();
   if (!tool) throw badRequest('Tool identity is required for approval.');
   const args = Object.hasOwn(toolCall, 'arguments') ? toolCall.arguments : (Object.hasOwn(toolCall, 'args') ? toolCall.args : {});
-  const actionDigest = runtimeApprovalActionDigest({
-    workspaceId: access.project.workspace_id,
-    projectId: access.project.id,
-    environment: access.project.environment,
-    tool,
-    arguments: args,
-  });
   const approvalId = id('apr_');
   const lifetime = Math.max(30, Math.min(3600, Number(ttlSeconds) || 600));
+  let output;
+  await db.transaction(async()=>{
+  const access = await requireProjectRole(projectId, userId, APPROVER_ROLES, true);
+  const actionDigest = runtimeApprovalActionDigest({workspaceId:access.project.workspace_id,projectId:access.project.id,environment:access.project.environment,tool,arguments:args});
   const token = issueApproval({
     approvalId,
     workspaceId: access.project.workspace_id,
@@ -209,13 +205,14 @@ export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSe
       actionDigest, approvalTokenDigest(token), issuedAt, expiresAt);
   const snapshot = await db.prepare("SELECT id FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1")
     .get(access.project.workspace_id, access.project.id);
-  if (snapshot) await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
-    (id,workspace_id,project_id,system_snapshot_id,approval_id,binding_type,created_at)
-    VALUES (?,?,?,?,?,'exact_action_approval',?)`).run(id('crb_'), access.project.workspace_id, access.project.id, snapshot.id, approvalId, issuedAt);
+  if(systemSnapshotId&&snapshot?.id!==clean(systemSnapshotId,100))throw conflict('The approval snapshot is stale; reload before approving.');
+  if(snapshot&&controlId){const evaluation=await db.prepare('SELECT id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(access.project.workspace_id,projectId,snapshot.id,clean(controlId,80));if(!evaluation)throw notFound('Current snapshot control evaluation not found.');const descriptor={schema:'arl.control-runtime-binding.v1',workspaceId:access.project.workspace_id,projectId,systemSnapshotId:snapshot.id,entryId:clean(controlId,80),approvalId,bindingType:'exact_action_approval',createdAt:issuedAt};await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
+    (id,workspace_id,project_id,system_snapshot_id,entry_id,approval_id,binding_type,descriptor_json,content_digest,created_at)
+    VALUES (?,?,?,?,?,?,'exact_action_approval',?,?,?)`).run(id('crb_'), access.project.workspace_id, access.project.id, snapshot.id,clean(controlId,80), approvalId,canonicalJson(descriptor),digest(canonicalJson(descriptor)),issuedAt);}
   await audit({ workspaceId: access.project.workspace_id, projectId: access.project.id, actorType: 'user', actorId: userId,
     action: 'runtime_approval.issued', targetType: 'runtime_approval', targetId: approvalId,
     metadata: { tool, environment: access.project.environment, actionDigest, expiresAt } });
-  return {
+  output={
     id: approvalId,
     projectId: access.project.id,
     tool,
@@ -227,6 +224,8 @@ export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSe
     token,
     shownOnce: true,
   };
+  });
+  return output;
 }
 
 export async function listRuntimeApprovals({ projectId, userId, limit = 50 }) {
@@ -384,9 +383,16 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       retestCriteria ? (retestSatisfied ? 1 : 0) : null, response.timestamp);
     const snapshot = await db.prepare("SELECT id FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1")
       .get(project.workspace_id, project.id);
-    if (snapshot) await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
-      (id,workspace_id,project_id,system_snapshot_id,runtime_event_id,binding_type,created_at)
-      VALUES (?,?,?,?,?,'runtime_decision',?)`).run(id('crb_'), project.workspace_id, project.id, snapshot.id, runtimeEventId, response.timestamp);
+    if (snapshot && retestCriteria) {
+      const remediation=await db.prepare('SELECT finding_key FROM remediation_items WHERE id=? AND project_id=?').get(retestCriteria.remediation_id,project.id);
+      const controlId=String(remediation?.finding_key||'').match(/^ARL-KB-\d{3}/)?.[0];
+      const evaluation=controlId?await db.prepare('SELECT id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(project.workspace_id,project.id,snapshot.id,controlId):null;
+      if(!evaluation)throw conflict('Runtime retest cannot be bound to the current control snapshot.');
+      const descriptor={schema:'arl.control-runtime-binding.v1',workspaceId:project.workspace_id,projectId:project.id,systemSnapshotId:snapshot.id,entryId:controlId,runtimeEventId,bindingType:'runtime_decision',createdAt:response.timestamp};
+      await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
+        (id,workspace_id,project_id,system_snapshot_id,entry_id,runtime_event_id,binding_type,descriptor_json,content_digest,created_at)
+        VALUES (?,?,?,?,?,?,'runtime_decision',?,?,?)`).run(id('crb_'),project.workspace_id,project.id,snapshot.id,controlId,runtimeEventId,canonicalJson(descriptor),digest(canonicalJson(descriptor)),response.timestamp);
+    }
     if (shouldConsumeApproval) {
       const consumed = await db.prepare(`UPDATE runtime_approvals
         SET status='consumed',consumed_at=?,consumed_request_id=?,runtime_event_id=?
@@ -987,10 +993,11 @@ async function projectAccess(projectId, userId) {
   return row ? { project: row, role: row.role } : null;
 }
 
-async function requireProjectRole(projectId, userId, roles) {
-  const access = await projectAccess(projectId, userId);
-  if (!access || !roles.has(access.role)) throw forbidden('Project not found or permission denied.');
-  return access;
+async function requireProjectRole(projectId, userId, roles, lock=false) {
+  const access = lock && db.kind==='postgres' ? (()=>db.prepare(`SELECT p.*,m.role FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id WHERE p.id=? AND m.user_id=? AND m.status='active' FOR UPDATE OF p`).get(projectId,userId).then(row=>row?{project:row,role:row.role}:null))() : projectAccess(projectId, userId);
+  const resolved=await access;
+  if (!resolved || !roles.has(resolved.role)) throw forbidden('Project not found or permission denied.');
+  return resolved;
 }
 
 async function workspaceMembership(workspaceId, userId) {
