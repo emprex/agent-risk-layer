@@ -1,4 +1,7 @@
 import { hydrateNav } from './shared.js';
+import { applyDocumentSeo } from './seo.js';
+
+applyDocumentSeo();
 
 const header = document.querySelector('[data-site-header]');
 const menuButton = document.querySelector('[data-menu-toggle]');
