@@ -1,5 +1,6 @@
 const MEASUREMENT_ID = 'G-T1V035EGTB';
 const CONSENT_KEY = 'agentrisklayer_analytics_consent';
+const ONCE_PREFIX = 'arl_analytics_once:';
 let loaded = false;
 
 window.dataLayer = window.dataLayer || [];
@@ -20,14 +21,36 @@ window.gtag('set', {
   restricted_data_processing: true
 });
 
+function storageGet(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(storage, key, value) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function consentState() {
+  return storageGet(localStorage, CONSENT_KEY);
+}
+
 function loadAnalytics() {
-  if (loaded) return;
+  if (loaded || consentState() !== 'granted') return;
   loaded = true;
   window.gtag('consent', 'update', { analytics_storage: 'granted' });
   const script = document.createElement('script');
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(MEASUREMENT_ID)}`;
   script.referrerPolicy = 'strict-origin-when-cross-origin';
+  script.addEventListener('error', () => { loaded = false; }, { once: true });
   document.head.appendChild(script);
   window.gtag('js', new Date());
   window.gtag('config', MEASUREMENT_ID, {
@@ -38,28 +61,46 @@ function loadAnalytics() {
   });
 }
 
-function track(name, parameters = {}) {
-  if (localStorage.getItem(CONSENT_KEY) !== 'granted') return;
-  loadAnalytics();
-  const safe = Object.fromEntries(
-    Object.entries(parameters).filter(([, value]) =>
-      ['string', 'number', 'boolean'].includes(typeof value)
-    )
+function safeParameters(parameters = {}) {
+  return Object.fromEntries(
+    Object.entries(parameters)
+      .filter(([key, value]) => /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key) &&
+        ['string', 'number', 'boolean'].includes(typeof value))
+      .map(([key, value]) => [key, typeof value === 'string' ? value.slice(0, 100) : value])
   );
-  window.gtag('event', name, safe);
+}
+
+function track(name, parameters = {}) {
+  if (consentState() !== 'granted') return false;
+  if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(String(name))) return false;
+  loadAnalytics();
+  window.gtag('event', String(name), safeParameters(parameters));
+  return true;
+}
+
+function trackOnce(key, name, parameters = {}) {
+  const marker = `${ONCE_PREFIX}${String(key).slice(0, 100)}`;
+  if (storageGet(sessionStorage, marker) === '1') return false;
+  if (!track(name, parameters)) return false;
+  storageSet(sessionStorage, marker, '1');
+  return true;
 }
 
 function setConsent(value) {
-  localStorage.setItem(CONSENT_KEY, value);
+  const next = value === 'granted' ? 'granted' : 'denied';
+  storageSet(localStorage, CONSENT_KEY, next);
   window.gtag('consent', 'update', {
-    analytics_storage: value === 'granted' ? 'granted' : 'denied'
+    analytics_storage: next === 'granted' ? 'granted' : 'denied'
   });
   document.getElementById('analyticsConsent')?.remove();
-  if (value === 'granted') loadAnalytics();
+  if (next === 'granted') {
+    loadAnalytics();
+    trackJourneyState();
+  }
 }
 
 function showConsentBanner() {
-  if (localStorage.getItem(CONSENT_KEY)) return;
+  if (consentState()) return;
   const banner = document.createElement('section');
   banner.id = 'analyticsConsent';
   banner.className = 'analytics-consent';
@@ -84,8 +125,62 @@ function showConsentBanner() {
 
 function planFromElement(element) {
   const card = element.closest('[data-plan], .pricing-card, article');
-  return element.dataset.plan || card?.dataset.plan ||
-    card?.querySelector('h2,h3,strong')?.textContent?.trim() || 'unknown';
+  return element.dataset.plan || element.dataset.checkout || card?.dataset.plan ||
+    card?.querySelector('h2,h3,strong')?.textContent?.trim().slice(0, 80) || 'unknown';
+}
+
+function currentPath() {
+  return location.pathname === '/' ? '/' : location.pathname.replace(/\/$/, '');
+}
+
+function referrerPath() {
+  try {
+    return document.referrer ? new URL(document.referrer).pathname : '';
+  } catch {
+    return '';
+  }
+}
+
+function observeConfirmedPurchase() {
+  if (currentPath() !== '/success.html') return;
+  const root = document.querySelector('#successRoot');
+  if (!root) return;
+  const check = () => {
+    if (!/Payment and fulfilment completed\./i.test(root.textContent || '')) return false;
+    trackOnce('purchase-confirmed', 'purchase', { source: 'stripe_checkout' });
+    return true;
+  };
+  if (check()) return;
+  const observer = new MutationObserver(() => {
+    if (check()) observer.disconnect();
+  });
+  observer.observe(root, { childList: true, subtree: true, characterData: true });
+}
+
+function trackJourneyState() {
+  if (consentState() !== 'granted') return;
+  const path = currentPath();
+  const params = new URLSearchParams(location.search);
+
+  if (path === '/assessment.html') {
+    trackOnce('assessment-start', 'assessment_start');
+  }
+
+  if (path === '/result.html' && storageGet(sessionStorage, 'arl_last_assessment')) {
+    trackOnce('assessment-complete', 'assessment_complete');
+  }
+
+  if (path === '/dashboard.html' && params.get('welcome') === '1') {
+    trackOnce('sign-up-complete', 'sign_up', { method: 'email_password' });
+  } else if (path === '/dashboard.html' && referrerPath() === '/auth.html') {
+    trackOnce('login-complete', 'login', { method: 'email_password' });
+  }
+
+  if (path === '/pricing.html') {
+    trackOnce('pricing-view', 'view_pricing');
+  }
+
+  observeConfirmedPurchase();
 }
 
 document.addEventListener('click', event => {
@@ -94,8 +189,8 @@ document.addEventListener('click', event => {
   const text = target.textContent.trim().toLowerCase();
   const href = target.getAttribute('href') || '';
 
-  if (target.matches('[data-plan], [data-checkout]') ||
-      /checkout|subscribe|upgrade|buy|choose plan/.test(text)) {
+  if (target.matches('[data-plan], [data-checkout], #buyPro') ||
+      /checkout|subscribe|upgrade|buy|choose plan|get reviewed assessment/.test(text)) {
     track('begin_checkout', { plan: planFromElement(target) });
   } else if (/create (free )?account|sign up|register/.test(text) ||
              /auth\.html.*register/.test(href)) {
@@ -104,33 +199,47 @@ document.addEventListener('click', event => {
     track('generate_lead_start');
   } else if (/sample.*report|download.*report/.test(text + ' ' + href)) {
     track('sample_report_view');
+  } else if (/assessment\.html/.test(href)) {
+    track('assessment_cta_click');
   }
 });
 
 document.addEventListener('submit', event => {
   const form = event.target;
+  const id = String(form.id || '').toLowerCase();
   const action = (form.getAttribute('action') || location.pathname).toLowerCase();
-  if (/auth|register|signup/.test(action) ||
-      new URLSearchParams(location.search).get('mode') === 'register') {
+  if (id === 'registerform' || /register|signup/.test(action)) {
     track('sign_up_submit');
+  } else if (id === 'loginform') {
+    track('login_submit');
   } else if (/contact|lead|quote/.test(action)) {
     track('generate_lead_submit');
   }
 });
 
 window.AgentRiskAnalytics = Object.freeze({
+  measurementId: MEASUREMENT_ID,
   track,
+  trackOnce,
+  consent: consentState,
   grant: () => setConsent('granted'),
   deny: () => setConsent('denied'),
   resetConsent: () => {
-    localStorage.removeItem(CONSENT_KEY);
+    try { localStorage.removeItem(CONSENT_KEY); } catch {}
     location.reload();
   }
 });
 
-if (localStorage.getItem(CONSENT_KEY) === 'granted') loadAnalytics();
+if (consentState() === 'granted') {
+  loadAnalytics();
+  trackJourneyState();
+}
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', showConsentBanner, { once: true });
+  document.addEventListener('DOMContentLoaded', () => {
+    showConsentBanner();
+    trackJourneyState();
+  }, { once: true });
 } else {
   showConsentBanner();
+  trackJourneyState();
 }
