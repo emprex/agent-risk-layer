@@ -55,6 +55,14 @@ test('homepage structured data is bounded to visible, supportable claims', () =>
   }
 });
 
+test('MCP risk page receives descriptive internal links from relevant public pages', () => {
+  const homepage = read('public/index.html');
+  const runtime = read('public/runtime.html');
+  assert.match(homepage, /href="\/checks\/mcp-server-risk-assessment">MCP server risk assessment<\/a>/);
+  assert.match(runtime, /href="\/checks\/mcp-server-risk-assessment">Review the MCP server risk assessment<\/a>/);
+  assert.match(runtime, /tool trust, permissions, secrets and action validation/);
+});
+
 test('search and social images are present as local crawlable assets', () => {
   for (const asset of ['public/agentrisklayer-logo-512.png', 'public/agentrisklayer-social-1200x630.png']) {
     const stat = fs.statSync(path.join(root, asset));
