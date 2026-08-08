@@ -43,7 +43,7 @@ Unknown material information can legitimately produce **HOLD FOR INFORMATION**. 
 
 Exposure questions describe potential consequence and attack surface. A high-impact deployment, sensitive data or broad user population is not itself a vulnerability.
 
-When risk cannot be calculated because material exposure/control information is missing, the customer sees **Risk not determined** and assessment completeness instead of a fabricated maximum score.
+When risk cannot be calculated because material exposure/control information is missing, the customer sees **Risk not determined** and security information completeness instead of a fabricated maximum score.
 
 ## First-customer profile requirements
 
@@ -59,9 +59,10 @@ When risk cannot be calculated because material exposure/control information is 
 - Missing information appears in a dedicated **Information needed** section with why it matters, what to confirm and useful evidence.
 - Unknowns never appear as Critical findings merely because they are unknown.
 - Declared/observed findings remain separate from information gaps.
-- The result explains whether the score is available, assessment completeness and evidence confidence.
+- The result explains whether the score is available, security information completeness and evidence confidence.
 - The next action reflects the actual blocker: information, evidence, remediation or monitoring.
 - The customer can move from `Unknown → clarified answer → evidence → test → finding/remediation if needed → retest` without losing assessment scope.
+- An incomplete result can create a new, prefilled updated assessment that asks only unresolved questions; the historical source assessment remains unchanged.
 - Reports preserve the same distinction between unresolved information and findings.
 
 ## Page-purpose rules

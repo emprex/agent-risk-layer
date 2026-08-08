@@ -42,9 +42,9 @@ export async function renderReportPdf(report) {
     cover();
     if (report.metrics)
         metricRow([
-            { label: 'Declared risk', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? report.riskBand : 'Assessment incomplete' },
+            { label: 'Declared risk', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? report.riskBand : 'Security information incomplete' },
             { label: 'Evidence confidence', value: `${report.metrics.evidenceConfidence}/100`, note: 'Evidence profile' },
-            { label: 'Assessment completeness', value: `${report.metrics.assessmentCompleteness ?? 100}%`, note: unresolved.length ? `${unresolved.length} unresolved` : 'Questions answered' },
+            { label: 'Security information completeness', value: `${report.metrics.assessmentCompleteness ?? 100}%`, note: unresolved.length ? `${unresolved.length} unresolved` : 'Questions answered' },
         ]);
     callout('Executive recommendation', report.headline, report.decision === 'DO NOT DEPLOY' ? 'danger' : String(report.decision).includes('MATERIAL') ? 'warning' : String(report.decision).includes('HOLD') ? 'warning' : 'accent');
     add(`Assessment ID: ${report.assessmentId}`, 8, false, 0, 2, 'muted');
@@ -95,7 +95,7 @@ export async function renderReportPdf(report) {
             callout('Risk not determined', 'Material exposure or control information is missing. Complete the unresolved questions before interpreting a numerical risk score.', 'warning');
         }
         riskBar('Evidence confidence', report.metrics.evidenceConfidence, 'accent');
-        riskBar('Assessment completeness', report.metrics.assessmentCompleteness ?? 100, 'accent');
+        riskBar('Security information completeness', report.metrics.assessmentCompleteness ?? 100, 'accent');
     }
     heading('Decision interpretation', 2);
     add(report.methodology, 9);

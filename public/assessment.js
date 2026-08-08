@@ -11,32 +11,81 @@ const backButton = document.querySelector('#backButton');
 const nextButton = document.querySelector('#nextButton');
 const submitButton = document.querySelector('#submitAssessment');
 const evidenceSelect = document.querySelector('#questionEvidence');
+const agentName = document.querySelector('#agentName');
 const agentType = document.querySelector('#agentType');
 const agentDescription = document.querySelector('#agentDescription');
+const revisionNotice = document.querySelector('#revisionNotice');
+const updateFrom = qs('updateFrom');
+const updateToken = qs('token');
 
 let questionnaire = [];
+let flowQuestions = [];
 let evidenceOptions = [];
 let stepIndex = 0;
+let sourceAssessmentId = '';
 const answers = new Map();
 
 async function init() {
   try {
-    const [questionPayload, cfg] = await Promise.all([api('/api/questionnaire'), api('/api/config')]);
+    const revisionRequest = updateFrom
+      ? api(`/api/assessments/${encodeURIComponent(updateFrom)}${updateToken ? `?token=${encodeURIComponent(updateToken)}` : ''}`)
+      : Promise.resolve(null);
+    const [questionPayload, cfg, revisionPayload] = await Promise.all([
+      api('/api/questionnaire'),
+      api('/api/config'),
+      revisionRequest,
+    ]);
     questionnaire = questionPayload.questionnaire;
+    flowQuestions = questionnaire;
     evidenceOptions = questionPayload.evidenceOptions || [];
     if (cfg.demoMode) {
       const demoNotice = document.querySelector('#demoNotice');
       demoNotice.textContent = 'Demo mode is active. Paid checkout will be simulated; no card is charged.';
       demoNotice.hidden = false;
     }
-    const preset = qs('type');
-    if (preset) agentType.value = preset;
+    if (updateFrom) {
+      if (!revisionPayload?.revisionSource) throw new Error('This assessment cannot be used as an update source. Sign in as its owner and try again.');
+      applyRevisionSource(revisionPayload.revisionSource);
+    } else {
+      const preset = qs('type');
+      if (preset) agentType.value = preset;
+    }
     updateDescriptionRequirement();
     renderStep();
   } catch (error) {
     showError(errorBox, error.message);
     nextButton.disabled = true;
   }
+}
+
+function normaliseSourceAnswer(question, raw) {
+  const candidate = typeof raw === 'string'
+    ? { value: raw, evidence: 'customer_assertion' }
+    : { value: raw?.value, evidence: raw?.evidence || 'none' };
+  if (!question.options.some((option) => option.value === candidate.value)) return null;
+  const evidence = candidate.value === 'unknown'
+    ? 'none'
+    : candidate.evidence === 'none' ? 'none' : 'customer_assertion';
+  return { value: candidate.value, evidence };
+}
+
+function applyRevisionSource(source) {
+  sourceAssessmentId = source.assessmentId;
+  agentName.value = source.name || '';
+  agentType.value = source.agentType || '';
+  const sourceAnswers = source.answers && typeof source.answers === 'object' ? source.answers : {};
+  agentDescription.value = String(sourceAnswers.__system_description || '').slice(0, 800);
+  answers.clear();
+  for (const question of questionnaire) {
+    const answer = normaliseSourceAnswer(question, sourceAnswers[question.id]);
+    if (answer) answers.set(question.id, answer);
+  }
+  flowQuestions = questionnaire.filter((question) => !answers.has(question.id) || answers.get(question.id)?.value === 'unknown');
+  if (!flowQuestions.length) flowQuestions = questionnaire;
+  revisionNotice.textContent = flowQuestions.length === questionnaire.length && !questionnaire.some((question) => answers.get(question.id)?.value === 'unknown')
+    ? `Creating an updated assessment from ${source.name}. Previous answers are prefilled for review. The previous assessment remains unchanged.`
+    : `Creating an updated assessment from ${source.name}. Previous known answers are prefilled; only unresolved questions need a new answer. The previous assessment remains unchanged.`;
+  revisionNotice.hidden = false;
 }
 
 function updateDescriptionRequirement() {
@@ -56,9 +105,9 @@ function plainEvidenceLabel(option) {
 
 function renderStep() {
   hideError(errorBox);
-  const totalSteps = questionnaire.length + 1;
+  const totalSteps = flowQuestions.length + 1;
   const currentStep = stepIndex + 1;
-  const percent = questionnaire.length ? Math.round((stepIndex / questionnaire.length) * 100) : 0;
+  const percent = flowQuestions.length ? Math.round((stepIndex / flowQuestions.length) * 100) : 0;
   progressBar.style.width = `${percent}%`;
   progressText.textContent = `${percent}%`;
   backButton.hidden = stepIndex === 0;
@@ -75,7 +124,7 @@ function renderStep() {
 
   profileStep.hidden = true;
   questionStage.hidden = false;
-  const question = questionnaire[stepIndex - 1];
+  const question = flowQuestions[stepIndex - 1];
   const saved = answers.get(question.id);
   document.querySelector('#questionKind').textContent = question.kind === 'exposure' ? 'What could happen?' : 'What protection is in place?';
   document.querySelector('#stepCount').textContent = `Step ${currentStep} of ${totalSteps}`;
@@ -91,7 +140,7 @@ function renderStep() {
   evidenceSelect.innerHTML = evidenceOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(plainEvidenceLabel(option))}</option>`).join('');
   evidenceSelect.value = saved?.evidence || 'customer_assertion';
   progressLabel.textContent = `${question.domain} · step ${currentStep} of ${totalSteps}`;
-  const last = stepIndex === questionnaire.length;
+  const last = stepIndex === flowQuestions.length;
   nextButton.hidden = last;
   submitButton.hidden = !last;
   questionStage.focus?.();
@@ -120,7 +169,7 @@ function validateProfile() {
 }
 
 function saveCurrentQuestion() {
-  const question = questionnaire[stepIndex - 1];
+  const question = flowQuestions[stepIndex - 1];
   const selected = form.querySelector('input[name="currentQuestion"]:checked');
   if (!selected) {
     showError(errorBox, 'Choose the closest answer, or select “I’m not sure”.');
@@ -137,7 +186,7 @@ nextButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex === 0 && !validateProfile()) return;
   if (stepIndex > 0 && !saveCurrentQuestion()) return;
-  if (stepIndex < questionnaire.length) {
+  if (stepIndex < flowQuestions.length) {
     stepIndex += 1;
     renderStep();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -147,7 +196,7 @@ nextButton.addEventListener('click', () => {
 backButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex > 0) {
-    if (stepIndex <= questionnaire.length) {
+    if (stepIndex <= flowQuestions.length) {
       const selected = form.querySelector('input[name="currentQuestion"]:checked');
       if (selected) saveCurrentQuestion();
     }
@@ -160,7 +209,7 @@ backButton.addEventListener('click', () => {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideError(errorBox);
-  if (stepIndex !== questionnaire.length || !saveCurrentQuestion()) return;
+  if (stepIndex !== flowQuestions.length || !saveCurrentQuestion()) return;
   if (!validateProfile()) {
     stepIndex = 0;
     renderStep();
@@ -174,9 +223,11 @@ form.addEventListener('submit', async (event) => {
     const payload = await api('/api/assessments', {
       method: 'POST',
       body: JSON.stringify({
-        name: document.querySelector('#agentName').value.trim(),
+        name: agentName.value.trim(),
         agentType: agentType.value,
         answers: payloadAnswers,
+        sourceAssessmentId: sourceAssessmentId || undefined,
+        sourceAccessToken: sourceAssessmentId ? updateToken || undefined : undefined,
       }),
     });
     sessionStorage.setItem('arl_last_assessment', JSON.stringify({ id: payload.assessment.id, token: payload.accessToken }));

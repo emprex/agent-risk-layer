@@ -364,7 +364,20 @@ const server = http.createServer(async (req, res) => {
                     throw new Error('Enter a name for the agent or system.');
                 if (agentType.length < 2)
                     throw new Error('Choose an agent type.');
-                const result = evaluateAssessment(body.answers || {}, { agentType });
+                const sourceAssessmentId = cleanText(body.sourceAssessmentId || '', 80);
+                let sourceAssessment = null;
+                if (sourceAssessmentId) {
+                    sourceAssessment = await db.prepare('SELECT id,user_id,access_token FROM assessments WHERE id = ?').get(sourceAssessmentId);
+                    if (!sourceAssessment)
+                        throw Object.assign(new Error('Source assessment not found.'), { statusCode: 404 });
+                    const sourceOwned = Boolean(req.user && sourceAssessment.user_id === req.user.id);
+                    const unclaimedWithToken = Boolean(!sourceAssessment.user_id && body.sourceAccessToken && constantTimeTextEqual(String(body.sourceAccessToken), sourceAssessment.access_token));
+                    if (!sourceOwned && !unclaimedWithToken)
+                        throw Object.assign(new Error('You do not have permission to create an update from this assessment.'), { statusCode: 403 });
+                }
+                const answers = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? { ...body.answers } : {};
+                if (sourceAssessment) answers.__source_assessment_id = sourceAssessment.id;
+                const result = evaluateAssessment(answers, { agentType, sourceAssessmentId: sourceAssessment?.id || null });
                 const assessmentId = id('asm_');
                 const accessToken = id('access_');
                 const shareToken = id('share_');
@@ -373,15 +386,15 @@ const server = http.createServer(async (req, res) => {
           INSERT INTO assessments
           (id, user_id, name, agent_type, answers_json, score, risk_band, result_json, paid_tier, access_token, share_token, public_enabled, scoring_version, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'free', ?, ?, 0, ?, ?, ?)
-        `).run(assessmentId, req.user?.id || null, name, agentType, JSON.stringify(body.answers), result.score, result.riskBand, JSON.stringify(result), accessToken, shareToken, config.scoringVersion, created, created);
-                await insertEvent('assessment_completed', req.user?.id || null, { assessmentId, score: result.score, riskBand: result.riskBand, agentType });
+        `).run(assessmentId, req.user?.id || null, name, agentType, JSON.stringify(answers), result.score, result.riskBand, JSON.stringify(result), accessToken, shareToken, config.scoringVersion, created, created);
+                await insertEvent('assessment_completed', req.user?.id || null, { assessmentId, sourceAssessmentId: sourceAssessment?.id || null, score: result.score, riskBand: result.riskBand, agentType });
                 return json(res, 201, {
                     assessment: publicAssessment({ id: assessmentId, name, agent_type: agentType, score: result.score, risk_band: result.riskBand, result_json: JSON.stringify(result), paid_tier: 'free', access_token: accessToken, share_token: shareToken, public_enabled: 0, scoring_version: config.scoringVersion, created_at: created }),
                     accessToken,
                 });
             }
             catch (error) {
-                return json(res, 400, { error: error.message });
+                return json(res, error.statusCode || 400, { error: error.message });
             }
         }
         let match = url.pathname.match(/^\/api\/assessments\/([^/]+)$/);
@@ -398,7 +411,16 @@ const server = http.createServer(async (req, res) => {
             const effectiveTier = subscribed || superuserAccess ? 'pro' : row.paid_tier;
             const inspection = isOwner ? await latestInspection(row.id) : null;
             const redTeamRun = isOwner ? await latestRedTeamRun(row.id) : null;
-            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, superuserAccess, inspection, redTeamRun });
+            const canRevise = Boolean(isOwner || (!row.user_id && hasToken));
+            const revisionSource = canRevise ? {
+                assessmentId: row.id,
+                name: row.name,
+                agentType: row.agent_type,
+                answers: parseJson(row.answers_json, {}),
+                scoringVersion: row.scoring_version,
+                createdAt: row.created_at,
+            } : null;
+            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, superuserAccess, revisionSource, inspection, redTeamRun });
         }
         match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/claim$/);
         if (req.method === 'POST' && match) {
