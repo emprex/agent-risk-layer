@@ -1,306 +1,26 @@
 name: Temporary assessment continuation validation
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - fix/assessment-continuation
 
 permissions:
   contents: write
 
 jobs:
   patch-test-commit:
-    if: github.head_ref == 'fix/assessment-continuation'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - name: Apply focused customer-continuation patch
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def read(path):
-              return Path(path).read_text()
-
-          def write(path, text):
-              Path(path).write_text(text)
-
-          def replace_once(path, old, new):
-              text = read(path)
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:120]!r}')
-              write(path, text.replace(old, new, 1))
-
-          # Assessment page: make revision mode visible without exposing any source answers in HTML.
-          replace_once(
-              'public/assessment.html',
-              '</div>\n<form id="assessmentForm" novalidate="">',
-              '</div>\n<div class="notice" hidden="" id="revisionNotice" role="status"></div>\n<form id="assessmentForm" novalidate="">',
-          )
-
-          # Assessment client: securely fetch the prior assessment, prefill valid answers,
-          # and ask only unresolved questions while creating a new immutable assessment.
-          path = 'public/assessment.js'
-          text = read(path)
-          text = text.replace(
-              "const agentType = document.querySelector('#agentType');\nconst agentDescription = document.querySelector('#agentDescription');",
-              "const agentName = document.querySelector('#agentName');\nconst agentType = document.querySelector('#agentType');\nconst agentDescription = document.querySelector('#agentDescription');\nconst revisionNotice = document.querySelector('#revisionNotice');\nconst updateFrom = qs('updateFrom');\nconst updateToken = qs('token');",
-              1,
-          )
-          text = text.replace(
-              "let questionnaire = [];\nlet evidenceOptions = [];\nlet stepIndex = 0;\nconst answers = new Map();",
-              "let questionnaire = [];\nlet flowQuestions = [];\nlet evidenceOptions = [];\nlet stepIndex = 0;\nlet sourceAssessmentId = '';\nconst answers = new Map();",
-              1,
-          )
-          old_init = """async function init() {
-  try {
-    const [questionPayload, cfg] = await Promise.all([api('/api/questionnaire'), api('/api/config')]);
-    questionnaire = questionPayload.questionnaire;
-    evidenceOptions = questionPayload.evidenceOptions || [];
-    if (cfg.demoMode) {
-      const demoNotice = document.querySelector('#demoNotice');
-      demoNotice.textContent = 'Demo mode is active. Paid checkout will be simulated; no card is charged.';
-      demoNotice.hidden = false;
-    }
-    const preset = qs('type');
-    if (preset) agentType.value = preset;
-    updateDescriptionRequirement();
-    renderStep();
-  } catch (error) {
-    showError(errorBox, error.message);
-    nextButton.disabled = true;
-  }
-}
-"""
-          new_init = """async function init() {
-  try {
-    const revisionRequest = updateFrom
-      ? api(`/api/assessments/${encodeURIComponent(updateFrom)}${updateToken ? `?token=${encodeURIComponent(updateToken)}` : ''}`)
-      : Promise.resolve(null);
-    const [questionPayload, cfg, revisionPayload] = await Promise.all([
-      api('/api/questionnaire'),
-      api('/api/config'),
-      revisionRequest,
-    ]);
-    questionnaire = questionPayload.questionnaire;
-    flowQuestions = questionnaire;
-    evidenceOptions = questionPayload.evidenceOptions || [];
-    if (cfg.demoMode) {
-      const demoNotice = document.querySelector('#demoNotice');
-      demoNotice.textContent = 'Demo mode is active. Paid checkout will be simulated; no card is charged.';
-      demoNotice.hidden = false;
-    }
-    if (updateFrom) {
-      if (!revisionPayload?.revisionSource) throw new Error('This assessment cannot be used as an update source. Sign in as its owner and try again.');
-      applyRevisionSource(revisionPayload.revisionSource);
-    } else {
-      const preset = qs('type');
-      if (preset) agentType.value = preset;
-    }
-    updateDescriptionRequirement();
-    renderStep();
-  } catch (error) {
-    showError(errorBox, error.message);
-    nextButton.disabled = true;
-  }
-}
-
-function normaliseSourceAnswer(question, raw) {
-  const candidate = typeof raw === 'string'
-    ? { value: raw, evidence: 'customer_assertion' }
-    : { value: raw?.value, evidence: raw?.evidence || 'none' };
-  if (!question.options.some((option) => option.value === candidate.value)) return null;
-  const evidence = candidate.value === 'unknown'
-    ? 'none'
-    : candidate.evidence === 'none' ? 'none' : 'customer_assertion';
-  return { value: candidate.value, evidence };
-}
-
-function applyRevisionSource(source) {
-  sourceAssessmentId = source.assessmentId;
-  agentName.value = source.name || '';
-  agentType.value = source.agentType || '';
-  const sourceAnswers = source.answers && typeof source.answers === 'object' ? source.answers : {};
-  agentDescription.value = String(sourceAnswers.__system_description || '').slice(0, 800);
-  answers.clear();
-  for (const question of questionnaire) {
-    const answer = normaliseSourceAnswer(question, sourceAnswers[question.id]);
-    if (answer) answers.set(question.id, answer);
-  }
-  flowQuestions = questionnaire.filter((question) => !answers.has(question.id) || answers.get(question.id)?.value === 'unknown');
-  if (!flowQuestions.length) flowQuestions = questionnaire;
-  revisionNotice.textContent = flowQuestions.length === questionnaire.length && !questionnaire.some((question) => answers.get(question.id)?.value === 'unknown')
-    ? `Creating an updated assessment from ${source.name}. Previous answers are prefilled for review. The previous assessment remains unchanged.`
-    : `Creating an updated assessment from ${source.name}. Previous known answers are prefilled; only unresolved questions need a new answer. The previous assessment remains unchanged.`;
-  revisionNotice.hidden = false;
-}
-"""
-          if text.count(old_init) != 1:
-              raise SystemExit('public/assessment.js: init block did not match exactly')
-          text = text.replace(old_init, new_init, 1)
-          text = text.replace('const totalSteps = questionnaire.length + 1;', 'const totalSteps = flowQuestions.length + 1;', 1)
-          text = text.replace('const percent = questionnaire.length ? Math.round((stepIndex / questionnaire.length) * 100) : 0;', 'const percent = flowQuestions.length ? Math.round((stepIndex / flowQuestions.length) * 100) : 0;', 1)
-          text = text.replace('const question = questionnaire[stepIndex - 1];', 'const question = flowQuestions[stepIndex - 1];', 2)
-          text = text.replace('const last = stepIndex === questionnaire.length;', 'const last = stepIndex === flowQuestions.length;', 1)
-          text = text.replace('if (stepIndex < questionnaire.length) {', 'if (stepIndex < flowQuestions.length) {', 1)
-          text = text.replace('if (stepIndex <= questionnaire.length) {', 'if (stepIndex <= flowQuestions.length) {', 1)
-          text = text.replace("if (stepIndex !== questionnaire.length || !saveCurrentQuestion()) return;", "if (stepIndex !== flowQuestions.length || !saveCurrentQuestion()) return;", 1)
-          text = text.replace(
-              "body: JSON.stringify({\n        name: document.querySelector('#agentName').value.trim(),\n        agentType: agentType.value,\n        answers: payloadAnswers,\n      }),",
-              "body: JSON.stringify({\n        name: agentName.value.trim(),\n        agentType: agentType.value,\n        answers: payloadAnswers,\n        sourceAssessmentId: sourceAssessmentId || undefined,\n        sourceAccessToken: sourceAssessmentId ? updateToken || undefined : undefined,\n      }),",
-              1,
-          )
-          if 'flowQuestions' not in text or 'sourceAssessmentId' not in text:
-              raise SystemExit('public/assessment.js: continuation markers missing after patch')
-          write(path, text)
-
-          # Result page: clear naming + immutable prefilled continuation.
-          path = 'public/result.js'
-          text = read(path)
-          text = text.replace('let isOwner = false;', "let isOwner = false;\nlet revisionSource = null;", 1)
-          text = text.replace('isOwner = assessmentPayload.isOwner;\n    user = userPayload.user;', 'isOwner = assessmentPayload.isOwner;\n    revisionSource = assessmentPayload.revisionSource || null;\n    user = userPayload.user;', 1)
-          text = text.replace(
-              "function render() {",
-              "function revisionHref() {\n  if (!revisionSource) return '/assessment.html';\n  const params = new URLSearchParams({ updateFrom: revisionSource.assessmentId });\n  if (token) params.set('token', token);\n  return `/assessment.html?${params.toString()}`;\n}\n\nfunction render() {",
-              1,
-          )
-          text = text.replace(
-              "${!unresolvedState.exact ? '<p class=\"microcopy\">The free result shows the unresolved control questions available in this summary plus the remaining context count. A new check can record the clarified answers without rewriting this historical result.</p>' : ''}\n        <a class=\"button ghost\" href=\"/assessment.html\">Run a new check with the clarified information</a>",
-              "${!unresolvedState.exact ? '<p class=\"microcopy\">The free result shows the unresolved control questions available in this summary plus the remaining context count.</p>' : ''}\n        ${revisionSource ? `<p class=\"microcopy\">Create an updated assessment after you confirm the missing information. Your profile and known answers are prefilled, only unresolved questions need a new answer, and this historical result remains unchanged.</p><a class=\"button ghost\" href=\"${revisionHref()}\">Create updated assessment</a>` : '<a class=\"button ghost\" href=\"/assessment.html\">Run a new check with the clarified information</a>'}",
-              1,
-          )
-          text = text.replace('<span>Assessment completeness</span>', '<span>Security information completeness</span>', 1)
-          text = text.replace('<span class="risk-pill">Assessment incomplete</span>', '<span class="risk-pill">Security information incomplete</span>', 1)
-          if 'Create updated assessment' not in text or 'Security information completeness' not in text:
-              raise SystemExit('public/result.js: expected continuation/label markers missing')
-          write(path, text)
-
-          # Public result and dashboard naming/continuation language.
-          replace_once('public/public-result.js', "'Assessment incomplete'", "'Security information incomplete'")
-          path = 'public/dashboard.js'
-          text = read(path)
-          text = text.replace('then run a new check with the clarified answers.', 'then create an updated assessment with the clarified answers.', 1)
-          text = text.replace('<span class="risk-pill">Assessment incomplete</span>', '<span class="risk-pill">Security information incomplete</span>', 1)
-          text = text.replace('Clarify the incomplete assessment before creating fixes', 'Clarify the missing security information before creating fixes', 1)
-          write(path, text)
-
-          # Server: expose raw source answers only to an owner or an unclaimed token holder,
-          # and bind new assessments to a verified source without mutating the source row.
-          path = 'server.js'
-          text = read(path)
-          old = """                const result = evaluateAssessment(body.answers || {}, { agentType });
-                const assessmentId = id('asm_');
-"""
-          new = """                const sourceAssessmentId = cleanText(body.sourceAssessmentId || '', 80);
-                let sourceAssessment = null;
-                if (sourceAssessmentId) {
-                    sourceAssessment = await db.prepare('SELECT id,user_id,access_token FROM assessments WHERE id = ?').get(sourceAssessmentId);
-                    if (!sourceAssessment)
-                        throw Object.assign(new Error('Source assessment not found.'), { statusCode: 404 });
-                    const sourceOwned = Boolean(req.user && sourceAssessment.user_id === req.user.id);
-                    const unclaimedWithToken = Boolean(!sourceAssessment.user_id && body.sourceAccessToken && constantTimeTextEqual(String(body.sourceAccessToken), sourceAssessment.access_token));
-                    if (!sourceOwned && !unclaimedWithToken)
-                        throw Object.assign(new Error('You do not have permission to create an update from this assessment.'), { statusCode: 403 });
-                }
-                const answers = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? { ...body.answers } : {};
-                if (sourceAssessment) answers.__source_assessment_id = sourceAssessment.id;
-                const result = evaluateAssessment(answers, { agentType, sourceAssessmentId: sourceAssessment?.id || null });
-                const assessmentId = id('asm_');
-"""
-          if text.count(old) != 1:
-              raise SystemExit('server.js: POST assessment evaluation block mismatch')
-          text = text.replace(old, new, 1)
-          text = text.replace('JSON.stringify(body.answers), result.score, result.riskBand', 'JSON.stringify(answers), result.score, result.riskBand', 1)
-          text = text.replace("{ assessmentId, score: result.score, riskBand: result.riskBand, agentType }", "{ assessmentId, sourceAssessmentId: sourceAssessment?.id || null, score: result.score, riskBand: result.riskBand, agentType }", 1)
-          text = text.replace("return json(res, 400, { error: error.message });\n            }\n        }\n        let match = url.pathname.match(/^\\/api\\/assessments\\/([^/]+)$/);", "return json(res, error.statusCode || 400, { error: error.message });\n            }\n        }\n        let match = url.pathname.match(/^\\/api\\/assessments\\/([^/]+)$/);", 1)
-          old_get = """            const redTeamRun = isOwner ? await latestRedTeamRun(row.id) : null;
-            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, superuserAccess, inspection, redTeamRun });
-"""
-          new_get = """            const redTeamRun = isOwner ? await latestRedTeamRun(row.id) : null;
-            const canRevise = Boolean(isOwner || (!row.user_id && hasToken));
-            const revisionSource = canRevise ? {
-                assessmentId: row.id,
-                name: row.name,
-                agentType: row.agent_type,
-                answers: parseJson(row.answers_json, {}),
-                scoringVersion: row.scoring_version,
-                createdAt: row.created_at,
-            } : null;
-            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, superuserAccess, revisionSource, inspection, redTeamRun });
-"""
-          if text.count(old_get) != 1:
-              raise SystemExit('server.js: GET assessment response block mismatch')
-          text = text.replace(old_get, new_get, 1)
-          write(path, text)
-
-          # Report/PDF terminology; internal compatibility field stays assessmentCompleteness.
-          replace_once('src/report.js', 'Assessment completeness is ${base.metrics.assessmentCompleteness}%', 'Security information completeness is ${base.metrics.assessmentCompleteness}%')
-          path = 'src/pdf.js'
-          text = read(path)
-          expected = {
-              "label: 'Assessment completeness'": "label: 'Security information completeness'",
-              "note: scoreAvailable ? report.riskBand : 'Assessment incomplete'": "note: scoreAvailable ? report.riskBand : 'Security information incomplete'",
-              "riskBar('Assessment completeness', report.metrics.assessmentCompleteness ?? 100, 'accent');": "riskBar('Security information completeness', report.metrics.assessmentCompleteness ?? 100, 'accent');",
-          }
-          for old_value, new_value in expected.items():
-              if text.count(old_value) != 1:
-                  raise SystemExit(f'src/pdf.js: expected one match for {old_value!r}, found {text.count(old_value)}')
-              text = text.replace(old_value, new_value, 1)
-          write(path, text)
-
-          # Customer-journey contract and regression guards.
-          path = 'CUSTOMER_JOURNEY_V10.md'
-          text = read(path).replace('assessment completeness', 'security information completeness')
-          marker = '- The customer can move from `Unknown → clarified answer → evidence → test → finding/remediation if needed → retest` without losing assessment scope.\n'
-          addition = marker + '- An incomplete result can create a new, prefilled updated assessment that asks only unresolved questions; the historical source assessment remains unchanged.\n'
-          if text.count(marker) != 1:
-              raise SystemExit('CUSTOMER_JOURNEY_V10.md: continuation marker mismatch')
-          text = text.replace(marker, addition, 1)
-          write(path, text)
-
-          path = 'tests/customer-journey.test.js'
-          text = read(path)
-          text = text.replace("assert.match(js, /payloadAnswers\\.__system_description/);", "assert.match(js, /payloadAnswers\\.__system_description/);\n  assert.match(html, /revisionNotice/);\n  assert.match(js, /updateFrom/);\n  assert.match(js, /flowQuestions/);\n  assert.match(js, /previous assessment remains unchanged/i);\n  assert.doesNotMatch(js, /localStorage/);", 1)
-          text = text.replace('assert.match(js, /Assessment completeness/);', 'assert.match(js, /Security information completeness/);\n  assert.match(js, /Create updated assessment/);', 1)
-          dashboard_test = """  assert.match(js, /This is a guide, not an automatic deployment approval/);
-});
-"""
-          dashboard_new = """  assert.match(js, /This is a guide, not an automatic deployment approval/);
-  assert.match(js, /create an updated assessment with the clarified answers/);
-  assert.match(js, /Security information incomplete/);
-});
-
- test('assessment continuation preserves history and limits raw-answer prefill to authorised callers', () => {
-  const server = read('server.js');
-  const resultJs = read('public/result.js');
-  const assessmentJs = read('public/assessment.js');
-  assert.match(server, /const canRevise = Boolean\(isOwner \|\| \(!row\.user_id && hasToken\)\)/);
-  assert.match(server, /revisionSource/);
-  assert.match(server, /__source_assessment_id/);
-  assert.match(server, /You do not have permission to create an update from this assessment/);
-  assert.match(resultJs, /Create updated assessment/);
-  assert.match(assessmentJs, /sourceAssessmentId/);
-  assert.match(assessmentJs, /only unresolved questions need a new answer/i);
-  assert.doesNotMatch(assessmentJs, /localStorage/);
-});
-"""
-          if text.count(dashboard_test) != 1:
-              raise SystemExit('tests/customer-journey.test.js: dashboard test marker mismatch')
-          text = text.replace(dashboard_test, dashboard_new, 1)
-          write(path, text)
-
-          # Static sanity: the confusing label must be gone from customer-facing implementation/docs.
-          for target in ['public/result.js', 'public/public-result.js', 'public/dashboard.js', 'src/pdf.js', 'src/report.js', 'CUSTOMER_JOURNEY_V10.md']:
-              if 'Assessment completeness' in read(target):
-                  raise SystemExit(f'{target}: stale Assessment completeness label remains')
-          PY
+        run: python3 .github/temporary-assessment-continuation.py
       - name: Install dependencies
         run: npm ci
       - name: Run unit and integration tests
@@ -309,15 +29,15 @@ function applyRevisionSource(source) {
         run: npm run validate
       - name: Check patch hygiene
         run: git diff --check
-      - name: Commit validated patch and remove temporary workflow
+      - name: Commit validated patch and remove temporary files
         run: |
-          rm .github/workflows/temporary-assessment-continuation.yml
-          git add public/assessment.html public/assessment.js public/result.js public/public-result.js public/dashboard.js server.js src/report.js src/pdf.js CUSTOMER_JOURNEY_V10.md tests/customer-journey.test.js .github/workflows/temporary-assessment-continuation.yml
-          expected="CUSTOMER_JOURNEY_V10.md public/assessment.html public/assessment.js public/dashboard.js public/public-result.js public/result.js server.js src/pdf.js src/report.js tests/customer-journey.test.js"
+          rm .github/workflows/temporary-assessment-continuation.yml .github/temporary-assessment-continuation.py
+          git add public/assessment.html public/assessment.js public/result.js public/public-result.js public/dashboard.js server.js src/report.js src/pdf.js CUSTOMER_JOURNEY_V10.md tests/customer-journey.test.js .github/workflows/temporary-assessment-continuation.yml .github/temporary-assessment-continuation.py
+          expected=".github/temporary-assessment-continuation.py .github/workflows/temporary-assessment-continuation.yml CUSTOMER_JOURNEY_V10.md public/assessment.html public/assessment.js public/dashboard.js public/public-result.js public/result.js server.js src/pdf.js src/report.js tests/customer-journey.test.js"
           actual="$(git diff --cached --name-only | sort | tr '\n' ' ' | sed 's/ $//')"
           wanted="$(printf '%s\n' $expected | sort | tr '\n' ' ' | sed 's/ $//')"
           if [ "$actual" != "$wanted" ]; then echo "Unexpected staged files: $actual"; exit 1; fi
           git config user.name "emprex"
           git config user.email "guillaume.strohecker@gmail.com"
           git commit -m "Improve assessment clarification flow"
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin HEAD:fix/assessment-continuation
