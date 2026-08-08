@@ -45,6 +45,9 @@ test('assessment presents one guided question at a time, captures unusual agents
   assert.match(html, /Autonomous \/ general-purpose agent/);
   assert.match(html, /required for “Other”/);
   assert.match(html, /Do you have proof for this answer\?/);
+  assert.match(html, /supporting evidence to attach/i);
+  assert.match(html, /Verified evidence can never be created by selecting an option/i);
+  assert.match(js, /evidence_ready/);
   assert.doesNotMatch(html, /25 security controls/);
   assert.match(js, /flowQuestions\[stepIndex - 1\]/);
   assert.match(js, /type === 'Other' && description\.length < 10/);
@@ -90,6 +93,9 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /Security information completeness/);
   assert.match(js, /Create updated assessment/);
   assert.match(js, /Technical score and evidence details/);
+  assert.match(js, /Aggregate declared score/);
+  assert.match(js, /Highest declared finding/);
+  assert.match(js, /Not applicable — declared, not verified/);
   assert.match(js, /escapeHtml\(finding\.title\)/);
   assert.match(js, /escapeHtml\(finding\.observed\)/);
 });
@@ -169,6 +175,8 @@ test('customer-facing pages use external scripts and preserve security boundarie
   assert.match(shared, /X-CSRF-Token/);
   assert.match(shared, /credentials: 'same-origin'/);
   assert.match(shared, /cache: 'no-store'/);
+  const server = read('server.js');
+  assert.match(server, /\['\.html', '\.js', '\.mjs', '\.css'\]\.includes\(extension\)/);
 });
 
 test('the public sitemap includes the customer task chooser', () => {

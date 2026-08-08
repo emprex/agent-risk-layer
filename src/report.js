@@ -22,13 +22,13 @@ export function buildReport(assessment, tier = 'basic', inspection = null, redTe
     else if (redTeamIsTarget && (redTeam?.summary?.counts?.failed || 0) > 0 && !String(combinedDecision).startsWith('DO NOT'))
         combinedDecision = 'REMEDIATE BEFORE RELEASE';
     const combinedHeadline = `${result.headline}${inspection ? ` Static inspection posture ${inspection.summary.postureScore}/100.` : ''}${redTeam ? `${redTeamIsTarget ? ' Controlled red-team' : ' Runner simulation'} assurance ${redTeam.summary.assuranceScore}/100 with ${redTeam.summary.counts.failed} failed cases.` : ''}`;
-    const riskSummary = result.scoreAvailable === false ? 'Risk not determined — material information is missing.' : `${result.riskBand} declared risk at ${result.score}/100.`;
+    const riskSummary = result.scoreAvailable === false ? 'Risk not determined — material information is missing.' : `${result.riskBand} overall declared risk band with an aggregate score of ${result.score}/100${result.highestFindingSeverity ? `; highest declared finding ${result.highestFindingSeverity}.` : '.'}`;
     const base = {
         reportClass: tier === 'pro' ? 'Professional Security Review' : 'Essential Security Review',
         title: `${assessment.name} — AI Agent Security Assessment`, assessmentId: assessment.id, agentType: assessment.agent_type,
         systemDescription: result.systemDescription || '',
         created: date(assessment.created_at), generated: date(new Date()), scoringVersion: assessment.scoring_version || 'arl-risk-v3.0',
-        score: result.score, scoreAvailable: result.scoreAvailable !== false, riskBand: result.riskBand, headline: combinedHeadline, decision: combinedDecision, methodology: result.methodology,
+        score: result.score, scoreAvailable: result.scoreAvailable !== false, riskBand: result.riskBand, aggregateRiskBand: result.aggregateRiskBand, highestFindingSeverity: result.highestFindingSeverity || '', highestAttackPathSeverity: result.highestAttackPathSeverity || '', headline: combinedHeadline, decision: combinedDecision, methodology: result.methodology,
         metrics: { inherentRisk: result.inherentRisk ?? null, controlGap: result.controlGap ?? null, evidenceConfidence: result.evidenceConfidence ?? 0, assessmentCompleteness: result.assessmentCompleteness ?? 100 },
         responses: result.responses || [], findings, unresolvedItems, attackPaths, controls: result.controls || [], recommendations,
         evidenceSummary: { verifiedControls, totalControls: (result.controls || []).length, weakEvidence: evidenceWeak.length, unresolved: unresolvedItems.length, statement: unresolvedItems.length ? `${unresolvedItems.length} material security questions remain unresolved. They are information gaps, not vulnerabilities, and must be answered before the deployment posture can be determined.` : evidenceWeak.length ? `${evidenceWeak.length} answered items rely on absent or owner-stated evidence and should be independently verified.` : 'The supplied evidence profile is comparatively strong; retain evidence and retest after material change.' },

@@ -82,6 +82,21 @@ function revisionHref() {
   return `/assessment.html?${params.toString()}`;
 }
 
+function severityLabel(value) {
+  const text = String(value || '').toLowerCase();
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'None';
+}
+
+function controlStatusText(control) {
+  const evidence = control.evidence || 'Evidence not stated';
+  if (control.status === 'unresolved') return 'Information required';
+  if (control.status === 'not-applicable-verified') return 'Not applicable — verified';
+  if (control.status === 'not-applicable-declared' || control.applicability === 'not-applicable-claimed') return 'Not applicable — declared, not verified';
+  if (control.status === 'verified') return `Verified · ${evidence}`;
+  if (control.status === 'action') return `Action required · ${evidence}`;
+  return `Evidence required · ${evidence}`;
+}
+
 function render() {
   const full = assessment.result || {};
   const paid = assessment.paidTier !== 'free';
@@ -90,12 +105,12 @@ function render() {
   const unresolvedCount = unresolvedState.count;
   const rawFindings = paid ? (full.findings || []) : (assessment.topFindings || full.topFindings || full.findings || []);
   const findings = rawFindings.filter((item) => item.status !== 'information-required' && item.kind !== 'information-required');
-  const decision = plainDecision(full.decision, unresolvedCount);
+  const decision = plainDecision(full.decision, unresolvedCount, findings.length);
   const scoreAvailable = full.scoreAvailable !== false && assessment.riskBand !== 'Undetermined';
   const completeness = deriveCompleteness(full, unresolvedCount);
   const controls = assessment.controls || full.controls || [];
   const primaryTarget = unresolvedCount ? '#informationNeeded' : '#priorityRisks';
-  const primaryLabel = unresolvedCount ? 'Complete missing information' : 'See what to fix first';
+  const primaryLabel = unresolvedCount ? (findings.length ? 'Review information and fixes' : 'Complete missing information') : 'See what to fix first';
   root.className = 'plain-result-layout';
   root.innerHTML = `
     <section class="plain-result-main">
@@ -131,7 +146,9 @@ function render() {
         <summary><span><strong>Technical score and evidence details</strong><small>For security teams, developers and auditors</small></span><span>Open details</span></summary>
         <div class="technical-result-body">
           <div class="metric-grid">
-            <div class="metric-card"><span>Overall declared risk</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>
+            <div class="metric-card"><span>Aggregate declared score</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>
+            <div class="metric-card"><span>Overall declared risk band</span><strong>${scoreAvailable ? escapeHtml(assessment.riskBand) : 'Not determined'}</strong></div>
+            <div class="metric-card"><span>Highest declared finding</span><strong>${escapeHtml(severityLabel(full.highestFindingSeverity))}</strong></div>
             <div class="metric-card"><span>Exposure</span><strong>${metric(full.inherentRisk, full.inherentRisk === null ? '' : '/100')}</strong></div>
             <div class="metric-card"><span>Control gap</span><strong>${metric(full.controlGap, full.controlGap === null ? '' : '/100')}</strong></div>
             <div class="metric-card"><span>Security information completeness</span><strong>${completeness === null ? '—' : `${completeness}%`}</strong></div>
@@ -139,7 +156,7 @@ function render() {
           </div>
           <p class="microcopy">${escapeHtml(full.methodology || assessment.methodology || '')}</p>
           <h3>Protection status</h3>
-          <div class="control-grid">${controls.map((control) => `<div class="control ${escapeHtml(control.status)}">${escapeHtml(control.name)}<small class="evidence-chip">${escapeHtml(control.status === 'unresolved' ? 'Information required' : control.evidence || 'Evidence not stated')}</small></div>`).join('')}</div>
+          <div class="control-grid">${controls.map((control) => `<div class="control ${escapeHtml(control.status)}">${escapeHtml(control.name)}<small class="evidence-chip">${escapeHtml(controlStatusText(control))}</small></div>`).join('')}</div>
           ${paid && full.attackPaths?.length ? `<h3 class="section-gap">Credible attack paths</h3>${full.attackPaths.map(pathHtml).join('')}` : ''}
         </div>
       </details>
@@ -152,8 +169,8 @@ function render() {
       <h2>${escapeHtml(assessment.name)}</h2>
       <p class="muted">${escapeHtml(assessment.agentType)}</p>
       ${full.systemDescription ? `<p>${escapeHtml(full.systemDescription)}</p>` : ''}
-      <div class="result-side-risk">${scoreAvailable ? `<span class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} declared risk</span><strong>${assessment.score}<small>/100</small></strong>` : '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'}</div>
-      <p class="side-score-explainer">${scoreAvailable ? 'The score prioritises declared risk. It is not a probability of breach and does not prove the agent is secure.' : 'Risk is not scored until enough exposure and control information is known. Missing information is kept separate from vulnerabilities.'}</p>
+      <div class="result-side-risk">${scoreAvailable ? `<span class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} overall declared band</span><strong>${assessment.score}<small>/100 aggregate</small></strong>` : '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'}</div>
+      <p class="side-score-explainer">${scoreAvailable ? `Highest declared finding: ${escapeHtml(severityLabel(full.highestFindingSeverity))}. The aggregate score summarises breadth and does not downgrade a more severe individual finding. It is not a probability of breach and does not prove the agent is secure.` : 'Risk is not scored until enough exposure and control information is known. Missing information is kept separate from vulnerabilities.'}</p>
       ${paid ? `<a class="button primary full" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf?token=${encodeURIComponent(token)}">Download full PDF report</a>` : `<button class="button primary full" id="buyPro">Get reviewed assessment · £99</button>`}
       ${isOwner ? `<a class="button ghost full" href="/inspector.html?assessment=${encodeURIComponent(assessment.id)}">${full.inspection ? 'Run another code and configuration check' : 'Add code and configuration evidence'}</a><a class="button ghost full" href="/redteam.html?assessment=${encodeURIComponent(assessment.id)}">${full.redTeam ? 'Run another attack simulation' : 'Add controlled attack-test evidence'}</a>` : ''}
       ${sharingHtml()}
@@ -162,10 +179,11 @@ function render() {
   wire();
 }
 
-function plainDecision(value, unresolvedCount = 0) {
+function plainDecision(value, unresolvedCount = 0, findingCount = 0) {
   const decisions = {
     'DO NOT DEPLOY': { state: 'stop', label: 'Stop and fix first', title: 'Do not use this agent in production yet.', explanation: 'A declared critical weakness or credible critical attack path needs remediation and retesting before production use.' },
     'DEPLOY ONLY AFTER MATERIAL REMEDIATION': { state: 'hold', label: 'Important fixes required', title: 'Fix the material risks before wider use.', explanation: 'The declared controls contain weaknesses that should be closed before the agent handles more users, data or authority.' },
+    'HOLD FOR INFORMATION AND REMEDIATION': { state: 'hold', label: 'Information and fixes required', title: 'Resolve the missing information and declared weaknesses before deployment.', explanation: `${unresolvedCount || 'Material'} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain and ${findingCount || 'material'} declared control weakness${findingCount === 1 ? '' : 'es'} require remediation. Unknowns are not vulnerabilities, but the known weaknesses still matter.` },
     'HOLD FOR INFORMATION': { state: 'hold', label: 'Information required', title: 'Complete the missing security information before a deployment decision.', explanation: `${unresolvedCount || 'Material'} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain. This does not mean those items are vulnerabilities; it means the current assessment cannot yet determine the deployment posture.` },
     'HOLD FOR EVIDENCE': { state: 'hold', label: 'Proof required', title: 'Pause until the important protections are proven.', explanation: 'The declared controls look relevant, but the result does not yet contain enough tested or reviewed evidence to rely on them.' },
     'PROCEED WITH CONDITIONS': { state: 'caution', label: 'Proceed carefully', title: 'You can continue with the listed conditions.', explanation: 'Address the declared weaknesses, keep the agent within the stated limits and reassess after material changes.' },
