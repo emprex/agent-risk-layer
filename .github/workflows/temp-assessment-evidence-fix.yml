@@ -22,83 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply targeted fixes
-        shell: bash
         run: |
           python .github/temp-assessment-patch.py
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('src/risk-engine.js')
-          text = p.read_text()
-          replacements = [
-              (
-                  "  const highestSeverity = (items) => items.reduce((highest, item) => severityRank[item.severity] > severityRank[highest] ? item.severity : highest, '');",
-                  "  const highestSeverity = (items) => items.reduce((highest, item) => (severityRank[item.severity] || 0) > (severityRank[highest] || 0) ? item.severity : highest, '');",
-              ),
-              (
-                  "  const highestMaterialSeverity = severityRank[highestFindingSeverity] >= severityRank[highestAttackPathSeverity] ? highestFindingSeverity : highestAttackPathSeverity;",
-                  "  const highestMaterialSeverity = (severityRank[highestFindingSeverity] || 0) >= (severityRank[highestAttackPathSeverity] || 0) ? highestFindingSeverity : highestAttackPathSeverity;",
-              ),
-          ]
-          for old, new in replacements:
-              if old not in text:
-                  raise SystemExit(f'Expected severity line not found: {old}')
-              text = text.replace(old, new, 1)
-          p.write_text(text)
-
-          p = Path('tests/risk-engine.test.js')
-          text = p.read_text()
-          old = "test('moderate configuration produces control findings and attack paths', () => {"
-          new = "test('mixed configuration exposes a critical prompt-injection attack path', () => {"
-          if old not in text:
-              raise SystemExit('Expected legacy mixed-risk test name not found')
-          text = text.replace(old, new, 1)
-          old = "  assert.ok(['Moderate', 'High'].includes(result.riskBand));"
-          new = "  assert.equal(result.riskBand, 'Critical');\n  assert.equal(result.decision, 'DO NOT DEPLOY');\n  assert.ok(result.attackPaths.some((path) => path.severity === 'critical'));"
-          if old not in text:
-              raise SystemExit('Expected legacy risk-band assertion not found')
-          p.write_text(text.replace(old, new, 1))
-
-          p = Path('scripts/run-1000-scenarios.mjs')
-          text = p.read_text()
-          old = """  const orderedBand = result.scoreAvailable === false
-    ? result.riskBand === 'Undetermined'
-    : result.score >= 75 ? result.riskBand === 'Critical'
-      : result.score >= 50 ? result.riskBand === 'High'
-        : result.score >= 25 ? result.riskBand === 'Moderate'
-          : result.riskBand === 'Low';
-"""
-          new = """  const expectedAggregateBand = result.scoreAvailable === false
-    ? 'Undetermined'
-    : result.score >= 75 ? 'Critical'
-      : result.score >= 50 ? 'High'
-        : result.score >= 25 ? 'Moderate'
-          : 'Low';
-  const bandRank = { Undetermined: -1, Low: 0, Moderate: 1, High: 2, Critical: 3 };
-  const severityBand = { low: 'Low', medium: 'Moderate', high: 'High', critical: 'Critical' };
-  const highestMaterialBand = severityBand[result.highestMaterialSeverity] || 'Undetermined';
-  const aggregateBandMatches = result.aggregateRiskBand === expectedAggregateBand;
-  const overallBandRespectsFloor = bandRank[result.riskBand] >= Math.max(bandRank[expectedAggregateBand], bandRank[highestMaterialBand]);
-"""
-          if old not in text:
-              raise SystemExit('Expected legacy scenario band invariant not found')
-          text = text.replace(old, new, 1)
-          old = "  const pass = validScore && safeDecision && orderedBand && findingIntegrity && unresolvedIntegrity && unknownIsolation && pathIntegrity && recommendationIntegrity;"
-          new = "  const pass = validScore && safeDecision && aggregateBandMatches && overallBandRespectsFloor && findingIntegrity && unresolvedIntegrity && unknownIsolation && pathIntegrity && recommendationIntegrity;"
-          if old not in text:
-              raise SystemExit('Expected scenario pass invariant not found')
-          text = text.replace(old, new, 1)
-          old = "    checks: { validScore, safeDecision, orderedBand, findingIntegrity, unresolvedIntegrity, unknownIsolation, pathIntegrity, recommendationIntegrity },"
-          new = "    checks: { validScore, safeDecision, aggregateBandMatches, overallBandRespectsFloor, findingIntegrity, unresolvedIntegrity, unknownIsolation, pathIntegrity, recommendationIntegrity },"
-          if old not in text:
-              raise SystemExit('Expected scenario checks object not found')
-          text = text.replace(old, new, 1)
-          old = "The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, risk-band inconsistencies, malformed findings, malformed information gaps, unknown answers being scored as vulnerabilities, or a deployment-permitting decision when a critical attack path existed."
-          new = "The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, aggregate-score band inconsistencies, an overall risk band below the highest declared finding or attack-path severity, malformed findings, malformed information gaps, unknown answers being scored as vulnerabilities, or a deployment-permitting decision when a critical attack path existed."
-          if old not in text:
-              raise SystemExit('Expected scenario report explanation not found')
-          p.write_text(text.replace(old, new, 1))
-          PY
+          python .github/temp-assessment-followup.py
       - name: Validate release
         run: npm run validate
       - name: Commit validated fixes and remove temporary tooling
@@ -106,7 +32,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/temp-assessment-evidence-fix.yml .github/temp-assessment-patch.py
+          git rm .github/workflows/temp-assessment-evidence-fix.yml .github/temp-assessment-patch.py .github/temp-assessment-followup.py
           git add src/config.js src/risk-engine.js src/report.js src/pdf.js public/assessment.js public/assessment.html public/result.js server.js scripts/run-1000-scenarios.mjs tests/risk-engine.test.js tests/customer-journey.test.js docs/ASSESSMENT_EVIDENCE_SEMANTICS.md
           git commit -m "Fix assessment evidence and result semantics [skip ci]"
           git push origin HEAD
