@@ -22,7 +22,19 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply targeted fixes
-        run: python .github/temp-assessment-patch.py
+        shell: bash
+        run: |
+          python .github/temp-assessment-patch.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/risk-engine.js')
+          text = p.read_text()
+          old = "  const highestSeverity = (items) => items.reduce((highest, item) => severityRank[item.severity] > severityRank[highest] ? item.severity : highest, '');"
+          new = "  const highestSeverity = (items) => items.reduce((highest, item) => (severityRank[item.severity] || 0) > (severityRank[highest] || 0) ? item.severity : highest, '');"
+          if old not in text:
+              raise SystemExit('Expected highestSeverity line not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
       - name: Validate release
         run: npm run validate
       - name: Commit validated fixes and remove temporary tooling
