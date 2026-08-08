@@ -4,19 +4,22 @@ const root = document.querySelector('#resultRoot');
 const id = qs('id');
 const token = qs('token');
 let assessment;
+let questionnaire = [];
 let user;
 let isOwner = false;
 
 async function init() {
   if (!id || !token) return fail('The assessment link is incomplete.');
   try {
-    const [assessmentPayload, userPayload] = await Promise.all([
+    const [assessmentPayload, userPayload, questionnairePayload] = await Promise.all([
       api(`/api/assessments/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`),
       api('/api/auth/me'),
+      api('/api/questionnaire').catch(() => ({ questionnaire: [] })),
     ]);
     assessment = assessmentPayload.assessment;
     isOwner = assessmentPayload.isOwner;
     user = userPayload.user;
+    questionnaire = questionnairePayload.questionnaire || [];
     render();
   } catch (error) {
     fail(error.message);
@@ -27,15 +30,62 @@ function metric(value, suffix = '') {
   return value === null || value === undefined ? '—' : `${value}${suffix}`;
 }
 
+function unresolvedCountFromHeadline(full) {
+  const text = String(full?.headline || assessment?.headline || '');
+  const match = text.match(/(\d+)\s+material security questions? remain unresolved/i);
+  return match ? Number(match[1]) : 0;
+}
+
+function deriveUnresolved(full) {
+  const exact = full.unresolvedItems || full.blockingInformationGaps;
+  if (Array.isArray(exact) && exact.length) return { items: exact, count: exact.length, exact: true };
+
+  const controls = assessment.controls || full.controls || [];
+  const controlItems = controls
+    .filter((control) => control.status === 'unresolved')
+    .map((control, index) => ({
+      id: `U-${String(index + 1).padStart(2, '0')}`,
+      title: control.name,
+      whyItMatters: 'This protection cannot be relied on until the current implementation is understood.',
+      whatToConfirm: 'Confirm the current control with the system owner and record what is true today.',
+      proof: 'A reviewed configuration, architecture record or repeatable test for this exact agent.',
+    }));
+
+  const total = Math.max(unresolvedCountFromHeadline(full), controlItems.length);
+  const otherCount = Math.max(0, total - controlItems.length);
+  if (otherCount) {
+    controlItems.unshift({
+      id: 'Context',
+      title: `${otherCount} exposure or architecture question${otherCount === 1 ? '' : 's'} also need an answer`,
+      whyItMatters: 'Data, users, autonomy, tools and business impact determine which protections and tests are actually required.',
+      whatToConfirm: 'Return to the system owner and complete the unanswered context questions before treating the risk score as meaningful.',
+      proof: 'An owner-reviewed architecture/data-flow description for the assessed deployment.',
+    });
+  }
+  return { items: controlItems, count: total, exact: otherCount === 0 };
+}
+
+function deriveCompleteness(full, unresolvedCount) {
+  if (Number.isFinite(Number(full.assessmentCompleteness))) return Number(full.assessmentCompleteness);
+  const total = questionnaire.length;
+  if (!total || !unresolvedCount) return unresolvedCount ? null : 100;
+  return Math.max(0, Math.round(((total - unresolvedCount) / total) * 100));
+}
+
 function render() {
-  const full = assessment.result;
+  const full = assessment.result || {};
   const paid = assessment.paidTier !== 'free';
-  const findings = paid ? (full.findings || []) : (assessment.topFindings || full.topFindings || []);
-  const unresolved = full.unresolvedItems || full.blockingInformationGaps || [];
-  const decision = plainDecision(full.decision, unresolved.length);
+  const unresolvedState = deriveUnresolved(full);
+  const unresolved = unresolvedState.items;
+  const unresolvedCount = unresolvedState.count;
+  const rawFindings = paid ? (full.findings || []) : (assessment.topFindings || full.topFindings || full.findings || []);
+  const findings = rawFindings.filter((item) => item.status !== 'information-required' && item.kind !== 'information-required');
+  const decision = plainDecision(full.decision, unresolvedCount);
   const scoreAvailable = full.scoreAvailable !== false && assessment.riskBand !== 'Undetermined';
-  const primaryTarget = unresolved.length ? '#informationNeeded' : '#priorityRisks';
-  const primaryLabel = unresolved.length ? 'Complete missing information' : 'See what to fix first';
+  const completeness = deriveCompleteness(full, unresolvedCount);
+  const controls = assessment.controls || full.controls || [];
+  const primaryTarget = unresolvedCount ? '#informationNeeded' : '#priorityRisks';
+  const primaryLabel = unresolvedCount ? 'Complete missing information' : 'See what to fix first';
   root.className = 'plain-result-layout';
   root.innerHTML = `
     <section class="plain-result-main">
@@ -52,13 +102,15 @@ function render() {
         </div>
       </div>
 
-      ${unresolved.length ? `<section class="panel" id="informationNeeded">
-        <div class="section-heading compact-heading"><div><span class="eyebrow">Information needed</span><h2>${unresolved.length} security question${unresolved.length === 1 ? '' : 's'} still need an answer</h2><p>These are unresolved assessment inputs, not discovered vulnerabilities. Confirm them with the system owner before relying on a deployment decision.</p></div></div>
+      ${unresolvedCount ? `<section class="panel" id="informationNeeded">
+        <div class="section-heading compact-heading"><div><span class="eyebrow">Information needed</span><h2>${unresolvedCount} security question${unresolvedCount === 1 ? '' : 's'} still need an answer</h2><p>These are unresolved assessment inputs, not discovered vulnerabilities. Confirm them with the system owner before relying on a deployment decision.</p></div></div>
         <div class="plain-finding-list">${unresolved.map(unresolvedHtml).join('')}</div>
+        ${!unresolvedState.exact ? '<p class="microcopy">The free result shows the unresolved control questions available in this summary plus the remaining context count. A new check can record the clarified answers without rewriting this historical result.</p>' : ''}
+        <a class="button ghost" href="/assessment.html">Run a new check with the clarified information</a>
       </section>` : ''}
 
       <section class="panel" id="priorityRisks">
-        <div class="section-heading compact-heading"><div><span class="eyebrow">Confirmed from your answers</span><h2>${findings.length ? (paid ? 'Declared control weaknesses' : 'The three declared weaknesses to address first') : 'No declared control weakness established yet'}</h2><p>${findings.length ? 'These are based on specific answers you supplied. They remain unverified until linked to reviewed evidence or repeatable tests.' : 'Unknown answers are not treated as vulnerabilities. Complete missing information and add evidence before drawing a security conclusion.'}</p></div></div>
+        <div class="section-heading compact-heading"><div><span class="eyebrow">Confirmed from your answers</span><h2>${findings.length ? (paid ? 'Declared control weaknesses' : 'The declared weaknesses to address first') : 'No declared control weakness established yet'}</h2><p>${findings.length ? 'These are based on specific answers you supplied. They remain unverified until linked to reviewed evidence or repeatable tests.' : 'Unknown answers are not treated as vulnerabilities. Complete missing information and add evidence before drawing a security conclusion.'}</p></div></div>
         <div class="plain-finding-list">${findings.length ? findings.map(plainFindingHtml).join('') : '<div class="success-box"><strong>No control weakness was established from the answered questions.</strong><p>This is not a security approval. Missing information and unverified controls can still block deployment.</p></div>'}</div>
         ${paid ? '' : `<div class="unlock-box customer-unlock"><h3>Need a reviewed launch decision?</h3><p>The £99 assessment adds the complete finding register, technical evidence review, controlled attack testing, remediation ownership and a retest decision.</p><button class="button primary" id="unlockInline">Review the £99 assessment</button></div>`}
       </section>
@@ -72,12 +124,12 @@ function render() {
             <div class="metric-card"><span>Overall declared risk</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>
             <div class="metric-card"><span>Exposure</span><strong>${metric(full.inherentRisk, full.inherentRisk === null ? '' : '/100')}</strong></div>
             <div class="metric-card"><span>Control gap</span><strong>${metric(full.controlGap, full.controlGap === null ? '' : '/100')}</strong></div>
-            <div class="metric-card"><span>Assessment completeness</span><strong>${metric(full.assessmentCompleteness ?? 100, '%')}</strong></div>
+            <div class="metric-card"><span>Assessment completeness</span><strong>${completeness === null ? '—' : `${completeness}%`}</strong></div>
             <div class="metric-card"><span>Evidence confidence</span><strong>${metric(full.evidenceConfidence ?? 0, '%')}</strong></div>
           </div>
-          <p class="microcopy">${escapeHtml(full.methodology)}</p>
+          <p class="microcopy">${escapeHtml(full.methodology || assessment.methodology || '')}</p>
           <h3>Protection status</h3>
-          <div class="control-grid">${assessment.controls.map((control) => `<div class="control ${escapeHtml(control.status)}">${escapeHtml(control.name)}<small class="evidence-chip">${escapeHtml(control.status === 'unresolved' ? 'Information required' : control.evidence || 'Evidence not stated')}</small></div>`).join('')}</div>
+          <div class="control-grid">${controls.map((control) => `<div class="control ${escapeHtml(control.status)}">${escapeHtml(control.name)}<small class="evidence-chip">${escapeHtml(control.status === 'unresolved' ? 'Information required' : control.evidence || 'Evidence not stated')}</small></div>`).join('')}</div>
           ${paid && full.attackPaths?.length ? `<h3 class="section-gap">Credible attack paths</h3>${full.attackPaths.map(pathHtml).join('')}` : ''}
         </div>
       </details>
