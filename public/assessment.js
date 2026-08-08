@@ -11,6 +11,8 @@ const backButton = document.querySelector('#backButton');
 const nextButton = document.querySelector('#nextButton');
 const submitButton = document.querySelector('#submitAssessment');
 const evidenceSelect = document.querySelector('#questionEvidence');
+const agentType = document.querySelector('#agentType');
+const agentDescription = document.querySelector('#agentDescription');
 
 let questionnaire = [];
 let evidenceOptions = [];
@@ -28,7 +30,8 @@ async function init() {
       demoNotice.hidden = false;
     }
     const preset = qs('type');
-    if (preset) document.querySelector('#agentType').value = preset;
+    if (preset) agentType.value = preset;
+    updateDescriptionRequirement();
     renderStep();
   } catch (error) {
     showError(errorBox, error.message);
@@ -36,8 +39,17 @@ async function init() {
   }
 }
 
+function updateDescriptionRequirement() {
+  const required = agentType.value === 'Other';
+  agentDescription.required = required;
+  agentDescription.setAttribute('aria-required', String(required));
+  agentDescription.placeholder = required
+    ? 'Describe the agent’s purpose, users, main capabilities and anything unusual about its architecture.'
+    : 'Example: General autonomous system with long-term planning and cross-session learning. It currently runs in a manual testing UI.';
+}
+
 function plainEvidenceLabel(option) {
-  if (option.value === 'none') return "I do not know / no proof yet";
+  if (option.value === 'none') return 'I do not know / no proof yet';
   if (option.value === 'customer_assertion') return 'My answer only (not verified)';
   return option.label;
 }
@@ -57,6 +69,7 @@ function renderStep() {
     progressLabel.textContent = `Step 1 of ${totalSteps}`;
     nextButton.hidden = false;
     submitButton.hidden = true;
+    updateDescriptionRequirement();
     return;
   }
 
@@ -86,7 +99,8 @@ function renderStep() {
 
 function validateProfile() {
   const name = document.querySelector('#agentName').value.trim();
-  const type = document.querySelector('#agentType').value;
+  const type = agentType.value;
+  const description = agentDescription.value.trim();
   if (!name) {
     showError(errorBox, 'Give the agent a name so you can recognise this result later.');
     document.querySelector('#agentName').focus();
@@ -94,7 +108,12 @@ function validateProfile() {
   }
   if (!type) {
     showError(errorBox, 'Choose the closest description of what the agent does.');
-    document.querySelector('#agentType').focus();
+    agentType.focus();
+    return false;
+  }
+  if (type === 'Other' && description.length < 10) {
+    showError(errorBox, 'Describe what this agent does so the assessment does not lose important context.');
+    agentDescription.focus();
     return false;
   }
   return true;
@@ -112,6 +131,8 @@ function saveCurrentQuestion() {
   return true;
 }
 
+agentType.addEventListener('change', updateDescriptionRequirement);
+
 nextButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex === 0 && !validateProfile()) return;
@@ -126,7 +147,7 @@ nextButton.addEventListener('click', () => {
 backButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex > 0) {
-    if (stepIndex > 0 && stepIndex <= questionnaire.length) {
+    if (stepIndex <= questionnaire.length) {
       const selected = form.querySelector('input[name="currentQuestion"]:checked');
       if (selected) saveCurrentQuestion();
     }
@@ -146,13 +167,15 @@ form.addEventListener('submit', async (event) => {
     return;
   }
   const payloadAnswers = Object.fromEntries(questionnaire.map((question) => [question.id, answers.get(question.id)]));
+  const description = agentDescription.value.trim();
+  if (description) payloadAnswers.__system_description = description.slice(0, 800);
   setBusy(submitButton, true, 'Building your result…');
   try {
     const payload = await api('/api/assessments', {
       method: 'POST',
       body: JSON.stringify({
         name: document.querySelector('#agentName').value.trim(),
-        agentType: document.querySelector('#agentType').value,
+        agentType: agentType.value,
         answers: payloadAnswers,
       }),
     });

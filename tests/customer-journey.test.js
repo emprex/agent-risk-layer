@@ -36,41 +36,53 @@ test('task chooser lets beginners select a situation without learning product ar
   assert.match(html, /Start the free check/);
 });
 
-test('assessment presents one guided question at a time and treats proof honestly', () => {
+test('assessment presents one guided question at a time, captures unusual agents and treats proof honestly', () => {
   const html = read('public/assessment.html');
   const js = read('public/assessment.js');
   assert.match(html, /one question at a time/i);
-  assert.match(html, /You can choose “I’m not sure”/);
+  assert.match(html, /“I’m not sure” means information required—not a vulnerability/);
+  assert.match(html, /Briefly describe what it does/);
+  assert.match(html, /Autonomous \/ general-purpose agent/);
+  assert.match(html, /required for “Other”/);
   assert.match(html, /Do you have proof for this answer\?/);
   assert.doesNotMatch(html, /25 security controls/);
   assert.match(js, /questionnaire\[stepIndex - 1\]/);
+  assert.match(js, /type === 'Other' && description\.length < 10/);
+  assert.match(js, /payloadAnswers\.__system_description/);
   assert.match(js, /saved\?\.evidence \|\| 'customer_assertion'/);
   assert.match(js, /selected\.value === 'unknown' \? 'none'/);
   assert.doesNotMatch(js, /questionnaire\.map\(.*question-card/s);
 });
 
-test('unknown answers fail closed instead of inventing a protection', () => {
+test('unknown answers fail closed as information gaps without inventing vulnerabilities', () => {
   const answers = safestAnswers();
   for (const question of questionnaire) {
     assert.ok(question.options.some((option) => option.value === 'unknown'), question.id);
     answers[question.id] = { value: 'unknown', evidence: 'none' };
   }
   const result = evaluateAssessment(answers);
-  assert.equal(result.riskBand, 'Critical');
-  assert.equal(result.decision, 'DO NOT DEPLOY');
+  assert.equal(result.riskBand, 'Undetermined');
+  assert.equal(result.scoreAvailable, false);
+  assert.equal(result.decision, 'HOLD FOR INFORMATION');
   assert.equal(result.evidenceConfidence, 0);
-  assert.ok(result.findings.every((finding) => finding.observed === "I'm not sure"));
-  assert.ok(result.recommendations.some((item) => /Confirm the current control or exposure/.test(item.text)));
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.unresolvedItems.length, questionnaire.length);
+  assert.match(result.headline, /No vulnerability is inferred/i);
 });
 
-test('result page puts the decision and practical fixes before technical scoring', () => {
+test('result page puts information gaps, real findings and practical next actions before technical scoring', () => {
   const html = read('public/result.html');
   const js = read('public/result.js');
   assert.match(html, /Security check result/);
   assert.match(js, /Your next action/);
+  assert.match(js, /Information needed/);
+  assert.match(js, /unresolved assessment inputs, not discovered vulnerabilities/);
+  assert.match(js, /No control weakness was established/);
   assert.match(js, /What could happen/);
   assert.match(js, /Who should own it/);
   assert.match(js, /How to prove it is fixed/);
+  assert.match(js, /Not determined/);
+  assert.match(js, /Assessment completeness/);
   assert.match(js, /Technical score and evidence details/);
   assert.match(js, /escapeHtml\(finding\.title\)/);
   assert.match(js, /escapeHtml\(finding\.observed\)/);
@@ -138,7 +150,6 @@ test('customer-facing pages use external scripts and preserve security boundarie
 test('the public sitemap includes the customer task chooser', () => {
   assert.match(read('server.js'), /'\/start\.html'/);
 });
-
 
 test('commercial catalogue contains only the approved current prices', () => {
   assert.deepEqual(Object.fromEntries(Object.entries(plans).map(([key, plan]) => [key, {

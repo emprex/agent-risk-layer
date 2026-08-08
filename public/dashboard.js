@@ -16,7 +16,7 @@ async function init() {
       ${todayActions(data)}
       ${progressOverview(data)}
       <section id="risks" class="panel section-gap">
-        <div class="section-heading compact-heading"><div><span class="eyebrow">Your agents</span><h2>Checks and next actions</h2><p>Open a result to see what to fix, why it matters and whether the agent is ready.</p></div><a class="button primary small" href="/assessment.html">Check another agent</a></div>
+        <div class="section-heading compact-heading"><div><span class="eyebrow">Your agents</span><h2>Checks and next actions</h2><p>Open a result to see what information, evidence or remediation is needed next.</p></div><a class="button primary small" href="/assessment.html">Check another agent</a></div>
         <div class="assessment-list">${data.assessments.length ? data.assessments.map(assessmentHtml).join('') : emptyAssessments()}</div>
       </section>
       ${advancedTools(data)}
@@ -48,15 +48,27 @@ async function init() {
   }
 }
 
+function assessmentLink(assessment) {
+  return `/result.html?id=${encodeURIComponent(assessment.id)}&token=${encodeURIComponent(assessment.access_token)}`;
+}
+
+function isIncompleteAssessment(assessment) {
+  return String(assessment.risk_band || assessment.riskBand || '').toLowerCase() === 'undetermined';
+}
+
 function todayActions(data) {
   const assessments = data.assessments || [];
   const projects = data.controlPlane?.projects || [];
   const openFixes = Number(data.controlPlane?.totals?.openRemediations || 0);
-  const highest = [...assessments].sort((a, b) => Number(b.score) - Number(a.score))[0];
-  const critical = assessments.filter((item) => String(item.risk_band || item.riskBand || '').toLowerCase() === 'critical').length;
+  const incomplete = assessments.filter(isIncompleteAssessment);
+  const scoreable = assessments.filter((item) => !isIncompleteAssessment(item));
+  const highest = [...scoreable].sort((a, b) => Number(b.score) - Number(a.score))[0];
+  const reviewTarget = incomplete[0] || highest || assessments[0];
+  const critical = scoreable.filter((item) => String(item.risk_band || item.riskBand || '').toLowerCase() === 'critical').length;
   let recommended;
   if (!assessments.length) recommended = { eyebrow: 'Recommended first step', title: 'Check one AI agent', text: 'Answer simple questions about access, data, actions and recovery. You will receive a clear decision and the first risks to address.', href: '/assessment.html', action: 'Start the free check', time: 'About 5–10 minutes' };
-  else if (critical || (highest && Number(highest.score) >= 75)) recommended = { eyebrow: 'Urgent review', title: `Review ${highest.name}`, text: 'This is currently your highest recorded risk. Read the decision first, then assign the most important fix.', href: `/result.html?id=${encodeURIComponent(highest.id)}&token=${encodeURIComponent(highest.access_token)}`, action: 'Review the result', time: 'Start with the first finding' };
+  else if (critical || (highest && Number(highest.score) >= 75)) recommended = { eyebrow: 'Urgent review', title: `Review ${highest.name}`, text: 'This is currently your highest recorded declared risk. Read the decision first, then assign the most important confirmed fix.', href: assessmentLink(highest), action: 'Review the result', time: 'Start with the first confirmed finding' };
+  else if (incomplete.length) recommended = { eyebrow: 'Information required', title: `Complete ${incomplete[0].name}`, text: 'This check is on hold because material security information is still unanswered. Open the result, confirm the missing context with the agent owner, then run a new check with the clarified answers.', href: assessmentLink(incomplete[0]), action: 'Review missing information', time: 'Unknowns are not vulnerabilities' };
   else if (openFixes) recommended = { eyebrow: 'Work in progress', title: `Close ${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}`, text: 'Confirm the owner, attach implementation evidence and retest the same risk before marking it closed.', href: '/control-plane.html#remediation', action: 'Open required fixes', time: 'Evidence required before closure' };
   else if (!projects.length) recommended = { eyebrow: 'Next protection step', title: 'See live protection work', text: 'Run the safe built-in example before connecting code. It shows missing, changed and reused approvals being blocked.', href: '/control-plane.html', action: 'Run the safe example', time: 'About 30 seconds' };
   else recommended = { eyebrow: 'Keep control current', title: 'Review your latest agent decisions', text: 'Check what the runtime policy allowed or blocked and whether any new access or behaviour needs attention.', href: '/control-plane.html', action: 'Review live protection', time: 'No terminal required' };
@@ -65,22 +77,27 @@ function todayActions(data) {
     <article class="dashboard-recommended-action"><div><span class="eyebrow">${escapeHtml(recommended.eyebrow)}</span><h2 id="todayActionsTitle">${escapeHtml(recommended.title)}</h2><p>${escapeHtml(recommended.text)}</p><small>${escapeHtml(recommended.time)}</small></div><a class="button primary button-xl" href="${recommended.href}">${escapeHtml(recommended.action)} →</a></article>
     <div class="dashboard-secondary-actions" aria-label="Other security tasks">
       <a href="/assessment.html"><span>Check</span><strong>Assess another agent</strong><small>Understand risk and the next action</small></a>
-      <a href="${highest ? `/result.html?id=${encodeURIComponent(highest.id)}&token=${encodeURIComponent(highest.access_token)}` : '/sample-report.html'}"><span>Review</span><strong>${highest ? 'Open the latest result' : 'See an example result'}</strong><small>Decision, priority risks and proof</small></a>
+      <a href="${reviewTarget ? assessmentLink(reviewTarget) : '/sample-report.html'}"><span>Review</span><strong>${reviewTarget ? 'Open the latest result' : 'See an example result'}</strong><small>Information, findings, decision and proof</small></a>
       <a href="/control-plane.html"><span>Protect</span><strong>Open live protection</strong><small>Safe example, policies and decisions</small></a>
     </div>
   </section>`;
 }
 
 function progressOverview(data) {
+  const assessments = data.assessments || [];
   const totals = data.controlPlane?.totals || {};
   const assessed = Number(data.stats.assessments || 0) > 0;
   const urgent = Number(data.stats.critical || 0);
+  const incompleteCount = assessments.filter(isIncompleteAssessment).length;
   const openFixes = Number(totals.openRemediations || 0);
   const protectedRequests = Number(totals.runtimeRequestsMonth || 0);
+  const reviewStep = incompleteCount
+    ? { label: 'Complete missing information', complete: false, detail: `${incompleteCount} incomplete ${incompleteCount === 1 ? 'check needs' : 'checks need'} clarification`, href: '#risks' }
+    : { label: 'Address urgent findings', complete: assessed && urgent === 0, detail: urgent ? `${urgent} critical ${urgent === 1 ? 'result needs' : 'results need'} attention` : assessed ? 'No critical result recorded' : 'Complete a check first', href: '#risks' };
   const steps = [
     { label: 'Check the risk', complete: assessed, detail: assessed ? `${Number(data.stats.assessments || 0)} saved ${Number(data.stats.assessments || 0) === 1 ? 'check' : 'checks'}` : 'No agent checked yet', href: '/assessment.html' },
-    { label: 'Address urgent findings', complete: assessed && urgent === 0, detail: urgent ? `${urgent} critical ${urgent === 1 ? 'result needs' : 'results need'} attention` : assessed ? 'No critical result recorded' : 'Complete a check first', href: '#risks' },
-    { label: 'Track and verify fixes', complete: assessed && openFixes === 0, detail: openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
+    reviewStep,
+    { label: 'Track and verify fixes', complete: assessed && incompleteCount === 0 && openFixes === 0, detail: incompleteCount ? 'Clarify the incomplete assessment before creating fixes' : openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
     { label: 'Protect live actions', complete: protectedRequests > 0, detail: protectedRequests ? `${protectedRequests.toLocaleString('en-GB')} decisions this month` : 'No live decision recorded yet', href: '/control-plane.html' },
   ];
   const complete = steps.filter((step) => step.complete).length;
@@ -133,12 +150,22 @@ function purchaseHtml(purchase) {
 }
 
 function assessmentHtml(assessment) {
+  const incomplete = isIncompleteAssessment(assessment);
   const urgent = assessment.risk_band === 'Critical' || assessment.risk_band === 'High';
-  const next = urgent ? 'Fix the highest risks before wider use' : assessment.latest_inspection_summary ? 'Review the latest evidence and check again after changes' : 'Add proof or a technical check when you need stronger assurance';
+  const next = incomplete
+    ? 'Complete missing security information before a deployment decision'
+    : urgent
+      ? 'Fix the highest confirmed risks before wider use'
+      : assessment.latest_inspection_summary
+        ? 'Review the latest evidence and check again after changes'
+        : 'Add proof or a technical check when you need stronger assurance';
+  const status = incomplete
+    ? '<span class="risk-pill">Assessment incomplete</span><strong>—</strong>'
+    : `<span class="risk-pill ${riskClass(assessment.risk_band)}">${escapeHtml(assessment.risk_band)} declared risk</span><strong>${assessment.score}/100</strong>`;
   return `<article class="customer-assessment-row">
-    <div class="assessment-status-block"><span class="risk-pill ${riskClass(assessment.risk_band)}">${escapeHtml(assessment.risk_band)} risk</span><strong>${assessment.score}/100</strong></div>
+    <div class="assessment-status-block">${status}</div>
     <div class="assessment-main"><h3>${escapeHtml(assessment.name)}</h3><p>${escapeHtml(assessment.agent_type)} · checked ${new Date(assessment.created_at).toLocaleDateString('en-GB')}</p><div class="assessment-next"><small>Next action</small><strong>${escapeHtml(next)}</strong></div></div>
-    <div class="assessment-simple-actions"><a class="button primary small" href="/result.html?id=${encodeURIComponent(assessment.id)}&token=${encodeURIComponent(assessment.access_token)}">Open result</a><button class="icon-button" title="Delete assessment" aria-label="Delete ${escapeHtml(assessment.name)}" data-delete-assessment="${escapeHtml(assessment.id)}">×</button></div>
+    <div class="assessment-simple-actions"><a class="button primary small" href="${assessmentLink(assessment)}">Open result</a><button class="icon-button" title="Delete assessment" aria-label="Delete ${escapeHtml(assessment.name)}" data-delete-assessment="${escapeHtml(assessment.id)}">×</button></div>
   </article>`;
 }
 
