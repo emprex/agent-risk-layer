@@ -17,7 +17,11 @@ init();
 async function init() {
   try {
     const cfg = await api('/api/config');
-    document.querySelector('#demoNotice').hidden = !cfg.demoMode;
+    const demoNotice = document.querySelector('#demoNotice');
+    if (cfg.demoMode) {
+      demoNotice.textContent = 'Demo mode is active. Subscription checkout is simulated and can be cancelled from the dashboard.';
+      demoNotice.hidden = false;
+    }
     const cards = [communityCard(), assessmentCard(cfg.prices.pro_report), ...['developer_monthly', 'team_monthly', 'agency_monthly'].map((key) => recurringCard(key, cfg.prices[key])), enterpriseCard()];
     const grid = document.querySelector('#pricingGrid');
     grid.innerHTML = cards.join('');

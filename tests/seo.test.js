@@ -63,6 +63,19 @@ test('MCP risk page receives descriptive internal links from relevant public pag
   assert.match(runtime, /tool trust, permissions, secrets and action validation/);
 });
 
+test('demo notices are not pre-rendered in crawlable HTML', () => {
+  for (const relative of ['public/pricing.html', 'public/assessment.html']) {
+    const html = read(relative);
+    assert.doesNotMatch(html, /id="demoNotice"[^>]*>[^<]+<\/div>/);
+  }
+  for (const relative of ['public/pricing.js', 'public/assessment.js']) {
+    const script = read(relative);
+    assert.match(script, /if \(cfg\.demoMode\)/);
+    assert.match(script, /demoNotice\.textContent/);
+    assert.match(script, /demoNotice\.hidden = false/);
+  }
+});
+
 test('search and social images are present as local crawlable assets', () => {
   for (const asset of ['public/agentrisklayer-logo-512.png', 'public/agentrisklayer-social-1200x630.png']) {
     const stat = fs.statSync(path.join(root, asset));

@@ -22,7 +22,11 @@ async function init() {
     const [questionPayload, cfg] = await Promise.all([api('/api/questionnaire'), api('/api/config')]);
     questionnaire = questionPayload.questionnaire;
     evidenceOptions = questionPayload.evidenceOptions || [];
-    if (cfg.demoMode) document.querySelector('#demoNotice').hidden = false;
+    if (cfg.demoMode) {
+      const demoNotice = document.querySelector('#demoNotice');
+      demoNotice.textContent = 'Demo mode is active. Paid checkout will be simulated; no card is charged.';
+      demoNotice.hidden = false;
+    }
     const preset = qs('type');
     if (preset) document.querySelector('#agentType').value = preset;
     renderStep();
