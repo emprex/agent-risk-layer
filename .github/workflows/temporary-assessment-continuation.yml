@@ -30,12 +30,12 @@ jobs:
       - name: Run release validation
         run: npm run validate
       - name: Check patch hygiene
-        run: git diff --check
+        run: git diff --check -- . ':(exclude)public/downloads/agentrisklayer-sample-professional-report.pdf'
       - name: Commit validated patch and remove temporary files
         run: |
           rm .github/workflows/temporary-assessment-continuation.yml .github/temporary-assessment-continuation.py .github/temporary-assessment-continuation-test-fix.py
-          git add public/assessment.html public/assessment.js public/result.js public/public-result.js public/dashboard.js server.js src/report.js src/pdf.js CUSTOMER_JOURNEY_V10.md tests/customer-journey.test.js .github/workflows/temporary-assessment-continuation.yml .github/temporary-assessment-continuation.py .github/temporary-assessment-continuation-test-fix.py
-          expected=".github/temporary-assessment-continuation-test-fix.py .github/temporary-assessment-continuation.py .github/workflows/temporary-assessment-continuation.yml CUSTOMER_JOURNEY_V10.md public/assessment.html public/assessment.js public/dashboard.js public/public-result.js public/result.js server.js src/pdf.js src/report.js tests/customer-journey.test.js"
+          git add public/assessment.html public/assessment.js public/result.js public/public-result.js public/dashboard.js server.js src/report.js src/pdf.js CUSTOMER_JOURNEY_V10.md tests/customer-journey.test.js public/downloads/agentrisklayer-sample-professional-report.pdf .github/workflows/temporary-assessment-continuation.yml .github/temporary-assessment-continuation.py .github/temporary-assessment-continuation-test-fix.py
+          expected=".github/temporary-assessment-continuation-test-fix.py .github/temporary-assessment-continuation.py .github/workflows/temporary-assessment-continuation.yml CUSTOMER_JOURNEY_V10.md public/assessment.html public/assessment.js public/dashboard.js public/downloads/agentrisklayer-sample-professional-report.pdf public/public-result.js public/result.js server.js src/pdf.js src/report.js tests/customer-journey.test.js"
           actual="$(git diff --cached --name-only | sort | tr '\n' ' ' | sed 's/ $//')"
           wanted="$(printf '%s\n' $expected | sort | tr '\n' ' ' | sed 's/ $//')"
           if [ "$actual" != "$wanted" ]; then echo "Unexpected staged files: $actual"; exit 1; fi
