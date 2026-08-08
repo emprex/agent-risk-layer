@@ -29,11 +29,21 @@ jobs:
           from pathlib import Path
           p = Path('src/risk-engine.js')
           text = p.read_text()
-          old = "  const highestSeverity = (items) => items.reduce((highest, item) => severityRank[item.severity] > severityRank[highest] ? item.severity : highest, '');"
-          new = "  const highestSeverity = (items) => items.reduce((highest, item) => (severityRank[item.severity] || 0) > (severityRank[highest] || 0) ? item.severity : highest, '');"
-          if old not in text:
-              raise SystemExit('Expected highestSeverity line not found')
-          p.write_text(text.replace(old, new, 1))
+          replacements = [
+              (
+                  "  const highestSeverity = (items) => items.reduce((highest, item) => severityRank[item.severity] > severityRank[highest] ? item.severity : highest, '');",
+                  "  const highestSeverity = (items) => items.reduce((highest, item) => (severityRank[item.severity] || 0) > (severityRank[highest] || 0) ? item.severity : highest, '');",
+              ),
+              (
+                  "  const highestMaterialSeverity = severityRank[highestFindingSeverity] >= severityRank[highestAttackPathSeverity] ? highestFindingSeverity : highestAttackPathSeverity;",
+                  "  const highestMaterialSeverity = (severityRank[highestFindingSeverity] || 0) >= (severityRank[highestAttackPathSeverity] || 0) ? highestFindingSeverity : highestAttackPathSeverity;",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'Expected severity line not found: {old}')
+              text = text.replace(old, new, 1)
+          p.write_text(text)
           PY
       - name: Validate release
         run: npm run validate
