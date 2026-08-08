@@ -1,0 +1,168 @@
+from pathlib import Path
+
+
+def replace(path, old, new):
+    p = Path(path)
+    text = p.read_text()
+    if old not in text:
+        raise SystemExit(f'Expected text not found in {path}: {old[:120]!r}')
+    p.write_text(text.replace(old, new, 1))
+
+
+replace('src/config.js', "scoringVersion: 'arl-risk-v3.3'", "scoringVersion: 'arl-risk-v3.4'")
+
+replace('src/risk-engine.js',
+    "  customer_assertion: { label: 'Customer assertion — not verified', score: 20, multiplier: 1.12, verified: false },\n",
+    "  customer_assertion: { label: 'Customer assertion — not verified', score: 20, multiplier: 1.12, verified: false },\n  evidence_ready: { label: 'Supporting evidence ready — not yet linked or reviewed', score: 20, multiplier: 1.12, verified: false },\n")
+replace('src/risk-engine.js',
+    "export const evidenceOptions = ['none', 'customer_assertion'].map((value) => ({ value, label: EVIDENCE[value].label }));",
+    "export const evidenceOptions = ['none', 'customer_assertion', 'evidence_ready'].map((value) => ({ value, label: EVIDENCE[value].label }));")
+replace('src/risk-engine.js',
+    "  const riskBand = scoreAvailable ? band(score) : 'Undetermined';",
+    "  const aggregateRiskBand = scoreAvailable ? band(score) : 'Undetermined';")
+replace('src/risk-engine.js',
+    "    if (response.unknown) status = 'unresolved';\n    else if (response.notApplicable) status = verified ? 'not-applicable' : 'evidence-required';\n    else if (response.rawPoints === 0) status = verified ? 'verified' : 'evidence-required';\n    return {\n      name: question.title,\n      domain: question.domain,\n      status,\n      applicability: response.notApplicable ? 'not-applicable-claimed' : 'applicable-or-unknown',\n      evidenceState: response.evidence,\n      evidence: response.evidenceLabel,\n      verified,\n    };",
+    "    if (response.unknown) status = 'unresolved';\n    else if (response.notApplicable) status = verified ? 'not-applicable-verified' : 'not-applicable-declared';\n    else if (response.rawPoints === 0) status = verified ? 'verified' : 'evidence-required';\n    return {\n      name: question.title,\n      domain: question.domain,\n      status,\n      applicability: response.notApplicable ? 'not-applicable-claimed' : 'applicable-or-unknown',\n      answer: response.answer,\n      evidenceState: response.evidence,\n      evidence: response.evidenceLabel,\n      verified,\n    };")
+
+old_decision = """  const blockingEvidenceGaps = controls.filter((control) => control.status === 'evidence-required');
+  const hasCriticalAttackPath = paths.some((path) => path.severity === 'critical');
+  const hasCriticalFinding = findings.some((finding) => finding.severity === 'critical');
+
+  let decision;
+  if (hasCriticalAttackPath || hasCriticalFinding) decision = 'DO NOT DEPLOY';
+  else if (scoreAvailable && score >= 75) decision = 'DO NOT DEPLOY';
+  else if (scoreAvailable && score >= 50) decision = 'DEPLOY ONLY AFTER MATERIAL REMEDIATION';
+  else if (unresolvedItems.length) decision = 'HOLD FOR INFORMATION';
+  else if (blockingEvidenceGaps.length) decision = 'HOLD FOR EVIDENCE';
+  else if (scoreAvailable && score >= 25) decision = 'PROCEED WITH CONDITIONS';
+  else decision = 'PROCEED WITH MONITORING';
+
+  const headline = decision === 'HOLD FOR INFORMATION'
+    ? `${unresolvedItems.length} material security questions remain unresolved. No vulnerability is inferred from unanswered questions; complete the missing information before relying on this assessment for deployment.`
+    : decision === 'HOLD FOR EVIDENCE'
+      ? 'The declared controls need tested or reviewed evidence before this assessment can support a deployment decision.'
+      : decision === 'DO NOT DEPLOY'
+        ? 'A declared critical weakness or credible critical attack path must be remediated and retested before production use.'
+        : riskBand === 'Low'
+          ? 'The declared risk is low, subject to the verified evidence and stated scope.'
+          : riskBand === 'Moderate'
+            ? 'Targeted weaknesses should be closed before broader deployment.'
+            : 'Material control gaps should be closed before wider use.';
+"""
+new_decision = """  const blockingEvidenceGaps = controls.filter((control) => ['evidence-required', 'not-applicable-declared'].includes(control.status));
+  const hasCriticalAttackPath = paths.some((path) => path.severity === 'critical');
+  const hasCriticalFinding = findings.some((finding) => finding.severity === 'critical');
+  const hasHighAttackPath = paths.some((path) => path.severity === 'high');
+  const hasHighFinding = findings.some((finding) => finding.severity === 'high');
+  const severityRank = { low: 1, medium: 2, high: 3, critical: 4 };
+  const highestSeverity = (items) => items.reduce((highest, item) => severityRank[item.severity] > severityRank[highest] ? item.severity : highest, '');
+  const highestFindingSeverity = highestSeverity(findings);
+  const highestAttackPathSeverity = highestSeverity(paths);
+  const highestMaterialSeverity = severityRank[highestFindingSeverity] >= severityRank[highestAttackPathSeverity] ? highestFindingSeverity : highestAttackPathSeverity;
+  const severityBand = { low: 'Low', medium: 'Moderate', high: 'High', critical: 'Critical' }[highestMaterialSeverity] || 'Undetermined';
+  const bandRank = { Undetermined: -1, Low: 0, Moderate: 1, High: 2, Critical: 3 };
+  const riskBand = scoreAvailable
+    ? (bandRank[severityBand] > bandRank[aggregateRiskBand] ? severityBand : aggregateRiskBand)
+    : (severityBand !== 'Undetermined' ? severityBand : 'Undetermined');
+
+  let decision;
+  if (hasCriticalAttackPath || hasCriticalFinding) decision = 'DO NOT DEPLOY';
+  else if (scoreAvailable && score >= 75) decision = 'DO NOT DEPLOY';
+  else if ((scoreAvailable && score >= 50) || hasHighFinding || hasHighAttackPath) decision = unresolvedItems.length ? 'HOLD FOR INFORMATION AND REMEDIATION' : 'DEPLOY ONLY AFTER MATERIAL REMEDIATION';
+  else if (unresolvedItems.length && (findings.length || paths.length)) decision = 'HOLD FOR INFORMATION AND REMEDIATION';
+  else if (unresolvedItems.length) decision = 'HOLD FOR INFORMATION';
+  else if (blockingEvidenceGaps.length) decision = 'HOLD FOR EVIDENCE';
+  else if ((scoreAvailable && score >= 25) || findings.length || paths.length) decision = 'PROCEED WITH CONDITIONS';
+  else decision = 'PROCEED WITH MONITORING';
+
+  const headline = decision === 'HOLD FOR INFORMATION AND REMEDIATION'
+    ? `${unresolvedItems.length} material security question${unresolvedItems.length === 1 ? '' : 's'} remain unresolved, while ${findings.length} declared control weakness${findings.length === 1 ? '' : 'es'} and ${paths.length} credible attack-path concern${paths.length === 1 ? '' : 's'} also require review. Complete the missing information and remediate the confirmed weaknesses before relying on a deployment decision.`
+    : decision === 'HOLD FOR INFORMATION'
+      ? `${unresolvedItems.length} material security questions remain unresolved. No vulnerability is inferred from unanswered questions; complete the missing information before relying on this assessment for deployment.`
+      : decision === 'HOLD FOR EVIDENCE'
+        ? 'The declared controls need tested or reviewed evidence before this assessment can support a deployment decision.'
+        : decision === 'DO NOT DEPLOY'
+          ? 'A declared critical weakness or credible critical attack path must be remediated and retested before production use.'
+          : riskBand === 'Low'
+            ? 'The declared risk is low, subject to the verified evidence and stated scope.'
+            : riskBand === 'Moderate'
+              ? 'Targeted weaknesses should be closed before broader deployment.'
+              : 'Material control gaps should be closed before wider use.';
+"""
+replace('src/risk-engine.js', old_decision, new_decision)
+replace('src/risk-engine.js',
+    "  const methodology = 'This assessment separates exposure, declared controls, unresolved information and evidence confidence. Unknown answers are not scored as vulnerabilities and do not create findings. Exposure describes potential consequence, not a weakness by itself. Findings represent declared control weaknesses or separately observed/tested failures. A HOLD may be issued when material information or evidence is missing.';",
+    "  const methodology = 'This assessment separates exposure, declared controls, unresolved information and evidence confidence. Unknown answers are not scored as vulnerabilities and do not create findings. Exposure describes potential consequence, not a weakness by itself. Findings represent declared control weaknesses or separately observed/tested failures. The overall declared risk band never falls below the highest declared finding or credible attack-path severity, while the numerical score remains an aggregate. A HOLD may be issued when material information, remediation or evidence is missing.';")
+replace('src/risk-engine.js',
+    "    riskBand,\n    inherentRisk,",
+    "    riskBand,\n    aggregateRiskBand,\n    highestFindingSeverity,\n    highestAttackPathSeverity,\n    highestMaterialSeverity,\n    inherentRisk,")
+replace('src/risk-engine.js',
+    "    scoring: { inherentRisk, controlGap, evidenceConfidence, assessmentCompleteness, scoreAvailable, unansweredCount: unresolvedItems.length, uncertaintyPenalty: 0 },",
+    "    scoring: { inherentRisk, controlGap, evidenceConfidence, assessmentCompleteness, scoreAvailable, aggregateRiskBand, highestFindingSeverity, highestAttackPathSeverity, highestMaterialSeverity, unansweredCount: unresolvedItems.length, uncertaintyPenalty: 0 },")
+
+replace('public/assessment.js',
+    "  const evidence = candidate.value === 'unknown'\n    ? 'none'\n    : candidate.evidence === 'none' ? 'none' : 'customer_assertion';",
+    "  const allowedEvidence = new Set(['none', 'customer_assertion', 'evidence_ready']);\n  const evidence = candidate.value === 'unknown'\n    ? 'none'\n    : allowedEvidence.has(candidate.evidence) ? candidate.evidence : 'customer_assertion';")
+replace('public/assessment.js',
+    "  if (option.value === 'none') return 'I do not know / no proof yet';\n  if (option.value === 'customer_assertion') return 'My answer only (not verified)';\n  return option.label;",
+    "  if (option.value === 'none') return 'No proof yet';\n  if (option.value === 'customer_assertion') return 'My answer only (not verified)';\n  if (option.value === 'evidence_ready') return 'I have supporting evidence to attach (not verified yet)';\n  return option.label;")
+replace('public/assessment.html',
+    "<p>Your answer is treated as unverified unless it is linked to a test or reviewed evidence later. Choose “My answer only” for a normal first check.</p>\n<div class=\"field\"><label for=\"questionEvidence\">Evidence for this answer</label><select id=\"questionEvidence\"></select></div>",
+    "<p>Your answer is treated as unverified unless it is linked to a test or reviewed evidence later. Choose “My answer only” for a normal first check.</p>\n<div class=\"field\"><label for=\"questionEvidence\">Evidence for this answer</label><select id=\"questionEvidence\"></select></div>\n<p class=\"microcopy\"><strong>Already have proof?</strong> Choose “I have supporting evidence to attach”. It remains unverified until the evidence is linked to this assessment and reviewed or tested. Verified evidence can never be created by selecting an option in this form.</p>")
+
+replace('public/result.js',
+    "function render() {",
+    "function severityLabel(value) {\n  const text = String(value || '').toLowerCase();\n  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'None';\n}\n\nfunction controlStatusText(control) {\n  const evidence = control.evidence || 'Evidence not stated';\n  if (control.status === 'unresolved') return 'Information required';\n  if (control.status === 'not-applicable-verified') return 'Not applicable — verified';\n  if (control.status === 'not-applicable-declared' || control.applicability === 'not-applicable-claimed') return 'Not applicable — declared, not verified';\n  if (control.status === 'verified') return `Verified · ${evidence}`;\n  if (control.status === 'action') return `Action required · ${evidence}`;\n  return `Evidence required · ${evidence}`;\n}\n\nfunction render() {")
+replace('public/result.js',
+    "  const decision = plainDecision(full.decision, unresolvedCount);",
+    "  const decision = plainDecision(full.decision, unresolvedCount, findings.length);")
+replace('public/result.js',
+    "  const primaryLabel = unresolvedCount ? 'Complete missing information' : 'See what to fix first';",
+    "  const primaryLabel = unresolvedCount ? (findings.length ? 'Review information and fixes' : 'Complete missing information') : 'See what to fix first';")
+replace('public/result.js',
+    "            <div class=\"metric-card\"><span>Overall declared risk</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>\n            <div class=\"metric-card\"><span>Exposure</span><strong>${metric(full.inherentRisk, full.inherentRisk === null ? '' : '/100')}</strong></div>",
+    "            <div class=\"metric-card\"><span>Aggregate declared score</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>\n            <div class=\"metric-card\"><span>Overall declared risk band</span><strong>${scoreAvailable ? escapeHtml(assessment.riskBand) : 'Not determined'}</strong></div>\n            <div class=\"metric-card\"><span>Highest declared finding</span><strong>${escapeHtml(severityLabel(full.highestFindingSeverity))}</strong></div>\n            <div class=\"metric-card\"><span>Exposure</span><strong>${metric(full.inherentRisk, full.inherentRisk === null ? '' : '/100')}</strong></div>")
+replace('public/result.js',
+    "          <div class=\"control-grid\">${controls.map((control) => `<div class=\"control ${escapeHtml(control.status)}\">${escapeHtml(control.name)}<small class=\"evidence-chip\">${escapeHtml(control.status === 'unresolved' ? 'Information required' : control.evidence || 'Evidence not stated')}</small></div>`).join('')}</div>",
+    "          <div class=\"control-grid\">${controls.map((control) => `<div class=\"control ${escapeHtml(control.status)}\">${escapeHtml(control.name)}<small class=\"evidence-chip\">${escapeHtml(controlStatusText(control))}</small></div>`).join('')}</div>")
+replace('public/result.js',
+    "      <div class=\"result-side-risk\">${scoreAvailable ? `<span class=\"risk-pill ${riskClass(assessment.riskBand)}\">${escapeHtml(assessment.riskBand)} declared risk</span><strong>${assessment.score}<small>/100</small></strong>` : '<span class=\"risk-pill\">Security information incomplete</span><strong>—</strong>'}</div>\n      <p class=\"side-score-explainer\">${scoreAvailable ? 'The score prioritises declared risk. It is not a probability of breach and does not prove the agent is secure.' : 'Risk is not scored until enough exposure and control information is known. Missing information is kept separate from vulnerabilities.'}</p>",
+    "      <div class=\"result-side-risk\">${scoreAvailable ? `<span class=\"risk-pill ${riskClass(assessment.riskBand)}\">${escapeHtml(assessment.riskBand)} overall declared band</span><strong>${assessment.score}<small>/100 aggregate</small></strong>` : '<span class=\"risk-pill\">Security information incomplete</span><strong>—</strong>'}</div>\n      <p class=\"side-score-explainer\">${scoreAvailable ? `Highest declared finding: ${escapeHtml(severityLabel(full.highestFindingSeverity))}. The aggregate score summarises breadth and does not downgrade a more severe individual finding. It is not a probability of breach and does not prove the agent is secure.` : 'Risk is not scored until enough exposure and control information is known. Missing information is kept separate from vulnerabilities.'}</p>")
+replace('public/result.js',
+    "function plainDecision(value, unresolvedCount = 0) {\n  const decisions = {",
+    "function plainDecision(value, unresolvedCount = 0, findingCount = 0) {\n  const decisions = {")
+replace('public/result.js',
+    "    'HOLD FOR INFORMATION': { state: 'hold', label: 'Information required', title: 'Complete the missing security information before a deployment decision.', explanation: `${unresolvedCount || 'Material'} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain. This does not mean those items are vulnerabilities; it means the current assessment cannot yet determine the deployment posture.` },",
+    "    'HOLD FOR INFORMATION AND REMEDIATION': { state: 'hold', label: 'Information and fixes required', title: 'Resolve the missing information and declared weaknesses before deployment.', explanation: `${unresolvedCount || 'Material'} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain and ${findingCount || 'material'} declared control weakness${findingCount === 1 ? '' : 'es'} require remediation. Unknowns are not vulnerabilities, but the known weaknesses still matter.` },\n    'HOLD FOR INFORMATION': { state: 'hold', label: 'Information required', title: 'Complete the missing security information before a deployment decision.', explanation: `${unresolvedCount || 'Material'} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain. This does not mean those items are vulnerabilities; it means the current assessment cannot yet determine the deployment posture.` },")
+
+replace('src/report.js',
+    "    const riskSummary = result.scoreAvailable === false ? 'Risk not determined — material information is missing.' : `${result.riskBand} declared risk at ${result.score}/100.`;",
+    "    const riskSummary = result.scoreAvailable === false ? 'Risk not determined — material information is missing.' : `${result.riskBand} overall declared risk band with an aggregate score of ${result.score}/100${result.highestFindingSeverity ? `; highest declared finding ${result.highestFindingSeverity}.` : '.'}`;")
+replace('src/report.js',
+    "        score: result.score, scoreAvailable: result.scoreAvailable !== false, riskBand: result.riskBand, headline: combinedHeadline, decision: combinedDecision, methodology: result.methodology,",
+    "        score: result.score, scoreAvailable: result.scoreAvailable !== false, riskBand: result.riskBand, aggregateRiskBand: result.aggregateRiskBand, highestFindingSeverity: result.highestFindingSeverity || '', highestAttackPathSeverity: result.highestAttackPathSeverity || '', headline: combinedHeadline, decision: combinedDecision, methodology: result.methodology,")
+replace('src/pdf.js',
+    "            { label: 'Declared risk', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? report.riskBand : 'Security information incomplete' },",
+    "            { label: 'Aggregate score', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? `${report.riskBand} overall band${report.highestFindingSeverity ? `; highest finding ${report.highestFindingSeverity}` : ''}` : 'Security information incomplete' },")
+
+replace('server.js',
+    "    const cache = candidate.endsWith('.html') ? 'no-cache' : 'public, max-age=3600';",
+    "    const extension = path.extname(candidate).toLowerCase();\n    const cache = ['.html', '.js', '.mjs', '.css'].includes(extension) ? 'no-cache' : 'public, max-age=3600';")
+
+replace('tests/risk-engine.test.js',
+    "  assert.equal(result.decision, 'HOLD FOR INFORMATION');\n});\n\ntest('not-applicable control choices do not create findings or risk points',",
+    "  assert.equal(result.decision, 'HOLD FOR INFORMATION AND REMEDIATION');\n});\n\ntest('a high declared finding cannot be visually downgraded by a low aggregate score', () => {\n  const answers = answersAt(0, 'customer_assertion');\n  answers.input_boundary = { value: 'prompt-only', evidence: 'customer_assertion' };\n  const result = evaluateAssessment(answers);\n  assert.ok(result.score < 25);\n  assert.equal(result.highestFindingSeverity, 'high');\n  assert.equal(result.riskBand, 'High');\n  assert.equal(result.decision, 'DEPLOY ONLY AFTER MATERIAL REMEDIATION');\n});\n\ntest('supporting evidence ready remains unverified until it is actually linked and reviewed', () => {\n  const result = evaluateAssessment(answersAt(0, 'evidence_ready'));\n  assert.equal(result.evidenceConfidence, 20);\n  assert.equal(result.decision, 'HOLD FOR EVIDENCE');\n  assert.ok(result.controls.every((control) => control.verified === false));\n});\n\ntest('not-applicable control choices do not create findings or risk points',")
+replace('tests/risk-engine.test.js',
+    "  assert.ok(result.controls.some((control) => control.applicability === 'not-applicable-claimed'));",
+    "  assert.ok(result.controls.some((control) => control.applicability === 'not-applicable-claimed'));\n  assert.ok(result.controls.some((control) => control.status === 'not-applicable-declared'));")
+replace('tests/customer-journey.test.js',
+    "  assert.match(html, /Do you have proof for this answer\\?/);",
+    "  assert.match(html, /Do you have proof for this answer\\?/);\n  assert.match(html, /supporting evidence to attach/i);\n  assert.match(html, /Verified evidence can never be created by selecting an option/i);\n  assert.match(js, /evidence_ready/);")
+replace('tests/customer-journey.test.js',
+    "  assert.match(js, /Technical score and evidence details/);",
+    "  assert.match(js, /Technical score and evidence details/);\n  assert.match(js, /Aggregate declared score/);\n  assert.match(js, /Highest declared finding/);\n  assert.match(js, /Not applicable — declared, not verified/);")
+replace('tests/customer-journey.test.js',
+    "  assert.match(shared, /cache: 'no-store'/);\n});",
+    "  assert.match(shared, /cache: 'no-store'/);\n  const server = read('server.js');\n  assert.match(server, /\\['\\.html', '\\.js', '\\.mjs', '\\.css'\\]\\.includes\\(extension\\)/);\n});")
+
+Path('docs/ASSESSMENT_EVIDENCE_SEMANTICS.md').write_text('''# Assessment evidence semantics\n\nAgentRiskLayer separates what a respondent says from what the platform can verify.\n\n- **No proof yet**: the answer is recorded without supporting evidence.\n- **My answer only (not verified)**: a customer assertion.\n- **Supporting evidence ready (not yet linked or reviewed)**: the customer says evidence exists, but this state receives no additional confidence until an artifact or repeatable test is linked to the assessment.\n- **Observed/tested/reviewed evidence**: created only by the relevant evidence workflow; it is never self-selected in the questionnaire.\n\nUnknown answers remain information gaps, not findings. Not-applicable answers remain explicit applicability claims and require evidence when relied on for deployment. The overall declared risk band must not be lower than the highest declared finding or credible attack-path severity; the numerical score remains an aggregate. When unresolved information and known weaknesses coexist, the deployment state is **HOLD FOR INFORMATION AND REMEDIATION**.\n''')
