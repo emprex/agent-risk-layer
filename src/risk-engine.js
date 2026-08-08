@@ -1,6 +1,7 @@
 const EVIDENCE = {
   none: { label: 'No evidence supplied', score: 0, multiplier: 1.18, verified: false },
   customer_assertion: { label: 'Customer assertion — not verified', score: 20, multiplier: 1.12, verified: false },
+  evidence_ready: { label: 'Supporting evidence ready — not yet linked or reviewed', score: 20, multiplier: 1.12, verified: false },
   configuration_observed: { label: 'Configuration observed', score: 55, multiplier: 1.04, verified: false },
   artifact_uploaded: { label: 'Artifact uploaded — review pending', score: 60, multiplier: 1.02, verified: false },
   automatically_tested: { label: 'Automatically tested', score: 85, multiplier: 0.96, verified: true },
@@ -45,7 +46,7 @@ export const questionnaire = baseQuestionnaire.map((question) => ({
   options: [...question.options, option('unknown', "I'm not sure", 0, ['uncertainty'])],
 }));
 
-export const evidenceOptions = ['none', 'customer_assertion'].map((value) => ({ value, label: EVIDENCE[value].label }));
+export const evidenceOptions = ['none', 'customer_assertion', 'evidence_ready'].map((value) => ({ value, label: EVIDENCE[value].label }));
 
 const guidance = {
   permissions: ['Create a dedicated non-human identity and remove inherited or wildcard permissions.', 'Enforce resource-level deny rules outside the model.'],
@@ -226,7 +227,7 @@ export function evaluateAssessment(answers = {}, context = {}) {
   const assessmentCompleteness = Math.round((knownAnswerCount / questionnaire.length) * 100);
   const scoreAvailable = inherentRisk !== null && controlGap !== null;
   const score = scoreAvailable ? Math.min(100, Math.round(inherentRisk * 0.38 + controlGap * 0.62)) : 0;
-  const riskBand = scoreAvailable ? band(score) : 'Undetermined';
+  const aggregateRiskBand = scoreAvailable ? band(score) : 'Undetermined';
 
   const unresolvedItems = responses.filter((response) => response.unknown).map((response, index) => {
     const detail = clarification[response.id] || ['This information is needed to complete the assessment.', 'Confirm the current state with the system owner.', 'A reviewed configuration or repeatable test.'];
@@ -284,51 +285,71 @@ export function evaluateAssessment(answers = {}, context = {}) {
     const verified = Boolean(EVIDENCE[response.evidence]?.verified);
     let status = 'action';
     if (response.unknown) status = 'unresolved';
-    else if (response.notApplicable) status = verified ? 'not-applicable' : 'evidence-required';
+    else if (response.notApplicable) status = verified ? 'not-applicable-verified' : 'not-applicable-declared';
     else if (response.rawPoints === 0) status = verified ? 'verified' : 'evidence-required';
     return {
       name: question.title,
       domain: question.domain,
       status,
       applicability: response.notApplicable ? 'not-applicable-claimed' : 'applicable-or-unknown',
+      answer: response.answer,
       evidenceState: response.evidence,
       evidence: response.evidenceLabel,
       verified,
     };
   });
 
-  const blockingEvidenceGaps = controls.filter((control) => control.status === 'evidence-required');
+  const blockingEvidenceGaps = controls.filter((control) => ['evidence-required', 'not-applicable-declared'].includes(control.status));
   const hasCriticalAttackPath = paths.some((path) => path.severity === 'critical');
   const hasCriticalFinding = findings.some((finding) => finding.severity === 'critical');
+  const hasHighAttackPath = paths.some((path) => path.severity === 'high');
+  const hasHighFinding = findings.some((finding) => finding.severity === 'high');
+  const severityRank = { low: 1, medium: 2, high: 3, critical: 4 };
+  const highestSeverity = (items) => items.reduce((highest, item) => (severityRank[item.severity] || 0) > (severityRank[highest] || 0) ? item.severity : highest, '');
+  const highestFindingSeverity = highestSeverity(findings);
+  const highestAttackPathSeverity = highestSeverity(paths);
+  const highestMaterialSeverity = (severityRank[highestFindingSeverity] || 0) >= (severityRank[highestAttackPathSeverity] || 0) ? highestFindingSeverity : highestAttackPathSeverity;
+  const severityBand = { low: 'Low', medium: 'Moderate', high: 'High', critical: 'Critical' }[highestMaterialSeverity] || 'Undetermined';
+  const bandRank = { Undetermined: -1, Low: 0, Moderate: 1, High: 2, Critical: 3 };
+  const riskBand = scoreAvailable
+    ? (bandRank[severityBand] > bandRank[aggregateRiskBand] ? severityBand : aggregateRiskBand)
+    : (severityBand !== 'Undetermined' ? severityBand : 'Undetermined');
 
   let decision;
   if (hasCriticalAttackPath || hasCriticalFinding) decision = 'DO NOT DEPLOY';
   else if (scoreAvailable && score >= 75) decision = 'DO NOT DEPLOY';
-  else if (scoreAvailable && score >= 50) decision = 'DEPLOY ONLY AFTER MATERIAL REMEDIATION';
+  else if ((scoreAvailable && score >= 50) || hasHighFinding || hasHighAttackPath) decision = unresolvedItems.length ? 'HOLD FOR INFORMATION AND REMEDIATION' : 'DEPLOY ONLY AFTER MATERIAL REMEDIATION';
+  else if (unresolvedItems.length && (findings.length || paths.length)) decision = 'HOLD FOR INFORMATION AND REMEDIATION';
   else if (unresolvedItems.length) decision = 'HOLD FOR INFORMATION';
   else if (blockingEvidenceGaps.length) decision = 'HOLD FOR EVIDENCE';
-  else if (scoreAvailable && score >= 25) decision = 'PROCEED WITH CONDITIONS';
+  else if ((scoreAvailable && score >= 25) || findings.length || paths.length) decision = 'PROCEED WITH CONDITIONS';
   else decision = 'PROCEED WITH MONITORING';
 
-  const headline = decision === 'HOLD FOR INFORMATION'
-    ? `${unresolvedItems.length} material security questions remain unresolved. No vulnerability is inferred from unanswered questions; complete the missing information before relying on this assessment for deployment.`
-    : decision === 'HOLD FOR EVIDENCE'
-      ? 'The declared controls need tested or reviewed evidence before this assessment can support a deployment decision.'
-      : decision === 'DO NOT DEPLOY'
-        ? 'A declared critical weakness or credible critical attack path must be remediated and retested before production use.'
-        : riskBand === 'Low'
-          ? 'The declared risk is low, subject to the verified evidence and stated scope.'
-          : riskBand === 'Moderate'
-            ? 'Targeted weaknesses should be closed before broader deployment.'
-            : 'Material control gaps should be closed before wider use.';
+  const headline = decision === 'HOLD FOR INFORMATION AND REMEDIATION'
+    ? `${unresolvedItems.length} material security question${unresolvedItems.length === 1 ? '' : 's'} remain unresolved, while ${findings.length} declared control weakness${findings.length === 1 ? '' : 'es'} and ${paths.length} credible attack-path concern${paths.length === 1 ? '' : 's'} also require review. Complete the missing information and remediate the confirmed weaknesses before relying on a deployment decision.`
+    : decision === 'HOLD FOR INFORMATION'
+      ? `${unresolvedItems.length} material security questions remain unresolved. No vulnerability is inferred from unanswered questions; complete the missing information before relying on this assessment for deployment.`
+      : decision === 'HOLD FOR EVIDENCE'
+        ? 'The declared controls need tested or reviewed evidence before this assessment can support a deployment decision.'
+        : decision === 'DO NOT DEPLOY'
+          ? 'A declared critical weakness or credible critical attack path must be remediated and retested before production use.'
+          : riskBand === 'Low'
+            ? 'The declared risk is low, subject to the verified evidence and stated scope.'
+            : riskBand === 'Moderate'
+              ? 'Targeted weaknesses should be closed before broader deployment.'
+              : 'Material control gaps should be closed before wider use.';
 
   const systemDescription = String(answers.__system_description || context.systemDescription || '').trim().slice(0, 800);
-  const methodology = 'This assessment separates exposure, declared controls, unresolved information and evidence confidence. Unknown answers are not scored as vulnerabilities and do not create findings. Exposure describes potential consequence, not a weakness by itself. Findings represent declared control weaknesses or separately observed/tested failures. A HOLD may be issued when material information or evidence is missing.';
+  const methodology = 'This assessment separates exposure, declared controls, unresolved information and evidence confidence. Unknown answers are not scored as vulnerabilities and do not create findings. Exposure describes potential consequence, not a weakness by itself. Findings represent declared control weaknesses or separately observed/tested failures. The overall declared risk band never falls below the highest declared finding or credible attack-path severity, while the numerical score remains an aggregate. A HOLD may be issued when material information, remediation or evidence is missing.';
 
   return {
     score,
     scoreAvailable,
     riskBand,
+    aggregateRiskBand,
+    highestFindingSeverity,
+    highestAttackPathSeverity,
+    highestMaterialSeverity,
     inherentRisk,
     controlGap,
     evidenceConfidence,
@@ -354,6 +375,6 @@ export function evaluateAssessment(answers = {}, context = {}) {
       owasp: uniq(findings.flatMap((finding) => finding.frameworks).filter((item) => item.startsWith('OWASP'))),
       nist: uniq([...findings.flatMap((finding) => finding.frameworks), ...unresolvedItems.flatMap((item) => item.frameworks)].filter((item) => item.startsWith('NIST'))),
     },
-    scoring: { inherentRisk, controlGap, evidenceConfidence, assessmentCompleteness, scoreAvailable, unansweredCount: unresolvedItems.length, uncertaintyPenalty: 0 },
+    scoring: { inherentRisk, controlGap, evidenceConfidence, assessmentCompleteness, scoreAvailable, aggregateRiskBand, highestFindingSeverity, highestAttackPathSeverity, highestMaterialSeverity, unansweredCount: unresolvedItems.length, uncertaintyPenalty: 0 },
   };
 }

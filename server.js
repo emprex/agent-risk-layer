@@ -1995,7 +1995,8 @@ function serveStatic(pathname, req, res) {
         return text(res, 404, 'Not found');
     const body = fs.readFileSync(candidate);
     const type = mimeTypes[path.extname(candidate).toLowerCase()] || 'application/octet-stream';
-    const cache = candidate.endsWith('.html') ? 'no-cache' : 'public, max-age=3600';
+    const extension = path.extname(candidate).toLowerCase();
+    const cache = ['.html', '.js', '.mjs', '.css'].includes(extension) ? 'no-cache' : 'public, max-age=3600';
     res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': cache });
     return req.method === 'HEAD' ? res.end() : res.end(body);
 }

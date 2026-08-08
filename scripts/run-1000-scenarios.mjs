@@ -21,12 +21,17 @@ for (let index = 0; index < 1000; index += 1) {
   const criticalPath = result.attackPaths.some((path) => path.severity === 'critical');
   const validScore = Number.isInteger(result.score) && result.score >= 0 && result.score <= 100;
   const safeDecision = !criticalPath || result.decision === 'DO NOT DEPLOY';
-  const orderedBand = result.scoreAvailable === false
-    ? result.riskBand === 'Undetermined'
-    : result.score >= 75 ? result.riskBand === 'Critical'
-      : result.score >= 50 ? result.riskBand === 'High'
-        : result.score >= 25 ? result.riskBand === 'Moderate'
-          : result.riskBand === 'Low';
+  const expectedAggregateBand = result.scoreAvailable === false
+    ? 'Undetermined'
+    : result.score >= 75 ? 'Critical'
+      : result.score >= 50 ? 'High'
+        : result.score >= 25 ? 'Moderate'
+          : 'Low';
+  const bandRank = { Undetermined: -1, Low: 0, Moderate: 1, High: 2, Critical: 3 };
+  const severityBand = { low: 'Low', medium: 'Moderate', high: 'High', critical: 'Critical' };
+  const highestMaterialBand = severityBand[result.highestMaterialSeverity] || 'Undetermined';
+  const aggregateBandMatches = result.aggregateRiskBand === expectedAggregateBand;
+  const overallBandRespectsFloor = bandRank[result.riskBand] >= Math.max(bandRank[expectedAggregateBand], bandRank[highestMaterialBand]);
   const findingIntegrity = result.findings.every((finding) =>
     finding.id && finding.title && finding.recommendation && finding.verification &&
     ['critical','high','medium','low'].includes(finding.severity));
@@ -38,7 +43,7 @@ for (let index = 0; index < 1000; index += 1) {
   const pathIntegrity = result.attackPaths.every((path) =>
     path.id && path.title && path.narrative && path.tags.length > 0);
   const recommendationIntegrity = result.findings.length === 0 || result.recommendations.length > 0;
-  const pass = validScore && safeDecision && orderedBand && findingIntegrity && unresolvedIntegrity && unknownIsolation && pathIntegrity && recommendationIntegrity;
+  const pass = validScore && safeDecision && aggregateBandMatches && overallBandRespectsFloor && findingIntegrity && unresolvedIntegrity && unknownIsolation && pathIntegrity && recommendationIntegrity;
   rows.push({
     id: `S${String(index + 1).padStart(4, '0')}`,
     customer: `${sectors[index % sectors.length]} customer ${index + 1}`,
@@ -52,7 +57,7 @@ for (let index = 0; index < 1000; index += 1) {
     findings: result.findings.length,
     attackPaths: result.attackPaths.length,
     criticalPath,
-    checks: { validScore, safeDecision, orderedBand, findingIntegrity, unresolvedIntegrity, unknownIsolation, pathIntegrity, recommendationIntegrity },
+    checks: { validScore, safeDecision, aggregateBandMatches, overallBandRespectsFloor, findingIntegrity, unresolvedIntegrity, unknownIsolation, pathIntegrity, recommendationIntegrity },
     pass,
   });
 }
@@ -93,7 +98,7 @@ ${summary.failed === 0 ? '**PASS.** All deterministic safety and integrity invar
 
 ## What this proves
 
-The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, risk-band inconsistencies, malformed findings, malformed information gaps, unknown answers being scored as vulnerabilities, or a deployment-permitting decision when a critical attack path existed.
+The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, aggregate-score band inconsistencies, an overall risk band below the highest declared finding or attack-path severity, malformed findings, malformed information gaps, unknown answers being scored as vulnerabilities, or a deployment-permitting decision when a critical attack path existed.
 
 ## Limits
 

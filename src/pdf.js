@@ -42,7 +42,7 @@ export async function renderReportPdf(report) {
     cover();
     if (report.metrics)
         metricRow([
-            { label: 'Declared risk', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? report.riskBand : 'Security information incomplete' },
+            { label: 'Aggregate score', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? `${report.riskBand} overall band${report.highestFindingSeverity ? `; highest finding ${report.highestFindingSeverity}` : ''}` : 'Security information incomplete' },
             { label: 'Evidence confidence', value: `${report.metrics.evidenceConfidence}/100`, note: 'Evidence profile' },
             { label: 'Security information completeness', value: `${report.metrics.assessmentCompleteness ?? 100}%`, note: unresolved.length ? `${unresolved.length} unresolved` : 'Questions answered' },
         ]);

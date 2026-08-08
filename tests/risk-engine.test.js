@@ -48,7 +48,7 @@ test('exposure describes context and does not become a finding by itself', () =>
   assert.ok(result.inherentRisk > 0);
 });
 
-test('moderate configuration produces control findings and attack paths', () => {
+test('mixed configuration exposes a critical prompt-injection attack path', () => {
   const answers = answersAt(1, 'documented');
   answers.permissions = { value: 'user', evidence: 'documented' };
   answers.external_content = { value: 'mixed', evidence: 'documented' };
@@ -56,7 +56,9 @@ test('moderate configuration produces control findings and attack paths', () => 
   answers.tool_scope = { value: 'broad', evidence: 'documented' };
   const result = evaluateAssessment(answers, { agentType: 'Email agent' });
   assert.ok(result.score >= 25 && result.score < 75);
-  assert.ok(['Moderate', 'High'].includes(result.riskBand));
+  assert.equal(result.riskBand, 'Critical');
+  assert.equal(result.decision, 'DO NOT DEPLOY');
+  assert.ok(result.attackPaths.some((path) => path.severity === 'critical'));
   assert.ok(result.topFindings.length <= 3);
   assert.ok(result.findings.every((finding) => finding.recommendation && finding.verification));
   assert.ok(result.attackPaths.length >= 1);
@@ -101,7 +103,24 @@ test('mixed known and unknown answers keep real findings separate from informati
   const result = evaluateAssessment(answers);
   assert.ok(result.findings.some((finding) => finding.title.includes('permissions')));
   assert.ok(result.unresolvedItems.some((item) => item.questionId === 'memory_security'));
-  assert.equal(result.decision, 'HOLD FOR INFORMATION');
+  assert.equal(result.decision, 'HOLD FOR INFORMATION AND REMEDIATION');
+});
+
+test('a high declared finding cannot be visually downgraded by a low aggregate score', () => {
+  const answers = answersAt(0, 'customer_assertion');
+  answers.input_boundary = { value: 'prompt-only', evidence: 'customer_assertion' };
+  const result = evaluateAssessment(answers);
+  assert.ok(result.score < 25);
+  assert.equal(result.highestFindingSeverity, 'high');
+  assert.equal(result.riskBand, 'High');
+  assert.equal(result.decision, 'DEPLOY ONLY AFTER MATERIAL REMEDIATION');
+});
+
+test('supporting evidence ready remains unverified until it is actually linked and reviewed', () => {
+  const result = evaluateAssessment(answersAt(0, 'evidence_ready'));
+  assert.equal(result.evidenceConfidence, 20);
+  assert.equal(result.decision, 'HOLD FOR EVIDENCE');
+  assert.ok(result.controls.every((control) => control.verified === false));
 });
 
 test('not-applicable control choices do not create findings or risk points', () => {
@@ -115,6 +134,7 @@ test('not-applicable control choices do not create findings or risk points', () 
   const result = evaluateAssessment(answers);
   assert.equal(result.findings.length, 0);
   assert.ok(result.controls.some((control) => control.applicability === 'not-applicable-claimed'));
+  assert.ok(result.controls.some((control) => control.status === 'not-applicable-declared'));
   assert.equal(result.decision, 'HOLD FOR EVIDENCE');
 });
 

@@ -63,9 +63,10 @@ function normaliseSourceAnswer(question, raw) {
     ? { value: raw, evidence: 'customer_assertion' }
     : { value: raw?.value, evidence: raw?.evidence || 'none' };
   if (!question.options.some((option) => option.value === candidate.value)) return null;
+  const allowedEvidence = new Set(['none', 'customer_assertion', 'evidence_ready']);
   const evidence = candidate.value === 'unknown'
     ? 'none'
-    : candidate.evidence === 'none' ? 'none' : 'customer_assertion';
+    : allowedEvidence.has(candidate.evidence) ? candidate.evidence : 'customer_assertion';
   return { value: candidate.value, evidence };
 }
 
@@ -98,8 +99,9 @@ function updateDescriptionRequirement() {
 }
 
 function plainEvidenceLabel(option) {
-  if (option.value === 'none') return 'I do not know / no proof yet';
+  if (option.value === 'none') return 'No proof yet';
   if (option.value === 'customer_assertion') return 'My answer only (not verified)';
+  if (option.value === 'evidence_ready') return 'I have supporting evidence to attach (not verified yet)';
   return option.label;
 }
 
