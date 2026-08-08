@@ -1,0 +1,43 @@
+name: Temporary continuation hardening validation
+
+on:
+  push:
+    branches:
+      - fix/assessment-continuation
+
+permissions:
+  contents: write
+
+jobs:
+  harden-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply hardening patch
+        run: python3 .github/temporary-continuation-hardening.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Validate release
+        run: npm run validate
+      - name: Check patch hygiene
+        run: git diff --check -- . ':(exclude)public/downloads/agentrisklayer-sample-professional-report.pdf'
+      - name: Commit validated hardening and remove temporary files
+        run: |
+          rm .github/workflows/temporary-continuation-hardening.yml .github/temporary-continuation-hardening.py
+          git add server.js public/result.js tests/customer-journey.test.js .github/workflows/temporary-continuation-hardening.yml .github/temporary-continuation-hardening.py
+          expected=".github/temporary-continuation-hardening.py .github/workflows/temporary-continuation-hardening.yml public/result.js server.js tests/customer-journey.test.js"
+          actual="$(git diff --cached --name-only | sort | tr '\n' ' ' | sed 's/ $//')"
+          wanted="$(printf '%s\n' $expected | sort | tr '\n' ' ' | sed 's/ $//')"
+          if [ "$actual" != "$wanted" ]; then echo "Unexpected staged files: $actual"; exit 1; fi
+          git config user.name "emprex"
+          git config user.email "guillaume.strohecker@gmail.com"
+          git commit -m "Harden assessment revision lineage"
+          git push origin HEAD:fix/assessment-continuation
