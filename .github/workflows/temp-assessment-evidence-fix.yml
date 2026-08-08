@@ -27,6 +27,7 @@ jobs:
           python .github/temp-assessment-patch.py
           python - <<'PY'
           from pathlib import Path
+
           p = Path('src/risk-engine.js')
           text = p.read_text()
           replacements = [
@@ -44,6 +45,19 @@ jobs:
                   raise SystemExit(f'Expected severity line not found: {old}')
               text = text.replace(old, new, 1)
           p.write_text(text)
+
+          p = Path('tests/risk-engine.test.js')
+          text = p.read_text()
+          old = "test('moderate configuration produces control findings and attack paths', () => {"
+          new = "test('mixed configuration exposes a critical prompt-injection attack path', () => {"
+          if old not in text:
+              raise SystemExit('Expected legacy mixed-risk test name not found')
+          text = text.replace(old, new, 1)
+          old = "  assert.ok(['Moderate', 'High'].includes(result.riskBand));"
+          new = "  assert.equal(result.riskBand, 'Critical');\n  assert.equal(result.decision, 'DO NOT DEPLOY');\n  assert.ok(result.attackPaths.some((path) => path.severity === 'critical'));"
+          if old not in text:
+              raise SystemExit('Expected legacy risk-band assertion not found')
+          p.write_text(text.replace(old, new, 1))
           PY
       - name: Validate release
         run: npm run validate
