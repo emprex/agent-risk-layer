@@ -37,12 +37,20 @@ export async function renderReportPdf(report) {
     const metricRow = (items) => blocks.push({ type: 'metrics', height: 80, items });
     const riskBar = (labelText, value, tone = 'accent') => blocks.push({ type: 'bar', height: 38, label: labelText, value: Math.max(0, Math.min(100, Number(value) || 0)), tone });
     const callout = (title, text, tone = 'accent') => { const lines = wrap(text, 76); blocks.push({ type: 'callout', height: 42 + lines.length * 11, title, lines, tone }); };
+    const scoreAvailable = report.scoreAvailable !== false && report.riskBand !== 'Undetermined';
+    const unresolved = report.unresolvedItems || [];
     cover();
     if (report.metrics)
-        metricRow([{ label: 'Residual risk', value: `${report.score}/100`, note: report.riskBand }, { label: 'Evidence confidence', value: `${report.metrics.evidenceConfidence}/100`, note: 'Declared evidence' }, { label: 'Technical assurance', value: report.redTeam ? `${report.redTeam.summary.assuranceScore}/100` : report.inspection ? `${report.inspection.summary.postureScore}/100` : 'Not tested', note: report.redTeam ? 'Controlled run' : report.inspection ? 'Static inspection' : 'Questionnaire only' }]);
-    callout('Executive recommendation', report.headline, report.decision === 'DO NOT DEPLOY' ? 'danger' : String(report.decision).includes('MATERIAL') ? 'warning' : 'accent');
+        metricRow([
+            { label: 'Declared risk', value: scoreAvailable ? `${report.score}/100` : 'Not determined', note: scoreAvailable ? report.riskBand : 'Assessment incomplete' },
+            { label: 'Evidence confidence', value: `${report.metrics.evidenceConfidence}/100`, note: 'Evidence profile' },
+            { label: 'Assessment completeness', value: `${report.metrics.assessmentCompleteness ?? 100}%`, note: unresolved.length ? `${unresolved.length} unresolved` : 'Questions answered' },
+        ]);
+    callout('Executive recommendation', report.headline, report.decision === 'DO NOT DEPLOY' ? 'danger' : String(report.decision).includes('MATERIAL') ? 'warning' : String(report.decision).includes('HOLD') ? 'warning' : 'accent');
     add(`Assessment ID: ${report.assessmentId}`, 8, false, 0, 2, 'muted');
     add(`Agent type: ${report.agentType}`, 8, false, 0, 2, 'muted');
+    if (report.systemDescription)
+        add(`System description: ${report.systemDescription}`, 8, false, 0, 2, 'muted');
     add(`Assessment date: ${report.created}`, 8, false, 0, 2, 'muted');
     add(`Generated: ${report.generated}`, 8, false, 0, 2, 'muted');
     add(`Scoring model: ${report.scoringVersion}`, 8, false, 0, 2, 'muted');
@@ -51,7 +59,10 @@ export async function renderReportPdf(report) {
     if (report.executiveBrief) {
         add(report.executiveBrief.summary, 11, false, 0, 10);
         heading('Primary credible threats', 2);
-        (report.executiveBrief.primaryThreats || []).forEach(bullet);
+        if ((report.executiveBrief.primaryThreats || []).length)
+            (report.executiveBrief.primaryThreats || []).forEach(bullet);
+        else
+            add('No credible attack path was established from the answered information.', 9);
         heading('Control assurance', 2);
         add(report.executiveBrief.controlCoverage, 10);
     }
@@ -69,17 +80,22 @@ export async function renderReportPdf(report) {
         add(`Project: ${ci.project.name} | Snapshot: ${ci.systemSnapshot.version} | Digest: ${ci.systemSnapshot.digest}`,8,false,0,3,'muted');
         add(`Control profile: ${ci.controlProfileVersion} | Profile digest: ${ci.controlProfileDigest}`,8,false,0,5,'muted');
         add(`Reviewed: ${ci.controlsReviewed||0} | Applicable: ${ci.applicableControls} | Not applicable: ${ci.notApplicableControls||0} | Needs context: ${ci.contextRequiredControls||0} | Observed: ${ci.observedControls} | Missing evidence: ${ci.missingEvidence.length} | Open findings: ${ci.openFindings.length}`,9,true);
-        for (const decision of (ci.applicabilityDecisions||[]).slice(0,20)) add(`${decision.controlId}: ${decision.decision.replaceAll('_',' ')} — ${decision.reason}`,8,false,0,2);
-        add(`Deployment decision: ${ci.deploymentDecision?.decision||'not recorded'}${ci.stale?' — stale; reassessment required':''}. Runtime evidence: ${ci.runtimeEvidence}. Approval evidence: ${ci.approvalEvidence}.`,9);
+        for (const decision of (ci.applicabilityDecisions||[]).slice(0,20)) add(`${decision.controlId}: ${decision.decision.replaceAll('_',' ')} - ${decision.reason}`,8,false,0,2);
+        add(`Deployment decision: ${ci.deploymentDecision?.decision||'not recorded'}${ci.stale?' - stale; reassessment required':''}. Runtime evidence: ${ci.runtimeEvidence}. Approval evidence: ${ci.approvalEvidence}.`,9);
         add(ci.disclaimer,8,false,0,4,'muted');
     }
     pageBreak();
     heading('2. Risk composition', 1);
-    add('Residual risk is not a single checklist total. The model separates what the agent is exposed to, how weak the controls are, and how much reliable evidence supports the answers.', 10);
+    add('The assessment separates exposure, declared control weakness, unresolved information and evidence confidence. Unknown answers are not scored as vulnerabilities.', 10);
     if (report.metrics) {
-        riskBar('Inherent exposure', report.metrics.inherentRisk, 'warning');
-        riskBar('Control weakness', report.metrics.controlGap, 'danger');
+        if (scoreAvailable) {
+            riskBar('Inherent exposure', report.metrics.inherentRisk, 'warning');
+            riskBar('Control weakness', report.metrics.controlGap, 'danger');
+        } else {
+            callout('Risk not determined', 'Material exposure or control information is missing. Complete the unresolved questions before interpreting a numerical risk score.', 'warning');
+        }
         riskBar('Evidence confidence', report.metrics.evidenceConfidence, 'accent');
+        riskBar('Assessment completeness', report.metrics.assessmentCompleteness ?? 100, 'accent');
     }
     heading('Decision interpretation', 2);
     add(report.methodology, 9);
@@ -154,9 +170,23 @@ export async function renderReportPdf(report) {
                 add(`Mapped guidance: ${path.frameworks.join(' | ')}`, 8, false, 10, 7, 'muted');
         }
     }
+    if (unresolved.length) {
+        heading('Information required before deployment decision', 1);
+        add(`${unresolved.length} material assessment question${unresolved.length === 1 ? '' : 's'} remain unresolved. These are information gaps, not discovered vulnerabilities.`, 10, true);
+        for (const item of unresolved) {
+            heading(`${item.id || 'Information'} | ${item.domain || 'Assessment context'}`, 3);
+            add(item.title, 10, true, 10, 2);
+            if (item.whyItMatters)
+                add(`Why it matters: ${item.whyItMatters}`, 9, false, 10, 3);
+            if (item.whatToConfirm)
+                add(`What to confirm: ${item.whatToConfirm}`, 9, true, 10, 3);
+            if (item.proof)
+                add(`Useful evidence: ${item.proof}`, 8, false, 10, 5, 'muted');
+        }
+    }
     heading('6. Finding register', 1);
     if (!report.findings.length)
-        add('No material weakness was identified from the supplied answers. Evidence verification is still required.');
+        add(unresolved.length ? 'No material control weakness was established from the answered questions. Unresolved information is listed separately and must not be interpreted as a vulnerability.' : 'No material weakness was identified from the supplied answers. Evidence verification is still required.');
     const register = report.findingRegister || report.findings;
     for (const f of register) {
         heading(`${f.id} | ${String(f.severity).toUpperCase()} | ${f.domain || ''}`, 3);
@@ -179,6 +209,8 @@ export async function renderReportPdf(report) {
     for (const c of report.controls || [])
         add(`${String(c.status).toUpperCase()} | ${c.domain || ''} | ${c.name} | Evidence: ${c.evidence || 'Not stated'}`, 9, c.status === 'action', 0, 4);
     heading('8. Prioritised remediation plan', 1);
+    if (!(report.recommendations || []).length)
+        add(unresolved.length ? 'Complete the missing information before creating remediation items. Remediation should address confirmed control weaknesses, not unanswered questions.' : 'No remediation item was generated from the supplied answers.');
     (report.recommendations || []).forEach((x, i) => {
         add(`${i + 1}. [${x.priority}] ${x.text}`, 9, true, 0, 2);
         if (x.frameworks?.length)
@@ -218,7 +250,7 @@ export async function renderReportPdf(report) {
     heading('12. Assessment responses and evidence', 1);
     for (const r of report.responses || []) {
         add(`${r.domain || ''} | ${r.title}`, 9, true, 0, 1);
-        add(`${r.answer} | Risk points: ${r.points}/10 | Evidence: ${r.evidenceLabel || 'Not stated'}`, 8, false, 12, 5);
+        add(`${r.answer} | Risk points: ${r.unknown || r.notApplicable ? 'not scored' : `${r.points}/10`} | Evidence: ${r.evidenceLabel || 'Not stated'}`, 8, false, 12, 5);
     }
     pageBreak();
     heading('13. Methodology, assumptions and boundaries', 1);
@@ -279,7 +311,8 @@ export async function renderReportPdf(report) {
                 const titleLines = wrap(line.title, 31).slice(0, 4);
                 titleLines.forEach((t, i) => commands.push(`BT /F2 22 Tf ${fill(palette.white)} 1 0 0 1 60 ${top - 78 - i * 28} Tm (${esc(t)}) Tj ET`));
                 commands.push(`BT /F1 10 Tf 0.72 0.82 0.77 rg 1 0 0 1 60 ${bottom + 48} Tm (${esc('Evidence-led review | Static inspection | Controlled adversarial testing')}) Tj ET`);
-                commands.push(`${fill(line.decision === 'DO NOT DEPLOY' ? palette.danger : String(line.decision).includes('MATERIAL') ? palette.warning : palette.accent)} 392 ${bottom + 30} 145 58 re f`);
+                const decisionTone = line.decision === 'DO NOT DEPLOY' ? palette.danger : String(line.decision).includes('MATERIAL') || String(line.decision).includes('HOLD') ? palette.warning : palette.accent;
+                commands.push(`${fill(decisionTone)} 392 ${bottom + 30} 145 58 re f`);
                 commands.push(`BT /F2 9 Tf ${fill(palette.white)} 1 0 0 1 405 ${bottom + 68} Tm (${esc('DEPLOYMENT DECISION')}) Tj ET`);
                 wrap(line.decision, 20).slice(0, 2).forEach((decisionLine, i) => commands.push(`BT /F2 10 Tf ${fill(palette.white)} 1 0 0 1 405 ${bottom + 50 - i * 13} Tm (${esc(decisionLine)}) Tj ET`));
                 continue;
