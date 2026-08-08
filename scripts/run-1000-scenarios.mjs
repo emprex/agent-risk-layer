@@ -21,33 +21,44 @@ for (let index = 0; index < 1000; index += 1) {
   const criticalPath = result.attackPaths.some((path) => path.severity === 'critical');
   const validScore = Number.isInteger(result.score) && result.score >= 0 && result.score <= 100;
   const safeDecision = !criticalPath || result.decision === 'DO NOT DEPLOY';
-  const orderedBand = result.score >= 75 ? result.riskBand === 'Critical'
-    : result.score >= 50 ? result.riskBand === 'High'
-    : result.score >= 25 ? result.riskBand === 'Moderate'
-    : result.riskBand === 'Low';
+  const orderedBand = result.scoreAvailable === false
+    ? result.riskBand === 'Undetermined'
+    : result.score >= 75 ? result.riskBand === 'Critical'
+      : result.score >= 50 ? result.riskBand === 'High'
+        : result.score >= 25 ? result.riskBand === 'Moderate'
+          : result.riskBand === 'Low';
   const findingIntegrity = result.findings.every((finding) =>
-    finding.id && finding.title && finding.recommendation &&
+    finding.id && finding.title && finding.recommendation && finding.verification &&
     ['critical','high','medium','low'].includes(finding.severity));
+  const unresolvedIntegrity = result.unresolvedItems.every((item) =>
+    item.id && item.title && item.status === 'information-required' && item.whatToConfirm && item.proof);
+  const unknownIsolation = result.responses
+    .filter((response) => response.unknown)
+    .every((response) => response.points === 0 && response.severity === null);
   const pathIntegrity = result.attackPaths.every((path) =>
     path.id && path.title && path.narrative && path.tags.length > 0);
   const recommendationIntegrity = result.findings.length === 0 || result.recommendations.length > 0;
-  const pass = validScore && safeDecision && orderedBand && findingIntegrity && pathIntegrity && recommendationIntegrity;
+  const pass = validScore && safeDecision && orderedBand && findingIntegrity && unresolvedIntegrity && unknownIsolation && pathIntegrity && recommendationIntegrity;
   rows.push({
     id: `S${String(index + 1).padStart(4, '0')}`,
     customer: `${sectors[index % sectors.length]} customer ${index + 1}`,
     agent: result.agentType,
     score: result.score,
+    scoreAvailable: result.scoreAvailable,
+    completeness: result.assessmentCompleteness,
+    unresolved: result.unresolvedItems.length,
     band: result.riskBand,
     decision: result.decision,
     findings: result.findings.length,
     attackPaths: result.attackPaths.length,
     criticalPath,
-    checks: { validScore, safeDecision, orderedBand, findingIntegrity, pathIntegrity, recommendationIntegrity },
+    checks: { validScore, safeDecision, orderedBand, findingIntegrity, unresolvedIntegrity, unknownIsolation, pathIntegrity, recommendationIntegrity },
     pass,
   });
 }
 
 const failures = rows.filter((row) => !row.pass);
+const scoredRows = rows.filter((row) => row.scoreAvailable !== false);
 const summary = {
   release,
   seed: '0x5a17c0de',
@@ -55,9 +66,10 @@ const summary = {
   scenarios: rows.length,
   passed: rows.length - failures.length,
   failed: failures.length,
+  incomplete: rows.filter((row) => row.scoreAvailable === false).length,
   unsafeDecisions: rows.filter((row) => !row.checks.safeDecision).length,
   criticalPathScenarios: rows.filter((row) => row.criticalPath).length,
-  averageScore: Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length),
+  averageScore: scoredRows.length ? Math.round(scoredRows.reduce((sum, row) => sum + row.score, 0) / scoredRows.length) : null,
 };
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -69,9 +81,10 @@ Generated: ${summary.generatedAt}
 - Scenarios: **${summary.scenarios}**
 - Passed: **${summary.passed}**
 - Failed: **${summary.failed}**
+- Incomplete/undetermined assessments: **${summary.incomplete}**
 - Critical-path scenarios: **${summary.criticalPathScenarios}**
 - Unsafe deployment decisions: **${summary.unsafeDecisions}**
-- Average score: **${summary.averageScore}/100**
+- Average score across scoreable assessments: **${summary.averageScore === null ? 'not applicable' : `${summary.averageScore}/100`}**
 - Deterministic seed: \`${summary.seed}\`
 
 ## Release gate
@@ -80,7 +93,7 @@ ${summary.failed === 0 ? '**PASS.** All deterministic safety and integrity invar
 
 ## What this proves
 
-The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, risk-band inconsistencies, malformed findings, empty remediation, or a deployment-permitting decision when a critical attack path existed.
+The packaged assessment engine handled 1,000 reproducible combinations without invalid scores, risk-band inconsistencies, malformed findings, malformed information gaps, unknown answers being scored as vulnerabilities, or a deployment-permitting decision when a critical attack path existed.
 
 ## Limits
 
