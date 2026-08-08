@@ -115,9 +115,11 @@ test('assessment continuation preserves history and limits raw-answer prefill to
   const assessmentJs = read('public/assessment.js');
   assert.match(server, /const canRevise = Boolean\(isOwner \|\| \(!row\.user_id && hasToken\)\)/);
   assert.match(server, /revisionSource/);
-  assert.match(server, /__source_assessment_id/);
+  assert.match(server, /delete answers\.__source_assessment_id/);
+  assert.match(server, /if \(sourceAssessment\) answers\.__source_assessment_id = sourceAssessment\.id/);
   assert.match(server, /You do not have permission to create an update from this assessment/);
   assert.match(resultJs, /Create updated assessment/);
+  assert.match(resultJs, /token && !isOwner/);
   assert.match(assessmentJs, /sourceAssessmentId/);
   assert.match(assessmentJs, /only unresolved questions need a new answer/i);
   assert.doesNotMatch(assessmentJs, /localStorage/);

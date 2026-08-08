@@ -376,6 +376,8 @@ const server = http.createServer(async (req, res) => {
                         throw Object.assign(new Error('You do not have permission to create an update from this assessment.'), { statusCode: 403 });
                 }
                 const answers = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? { ...body.answers } : {};
+                // Revision lineage is server-derived evidence; never trust a caller-supplied lineage marker.
+                delete answers.__source_assessment_id;
                 if (sourceAssessment) answers.__source_assessment_id = sourceAssessment.id;
                 const result = evaluateAssessment(answers, { agentType, sourceAssessmentId: sourceAssessment?.id || null });
                 const assessmentId = id('asm_');

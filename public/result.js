@@ -77,7 +77,8 @@ function deriveCompleteness(full, unresolvedCount) {
 function revisionHref() {
   if (!revisionSource) return '/assessment.html';
   const params = new URLSearchParams({ updateFrom: revisionSource.assessmentId });
-  if (token) params.set('token', token);
+  // Signed-in owners do not need the access token propagated to another URL.
+  if (token && !isOwner) params.set('token', token);
   return `/assessment.html?${params.toString()}`;
 }
 
