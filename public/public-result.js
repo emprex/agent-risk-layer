@@ -1,11 +1,33 @@
 import { api, escapeHtml, qs, riskClass } from './shared.js';
+
 const root = document.querySelector('#sharedRoot');
+
 async function init() {
   try {
     const { assessment } = await api(`/api/public/${encodeURIComponent(qs('token') || '')}`);
-    const color = assessment.score >= 75 ? 'var(--red)' : assessment.score >= 50 ? 'var(--orange)' : assessment.score >= 25 ? 'var(--yellow)' : 'var(--green)';
+    const scoreAvailable = assessment.riskBand !== 'Undetermined';
+    const findings = assessment.topFindings || [];
+    const controls = assessment.controls || [];
     root.className = '';
-    root.innerHTML = `<div class="result-grid"><aside class="panel result-score"><span class="eyebrow">Shared assessment</span><div class="score-ring ${riskClass(assessment.riskBand)}"><strong>${assessment.score}<small>/100</small></strong></div><div class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} risk</div><h2>${escapeHtml(assessment.name)}</h2><p class="muted">${escapeHtml(assessment.agentType)}</p><img alt="AgentRiskLayer assessment badge" src="/badge/${encodeURIComponent(assessment.shareToken)}.svg"><a class="button primary full" href="/assessment.html">Assess your own agent</a></aside><section><div class="panel"><h1 class="result-headline">${escapeHtml(assessment.headline)}</h1><p class="muted">${escapeHtml(assessment.methodology)}</p></div><div class="panel"><h2>Top findings</h2><div class="finding-list">${assessment.topFindings.map((f) => `<article class="finding"><div class="finding-head"><h4>${escapeHtml(f.title)}</h4><span class="severity ${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span></div><p>${escapeHtml(f.observed)}</p></article>`).join('')}</div></div><div class="panel"><h2>Control coverage</h2><div class="control-grid">${assessment.controls.map((c) => `<div class="control ${c.status}">${escapeHtml(c.name)}</div>`).join('')}</div></div></section></div>`;
-  } catch (error) { root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`; }
+    root.innerHTML = `<div class="result-grid">
+      <aside class="panel result-score">
+        <span class="eyebrow">Shared assessment</span>
+        <div class="score-ring ${scoreAvailable ? riskClass(assessment.riskBand) : ''}"><strong>${scoreAvailable ? `${assessment.score}<small>/100</small>` : '—'}</strong></div>
+        <div class="risk-pill ${scoreAvailable ? riskClass(assessment.riskBand) : ''}">${scoreAvailable ? `${escapeHtml(assessment.riskBand)} declared risk` : 'Assessment incomplete'}</div>
+        <h2>${escapeHtml(assessment.name)}</h2>
+        <p class="muted">${escapeHtml(assessment.agentType)}</p>
+        ${scoreAvailable ? `<img alt="AgentRiskLayer assessment badge" src="/badge/${encodeURIComponent(assessment.shareToken)}.svg">` : '<p class="microcopy">No risk score or badge is shown while material security information is unresolved.</p>'}
+        <a class="button primary full" href="/assessment.html">Assess your own agent</a>
+      </aside>
+      <section>
+        <div class="panel"><h1 class="result-headline">${escapeHtml(assessment.headline)}</h1><p class="muted">${escapeHtml(assessment.methodology)}</p></div>
+        <div class="panel"><h2>${findings.length ? 'Top declared findings' : 'Findings'}</h2><div class="finding-list">${findings.length ? findings.map((f) => `<article class="finding"><div class="finding-head"><h4>${escapeHtml(f.title)}</h4>${f.severity ? `<span class="severity ${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span>` : ''}</div><p>${escapeHtml(f.observed || 'See the assessment owner for details.')}</p></article>`).join('') : '<p>No declared control weakness is shown in this public summary. Missing information or evidence may still prevent a deployment decision.</p>'}</div></div>
+        <div class="panel"><h2>Control coverage</h2><div class="control-grid">${controls.map((c) => `<div class="control ${escapeHtml(c.status)}">${escapeHtml(c.name)}${c.status === 'unresolved' ? '<small>Information required</small>' : ''}</div>`).join('')}</div></div>
+      </section>
+    </div>`;
+  } catch (error) {
+    root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
+  }
 }
+
 init();
