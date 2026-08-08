@@ -7,6 +7,7 @@ let assessment;
 let questionnaire = [];
 let user;
 let isOwner = false;
+let revisionSource = null;
 
 async function init() {
   if (!id || !token) return fail('The assessment link is incomplete.');
@@ -18,6 +19,7 @@ async function init() {
     ]);
     assessment = assessmentPayload.assessment;
     isOwner = assessmentPayload.isOwner;
+    revisionSource = assessmentPayload.revisionSource || null;
     user = userPayload.user;
     questionnaire = questionnairePayload.questionnaire || [];
     render();
@@ -72,6 +74,14 @@ function deriveCompleteness(full, unresolvedCount) {
   return Math.max(0, Math.round(((total - unresolvedCount) / total) * 100));
 }
 
+function revisionHref() {
+  if (!revisionSource) return '/assessment.html';
+  const params = new URLSearchParams({ updateFrom: revisionSource.assessmentId });
+  // Signed-in owners do not need the access token propagated to another URL.
+  if (token && !isOwner) params.set('token', token);
+  return `/assessment.html?${params.toString()}`;
+}
+
 function render() {
   const full = assessment.result || {};
   const paid = assessment.paidTier !== 'free';
@@ -105,8 +115,8 @@ function render() {
       ${unresolvedCount ? `<section class="panel" id="informationNeeded">
         <div class="section-heading compact-heading"><div><span class="eyebrow">Information needed</span><h2>${unresolvedCount} security question${unresolvedCount === 1 ? '' : 's'} still need an answer</h2><p>These are unresolved assessment inputs, not discovered vulnerabilities. Confirm them with the system owner before relying on a deployment decision.</p></div></div>
         <div class="plain-finding-list">${unresolved.map(unresolvedHtml).join('')}</div>
-        ${!unresolvedState.exact ? '<p class="microcopy">The free result shows the unresolved control questions available in this summary plus the remaining context count. A new check can record the clarified answers without rewriting this historical result.</p>' : ''}
-        <a class="button ghost" href="/assessment.html">Run a new check with the clarified information</a>
+        ${!unresolvedState.exact ? '<p class="microcopy">The free result shows the unresolved control questions available in this summary plus the remaining context count.</p>' : ''}
+        ${revisionSource ? `<p class="microcopy">Create an updated assessment after you confirm the missing information. Your profile and known answers are prefilled, only unresolved questions need a new answer, and this historical result remains unchanged.</p><a class="button ghost" href="${revisionHref()}">Create updated assessment</a>` : '<a class="button ghost" href="/assessment.html">Run a new check with the clarified information</a>'}
       </section>` : ''}
 
       <section class="panel" id="priorityRisks">
@@ -124,7 +134,7 @@ function render() {
             <div class="metric-card"><span>Overall declared risk</span><strong>${scoreAvailable ? `${assessment.score}/100` : 'Not determined'}</strong></div>
             <div class="metric-card"><span>Exposure</span><strong>${metric(full.inherentRisk, full.inherentRisk === null ? '' : '/100')}</strong></div>
             <div class="metric-card"><span>Control gap</span><strong>${metric(full.controlGap, full.controlGap === null ? '' : '/100')}</strong></div>
-            <div class="metric-card"><span>Assessment completeness</span><strong>${completeness === null ? '—' : `${completeness}%`}</strong></div>
+            <div class="metric-card"><span>Security information completeness</span><strong>${completeness === null ? '—' : `${completeness}%`}</strong></div>
             <div class="metric-card"><span>Evidence confidence</span><strong>${metric(full.evidenceConfidence ?? 0, '%')}</strong></div>
           </div>
           <p class="microcopy">${escapeHtml(full.methodology || assessment.methodology || '')}</p>
@@ -142,7 +152,7 @@ function render() {
       <h2>${escapeHtml(assessment.name)}</h2>
       <p class="muted">${escapeHtml(assessment.agentType)}</p>
       ${full.systemDescription ? `<p>${escapeHtml(full.systemDescription)}</p>` : ''}
-      <div class="result-side-risk">${scoreAvailable ? `<span class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} declared risk</span><strong>${assessment.score}<small>/100</small></strong>` : '<span class="risk-pill">Assessment incomplete</span><strong>—</strong>'}</div>
+      <div class="result-side-risk">${scoreAvailable ? `<span class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} declared risk</span><strong>${assessment.score}<small>/100</small></strong>` : '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'}</div>
       <p class="side-score-explainer">${scoreAvailable ? 'The score prioritises declared risk. It is not a probability of breach and does not prove the agent is secure.' : 'Risk is not scored until enough exposure and control information is known. Missing information is kept separate from vulnerabilities.'}</p>
       ${paid ? `<a class="button primary full" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf?token=${encodeURIComponent(token)}">Download full PDF report</a>` : `<button class="button primary full" id="buyPro">Get reviewed assessment · £99</button>`}
       ${isOwner ? `<a class="button ghost full" href="/inspector.html?assessment=${encodeURIComponent(assessment.id)}">${full.inspection ? 'Run another code and configuration check' : 'Add code and configuration evidence'}</a><a class="button ghost full" href="/redteam.html?assessment=${encodeURIComponent(assessment.id)}">${full.redTeam ? 'Run another attack simulation' : 'Add controlled attack-test evidence'}</a>` : ''}

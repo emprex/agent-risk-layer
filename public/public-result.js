@@ -13,7 +13,7 @@ async function init() {
       <aside class="panel result-score">
         <span class="eyebrow">Shared assessment</span>
         <div class="score-ring ${scoreAvailable ? riskClass(assessment.riskBand) : ''}"><strong>${scoreAvailable ? `${assessment.score}<small>/100</small>` : '—'}</strong></div>
-        <div class="risk-pill ${scoreAvailable ? riskClass(assessment.riskBand) : ''}">${scoreAvailable ? `${escapeHtml(assessment.riskBand)} declared risk` : 'Assessment incomplete'}</div>
+        <div class="risk-pill ${scoreAvailable ? riskClass(assessment.riskBand) : ''}">${scoreAvailable ? `${escapeHtml(assessment.riskBand)} declared risk` : 'Security information incomplete'}</div>
         <h2>${escapeHtml(assessment.name)}</h2>
         <p class="muted">${escapeHtml(assessment.agentType)}</p>
         ${scoreAvailable ? `<img alt="AgentRiskLayer assessment badge" src="/badge/${encodeURIComponent(assessment.shareToken)}.svg">` : '<p class="microcopy">No risk score or badge is shown while material security information is unresolved.</p>'}

@@ -46,9 +46,14 @@ test('assessment presents one guided question at a time, captures unusual agents
   assert.match(html, /required for “Other”/);
   assert.match(html, /Do you have proof for this answer\?/);
   assert.doesNotMatch(html, /25 security controls/);
-  assert.match(js, /questionnaire\[stepIndex - 1\]/);
+  assert.match(js, /flowQuestions\[stepIndex - 1\]/);
   assert.match(js, /type === 'Other' && description\.length < 10/);
   assert.match(js, /payloadAnswers\.__system_description/);
+  assert.match(html, /revisionNotice/);
+  assert.match(js, /updateFrom/);
+  assert.match(js, /flowQuestions/);
+  assert.match(js, /previous assessment remains unchanged/i);
+  assert.doesNotMatch(js, /localStorage/);
   assert.match(js, /saved\?\.evidence \|\| 'customer_assertion'/);
   assert.match(js, /selected\.value === 'unknown' \? 'none'/);
   assert.doesNotMatch(js, /questionnaire\.map\(.*question-card/s);
@@ -82,7 +87,8 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /Who should own it/);
   assert.match(js, /How to prove it is fixed/);
   assert.match(js, /Not determined/);
-  assert.match(js, /Assessment completeness/);
+  assert.match(js, /Security information completeness/);
+  assert.match(js, /Create updated assessment/);
   assert.match(js, /Technical score and evidence details/);
   assert.match(js, /escapeHtml\(finding\.title\)/);
   assert.match(js, /escapeHtml\(finding\.observed\)/);
@@ -99,6 +105,24 @@ test('dashboard calculates one recommended next action and keeps other work seco
   assert.match(js, /dashboard-recommended-action/);
   assert.match(js, /Other security tasks/);
   assert.match(js, /This is a guide, not an automatic deployment approval/);
+  assert.match(js, /create an updated assessment with the clarified answers/);
+  assert.match(js, /Security information incomplete/);
+});
+
+test('assessment continuation preserves history and limits raw-answer prefill to authorised callers', () => {
+  const server = read('server.js');
+  const resultJs = read('public/result.js');
+  const assessmentJs = read('public/assessment.js');
+  assert.match(server, /const canRevise = Boolean\(isOwner \|\| \(!row\.user_id && hasToken\)\)/);
+  assert.match(server, /revisionSource/);
+  assert.match(server, /delete answers\.__source_assessment_id/);
+  assert.match(server, /if \(sourceAssessment\) answers\.__source_assessment_id = sourceAssessment\.id/);
+  assert.match(server, /You do not have permission to create an update from this assessment/);
+  assert.match(resultJs, /Create updated assessment/);
+  assert.match(resultJs, /token && !isOwner/);
+  assert.match(assessmentJs, /sourceAssessmentId/);
+  assert.match(assessmentJs, /only unresolved questions need a new answer/i);
+  assert.doesNotMatch(assessmentJs, /localStorage/);
 });
 
 test('control plane defaults to one human next step and preserves specialist controls on demand', () => {

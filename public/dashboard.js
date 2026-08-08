@@ -68,7 +68,7 @@ function todayActions(data) {
   let recommended;
   if (!assessments.length) recommended = { eyebrow: 'Recommended first step', title: 'Check one AI agent', text: 'Answer simple questions about access, data, actions and recovery. You will receive a clear decision and the first risks to address.', href: '/assessment.html', action: 'Start the free check', time: 'About 5–10 minutes' };
   else if (critical || (highest && Number(highest.score) >= 75)) recommended = { eyebrow: 'Urgent review', title: `Review ${highest.name}`, text: 'This is currently your highest recorded declared risk. Read the decision first, then assign the most important confirmed fix.', href: assessmentLink(highest), action: 'Review the result', time: 'Start with the first confirmed finding' };
-  else if (incomplete.length) recommended = { eyebrow: 'Information required', title: `Complete ${incomplete[0].name}`, text: 'This check is on hold because material security information is still unanswered. Open the result, confirm the missing context with the agent owner, then run a new check with the clarified answers.', href: assessmentLink(incomplete[0]), action: 'Review missing information', time: 'Unknowns are not vulnerabilities' };
+  else if (incomplete.length) recommended = { eyebrow: 'Information required', title: `Complete ${incomplete[0].name}`, text: 'This check is on hold because material security information is still unanswered. Open the result, confirm the missing context with the agent owner, then create an updated assessment with the clarified answers.', href: assessmentLink(incomplete[0]), action: 'Review missing information', time: 'Unknowns are not vulnerabilities' };
   else if (openFixes) recommended = { eyebrow: 'Work in progress', title: `Close ${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}`, text: 'Confirm the owner, attach implementation evidence and retest the same risk before marking it closed.', href: '/control-plane.html#remediation', action: 'Open required fixes', time: 'Evidence required before closure' };
   else if (!projects.length) recommended = { eyebrow: 'Next protection step', title: 'See live protection work', text: 'Run the safe built-in example before connecting code. It shows missing, changed and reused approvals being blocked.', href: '/control-plane.html', action: 'Run the safe example', time: 'About 30 seconds' };
   else recommended = { eyebrow: 'Keep control current', title: 'Review your latest agent decisions', text: 'Check what the runtime policy allowed or blocked and whether any new access or behaviour needs attention.', href: '/control-plane.html', action: 'Review live protection', time: 'No terminal required' };
@@ -97,7 +97,7 @@ function progressOverview(data) {
   const steps = [
     { label: 'Check the risk', complete: assessed, detail: assessed ? `${Number(data.stats.assessments || 0)} saved ${Number(data.stats.assessments || 0) === 1 ? 'check' : 'checks'}` : 'No agent checked yet', href: '/assessment.html' },
     reviewStep,
-    { label: 'Track and verify fixes', complete: assessed && incompleteCount === 0 && openFixes === 0, detail: incompleteCount ? 'Clarify the incomplete assessment before creating fixes' : openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
+    { label: 'Track and verify fixes', complete: assessed && incompleteCount === 0 && openFixes === 0, detail: incompleteCount ? 'Clarify the missing security information before creating fixes' : openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
     { label: 'Protect live actions', complete: protectedRequests > 0, detail: protectedRequests ? `${protectedRequests.toLocaleString('en-GB')} decisions this month` : 'No live decision recorded yet', href: '/control-plane.html' },
   ];
   const complete = steps.filter((step) => step.complete).length;
@@ -160,7 +160,7 @@ function assessmentHtml(assessment) {
         ? 'Review the latest evidence and check again after changes'
         : 'Add proof or a technical check when you need stronger assurance';
   const status = incomplete
-    ? '<span class="risk-pill">Assessment incomplete</span><strong>—</strong>'
+    ? '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'
     : `<span class="risk-pill ${riskClass(assessment.risk_band)}">${escapeHtml(assessment.risk_band)} declared risk</span><strong>${assessment.score}/100</strong>`;
   return `<article class="customer-assessment-row">
     <div class="assessment-status-block">${status}</div>
