@@ -24,17 +24,17 @@ export async function registerExternalCorpus({
   const licenseTextSha256 = sha256(licenseText);
   const importedAt = nowIso();
   await db.prepare(`INSERT INTO external_intelligence_corpora
-    (id,source_name,dataset_name,source_url,source_revision,license_spdx,license_text_sha256,
+    (id,source_name,dataset_name,source_url,source_revision,license_spdx,license_text,license_text_sha256,
      manifest_sha256,import_file_sha256,row_count,import_status,raw_content_retained,virustotal_customer_visible,usage_policy,notes,imported_at)
-    VALUES (?,?,?,?,?,?,?,?,?,0,'importing',0,0,'reference_and_benchmark',?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,0,'importing',0,0,'reference_and_benchmark',?,?)
     ON CONFLICT(id) DO UPDATE SET
       source_name=excluded.source_name,dataset_name=excluded.dataset_name,source_url=excluded.source_url,
-      source_revision=excluded.source_revision,license_spdx=excluded.license_spdx,
+      source_revision=excluded.source_revision,license_spdx=excluded.license_spdx,license_text=excluded.license_text,
       license_text_sha256=excluded.license_text_sha256,manifest_sha256=excluded.manifest_sha256,
       import_file_sha256=excluded.import_file_sha256,row_count=0,import_status='importing',raw_content_retained=0,virustotal_customer_visible=0,
       usage_policy='reference_and_benchmark',notes=excluded.notes,imported_at=excluded.imported_at`)
     .run(text(id, 120), text(sourceName, 160), text(datasetName, 200), text(sourceUrl, 500), text(sourceRevision, 80),
-      text(licenseSpdx, 32), licenseTextSha256, text(manifestSha256, 64), text(importFileSha256, 64), text(notes, 2000), importedAt);
+      text(licenseSpdx, 32), String(licenseText), licenseTextSha256, text(manifestSha256, 64), text(importFileSha256, 64), text(notes, 2000), importedAt);
   return { id: text(id, 120), licenseTextSha256, importedAt };
 }
 
