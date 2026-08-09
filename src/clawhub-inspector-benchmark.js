@@ -10,19 +10,26 @@ export const BENCHMARK_RELEVANT_RULES = new Set([
 ]);
 
 // Mappings are semantic comparison aids defined before the final holdout run.
-// They do not make the external corpus ground truth and they do not change Inspector rules.
+// An empty mapping is an explicit Inspector coverage gap, not permission to retrofit a rule after seeing holdout results.
+// These mappings do not make the external corpus ground truth and do not change Inspector rules.
 export const EXTERNAL_SIGNAL_TO_ARL_RULES = Object.freeze({
   'static:suspicious.dangerous_exec': ['ARL-MCP-001','ARL-AI-001','ARL-DEP-003'],
   'static:suspicious.env_credential_access': ['ARL-SEC-001','ARL-SEC-003','ARL-AI-004'],
   'static:suspicious.exposed_secret_literal': ['ARL-SEC-001','ARL-SEC-002'],
   'static:suspicious.dynamic_code_execution': ['ARL-AI-001','ARL-MCP-001'],
+  'static:suspicious.prompt_injection_instructions': [],
   'static:suspicious.install_untrusted_source': ['ARL-MCP-003','ARL-DEP-002','ARL-DEP-003'],
   'static:suspicious.destructive_delete_command': ['ARL-MCP-001','ARL-AI-001'],
-  'static:suspicious.potential_exfiltration': ['ARL-AI-004','ARL-MCP-002'],
+  'static:suspicious.potential_exfiltration': [],
   'static:suspicious.insecure_tls_verification': ['ARL-AI-003'],
   'static:suspicious.secret_argv_exposure': ['ARL-SEC-001','ARL-AI-004'],
+  'skillspector:MCP Least Privilege': ['ARL-MCP-002','ARL-AI-007'],
+  'skillspector:MCP Tool Poisoning': [],
+  'skillspector:Data Exfiltration': [],
   'skillspector:Dangerous Code Execution': ['ARL-MCP-001','ARL-AI-001'],
+  'skillspector:Rogue Agent': [],
   'skillspector:Supply Chain': ['ARL-MCP-003','ARL-DEP-002','ARL-DEP-003'],
+  'skillspector:Data Flow': [],
   'skillspector:Privilege Escalation': ['ARL-CTR-003','ARL-CTR-004','ARL-MCP-001'],
   'skillspector:Tool Misuse': ['ARL-MCP-001','ARL-AI-001','ARL-AI-007'],
   'skillspector:Excessive Agency': ['ARL-MCP-001','ARL-MCP-002','ARL-AI-007'],
@@ -50,11 +57,11 @@ export function mappedSignalsForRow(row = {}) {
   const signals = [];
   for (const code of Array.isArray(row.static_reason_codes) ? row.static_reason_codes : []) {
     const key = `static:${String(code || '').trim()}`;
-    if (EXTERNAL_SIGNAL_TO_ARL_RULES[key]) signals.push(key);
+    if (Object.hasOwn(EXTERNAL_SIGNAL_TO_ARL_RULES, key)) signals.push(key);
   }
   for (const category of Array.isArray(row.skillspector_issue_categories) ? row.skillspector_issue_categories : []) {
     const key = `skillspector:${String(category || '').trim()}`;
-    if (EXTERNAL_SIGNAL_TO_ARL_RULES[key]) signals.push(key);
+    if (Object.hasOwn(EXTERNAL_SIGNAL_TO_ARL_RULES, key)) signals.push(key);
   }
   return [...new Set(signals)].sort();
 }
@@ -93,8 +100,10 @@ export function summariseClawHubBenchmark(records = [], metadata = {}) {
   const valid = records.filter((record) => !record.error);
   const errors = records.length - valid.length;
   const mapped = new Map();
+  const arlRuleCounts = new Map();
   for (const record of valid) {
     const arlRuleIds = new Set(record.arlRuleIds || []);
+    for (const ruleId of arlRuleIds) arlRuleCounts.set(ruleId, (arlRuleCounts.get(ruleId) || 0) + 1);
     for (const signal of record.mappedSignals || []) {
       const current = mapped.get(signal) || { sourceRows: 0, arlMappedRuleObserved: 0 };
       current.sourceRows += 1;
@@ -103,11 +112,18 @@ export function summariseClawHubBenchmark(records = [], metadata = {}) {
       mapped.set(signal, current);
     }
   }
-  const mappedSignals = Object.fromEntries([...mapped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([signal, value]) => [signal, {
-    ...value,
-    concordance: ratio(value.arlMappedRuleObserved, value.sourceRows),
-    mappedArlRules: EXTERNAL_SIGNAL_TO_ARL_RULES[signal],
-  }]));
+  const mappedSignals = Object.fromEntries([...mapped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([signal, value]) => {
+    const mappedArlRules = EXTERNAL_SIGNAL_TO_ARL_RULES[signal] || [];
+    return [signal, {
+      ...value,
+      coverageStatus: mappedArlRules.length ? 'mapped_inspector_rule' : 'no_mapped_inspector_rule',
+      concordance: mappedArlRules.length ? ratio(value.arlMappedRuleObserved, value.sourceRows) : null,
+      mappedArlRules,
+    }];
+  }));
+  const explicitCoverageGaps = Object.entries(mappedSignals)
+    .filter(([, value]) => value.coverageStatus === 'no_mapped_inspector_rule' && value.sourceRows > 0)
+    .map(([signal, value]) => ({ signal, sourceRows: value.sourceRows }));
 
   return {
     schema: CLAWHUB_BENCHMARK_SCHEMA,
@@ -122,16 +138,19 @@ export function summariseClawHubBenchmark(records = [], metadata = {}) {
     rowsEvaluated: valid.length,
     scanErrors: errors,
     arlPositiveRows: valid.filter((record) => record.arlPositive).length,
+    arlRuleCounts: Object.fromEntries([...arlRuleCounts.entries()].sort(([a], [b]) => a.localeCompare(b))),
     externalComparison: {
       clawscan: pairMetrics(valid, 'clawscan'),
       static: pairMetrics(valid, 'static'),
       skillspector: pairMetrics(valid, 'skillspector'),
     },
     mappedSignalConcordance: mappedSignals,
+    explicitInspectorCoverageGaps: explicitCoverageGaps,
     limitations: [
       'The ClawHub corpus is a sanitized silver-standard research corpus; scanner positives are not human-verified ground truth.',
       'AgentRisk Inspector is a repository/configuration scanner. Reconstructing each ClawHub skill as a temporary artifact is a scope-limited comparison, not a full deployment assessment.',
       'Agreement/disagreement metrics measure signal concordance, not comparative product accuracy or superiority.',
+      'An explicit no_mapped_inspector_rule signal documents current Inspector scope; it is not proof that every row carrying the external signal is a missed vulnerability.',
       'VirusTotal-derived fields are intentionally excluded from this commercial benchmark workflow.',
       'Generic repository-hygiene findings are excluded so synthetic temporary directories do not create meaningless positives.',
     ],
