@@ -1,0 +1,294 @@
+{
+  "schema": "arl.clawhub-inspector-benchmark.v1",
+  "generatedAt": "2026-08-09T21:45:45.098Z",
+  "corpus": "OpenClaw/clawhub-security-signals",
+  "sourceRevision": "b78f0484811af3de35977b828b91d57f5c6491a2",
+  "sourceFileSha256": "63a787680a75bd44560fd5c49a9b597bd191bfba55c8a0f3af46d2a81f03da67",
+  "split": "validation",
+  "inspectorVersion": "4.1.0",
+  "inspectorPolicyVersion": "arl-inspector-policy-2026.10",
+  "rowsRequested": 10076,
+  "rowsEvaluated": 10076,
+  "scanErrors": 0,
+  "arlPositiveRows": 502,
+  "arlRuleCounts": {
+    "ARL-AI-001": 13,
+    "ARL-AI-003": 3,
+    "ARL-AI-004": 4,
+    "ARL-AI-005": 55,
+    "ARL-AI-006": 76,
+    "ARL-AI-007": 13,
+    "ARL-AI-008": 3,
+    "ARL-DEP-002": 48,
+    "ARL-INS-001": 120,
+    "ARL-INS-002": 119,
+    "ARL-INS-003": 5,
+    "ARL-INS-004": 22,
+    "ARL-INS-005": 117,
+    "ARL-MCP-001": 3,
+    "ARL-MCP-003": 12,
+    "ARL-SEC-002": 3,
+    "ARL-SEC-003": 2
+  },
+  "externalComparison": {
+    "clawscan": {
+      "bothPositive": 267,
+      "arlOnly": 235,
+      "externalOnly": 3553,
+      "bothNonPositive": 6021,
+      "jaccardPositive": 0.06584463625154131,
+      "arlDetectionRateOnExternalPositive": 0.06989528795811518,
+      "arlPositiveRateOnExternalNonPositive": 0.03756393861892583
+    },
+    "static": {
+      "bothPositive": 84,
+      "arlOnly": 418,
+      "externalOnly": 556,
+      "bothNonPositive": 9018,
+      "jaccardPositive": 0.07939508506616257,
+      "arlDetectionRateOnExternalPositive": 0.13125,
+      "arlPositiveRateOnExternalNonPositive": 0.044298431538787625
+    },
+    "skillspector": {
+      "bothPositive": 351,
+      "arlOnly": 151,
+      "externalOnly": 4521,
+      "bothNonPositive": 5053,
+      "jaccardPositive": 0.06987855863030061,
+      "arlDetectionRateOnExternalPositive": 0.07204433497536945,
+      "arlPositiveRateOnExternalNonPositive": 0.029016141429669486
+    }
+  },
+  "mappedSignalConcordance": {
+    "skillspector:Dangerous Code Execution": {
+      "sourceRows": 242,
+      "arlMappedRuleObserved": 4,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.01652892561983471,
+      "mappedArlRules": [
+        "ARL-MCP-001",
+        "ARL-AI-001"
+      ]
+    },
+    "skillspector:Data Exfiltration": {
+      "sourceRows": 347,
+      "arlMappedRuleObserved": 26,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.07492795389048991,
+      "mappedArlRules": [
+        "ARL-INS-002"
+      ]
+    },
+    "skillspector:Data Flow": {
+      "sourceRows": 146,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "no_mapped_inspector_rule",
+      "concordance": null,
+      "mappedArlRules": []
+    },
+    "skillspector:Excessive Agency": {
+      "sourceRows": 86,
+      "arlMappedRuleObserved": 4,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.046511627906976744,
+      "mappedArlRules": [
+        "ARL-MCP-001",
+        "ARL-MCP-002",
+        "ARL-AI-007",
+        "ARL-INS-004"
+      ]
+    },
+    "skillspector:MCP Least Privilege": {
+      "sourceRows": 1423,
+      "arlMappedRuleObserved": 7,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.004919184820801124,
+      "mappedArlRules": [
+        "ARL-MCP-002",
+        "ARL-AI-007"
+      ]
+    },
+    "skillspector:MCP Tool Poisoning": {
+      "sourceRows": 744,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "no_mapped_inspector_rule",
+      "concordance": null,
+      "mappedArlRules": []
+    },
+    "skillspector:Privilege Escalation": {
+      "sourceRows": 112,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0,
+      "mappedArlRules": [
+        "ARL-CTR-003",
+        "ARL-CTR-004",
+        "ARL-MCP-001",
+        "ARL-INS-003"
+      ]
+    },
+    "skillspector:Rogue Agent": {
+      "sourceRows": 226,
+      "arlMappedRuleObserved": 1,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.004424778761061947,
+      "mappedArlRules": [
+        "ARL-INS-001",
+        "ARL-INS-004"
+      ]
+    },
+    "skillspector:Supply Chain": {
+      "sourceRows": 220,
+      "arlMappedRuleObserved": 23,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.10454545454545454,
+      "mappedArlRules": [
+        "ARL-MCP-003",
+        "ARL-DEP-002",
+        "ARL-DEP-003"
+      ]
+    },
+    "skillspector:Tool Misuse": {
+      "sourceRows": 92,
+      "arlMappedRuleObserved": 2,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.021739130434782608,
+      "mappedArlRules": [
+        "ARL-MCP-001",
+        "ARL-AI-001",
+        "ARL-AI-007",
+        "ARL-INS-003",
+        "ARL-INS-004"
+      ]
+    },
+    "static:suspicious.dangerous_exec": {
+      "sourceRows": 184,
+      "arlMappedRuleObserved": 3,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.016304347826086956,
+      "mappedArlRules": [
+        "ARL-MCP-001",
+        "ARL-AI-001",
+        "ARL-DEP-003"
+      ]
+    },
+    "static:suspicious.destructive_delete_command": {
+      "sourceRows": 31,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0,
+      "mappedArlRules": [
+        "ARL-MCP-001",
+        "ARL-AI-001",
+        "ARL-INS-003"
+      ]
+    },
+    "static:suspicious.dynamic_code_execution": {
+      "sourceRows": 74,
+      "arlMappedRuleObserved": 3,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.04054054054054054,
+      "mappedArlRules": [
+        "ARL-AI-001",
+        "ARL-MCP-001",
+        "ARL-INS-003"
+      ]
+    },
+    "static:suspicious.env_credential_access": {
+      "sourceRows": 197,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0,
+      "mappedArlRules": [
+        "ARL-SEC-001",
+        "ARL-SEC-003",
+        "ARL-AI-004"
+      ]
+    },
+    "static:suspicious.exposed_secret_literal": {
+      "sourceRows": 200,
+      "arlMappedRuleObserved": 1,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.005,
+      "mappedArlRules": [
+        "ARL-SEC-001",
+        "ARL-SEC-002"
+      ]
+    },
+    "static:suspicious.insecure_tls_verification": {
+      "sourceRows": 31,
+      "arlMappedRuleObserved": 2,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.06451612903225806,
+      "mappedArlRules": [
+        "ARL-AI-003"
+      ]
+    },
+    "static:suspicious.install_untrusted_source": {
+      "sourceRows": 30,
+      "arlMappedRuleObserved": 1,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.03333333333333333,
+      "mappedArlRules": [
+        "ARL-MCP-003",
+        "ARL-DEP-002",
+        "ARL-DEP-003",
+        "ARL-INS-005"
+      ]
+    },
+    "static:suspicious.potential_exfiltration": {
+      "sourceRows": 33,
+      "arlMappedRuleObserved": 1,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.030303030303030304,
+      "mappedArlRules": [
+        "ARL-INS-002"
+      ]
+    },
+    "static:suspicious.prompt_injection_instructions": {
+      "sourceRows": 70,
+      "arlMappedRuleObserved": 20,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0.2857142857142857,
+      "mappedArlRules": [
+        "ARL-INS-001"
+      ]
+    },
+    "static:suspicious.secret_argv_exposure": {
+      "sourceRows": 17,
+      "arlMappedRuleObserved": 0,
+      "coverageStatus": "mapped_inspector_rule",
+      "concordance": 0,
+      "mappedArlRules": [
+        "ARL-SEC-001",
+        "ARL-AI-004"
+      ]
+    }
+  },
+  "explicitInspectorCoverageGaps": [
+    {
+      "signal": "skillspector:Data Flow",
+      "sourceRows": 146
+    },
+    {
+      "signal": "skillspector:MCP Tool Poisoning",
+      "sourceRows": 744
+    }
+  ],
+  "limitations": [
+    "The ClawHub corpus is a sanitized silver-standard research corpus; scanner positives are not human-verified ground truth.",
+    "AgentRisk Inspector is a repository/configuration scanner. Reconstructing each ClawHub skill as a temporary artifact is a scope-limited comparison, not a full deployment assessment.",
+    "Agreement/disagreement metrics measure signal concordance, not comparative product accuracy or superiority.",
+    "An explicit no_mapped_inspector_rule signal documents current Inspector scope; it is not proof that every row carrying the external signal is a missed vulnerability.",
+    "VirusTotal-derived fields are intentionally excluded from this commercial benchmark workflow.",
+    "Generic repository-hygiene findings are excluded so synthetic temporary directories do not create meaningless positives."
+  ],
+  "materialisation": {
+    "bundleFilesWritten": 8686,
+    "bundleFilesSkipped": 0,
+    "codeExecuted": false,
+    "networkProbing": false,
+    "virusTotalFieldsUsed": false
+  },
+  "claimBoundary": "This report measures concordance between AgentRisk Inspector findings and external silver-standard signals on sanitized reconstructed skill artifacts. It is not an accuracy, prevalence, certification or superiority claim."
+}
