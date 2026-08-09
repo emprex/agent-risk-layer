@@ -10,7 +10,7 @@ Boundary: this does not establish certification, accreditation, exhaustive cover
 
 Permitted claim before live testing: “AgentRiskLayer uses a version-bound design-partner protocol that preserves declarations separately from observed and test-generated evidence, links findings to reproduction evidence, and requires remediation and retest before a fixed-control claim is made.” Evidence: `docs/DESIGN_PARTNER_EVIDENCE_CASE_PROTOCOL.md`.
 
-Boundary: participation in a design-partartner assessment is not a customer relationship, endorsement, independent audit or proof of security. A questionnaire baseline is not a technical finding. No partner name, company, source excerpt, screenshot, result, quote or identifying technical detail may be published without explicit written permission for the exact publication scope. A remediation is not represented as successful until the original failure or a documented equivalent is retested against the remediated system version.
+Boundary: participation in a design-partner assessment is not a customer relationship, endorsement, independent audit or proof of security. A questionnaire baseline is not a technical finding. No partner name, company, source excerpt, screenshot, result, quote or identifying technical detail may be published without explicit written permission for the exact publication scope. A remediation is not represented as successful until the original failure or a documented equivalent is retested against the remediated system version.
 
 A public evidence case may be claimed only after all publication gates in the protocol are satisfied. Until then, design-partner work remains private assessment evidence.
 
