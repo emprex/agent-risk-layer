@@ -53,6 +53,30 @@ function renderMappings(entry) {
   const mappings = (entry.mappings || []).map((mapping) => `${mapping.framework} ${mapping.reference || mapping.frameworkReference || ''} — ${mapping.mappingLimit || mapping.mapping_limit || 'Informative mapping only.'}`);
   return mappings.length ? list(mappings) : '<p>No framework mappings are published for this entry.</p>';
 }
+async function loadExternalIntelligence() {
+  try {
+    const response = await fetch('/external-intelligence-clawhub-v1.json', { credentials: 'same-origin', cache: 'force-cache' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data?.schema !== 'arl.external-intelligence.public.v1' || !Array.isArray(data.signals)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+function renderExternalIntelligence(entry, intelligence) {
+  if (!intelligence) return '';
+  const signals = intelligence.signals
+    .filter((signal) => Array.isArray(signal.riskCategories) && signal.riskCategories.includes(entry.category))
+    .sort((a, b) => Number(b.rowCount || 0) - Number(a.rowCount || 0))
+    .slice(0, 6);
+  if (!signals.length) return '';
+  const signalRows = signals.map((signal) => {
+    const kind = signal.namespace === 'skillspector_category' ? 'SkillSpector advisory category' : 'Static-analysis reason code';
+    return `<li><strong>${escapeHtml(signal.value)}</strong> — ${Number(signal.rowCount || 0).toLocaleString()} published corpus rows <span class="muted">(${escapeHtml(kind)})</span></li>`;
+  }).join('');
+  return `<section class="panel risk-detail-section"><h2>External reference intelligence</h2><p>Related patterns occur in the frozen OpenClaw ClawHub Security Signals research corpus. This is context for what to investigate, not evidence that this control failed in your agent.</p><ul>${signalRows}</ul><p class="muted">Source: ${escapeHtml(intelligence.source)} · ${escapeHtml(intelligence.dataset)} · revision ${escapeHtml(String(intelligence.sourceRevision || '').slice(0, 12))} · ${escapeHtml(intelligence.license)} licence. Aggregate external signals never change AgentRiskLayer evidence state, finding severity or deployment decisions.</p><p class="risk-knowledge-disclaimer">${escapeHtml(intelligence.claimBoundary || '')} ${escapeHtml(intelligence.noEndorsement || '')}</p></section>`;
+}
 function renderFull(entry) {
   const check = entry.checks?.[0] || {};
   const solution = entry.solutions?.[0] || {};
@@ -73,7 +97,7 @@ function renderPublic(entry) {
   try {
     const id = qs('id');
     if (!id) throw new Error('Risk identifier is missing.');
-    const { entry, full } = await loadEntry(id);
+    const [{ entry, full }, intelligence] = await Promise.all([loadEntry(id), loadExternalIntelligence()]);
     const account = await api('/api/auth/me').catch(() => ({ user: null }));
     root.className = 'risk-detail-layout';
     const destination=`/control-intelligence.html?controlId=${encodeURIComponent(entry.id)}`;
@@ -82,7 +106,8 @@ function renderPublic(entry) {
     root.innerHTML = `<section class="page-heading risk-knowledge-hero"><span class="eyebrow">${escapeHtml(entry.category)}</span><h1>${escapeHtml(entry.title)}</h1><p>${escapeHtml(entry.claimsBoundary || '')}</p>${exportActions}</section>
       <section class="panel risk-detail-section"><h2>Problem</h2><p>${escapeHtml(entry.problem?.statement || '')}</p><h3>Why it matters</h3><p>${escapeHtml(entry.problem?.operational_impact || entry.problem?.credible_failure_or_attack || '')}</p><p><strong>${escapeHtml(severityPresentation(entry))}</strong></p><p class="muted">Catalogue controls do not carry a universal severity. AgentRiskLayer assigns severity after evaluating the control against a specific agent’s access, data, authority, exposure, safeguards and potential impact.</p><h3>Applicable architectures</h3>${list(entry.problem?.applicability)}<h3>Assets and trust boundaries</h3>${list(entry.problem?.affected_assets)}<p>${escapeHtml(entry.problem?.trust_boundary || '')}</p></section>
       ${full ? renderFull(entry) : renderPublic(entry)}
-      <section class="panel risk-detail-section"><h2>Reference alignment</h2>${renderMappings(entry)}<p class="risk-knowledge-disclaimer">Mappings are informative and do not prove compliance, certification or absence of risk.</p></section>`;
+      <section class="panel risk-detail-section"><h2>Reference alignment</h2>${renderMappings(entry)}<p class="risk-knowledge-disclaimer">Mappings are informative and do not prove compliance, certification or absence of risk.</p></section>
+      ${renderExternalIntelligence(entry, intelligence)}`;
   } catch (error) {
     root.className = 'error-box show';
     root.textContent = error.message;
