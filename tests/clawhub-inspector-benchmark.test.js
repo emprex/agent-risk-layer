@@ -52,6 +52,30 @@ test('summary reports concordance rather than accuracy', () => {
   assert.equal(report.externalComparison.static.bothPositive, 1);
   assert.equal(report.externalComparison.skillspector.externalOnly, 1);
   assert.equal(report.mappedSignalConcordance['static:suspicious.dynamic_code_execution'].concordance, 1);
+  assert.equal(report.arlRuleCounts['ARL-AI-001'], 1);
   assert.equal('accuracy' in report, false);
   assert.match(report.limitations.join(' '), /not comparative product accuracy/i);
+});
+
+test('known external categories without an Inspector rule are reported as scope gaps', () => {
+  const row = {
+    static_reason_codes: ['suspicious.prompt_injection_instructions'],
+    skillspector_issue_categories: ['MCP Tool Poisoning'],
+  };
+  assert.deepEqual(mappedSignalsForRow(row), [
+    'skillspector:MCP Tool Poisoning',
+    'static:suspicious.prompt_injection_instructions',
+  ]);
+  const report = summariseClawHubBenchmark([{
+    external: { clawscan: true, static: true, skillspector: true },
+    mappedSignals: mappedSignalsForRow(row),
+    arlRuleIds: [],
+    arlPositive: false,
+  }]);
+  assert.equal(report.mappedSignalConcordance['static:suspicious.prompt_injection_instructions'].coverageStatus, 'no_mapped_inspector_rule');
+  assert.equal(report.mappedSignalConcordance['static:suspicious.prompt_injection_instructions'].concordance, null);
+  assert.deepEqual(report.explicitInspectorCoverageGaps.map((item) => item.signal).sort(), [
+    'skillspector:MCP Tool Poisoning',
+    'static:suspicious.prompt_injection_instructions',
+  ]);
 });
