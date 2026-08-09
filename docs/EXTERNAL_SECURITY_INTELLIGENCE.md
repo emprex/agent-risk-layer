@@ -27,7 +27,7 @@ Upstream dataset: `OpenClaw/clawhub-security-signals`
 Licence: MIT  
 Pinned source revision: `69dcbd323c155312fb000ec89ea0b1efdf6a5757`
 
-The importer requires the exact upstream `LICENSE` file and stores its SHA-256. It does not invent or replace the upstream licence text.
+The importer requires the exact upstream `LICENSE` file, retains that exact licence notice with the imported corpus record, and stores its SHA-256 for integrity checking. It does not invent, paraphrase or replace the upstream licence text.
 
 AgentRiskLayer does not call the VirusTotal Public API for this feature. VirusTotal-derived per-record fields are discarded before persistence and are never exposed to customers. If commercial VirusTotal integration is desired later, it requires a separately reviewed commercial agreement and explicit owner approval.
 
