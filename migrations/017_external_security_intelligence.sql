@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS external_intelligence_corpora (
   source_url TEXT NOT NULL,
   source_revision TEXT NOT NULL CHECK (length(source_revision)=40),
   license_spdx TEXT NOT NULL,
+  license_text TEXT NOT NULL,
   license_text_sha256 TEXT NOT NULL CHECK (length(license_text_sha256)=64),
   manifest_sha256 TEXT NOT NULL CHECK (length(manifest_sha256)=64),
   import_file_sha256 TEXT NOT NULL CHECK (length(import_file_sha256)=64),
