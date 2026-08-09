@@ -5,9 +5,15 @@
   "source": "OpenClaw",
   "dataset": "OpenClaw/clawhub-security-signals",
   "sourceUrl": "https://huggingface.co/datasets/OpenClaw/clawhub-security-signals",
-  "sourceRevision": "69dcbd323c155312fb000ec89ea0b1efdf6a5757",
+  "sourceRevision": "b78f0484811af3de35977b828b91d57f5c6491a2",
   "license": "MIT",
   "snapshotRowsPublished": 67453,
+  "sourceFiles": [
+    { "name": "train.jsonl", "split": "train", "rows": 47262, "sha256": "9a216aedde1f6e89c61efaef18550ea58e854272310d5bad23dc2b94145ebb5b" },
+    { "name": "validation.jsonl", "split": "validation", "rows": 10076, "sha256": "63a787680a75bd44560fd5c49a9b597bd191bfba55c8a0f3af46d2a81f03da67" },
+    { "name": "test.jsonl", "split": "test", "rows": 6747, "sha256": "89ab5a8383e2d0795cf3ea1fb715523e7f87463f3bf00f4354f421833a658209" },
+    { "name": "eval_holdout.jsonl", "split": "eval_holdout", "rows": 3368, "sha256": "0c3d2f7d47ba03a235e0c6871acf60e9cad93ef082d78bacef19d065c2de8dad" }
+  ],
   "evidenceClass": "external_reference",
   "customerImpact": "none",
   "claimBoundary": "These are aggregate signals from an external silver-standard research corpus. They provide context for what to investigate and do not prove that a customer agent has a vulnerability, that a control passed, or that deployment is safe.",

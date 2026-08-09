@@ -2,7 +2,13 @@ import crypto from 'node:crypto';
 
 export const CLAWHUB_CORPUS_ID = 'openclaw-clawhub-security-signals-paper-v1';
 export const CLAWHUB_DATASET = 'OpenClaw/clawhub-security-signals';
-export const CLAWHUB_SOURCE_REVISION = '69dcbd323c155312fb000ec89ea0b1efdf6a5757';
+export const CLAWHUB_SOURCE_REVISION = 'b78f0484811af3de35977b828b91d57f5c6491a2';
+export const CLAWHUB_FROZEN_FILES = Object.freeze({
+  'train.jsonl': { split: 'train', rows: 47262, sha256: '9a216aedde1f6e89c61efaef18550ea58e854272310d5bad23dc2b94145ebb5b' },
+  'validation.jsonl': { split: 'validation', rows: 10076, sha256: '63a787680a75bd44560fd5c49a9b597bd191bfba55c8a0f3af46d2a81f03da67' },
+  'test.jsonl': { split: 'test', rows: 6747, sha256: '89ab5a8383e2d0795cf3ea1fb715523e7f87463f3bf00f4354f421833a658209' },
+  'eval_holdout.jsonl': { split: 'eval_holdout', rows: 3368, sha256: '0c3d2f7d47ba03a235e0c6871acf60e9cad93ef082d78bacef19d065c2de8dad' },
+});
 export const ALLOWED_SPLITS = new Set(['train', 'validation', 'test', 'eval_holdout']);
 export const CUSTOMER_VISIBLE_NAMESPACES = new Set(['clawscan_verdict', 'static_reason_code', 'skillspector_category']);
 
@@ -36,12 +42,34 @@ function sha256(value) {
   return crypto.createHash('sha256').update(String(value ?? '')).digest('hex');
 }
 
+
 export function assertMitLicenseText(licenseText) {
   const value = String(licenseText ?? '');
   const required = ['MIT License', 'Permission is hereby granted', 'THE SOFTWARE IS PROVIDED'];
   if (!required.every((phrase) => value.includes(phrase))) {
     throw new Error('The supplied upstream licence file does not look like the MIT licence declared by the dataset.');
   }
+  return true;
+}
+
+
+export function assertFrozenClawHubFiles(fileResults = []) {
+  const seen = new Set();
+  for (const result of fileResults) {
+    const name = text(result.name, 120);
+    const expected = CLAWHUB_FROZEN_FILES[name];
+    if (!expected) throw new Error(`Unexpected ClawHub source file: ${name || 'missing'}`);
+    if (seen.has(name)) throw new Error(`Duplicate ClawHub source file: ${name}`);
+    seen.add(name);
+    if (String(result.sha256 || '').toLowerCase() !== expected.sha256)
+      throw new Error(`${name} SHA-256 does not match the pinned frozen corpus.`);
+    if (Number(result.rows) !== expected.rows)
+      throw new Error(`${name} row count ${Number(result.rows) || 0} does not match pinned count ${expected.rows}.`);
+    if (result.split && result.split !== expected.split)
+      throw new Error(`${name} contains unexpected split ${result.split}; expected ${expected.split}.`);
+  }
+  const missing = Object.keys(CLAWHUB_FROZEN_FILES).filter((name) => !seen.has(name));
+  if (missing.length) throw new Error(`Missing pinned ClawHub source file(s): ${missing.join(', ')}`);
   return true;
 }
 

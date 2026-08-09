@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   aggregateClawHubRecord,
   assertBenchmarkPurposeAllowed,
+  assertFrozenClawHubFiles,
   assertMitLicenseText,
   containsForbiddenCustomerField,
   projectClawHubRecord,
@@ -89,7 +90,23 @@ test('public manifest and production schema exclude raw content and VirusTotal r
   const manifest = JSON.parse(await fs.readFile(path.resolve(import.meta.dirname, '..', 'public', 'external-intelligence-clawhub-v1.json'), 'utf8'));
   assert.equal(containsForbiddenCustomerField(manifest), false);
   assert.equal(manifest.evidenceClass, 'external_reference');
+  assert.equal(manifest.sourceRevision, 'b78f0484811af3de35977b828b91d57f5c6491a2');
+  assert.equal(manifest.sourceFiles.length, 4);
+  assert.equal(manifest.sourceFiles.reduce((sum, item) => sum + item.rows, 0), 67453);
   const migration = (await fs.readFile(path.resolve(import.meta.dirname, '..', 'migrations', '017_external_security_intelligence.sql'), 'utf8')).toLowerCase();
   assert.match(migration, /license_text text not null/);
   assert.doesNotMatch(migration, /virustotal_status|virustotal_malicious_count|skill_md_content|skill_bundle_content/);
+});
+
+test('frozen corpus import requires all four exact data-file hashes and row counts', () => {
+  const files = [
+    { name: 'train.jsonl', split: 'train', rows: 47262, sha256: '9a216aedde1f6e89c61efaef18550ea58e854272310d5bad23dc2b94145ebb5b' },
+    { name: 'validation.jsonl', split: 'validation', rows: 10076, sha256: '63a787680a75bd44560fd5c49a9b597bd191bfba55c8a0f3af46d2a81f03da67' },
+    { name: 'test.jsonl', split: 'test', rows: 6747, sha256: '89ab5a8383e2d0795cf3ea1fb715523e7f87463f3bf00f4354f421833a658209' },
+    { name: 'eval_holdout.jsonl', split: 'eval_holdout', rows: 3368, sha256: '0c3d2f7d47ba03a235e0c6871acf60e9cad93ef082d78bacef19d065c2de8dad' },
+  ];
+  assert.equal(assertFrozenClawHubFiles(files), true);
+  assert.throws(() => assertFrozenClawHubFiles(files.slice(0, 3)), /Missing pinned/);
+  assert.throws(() => assertFrozenClawHubFiles(files.map((file, index) => index ? file : { ...file, sha256: '0'.repeat(64) })), /SHA-256/);
+  assert.throws(() => assertFrozenClawHubFiles([...files, files[0]]), /Duplicate/);
 });

@@ -10,37 +10,35 @@ import {
   CLAWHUB_DATASET,
   CLAWHUB_SOURCE_REVISION,
   aggregateClawHubRecord,
+  assertFrozenClawHubFiles,
   assertMitLicenseText,
   assertPinnedClawHubRevision,
   projectClawHubRecord,
 } from '../src/external-security-intelligence-core.js';
 
 const MAX_JSONL_LINE_BYTES = 16 * 1024 * 1024;
-const EXPECTED_PAPER_ROWS = 67453;
 
 function usage(error) {
   if (error) console.error(`Error: ${error}`);
-  console.error(`Usage:\n  node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs \\\n    --file /private/path/train.jsonl [--file /private/path/validation.jsonl ...] \\\n    --license-file /private/path/LICENSE \\\n    --revision ${CLAWHUB_SOURCE_REVISION} \\\n    [--expected-rows ${EXPECTED_PAPER_ROWS}] [--dry-run]\n\nThe importer is offline-only. It never fetches Hugging Face or VirusTotal. Raw SKILL/bundle content and all VirusTotal-derived fields are discarded before persistence.`);
+  console.error(`Usage:\n  node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs \\\n    --file /private/path/train.jsonl [--file /private/path/validation.jsonl ...] \\\n    --license-file /private/path/LICENSE \\\n    --revision ${CLAWHUB_SOURCE_REVISION} \\\n    [--dry-run]\n\nThe importer is offline-only. It never fetches Hugging Face or VirusTotal. Raw SKILL/bundle content and all VirusTotal-derived fields are discarded before persistence.`);
   process.exit(error ? 2 : 0);
 }
 
 function parseArgs(argv) {
-  const options = { files: [], revision: '', licenseFile: '', expectedRows: EXPECTED_PAPER_ROWS, dryRun: false };
+  const options = { files: [], revision: '', licenseFile: '', dryRun: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--file') options.files.push(argv[++i]);
     else if (arg === '--license-file') options.licenseFile = argv[++i];
     else if (arg === '--revision') options.revision = argv[++i];
-    else if (arg === '--expected-rows') options.expectedRows = Number(argv[++i]);
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--help' || arg === '-h') usage();
     else usage(`Unknown argument ${arg}`);
   }
   if (!options.files.length) usage('At least one --file is required.');
   if (!options.licenseFile) usage('--license-file is required so the exact upstream licence is captured by digest.');
-  if (!Number.isInteger(options.expectedRows) || options.expectedRows <= 0) usage('--expected-rows must be a positive integer.');
   options.revision = assertPinnedClawHubRevision(options.revision);
-  if (options.revision !== CLAWHUB_SOURCE_REVISION) usage('This importer supports the pinned frozen paper snapshot only. Review code and third-party terms before changing revision.');
+  if (options.revision !== CLAWHUB_SOURCE_REVISION) usage('This importer supports the pinned frozen paper data release only. Review code, hashes and third-party terms before changing revision.');
   return options;
 }
 
@@ -63,6 +61,7 @@ async function scanFile(filePath, onRecord) {
   let rows = 0;
   let rawFieldsStripped = 0;
   let virusTotalFieldsStripped = 0;
+  let fileSplit = null;
   for await (const line of rl) {
     if (!line.trim()) continue;
     rows += 1;
@@ -73,6 +72,8 @@ async function scanFile(filePath, onRecord) {
     try { parsed = JSON.parse(line); }
     catch { throw new Error(`${path.basename(filePath)} row ${rows} is not valid JSON.`); }
     const projected = projectClawHubRecord(parsed);
+    if (!fileSplit) fileSplit = projected.split;
+    else if (fileSplit !== projected.split) throw new Error(`${path.basename(filePath)} contains multiple split labels.`);
     rawFieldsStripped += projected.strippedRawContentFieldCount;
     virusTotalFieldsStripped += projected.strippedVirusTotalFieldCount;
     await onRecord(parsed, projected);
@@ -82,6 +83,7 @@ async function scanFile(filePath, onRecord) {
     sha256: hash.digest('hex'),
     rawFieldsStripped,
     virusTotalFieldsStripped,
+    split: fileSplit,
   };
 }
 
@@ -114,18 +116,17 @@ try {
     });
     strippedRawFields += result.rawFieldsStripped;
     strippedVirusTotalFields += result.virusTotalFieldsStripped;
-    fileDigests.push({ name: path.basename(absolute), sha256: result.sha256 });
+    fileDigests.push({ name: path.basename(absolute), sha256: result.sha256, rows: result.rows, split: result.split });
   }
 
-  if (totalRows !== options.expectedRows) {
-    throw new Error(`Corpus row count ${totalRows} does not match expected frozen-snapshot count ${options.expectedRows}. Review the pinned files/revision before importing.`);
-  }
+  assertFrozenClawHubFiles(fileDigests);
 
   const importFileSha256 = combineFileDigests(fileDigests);
   const manifest = {
     corpusId: CLAWHUB_CORPUS_ID,
     dataset: CLAWHUB_DATASET,
     sourceRevision: options.revision,
+    sourceFiles: fileDigests.map(({ name, sha256, rows, split }) => ({ name, sha256, rows, split })).sort((a, b) => a.name.localeCompare(b.name)),
     licenseSpdx: 'MIT',
     licenseTextSha256,
     importFileSha256,
@@ -154,9 +155,11 @@ try {
     totalRows = 0;
     aggregateMap.clear();
     splitCounts.clear();
+    const persistedFileDigests = [];
     for (const file of options.files) {
       let batch = [];
-      await scanFile(path.resolve(file), async (raw, projected) => {
+      const absolute = path.resolve(file);
+      const result = await scanFile(absolute, async (raw, projected) => {
         totalRows += 1;
         splitCounts.set(projected.split, (splitCounts.get(projected.split) || 0) + 1);
         aggregateClawHubRecord(projected, aggregateMap);
@@ -167,7 +170,10 @@ try {
         }
       });
       if (batch.length) await persistence.upsertExternalIntelligenceBatch(CLAWHUB_CORPUS_ID, batch);
+      persistedFileDigests.push({ name: path.basename(absolute), sha256: result.sha256, rows: result.rows, split: result.split });
     }
+    // Detect any file change between the validation and persistence passes before the corpus can become active.
+    assertFrozenClawHubFiles(persistedFileDigests);
     await persistence.replaceExternalIntelligenceAggregates(CLAWHUB_CORPUS_ID, aggregateMap);
     await persistence.finaliseExternalCorpusImport(CLAWHUB_CORPUS_ID, totalRows);
   }
@@ -177,6 +183,7 @@ try {
     dryRun: options.dryRun,
     corpusId: CLAWHUB_CORPUS_ID,
     sourceRevision: options.revision,
+    sourceFiles: fileDigests.map(({ name, sha256, rows, split }) => ({ name, sha256, rows, split })).sort((a, b) => a.name.localeCompare(b.name)),
     rows: totalRows,
     splitCounts: Object.fromEntries([...splitCounts.entries()].sort()),
     licenseTextSha256,
