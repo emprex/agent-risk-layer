@@ -1,5 +1,5 @@
 {
-  "policyVersion": "arl-inspector-policy-2026.09",
+  "policyVersion": "arl-inspector-policy-2026.10",
   "rules": [
     {
       "id": "ARL-SEC-001",
@@ -263,6 +263,66 @@
       "frameworks": [
         "OWASP Agentic: Memory Poisoning",
         "OWASP Agent Security - Memory & Context Security"
+      ]
+    },
+    {
+      "id": "ARL-INS-001",
+      "title": "Agent instructions attempt to override trusted policy",
+      "severity": "high",
+      "category": "Agent instructions",
+      "summary": "A recognized agent instruction surface contains a directive that appears to bypass higher-trust instructions, safety controls, policy or approval boundaries.",
+      "remediation": "Remove instruction-level policy bypasses. Treat instruction files as untrusted configuration, preserve instruction hierarchy, and enforce authorization outside the model context.",
+      "frameworks": [
+        "OWASP Agentic: Tool Misuse",
+        "OWASP Agent Security - Tool Security"
+      ]
+    },
+    {
+      "id": "ARL-INS-002",
+      "title": "Agent instructions may disclose or transfer sensitive credentials",
+      "severity": "high",
+      "category": "Agent instructions",
+      "summary": "A recognized agent instruction surface directs sensitive credential or secret material toward an external transfer or disclosure action.",
+      "remediation": "Remove instructions that expose secrets. Keep credentials outside model-visible content and enforce destination, data-classification and egress controls before any transfer.",
+      "frameworks": [
+        "OWASP Agent Security - Data Protection & Privacy",
+        "OWASP Agent Security - Tool Security"
+      ]
+    },
+    {
+      "id": "ARL-INS-003",
+      "title": "Agent instructions contain dangerous or privileged execution",
+      "severity": "high",
+      "category": "Agent instructions",
+      "summary": "A recognized agent instruction surface directs destructive, privileged or dangerous execution that could materially alter a host, deployment or data store.",
+      "remediation": "Replace broad execution instructions with narrowly scoped deterministic actions, sandboxing, allowlists and transaction-bound approval for destructive or administrative operations.",
+      "frameworks": [
+        "OWASP Agentic: Tool Misuse",
+        "OWASP Agent Security - Human-in-the-Loop"
+      ]
+    },
+    {
+      "id": "ARL-INS-004",
+      "title": "Agent instructions bypass approval for high-impact actions",
+      "severity": "high",
+      "category": "Agent instructions",
+      "summary": "A recognized agent instruction surface directs a high-impact action to occur without user, operator or human approval or confirmation.",
+      "remediation": "Require explicit unexpired approval bound to the exact action, parameters, target and value before financial, destructive, administrative or externally visible actions.",
+      "frameworks": [
+        "OWASP Agent Security - Human-in-the-Loop",
+        "NIST AI RMF GOVERN 1"
+      ]
+    },
+    {
+      "id": "ARL-INS-005",
+      "title": "Agent instructions execute mutable or remote installation content",
+      "severity": "high",
+      "category": "Agent instructions",
+      "summary": "A recognized agent instruction surface directs execution or installation from a mutable or remote source without an integrity pin.",
+      "remediation": "Use reviewed immutable versions and hashes, verify provenance before execution, and perform installation only inside a restricted environment.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "SLSA Source"
       ]
     },
     {

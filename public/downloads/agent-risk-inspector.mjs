@@ -15,8 +15,8 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '4.0.0';
-export const POLICY_VERSION = 'arl-inspector-policy-2026.09';
+export const INSPECTOR_VERSION = '4.1.0';
+export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
 const DEFAULT_LIMITS = Object.freeze({
@@ -66,6 +66,11 @@ export const POLICY_CATALOG = Object.freeze([
   rule('ARL-AI-006','Structured output validation is not evident','medium','Output validation','Agent integration was detected without clear schema validation or structured-output enforcement.','Require typed structured outputs and independently validate every tool call, destination and business rule before execution.',['OWASP LLM05 Improper Output Handling','OWASP Agent Security - Output Validation']),
   rule('ARL-AI-007','Human approval control is not evident for execution-capable agent','high','Human oversight','An execution-capable agent was detected without a clear approval gate for sensitive operations.','Classify actions by impact and require unexpired, parameter-bound approval for financial, destructive, administrative and externally visible actions.',['OWASP Agent Security - Human-in-the-Loop','NIST AI RMF GOVERN 1']),
   rule('ARL-AI-008','Tenant or session isolation is not evident in persistent memory','high','Memory security','Persistent agent memory or vector storage was detected without a clear tenant or session scoping signal.','Scope every read and write by tenant and session, validate memory content, retain provenance, expire data, and test cross-user isolation.',['OWASP Agentic: Memory Poisoning','OWASP Agent Security - Memory & Context Security']),
+  rule('ARL-INS-001','Agent instructions attempt to override trusted policy','high','Agent instructions','A recognized agent instruction surface contains a directive that appears to bypass higher-trust instructions, safety controls, policy or approval boundaries.','Remove instruction-level policy bypasses. Treat instruction files as untrusted configuration, preserve instruction hierarchy, and enforce authorization outside the model context.',['OWASP Agentic: Tool Misuse','OWASP Agent Security - Tool Security']),
+  rule('ARL-INS-002','Agent instructions may disclose or transfer sensitive credentials','high','Agent instructions','A recognized agent instruction surface directs sensitive credential or secret material toward an external transfer or disclosure action.','Remove instructions that expose secrets. Keep credentials outside model-visible content and enforce destination, data-classification and egress controls before any transfer.',['OWASP Agent Security - Data Protection & Privacy','OWASP Agent Security - Tool Security']),
+  rule('ARL-INS-003','Agent instructions contain dangerous or privileged execution','high','Agent instructions','A recognized agent instruction surface directs destructive, privileged or dangerous execution that could materially alter a host, deployment or data store.','Replace broad execution instructions with narrowly scoped deterministic actions, sandboxing, allowlists and transaction-bound approval for destructive or administrative operations.',['OWASP Agentic: Tool Misuse','OWASP Agent Security - Human-in-the-Loop']),
+  rule('ARL-INS-004','Agent instructions bypass approval for high-impact actions','high','Agent instructions','A recognized agent instruction surface directs a high-impact action to occur without user, operator or human approval or confirmation.','Require explicit unexpired approval bound to the exact action, parameters, target and value before financial, destructive, administrative or externally visible actions.',['OWASP Agent Security - Human-in-the-Loop','NIST AI RMF GOVERN 1']),
+  rule('ARL-INS-005','Agent instructions execute mutable or remote installation content','high','Agent instructions','A recognized agent instruction surface directs execution or installation from a mutable or remote source without an integrity pin.','Use reviewed immutable versions and hashes, verify provenance before execution, and perform installation only inside a restricted environment.',['OWASP LLM03 Supply Chain','SLSA Source']),
   rule('ARL-DEP-001','Dependency lockfile is missing','medium','Supply chain','A package manifest exists without its ecosystem lockfile.','Commit and enforce a lockfile, use reproducible installs, and review automated dependency updates.',['SLSA Build','OWASP LLM03 Supply Chain']),
   rule('ARL-DEP-002','Dependency version is unbounded or mutable','medium','Supply chain','A direct dependency uses wildcard, latest, URL, branch, or another mutable version reference.','Pin direct dependencies to controlled versions and use a lockfile with integrity metadata.',['OWASP LLM03 Supply Chain','SLSA Source']),
   rule('ARL-DEP-003','Install script executes shell or remote content','high','Supply chain','A package lifecycle script executes a shell command or retrieves remote executable content.','Remove unnecessary lifecycle scripts; verify and pin unavoidable tooling and run installs in a restricted environment.',['OWASP LLM03 Supply Chain','SLSA Build']),
@@ -93,6 +98,7 @@ export async function scanRepository(rootInput='.', options={}) {
   runDockerChecks(context);
   runWorkflowChecks(context);
   runMcpChecks(context);
+  runInstructionChecks(context);
   runSourceChecks(context);
   runKubernetesChecks(context);
   runAssuranceChecks(context);
@@ -386,6 +392,151 @@ function runMcpChecks(ctx){
   }
 }
 
+
+function runInstructionChecks(ctx){
+  const ruleIds=[
+    'ARL-INS-001',
+    'ARL-INS-002',
+    'ARL-INS-003',
+    'ARL-INS-004',
+    'ARL-INS-005',
+  ];
+  for(const ruleId of ruleIds)ctx.checked(ruleId);
+
+  const instructionNames=new Set([
+    'skill.md',
+    'agents.md',
+    'claude.md',
+    'gemini.md',
+  ]);
+
+  const isInstructionFile=(file)=>{
+    const rel=ctx.relative(file).replaceAll('\\','/').toLowerCase();
+    const base=path.basename(rel);
+    return instructionNames.has(base)
+      || rel==='.github/copilot-instructions.md'
+      || rel.endsWith('/.github/copilot-instructions.md');
+  };
+
+  /*
+   * We are scanning agent-consumed instructions, but those files can also
+   * contain security documentation, examples and scanners describing attacks.
+   * A dangerous phrase is therefore not enough by itself.
+   *
+   * Suppression is local to the clause preceding the match. We deliberately
+   * do not suppress an entire file merely because it describes itself as a
+   * security tool.
+   */
+  const descriptivePrefix=/\b(?:detect(?:s|ed|ing|ion)?|scanner|scanning|scan(?:s|ned|ning)?|audit(?:s|ed|ing)?|linter|lint(?:s|ed|ing)?|review(?:s|ed|ing)?|detector|detection\s+pattern|security\s+rule|security\s+check|guardrail|protect(?:s|ed|ing|ion)?|prevent(?:s|ed|ing|ion)?|reject(?:s|ed|ing|ion)?|block(?:s|ed|ing)?|warn(?:s|ed|ing)?|flag(?:s|ged|ging)?|identify|identifies|identified|check(?:s|ed|ing)?\s+for|catch(?:es|ing)?|look\s+for|example|examples|e\.g\.|such\s+as)\b/i;
+
+  const defensivePrefix=/\b(?:do\s+not|don't|never|must\s+not|should\s+not|avoid(?:s|ed|ing)?)\b[^\n.!?;]{0,100}$/i;
+
+  function localPrefix(text,index){
+    const lower=Math.max(0,index-220);
+    const raw=text.slice(lower,index);
+
+    let boundary=-1;
+    for(const token of ['\n','.','!','?',';']){
+      boundary=Math.max(boundary,raw.lastIndexOf(token));
+    }
+
+    return raw.slice(boundary+1);
+  }
+
+  function suppressMatch(text,index){
+    const prefix=localPrefix(text,index);
+    return descriptivePrefix.test(prefix) || defensivePrefix.test(prefix);
+  }
+
+  const checks=[
+    {
+      id:'ARL-INS-001',
+      fact:'Instruction surface contains an actionable policy or instruction-hierarchy bypass signal',
+      patterns:[
+        /\b(?:ignore|disregard|override|bypass|disable)\b[^\n.!?;]{0,110}\b(?:previous|prior|system|developer|safety|security|policy|guardrails?|approval|confirmation|trusted instructions?)\b/gi,
+        /\b(?:system|developer|safety|security|policy|guardrails?|approval|confirmation)\b[^\n.!?;]{0,110}\b(?:ignore|disregard|override|bypass|disable)\b/gi,
+      ],
+    },
+
+    {
+      id:'ARL-INS-002',
+      fact:'Instruction surface directs sensitive credential disclosure to an external destination',
+      patterns:[
+        /\b(?:send|upload|post|forward|transmit|publish|leak|steal|exfiltrate(?:s|d|ing)?)\b[^\n.!?;]{0,140}(?:contents?\s+of\s+)?(?:the\s+)?(?:\.env\b|\bapi[_ -]?keys?\b|\baccess[_ -]?tokens?\b|\bauth[_ -]?tokens?\b|\bcredentials?\b|\bsecrets?\b|\bprivate[_ -]?keys?\b|\bssh[_ -]?keys?\b|\bseed phrase\b|\bpasswords?\b)[^\n.!?;]{0,140}(?:https?:\/\/|\bexternal\b|\bthird[- ]party\b|\buntrusted\b|\battacker\b|\bwebhook\b|\bremote (?:server|endpoint)\b)/gi,
+        /(?:\.env\b|\bapi[_ -]?keys?\b|\baccess[_ -]?tokens?\b|\bauth[_ -]?tokens?\b|\bcredentials?\b|\bsecrets?\b|\bprivate[_ -]?keys?\b|\bssh[_ -]?keys?\b|\bseed phrase\b|\bpasswords?\b)[^\n.!?;]{0,120}\b(?:send|upload|post|forward|transmit|publish|leak|exfiltrate(?:s|d|ing)?)\b[^\n.!?;]{0,120}(?:https?:\/\/|\bexternal\b|\bthird[- ]party\b|\buntrusted\b|\battacker\b|\bwebhook\b|\bremote (?:server|endpoint)\b)/gi,
+      ],
+    },
+
+    {
+      id:'ARL-INS-003',
+      fact:'Instruction surface directs dangerous, destructive or privileged execution',
+      patterns:[
+        /\b(?:run|execute|invoke|call|use)\b[^\n.!?;]{0,60}(?:sudo\s+)?rm\s+-rf\s+(?:\/|~|\$HOME)(?=\s|$|\/)/gi,
+        /\b(?:run|execute|invoke|call|use)\b[^\n.!?;]{0,90}(?:mkfs(?:\.\w+)?\b|dd\b[^\n.!?;]{0,50}\bof=\/dev\/|terraform\s+destroy\b|kubectl\s+delete\s+(?:namespace|clusterrole)\b|docker\b[^\n.!?;]{0,40}--privileged\b|sudo\s+(?:su\b|-i\b)|chmod\s+777\b|drop\s+(?:database|table)\b|truncate\s+(?:database|table)\b)/gi,
+        /\b(?:run|execute|invoke|call|use)\b[^\n.!?;]{0,60}(?:eval\s*\(|exec\s*\(|new\s+Function\b)/gi,
+        /```(?:bash|sh|shell)?[ \t]*\r?\n[ \t]*(?:sudo[ \t]+)?rm[ \t]+-rf[ \t]+(?:\/|~|\$HOME)(?=\s|$|\/)/gim,
+      ],
+    },
+
+    {
+      id:'ARL-INS-004',
+      fact:'Instruction surface directs a high-impact action without approval or confirmation',
+      patterns:[
+        /\b(?:delete|destroy|drop|truncate|refund|pay|purchase|transfer|send|post|publish|message|email|deploy|cancel|book|sign|approve|execute|run)\b[^\n.!?;]{0,120}\bwithout\s+(?:asking(?:\s+the\s+user)?|approval|confirmation|review|permission)\b/gi,
+        /\bwithout\s+(?:asking(?:\s+the\s+user)?|approval|confirmation|review|permission)\b[^\n.!?;]{0,120}\b(?:delete|destroy|drop|truncate|refund|pay|purchase|transfer|send|post|publish|message|email|deploy|cancel|book|sign|approve|execute|run)\b/gi,
+      ],
+    },
+
+    {
+      id:'ARL-INS-005',
+      fact:'Instruction surface directs mutable or remote installation content',
+      patterns:[
+        /\b(?:curl|wget)\b[^\n|;&]{0,220}\|\s*(?:sh|bash|zsh)\b/gi,
+        /\b(?:pip|pip3)\s+install\s+(?:git\+|https?:\/\/)\S+/gi,
+        /\b(?:npm|pnpm|yarn)\s+(?:add|install)\s+(?:git\+|git@|https?:\/\/)\S+/gi,
+      ],
+    },
+  ];
+
+  for(const file of ctx.inventory.files){
+    if(!isInstructionFile(file))continue;
+
+    const text=ctx.read(file);
+    if(text===null)continue;
+
+    ctx.technologies.add('Agent instruction surface');
+
+    for(const check of checks){
+      let evidence=null;
+
+      for(const pattern of check.patterns){
+        pattern.lastIndex=0;
+        let match;
+
+        while((match=pattern.exec(text))){
+          if(!suppressMatch(text,match.index)){
+            evidence=ev(
+              ctx,
+              file,
+              lineNumber(text,match.index),
+              check.fact,
+            );
+            break;
+          }
+
+          if(pattern.lastIndex===match.index)pattern.lastIndex++;
+        }
+
+        if(evidence)break;
+      }
+
+      if(evidence){
+        ctx.add(check.id,[evidence],{confidence:'medium'});
+      }
+    }
+  }
+}
+
 function runSourceChecks(ctx){
   ctx.checked('ARL-AI-001');ctx.checked('ARL-AI-002');ctx.checked('ARL-AI-003');ctx.checked('ARL-AI-004');ctx.checked('ARL-AI-005');ctx.checked('ARL-AI-006');ctx.checked('ARL-AI-007');ctx.checked('ARL-AI-008');
   let hasAi=false,hasLimits=false,hasSchema=false,hasApproval=false,hasMemory=false,hasTenantScope=false;
@@ -518,6 +669,13 @@ function isMutableVersion(version){return /^(?:\*|latest|next|main|master|worksp
 function wildcardCorsSignals(text){const regex=/(?:cors\s*\(\s*\{[\s\S]{0,180}origin\s*:\s*['"]\*['"]|setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]|header\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"])/ig;const signals=[];let match;while((match=regex.exec(text))){signals.push({index:match.index});if(regex.lastIndex===match.index)regex.lastIndex++;}return signals;}
 function isTestOrExamplePath(relative){return /(^|\/)(?:test|tests|spec|__tests__|fixtures?|examples?|samples?)(\/|$)|(?:\.test|\.spec)\.[^/]+$/i.test(String(relative));}
 function isTextCandidate(file){const base=path.basename(file).toLowerCase();return TEXT_EXTENSIONS.has(path.extname(file).toLowerCase())||base==='dockerfile'||base.startsWith('.env')||base.endsWith('.lock');}
+function isAgentInstructionCandidate(file,ctx){
+  const relative=ctx.relative(file).toLowerCase();
+  const basename=path.basename(relative);
+  if(new Set(['skill.md','agents.md','claude.md','gemini.md']).has(basename))return true;
+  if(relative==='.github/copilot-instructions.md')return true;
+  return false;
+}
 function isSourceCandidate(file){return /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|php|sh)$/i.test(file);}
 
 export async function uploadBundle(bundle,{baseUrl,token}){
