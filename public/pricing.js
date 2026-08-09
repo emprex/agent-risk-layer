@@ -1,4 +1,5 @@
 import { api, escapeHtml, money, setBusy, showError } from './shared.js';
+import { resolvePricingMode } from './pricing-mode.js';
 
 const entitlements = {
   developer_monthly: ['3 security projects', '50,000 Guard decisions/month', '30-day runtime evidence retention', '5 active keys per project', '10 authorised red-team campaigns/30 days'],
@@ -11,21 +12,35 @@ const summaries = {
   agency_monthly: 'For a service provider managing security work across customer projects.',
 };
 const errorBox = document.querySelector('#pricingError');
+let pricingMode = { mode: 'unknown', allowCheckout: false, showDemoNotice: false, message: '' };
 
 init();
 
 async function init() {
   try {
     const cfg = await api('/api/config');
+    pricingMode = resolvePricingMode(cfg);
     const demoNotice = document.querySelector('#demoNotice');
-    if (cfg.demoMode) {
-      demoNotice.textContent = 'Demo mode is active. Subscription checkout is simulated and can be cancelled from the dashboard.';
+    if (pricingMode.showDemoNotice) {
+      demoNotice.textContent = pricingMode.message;
       demoNotice.hidden = false;
+    } else {
+      demoNotice.textContent = '';
+      demoNotice.hidden = true;
     }
     const cards = [communityCard(), assessmentCard(cfg.prices.pro_report), ...['developer_monthly', 'team_monthly', 'agency_monthly'].map((key) => recurringCard(key, cfg.prices[key])), enterpriseCard()];
     const grid = document.querySelector('#pricingGrid');
     grid.innerHTML = cards.join('');
     grid.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', startCheckout));
+    if (!pricingMode.allowCheckout) {
+      grid.querySelectorAll('[data-checkout]').forEach((button) => {
+        button.disabled = true;
+        button.setAttribute('aria-disabled', 'true');
+        button.dataset.original = button.textContent;
+        button.textContent = 'Checkout temporarily unavailable';
+      });
+      showError(errorBox, pricingMode.message);
+    }
   } catch (error) { showError(errorBox, error.message); }
 }
 
@@ -75,6 +90,11 @@ function enterpriseCard() {
 
 async function startCheckout(event) {
   const button = event.currentTarget;
+  if (!pricingMode.allowCheckout) {
+    showError(errorBox, pricingMode.message || 'Checkout is temporarily unavailable.');
+    errorBox.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
   setBusy(button, true, 'Opening Stripe…');
   try {
     const { user } = await api('/api/auth/me');
