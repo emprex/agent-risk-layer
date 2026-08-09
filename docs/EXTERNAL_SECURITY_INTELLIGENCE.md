@@ -25,9 +25,11 @@ Customer evidence remains project-bound evidence collected through AgentRiskLaye
 
 Upstream dataset: `OpenClaw/clawhub-security-signals`  
 Licence: MIT  
-Pinned source revision: `69dcbd323c155312fb000ec89ea0b1efdf6a5757`
+Pinned source revision: `b78f0484811af3de35977b828b91d57f5c6491a2`
 
 The importer requires the exact upstream `LICENSE` file, retains that exact licence notice with the imported corpus record, and stores its SHA-256 for integrity checking. It does not invent, paraphrase or replace the upstream licence text.
+
+The importer also pins the four frozen JSONL source files by basename, deterministic split, row count and SHA-256. A missing, duplicate, substituted, truncated or changed source file fails closed before the corpus can become active.
 
 AgentRiskLayer does not call the VirusTotal Public API for this feature. VirusTotal-derived per-record fields are discarded before persistence and are never exposed to customers. If commercial VirusTotal integration is desired later, it requires a separately reviewed commercial agreement and explicit owner approval.
 
@@ -46,7 +48,7 @@ All corpus rows are untrusted data. The importer:
 7. strips every top-level `virustotal_*` field;
 8. stores only a SHA-256 of `skill_slug`, not the public slug itself;
 9. validates the source record digest, split and ClawScan verdict;
-10. fails closed on malformed records or an unexpected frozen-snapshot row count.
+10. validates every frozen source filename, row count and SHA-256 and rechecks them before the import is marked complete.
 
 Raw corpus files belong outside Git, outside `public/`, and outside application backups unless a separate retention decision explicitly includes them.
 
@@ -74,13 +76,13 @@ node scripts/import-clawhub-security-signals.mjs \
   --file /private/clawhub/test.jsonl \
   --file /private/clawhub/eval_holdout.jsonl \
   --license-file /private/clawhub/LICENSE \
-  --revision 69dcbd323c155312fb000ec89ea0b1efdf6a5757 \
+  --revision b78f0484811af3de35977b828b91d57f5c6491a2 \
   --dry-run
 ```
 
-After the dry run reports the expected frozen row count, rerun with the configured PostgreSQL environment and without `--dry-run`.
+After the dry run reports the pinned files and expected split counts, rerun with the configured PostgreSQL environment and without `--dry-run`.
 
-The import is marked `complete` only after aggregate signals are rebuilt and the total row count is recorded. Failed imports remain marked `failed`.
+The import is marked `complete` only after the exact source files are rechecked, aggregate signals are rebuilt and the total row count is recorded. Failed imports remain marked `failed` and do not become active reference data.
 
 ## Website behaviour
 
