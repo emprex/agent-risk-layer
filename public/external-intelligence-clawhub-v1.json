@@ -1,0 +1,49 @@
+{
+  "schema": "arl.external-intelligence.public.v1",
+  "id": "openclaw-clawhub-security-signals-paper-v1",
+  "name": "ClawHub Security Signals — external reference corpus",
+  "source": "OpenClaw",
+  "dataset": "OpenClaw/clawhub-security-signals",
+  "sourceUrl": "https://huggingface.co/datasets/OpenClaw/clawhub-security-signals",
+  "sourceRevision": "69dcbd323c155312fb000ec89ea0b1efdf6a5757",
+  "license": "MIT",
+  "snapshotRowsPublished": 67453,
+  "evidenceClass": "external_reference",
+  "customerImpact": "none",
+  "claimBoundary": "These are aggregate signals from an external silver-standard research corpus. They provide context for what to investigate and do not prove that a customer agent has a vulnerability, that a control passed, or that deployment is safe.",
+  "noEndorsement": "OpenClaw, NVIDIA and other upstream scanner providers do not sponsor, certify or endorse AgentRiskLayer.",
+  "excludedFromCustomerSurface": [
+    "raw SKILL.md content",
+    "raw bundled-file content",
+    "per-record VirusTotal-derived fields"
+  ],
+  "splitPolicy": {
+    "train": 47262,
+    "validation": 10076,
+    "test": 6747,
+    "eval_holdout": 3368,
+    "evalHoldoutRule": "Reserved for final evaluation; not used for rule development, tuning or threshold selection."
+  },
+  "signals": [
+    { "namespace": "skillspector_category", "value": "MCP Least Privilege", "rowCount": 9641, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "skillspector_category", "value": "MCP Tool Poisoning", "rowCount": 5084, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "skillspector_category", "value": "Data Exfiltration", "rowCount": 2192, "riskCategories": ["Data, privacy, retrieval and memory"] },
+    { "namespace": "skillspector_category", "value": "Dangerous Code Execution", "rowCount": 1629, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "skillspector_category", "value": "Rogue Agent", "rowCount": 1428, "riskCategories": ["Governance and scope"] },
+    { "namespace": "skillspector_category", "value": "Supply Chain", "rowCount": 1336, "riskCategories": ["Model and software supply chain"] },
+    { "namespace": "skillspector_category", "value": "Data Flow", "rowCount": 976, "riskCategories": ["Data, privacy, retrieval and memory"] },
+    { "namespace": "skillspector_category", "value": "Privilege Escalation", "rowCount": 792, "riskCategories": ["Identity, access and tenant isolation"] },
+    { "namespace": "skillspector_category", "value": "Tool Misuse", "rowCount": 647, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "skillspector_category", "value": "Excessive Agency", "rowCount": 511, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "static_reason_code", "value": "suspicious.dangerous_exec", "rowCount": 1428, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "static_reason_code", "value": "suspicious.env_credential_access", "rowCount": 1298, "riskCategories": ["Identity, access and tenant isolation"] },
+    { "namespace": "static_reason_code", "value": "suspicious.exposed_secret_literal", "rowCount": 1219, "riskCategories": ["Identity, access and tenant isolation"] },
+    { "namespace": "static_reason_code", "value": "suspicious.dynamic_code_execution", "rowCount": 451, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "static_reason_code", "value": "suspicious.prompt_injection_instructions", "rowCount": 433, "riskCategories": ["Prompt, input and goal integrity"] },
+    { "namespace": "static_reason_code", "value": "suspicious.install_untrusted_source", "rowCount": 250, "riskCategories": ["Model and software supply chain"] },
+    { "namespace": "static_reason_code", "value": "suspicious.destructive_delete_command", "rowCount": 201, "riskCategories": ["Tools, MCP and agent authority"] },
+    { "namespace": "static_reason_code", "value": "suspicious.potential_exfiltration", "rowCount": 181, "riskCategories": ["Data, privacy, retrieval and memory"] },
+    { "namespace": "static_reason_code", "value": "suspicious.insecure_tls_verification", "rowCount": 166, "riskCategories": ["Model and software supply chain"] },
+    { "namespace": "static_reason_code", "value": "suspicious.secret_argv_exposure", "rowCount": 121, "riskCategories": ["Identity, access and tenant isolation"] }
+  ]
+}
