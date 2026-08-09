@@ -68,12 +68,16 @@ test('demo notices are not pre-rendered in crawlable HTML', () => {
     const html = read(relative);
     assert.doesNotMatch(html, /id="demoNotice"[^>]*>[^<]+<\/div>/);
   }
-  for (const relative of ['public/pricing.js', 'public/assessment.js']) {
-    const script = read(relative);
-    assert.match(script, /if \(cfg\.demoMode\)/);
-    assert.match(script, /demoNotice\.textContent/);
-    assert.match(script, /demoNotice\.hidden = false/);
-  }
+  const pricing = read('public/pricing.js');
+  assert.match(pricing, /pricingMode = resolvePricingMode\(cfg\)/);
+  assert.match(pricing, /if \(pricingMode\.showDemoNotice\)/);
+  assert.match(pricing, /demoNotice\.textContent/);
+  assert.match(pricing, /demoNotice\.hidden = false/);
+
+  const assessment = read('public/assessment.js');
+  assert.match(assessment, /if \(cfg\.demoMode\)/);
+  assert.match(assessment, /demoNotice\.textContent/);
+  assert.match(assessment, /demoNotice\.hidden = false/);
 });
 
 test('search and social images are present as local crawlable assets', () => {
