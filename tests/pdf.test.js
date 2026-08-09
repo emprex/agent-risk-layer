@@ -20,26 +20,26 @@ test('sample Professional PDF includes metadata, section bookmarks and bounded p
 test('report cover describes only evidence actually attached', () => {
   assert.equal(
     reportCoverEvidenceLine({}),
-    'Structured self-assessment | Declared evidence | No technical testing attached',
+    'Structured self-assessment | Declared evidence | No technical testing',
   );
   assert.equal(
     reportCoverEvidenceLine({ inspection: {} }),
-    'Evidence-led review | Local static inspection | No adversarial test attached',
+    'Evidence-led review | Local inspection | No adversarial test attached',
   );
   assert.equal(
     reportCoverEvidenceLine({ redTeam: { campaign: { target: { mode: 'staging-adapter' } } } }),
-    'Evidence-led review | No static inspection | Controlled adversarial testing',
+    'Evidence-led review | No local inspection | Controlled adversarial testing',
   );
   assert.equal(
     reportCoverEvidenceLine({ inspection: {}, redTeam: { campaign: { target: { mode: 'staging-adapter' } } } }),
-    'Evidence-led review | Local static inspection | Controlled adversarial testing',
+    'Evidence-led review | Local inspection | Controlled adversarial testing',
   );
   assert.equal(
     reportCoverEvidenceLine({ redTeam: { campaign: { target: { mode: 'simulator' } } } }),
-    'Structured self-assessment | Runner simulation | No assessed-system testing',
+    'Structured self-assessment | Runner simulation | No system testing',
   );
   assert.equal(
     reportCoverEvidenceLine({ inspection: {}, redTeam: { campaign: { target: { mode: 'simulator' } } } }),
-    'Evidence-led review | Local static inspection | Runner simulation',
+    'Evidence-led review | Local inspection | Runner simulation',
   );
 });

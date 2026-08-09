@@ -24,16 +24,16 @@ export function reportCoverEvidenceLine(report = {}) {
     const hasTargetRedTeam = report.redTeam?.campaign?.target?.mode === 'staging-adapter';
     const hasRunnerSimulation = hasRedTeam && !hasTargetRedTeam;
     if (hasInspection && hasTargetRedTeam)
-        return 'Evidence-led review | Local static inspection | Controlled adversarial testing';
+        return 'Evidence-led review | Local inspection | Controlled adversarial testing';
     if (hasInspection && hasRunnerSimulation)
-        return 'Evidence-led review | Local static inspection | Runner simulation';
+        return 'Evidence-led review | Local inspection | Runner simulation';
     if (hasInspection)
-        return 'Evidence-led review | Local static inspection | No adversarial test attached';
+        return 'Evidence-led review | Local inspection | No adversarial test attached';
     if (hasTargetRedTeam)
-        return 'Evidence-led review | No static inspection | Controlled adversarial testing';
+        return 'Evidence-led review | No local inspection | Controlled adversarial testing';
     if (hasRunnerSimulation)
-        return 'Structured self-assessment | Runner simulation | No assessed-system testing';
-    return 'Structured self-assessment | Declared evidence | No technical testing attached';
+        return 'Structured self-assessment | Runner simulation | No system testing';
+    return 'Structured self-assessment | Declared evidence | No technical testing';
 }
 
 export async function renderReportPdf(report) {
