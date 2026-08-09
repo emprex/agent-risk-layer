@@ -82,3 +82,14 @@ test('upstream licence evidence must look like the declared MIT licence', () => 
   assert.equal(assertMitLicenseText('MIT License\nPermission is hereby granted\nTHE SOFTWARE IS PROVIDED'), true);
   assert.throws(() => assertMitLicenseText('proprietary'), /does not look like the MIT licence/);
 });
+
+test('public manifest and production schema exclude raw content and VirusTotal record fields', async () => {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const manifest = JSON.parse(await fs.readFile(path.resolve(import.meta.dirname, '..', 'public', 'external-intelligence-clawhub-v1.json'), 'utf8'));
+  assert.equal(containsForbiddenCustomerField(manifest), false);
+  assert.equal(manifest.evidenceClass, 'external_reference');
+  const migration = (await fs.readFile(path.resolve(import.meta.dirname, '..', 'migrations', '017_external_security_intelligence.sql'), 'utf8')).toLowerCase();
+  assert.match(migration, /license_text text not null/);
+  assert.doesNotMatch(migration, /virustotal_status|virustotal_malicious_count|skill_md_content|skill_bundle_content/);
+});
