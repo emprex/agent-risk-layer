@@ -20,7 +20,7 @@ This register records external datasets used by AgentRiskLayer. It is an operati
 | Customer evidence status | `external_reference` only |
 | Can change deployment decision | No |
 | Upstream endorsement claimed | No |
-| Licence evidence | Exact upstream LICENSE text supplied at import; SHA-256 stored in `external_intelligence_corpora.license_text_sha256` |
+| Licence evidence | Exact upstream LICENSE text supplied at import, retained in `external_intelligence_corpora.license_text`, with SHA-256 stored in `license_text_sha256` |
 | Dataset integrity evidence | Exact source revision plus per-import file-set SHA-256 and manifest SHA-256 |
 | Eval holdout policy | Final evaluation only; no tuning/training/rule development |
 | Retention | Derived metadata may be retained; raw JSONL remains outside Git/web root and is governed separately |
