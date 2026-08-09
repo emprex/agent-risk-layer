@@ -1,7 +1,7 @@
 # AgentRiskLayer v10.1.1 — billing and external-validation workflow evidence
 
-Date: 2026-08-09  
-Implementation commit assessed: `b9c8dfb28071eb8490e3cd7c17d65f41e5832b11`  
+Date: 2026-08-09
+Repository validation baseline: `b846dab4025f79cdb5f37bef8ec0418dbe0f4dd1`
 Scoring semantics: `arl-risk-v3.4`
 
 ## Scope
@@ -22,7 +22,22 @@ A public search-engine crawl of `https://agentrisklayer.com/pricing.html` retrie
 
 The Trust Centre crawl simultaneously described the service as production and stated that Stripe payments were live. This is a public-claims contradiction even though the repository/Render configuration declares `DEMO_MODE=false` and production startup has a readiness check requiring demo payments to be disabled.
 
-Direct live requests to `/api/config` and `/api/ready` could not be completed from the execution environment because DNS resolution for `agentrisklayer.com` was unavailable. Therefore this record does not claim that the live Render environment itself returned `demoMode=true` at the time of implementation.
+The initial implementation environment could not resolve the production domain, so no live-state claim was made at that stage.
+
+Production was subsequently verified from the owner-operated Debian environment on 2026-08-09:
+
+- `GET /api/config` returned `productStage=production` and `demoMode=false`;
+- `GET /api/ready` returned HTTP 200 with `ok=true` and `readiness.ready=true`;
+- the database adapter reported `postgres`;
+- the production schema reported `schemaCurrent=true`, `migrationCount=17`, and latest migration `017_external_security_intelligence.sql`;
+- the required `live_payments` readiness check passed;
+- required Stripe secret, webhook, price, transactional-email, support, legal-identity and metrics-auth readiness checks passed;
+- deployed `/pricing.js` contained the `resolvePricingMode` control flow;
+- direct retrieval of `/pricing.html` contained no crawlable `Demo mode` or `simulated checkout` message.
+
+The readiness response carried timestamp `2026-08-09T20:24:08.565Z`.
+
+These observations close the original production/demo presentation contradiction for the directly observed production state. They do not establish what a stale third-party search cache may continue to display until that cache is refreshed.
 
 ### Remediation implemented
 
@@ -34,22 +49,33 @@ Direct live requests to `/api/config` and `/api/ready` could not be completed fr
 
 `public/pricing.js` applies that state without changing Stripe, Render or authentication configuration.
 
-### Focused validation
+### Local validation
 
-Local isolated Node tests against the exact pricing-mode logic:
+After synchronising local `main` with GitHub, the complete repository test suite was executed from `/home/guillaume/agent-risk-layer-fix`.
 
-- production live billing: PASS
-- non-production demo labelling: PASS
-- production/demo mismatch fails closed: PASS
+The initial run identified two stale regression-test expectations:
 
-Pricing-mode + benchmark focused suite total: **7 passed, 0 failed, 0 skipped**.
+1. the PostgreSQL test expected 16 migrations although migration 017 had intentionally been added;
+2. the SEO regression expected the old direct `cfg.demoMode` branch in `pricing.js` although pricing now uses `resolvePricingMode(cfg)`.
 
-Relevant modules also passed `node --check` in the isolated validation workspace:
+No production logic was changed to satisfy those failures. Only the obsolete test expectations were updated.
 
-- `public/pricing-mode.js`
-- `src/clawhub-inspector-benchmark.js`
-- `scripts/run-clawhub-inspector-benchmark.mjs`
-- pricing integration syntax was separately checked against the implemented control flow.
+The affected PostgreSQL and SEO suites were rerun first:
+
+- **17 tests passed**
+- **0 failed**
+
+The complete `npm test` suite was then rerun:
+
+- **240 tests**
+- **240 passed**
+- **0 failed**
+- **0 skipped**
+- duration approximately 40 seconds
+
+The regression-test corrections were committed as:
+
+`b846dab4025f79cdb5f37bef8ec0418dbe0f4dd1` — `Update regression tests for external intelligence and pricing mode`.
 
 ## Design-partner evidence-case protocol
 
@@ -82,15 +108,23 @@ The full pinned ClawHub benchmark was **not executed** in this validation enviro
 
 No quantitative AgentRiskLayer/ClawHub performance result is therefore recorded or permitted by this validation record.
 
-## Remaining verification
+## Production billing verification status
 
-Before calling the production billing contradiction fully closed:
+The production/demo contradiction is closed for the directly observed production state:
 
-1. confirm Render deployed the current `main` commit;
-2. query live `/api/config` and confirm `productStage=production` and `demoMode=false`;
-3. query live `/api/ready` and confirm readiness HTTP 200 with the live-payments check passing;
-4. open production `/pricing.html` in a fresh browser session and confirm no simulated/demo checkout notice is rendered;
-5. perform an authorised checkout smoke up to the Stripe-hosted checkout page without completing payment, if owner approval allows it.
+- production configuration: VERIFIED
+- demo payments disabled: VERIFIED
+- readiness HTTP 200: VERIFIED
+- PostgreSQL schema current through migration 017: VERIFIED
+- live-payments readiness control: VERIFIED
+- deployed pricing-mode resolver: VERIFIED
+- crawlable pricing HTML free of the demo/simulated-checkout message: VERIFIED
+
+An end-to-end checkout smoke through creation of a Stripe-hosted Checkout session has not been executed as part of this record. No payment was attempted.
+
+The exact Git commit SHA deployed by Render was not exposed by the checked public endpoints, so the runtime evidence is bound to the observed production behavior and application version `10.1.1`, not to an independently observed Render deployment SHA.
+
+## Remaining ClawHub benchmark verification
 
 Before publishing any ClawHub benchmark metric:
 
@@ -103,7 +137,9 @@ Before publishing any ClawHub benchmark metric:
 
 ## Limitations
 
-- GitHub currently exposes no CI status checks for this commit.
-- The full repository test/smoke/scenario suite was not available in this execution environment.
-- No live production endpoint result is claimed here because direct DNS resolution was unavailable.
-- No ClawHub benchmark performance claim is made because the full frozen corpus was unavailable locally.
+- GitHub exposes no CI status checks for this validation baseline; the recorded test evidence is owner-operated local execution.
+- The public production endpoints checked do not expose the exact Render deployment Git SHA.
+- No live Stripe Checkout session was created during this verification.
+- No ClawHub benchmark performance claim is made because the full pinned benchmark has not yet been executed.
+- The ClawHub corpus remains external silver-standard scanner evidence, not human-adjudicated ground truth.
+- This record covers the stated billing presentation, design-partner protocol and external-intelligence workflow scope; it is not an accredited certification or a guarantee that AgentRiskLayer is risk-free.
