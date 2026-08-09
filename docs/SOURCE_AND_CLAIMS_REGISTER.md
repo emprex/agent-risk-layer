@@ -6,6 +6,29 @@ Permitted claim: “AgentRiskLayer Control Intelligence connects a project’s v
 
 Boundary: this does not establish certification, accreditation, exhaustive coverage, regulatory approval, independent validation or guaranteed security. Controls remain candidate content. Framework mappings remain informative. No customer outcome, benchmark or time-saved claim is supported.
 
+## Design-partner evidence cases
+
+Permitted claim before live testing: “AgentRiskLayer uses a version-bound design-partner protocol that preserves declarations separately from observed and test-generated evidence, links findings to reproduction evidence, and requires remediation and retest before a fixed-control claim is made.” Evidence: `docs/DESIGN_PARTNER_EVIDENCE_CASE_PROTOCOL.md`.
+
+Boundary: participation in a design-partner assessment is not a customer relationship, endorsement, independent audit or proof of security. A questionnaire baseline is not a technical finding. No partner name, company, source excerpt, screenshot, result, quote or identifying technical detail may be published without explicit written permission for the exact publication scope. A remediation is not represented as successful until the original failure or a documented equivalent is retested against the remediated system version.
+
+A public evidence case may be claimed only after all publication gates in the protocol are satisfied. Until then, design-partner work remains private assessment evidence.
+
+## ClawHub external reference intelligence and Inspector benchmark
+
+Permitted current claim: “AgentRiskLayer uses the MIT-licensed OpenClaw ClawHub Security Signals frozen research corpus as external reference intelligence and provides a pinned, reproducible workflow for comparing AgentRisk Inspector findings with ClawScan, static-analysis and SkillSpector signals.” Evidence: `docs/EXTERNAL_SECURITY_INTELLIGENCE.md`, `docs/THIRD_PARTY_DATA_REGISTER.md`, the pinned corpus/source-file digests, and the benchmark runner/tests.
+
+Benchmark claim boundary:
+
+- the ClawHub corpus is silver-standard research data, not human-verified vulnerability ground truth;
+- comparison metrics are concordance/disagreement metrics, not accuracy, certification, prevalence or product-superiority metrics;
+- VirusTotal-derived per-record fields are excluded from the commercial benchmark workflow;
+- generic temporary-repository hygiene findings are excluded from comparison so reconstruction artifacts do not create meaningless positives;
+- the `eval_holdout` split is reserved for final evaluation and must not be used for Inspector rule development, tuning or threshold selection;
+- no quantitative ClawHub/Inspector performance claim is permitted until a complete pinned run finishes with recorded source revision, split digest, Inspector version/policy version, row count, scan-error count and limitations.
+
+There is currently no permitted claim that AgentRiskLayer is more accurate, safer or more effective than ClawScan, SkillSpector, VirusTotal or another scanner based on this corpus.
+
 ## Design basis
 
 The catalogue is original AgentRiskLayer content. External standards and guidance are used as informative mappings, not copied control text and not proof of compliance.
@@ -29,6 +52,8 @@ The catalogue is original AgentRiskLayer content. External standards and guidanc
 ## Review date
 
 - Retrieved/reviewed: 2026-08-05; catalogue engineering review: 2026-08-06
+- External intelligence/benchmark claim review: 2026-08-09
+- Design-partner publication protocol review: 2026-08-09
 - Earliest scheduled entry review: 2026-10-04 (critical entries); each entry follows its own risk-based interval
 - Earlier review is required after a material source update, new attack evidence, customer incident, control bypass or architecture change.
 

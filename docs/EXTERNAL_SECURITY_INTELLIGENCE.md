@@ -84,6 +84,47 @@ After the dry run reports the pinned files and expected split counts, rerun with
 
 The import is marked `complete` only after the exact source files are rechecked, aggregate signals are rebuilt and the total row count is recorded. Failed imports remain marked `failed` and do not become active reference data.
 
+## Inspector benchmark procedure
+
+The benchmark is intentionally separate from customer evidence and from the production import. It reconstructs each sanitized skill row in a short-lived local directory and runs the existing read-only AgentRisk Inspector against that material.
+
+Safety and validity controls:
+
+- the selected JSONL split must match the exact pinned SHA-256 and row count;
+- the benchmark preserves the upstream split label;
+- `eval_holdout` requires an evaluation purpose and is blocked from tuning/rule-development use;
+- corpus files are treated as inert text and are never executed;
+- path traversal, oversized files and excessive bundle sizes are rejected/skipped;
+- temporary reconstructed artifacts are deleted after each scan;
+- no network probing is performed;
+- VirusTotal-derived fields are not used;
+- generic repository-hygiene rules are excluded from comparison to avoid meaningless findings caused by the temporary benchmark directory itself;
+- the existing Inspector rules are not modified from the holdout results before that holdout run is frozen and recorded.
+
+Run the frozen holdout only when the exact source file is available locally:
+
+```bash
+npm run test:clawhub-inspector -- \
+  --file /private/clawhub/eval_holdout.jsonl \
+  --split eval_holdout \
+  --purpose evaluation \
+  --out validation/clawhub-inspector-eval-holdout.json
+```
+
+The output records source revision/digest, split, Inspector version/policy version, evaluated rows, scan errors and aggregate concordance/disagreement metrics. It does not copy raw skill content into the report.
+
+### Benchmark interpretation
+
+The benchmark answers bounded questions such as:
+
+- when an external scanner marks a row positive, how often does the current Inspector emit one of its relevant findings?
+- where does Inspector emit a relevant finding while a selected external scanner is non-positive?
+- for pre-mapped signal categories, how often does a semantically related ARL rule appear?
+
+It does **not** establish accuracy because the external scanner labels are not human-verified ground truth. It does **not** establish that an AgentRiskLayer result is correct merely because another scanner agrees, and disagreement does not by itself establish that either scanner is wrong.
+
+Until a complete pinned run has been executed and archived, there is no quantitative AgentRiskLayer/ClawHub benchmark claim.
+
 ## Website behaviour
 
 The Risk Library reads a small bundled customer-safe aggregate manifest. It contains no raw skill content and no VirusTotal per-record fields. If this manifest is unavailable or malformed, the external-intelligence panel is simply omitted; the Risk Library continues to work normally.
