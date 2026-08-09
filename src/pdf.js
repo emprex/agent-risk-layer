@@ -17,6 +17,25 @@ function wrap(text, max = 88) {
     return lines.length ? lines : [''];
 }
 function esc(text) { return normalise(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
+
+export function reportCoverEvidenceLine(report = {}) {
+    const hasInspection = Boolean(report.inspection);
+    const hasRedTeam = Boolean(report.redTeam);
+    const hasTargetRedTeam = report.redTeam?.campaign?.target?.mode === 'staging-adapter';
+    const hasRunnerSimulation = hasRedTeam && !hasTargetRedTeam;
+    if (hasInspection && hasTargetRedTeam)
+        return 'Evidence-led review | Local static inspection | Controlled adversarial testing';
+    if (hasInspection && hasRunnerSimulation)
+        return 'Evidence-led review | Local static inspection | Runner simulation';
+    if (hasInspection)
+        return 'Evidence-led review | Local static inspection | No adversarial test attached';
+    if (hasTargetRedTeam)
+        return 'Evidence-led review | No static inspection | Controlled adversarial testing';
+    if (hasRunnerSimulation)
+        return 'Structured self-assessment | Runner simulation | No assessed-system testing';
+    return 'Structured self-assessment | Declared evidence | No technical testing attached';
+}
+
 export async function renderReportPdf(report) {
     const blocks = [];
     const add = (text, size = 10, bold = false, indent = 0, gap = 4, tone = 'body') => {
@@ -33,7 +52,7 @@ export async function renderReportPdf(report) {
     const pageBreak = () => blocks.push({ pageBreak: true });
     const bullet = (text) => add(`- ${text}`, 9, false, 12, 3);
     const label = (name, value) => { add(name.toUpperCase(), 8, true, 0, 1, 'muted'); add(value, 11, true, 0, 7, 'body'); };
-    const cover = () => blocks.push({ type: 'cover', height: 248, title: report.title, reportClass: report.reportClass || 'AI Agent Security Review', decision: report.decision || report.executiveBrief?.deploymentDecision || 'REVIEW REQUIRED', score: report.score, riskBand: report.riskBand });
+    const cover = () => blocks.push({ type: 'cover', height: 248, title: report.title, reportClass: report.reportClass || 'AI Agent Security Review', evidenceLine: reportCoverEvidenceLine(report), decision: report.decision || report.executiveBrief?.deploymentDecision || 'REVIEW REQUIRED', score: report.score, riskBand: report.riskBand });
     const metricRow = (items) => blocks.push({ type: 'metrics', height: 80, items });
     const riskBar = (labelText, value, tone = 'accent') => blocks.push({ type: 'bar', height: 38, label: labelText, value: Math.max(0, Math.min(100, Number(value) || 0)), tone });
     const callout = (title, text, tone = 'accent') => { const lines = wrap(text, 76); blocks.push({ type: 'callout', height: 42 + lines.length * 11, title, lines, tone }); };
@@ -310,7 +329,7 @@ export async function renderReportPdf(report) {
                 commands.push(`BT /F2 11 Tf ${fill(palette.accent)} 1 0 0 1 60 ${top - 38} Tm (${esc('AGENTRISKLAYER | ' + line.reportClass.toUpperCase())}) Tj ET`);
                 const titleLines = wrap(line.title, 31).slice(0, 4);
                 titleLines.forEach((t, i) => commands.push(`BT /F2 22 Tf ${fill(palette.white)} 1 0 0 1 60 ${top - 78 - i * 28} Tm (${esc(t)}) Tj ET`));
-                commands.push(`BT /F1 10 Tf 0.72 0.82 0.77 rg 1 0 0 1 60 ${bottom + 48} Tm (${esc('Evidence-led review | Static inspection | Controlled adversarial testing')}) Tj ET`);
+                commands.push(`BT /F1 10 Tf 0.72 0.82 0.77 rg 1 0 0 1 60 ${bottom + 48} Tm (${esc(line.evidenceLine)}) Tj ET`);
                 const decisionTone = line.decision === 'DO NOT DEPLOY' ? palette.danger : String(line.decision).includes('MATERIAL') || String(line.decision).includes('HOLD') ? palette.warning : palette.accent;
                 commands.push(`${fill(decisionTone)} 392 ${bottom + 30} 145 58 re f`);
                 commands.push(`BT /F2 9 Tf ${fill(palette.white)} 1 0 0 1 405 ${bottom + 68} Tm (${esc('DEPLOYMENT DECISION')}) Tj ET`);
