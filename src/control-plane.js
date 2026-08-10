@@ -22,6 +22,8 @@ export const PLAN_ENTITLEMENTS = Object.freeze({
   enterprise: Object.freeze({ projects: 500, runtimeRequestsPerMonth: 10_000_000, runtimeRequestsPerMinute: 30_000, retentionDays: 365, apiKeysPerProject: 100, name: 'Enterprise' }),
 });
 
+export const PROJECT_KINDS = Object.freeze({ RUNTIME: 'runtime', ASSESSMENT_CASE: 'assessment_case' });
+
 const PROJECT_ENVIRONMENTS = new Set(['development', 'test', 'staging', 'production']);
 const PROJECT_STATUSES = new Set(['active', 'paused', 'archived']);
 const REMEDIATION_STATUSES = new Set(['open', 'evidence_attached', 'ready_for_retest', 'retested', 'verified_closed', 'accepted_risk', 'evidence_upgrade_required']);
@@ -48,33 +50,50 @@ export async function entitlementForUser(userId) {
   return { key, ...PLAN_ENTITLEMENTS[key], subscription: subscription || null };
 }
 
-export async function createSecurityProject({ userId, workspaceId, name, environment = 'development' }) {
+export async function createSecurityProject({ userId, workspaceId, name, environment = 'development', projectKind = PROJECT_KINDS.RUNTIME }) {
   const membership = await workspaceMembership(workspaceId, userId);
   if (!membership || !MANAGE_ROLES.has(membership.role)) throw forbidden('Workspace developer, admin or owner access is required.');
   const cleanName = clean(name, 100);
   if (cleanName.length < 2) throw badRequest('Project name must contain at least two characters.');
   const cleanEnvironment = PROJECT_ENVIRONMENTS.has(environment) ? environment : 'development';
+  const normalizedProjectKind = clean(projectKind, 40).toLowerCase() || PROJECT_KINDS.RUNTIME;
+  if (!Object.values(PROJECT_KINDS).includes(normalizedProjectKind)) throw badRequest('Unknown project kind.');
+  const assessmentCase = normalizedProjectKind === PROJECT_KINDS.ASSESSMENT_CASE;
+  if (assessmentCase && (membership.role !== 'owner' || !await isPlatformSuperuser(userId))) {
+    throw forbidden('Only the AgentRiskLayer owner may create assessment cases.');
+  }
   const billingUserId = await workspaceBillingUser(workspaceId);
   const entitlement = await entitlementForUser(billingUserId);
-  const projectCount = Number((await db.prepare(`SELECT COUNT(*) count FROM security_projects
-    WHERE billing_user_id=? AND status!='archived'`).get(billingUserId)).count || 0);
-  if (projectCount >= entitlement.projects) throw paymentRequired(`${entitlement.name} supports ${entitlement.projects} active project${entitlement.projects === 1 ? '' : 's'}. Upgrade to add another.`);
+  if (!assessmentCase) {
+    const projectCount = Number((await db.prepare(`SELECT COUNT(*) count FROM security_projects p
+      WHERE p.billing_user_id=? AND p.status!='archived'
+        AND NOT EXISTS (SELECT 1 FROM owner_assessment_cases c WHERE c.project_id=p.id)`).get(billingUserId)).count || 0);
+    if (projectCount >= entitlement.projects) throw paymentRequired(`${entitlement.name} supports ${entitlement.projects} active project${entitlement.projects === 1 ? '' : 's'}. Upgrade to add another.`);
+  }
   const projectId = id('prj_');
   const timestamp = nowIso();
   const slug = await availableSlug(workspaceId, slugify(cleanName));
   const policy = compileRuntimePolicy(defaultProjectPolicy(cleanEnvironment));
   const policyDigest = policyIdentityDigest(policy, projectId);
-  await db.prepare(`INSERT INTO security_projects
-    (id,workspace_id,billing_user_id,created_by,name,slug,environment,status,policy_json,policy_version,policy_digest,policy_published_at,retention_days,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,'active',?,?,?,?,?,?,?)`)
-    .run(projectId, workspaceId, billingUserId, userId, cleanName, slug, cleanEnvironment, JSON.stringify(policy), policy.version, policyDigest, timestamp,
-      Math.min(entitlement.retentionDays, cleanEnvironment === 'production' ? 90 : entitlement.retentionDays), timestamp, timestamp);
-  await audit({ workspaceId, projectId, actorType: 'user', actorId: userId, action: 'project.created', targetType: 'project', targetId: projectId, metadata: { environment: cleanEnvironment } });
+  await db.transaction(async () => {
+    await db.prepare(`INSERT INTO security_projects
+      (id,workspace_id,billing_user_id,created_by,name,slug,environment,status,policy_json,policy_version,policy_digest,policy_published_at,retention_days,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,'active',?,?,?,?,?,?,?)`)
+      .run(projectId, workspaceId, billingUserId, userId, cleanName, slug, cleanEnvironment, JSON.stringify(policy), policy.version, policyDigest, timestamp,
+        Math.min(entitlement.retentionDays, cleanEnvironment === 'production' ? 90 : entitlement.retentionDays), timestamp, timestamp);
+    if (assessmentCase) {
+      await db.prepare(`INSERT INTO owner_assessment_cases (project_id,workspace_id,created_by,created_at) VALUES (?,?,?,?)`)
+        .run(projectId, workspaceId, userId, timestamp);
+    }
+    await audit({ workspaceId, projectId, actorType: 'user', actorId: userId, action: 'project.created', targetType: 'project', targetId: projectId,
+      metadata: { environment: cleanEnvironment, projectKind: normalizedProjectKind } });
+  });
   return getSecurityProject({ projectId, userId });
 }
 
 export async function listSecurityProjects(userId) {
   const rows = await db.prepare(`SELECT p.*,m.role,
+      CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind,
       (SELECT COUNT(*) FROM project_api_keys k WHERE k.project_id=p.id AND k.revoked_at IS NULL) api_key_count,
       (SELECT COUNT(*) FROM runtime_events e WHERE e.project_id=p.id AND e.created_at>=?) runtime_requests_month,
       (SELECT COUNT(*) FROM runtime_events e WHERE e.project_id=p.id AND e.decision='deny' AND e.created_at>=?) denied_month,
@@ -82,8 +101,13 @@ export async function listSecurityProjects(userId) {
       (SELECT MAX(created_at) FROM asset_snapshots a WHERE a.project_id=p.id) last_inventory_at,
       (SELECT summary_json FROM asset_snapshots a WHERE a.project_id=p.id ORDER BY created_at DESC LIMIT 1) latest_inventory_summary,
       (SELECT COUNT(*) FROM remediation_items r WHERE r.project_id=p.id AND r.status NOT IN ('verified','closed','verified_closed','accepted_risk')) open_remediations
-    FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id
-    WHERE m.user_id=? AND m.status='active' ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId);
+    FROM security_projects p
+    JOIN workspace_members m ON m.workspace_id=p.workspace_id
+    JOIN users actor ON actor.id=m.user_id
+    LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
+    WHERE m.user_id=? AND m.status='active'
+      AND (ac.project_id IS NULL OR actor.role='superuser')
+    ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId);
   return Promise.all(rows.map(async (row) => {
     const keys = await db.prepare('SELECT expires_at,revoked_at FROM project_api_keys WHERE project_id=?').all(row.id);
     return publicProject({ ...row, api_key_count: keys.filter((key) => apiKeyStatus(key) === 'active').length });
@@ -137,6 +161,7 @@ export async function updateSecurityProject({ projectId, userId, patch = {} }) {
 }
 
 export async function createProjectApiKey({ projectId, userId, name = 'Runtime key', expiresAt = null }) {
+  await assertRuntimeProject({ projectId, userId });
   const access = await requireProjectRole(projectId, userId, MANAGE_ROLES);
   const entitlement = await entitlementForUser(access.project.billing_user_id);
   const existingKeys = await db.prepare('SELECT expires_at,revoked_at FROM project_api_keys WHERE project_id=?').all(projectId);
@@ -176,6 +201,7 @@ export async function revokeProjectApiKey({ projectId, keyId, userId }) {
 
 
 export async function createRuntimeApproval({ projectId, userId, toolCall, ttlSeconds = 600, controlId = null, systemSnapshotId = null }) {
+  await assertRuntimeProject({ projectId, userId });
   if (!toolCall || typeof toolCall !== 'object' || Array.isArray(toolCall)) throw badRequest('An exact tool call is required for approval.');
   const tool = clean(toolCall.name || toolCall.tool, 200).toLowerCase();
   if (!tool) throw badRequest('Tool identity is required for approval.');
@@ -432,6 +458,7 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
 }
 
 export async function runGuidedProtectionCheck({ projectId, userId }) {
+  await assertRuntimeProject({ projectId, userId });
   const access = await requireProjectRole(projectId, userId, APPROVER_ROLES);
   const sampleTool = 'arl_demo.refund_order';
   const sampleArguments = Object.freeze({ orderId: 'demo_order_4821', amountPence: 17500, currency: 'GBP' });
@@ -924,18 +951,27 @@ function projectJourney(project) {
 
 export async function controlPlaneOverview(userId) {
   const projects = await listSecurityProjects(userId);
-  const projectIds = projects.map((item) => item.id);
-  if (!projectIds.length) return { projects: [], totals: { projects: 0, runtimeRequestsMonth: 0, deniedMonth: 0, openRemediations: 0, assets: 0 }, entitlement: await entitlementForUser(userId) };
+  const runtimeProjects = projects.filter((item) => item.projectKind !== PROJECT_KINDS.ASSESSMENT_CASE);
+  const assessmentProjects = projects.filter((item) => item.projectKind === PROJECT_KINDS.ASSESSMENT_CASE && item.status !== 'archived');
+  const entitlement = await entitlementForUser(userId);
   return {
     projects,
     totals: {
-      projects: projects.filter((item) => item.status !== 'archived').length,
-      runtimeRequestsMonth: projects.reduce((sum, item) => sum + Number(item.runtimeRequestsMonth || 0), 0),
-      deniedMonth: projects.reduce((sum, item) => sum + Number(item.deniedMonth || 0), 0),
-      openRemediations: projects.reduce((sum, item) => sum + Number(item.openRemediations || 0), 0),
-      assets: projects.reduce((sum, item) => sum + Number(item.latestInventoryTotal || 0), 0),
+      projects: runtimeProjects.filter((item) => item.status !== 'archived').length,
+      assessmentCases: assessmentProjects.length,
+      runtimeRequestsMonth: runtimeProjects.reduce((sum, item) => sum + Number(item.runtimeRequestsMonth || 0), 0),
+      deniedMonth: runtimeProjects.reduce((sum, item) => sum + Number(item.deniedMonth || 0), 0),
+      openRemediations: runtimeProjects.reduce((sum, item) => sum + Number(item.openRemediations || 0), 0),
+      assets: runtimeProjects.reduce((sum, item) => sum + Number(item.latestInventoryTotal || 0), 0),
     },
-    entitlement: await entitlementForUser(userId),
+    entitlement,
+    assessmentCases: {
+      canCreate: await isPlatformSuperuser(userId),
+      ownerOnly: true,
+      runtimeEnabled: false,
+      count: assessmentProjects.length,
+      projects: assessmentProjects,
+    },
   };
 }
 
@@ -989,16 +1025,43 @@ async function audit({ workspaceId = null, projectId = null, actorType, actorId 
 }
 
 async function projectAccess(projectId, userId) {
-  const row = await db.prepare(`SELECT p.*,m.role FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id
-    WHERE p.id=? AND m.user_id=? AND m.status='active'`).get(projectId, userId);
+  const row = await db.prepare(`SELECT p.*,m.role,
+    CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
+    FROM security_projects p
+    JOIN workspace_members m ON m.workspace_id=p.workspace_id
+    JOIN users actor ON actor.id=m.user_id
+    LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
+    WHERE p.id=? AND m.user_id=? AND m.status='active'
+      AND (ac.project_id IS NULL OR actor.role='superuser')`).get(projectId, userId);
   return row ? { project: row, role: row.role } : null;
 }
 
 async function requireProjectRole(projectId, userId, roles, lock=false) {
-  const access = lock && db.kind==='postgres' ? (()=>db.prepare(`SELECT p.*,m.role FROM security_projects p JOIN workspace_members m ON m.workspace_id=p.workspace_id WHERE p.id=? AND m.user_id=? AND m.status='active' FOR UPDATE OF p`).get(projectId,userId).then(row=>row?{project:row,role:row.role}:null))() : projectAccess(projectId, userId);
+  const access = lock && db.kind==='postgres' ? (()=>db.prepare(`SELECT p.*,m.role,
+    CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
+    FROM security_projects p
+    JOIN workspace_members m ON m.workspace_id=p.workspace_id
+    JOIN users actor ON actor.id=m.user_id
+    LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
+    WHERE p.id=? AND m.user_id=? AND m.status='active'
+      AND (ac.project_id IS NULL OR actor.role='superuser') FOR UPDATE OF p`).get(projectId,userId).then(row=>row?{project:row,role:row.role}:null))() : projectAccess(projectId, userId);
   const resolved=await access;
   if (!resolved || !roles.has(resolved.role)) throw forbidden('Project not found or permission denied.');
   return resolved;
+}
+
+async function isPlatformSuperuser(userId) {
+  const row = await db.prepare('SELECT role FROM users WHERE id=?').get(userId);
+  return row?.role === 'superuser';
+}
+
+async function assertRuntimeProject({ projectId, userId }) {
+  const access = await projectAccess(projectId, userId);
+  if (!access) throw forbidden('Project not found or permission denied.');
+  if ((access.project.project_kind || PROJECT_KINDS.RUNTIME) === PROJECT_KINDS.ASSESSMENT_CASE) {
+    throw forbidden('Owner assessment cases are evidence-only and do not provide runtime protection capabilities.');
+  }
+  return access;
 }
 
 async function workspaceMembership(workspaceId, userId) {
@@ -1034,8 +1097,10 @@ function defaultProjectPolicy(environment) {
 
 function publicProject(row) {
   const policy = parseJson(row.policy_json, {});
+  const projectKind = row.project_kind === PROJECT_KINDS.ASSESSMENT_CASE ? PROJECT_KINDS.ASSESSMENT_CASE : PROJECT_KINDS.RUNTIME;
   return {
     id: row.id, workspaceId: row.workspace_id, billingUserId: row.billing_user_id, name: row.name, slug: row.slug,
+    projectKind, runtimeEnabled: projectKind === PROJECT_KINDS.RUNTIME,
     environment: row.environment, status: row.status, role: row.role, policy, policyVersion: row.policy_version,
     policyDigest: row.policy_digest || null, policyPublishedAt: row.policy_published_at || null,
     retentionDays: Number(row.retention_days || 30), createdAt: row.created_at, updatedAt: row.updated_at,

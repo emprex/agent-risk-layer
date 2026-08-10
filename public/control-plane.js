@@ -10,6 +10,7 @@ let revealedApproval = null;
 let refreshTimer = null;
 let technicalMode = sessionStorage.getItem('arl_control_plane_mode') === 'technical';
 let guidedCheck = null;
+const runtimeProjects = () => (overview?.projects || []).filter((item) => item.projectKind !== 'assessment_case');
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
 
@@ -24,8 +25,9 @@ async function init() {
   if (['#runtime', '#policy', '#inventory', '#remediation', '#audit'].includes(location.hash)) technicalMode = true;
   try {
     await loadOverview();
-    if (selectedProjectId && overview.projects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
-    else if (overview.projects[0]) await loadProject(overview.projects[0].id);
+    const availableRuntimeProjects = runtimeProjects();
+    if (selectedProjectId && availableRuntimeProjects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
+    else if (availableRuntimeProjects[0]) await loadProject(availableRuntimeProjects[0].id);
     render();
     startRefresh();
   } catch (error) {
@@ -53,10 +55,11 @@ function render() {
 }
 
 function guidedProjectContext() {
-  const canCreate = overview.projects.length < overview.entitlement.projects;
+  const projects = runtimeProjects();
+  const canCreate = projects.length < overview.entitlement.projects;
   return `<section class="guided-project-context" aria-label="Current protected agent">
     <div class="guided-project-identity"><span class="project-icon">${escapeHtml(project.name.slice(0, 2).toUpperCase())}</span><div><small>Protected agent</small><strong>${escapeHtml(project.name)}</strong><span>${escapeHtml(plainEnvironment(project.environment))} · ${formatNumber(project.entitlement?.usage?.requests || 0)} checks this month</span></div></div>
-    ${overview.projects.length > 1 ? `<label class="guided-project-switcher">Change agent<select id="guidedProjectSelect">${overview.projects.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === project.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>` : `<div class="guided-plan-summary"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${canCreate ? 'You can add another project.' : 'Your plan includes one active project.'}</span>${canCreate ? '<button class="text-button" data-open-technical="project">Add another agent</button>' : '<a href="/pricing.html">Need more projects?</a>'}</div>`}
+    ${projects.length > 1 ? `<label class="guided-project-switcher">Change agent<select id="guidedProjectSelect">${projects.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === project.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label>` : `<div class="guided-plan-summary"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${canCreate ? 'You can add another project.' : 'Your plan includes one active project.'}</span>${canCreate ? '<button class="text-button" data-open-technical="project">Add another agent</button>' : '<a href="/pricing.html">Need more projects?</a>'}</div>`}
   </section>`;
 }
 
@@ -71,14 +74,15 @@ function overviewHeader() {
 }
 
 function projectRail() {
-  const canCreate = overview.projects.length < overview.entitlement.projects;
+  const projects = runtimeProjects();
+  const canCreate = projects.length < overview.entitlement.projects;
   const planMessage = canCreate
     ? `${overview.entitlement.name} includes ${overview.entitlement.projects} active project${overview.entitlement.projects === 1 ? '' : 's'}.`
     : `${overview.entitlement.name} includes ${overview.entitlement.projects} active project${overview.entitlement.projects === 1 ? '' : 's'}. You are already using ${overview.entitlement.projects === 1 ? 'it' : 'them'}.`;
   return `<aside class="project-rail customer-project-rail">
-    <div class="rail-heading"><span class="eyebrow">Your protected agents</span><small>${overview.projects.length || '0'} active</small></div>
-    <div class="project-list">${overview.projects.map(projectButton).join('') || '<p class="muted small-copy">Your first protected agent will appear here.</p>'}</div>
-    ${canCreate && overview.projects.length ? `<details class="rail-create-details"><summary>Add another agent</summary>${projectCreateForm()}</details>` : ''}
+    <div class="rail-heading"><span class="eyebrow">Your protected agents</span><small>${projects.length || '0'} active</small></div>
+    <div class="project-list">${projects.map(projectButton).join('') || '<p class="muted small-copy">Your first protected agent will appear here.</p>'}</div>
+    ${canCreate && projects.length ? `<details class="rail-create-details"><summary>Add another agent</summary>${projectCreateForm()}</details>` : ''}
     <div class="entitlement-card plain-plan-card"><strong>${escapeHtml(overview.entitlement.name)}</strong><span>${escapeHtml(planMessage)}</span><span>${formatNumber(overview.entitlement.runtimeRequestsPerMonth)} protection checks each month</span>${canCreate ? '' : '<a href="/pricing.html">Need more projects? Compare plans →</a>'}</div>
   </aside>`;
 }
@@ -102,12 +106,28 @@ function projectCreateForm() {
   </form>`;
 }
 
+function ownerAssessmentCasePanel() {
+  if (!overview.assessmentCases?.canCreate) return '';
+  const cases = overview.assessmentCases.projects || [];
+  return `<section class="panel owner-assessment-cases">
+    <div class="section-heading compact-heading"><div><span class="eyebrow">Owner-only assessment workspace</span><h2>Assessment cases</h2></div><strong>${cases.length}</strong></div>
+    <p>Create isolated design-partner or customer evidence cases without consuming the Community live-protection project allowance. Assessment cases cannot issue runtime keys, runtime approvals or protection quota.</p>
+    ${cases.length ? `<div class="plain-event-list">${cases.map((item) => `<div><span class="plain-decision allow">Case</span><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(plainEnvironment(item.environment))} · evidence-only</small></div><a class="button ghost small" href="/control-intelligence.html?projectId=${encodeURIComponent(item.id)}">Open Control Intelligence</a></div>`).join('')}</div>` : '<p class="muted">No owner assessment cases yet.</p>'}
+    <form id="createAssessmentCase" class="mini-form rail-form">
+      <label for="assessmentCaseName">Assessment case name</label>
+      <input id="assessmentCaseName" name="name" required minlength="2" maxlength="100" placeholder="CLARA Security Assessment">
+      <button class="button primary" type="submit">Create assessment case</button>
+    </form>
+  </section>`;
+}
+
 function emptyProject() {
   return `<section class="panel empty-state customer-empty-project">
     <span class="eyebrow">Start here</span>
     <h2>Protect one AI agent.</h2>
     <p>Give it a name and tell us whether it is still being built, being tested or already live. You can see protection work before connecting any code.</p>
     ${projectCreateForm()}
+    ${ownerAssessmentCasePanel()}
   </section>`;
 }
 
@@ -130,6 +150,7 @@ function guidedProjectHome() {
         : { title: 'Review decisions and close the next risk', text: 'Your agent is sending protected requests. Review what was allowed or blocked and assign any required fix.', action: 'review' };
   return `<div class="customer-control-home">
     ${guidedProgress(stage)}
+    ${ownerAssessmentCasePanel()}
     <section class="panel human-next-card v10-next-card">
       <div class="human-next-copy"><span class="eyebrow">Do this next</span><h2>${escapeHtml(next.title)}</h2><p>${escapeHtml(next.text)}</p><span class="next-time">${stage === 1 ? 'About 30 seconds' : stage === 2 ? 'Developer task · about 10 minutes' : 'Review whenever your agent is active'}</span></div>
       <div class="human-next-action">${nextActionButton(next, canApprove)}</div>
@@ -332,6 +353,7 @@ function bind() {
     try { await loadProject(button.dataset.projectId); revealedKey = ''; revealedApproval = null; render(); } catch (error) { fail(error); }
   }));
   document.querySelector('#createProject')?.addEventListener('submit', createProject);
+  document.querySelector('#createAssessmentCase')?.addEventListener('submit', createAssessmentCase);
   document.querySelector('#createKeyButton')?.addEventListener('click', createKey);
   document.querySelector('#approvalForm')?.addEventListener('submit', createApproval);
   document.querySelector('#policyForm')?.addEventListener('submit', savePolicy);
@@ -388,6 +410,21 @@ async function createProject(event) {
   try {
     const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: document.querySelector('#projectName').value, environment: document.querySelector('#projectEnvironment').value }) });
     await loadOverview(); await loadProject(result.project.id); render();
+  } catch (error) { fail(error); setBusy(button, false); }
+}
+
+async function createAssessmentCase(event) {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  setBusy(button, true, 'Creating assessment case…');
+  try {
+    const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({
+      workspaceId: project?.workspaceId || undefined,
+      name: document.querySelector('#assessmentCaseName').value,
+      environment: 'development',
+      projectKind: 'assessment_case',
+    }) });
+    location.href = `/control-intelligence.html?projectId=${encodeURIComponent(result.project.id)}`;
   } catch (error) { fail(error); setBusy(button, false); }
 }
 

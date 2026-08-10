@@ -750,7 +750,7 @@ const server = http.createServer(async (req, res) => {
                     const workspaces = await listWorkspaces(req.user.id);
                     workspaceId = workspaces[0]?.id || (await createWorkspace(req.user.id, `${req.user.email.split('@')[0]}'s security workspace`)).id;
                 }
-                return json(res, 201, { project: await createSecurityProject({ userId: req.user.id, workspaceId, name: body.name, environment: body.environment }) });
+                return json(res, 201, { project: await createSecurityProject({ userId: req.user.id, workspaceId, name: body.name, environment: body.environment, projectKind: body.projectKind }) });
             }
             catch (error) {
                 return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
