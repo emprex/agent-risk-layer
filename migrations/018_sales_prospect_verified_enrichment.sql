@@ -19,7 +19,7 @@ WITH enrichments (
     'Active agent runtime with MCP and tool execution; public documentation reviewed 2026-08-10 describes human approval for selected consequential tool calls.',
     'AI agent runtime where agents use apps, sub-agents, HTTP calls, workflows and MCP connector tools across hosted or customer-controlled execution.',
     'Public documentation describes agents calling external MCP tools and APIs with runtime credentials, plus optional human approval before destructive or expensive operations.',
-    '["https://registry.modelcontextprotocol.io/v0/servers?search=ac.inference.sh","https://inference.sh/about","https://inference.sh/agents","https://inference.sh/docs/connectors/agent-tools","https://www.linkedin.com/company/inference-sh"]',
+    '["https://registry.modelcontextprotocol.io/v0/servers?search=ac.inference.sh","https://inference.sh/about","https://inference.sh/agents","https://inference.sh/docs/agents/adding-tools","https://inference.sh/docs/connectors/mcp-server","https://www.linkedin.com/company/inference-sh"]',
     90,
     '["+20 specific AI-agent use case identified","+20 agent has real tool, data or system access","+15 current buying trigger identified","+15 named decision-maker identified","+10 public evidence recorded","+10 target company size"]',
     '[ARL-ENRICHMENT:2026-08-10] Public-source verification identified inference.sh and founder Ömer Karışman. Current official docs describe real MCP/tool execution and optional human approval. No buyer-specific contact route was added. Product and control descriptions are public-source observations, not ARL-tested controls.'
@@ -35,7 +35,7 @@ WITH enrichments (
     'RadiusOS is publicly described by its founder as live with paying users, AI deal scoring, Stripe billing, quotes and invoices, and an MCP server.',
     'MCP-first CRM and pipeline operating system for contacts, deals, quotes, invoices, scheduling, email and AI scoring.',
     'Registry and founder evidence describe 34 MCP tools spanning CRM records, quotes and invoices, scheduling, email workflows, AI scoring and Stripe-backed billing.',
-    '["https://registry.modelcontextprotocol.io/v0/servers?search=ai.radiusos","https://www.radiusos.ai/mcp","https://github.com/chadrnewell-hash/outreachos","https://www.linkedin.com/in/chadrnewell","https://www.linkedin.com/posts/chadrnewell_what-i-built-with-claude-code-in-28-days-activity-7454942465272479744-N-O-"]',
+    '["https://registry.modelcontextprotocol.io/v0/servers?search=ai.radiusos.www","https://www.radiusos.ai/mcp","https://github.com/chadrnewell-hash/outreachos","https://www.linkedin.com/in/chadrnewell","https://www.linkedin.com/posts/chadrnewell_what-i-built-with-claude-code-in-28-days-activity-7454942465272479744-N-O-"]',
     90,
     '["+20 specific AI-agent use case identified","+20 agent has real tool, data or system access","+15 current buying trigger identified","+15 named decision-maker identified","+10 verified contact route recorded","+10 public evidence recorded"]',
     '[ARL-ENRICHMENT:2026-08-10] Public-source verification identified founder Chad Newell and a live commercial RadiusOS product. Founder material describes paying users and consequential CRM/billing workflows. Company-size bucket remains unknown. Public claims are not independent verification of control effectiveness.'
