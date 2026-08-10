@@ -65,7 +65,7 @@ const guidance = {
   testing: ['Add adversarial regression tests for injection, leakage, tool misuse, memory poisoning, authority manipulation and unsafe delegation.', 'Block release when critical abuse cases fail.'],
   governance: ['Assign one accountable owner, document responsibilities and define reassessment triggers.'],
   'incident-response': ['Implement and exercise containment that stops execution, revokes authority and preserves/freeze relevant state for investigation.'],
-  critical: ['Do not deploy or expand a configuration with a confirmed critical weakness until it is remediated and retested.'],
+  critical: ['Do not deploy or expand while a critical finding remains unresolved; remediate it and retest before relying on a deployment decision.'],
 };
 
 const frameworks = {
@@ -326,7 +326,7 @@ export function evaluateAssessment(answers = {}, context = {}) {
   else decision = 'PROCEED WITH MONITORING';
 
   const headline = decision === 'HOLD FOR INFORMATION AND REMEDIATION'
-    ? `${unresolvedItems.length} material security question${unresolvedItems.length === 1 ? '' : 's'} remain unresolved, while ${findings.length} declared control weakness${findings.length === 1 ? '' : 'es'} and ${paths.length} credible attack-path concern${paths.length === 1 ? '' : 's'} also require review. Complete the missing information and remediate the confirmed weaknesses before relying on a deployment decision.`
+    ? `${unresolvedItems.length} material security question${unresolvedItems.length === 1 ? '' : 's'} remain unresolved, while ${findings.length} declared control weakness${findings.length === 1 ? '' : 'es'} and ${paths.length} credible attack-path concern${paths.length === 1 ? '' : 's'} also require review. Complete the missing information and address the listed weaknesses before relying on a deployment decision.`
     : decision === 'HOLD FOR INFORMATION'
       ? `${unresolvedItems.length} material security questions remain unresolved. No vulnerability is inferred from unanswered questions; complete the missing information before relying on this assessment for deployment.`
       : decision === 'HOLD FOR EVIDENCE'
