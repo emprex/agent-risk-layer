@@ -41,6 +41,11 @@ test('prospect workflow drafts evidence-based messages and requires approval bef
   assert.equal(approved.status, 'approved');
   const sent = await sales.updateMessage(ownerId, message.id, { status: 'sent' });
   assert.ok(sent.sentAt);
+  const updated = await sales.updateProspect(ownerId, prospect.id, { buyerName: 'Grace Hopper', buyerRole: 'Founder', buyerEmail: 'grace@example.com', evidence: ['https://example.com/launch', 'https://example.com/security'], notes: 'Buyer details verified for outreach.' });
+  assert.equal(updated.buyerName, 'Grace Hopper');
+  assert.equal(updated.buyerRole, 'Founder');
+  assert.equal(updated.stage, 'research');
+  assert.deepEqual(updated.evidence, ['https://example.com/launch', 'https://example.com/security']);
 });
 test('pipeline overview and demo brief support the commercial workflow', async () => {
   const prospects = await sales.listProspects();
@@ -59,4 +64,7 @@ test('sales UI remains private and contains the approval boundary', () => {
   assert.match(html, /noindex/);
   assert.match(html, /External messages require explicit owner approval/);
   assert.match(js, /Mark sent/);
+  assert.match(js, /Edit prospect/);
+  assert.match(js, /id=\"editProspectForm\"/);
+  assert.match(js, /async function editProspect/);
 });

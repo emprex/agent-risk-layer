@@ -66,6 +66,28 @@ function prospectForm() {
     <div id="formError" class="error-box"></div><button class="button primary" type="submit">Score and add prospect</button>
   </form>`;
 }
+function editProspectForm(p) {
+  const companySizes = ['', '1-10', '11-50', '51-200', '201+'];
+  return `<form id="editProspectForm" class="mini-form section-gap">
+    <div class="form-grid">
+      <label>Company name *<input name="companyName" maxlength="200" required value="${escapeHtml(p.companyName||'')}"></label>
+      <label>Company website<input name="website" type="url" placeholder="https://" value="${escapeHtml(p.website||'')}"></label>
+      <label>Company size<select name="companySize">${companySizes.map(x=>`<option value="${escapeHtml(x)}" ${x===(p.companySize||'')?'selected':''}>${escapeHtml(x||'Unknown')}</option>`).join('')}</select></label>
+      <label>Source<input name="source" value="${escapeHtml(p.source||'')}"></label>
+      <label>Buyer name<input name="buyerName" value="${escapeHtml(p.buyerName||'')}"></label>
+      <label>Buyer role<input name="buyerRole" placeholder="Founder, CTO, Head of AI" value="${escapeHtml(p.buyerRole||'')}"></label>
+      <label>Buyer email<input name="buyerEmail" type="email" value="${escapeHtml(p.buyerEmail||'')}"></label>
+      <label>Buyer LinkedIn<input name="buyerLinkedin" type="url" placeholder="https://linkedin.com/in/..." value="${escapeHtml(p.buyerLinkedin||'')}"></label>
+      <label>Estimated value £<input name="estimatedValuePounds" type="number" min="0" step="0.01" value="${escapeHtml(((Number(p.estimatedValuePence)||0)/100).toFixed(2))}"></label>
+    </div>
+    <label>Verified trigger signal<textarea name="triggerSignal" rows="2" placeholder="Public launch, funding, MCP release, hiring signal…">${escapeHtml(p.triggerSignal||'')}</textarea></label>
+    <label>Agent use case<textarea name="agentUseCase" rows="2" placeholder="What the agent does, based on public evidence">${escapeHtml(p.agentUseCase||'')}</textarea></label>
+    <label>Tools, data or systems it can access<textarea name="toolAccess" rows="2" placeholder="Only record verified facts">${escapeHtml(p.toolAccess||'')}</textarea></label>
+    <label>Evidence links or notes (one per line)<textarea name="evidence" rows="3">${escapeHtml((p.evidence||[]).join('\n'))}</textarea></label>
+    <label>Internal notes<textarea name="notes" rows="3">${escapeHtml(p.notes||'')}</textarea></label>
+    <div class="button-row compact"><button class="button primary small" type="submit">Save prospect</button></div>
+  </form>`;
+}
 function detailPanel() {
   const p = prospects.find(x=>x.id===selectedId);
   if (!p) return '';
@@ -74,6 +96,7 @@ function detailPanel() {
     <div class="section-heading"><div><span class="eyebrow">Qualified account</span><h2>${escapeHtml(p.companyName)}</h2></div><strong class="score-badge">${p.score}/100</strong></div>
     <div class="sales-facts"><div><span>Buyer</span><strong>${escapeHtml([p.buyerName,p.buyerRole].filter(Boolean).join(' · ')||'Not identified')}</strong></div><div><span>Trigger</span><strong>${escapeHtml(p.triggerSignal||'Not recorded')}</strong></div><div><span>Use case</span><strong>${escapeHtml(p.agentUseCase||'Not recorded')}</strong></div><div><span>Access</span><strong>${escapeHtml(p.toolAccess||'Not recorded')}</strong></div></div>
     <p class="small-copy muted">${p.scoreReasons.map(escapeHtml).join(' · ')}</p>
+    <details class="section-gap"><summary><strong>Edit prospect</strong> · buyer, evidence and qualification facts</summary>${editProspectForm(p)}</details>
     <form id="stageForm" class="inline-form"><select name="stage">${['research','qualified','contacted','replied','demo_booked','assessment_proposed','customer','subscription','lost'].map(x=>`<option value="${x}" ${x===p.stage?'selected':''}>${x.replaceAll('_',' ')}</option>`).join('')}</select><input name="nextAction" value="${escapeHtml(p.nextAction||'')}" placeholder="Next action"><input name="nextActionAt" type="datetime-local" value="${escapeHtml(localDate(p.nextActionAt))}"><button class="button ghost small">Update</button></form>
     <form id="activityForm" class="inline-form"><select name="activityType"><option value="reply">Reply</option><option value="follow_up">Follow-up</option><option value="demo">Demo</option><option value="proposal">Proposal</option><option value="assessment_sold">Assessment sold</option><option value="subscription_sold">Subscription sold</option><option value="note">Note</option></select><input name="outcome" placeholder="Outcome or note"><input name="amountPounds" type="number" min="0" step="0.01" placeholder="Revenue £"><button class="button ghost small">Record result</button></form>
     <div class="section-heading section-gap"><div><span class="eyebrow">Approval queue</span><h2>Personalised outreach</h2></div></div>
@@ -88,6 +111,7 @@ function messageCard(m) {
 function bind() {
   document.querySelectorAll('[data-select]').forEach(x=>x.addEventListener('click',()=>{selectedId=x.dataset.select; renderCurrent();}));
   document.querySelector('#prospectForm')?.addEventListener('submit', addProspect);
+  document.querySelector('#editProspectForm')?.addEventListener('submit', editProspect);
   document.querySelector('#stageForm')?.addEventListener('submit', updateStage);
   document.querySelector('#activityForm')?.addEventListener('submit', recordResult);
   document.querySelectorAll('[data-draft]').forEach(x=>x.addEventListener('click', draft));
@@ -102,6 +126,15 @@ async function addProspect(event) {
   data.evidence=String(data.evidence||'').split('\n').map(x=>x.trim()).filter(Boolean);
   try { const {prospect}=await api('/api/admin/sales/prospects',{method:'POST',body:JSON.stringify(data)}); selectedId=prospect.id; await load(); }
   catch(error){const box=document.querySelector('#formError');box.textContent=error.message;box.classList.add('show');setBusy(button,false);}
+}
+async function editProspect(event) {
+  event.preventDefault(); const button=event.submitter; setBusy(button,true,'Saving…');
+  const data=Object.fromEntries(new FormData(event.currentTarget));
+  data.evidence=String(data.evidence||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  data.estimatedValuePence=Math.max(0,Math.round((Number(data.estimatedValuePounds)||0)*100));
+  delete data.estimatedValuePounds;
+  try {await api(`/api/admin/sales/prospects/${encodeURIComponent(selectedId)}`,{method:'PATCH',body:JSON.stringify(data)});await load();}
+  catch(error){showSalesError(error);setBusy(button,false);}
 }
 async function updateStage(event) {
   event.preventDefault(); const data=Object.fromEntries(new FormData(event.currentTarget));
