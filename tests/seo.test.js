@@ -87,3 +87,10 @@ test('search and social images are present as local crawlable assets', () => {
     assert.ok(stat.size > 1000, `${asset} should contain an actual image`);
   }
 });
+
+test('generated risk-check pages use declared-score semantics', () => {
+  const server = read('server.js');
+  assert.match(server, /Example aggregate declared score/);
+  assert.match(server, /Moderate overall declared band/);
+  assert.doesNotMatch(server, /Example residual risk/);
+});
