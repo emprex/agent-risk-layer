@@ -1,4 +1,5 @@
 import { api, escapeHtml, hideError, qs, setBusy, showError } from './shared.js';
+import { buildRevisionQuestionFlow } from './assessment-revision.js';
 
 const form = document.querySelector('#assessmentForm');
 const profileStep = document.querySelector('#profileStep');
@@ -15,6 +16,8 @@ const agentName = document.querySelector('#agentName');
 const agentType = document.querySelector('#agentType');
 const agentDescription = document.querySelector('#agentDescription');
 const revisionNotice = document.querySelector('#revisionNotice');
+const revisionReviewField = document.querySelector('#revisionReviewField');
+const reviewPreviousAnswers = document.querySelector('#reviewPreviousAnswers');
 const updateFrom = qs('updateFrom');
 const updateToken = qs('token');
 
@@ -23,6 +26,7 @@ let flowQuestions = [];
 let evidenceOptions = [];
 let stepIndex = 0;
 let sourceAssessmentId = '';
+let revisionSourceName = '';
 const answers = new Map();
 
 async function init() {
@@ -70,8 +74,22 @@ function normaliseSourceAnswer(question, raw) {
   return { value: candidate.value, evidence };
 }
 
+function refreshRevisionFlow() {
+  if (!sourceAssessmentId) return;
+  const reviewAll = Boolean(reviewPreviousAnswers?.checked);
+  const unresolvedCount = questionnaire.filter((question) => !answers.has(question.id) || answers.get(question.id)?.value === 'unknown').length;
+  flowQuestions = buildRevisionQuestionFlow(questionnaire, answers, reviewAll);
+
+  if (reviewAll || unresolvedCount === 0) {
+    revisionNotice.textContent = `Creating an updated assessment from ${revisionSourceName}. Previous answers are prefilled for review and can be changed in this new assessment. The previous assessment remains unchanged.`;
+  } else {
+    revisionNotice.textContent = `Creating an updated assessment from ${revisionSourceName}. Previous known answers are prefilled; by default, only unresolved questions need a new answer. Turn on “Review all previous answers” if new information changes an earlier answer. The previous assessment remains unchanged.`;
+  }
+}
+
 function applyRevisionSource(source) {
   sourceAssessmentId = source.assessmentId;
+  revisionSourceName = source.name || 'the previous assessment';
   agentName.value = source.name || '';
   agentType.value = source.agentType || '';
   const sourceAnswers = source.answers && typeof source.answers === 'object' ? source.answers : {};
@@ -81,11 +99,9 @@ function applyRevisionSource(source) {
     const answer = normaliseSourceAnswer(question, sourceAnswers[question.id]);
     if (answer) answers.set(question.id, answer);
   }
-  flowQuestions = questionnaire.filter((question) => !answers.has(question.id) || answers.get(question.id)?.value === 'unknown');
-  if (!flowQuestions.length) flowQuestions = questionnaire;
-  revisionNotice.textContent = flowQuestions.length === questionnaire.length && !questionnaire.some((question) => answers.get(question.id)?.value === 'unknown')
-    ? `Creating an updated assessment from ${source.name}. Previous answers are prefilled for review. The previous assessment remains unchanged.`
-    : `Creating an updated assessment from ${source.name}. Previous known answers are prefilled; only unresolved questions need a new answer. The previous assessment remains unchanged.`;
+  if (revisionReviewField) revisionReviewField.hidden = false;
+  if (reviewPreviousAnswers) reviewPreviousAnswers.checked = false;
+  refreshRevisionFlow();
   revisionNotice.hidden = false;
 }
 
@@ -183,6 +199,11 @@ function saveCurrentQuestion() {
 }
 
 agentType.addEventListener('change', updateDescriptionRequirement);
+reviewPreviousAnswers?.addEventListener('change', () => {
+  if (!sourceAssessmentId || stepIndex !== 0) return;
+  refreshRevisionFlow();
+  renderStep();
+});
 
 nextButton.addEventListener('click', () => {
   hideError(errorBox);
