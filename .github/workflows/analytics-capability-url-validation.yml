@@ -1,0 +1,75 @@
+name: Analytics capability URL privacy validation
+
+on:
+  push:
+    branches:
+      - fix/analytics-capability-url-leak-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install product dependencies
+        run: npm ci
+      - name: Static checks
+        run: npm run check
+      - name: Focused analytics tests
+        run: node --test tests/analytics.test.js
+      - name: Full regression suite
+        run: npm test
+      - name: Install disposable browser verifier
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Verify GA4 receives no capability query data
+        run: |
+          python3 -m http.server 4173 -d public >/tmp/arl-static.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { chromium } from 'playwright';
+
+          const browser = await chromium.launch({ headless: true });
+          try {
+            const context = await browser.newContext();
+            await context.addInitScript(() => {
+              localStorage.setItem('agentrisklayer_analytics_consent', 'granted');
+            });
+            const page = await context.newPage();
+            await page.route('https://www.googletagmanager.com/**', route => route.abort());
+
+            await page.goto('http://127.0.0.1:4173/help.html?token=synthetic_referrer_secret&session_id=synthetic_session#fragment', { waitUntil: 'domcontentloaded' });
+            await page.evaluate(() => { location.href = '/trust.html?token=synthetic_capability_secret&session_id=synthetic_checkout_secret#fragment'; });
+            await page.waitForURL(/\/trust\.html\?token=/);
+            await page.waitForTimeout(100);
+
+            const config = await page.evaluate(() => {
+              const rows = (window.dataLayer || []).map(item => Array.from(item));
+              const entry = rows.find(row => row[0] === 'config' && row[1] === 'G-T1V035EGTB');
+              return entry?.[2] || null;
+            });
+
+            assert.ok(config, 'GA4 config should be queued after granted consent');
+            assert.equal(config.page_location, 'http://127.0.0.1:4173/trust.html');
+            assert.equal(config.page_referrer, 'http://127.0.0.1:4173/help.html');
+            const serialized = JSON.stringify(config);
+            for (const secret of ['synthetic_capability_secret', 'synthetic_checkout_secret', 'synthetic_referrer_secret', 'synthetic_session']) {
+              assert.equal(serialized.includes(secret), false, `analytics config must not contain ${secret}`);
+            }
+            console.log(JSON.stringify(config));
+            await context.close();
+          } finally {
+            await browser.close();
+          }
+          NODE
