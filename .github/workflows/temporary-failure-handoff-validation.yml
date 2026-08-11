@@ -35,7 +35,7 @@ jobs:
       - run: npm run check
       - run: NODE_ENV=test node --test tests/control-intelligence.test.js tests/control-intelligence-failure-handoff.test.js
       - run: npm test
-      - run: npm run test:postgres
+      - run: node scripts/test-control-intelligence-postgres.mjs
         env:
           NODE_ENV: test
           DATABASE_URL: ''
