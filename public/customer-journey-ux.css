@@ -1,0 +1,37 @@
+/* Customer-journey fixes backed by the 2026-08-11 production UX audit. */
+
+/* Preserve the HTML hidden contract when component classes set display explicitly. */
+.assessment-shell [hidden] {
+  display: none !important;
+}
+
+@media (max-width: 680px) {
+  /* A 1fr grid track uses an automatic minimum and allowed hero content to widen the page. */
+  .demo-v2-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .demo-v2-hero > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Keep the unbroken product name inside the 332–362px mobile content column. */
+  .demo-v2-hero h1 {
+    font-size: clamp(40px, 11vw, 45px);
+  }
+
+  /* The limitations grid had the same min-content expansion at 390px. */
+  .v10-limitations-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v10-limitations-layout > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .v10-limitations-layout h2 {
+    font-size: clamp(34px, 10vw, 40px);
+  }
+}
