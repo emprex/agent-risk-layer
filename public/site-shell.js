@@ -1,12 +1,12 @@
 import { hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
-import './website-v2.js';
 
-if (!document.querySelector('link[href="/website-v2.css"]')) {
+for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia']]) {
+  if (document.querySelector(`link[href="${href}"]`)) continue;
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/website-v2.css';
-  stylesheet.dataset.arlWebsiteV2 = '';
+  stylesheet.href = href;
+  stylesheet.dataset[dataKey] = '';
   document.head.appendChild(stylesheet);
 }
 
@@ -17,30 +17,6 @@ const menuButton = document.querySelector('[data-menu-toggle]');
 const navigation = document.querySelector('[data-primary-navigation]');
 const mobileNavigation = window.matchMedia('(max-width: 900px)');
 let lastFocusedElement = null;
-
-function buildPublicNavigation() {
-  if (document.body.dataset.shell !== 'public' || !navigation) return;
-  navigation.innerHTML = `
-    <a href="/#product">Product</a>
-    <a href="/#how-it-works">How it works</a>
-    <a href="/trust.html">Trust</a>
-    <a href="/pricing.html">Pricing</a>
-    <details class="v2-resources">
-      <summary>Resources</summary>
-      <div class="v2-resource-menu">
-        <a href="/demo.html">Interactive demo</a>
-        <a href="/methodology.html">Methodology</a>
-        <a href="/risk-library.html">Risk library</a>
-        <a href="/sample-report.html">Sample report</a>
-        <a href="/help.html">Help Centre</a>
-      </div>
-    </details>
-    <a class="nav-signin" data-auth-link href="/auth.html">Sign in</a>
-    <a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a>
-  `;
-}
-
-buildPublicNavigation();
 
 if (document.body.dataset.shell === 'app' && navigation && !navigation.querySelector('a[href^="/control-intelligence"]')) {
   const link = document.createElement('a');
@@ -113,7 +89,7 @@ function setMenu(open, { focus = false, restoreFocus = false } = {}) {
   setNavigationAvailability(nextOpen);
 
   if (focus && nextOpen) {
-    requestAnimationFrame(() => navigation.querySelector('a[href], summary, button:not([disabled])')?.focus());
+    requestAnimationFrame(() => navigation.querySelector('a[href], button:not([disabled])')?.focus());
   }
 
   if (restoreFocus && !nextOpen) {
@@ -126,7 +102,7 @@ function setMenu(open, { focus = false, restoreFocus = false } = {}) {
 
 function focusableMenuControls() {
   if (!header) return [];
-  return [...header.querySelectorAll('button:not([disabled]), a[href], summary')]
+  return [...header.querySelectorAll('button:not([disabled]), a[href]')]
     .filter((element) => !element.hasAttribute('inert'));
 }
 
