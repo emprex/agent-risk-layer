@@ -1303,7 +1303,7 @@ function safeEqualDigest(left, right) {
 }
 function sanitiseVerificationInput(input) {
   const safe = privacySafeObject(input, 30);
-  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);
+  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes', 'rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']);
   return Object.fromEntries(Object.entries(safe).filter(([key]) => allowed.has(key)));
 }
 async function resolveActiveRetestCriteria({ project, criteriaId }) {
