@@ -64,3 +64,14 @@ test('responsive workflow navigation avoids a horizontal step rail', () => {
   assert.match(css, /@media\(max-width:430px\)\{\.ci-tabs,\.ci-metrics,\.ci-stage-nav ol\{grid-template-columns:1fr\}/);
   assert.match(css, /\.ci-bulk-row-error/);
 });
+
+
+test('cross-snapshot failure lineage is retained only for the open-finding retest path', () => {
+  assert.match(controlIntelligence, /const currentTests = data\.tests\.filter/);
+  assert.match(controlIntelligence, /const historicalTests = \(data\.testHistory \|\| data\.tests\)/);
+  assert.match(controlIntelligence, /const currentEvidence = data\.evidence\.filter/);
+  assert.match(controlIntelligence, /const historicalEvidence = \(data\.evidenceHistory \|\| data\.evidence\)/);
+  assert.match(controlIntelligence, /const tests = open\.length \? historicalTests : currentTests/);
+  assert.match(controlIntelligence, /row\.test_execution_id===initialFailure\?\.id/);
+  assert.match(controlIntelligence, /verifiedEvidence=currentEvidence\.some/);
+});

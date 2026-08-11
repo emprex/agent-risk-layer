@@ -329,6 +329,9 @@ export async function getControlIntelligence({ projectId, userId, limit = 25, of
   const allEvaluations = await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY entry_id').all(access.project.workspace_id, projectId, snapshot.id);
   await verifyRows(allEvaluations,'content_digest','evaluation');
   const derived = await loadDerivedRows(access, snapshot, allEvaluations);
+  derived.testHistory=await db.prepare(`SELECT t.* FROM control_test_executions t WHERE t.workspace_id=? AND t.project_id=? AND (t.system_snapshot_id=? OR EXISTS (SELECT 1 FROM remediation_items r WHERE r.id=t.finding_id AND r.project_id=t.project_id AND r.status NOT IN ('verified_closed','accepted_risk'))) ORDER BY t.created_at DESC LIMIT 500`).all(access.project.workspace_id,access.project.id,snapshot.id);
+  derived.evidenceHistory=await db.prepare(`SELECT e.* FROM control_evidence_items e WHERE e.workspace_id=? AND e.project_id=? AND (e.system_snapshot_id=? OR EXISTS (SELECT 1 FROM control_test_executions t JOIN remediation_items r ON r.id=t.finding_id AND r.project_id=t.project_id WHERE t.id=e.test_execution_id AND r.status NOT IN ('verified_closed','accepted_risk'))) ORDER BY e.observed_at DESC LIMIT 500`).all(access.project.workspace_id,access.project.id,snapshot.id);
+  await verifyRows(derived.testHistory,'content_digest','test');await verifyRows(derived.evidenceHistory,'integrity_digest','evidence');
   derived.snapshotAssessmentConfiguration=snapshot.assessment_configuration_json;
   derived.suggestions=suggestControls(derived.entries,snapshotFacts(snapshot),snapshot.id);
   const chains = deriveChains(allEvaluations, derived);
@@ -357,7 +360,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
   if (!evaluation) throw notFound('Control evaluation not found for the current snapshot.');
   await verifyRows([evaluation],'content_digest','evaluation');
   const limit = Math.max(1, Math.min(50, Number(historyLimit) || 25));
-  const [tests,evidence,links,remediations,runtime,approvals,decisions,mappings,revisions,requirements,testHistory] = await Promise.all([
+  const [tests,evidence,links,remediations,runtime,approvals,decisions,mappings,revisions,requirements,testHistory,lineageTests,lineageEvidence] = await Promise.all([
     db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, controlId, limit),
     db.prepare('SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY observed_at DESC LIMIT ?').all(access.project.workspace_id, projectId, snapshot.id, controlId, limit),
     db.prepare('SELECT subject_type,subject_id,link_role,knowledge_version,entry_digest,created_at FROM risk_knowledge_links WHERE workspace_id=? AND project_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id, projectId, controlId, limit),
@@ -373,9 +376,14 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     db.prepare('SELECT id,decision,reason,architecture_facts_json,evaluator_id,evaluator_role,evaluated_at,evaluation_digest,previous_revision_id FROM control_applicability_revisions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY evaluated_at DESC,id DESC LIMIT ?').all(access.project.workspace_id,projectId,snapshot.id,controlId,limit),
     db.prepare('SELECT id,action_type,reuse_scope,descriptor_json,requirement_digest,created_at FROM control_approval_requirements WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id,projectId,snapshot.id,controlId,limit),
     db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND entry_id=? ORDER BY created_at DESC LIMIT ?').all(access.project.workspace_id,projectId,controlId,limit),
+    db.prepare(`SELECT t.* FROM control_test_executions t WHERE t.workspace_id=? AND t.project_id=? AND t.entry_id=? AND (t.system_snapshot_id=? OR EXISTS (SELECT 1 FROM remediation_items r WHERE r.id=t.finding_id AND r.project_id=t.project_id AND r.status NOT IN ('verified_closed','accepted_risk'))) ORDER BY t.created_at DESC LIMIT 250`).all(access.project.workspace_id,projectId,controlId,snapshot.id),
+    db.prepare(`SELECT e.* FROM control_evidence_items e WHERE e.workspace_id=? AND e.project_id=? AND e.entry_id=? AND (e.system_snapshot_id=? OR EXISTS (SELECT 1 FROM control_test_executions t JOIN remediation_items r ON r.id=t.finding_id AND r.project_id=t.project_id WHERE t.id=e.test_execution_id AND r.status NOT IN ('verified_closed','accepted_risk'))) ORDER BY e.observed_at DESC LIMIT 250`).all(access.project.workspace_id,projectId,controlId,snapshot.id),
   ]);
   await verifyRows(tests, 'content_digest','test');
   await verifyRows(evidence, 'integrity_digest','evidence');
+  await verifyRows(testHistory, 'content_digest','test');
+  await verifyRows(lineageTests, 'content_digest','test');
+  await verifyRows(lineageEvidence, 'integrity_digest','evidence');
   await verifyRows(decisions,'decision_digest','decision');
   const bindings=await db.prepare('SELECT * FROM control_snapshot_runtime_bindings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? ORDER BY created_at DESC LIMIT 500').all(access.project.workspace_id,access.project.id,snapshot.id);
   await verifyRows(bindings,'content_digest','binding');
@@ -383,7 +391,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
     db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id>? ORDER BY entry_id LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
   ]);
-  const derived = { tests:testHistory, evidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
+  const derived = { tests, evidence, testHistory:lineageTests, evidenceHistory:lineageEvidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
     control: { id: evaluation.entry_id, title: evaluation.title, category: evaluation.category, problem: parseJson(evaluation.problem_json, {}),
@@ -459,23 +467,29 @@ export async function getControlIntelligenceReportSummary({projectId}){
 function deriveChains(evaluations, data) {
   return evaluations.map((evaluation) => {
     const controlId = evaluation.entry_id;
-    const tests = data.tests.filter((row) => row.entry_id === controlId);
-    const evidence = data.evidence.filter((row) => row.entry_id === controlId);
-    const links = data.links.filter((row) => row.entry_id === controlId);
     const findings = data.remediations.filter((row) => row.finding_key === controlId || row.finding_key?.startsWith(`${controlId}-`));
     const open = findings.filter((row) => !['verified_closed','accepted_risk'].includes(row.status));
+    const currentTests = data.tests.filter((row) => row.entry_id === controlId && (!row.system_snapshot_id || row.system_snapshot_id === evaluation.system_snapshot_id));
+    const historicalTests = (data.testHistory || data.tests).filter((row) => row.entry_id === controlId);
+    const currentEvidence = data.evidence.filter((row) => row.entry_id === controlId && (!row.system_snapshot_id || row.system_snapshot_id === evaluation.system_snapshot_id));
+    const historicalEvidence = (data.evidenceHistory || data.evidence).filter((row) => row.entry_id === controlId);
+    const tests = open.length ? historicalTests : currentTests;
+    const evidence = currentEvidence;
+    const links = data.links.filter((row) => row.entry_id === controlId);
     const implementationRecorded = open.some((row) => !['open'].includes(row.status));
-    const initialFailure = tests.find((row) => row.result === 'failed' && row.execution_kind !== 'retest');
+    const openFailureIds = new Set(open.map((row) => parseJson(row.verification_json, {})?.failedExecutionId).filter(Boolean));
+    const initialFailure = historicalTests.find((row) => row.result === 'failed' && row.execution_kind !== 'retest' && openFailureIds.has(row.id))
+      || tests.find((row) => row.result === 'failed' && row.execution_kind !== 'retest');
     const remediatedSnapshotReady = Boolean(initialFailure?.system_snapshot_id && evaluation.system_snapshot_id !== initialFailure.system_snapshot_id);
     const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady;
-    const passedRetest = tests.some((row)=>validRetest(row,data.tests,findings));
+    const passedRetest = historicalTests.some((row)=>validRetest(row,historicalTests,findings));
     const failed = tests.some((row) => row.result === 'failed');
-    const passed = tests.some((row) => row.result === 'passed');
-    const activeEvidence = evidence.some((row) => row.retention_status === 'active' && row.verification_state === 'verified');
+    const passed = currentTests.some((row) => row.result === 'passed');
+    const activeEvidence = currentEvidence.some((row) => row.retention_status === 'active' && row.verification_state === 'verified');
     const runtimeRegression = links.some((row) => row.subject_type === 'runtime_event') && data.runtime.some((row) => row.decision === 'deny' && links.some((link) => link.subject_id === row.id));
     const approvalRequired=(data.requirements||[]).some(row=>row.entry_id===controlId);
-    const executed=tests.filter(row=>row.result!=='planned');const latest=tests[0];const verifiedEvidence=evidence.some(row=>row.retention_status==='active'&&row.verification_state==='verified');
-    const failureEvidence=evidence.some(row=>row.retention_status==='active'&&['unverified','verified'].includes(row.verification_state)&&row.test_execution_id&&tests.some(test=>test.id===row.test_execution_id&&test.result==='failed'));
+    const executed=tests.filter(row=>row.result!=='planned');const latest=currentTests[0]||tests[0];const verifiedEvidence=currentEvidence.some(row=>row.retention_status==='active'&&row.verification_state==='verified');
+    const failureEvidence=(open.length?historicalEvidence:currentEvidence).some(row=>row.retention_status==='active'&&['unverified','verified'].includes(row.verification_state)&&row.test_execution_id&&row.test_execution_id===initialFailure?.id);
     let chainStatus = 'applicable_unassessed';
     if (evaluation.stale_at) chainStatus = 'reassessment_required';
     else if (evaluation.applicability_status === 'unknown') chainStatus = 'context_required';
