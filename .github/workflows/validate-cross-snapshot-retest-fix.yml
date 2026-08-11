@@ -1,4 +1,4 @@
-# Temporary validation workflow; removed before merge. Validation trigger 2.
+# Temporary validation workflow; removed before merge. Validation trigger 3.
 name: Validate cross-snapshot retest repair
 
 on:
@@ -89,7 +89,7 @@ jobs:
             await page.locator('#registerForm button[type=submit]').click();
             await page.waitForURL(/\/verify\.html/);
             await page.getByText('Email verified', { exact: false }).waitFor();
-            await page.locator('a[href="/dashboard.html"]').click();
+            await page.getByRole('link', { name: 'Open dashboard', exact: true }).click();
             await page.waitForURL(/\/dashboard\.html/);
             await setup.close();
 
