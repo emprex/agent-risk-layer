@@ -1,0 +1,77 @@
+/* Decorative media layer for the premium redesign. */
+.v10-home .v10-product-band,
+.v10-home .v10-example-band,
+.v10-home .v10-how-section{position:relative;overflow:hidden}
+.v10-home .v10-product-band::before{
+  content:"";
+  position:absolute;
+  inset:-50px -80px auto auto;
+  width:min(72vw,980px);
+  height:500px;
+  background:url('/evidence-network.svg') center/contain no-repeat;
+  opacity:.48;
+  pointer-events:none;
+  filter:saturate(115%);
+}
+.v10-home .v10-product-band>.content-section{position:relative;z-index:1}
+.v10-home .v10-example-band::before{
+  content:"";
+  position:absolute;
+  width:440px;
+  height:440px;
+  right:-120px;
+  bottom:-210px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(139,124,255,.12),rgba(22,184,255,.055) 38%,transparent 68%);
+  pointer-events:none;
+}
+.v10-control-visual{isolation:isolate;overflow:hidden}
+.v10-control-visual::before{
+  content:"";
+  position:absolute;
+  top:-20%;
+  left:-15%;
+  width:130%;
+  height:160px;
+  z-index:0;
+  pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(22,184,255,.11),transparent);
+  transform:translateX(-24%) rotate(-11deg);
+  animation:arlScan 8.5s linear infinite;
+}
+.v10-control-visual>*{position:relative;z-index:1}
+.v10-control-visual::after{
+  content:"LIVE CONTROL CHECK";
+  position:absolute;
+  z-index:2;
+  right:18px;
+  bottom:14px;
+  padding:5px 8px;
+  border:1px solid rgba(22,184,255,.18);
+  border-radius:999px;
+  background:rgba(5,12,20,.72);
+  color:#72d5ff;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.13em;
+  pointer-events:none;
+}
+@keyframes arlScan{0%{transform:translateX(-24%) rotate(-11deg)}50%{transform:translateX(8%) rotate(-11deg)}100%{transform:translateX(24%) rotate(-11deg)}}
+
+/* Give long-form trust/help/methodology pages a subtle visual anchor without stock imagery. */
+body[data-shell="public"] main>.hero.compact::after,
+body[data-shell="public"] main>.page-heading::after{
+  content:"";
+  display:block;
+  width:82px;
+  height:2px;
+  margin-top:22px;
+  border-radius:999px;
+  background:linear-gradient(90deg,var(--brand),rgba(139,124,255,.8),transparent);
+}
+
+@media(max-width:900px){
+  .v10-home .v10-product-band::before{width:920px;right:-430px;opacity:.24}
+  .v10-control-visual::before,.v10-control-visual::after{display:none}
+}
+@media(prefers-reduced-motion:reduce){.v10-control-visual::before{animation:none;opacity:.35}}

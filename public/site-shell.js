@@ -1,6 +1,15 @@
 import { hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
+for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia']]) {
+  if (document.querySelector(`link[href="${href}"]`)) continue;
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = href;
+  stylesheet.dataset[dataKey] = '';
+  document.head.appendChild(stylesheet);
+}
+
 applyDocumentSeo();
 
 const header = document.querySelector('[data-site-header]');
