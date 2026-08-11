@@ -109,12 +109,7 @@ jobs:
           )
           source = source.replace(
               "await click('[data-stage=\"retest\"] summary');",
-              "await wait('Boolean(document.querySelector(\"#retestForm\"))');",
-              1
-          )
-          source = source.replace(
-              "await call('Page.reload');await click('[data-stage=\"retest\"] summary');",
-              "await call('Page.reload');await wait('Boolean(document.querySelector(\"#closureForm\"))');",
+              "await wait('document.querySelector(\"[data-stage=\\\"retest\\\"]\")?.dataset.uxState===\"current\"');await click('.ci-stage-nav li[data-state=\"current\"] button');await wait('Boolean(document.querySelector(\"#retestForm\"))');",
               1
           )
           source = source.replace(
