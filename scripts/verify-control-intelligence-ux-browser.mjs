@@ -176,7 +176,7 @@ await navigate(`/control-intelligence-control.html?projectId=${encodeURIComponen
 await wait('Boolean(document.querySelector("#applicabilityForm"))');
 await wait('Boolean(document.querySelector(".ci-stage-nav"))');
 assert.match(await visibleText(), /3\. Evidence/);
-assert.match(await visibleText(), /Evidence trust remains explicit/);
+assert.equal(await evaluate('[...document.querySelectorAll(".ci-stage-help")].some(node=>node.textContent.includes("Evidence trust remains explicit"))'), true);
 await click('[name="decision"][value="applicable"]');
 await type('#appReason', 'Untrusted customer messages reach the refund agent and can influence tool actions.');
 await click('[name="fact"]');
