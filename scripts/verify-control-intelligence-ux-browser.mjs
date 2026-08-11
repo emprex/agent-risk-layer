@@ -167,7 +167,10 @@ await type('[name="missing-1"]', 'Confirm the production owner, decision policy 
 await click('[name="fact-1"]');
 await click('#bulkConfirm');
 await click('#bulkForm button[type=submit]');
-await wait('document.body.innerText.includes("2 of 108 controls reviewed")', 12000);
+await wait('document.querySelector("#ciMessage")?.innerText.includes("Saved 2 individual applicability decisions")');
+await wait('!document.querySelector("#bulkForm")', 12000);
+await navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}`);
+await wait('document.body.innerText.includes("2 of 108 controls reviewed")');
 
 await navigate(`/control-intelligence-control.html?projectId=${encodeURIComponent(projectId)}&controlId=ARL-KB-031`);
 await wait('Boolean(document.querySelector("#applicabilityForm"))');
