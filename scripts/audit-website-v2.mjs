@@ -7,6 +7,19 @@ const publicPages = ['/', '/trust.html', '/demo.html', '/methodology.html', '/he
 const widths = [1440, 1024, 768, 390, 360, 320];
 await mkdir('test-artifacts/website-v2', { recursive: true });
 
+async function revealFullPage(page) {
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  const viewport = page.viewportSize()?.height || 900;
+  for (let y = 0; y < height; y += Math.max(420, Math.floor(viewport * 0.72))) {
+    await page.evaluate((nextY) => window.scrollTo({ top: nextY, behavior: 'instant' }), y);
+    await page.waitForTimeout(90);
+  }
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+  await page.waitForTimeout(180);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.waitForTimeout(220);
+}
+
 const browser = await chromium.launch({ headless: true });
 const results = [];
 try {
@@ -40,7 +53,12 @@ try {
         assert.equal(await page.locator('[data-authority-demo]').count(), 1);
         assert.equal(await page.locator('[data-evidence-chain]').count(), 1);
         assert.equal(await page.getByText('Security evidence, not security theatre.').count(), 1);
-        if ([1440, 390].includes(width)) await page.screenshot({ path: `test-artifacts/website-v2/home-${width}.png`, fullPage: true });
+        if ([1440, 390].includes(width)) {
+          await revealFullPage(page);
+          const unrevealed = await page.locator('[data-reveal]:not(.is-visible)').count();
+          assert.equal(unrevealed, 0, `homepage reveal content should be visible before screenshot at ${width}px`);
+          await page.screenshot({ path: `test-artifacts/website-v2/home-${width}.png`, fullPage: true });
+        }
       }
       results.push({ width, ...state });
     }
