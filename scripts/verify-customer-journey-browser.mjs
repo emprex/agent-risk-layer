@@ -11,7 +11,7 @@ const email = `visible-customer-${Date.now()}@example.test`;
 const password = 'Visible-Customer-Journey-42!';
 const agentName = `Visible customer agent ${Date.now()}`;
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
 const page = await context.newPage();
 const sameOriginErrors = [];
 const consoleErrors = [];
@@ -134,13 +134,18 @@ try {
   const pdfLink = page.locator('a[href*="/api/reports/"][href*="/pdf"]');
   await pdfLink.waitFor();
   evidence.report.paidPdfLinkVisible = true;
-  const pdfHref = await pdfLink.getAttribute('href');
-  assert.ok(pdfHref, 'Paid result should expose the PDF report link');
-  const pdfResponse = await page.goto(new URL(pdfHref, baseUrl).toString(), { waitUntil: 'domcontentloaded' });
-  assert.equal(pdfResponse?.status(), 200);
-  assert.match(String(pdfResponse?.headers()['content-type'] || ''), /application\/pdf/i);
-  evidence.report.pdfHttp200 = true;
-  evidence.report.pdfContentType = pdfResponse?.headers()['content-type'] || '';
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    pdfLink.click(),
+  ]);
+  const downloadPath = await download.path();
+  assert.ok(downloadPath, 'PDF report download should complete');
+  const pdfBytes = await fs.readFile(downloadPath);
+  assert.ok(pdfBytes.length > 10000, `PDF report should be non-trivial, got ${pdfBytes.length} bytes`);
+  assert.equal(pdfBytes.subarray(0, 5).toString('ascii'), '%PDF-', 'Downloaded report should be a PDF');
+  evidence.report.pdfDownloadCompleted = true;
+  evidence.report.pdfBytes = pdfBytes.length;
+  evidence.report.pdfFilename = download.suggestedFilename();
 
   await page.goto(resultUrl, { waitUntil: 'networkidle' });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -184,7 +189,8 @@ try {
     `Unverified evidence boundary visible: ${evidence.assessment.unverifiedBoundaryVisible}`,
     `Demo checkout and fulfilment screen reached: ${evidence.checkout.demoPaymentAndFulfilmentVisible}`,
     `Assessment visible on dashboard after fulfilment: ${evidence.dashboard.assessmentVisibleAfterFulfilment}`,
-    `Paid PDF report returned HTTP 200/application-pdf: ${evidence.report.pdfHttp200}`,
+    `Paid PDF report downloaded and validated: ${evidence.report.pdfDownloadCompleted}`,
+    `Paid PDF bytes: ${evidence.report.pdfBytes || 0}`,
     `390px result width: ${JSON.stringify(evidence.mobile.result390)}`,
     `390px dashboard width: ${JSON.stringify(evidence.mobile.dashboard390)}`,
     `Private after logout: ${evidence.privacy.privateAfterLogout}`,
