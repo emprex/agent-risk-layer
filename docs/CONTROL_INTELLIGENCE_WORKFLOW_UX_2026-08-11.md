@@ -2,9 +2,9 @@
 
 ## Scope
 
-This change repairs the browser workflow and responsive presentation of Control Intelligence without changing the underlying evidence, finding, remediation, retest, approval or deployment-decision trust semantics.
+This change repairs the browser workflow, responsive presentation and two server-side workflow defects exposed by the CLARA design-partner assessment. It preserves the underlying evidence trust model: declarations remain distinct from observations, unverified evidence is not promoted, findings still require observed/reproduced failure evidence, and finding closure still requires remediation plus exact retest evidence.
 
-The work is based on observed design-partner use of the CLARA assessment and the current repository baseline `27ffe490b50f77d7d59c73a40ff5989763bff8e1`.
+The work is based on observed design-partner use of the CLARA assessment and repository baseline `27ffe490b50f77d7d59c73a40ff5989763bff8e1`.
 
 ## Observed problems
 
@@ -17,6 +17,43 @@ The design-partner run exposed workflow friction that was not visible in the ear
 - bulk applicability used the transactional batch API, so one stale or invalid row discarded every otherwise valid decision in that browser submission;
 - responsive navigation still relied on horizontal tab/step patterns that were awkward on narrow screens;
 - supporting-fact and impact-fact forms did not sufficiently warn reviewers against selecting unrelated facts merely to advance the workflow.
+
+## Additional root causes found during end-to-end validation
+
+The authenticated browser journey exposed two material server-side workflow defects that were repaired in this change.
+
+### Guided remediation narrative was silently discarded
+
+The remediation UI accepted root cause, corrective action, target environment, rollback plan, validation plan, change reference and limitations, but the server-side verification sanitizer retained only a small legacy allowlist. The UI could therefore report that a remediation plan was saved while most of the guided narrative was not persisted. The previous generic sanitizer also imposed a 200-character string ceiling that was inappropriate for remediation evidence.
+
+The sanitizer now uses an explicit, string-only, bounded field contract:
+
+- `artifactId`: 100 characters;
+- `reference`: 500;
+- `retestReference`: 500;
+- `notes`: 3000;
+- `rootCause`: 2000;
+- `correctiveAction`: 4000;
+- `targetEnvironment`: 500;
+- `rollbackPlan`: 2000;
+- `validationPlan`: 3000;
+- `changeReference`: 500;
+- `limitations`: 3000.
+
+This preserves the evidence supplied by the guided remediation forms without accepting arbitrary nested data or unbounded strings.
+
+### Retest could unlock before a remediated snapshot existed
+
+The previous stage-state calculation treated a finding as being in remediation as soon as implementation evidence changed its status. That could mark remediation complete and make exact retest current even though the current system snapshot was still the same snapshot on which the failure had been recorded.
+
+The workflow now requires both:
+
+1. implementation evidence recorded for the open finding; and
+2. a current system snapshot different from the original failed-test snapshot.
+
+Until both conditions exist, remediation remains the current stage. If implementation evidence exists but the snapshot has not changed, the next action explicitly asks for a remediated system snapshot before retesting.
+
+A stale variable reference introduced while repairing this state transition was caught by the authenticated browser test before merge and removed.
 
 ## Implemented browser changes
 
@@ -47,7 +84,7 @@ The browser now treats remediation as three ordered substeps:
 
 Later substeps remain visibly locked until the preceding evidence exists. Saved substeps are collapsed and disabled to reduce accidental blank overwrites. A changed snapshot is recognised by comparing the current snapshot with the original failed execution.
 
-This is a presentation/workflow guard. Server-side prerequisites and closure integrity remain authoritative.
+Server-side stage gating now enforces the same order before exact retest can become current.
 
 ### Bulk-review failure isolation
 
@@ -83,22 +120,28 @@ This repair does not:
 - promote unverified evidence to verified;
 - infer findings from declarations or unknowns;
 - close findings without implementation and exact-retest evidence;
-- change deployment-decision derivation;
-- change snapshot immutability or staleness semantics;
+- alter the server-derived deployment decision policy;
+- weaken snapshot immutability or staleness semantics;
 - weaken exact-action approval integrity;
 - alter tenant/project authorization;
-- add a new database or migration.
+- add a database or migration.
 
 ## Known remaining limitation
 
-The current snapshot architecture-fact vocabulary remains positive-fact oriented and the server still requires at least one confirmed snapshot fact for every applicability decision. The CLARA run showed that this is awkward for some scoped negative or missing-information decisions. That behaviour is intentionally not changed in this browser-only repair because it is part of the signed applicability descriptor and server validation contract. A future change should redesign that contract explicitly rather than silently fabricating negative facts in the browser.
+The current snapshot architecture-fact vocabulary remains positive-fact oriented and the server still requires at least one confirmed snapshot fact for every applicability decision. The CLARA run showed that this is awkward for some scoped negative or missing-information decisions. That behaviour is intentionally not changed here because it is part of the signed applicability descriptor and server validation contract. A future change should redesign that contract explicitly rather than silently fabricating negative facts in the browser.
 
-## Validation required before merge
+## Validation completed before merge
 
-- `npm run check`
-- full `npm test`
-- focused `tests/control-intelligence-ux.test.js`
-- authenticated browser journey through applicability, failed test, evidence, finding, remediation, changed snapshot and exact retest
-- desktop and narrow mobile overflow check
+Temporary PR validation ran against the PR merge result and completed successfully on 11 August 2026:
 
-Production should only be described as updated after the merged commit is deployed and the affected authenticated journey is exercised against that deployment.
+- `npm run check`: passed;
+- focused `tests/control-intelligence-ux.test.js`: 7/7 passed;
+- full `npm test`: 269 tests total, 268 passed, 0 failed, 1 skipped;
+- disposable PostgreSQL 16.14 harness: passed with 19 migrations, 182 foreign keys, snapshot/decision/bulk concurrency checks, transactional bulk rollback, exact approval scope and relational-abuse checks all passing;
+- authenticated visible browser journey: passed from registration through workspace/project creation, snapshot creation, bulk applicability, failed test, evidence, finding, remediation plan, implementation evidence, remediated snapshot, exact retest, finding closure, approval and deployment decision;
+- narrow mobile viewport at 390 px: no horizontal page overflow;
+- post-logout check: assessment project/finding content was not exposed to the logged-out browser.
+
+The authenticated browser validator used visible DOM controls and passed the repository guard that rejects hidden workflow mutation through direct application API calls.
+
+These results validate the branch/PR behaviour. Production must still be verified against the exact merged and deployed commit before the production workflow is described as updated.
