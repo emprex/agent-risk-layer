@@ -38,7 +38,7 @@ jobs:
           npm install --no-save playwright@1.54.2
           npx playwright install --with-deps chromium
 
-      - name: Verify repaired layouts in Chromium
+      - name: Diagnose and verify repaired layouts in Chromium
         run: |
           python3 -m http.server 4173 -d public >/tmp/arl-static.log 2>&1 &
           SERVER_PID=$!
@@ -48,6 +48,7 @@ jobs:
           import assert from 'node:assert/strict';
 
           const browser = await chromium.launch({ headless: true });
+          const failures = [];
           try {
             const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
             const assessment = await desktop.newPage();
@@ -71,34 +72,38 @@ jobs:
               const page = await mobile.newPage();
               await page.goto(`http://127.0.0.1:4173${path}`, { waitUntil: 'domcontentloaded' });
               const layout = await page.evaluate(() => {
-                const viewport = window.innerWidth;
-                const offenders = [...document.querySelectorAll('body *')].map((element) => {
-                  const rect = element.getBoundingClientRect();
-                  const style = getComputedStyle(element);
+                const measure = () => ({ viewport: window.innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth });
+                const baseline = measure();
+                const isolation = [];
+                for (const element of [...document.body.children]) {
+                  const previous = element.style.display;
+                  element.style.display = 'none';
+                  isolation.push({ tag: element.tagName.toLowerCase(), id: element.id || '', className: typeof element.className === 'string' ? element.className : '', hidden: measure() });
+                  element.style.display = previous;
+                }
+                const pseudo = [...document.querySelectorAll('body, body *')].flatMap((element) => ['::before','::after'].map((kind) => {
+                  const style = getComputedStyle(element, kind);
                   return {
-                    tag: element.tagName.toLowerCase(),
-                    id: element.id || '',
-                    className: typeof element.className === 'string' ? element.className : '',
-                    left: Math.round(rect.left * 10) / 10,
-                    right: Math.round(rect.right * 10) / 10,
-                    width: Math.round(rect.width * 10) / 10,
+                    target: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${typeof element.className === 'string' && element.className ? `.${element.className.split(/\s+/).join('.')}` : ''}${kind}`,
+                    content: style.content,
+                    position: style.position,
+                    left: style.left,
+                    right: style.right,
+                    width: style.width,
+                    transform: style.transform,
                     display: style.display,
-                    minWidth: style.minWidth,
-                    gridTemplateColumns: style.gridTemplateColumns,
-                    overflowX: style.overflowX,
-                    text: String(element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
                   };
-                }).filter((item) => item.display !== 'none' && item.width > 0 && (item.right > viewport + 1 || item.left < -1)).slice(0, 20);
-                return { viewport, html: document.documentElement.scrollWidth, body: document.body.scrollWidth, offenders };
+                })).filter((item) => item.content && item.content !== 'none' && item.content !== 'normal');
+                return { baseline, isolation, pseudo };
               });
               console.log(path, JSON.stringify(layout));
-              assert.ok(layout.html <= layout.viewport + 1, `${path} html overflows: ${JSON.stringify(layout)}`);
-              assert.ok(layout.body <= layout.viewport + 1, `${path} body overflows: ${JSON.stringify(layout)}`);
+              if (layout.baseline.html > layout.baseline.viewport + 1 || layout.baseline.body > layout.baseline.viewport + 1) failures.push(`${path}: ${JSON.stringify(layout.baseline)}`);
               await page.close();
             }
             await mobile.close();
           } finally {
             await browser.close();
           }
+          assert.deepEqual(failures, [], `mobile overflow remains: ${failures.join('; ')}`);
           console.log('Chromium customer-journey UX verification passed.');
           NODE
