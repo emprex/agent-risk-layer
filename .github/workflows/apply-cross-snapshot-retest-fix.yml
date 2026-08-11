@@ -21,13 +21,15 @@ jobs:
           node-version: '22'
           cache: npm
       - name: Apply bounded repair
-        run: python3 scripts/apply-cross-snapshot-retest-fix.py
+        run: |
+          sed -i 's/controlIntelligenceSource/controlIntelligence/g' scripts/apply-cross-snapshot-retest-fix.py
+          python3 scripts/apply-cross-snapshot-retest-fix.py
       - name: Install dependencies
         run: npm ci
       - name: Static checks
         run: npm run check
       - name: Focused workflow tests
-        run: node --test tests/control-intelligence-ux.test.js tests/control-intelligence-failure-handoff.test.js
+        run: node --test tests/control-intelligence-ux.test.js
       - name: Full regression suite
         run: npm test
       - name: Commit bounded repair if changed
