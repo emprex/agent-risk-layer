@@ -87,6 +87,11 @@ jobs:
               'await wait(\'document.body.innerText.includes("Create a finding")\');await call(\'Page.reload\');await wait(\'Boolean(document.querySelector("#evidenceForm"))\');',
               'await wait(\'document.body.innerText.includes("Attach observed evidence to the failed test")\');await wait(\'Boolean(document.querySelector("#evidenceForm"))\');'
           )
+          source = source.replace(
+              "await type('#findingAsset'",
+              "await wait('Boolean(document.querySelector(\"#findingForm\"))');await type('#findingAsset'",
+              1
+          )
           Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
           PY
           node /tmp/verify-control-intelligence-browser.mjs
