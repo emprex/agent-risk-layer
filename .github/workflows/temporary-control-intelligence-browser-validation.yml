@@ -20,6 +20,7 @@ jobs:
       - run: npm ci
       - name: Start test server
         run: |
+          rm -f ./data/browser-validation.sqlite ./data/browser-validation.sqlite-shm ./data/browser-validation.sqlite-wal
           NODE_ENV=test PORT=3311 HOST=127.0.0.1 BASE_URL=http://127.0.0.1:3311 DEMO_MODE=true SESSION_SECRET=browser-test-secret-12345678901234567890 DATABASE_PATH=./data/browser-validation.sqlite ADMIN_EMAIL=browser-owner@example.test SUPPORT_EMAIL=support@example.test node server.js > /tmp/arl-server.log 2>&1 &
           for i in {1..80}; do
             if curl -fsS http://127.0.0.1:3311/api/health >/dev/null; then exit 0; fi
@@ -36,12 +37,12 @@ jobs:
           done
           cat /tmp/chrome.log
           exit 1
-      - run: node scripts/check-browser-validator.mjs scripts/verify-control-intelligence-browser.mjs
-      - name: Run authenticated visible workflow
+      - run: node scripts/check-browser-validator.mjs scripts/verify-control-intelligence-ux-browser.mjs
+      - name: Run authenticated visible UX workflow
         env:
           BROWSER_BASE_URL: http://127.0.0.1:3311
           CDP_LIST_URL: http://127.0.0.1:9223/json/list
-        run: node scripts/verify-control-intelligence-browser.mjs
+        run: node scripts/verify-control-intelligence-ux-browser.mjs
       - name: Server log on failure
         if: failure()
         run: cat /tmp/arl-server.log || true
