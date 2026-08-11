@@ -26,16 +26,22 @@ test('control workflow uses progressive evidence wording and remediation substep
   assert.match(ux, /Create a new immutable snapshot only after confirming this exact system version contains the implemented remediation/);
 });
 
-test('guided remediation plan and implementation metadata survive the server verification allowlist', () => {
+test('guided remediation plan and implementation metadata survive the server verification sanitizer', () => {
   for (const key of ['rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']) {
-    assert.match(controlPlane, new RegExp(`['\"]${key}['\"]`));
+    assert.match(controlPlane, new RegExp(`\\b${key}: \\d+`));
   }
+  assert.match(controlPlane, /correctiveAction: 4000/);
+  assert.match(controlPlane, /validationPlan: 3000/);
+  assert.match(controlPlane, /limitations: 3000/);
+  assert.doesNotMatch(controlPlane, /const safe = privacySafeObject\(input, 30\);\s*const allowed = new Set\([^)]*rootCause/s);
 });
 
 test('remediation remains the current stage until implementation and a changed system snapshot both exist', () => {
   assert.match(controlIntelligence, /const implementationRecorded =/);
   assert.match(controlIntelligence, /const remediatedSnapshotReady =/);
   assert.match(controlIntelligence, /const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady/);
+  assert.match(controlIntelligence, /open\.length && implementationRecorded/);
+  assert.doesNotMatch(controlIntelligence, /\bremediating\b/);
   assert.match(controlIntelligence, /Create a remediated system snapshot before retesting\./);
 });
 
