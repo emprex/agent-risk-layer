@@ -42,6 +42,25 @@ function consentState() {
   return storageGet(localStorage, CONSENT_KEY);
 }
 
+function analyticsPageLocation() {
+  try {
+    const url = new URL(location.href);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '';
+  }
+}
+
+function analyticsPageReferrer() {
+  try {
+    if (!document.referrer) return '';
+    const url = new URL(document.referrer);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '';
+  }
+}
+
 function loadAnalytics() {
   if (loaded || consentState() !== 'granted') return;
   loaded = true;
@@ -57,7 +76,9 @@ function loadAnalytics() {
     anonymize_ip: true,
     cookie_flags: 'SameSite=Lax;Secure',
     send_page_view: true,
-    transport_type: 'beacon'
+    transport_type: 'beacon',
+    page_location: analyticsPageLocation(),
+    page_referrer: analyticsPageReferrer()
   });
 }
 
