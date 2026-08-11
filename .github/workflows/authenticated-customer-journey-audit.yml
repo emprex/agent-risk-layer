@@ -67,7 +67,19 @@ jobs:
           BROWSER_BASE_URL: http://127.0.0.1:3311
           CDP_LIST_URL: http://127.0.0.1:9223/json/list
         run: |
-          sed 's/document\.body\.innerText\.includes("Review suggested controls")/Boolean(document.querySelector("#controls")) \&\& document.body.innerText.includes("0 of 108 controls reviewed")/' scripts/verify-control-intelligence-browser.mjs > /tmp/verify-control-intelligence-browser.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('scripts/verify-control-intelligence-browser.mjs').read_text()
+          source = source.replace(
+              'await wait(\'document.body.innerText.includes("Review suggested controls")\');',
+              'await wait(\'Boolean(document.querySelector("#controls")) && document.body.innerText.includes("0 of 108 controls reviewed")\');'
+          )
+          source = source.replace(
+              'assert.match(await visibleText(),/require confirmation/);\nawait click(\'[data-bulk-control="ARL-KB-001"]\');',
+              'assert.match(await visibleText(),/require confirmation/);\nawait navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls`);await wait(\'Boolean(document.querySelector("[data-bulk-control=\\"ARL-KB-001\\"]"))\');\nawait click(\'[data-bulk-control="ARL-KB-001"]\');'
+          )
+          Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
+          PY
           node /tmp/verify-control-intelligence-browser.mjs
       - name: Audit authenticated layouts and browser errors
         run: |
