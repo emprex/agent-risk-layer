@@ -49,6 +49,7 @@ test('control chain requires evidence, links failed tests to findings and derive
   const f=await fixture('chain');
   const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Tool agent',components:[]},tools:[{name:'synthetic_tool'}],source:'test'}});
   const draftFailure=await recordControlTestExecution({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,result:'failed',observedResult:'Unsafe action reached the dry-run adapter.'}});assert.equal(draftFailure.findingId,null);
+  const observedFailure=await recordControlEvidence({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,testExecutionId:draftFailure.id,evidenceClass:'observed',sourceType:'test_output',sourceReference:'Dry-run adapter output',limitations:'Owner-executed synthetic failure evidence.'}});assert.equal(observedFailure.verificationState,'unverified');
   const finding=await createControlFinding({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId,input:{systemSnapshotId:snapshot.id,testExecutionId:draftFailure.id,title:'Unsafe synthetic action',narrative:'The synthetic action reached the dry-run adapter.',impact:'A protected operation could execute without the expected denial.',affectedAsset:'synthetic tool',impactFacts:{approvalBypass:true}}});const findingId=finding.id;
   const failed=draftFailure;
   assert.equal((await db.prepare('SELECT finding_id FROM control_test_executions WHERE id=?').get(failed.id)).finding_id,findingId);assert.equal(finding.contextualSeverity,'high');
@@ -60,7 +61,7 @@ test('control chain requires evidence, links failed tests to findings and derive
   assert.ok(graph.edges.every(edge=>graph.nodes.some(node=>node.id===edge.from)&&graph.nodes.some(node=>node.id===edge.to)));
   assert.deepEqual(firstPage.items.map(x=>x.controlId),[...firstPage.items.map(x=>x.controlId)].sort());
   const detail=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId});
-  assert.equal(detail.tests[0].checkDigest,detail.testDefinition.digest);assert.equal(detail.evidence[0].verificationState,'declared');assert.equal(detail.findings[0].id,findingId);
+  assert.equal(detail.tests[0].checkDigest,detail.testDefinition.digest);assert.equal(detail.evidence.find(x=>x.id===declared.id).verificationState,'declared');assert.equal(detail.findings[0].id,findingId);
   await db.prepare('UPDATE control_evidence_items SET integrity_digest=? WHERE id=?').run('0'.repeat(64),declared.id);
   await assert.rejects(()=>getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-053',userId:f.userId}),/digest verification/i);
   await db.prepare('UPDATE control_evidence_items SET integrity_digest=? WHERE id=?').run(declared.integrityDigest,declared.id);
