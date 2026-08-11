@@ -481,7 +481,7 @@ function deriveChains(evaluations, data) {
     else if (evaluation.applicability_status === 'unknown') chainStatus = 'context_required';
     else if (evaluation.applicability_status === 'not_applicable') chainStatus = 'not_applicable';
     else if (runtimeRegression) chainStatus = 'runtime_regression';
-    else if (open.length && remediating) chainStatus = 'remediation_in_progress';
+    else if (open.length && implementationRecorded) chainStatus = 'remediation_in_progress';
     else if (open.length || failed) chainStatus = 'finding_open';
     else if (passed && activeEvidence) chainStatus = 'controlled_with_evidence';
     else if (tests.length) chainStatus = failed ? 'test_failed' : 'test_planned';
