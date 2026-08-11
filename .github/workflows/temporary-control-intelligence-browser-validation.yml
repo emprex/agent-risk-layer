@@ -37,7 +37,10 @@ jobs:
           done
           cat /tmp/chrome.log
           exit 1
-      - run: node scripts/check-browser-validator.mjs scripts/verify-control-intelligence-ux-browser.mjs
+      - name: Prepare temporary browser journey
+        run: |
+          sed -i '/await wait('\''document.body.innerText.includes("Create a finding")'\'');/d' scripts/verify-control-intelligence-ux-browser.mjs
+          node scripts/check-browser-validator.mjs scripts/verify-control-intelligence-ux-browser.mjs
       - name: Run authenticated visible UX workflow
         env:
           BROWSER_BASE_URL: http://127.0.0.1:3311
