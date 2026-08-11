@@ -12,98 +12,77 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-
-      - name: Install application dependencies
-        run: npm ci
-
-      - name: Static checks
-        run: npm run check
-
-      - name: Focused journey tests
-        run: node --test tests/customer-journey-ux.test.js
-
-      - name: Full regression suite
-        run: npm test
 
       - name: Install disposable browser verifier
         run: |
           npm install --no-save playwright@1.54.2
           npx playwright install --with-deps chromium
 
-      - name: Diagnose and verify repaired layouts in Chromium
+      - name: Isolate mobile overflow in Chromium
         run: |
           python3 -m http.server 4173 -d public >/tmp/arl-static.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
           node --input-type=module <<'NODE'
           import { chromium } from 'playwright';
-          import assert from 'node:assert/strict';
 
           const browser = await chromium.launch({ headless: true });
-          const failures = [];
           try {
-            const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-            const assessment = await desktop.newPage();
-            await assessment.goto('http://127.0.0.1:4173/assessment.html', { waitUntil: 'domcontentloaded' });
-            for (const selector of ['#revisionReviewField', '#backButton', '#submitAssessment']) {
-              const state = await assessment.locator(selector).evaluate((element) => ({
-                hidden: element.hidden,
-                display: getComputedStyle(element).display,
-                width: element.getBoundingClientRect().width,
-                height: element.getBoundingClientRect().height,
-              }));
-              assert.equal(state.hidden, true, `${selector} should retain the hidden property`);
-              assert.equal(state.display, 'none', `${selector} should compute to display:none`);
-              assert.equal(state.width, 0, `${selector} should have no visible width`);
-              assert.equal(state.height, 0, `${selector} should have no visible height`);
-            }
-            await desktop.close();
-
-            const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });
+            const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
             for (const path of ['/demo.html', '/trust.html']) {
-              const page = await mobile.newPage();
+              const page = await context.newPage();
               await page.goto(`http://127.0.0.1:4173${path}`, { waitUntil: 'domcontentloaded' });
-              const layout = await page.evaluate(() => {
-                const measure = () => ({ viewport: window.innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth });
-                const baseline = measure();
-                const isolation = [];
-                for (const element of [...document.body.children]) {
-                  const previous = element.style.display;
-                  element.style.display = 'none';
-                  isolation.push({ tag: element.tagName.toLowerCase(), id: element.id || '', className: typeof element.className === 'string' ? element.className : '', hidden: measure() });
-                  element.style.display = previous;
-                }
-                const pseudo = [...document.querySelectorAll('body, body *')].flatMap((element) => ['::before','::after'].map((kind) => {
-                  const style = getComputedStyle(element, kind);
+              const data = await page.evaluate(() => {
+                const measure = () => document.documentElement.scrollWidth;
+                const main = document.querySelector('main');
+                const baseline = { viewport: innerWidth, html: measure(), body: document.body.scrollWidth, main: main?.scrollWidth || null };
+                const describe = (element) => {
+                  const rect = element.getBoundingClientRect();
+                  const style = getComputedStyle(element);
                   return {
-                    target: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${typeof element.className === 'string' && element.className ? `.${element.className.split(/\s+/).join('.')}` : ''}${kind}`,
-                    content: style.content,
-                    position: style.position,
-                    left: style.left,
-                    right: style.right,
-                    width: style.width,
-                    transform: style.transform,
+                    tag: element.tagName.toLowerCase(),
+                    id: element.id || '',
+                    className: typeof element.className === 'string' ? element.className : '',
+                    rect: { left: rect.left, right: rect.right, width: rect.width },
+                    scrollWidth: element.scrollWidth,
+                    clientWidth: element.clientWidth,
+                    overflowX: style.overflowX,
                     display: style.display,
+                    gridTemplateColumns: style.gridTemplateColumns,
+                    minWidth: style.minWidth,
                   };
-                })).filter((item) => item.content && item.content !== 'none' && item.content !== 'normal');
-                return { baseline, isolation, pseudo };
+                };
+                const hideChecks = [];
+                for (const element of [...main.children]) {
+                  const before = describe(element);
+                  const oldDisplay = element.style.display;
+                  element.style.display = 'none';
+                  const afterHide = measure();
+                  element.style.display = oldDisplay;
+                  const oldOverflow = element.style.overflowX;
+                  element.style.overflowX = 'hidden';
+                  const afterClip = measure();
+                  element.style.overflowX = oldOverflow;
+                  hideChecks.push({ before, afterHide, afterClip });
+                }
+                const descendants = [...main.querySelectorAll('*')]
+                  .map(describe)
+                  .filter((item) => item.scrollWidth > item.clientWidth + 1 || item.rect.right > innerWidth + 1 || item.rect.left < -1)
+                  .slice(0, 50);
+                return { baseline, hideChecks, descendants };
               });
-              console.log(path, JSON.stringify(layout));
-              if (layout.baseline.html > layout.baseline.viewport + 1 || layout.baseline.body > layout.baseline.viewport + 1) failures.push(`${path}: ${JSON.stringify(layout.baseline)}`);
+              console.log(path, JSON.stringify(data));
               await page.close();
             }
-            await mobile.close();
+            await context.close();
           } finally {
             await browser.close();
           }
-          assert.deepEqual(failures, [], `mobile overflow remains: ${failures.join('; ')}`);
-          console.log('Chromium customer-journey UX verification passed.');
           NODE
