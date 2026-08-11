@@ -282,14 +282,20 @@ async function saveBulkIndependently(event) {
   const button = form.querySelector('button[type="submit"]');
   if (button) button.disabled = true;
   const rows = [...form.querySelectorAll('[data-bulk-row]')];
+  const pendingRows = rows.filter((row) => !row.classList.contains('ci-bulk-row-saved'));
+  if (!pendingRows.length) {
+    setMessage('All reviewed rows are already saved. Reloading the updated assessment…');
+    setTimeout(() => location.reload(), 350);
+    return;
+  }
   let saved = 0;
   const failures = [];
   try {
     const current = await api(`/api/projects/${encodeURIComponent(projectId)}/control-intelligence?limit=1`);
     const snapshotId = current.systemSnapshot?.id;
     if (!snapshotId) throw new Error('Current system snapshot is unavailable. Reload before saving.');
-    for (let index = 0; index < rows.length; index += 1) {
-      const row = rows[index];
+    for (const row of pendingRows) {
+      const index = rows.indexOf(row);
       const control = row.dataset.bulkRow;
       const decision = form.elements[`decision-${index}`]?.value;
       const baseReason = String(form.elements[`reason-${index}`]?.value || '').trim();
