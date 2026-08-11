@@ -1,0 +1,26 @@
+name: Audit live pricing configuration
+on:
+  push:
+    branches:
+      - audit/website-v2-production-20260811
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch public production config
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen('https://agentrisklayer.com/api/config', timeout=20) as response:
+              data=json.load(response)
+          keep={
+            'productStage': data.get('productStage'),
+            'demoMode': data.get('demoMode'),
+            'prices': data.get('prices'),
+            'appVersion': data.get('appVersion'),
+            'scoringVersion': data.get('scoringVersion'),
+          }
+          print(json.dumps(keep, indent=2, sort_keys=True))
+          PY
