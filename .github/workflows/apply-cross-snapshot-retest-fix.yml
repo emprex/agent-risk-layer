@@ -49,6 +49,10 @@ jobs:
           marker = controls_prefix + controls_bad
           if marker in source:
               source = source.replace(marker, controls_prefix + controls_good, 1)
+          closure_bad = "await wait('Boolean(document.querySelector(\"#retestForm\"))');await type('#closureLimitations'"
+          closure_good = "await wait('Boolean(document.querySelector(\"#closureForm\"))');await type('#closureLimitations'"
+          if closure_bad in source:
+              source = source.replace(closure_bad, closure_good, 1)
           path.write_text(source)
           PY
       - name: Install dependencies
@@ -69,5 +73,5 @@ jobs:
             exit 0
           fi
           git diff --cached --check
-          git commit -m "Align browser verifier with controls view"
+          git commit -m "Align browser verifier with closure stage"
           git push origin HEAD:fix/cross-snapshot-retest-20260811
