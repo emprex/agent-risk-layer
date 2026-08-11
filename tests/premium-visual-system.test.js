@@ -2,63 +2,49 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [shell, css, motion, home, authority, chain, remediation, enforcement] = await Promise.all([
+const [shell, theme, media, network] = await Promise.all([
   readFile(new URL('../public/site-shell.js', import.meta.url), 'utf8'),
-  readFile(new URL('../public/website-v2.css', import.meta.url), 'utf8'),
-  readFile(new URL('../public/website-v2.js', import.meta.url), 'utf8'),
-  readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
-  readFile(new URL('../public/visuals/authority-map.svg', import.meta.url), 'utf8'),
-  readFile(new URL('../public/visuals/evidence-chain.svg', import.meta.url), 'utf8'),
-  readFile(new URL('../public/visuals/remediation-loop.svg', import.meta.url), 'utf8'),
-  readFile(new URL('../public/visuals/enforcement-boundary.svg', import.meta.url), 'utf8'),
+  readFile(new URL('../public/premium-theme.css', import.meta.url), 'utf8'),
+  readFile(new URL('../public/premium-media.css', import.meta.url), 'utf8'),
+  readFile(new URL('../public/evidence-network.svg', import.meta.url), 'utf8'),
 ]);
 
-test('site shell loads Website v2 and no longer loads the intermediate premium skin', () => {
-  assert.match(shell, /\/website-v2\.css/);
-  assert.match(shell, /import '\.\/website-v2\.js'/);
-  assert.doesNotMatch(shell, /premium-theme\.css/);
-  assert.doesNotMatch(shell, /premium-media\.css/);
-  assert.match(shell, /How it works/);
-  assert.match(shell, /v2-resources/);
+test('shared site shell loads the premium visual system across public and app surfaces', () => {
+  assert.match(shell, /\/premium-theme\.css/);
+  assert.match(shell, /\/premium-media\.css/);
+  assert.match(shell, /data-arl-premium-theme|arlPremiumTheme/);
+  assert.match(shell, /data-arl-premium-media|arlPremiumMedia/);
 });
 
-test('Website v2 preserves hidden controls, focus visibility and semantic state colours', () => {
-  assert.match(css, /\*\[hidden\]\{display:none!important\}/);
-  assert.match(css, /:focus-visible\{outline:3px solid var\(--v2-blue\)/);
-  assert.match(css, /--v2-success:#20a464/);
-  assert.match(css, /--v2-warning:#d78a00/);
-  assert.match(css, /--v2-critical:#d94141/);
-  assert.match(css, /body\[data-shell="public"\][\s\S]*background:var\(--v2-white\)/);
-  assert.match(css, /body\[data-shell="app"\][\s\S]*background:#06101b/);
-  assert.match(css, /ci-stage-nav li\[data-state="complete"\][\s\S]*32,164,100/);
-  assert.match(css, /error-box[\s\S]*217,65,65/);
+test('premium theme preserves hidden controls, focus visibility and semantic workflow colours', () => {
+  assert.match(theme, /\*\[hidden\]\{display:none!important\}/);
+  assert.match(theme, /:focus-visible\{outline:2px solid var\(--brand\)/);
+  assert.match(theme, /--brand:#16b8ff/);
+  assert.match(theme, /--premium-text:#f4f8ff/);
+  assert.match(theme, /\.ci-stage-nav li\[data-state="current"\][\s\S]*rgba\(22,184,255/,
+    'current workflow state keeps the cyan active-state treatment');
+  assert.match(theme, /\.ci-stage-nav li\[data-state="complete"\][^\n]*rgba\(34,197,94/,
+    'completed workflow state remains green rather than inheriting the active colour');
+  assert.match(theme, /\.success-box[^\n]*rgba\(34,197,94/,
+    'success surfaces remain green');
+  assert.match(theme, /\.error-box[^\n]*rgba\(239,68,68/,
+    'error/critical surfaces remain red');
 });
 
-test('motion is local, progressive and respects reduced-motion users', () => {
-  assert.doesNotMatch(motion, /https?:\/\//);
-  assert.match(motion, /IntersectionObserver/);
-  assert.match(motion, /prefers-reduced-motion: reduce/);
-  assert.match(css, /@media\(prefers-reduced-motion:reduce\)/);
-  assert.match(css, /transform/);
-  assert.match(css, /opacity/);
+test('premium media is local, bounded on mobile and respectful of reduced motion', () => {
+  assert.match(media, /url\('\/evidence-network\.svg'\)/);
+  assert.doesNotMatch(media, /https?:\/\//, 'premium media must not depend on third-party visual assets');
+  assert.match(media, /@media\(max-width:900px\)[\s\S]*\.v10-control-visual::before,\.v10-control-visual::after\{display:none\}/);
+  assert.match(media, /@media\(prefers-reduced-motion:reduce\)/);
 });
 
-test('homepage implements the authority, evidence, remediation, runtime and trust story', () => {
-  assert.match(home, /Know what your AI agent can actually do\./);
-  assert.match(home, /data-authority-demo/);
-  assert.match(home, /Declared controls/);
-  assert.match(home, /Observed controls/);
-  assert.match(home, /Exact retest/);
-  assert.match(home, /A remediation is not evidence that the risk is fixed\./);
-  assert.match(home, /The model proposes\. The enforcement layer decides\./);
-  assert.match(home, /Security evidence, not security theatre\./);
-  assert.match(home, /not an accredited certification or guarantee that a system is risk-free/i);
+test('evidence network visual is a local SVG asset without scripts or remote resources', () => {
+  assert.match(network, /^<svg[\s\S]*<\/svg>\s*$/);
+  assert.doesNotMatch(network, /<script\b/i);
+  assert.doesNotMatch(
+    network,
+    /<(?:image|use|script)\b[^>]*(?:href|xlink:href)=["']https?:\/\//i,
+    'standard SVG namespace is allowed, but external executable/media references are not',
+  );
+  assert.match(network, /#16B8FF/i);
 });
-
-for (const [name, svg] of [['authority', authority], ['chain', chain], ['remediation', remediation], ['enforcement', enforcement]]) {
-  test(`${name} visual is local SVG without script or remote media`, () => {
-    assert.match(svg, /^<svg[\s\S]*<\/svg>\s*$/);
-    assert.doesNotMatch(svg, /<script\b/i);
-    assert.doesNotMatch(svg, /<(?:image|use|script)\b[^>]*(?:href|xlink:href)=["']https?:\/\//i);
-  });
-}
