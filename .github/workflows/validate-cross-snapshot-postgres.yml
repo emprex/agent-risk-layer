@@ -1,0 +1,93 @@
+# Temporary validation workflow; remove before merge.
+name: Validate cross-snapshot retest on PostgreSQL
+
+on:
+  push:
+    branches:
+      - fix/cross-snapshot-retest-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentrisk_disposable_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d agentrisk_disposable_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install application dependencies
+        run: npm ci
+      - name: Run PostgreSQL integrity and concurrency harness
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_disposable_test
+        run: node scripts/test-control-intelligence-postgres.mjs
+      - name: Install disposable browser verifier
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install chromium
+      - name: Start AgentRiskLayer against disposable PostgreSQL
+        env:
+          NODE_ENV: test
+          PORT: '3313'
+          HOST: 127.0.0.1
+          BASE_URL: http://127.0.0.1:3313
+          DEMO_MODE: 'true'
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_disposable_test
+          DATABASE_SSL: 'false'
+          SESSION_SECRET: postgres-browser-validation-20260811
+          SUPPORT_EMAIL: support@example.test
+        run: |
+          node server.js > /tmp/arl-pg-server.log 2>&1 &
+          echo $! > /tmp/arl-pg-server.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3313/api/ready >/tmp/arl-pg-ready.json; then
+              cat /tmp/arl-pg-ready.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/arl-pg-server.log
+          exit 1
+      - name: Start isolated Chromium CDP
+        run: |
+          CHROME=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          "$CHROME" --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-address=127.0.0.1 --remote-debugging-port=9224 --user-data-dir=/tmp/arl-pg-chrome about:blank > /tmp/arl-pg-chrome.log 2>&1 &
+          echo $! > /tmp/arl-pg-chrome.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9224/json/list >/tmp/arl-pg-cdp.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/arl-pg-chrome.log
+          exit 1
+      - name: Run full authenticated journey on PostgreSQL
+        env:
+          BROWSER_BASE_URL: http://127.0.0.1:3313
+          CDP_LIST_URL: http://127.0.0.1:9224/json/list
+        run: node scripts/verify-control-intelligence-browser.mjs
+      - name: Show diagnostics on failure
+        if: failure()
+        run: |
+          cat /tmp/arl-pg-server.log || true
+          cat /tmp/arl-pg-ready.json || true
+          cat /tmp/arl-pg-chrome.log || true
