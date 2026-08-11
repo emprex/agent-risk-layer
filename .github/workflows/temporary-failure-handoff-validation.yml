@@ -1,0 +1,23 @@
+name: Temporary failure handoff validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --test tests/control-intelligence.test.js tests/control-intelligence-failure-handoff.test.js
+      - run: npm test
