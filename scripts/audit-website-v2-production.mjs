@@ -3,7 +3,17 @@ import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const base = 'https://agentrisklayer.com';
-const publicPages = ['/', '/pricing.html', '/trust.html', '/demo.html', '/methodology.html', '/help.html', '/assessment.html', '/company.html', '/sample-report.html'];
+const pages = [
+  ['/', 'public'],
+  ['/pricing.html', 'public'],
+  ['/trust.html', 'public'],
+  ['/demo.html', 'public'],
+  ['/methodology.html', 'public'],
+  ['/help.html', 'public'],
+  ['/assessment.html', 'app'],
+  ['/company.html', 'public'],
+  ['/sample-report.html', 'public'],
+];
 const widths = [1440, 390, 360, 320];
 await mkdir('test-artifacts/website-v2-production', { recursive: true });
 
@@ -41,7 +51,7 @@ try {
   for (const width of widths) {
     const context = await browser.newContext({ viewport: { width, height: width <= 390 ? 900 : 1000 } });
     const page = await context.newPage();
-    for (const path of publicPages) {
+    for (const [path, expectedShell] of pages) {
       const consoleErrors = [];
       const serverErrors = [];
       const onConsole = (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); };
@@ -69,7 +79,7 @@ try {
           return style.display !== 'none' && box.width > 0 && box.height > 0;
         }).length,
       }));
-      assert.equal(state.shell, 'public', `${path} should remain public`);
+      assert.equal(state.shell, expectedShell, `${path} should remain ${expectedShell} shell`);
       assert.equal(state.css, true, `${path} should load Website v2 CSS`);
       assert.equal(state.oldPremium, false, `${path} should not load the intermediate premium skin`);
       assert.ok(state.scrollWidth <= state.clientWidth + 1, `${path} overflows at ${width}px: ${state.scrollWidth}/${state.clientWidth}`);
@@ -113,7 +123,7 @@ try {
   assert.equal(reducedState.scene, '3', 'reduced motion should use stable completed authority state');
   await reduced.close();
 
-  console.log(JSON.stringify({ api, pageChecks: checks.length, widths, publicPages, reducedMotion: reducedState, anonymousDashboardRedirect: true }, null, 2));
+  console.log(JSON.stringify({ api, pageChecks: checks.length, widths, pages, reducedMotion: reducedState, anonymousDashboardRedirect: true }, null, 2));
 } finally {
   await browser.close();
 }
