@@ -1,4 +1,4 @@
-# Temporary validation workflow; removed before merge. Validation trigger 3.
+# Temporary validation workflow; removed before merge. Validation trigger 4.
 name: Validate cross-snapshot retest repair
 
 on:
@@ -68,6 +68,33 @@ jobs:
           BROWSER_BASE_URL: http://127.0.0.1:3311
           CDP_LIST_URL: http://127.0.0.1:9223/json/list
         run: node scripts/verify-control-intelligence-browser.mjs
+      - name: Restart disposable app for isolated layout audit
+        env:
+          NODE_ENV: test
+          PORT: '3311'
+          HOST: 127.0.0.1
+          BASE_URL: http://127.0.0.1:3311
+          DEMO_MODE: 'true'
+          SESSION_SECRET: authenticated-layout-validation-20260811
+          SUPPORT_EMAIL: support@example.test
+        run: |
+          kill "$(cat /tmp/arl-server.pid)" 2>/dev/null || true
+          for i in $(seq 1 30); do
+            if ! curl -fsS http://127.0.0.1:3311/api/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          node server.js > /tmp/arl-layout-server.log 2>&1 &
+          echo $! > /tmp/arl-server.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3311/api/health >/tmp/arl-layout-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/arl-layout-server.log
+          exit 1
       - name: Audit authenticated page layouts
         run: |
           node --input-type=module <<'NODE'
@@ -141,4 +168,5 @@ jobs:
         if: failure()
         run: |
           cat /tmp/arl-server.log || true
+          cat /tmp/arl-layout-server.log || true
           cat /tmp/arl-chrome.log || true
