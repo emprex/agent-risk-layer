@@ -22,16 +22,33 @@ jobs:
           cache: npm
       - name: Apply bounded repair
         run: |
-          sed -i 's/controlIntelligenceSource/controlIntelligence/g' scripts/apply-cross-snapshot-retest-fix.py
           python3 scripts/apply-cross-snapshot-retest-fix.py
           python3 - <<'PY'
           from pathlib import Path
           path = Path('scripts/verify-control-intelligence-browser.mjs')
           source = path.read_text()
           replacement = "await wait('Boolean(document.querySelector(\".ci-stage-nav li[data-state=current] button\"))');"
-          for stage in ['finding', 'remediation', 'retest', 'approval', 'deployment_decision']:
-              old = rf'''await wait('document.querySelector(\"[data-stage=\\\"{stage}\\\"]\")?.dataset.uxState===\"current\"');'''
-              source = source.replace(old, replacement)
+          cursor = 0
+          replaced = 0
+          while True:
+              start = source.find("await wait('document.querySelector(", cursor)
+              if start < 0:
+                  break
+              end = source.find("');", start)
+              if end < 0:
+                  break
+              end += 3
+              segment = source[start:end]
+              if 'dataset.uxState' in segment and any(stage in segment for stage in ['finding','remediation','retest','approval','deployment_decision']):
+                  source = source[:start] + replacement + source[end:]
+                  cursor = start + len(replacement)
+                  replaced += 1
+              else:
+                  cursor = end
+          if replaced:
+              print(f'Repaired {replaced} progressive-stage wait expressions')
+          if 'dataset.uxState' in source and 'await wait(\'document.querySelector(' in source:
+              raise SystemExit('A malformed progressive-stage wait remains')
           path.write_text(source)
           PY
       - name: Install dependencies
@@ -42,15 +59,15 @@ jobs:
         run: node --test tests/control-intelligence-ux.test.js
       - name: Full regression suite
         run: npm test
-      - name: Commit bounded repair if changed
+      - name: Commit intended repair if changed
         run: |
-          if git diff --quiet; then
-            echo "No generated changes to commit."
-            exit 0
-          fi
           git config user.name "emprex"
           git config user.email "guillaume.strohecker@gmail.com"
           git add src/control-intelligence.js scripts/verify-control-intelligence-browser.mjs tests/control-intelligence-ux.test.js
+          if git diff --cached --quiet; then
+            echo "No intended product changes to commit."
+            exit 0
+          fi
           git diff --cached --check
           git commit -m "Fix progressive browser journey stage waits"
           git push origin HEAD:fix/cross-snapshot-retest-20260811
