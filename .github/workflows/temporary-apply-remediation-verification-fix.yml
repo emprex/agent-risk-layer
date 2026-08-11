@@ -1,0 +1,38 @@
+name: Temporary apply remediation verification fix
+
+on:
+  push:
+    branches: [fix/control-intelligence-workflow-ux-20260811]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/control-intelligence-workflow-ux-20260811
+          fetch-depth: 0
+      - name: Preserve guided remediation metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/control-plane.js')
+          text = path.read_text()
+          old = "const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);"
+          new = "const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes', 'rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']);"
+          if old not in text:
+              raise SystemExit('Expected remediation verification allowlist was not found.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit patch when needed
+        run: |
+          if git diff --quiet -- src/control-plane.js; then exit 0; fi
+          git config user.name "AgentRiskLayer CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/control-plane.js
+          git commit -m "Preserve guided remediation plan evidence"
+          git push origin HEAD:fix/control-intelligence-workflow-ux-20260811
