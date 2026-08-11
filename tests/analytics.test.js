@@ -27,3 +27,13 @@ test('analytics parameters are bounded to primitive non-sensitive metadata', () 
   assert.match(source, /slice\(0, 100\)/);
   assert.match(source, /\['string', 'number', 'boolean'\]/);
 });
+
+test('analytics page metadata strips query strings and fragments before GA4 sees capability URLs', () => {
+  assert.match(source, /function analyticsPageLocation\(\)/);
+  assert.match(source, /return `\$\{url\.origin\}\$\{url\.pathname\}`/);
+  assert.match(source, /function analyticsPageReferrer\(\)/);
+  assert.match(source, /page_location:\s*analyticsPageLocation\(\)/);
+  assert.match(source, /page_referrer:\s*analyticsPageReferrer\(\)/);
+  assert.doesNotMatch(source, /page_location:\s*location\.href/);
+  assert.doesNotMatch(source, /page_location:\s*document\.location/);
+});
