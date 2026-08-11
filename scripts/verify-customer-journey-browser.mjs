@@ -89,7 +89,7 @@ try {
     await page.locator('#questionStage').waitFor({ state: 'visible' });
     const radios = page.locator('input[name="currentQuestion"]');
     assert.ok(await radios.count() > 0, 'Each assessment step should render at least one answer');
-    await radios.first().check();
+    await radios.first().locator('xpath=ancestor::label[1]').click();
     answered += 1;
     if (await page.locator('#submitAssessment').isVisible()) {
       await page.locator('#submitAssessment').click();
