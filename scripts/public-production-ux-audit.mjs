@@ -8,7 +8,7 @@ const outDir = path.resolve(process.env.AUDIT_OUT_DIR || 'audit-artifacts/public
 await fs.mkdir(outDir, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
-const results = { generatedAt: new Date().toISOString(), baseUrl, api: {}, assessment: {}, mobile: {} };
+const results = { generatedAt: new Date().toISOString(), baseUrl, api: {}, assessment: {}, help: {}, mobile: {} };
 
 try {
   const requestContext = await browser.newContext();
@@ -42,6 +42,26 @@ try {
   }
   await assessment.screenshot({ path: path.join(outDir, 'assessment-postdeploy.png'), fullPage: true });
   await assessment.close();
+
+  const help = await desktop.newPage();
+  const helpResponse = await help.goto(`${baseUrl}/help.html`, { waitUntil: 'networkidle', timeout: 45000 });
+  assert.equal(helpResponse?.status(), 200, 'help HTTP status');
+  const helpText = await help.locator('main').innerText();
+  results.help = {
+    status: helpResponse?.status() ?? null,
+    hasNoProofYet: helpText.includes('No proof yet'),
+    hasCustomerAssertion: helpText.includes('My answer only (not verified)'),
+    hasEvidenceReady: helpText.includes('I have supporting evidence to attach (not verified yet)'),
+    hasVerificationBoundary: helpText.includes('Selecting an option in the assessment never creates verified evidence.'),
+    hasOldOwnerStatement: helpText.includes('Owner statement'),
+  };
+  assert.equal(results.help.hasNoProofYet, true, 'Help should contain current no-proof label');
+  assert.equal(results.help.hasCustomerAssertion, true, 'Help should contain current customer-assertion label');
+  assert.equal(results.help.hasEvidenceReady, true, 'Help should contain current supporting-evidence label');
+  assert.equal(results.help.hasVerificationBoundary, true, 'Help should state that a form option cannot create verified evidence');
+  assert.equal(results.help.hasOldOwnerStatement, false, 'Help should not contain obsolete Owner statement terminology');
+  await help.screenshot({ path: path.join(outDir, 'help-evidence-language-postdeploy.png'), fullPage: true });
+  await help.close();
   await desktop.close();
 
   for (const viewport of [{ width: 390, height: 844 }, { width: 360, height: 800 }]) {
@@ -71,6 +91,7 @@ const summary = [
   `Base URL: ${baseUrl}`,
   ...Object.entries(results.api).map(([endpoint, value]) => `- ${endpoint}: HTTP ${value.status}`),
   `- assessment hidden controls: ${JSON.stringify(results.assessment.controls)}`,
+  `- help evidence terminology: ${JSON.stringify(results.help)}`,
   ...Object.entries(results.mobile).map(([key, value]) => `- ${key}: ${JSON.stringify(value)}`),
   '',
   'All assertions passed.',
