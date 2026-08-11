@@ -1,3 +1,4 @@
+# Temporary validation workflow; removed before merge.
 name: Validate cross-snapshot retest repair
 
 on:
