@@ -23,29 +23,22 @@ jobs:
 
           plane = Path('src/control-plane.js')
           text = plane.read_text()
-          old = "const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);"
-          new = "const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes', 'rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']);"
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit('Expected remediation verification allowlist was not found.')
+          old_sanitizer = """function sanitiseVerificationInput(input) {\n  const safe = privacySafeObject(input, 30);\n  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes', 'rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']);\n  return Object.fromEntries(Object.entries(safe).filter(([key]) => allowed.has(key)));\n}"""
+          new_sanitizer = """function sanitiseVerificationInput(input) {\n  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};\n  const limits = Object.freeze({\n    artifactId: 100,\n    reference: 500,\n    retestReference: 500,\n    notes: 3000,\n    rootCause: 2000,\n    correctiveAction: 4000,\n    targetEnvironment: 500,\n    rollbackPlan: 2000,\n    validationPlan: 3000,\n    changeReference: 500,\n    limitations: 3000,\n  });\n  const output = {};\n  for (const [key, maxLength] of Object.entries(limits)) {\n    if (!Object.hasOwn(input, key) || input[key] == null || typeof input[key] !== 'string') continue;\n    output[key] = clean(input[key], maxLength);\n  }\n  return output;\n}"""
+          if old_sanitizer in text:
+              text = text.replace(old_sanitizer, new_sanitizer, 1)
+          elif new_sanitizer not in text:
+              raise SystemExit('Expected remediation verification sanitizer was not found.')
           plane.write_text(text)
 
           intelligence = Path('src/control-intelligence.js')
           text = intelligence.read_text()
-          old_state = """    const open = findings.filter((row) => !['verified_closed','accepted_risk'].includes(row.status));\n    const remediating = open.some((row) => !['open'].includes(row.status));\n    const passedRetest = tests.some((row)=>validRetest(row,data.tests,findings));\n    const failed = tests.some((row) => row.result === 'failed');"""
-          new_state = """    const open = findings.filter((row) => !['verified_closed','accepted_risk'].includes(row.status));\n    const implementationRecorded = open.some((row) => !['open'].includes(row.status));\n    const initialFailure = tests.find((row) => row.result === 'failed' && row.execution_kind !== 'retest');\n    const remediatedSnapshotReady = Boolean(initialFailure?.system_snapshot_id && evaluation.system_snapshot_id !== initialFailure.system_snapshot_id);\n    const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady;\n    const passedRetest = tests.some((row)=>validRetest(row,data.tests,findings));\n    const failed = tests.some((row) => row.result === 'failed');"""
-          if old_state in text:
-              text = text.replace(old_state, new_state, 1)
-          elif new_state not in text:
-              raise SystemExit('Expected control-chain remediation state block was not found.')
-
-          old_chain = """if(!findings.length){currentStage='finding';nextAction='Create or link a finding for the failed test.';}else if(!remediating){completedStages.push('finding');currentStage='remediation';nextAction='Record and implement remediation.';}else if(!passedRetest){completedStages.push('finding','remediation');currentStage='retest';nextAction='Retest the exact original failure against the remediated snapshot.';}"""
-          new_chain = """if(!findings.length){currentStage='finding';nextAction='Create or link a finding for the failed test.';}else if(!remediationReadyForRetest){completedStages.push('finding');currentStage='remediation';nextAction=implementationRecorded&&!remediatedSnapshotReady?'Create a remediated system snapshot before retesting.':'Record and implement remediation.';}else if(!passedRetest){completedStages.push('finding','remediation');currentStage='retest';nextAction='Retest the exact original failure against the remediated snapshot.';}"""
-          if old_chain in text:
-              text = text.replace(old_chain, new_chain, 1)
-          elif new_chain not in text:
-              raise SystemExit('Expected remediation stage transition was not found.')
+          old_status = "else if (open.length && remediating) chainStatus = 'remediation_in_progress';"
+          new_status = "else if (open.length && implementationRecorded) chainStatus = 'remediation_in_progress';"
+          if old_status in text:
+              text = text.replace(old_status, new_status, 1)
+          elif new_status not in text:
+              raise SystemExit('Expected remediation chain status reference was not found.')
           intelligence.write_text(text)
           PY
       - name: Commit patch when needed
@@ -54,5 +47,5 @@ jobs:
           git config user.name "AgentRiskLayer CI"
           git config user.email "actions@users.noreply.github.com"
           git add src/control-plane.js src/control-intelligence.js
-          git commit -m "Keep remediation current until changed snapshot"
+          git commit -m "Preserve remediation evidence and workflow state"
           git push origin HEAD:fix/control-intelligence-workflow-ux-20260811
