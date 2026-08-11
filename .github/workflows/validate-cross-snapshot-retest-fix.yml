@@ -1,0 +1,143 @@
+name: Validate cross-snapshot retest repair
+
+on:
+  push:
+    branches:
+      - fix/cross-snapshot-retest-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install application dependencies
+        run: npm ci
+      - name: Static and regression checks
+        run: |
+          npm run check
+          npm test
+      - name: Install disposable browser verifier
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install chromium
+      - name: Start disposable AgentRiskLayer app
+        env:
+          NODE_ENV: test
+          PORT: '3311'
+          HOST: 127.0.0.1
+          BASE_URL: http://127.0.0.1:3311
+          DEMO_MODE: 'true'
+          SESSION_SECRET: cross-snapshot-browser-validation-20260811
+          SUPPORT_EMAIL: support@example.test
+        run: |
+          node server.js > /tmp/arl-server.log 2>&1 &
+          echo $! > /tmp/arl-server.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3311/api/health >/tmp/arl-health.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/arl-server.log
+          exit 1
+      - name: Start isolated Chromium CDP
+        run: |
+          CHROME=$(node -e "console.log(require('playwright').chromium.executablePath())")
+          "$CHROME" --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-address=127.0.0.1 --remote-debugging-port=9223 --user-data-dir=/tmp/arl-chrome about:blank > /tmp/arl-chrome.log 2>&1 &
+          echo $! > /tmp/arl-chrome.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9223/json/list >/tmp/arl-cdp.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/arl-chrome.log
+          exit 1
+      - name: Run authenticated Control Intelligence journey
+        env:
+          BROWSER_BASE_URL: http://127.0.0.1:3311
+          CDP_LIST_URL: http://127.0.0.1:9223/json/list
+        run: node scripts/verify-control-intelligence-browser.mjs
+      - name: Audit authenticated page layouts
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const base = 'http://127.0.0.1:3311';
+          const browser = await chromium.launch({ headless: true });
+          const results = [];
+          try {
+            const setup = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+            const page = await setup.newPage();
+            const email = `layout-${Date.now()}@example.test`;
+            const password = 'Layout-Journey-42!';
+            await page.goto(`${base}/auth.html?mode=register`, { waitUntil: 'networkidle' });
+            await page.locator('#registerEmail').fill(email);
+            await page.locator('#registerPassword').fill(password);
+            await page.locator('#termsAccepted').check();
+            await page.locator('#registerForm button[type=submit]').click();
+            await page.waitForURL(/\/verify\.html/);
+            await page.getByText('Email verified', { exact: false }).waitFor();
+            await page.locator('a[href="/dashboard.html"]').click();
+            await page.waitForURL(/\/dashboard\.html/);
+            await setup.close();
+
+            for (const width of [1440, 390, 360]) {
+              const context = await browser.newContext({ viewport: { width, height: width > 500 ? 1000 : 844 } });
+              const auth = await context.newPage();
+              await auth.goto(`${base}/auth.html`, { waitUntil: 'networkidle' });
+              await auth.locator('#loginEmail').fill(email);
+              await auth.locator('#loginPassword').fill(password);
+              await auth.locator('#loginForm button[type=submit]').click();
+              await auth.waitForURL(/\/dashboard\.html/);
+              await auth.close();
+
+              for (const path of ['/dashboard.html','/workspaces.html','/assessment.html','/control-plane.html','/control-intelligence.html','/inspector.html','/redteam.html','/pricing.html','/help.html']) {
+                const p = await context.newPage();
+                const consoleErrors = [];
+                const serverErrors = [];
+                p.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+                p.on('response', response => {
+                  const url = new URL(response.url());
+                  if (url.origin === base && response.status() >= 500) serverErrors.push(`${response.status()} ${url.pathname}`);
+                });
+                const response = await p.goto(`${base}${path}`, { waitUntil: 'networkidle' });
+                const metrics = await p.evaluate(() => ({
+                  viewport: window.innerWidth,
+                  html: document.documentElement.scrollWidth,
+                  body: document.body.scrollWidth,
+                  path: location.pathname,
+                  title: document.title,
+                  h1: document.querySelector('h1')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+                }));
+                results.push({ width, path, status: response?.status(), metrics, consoleErrors, serverErrors });
+                assert.equal(response?.status(), 200, `${path} returned ${response?.status()} at ${width}px`);
+                assert.equal(metrics.path, path, `${path} navigated to ${metrics.path} at ${width}px`);
+                assert.ok(metrics.html <= metrics.viewport + 1, `${path} html overflow at ${width}px: ${JSON.stringify(metrics)}`);
+                assert.ok(metrics.body <= metrics.viewport + 1, `${path} body overflow at ${width}px: ${JSON.stringify(metrics)}`);
+                assert.deepEqual(serverErrors, [], `${path} same-origin HTTP 5xx errors at ${width}px: ${serverErrors.join(', ')}`);
+                assert.deepEqual(consoleErrors, [], `${path} console errors at ${width}px: ${consoleErrors.join(' | ')}`);
+                await p.close();
+              }
+              await context.close();
+            }
+          } finally {
+            await browser.close();
+          }
+          console.log(JSON.stringify({ authenticatedLayoutAudit: 'pass', pagesChecked: results.length, results }, null, 2));
+          NODE
+      - name: Show diagnostics on failure
+        if: failure()
+        run: |
+          cat /tmp/arl-server.log || true
+          cat /tmp/arl-chrome.log || true
