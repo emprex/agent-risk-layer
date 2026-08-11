@@ -80,14 +80,18 @@ try {
   await privatePage.goto(`${baseUrl}/dashboard.html`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await privatePage.waitForURL((url) => url.pathname === '/auth.html', { timeout: 15000 });
   const privateUrl = new URL(privatePage.url());
+  const authHeading = await privatePage.locator('#authTitle').innerText();
+  const loginVisible = await privatePage.locator('#loginForm').isVisible();
   results.authBoundary.dashboardPage = {
     finalPath: privateUrl.pathname,
     next: privateUrl.searchParams.get('next'),
-    bodyText: (await privatePage.locator('body').innerText()).slice(0, 500),
+    authHeading,
+    loginVisible,
   };
   assert.equal(privateUrl.pathname, '/auth.html', 'anonymous dashboard page should redirect to auth');
   assert.equal(privateUrl.searchParams.get('next'), '/dashboard.html', 'dashboard redirect should preserve the intended destination');
-  assert.match(results.authBoundary.dashboardPage.bodyText, /Welcome to AgentRiskLayer|Secure account access/i, 'auth destination should render the sign-in surface');
+  assert.equal(loginVisible, true, 'sign-in form should be visible after anonymous dashboard redirect');
+  assert.match(authHeading, /Welcome back|Welcome to AgentRiskLayer/i, 'auth destination should render the sign-in surface');
   await privatePage.screenshot({ path: path.join(outDir, 'anonymous-dashboard-redirect.png'), fullPage: true });
   await privatePage.close();
   await desktop.close();
