@@ -1302,9 +1302,26 @@ function safeEqualDigest(left, right) {
   return crypto.timingSafeEqual(Buffer.from(a.toLowerCase(), 'hex'), Buffer.from(b.toLowerCase(), 'hex'));
 }
 function sanitiseVerificationInput(input) {
-  const safe = privacySafeObject(input, 30);
-  const allowed = new Set(['artifactId', 'reference', 'retestReference', 'notes']);
-  return Object.fromEntries(Object.entries(safe).filter(([key]) => allowed.has(key)));
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const limits = Object.freeze({
+    artifactId: 100,
+    reference: 500,
+    retestReference: 500,
+    notes: 3000,
+    rootCause: 2000,
+    correctiveAction: 4000,
+    targetEnvironment: 500,
+    rollbackPlan: 2000,
+    validationPlan: 3000,
+    changeReference: 500,
+    limitations: 3000,
+  });
+  const output = {};
+  for (const [key, maxLength] of Object.entries(limits)) {
+    if (!Object.hasOwn(input, key) || input[key] == null || typeof input[key] !== 'string') continue;
+    output[key] = clean(input[key], maxLength);
+  }
+  return output;
 }
 async function resolveActiveRetestCriteria({ project, criteriaId }) {
   const criteria = await db.prepare(`SELECT * FROM remediation_retest_criteria
