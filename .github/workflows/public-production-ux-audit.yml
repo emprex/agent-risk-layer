@@ -1,0 +1,43 @@
+name: Public production UX audit
+
+on:
+  push:
+    branches:
+      - audit/public-production-ux-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright for this disposable audit
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Audit public production journey
+        env:
+          AUDIT_BASE_URL: https://agentrisklayer.com
+          AUDIT_OUT_DIR: audit-artifacts/public-production-ux
+        run: node scripts/public-production-ux-audit.mjs
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-production-ux-audit
+          path: audit-artifacts/public-production-ux
+          if-no-files-found: error
+          retention-days: 1
