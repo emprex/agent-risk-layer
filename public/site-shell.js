@@ -1,13 +1,13 @@
 import { hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
-const premiumThemeHref = '/premium-theme.css';
-if (!document.querySelector(`link[href="${premiumThemeHref}"]`)) {
-  const premiumTheme = document.createElement('link');
-  premiumTheme.rel = 'stylesheet';
-  premiumTheme.href = premiumThemeHref;
-  premiumTheme.dataset.arlPremiumTheme = '';
-  document.head.appendChild(premiumTheme);
+for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia']]) {
+  if (document.querySelector(`link[href="${href}"]`)) continue;
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = href;
+  stylesheet.dataset[dataKey] = '';
+  document.head.appendChild(stylesheet);
 }
 
 applyDocumentSeo();
