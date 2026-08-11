@@ -29,16 +29,21 @@
 .v10-control-visual::before{
   content:"";
   position:absolute;
-  inset:-30% -80% auto;
+  top:-20%;
+  left:-15%;
+  width:130%;
   height:160px;
-  z-index:-1;
+  z-index:0;
+  pointer-events:none;
   background:linear-gradient(90deg,transparent,rgba(22,184,255,.11),transparent);
-  transform:rotate(-11deg);
+  transform:translateX(-24%) rotate(-11deg);
   animation:arlScan 8.5s linear infinite;
 }
+.v10-control-visual>*{position:relative;z-index:1}
 .v10-control-visual::after{
   content:"LIVE CONTROL CHECK";
   position:absolute;
+  z-index:2;
   right:18px;
   bottom:14px;
   padding:5px 8px;
@@ -51,7 +56,7 @@
   letter-spacing:.13em;
   pointer-events:none;
 }
-@keyframes arlScan{0%{transform:translateX(-24%) rotate(-11deg)}50%{transform:translateX(42%) rotate(-11deg)}100%{transform:translateX(108%) rotate(-11deg)}}
+@keyframes arlScan{0%{transform:translateX(-24%) rotate(-11deg)}50%{transform:translateX(8%) rotate(-11deg)}100%{transform:translateX(24%) rotate(-11deg)}}
 
 /* Give long-form trust/help/methodology pages a subtle visual anchor without stock imagery. */
 body[data-shell="public"] main>.hero.compact::after,
@@ -67,6 +72,6 @@ body[data-shell="public"] main>.page-heading::after{
 
 @media(max-width:900px){
   .v10-home .v10-product-band::before{width:920px;right:-430px;opacity:.24}
-  .v10-control-visual::after{display:none}
+  .v10-control-visual::before,.v10-control-visual::after{display:none}
 }
 @media(prefers-reduced-motion:reduce){.v10-control-visual::before{animation:none;opacity:.35}}
