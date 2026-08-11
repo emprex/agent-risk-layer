@@ -30,24 +30,25 @@ jobs:
         run: |
           set -o pipefail
           npm test 2>&1 | tee /tmp/arl-v2-test.log
-      - name: Capture compact regression diagnostics
-        if: steps.regression.outcome == 'failure'
+      - name: Capture regression diagnostics
+        if: always()
         run: |
           mkdir -p test-artifacts/diagnostics
-          tail -n 160 /tmp/arl-v2-test.log > test-artifacts/diagnostics/regression-tail.txt
-      - name: Fail on regression failure
-        if: steps.regression.outcome == 'failure'
-        run: exit 1
+          cp /tmp/arl-v2-test.log test-artifacts/diagnostics/regression-full.txt || true
+          grep -E '^not ok |^# pass |^# fail |^# skipped ' /tmp/arl-v2-test.log > test-artifacts/diagnostics/regression-summary.txt || true
       - name: Install disposable browser tooling
+        if: steps.regression.outcome == 'success'
         run: |
           npm install --no-save playwright@1.54.2
           npx playwright install --with-deps chromium
       - name: Serve public build
+        if: steps.regression.outcome == 'success'
         run: |
           python3 -m http.server 4173 --directory public > /tmp/arl-v2-http.log 2>&1 &
           echo $! > /tmp/arl-v2-http.pid
           sleep 2
       - name: Browser audit
+        if: steps.regression.outcome == 'success'
         run: node scripts/audit-website-v2.mjs
       - name: Upload visual evidence and diagnostics
         if: always()
@@ -56,3 +57,6 @@ jobs:
           name: website-v2-validation-evidence
           path: test-artifacts
           if-no-files-found: ignore
+      - name: Fail on regression failure
+        if: steps.regression.outcome == 'failure'
+        run: exit 1
