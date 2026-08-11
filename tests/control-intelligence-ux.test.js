@@ -7,6 +7,7 @@ const overview = read('public/control-intelligence.html');
 const control = read('public/control-intelligence-control.html');
 const ux = read('public/control-intelligence-ux.js');
 const css = read('public/control-intelligence-ux.css');
+const controlPlane = read('src/control-plane.js');
 
 test('Control Intelligence pages load the progressive workflow UX', () => {
   for (const html of [overview, control]) {
@@ -22,6 +23,12 @@ test('control workflow uses progressive evidence wording and remediation substep
   assert.match(ux, /Implementation evidence/);
   assert.match(ux, /Do not record planned work as implemented/);
   assert.match(ux, /Create a new immutable snapshot only after confirming this exact system version contains the implemented remediation/);
+});
+
+test('guided remediation plan and implementation metadata survive the server verification allowlist', () => {
+  for (const key of ['rootCause', 'correctiveAction', 'targetEnvironment', 'rollbackPlan', 'validationPlan', 'changeReference', 'limitations']) {
+    assert.match(controlPlane, new RegExp(`['\"]${key}['\"]`));
+  }
 });
 
 test('browser bulk review saves decisions independently instead of losing valid rows', () => {
