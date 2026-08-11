@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>AgentRiskLayer — Security controls and evidence for AI agents</title>
-  <meta name="description" content="Understand what an AI agent can access, stop unsafe actions before they run and keep evidence for accountable deployment decisions.">
-  <meta property="og:title" content="AgentRiskLayer — Keep AI agents under control">
-  <meta property="og:description" content="Assess risk, inspect controls, stop unsafe actions and prove what happened—without needing to be an AI-security expert.">
+  <meta name="description" content="Understand what an AI agent can access and change, test whether controls work, stop unsafe actions and keep evidence through remediation and retesting.">
+  <meta property="og:title" content="AgentRiskLayer — Know what your AI agent can actually do">
+  <meta property="og:description" content="Assess authority, test controls, record findings, remediate and retest before a deployment decision.">
   <meta property="og:type" content="website">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
@@ -14,129 +14,182 @@
   <script type="module" src="/shared.js"></script>
   <script type="module" src="/site-shell.js"></script>
 </head>
-<body class="v10-home" data-shell="public">
+<body class="v2-home" data-shell="public">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header site-header-v10" data-site-header>
     <a class="brand brand-v10" href="/" aria-label="AgentRiskLayer home"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a>
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
-    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Primary navigation">
-      <a href="#product">Product</a><a href="/demo.html">See it work</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a>
-      <a class="nav-signin" data-auth-link href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a>
-    </nav>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Primary navigation"><a href="#product">Product</a><a href="#how-it-works">How it works</a><a href="/trust.html">Trust</a><a href="/pricing.html">Pricing</a><a data-auth-link href="/auth.html">Sign in</a><a class="button primary small" href="/assessment.html">Check an agent free</a></nav>
   </header>
 
   <main id="main-content">
-    <section class="v10-hero">
-      <div class="v10-hero-copy">
-        <span class="eyebrow">Security for AI agents that can take real action</span>
-        <h1>Know what your agent can do. Stop what it should not.</h1>
-        <p class="hero-copy">AgentRiskLayer helps you understand an AI agent’s access, block unsafe actions before they reach your systems and keep evidence for every important decision.</p>
+    <section class="v2-hero" aria-labelledby="heroTitle">
+      <div class="v2-hero-copy" data-reveal>
+        <span class="eyebrow">AI agent security · evidence · control</span>
+        <h1 id="heroTitle">Know what your AI agent can actually do.</h1>
+        <p class="hero-copy">Understand its authority, test what happens when controls fail, stop unsafe actions and keep the evidence through remediation and retesting.</p>
         <div class="button-row">
           <a class="button primary button-xl" href="/assessment.html">Check an agent free <span aria-hidden="true">→</span></a>
-          <a class="button ghost button-xl" href="/demo.html">Watch the 90-second demo</a>
+          <a class="button ghost button-xl" href="/demo.html">See how it works</a>
         </div>
-        <div class="v10-proof-line" aria-label="Getting started facts">
-          <span><b>5–10 minutes</b> for the first risk check</span>
-          <span><b>No card</b> to start</span>
-          <span><b>Private</b> unless you choose to share</span>
+        <div class="v2-proof-line" aria-label="Getting started facts">
+          <span>5–10 minute first check</span><span>No card to start</span><span>Private by default</span>
         </div>
       </div>
 
-      <aside class="v10-control-visual" aria-label="Example AgentRiskLayer decision">
-        <div class="visual-topbar"><span>Support agent · proposed action</span><span class="live-state"><i></i> Policy active</span></div>
-        <div class="visual-flow">
-          <div class="visual-node"><small>AI agent wants to</small><strong>Refund order</strong><span>£2,500 · customer email instruction</span></div>
-          <div class="visual-arrow" aria-hidden="true">→</div>
-          <div class="visual-gate"><span class="brand-mark">AR</span><small>AgentRiskLayer checks</small><strong>Policy + approval + context</strong></div>
-          <div class="visual-arrow" aria-hidden="true">→</div>
-          <div class="visual-node blocked"><small>Decision</small><strong>Blocked</strong><span>Exact human approval missing</span></div>
-        </div>
-        <div class="visual-evidence">
-          <span><i>✓</i> Tool call never reached the refund system</span>
-          <span><i>✓</i> Raw email and arguments were not retained</span>
-          <span><i>✓</i> Rule, policy version and evidence digest recorded</span>
-        </div>
-      </aside>
-    </section>
-
-    <section class="v10-audience-strip" aria-label="Who AgentRiskLayer is for">
-      <span>For teams building or using AI agents</span>
-      <b>Business owners</b><b>Product teams</b><b>Developers</b><b>Security teams</b><b>Consultancies</b>
-    </section>
-
-    <section class="content-section v10-problem-section">
-      <div class="section-heading v10-split-heading">
-        <div><span class="eyebrow">The problem</span><h2>An AI agent can cause harm without “hacking” anything.</h2></div>
-        <p>Risk often comes from ordinary authority: broad permissions, untrusted instructions, connected tools, weak approvals or no reliable way to stop the agent.</p>
-      </div>
-      <div class="v10-question-grid">
-        <article><span>01</span><h3>What can it access?</h3><p>Customer data, files, email, databases, cloud services, code and credentials.</p></article>
-        <article><span>02</span><h3>What can it change?</h3><p>Records, messages, permissions, deployments, money and irreversible business actions.</p></article>
-        <article><span>03</span><h3>What can influence it?</h3><p>Users, documents, websites, retrieved content and hidden instructions inside trusted workflows.</p></article>
-        <article><span>04</span><h3>Who stays in control?</h3><p>Whether important actions pause for a person, can be stopped quickly and leave reliable evidence.</p></article>
+      <div class="v2-authority" data-authority-demo data-scene="0" aria-label="Illustrative map of an AI agent's authority">
+        <div class="v2-authority-grid" aria-hidden="true"></div>
+        <div class="v2-authority-badge">Live authority model</div>
+        <div class="v2-authority-decision" data-authority-decision>OBSERVING AUTHORITY</div>
+        <svg viewBox="0 0 600 520" aria-hidden="true" focusable="false">
+          <path d="M300 260C210 235 150 176 88 110"/>
+          <path d="M300 260C390 230 462 160 520 105"/>
+          <path d="M300 260C208 300 146 365 88 422"/>
+          <path class="v2-path-risk" d="M300 260C392 300 462 368 528 420"/>
+          <path class="v2-path-approval" d="M300 260C340 185 357 120 367 64"/>
+          <path class="v2-path-safe" d="M300 260C262 340 244 400 232 468"/>
+        </svg>
+        <div class="v2-authority-node agent"><small>AI system</small><strong>Support agent</strong><span>authority under review</span></div>
+        <div class="v2-authority-node files"><small>Data</small><strong>Files</strong><span>read / write</span></div>
+        <div class="v2-authority-node api"><small>Action</small><strong>APIs + MCP</strong><span>tool calls</span></div>
+        <div class="v2-authority-node memory"><small>State</small><strong>Memory</strong><span>retrieval / learning</span></div>
+        <div class="v2-authority-node payment"><small>High impact</small><strong>Payments</strong><span>refund / transfer</span></div>
+        <div class="v2-authority-node approval"><small>Boundary</small><strong>Human approval</strong><span>exact action</span></div>
+        <div class="v2-authority-node evidence"><small>Proof</small><strong>Evidence</strong><span>decision recorded</span></div>
       </div>
     </section>
 
-    <section id="product" class="v10-product-band">
-      <div class="content-section">
-        <div class="section-heading v10-split-heading">
-          <div><span class="eyebrow">One connected security journey</span><h2>Assess, protect and prove—without stitching together separate tools.</h2></div>
-          <p>Start in plain English. Reveal deeper technical controls only when a developer, security reviewer or auditor needs them.</p>
-        </div>
-        <div class="v10-capability-grid">
-          <article class="capability-card"><div class="capability-icon">?</div><div><small>Understand</small><h3>Risk assessment</h3><p>See what could go wrong, how serious it is and what to fix first.</p><ul><li>Guided questions</li><li>Clear deployment decision</li><li>Prioritised actions</li></ul></div></article>
-          <article class="capability-card"><div class="capability-icon">⌁</div><div><small>Observe</small><h3>Technical inspection</h3><p>Compare what is declared with code, configuration, models, tools and permissions.</p><ul><li>Read-only local Inspector</li><li>Redacted signed evidence</li><li>Asset and permission drift</li></ul></div></article>
-          <article class="capability-card"><div class="capability-icon">↯</div><div><small>Test</small><h3>Controlled attack testing</h3><p>Reproduce prompt injection and tool misuse in an authorised test environment.</p><ul><li>Rules of Engagement</li><li>Repeatable attack cases</li><li>Retest evidence</li></ul></div></article>
-          <article class="capability-card"><div class="capability-icon">⛨</div><div><small>Control</small><h3>Runtime protection</h3><p>Allow, block or pause prompts, outputs and tool calls before execution.</p><ul><li>Versioned policies</li><li>Exact-action approvals</li><li>Privacy-safe decisions</li></ul></div></article>
-          <article class="capability-card"><div class="capability-icon">✓</div><div><small>Improve</small><h3>Remediation and retest</h3><p>Assign each fix, attach proof and verify the same risk again.</p><ul><li>Named ownership</li><li>Evidence-linked closure</li><li>Deployment gates</li></ul></div></article>
-          <article class="capability-card"><div class="capability-icon">#</div><div><small>Prove</small><h3>Decision evidence</h3><p>Keep a clear record of what was checked, observed, blocked, approved and retested.</p><ul><li>Signed reports</li><li>Evidence digests</li><li>Explicit limitations</li></ul></div></article>
+    <section class="v2-question-band" data-question-band>
+      <div class="v2-question-inner" data-reveal>
+        <span class="eyebrow">The security question</span>
+        <h2>If this agent fails or is attacked, what can happen?</h2>
+        <div class="v2-question-lines" aria-label="Questions AgentRiskLayer helps answer">
+          <span data-question-line>What can it access?</span>
+          <span data-question-line>What can it change?</span>
+          <span data-question-line>Who can influence it?</span>
+          <span data-question-line>What evidence proves the risk is controlled?</span>
         </div>
       </div>
     </section>
 
-    <section class="content-section v10-how-section" id="how-it-works">
-      <div class="section-heading vertical"><span class="eyebrow">How it works</span><h2>Four steps from uncertainty to a controlled decision.</h2><p>You can complete the first step alone. Developers and security teams join only when deeper evidence or live protection is needed.</p></div>
-      <ol class="v10-journey">
-        <li><span>1</span><div><small>CHECK</small><h3>Describe one agent</h3><p>Answer ordinary questions about access, data, tools, approvals and recovery.</p><a href="/assessment.html">Start the free check →</a></div></li>
-        <li><span>2</span><div><small>UNDERSTAND</small><h3>See the decision and priorities</h3><p>Learn what could happen, who should fix it and what proof is needed.</p><a href="/sample-report.html">See an example result →</a></div></li>
-        <li><span>3</span><div><small>CONTROL</small><h3>Inspect, test and protect</h3><p>Add technical evidence, run authorised attacks and stop unsafe runtime actions.</p><a href="/demo.html">Watch the product work →</a></div></li>
-        <li><span>4</span><div><small>PROVE</small><h3>Fix, retest and decide</h3><p>Close findings with evidence and support a proceed, hold or do-not-deploy decision.</p><a href="/trust.html">Review the evidence model →</a></div></li>
-      </ol>
-    </section>
-
-    <section class="v10-example-band">
-      <div class="content-section v10-example-layout">
-        <div><span class="eyebrow">Example: customer support agent</span><h2>A hidden email instruction asks for a £2,500 refund.</h2><p>The model proposes the refund, but the model does not have authority. AgentRiskLayer blocks the action because no server-issued approval matches the exact customer, order and amount.</p><div class="button-row"><a class="button primary" href="/demo.html">See the full example</a><a class="button ghost" href="/downloads/agentrisklayer-controlled-support-agent-proof.json" download>Download the proof manifest</a></div></div>
-        <div class="v10-example-result">
-          <span class="example-label">Runtime decision</span><strong>DENY</strong><p>This action requires an exact, single-use human approval.</p><dl><div><dt>Tool reached?</dt><dd>No</dd></div><div><dt>Raw content stored?</dt><dd>No</dd></div><div><dt>Evidence recorded?</dt><dd>Yes</dd></div></dl>
+    <section class="v2-chain-section" id="how-it-works">
+      <div class="v2-chain-inner">
+        <div class="v2-chain-head" data-reveal>
+          <div><span class="eyebrow">From claim to decision</span><h2>Security evidence should survive the whole journey.</h2></div>
+          <p>A questionnaire answer is not technical proof. AgentRiskLayer keeps each evidence class visible as the system moves through findings, remediation, exact retesting and deployment decisions.</p>
+        </div>
+        <div class="v2-chain" data-evidence-chain aria-label="AgentRiskLayer evidence chain">
+          <div class="v2-chain-progress" data-chain-progress aria-hidden="true"></div>
+          <div class="v2-chain-step" data-chain-step><b>01</b><strong>Declared controls</strong><small>What the owner says exists</small></div>
+          <div class="v2-chain-step" data-chain-step><b>02</b><strong>Observed controls</strong><small>What the system shows</small></div>
+          <div class="v2-chain-step" data-chain-step><b>03</b><strong>Findings</strong><small>What remains exposed</small></div>
+          <div class="v2-chain-step" data-chain-step><b>04</b><strong>Red-team evidence</strong><small>What testing reproduces</small></div>
+          <div class="v2-chain-step" data-chain-step><b>05</b><strong>Runtime evidence</strong><small>What policy actually did</small></div>
+          <div class="v2-chain-step" data-chain-step><b>06</b><strong>Human approval</strong><small>Who approved the exact action</small></div>
+          <div class="v2-chain-step" data-chain-step><b>07</b><strong>Remediation</strong><small>What changed and who owns it</small></div>
+          <div class="v2-chain-step" data-chain-step><b>08</b><strong>Exact retest</strong><small>Whether the risk remains controlled</small></div>
+          <div class="v2-chain-step" data-chain-step><b>09</b><strong>Deployment decision</strong><small>Proceed, hold or do not deploy</small></div>
         </div>
       </div>
     </section>
 
-    <section class="content-section v10-pricing-preview">
-      <div class="section-heading v10-split-heading"><div><span class="eyebrow">Simple starting points</span><h2>Begin free. Pay when you need reviewed evidence or more scale.</h2></div><p>No card is required for Community. Stripe shows the exact price and renewal terms before any payment.</p></div>
-      <div class="v10-price-grid">
-        <article><small>LEARN</small><h3>Community</h3><strong>£0</strong><p>Check one agent and protect one live project.</p><a class="button ghost full" href="/assessment.html">Check an agent free</a></article>
-        <article class="recommended"><small>DECIDE</small><h3>Security assessment</h3><strong>£99 <em>once</em></strong><p>Reviewed evidence, attack testing, action plan and deployment decision.</p><a class="button primary full" href="/assessment.html">Start the assessment</a></article>
-        <article><small>PROTECT</small><h3>Subscriptions</h3><strong>From £29 <em>/month</em></strong><p>More projects, runtime decisions, retention and team workflows.</p><a class="button ghost full" href="/pricing.html">Compare every plan</a></article>
+    <section class="v2-story-section">
+      <div class="v2-story-intro" data-reveal><span class="eyebrow">What actually goes wrong</span><h2>An agent does not need to be malicious to create serious risk.</h2><p>Ordinary authority, untrusted input and weak enforcement are enough. The important question is whether the boundary survives when the system is challenged.</p></div>
+
+      <article class="v2-story">
+        <div class="v2-story-visual dark" data-reveal><img src="/visuals/enforcement-boundary.svg" alt="Illustrative flow showing an AI agent action passing through AgentRiskLayer enforcement before a tool or API"></div>
+        <div class="v2-story-copy" data-reveal data-reveal-delay="1"><span class="eyebrow">Untrusted input</span><h3>The instruction looked legitimate. The authority was not.</h3><p>A model can be influenced by email, documents, retrieved content or websites. The important control is whether a proposed action still has to pass an authoritative boundary before the side effect occurs.</p><a href="/demo.html">Watch the controlled example →</a></div>
+      </article>
+
+      <article class="v2-story reverse">
+        <div class="v2-story-visual" data-reveal><img src="/visuals/authority-map.svg" alt="Illustrative map showing an AI agent connected to files, APIs, memory, payments, approval and evidence"></div>
+        <div class="v2-story-copy" data-reveal data-reveal-delay="1"><span class="eyebrow">Excessive authority</span><h3>The model does not need to be compromised to cause damage.</h3><p>Broad permissions can turn an ordinary model error into a filesystem change, customer-data exposure or high-impact business action. Authority has to be visible before risk can be controlled.</p><a href="/risk-library.html">Explore the risk library →</a></div>
+      </article>
+
+      <article class="v2-story">
+        <div class="v2-story-visual" data-reveal><img src="/visuals/remediation-loop.svg" alt="Illustrative remediation loop showing finding, fix, changed version and exact retest"></div>
+        <div class="v2-story-copy" data-reveal data-reveal-delay="1"><span class="eyebrow">Remediation and retest</span><h3>A remediation is not evidence that the risk is fixed.</h3><p>The changed system must be assessed against the same failure and reasonable bypass variants. If the retest fails, the finding stays open and the evidence chain continues.</p><a href="/methodology.html">Read the methodology →</a></div>
+      </article>
+    </section>
+
+    <section class="v2-product-band" id="product">
+      <div class="v2-product-inner" data-product-tour>
+        <div class="v2-product-head" data-reveal><span class="eyebrow">Product in action</span><h2>One connected workflow instead of disconnected security evidence.</h2><p>Move from architecture and control applicability to testing, findings, remediation, retesting, approval and deployment decision without losing the exact system version or evidence source.</p></div>
+        <div class="v2-product-tabs" role="tablist" aria-label="AgentRiskLayer workflow">
+          <button type="button" role="tab" aria-selected="true" data-product-tab="assess">Assess</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="inspect">Inspect</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="test">Test</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="find">Find</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="remediate">Remediate</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="retest">Retest</button>
+          <button type="button" role="tab" aria-selected="false" data-product-tab="decide">Decide</button>
+        </div>
+        <div class="v2-product-frame" data-reveal>
+          <div class="v2-product-screen" aria-label="Illustrative product interface">
+            <div class="v2-mockbar"></div><div class="v2-mockbar short"></div>
+            <div class="v2-mock-grid"><div class="v2-mock-card"><small>Controls reviewed</small><strong>42</strong></div><div class="v2-mock-card"><small>Open findings</small><strong>3</strong></div><div class="v2-mock-card"><small>Retests required</small><strong>1</strong></div></div>
+            <div class="v2-mock-list"><div class="v2-mock-row success" data-product-row><i class="v2-mock-dot"></i><span>System scope bound to snapshot</span><small>current</small></div><div class="v2-mock-row success" data-product-row><i class="v2-mock-dot"></i><span>Observed evidence linked</span><small>verified</small></div><div class="v2-mock-row warning" data-product-row><i class="v2-mock-dot"></i><span>Exact retest required</span><small>hold</small></div><div class="v2-mock-row critical" data-product-row><i class="v2-mock-dot"></i><span>Deployment blocker remains</span><small>open</small></div></div>
+          </div>
+          <aside class="v2-product-sidebar"><span class="eyebrow">Current stage</span><h3 data-product-title>Assessment</h3><p data-product-copy>Start with the agent’s purpose, access, tools, approvals and recovery. The result identifies what needs deeper evidence.</p><a class="button primary" href="/demo.html">Open interactive demo</a></aside>
+        </div>
       </div>
     </section>
 
-    <section class="v10-trust-band">
-      <div class="content-section v10-trust-layout">
-        <div><span class="eyebrow">Trust through boundaries</span><h2>Clear evidence. Clear limitations. No security theatre.</h2><p>AgentRiskLayer separates what a customer declares, what the platform observes, what controlled tests reproduce and what happens at runtime.</p></div>
-        <div class="v10-trust-points"><span><i>✓</i> Private by default</span><span><i>✓</i> Raw hosted prompts and tool arguments not retained</span><span><i>✓</i> Exact-action, time-bound approvals</span><span><i>✓</i> Signed or hashed evidence where appropriate</span><span><i>✓</i> No claim of accredited certification or guaranteed security</span></div>
-        <div class="button-row"><a class="button primary" href="/trust.html">Open the Trust Centre</a><a class="button ghost" href="/security-center.html">Review security controls</a></div>
+    <section class="v2-ci-section">
+      <div class="v2-ci-inner">
+        <div class="v2-ci-copy" data-reveal><span class="eyebrow">Control Intelligence</span><h2>One evidence chain, not eight disconnected security tools.</h2><p>Connect the system architecture to threats, controls, tests, evidence, findings, remediation and deployment decisions while preserving the version that each piece of evidence actually assessed.</p><a class="button primary" href="/control-intelligence.html">Open Control Intelligence</a></div>
+        <div class="v2-ci-graph" data-reveal aria-label="Illustrative Control Intelligence graph">
+          <svg viewBox="0 0 650 480" aria-hidden="true"><path d="M120 90C220 110 240 150 300 190C370 235 420 225 520 160"/><path d="M120 250C205 220 245 195 300 190C390 182 420 250 535 290"/><path d="M205 410C255 355 285 330 335 292C385 255 455 320 500 408"/></svg>
+          <div class="v2-ci-node n1">Architecture</div><div class="v2-ci-node n2">Threat</div><div class="v2-ci-node n3">Control</div><div class="v2-ci-node n4">Test</div><div class="v2-ci-node n5">Evidence</div><div class="v2-ci-node n6">Finding</div><div class="v2-ci-node n7">Remediation</div><div class="v2-ci-node n8">Decision</div>
+        </div>
       </div>
     </section>
 
-    <section class="content-section v10-final-cta">
-      <div><span class="eyebrow">Start with one agent</span><h2>Find the first risk before it becomes a real incident.</h2><p>No security expertise or payment card is required.</p></div>
-      <a class="button primary button-xl" href="/assessment.html">Check an agent free <span aria-hidden="true">→</span></a>
+    <section class="v2-runtime">
+      <div data-reveal><span class="eyebrow">Runtime protection</span><h2>The model proposes. The enforcement layer decides.</h2><p>Prompts, outputs and proposed tool calls can be checked against versioned policy before the application performs the side effect. Sensitive actions can require a server-issued approval bound to the exact action.</p><div class="v2-outcomes"><span class="allow">ALLOW</span><span class="deny">DENY</span><span class="approve">REQUIRE APPROVAL</span></div><a class="button primary" href="/control-plane.html">See live protection</a></div>
+      <div class="v2-runtime-flow" data-reveal data-reveal-delay="1"><div class="v2-runtime-box"><small>PROPOSED ACTION</small><strong>AI agent</strong><span>refund_order()</span></div><div class="v2-runtime-arrow" aria-hidden="true">→</div><div class="v2-runtime-box gate"><small>ENFORCEMENT</small><strong>AgentRiskLayer</strong><span>policy · context · approval</span></div><div class="v2-runtime-arrow" aria-hidden="true">→</div><div class="v2-runtime-box"><small>SIDE EFFECT</small><strong>Tool / API</strong><span>only after decision</span></div></div>
+    </section>
+
+    <section class="v2-report-band">
+      <div class="v2-report-inner">
+        <div class="v2-report-copy" data-reveal><span class="eyebrow">Reviewable evidence</span><h2>Evidence someone else can actually inspect.</h2><p>A useful security result identifies the assessed system/version, scope, control profile, test method, evidence source, severity reasoning, limitations, remediation and retest state.</p><a class="button primary" href="/sample-report.html">See sample report</a></div>
+        <div class="v2-report-card" data-reveal data-reveal-delay="1" aria-label="Illustrative AgentRiskLayer report preview"><div class="v2-report-header"><div><div class="v2-report-title">AgentRiskLayer Security Assessment</div><small>Assessed against AgentRiskLayer Control Profile</small></div><div class="v2-report-meta">SYSTEM v1.4<br>SNAPSHOT 7f21…b93</div></div><div class="v2-report-finding"><b>Finding · High</b><p>Generated code can reach a host capability outside the intended enforcement boundary.</p></div><div class="v2-report-grid"><div><span>Evidence source</span><strong>Observed + controlled test</strong></div><div><span>Owner</span><strong>Engineering</strong></div><div><span>Remediation</span><strong>Implementation recorded</strong></div><div><span>Retest</span><strong>Required on changed version</strong></div></div></div>
+      </div>
+    </section>
+
+    <section class="v2-audience">
+      <span class="eyebrow">Built for teams shipping agents</span><h2>Use AgentRiskLayer when authority and evidence matter.</h2>
+      <div class="v2-audience-grid"><article data-reveal><h3>Building an AI product</h3><p>Understand what the agent can access and change before customers depend on it.</p></article><article data-reveal data-reveal-delay="1"><h3>Shipping tool-enabled agents</h3><p>Put explicit boundaries around MCP, APIs and privileged actions.</p></article><article data-reveal data-reveal-delay="2"><h3>Preparing for enterprise review</h3><p>Connect answers to evidence rather than unsupported security claims.</p></article><article data-reveal data-reveal-delay="3"><h3>Operating high-impact workflows</h3><p>Require approval, runtime policy, remediation and exact retesting where consequences are material.</p></article></div>
+    </section>
+
+    <section class="v2-pricing">
+      <div class="v2-pricing-inner">
+        <div class="v2-pricing-head" data-reveal><span class="eyebrow">Simple starting points</span><h2>Start free. Pay when you need reviewed evidence or more scale.</h2><p>No card is required for Community. Paid plans extend capacity and collaboration without changing the evidence boundary.</p></div>
+        <div class="v2-pricing-grid">
+          <article class="v2-price"><small>Community</small><h3>Explore one agent</h3><strong>£0</strong><p>Private risk check and one security project.</p><a class="button ghost" href="/assessment.html">Start free</a></article>
+          <article class="v2-price recommended"><small>Recommended starting point</small><h3>Security Assessment</h3><strong>£99 <em>one-off</em></strong><p>Reviewed evidence, findings, controlled testing, remediation and deployment decision for one agent.</p><a class="button primary" href="/assessment.html">Start assessment</a></article>
+          <article class="v2-price"><small>Developer</small><h3>Ongoing protection</h3><strong>£29 <em>/month</em></strong><p>More runtime capacity and developer workflows.</p><a class="button ghost" href="/pricing.html">Compare</a></article>
+          <article class="v2-price"><small>Team</small><h3>Shared workflow</h3><strong>£99 <em>/month</em></strong><p>More projects, retention and team collaboration.</p><a class="button ghost" href="/pricing.html">Compare</a></article>
+          <article class="v2-price"><small>Agency</small><h3>Multiple clients</h3><strong>£249 <em>/month</em></strong><p>Higher limits for consultancies and multi-client work.</p><a class="button ghost" href="/pricing.html">Compare</a></article>
+        </div>
+        <div class="v2-enterprise"><div><strong>Enterprise · from £6,000/year</strong><p>Scoped assurance, higher limits and deployment support under an agreed engagement.</p></div><a class="button ghost" href="mailto:support@agentrisklayer.com">Discuss scope</a></div>
+      </div>
+    </section>
+
+    <section class="v2-trust">
+      <div class="v2-trust-inner">
+        <span class="eyebrow">Trust through boundaries</span><h2>Security evidence, not security theatre.</h2>
+        <div class="v2-trust-columns"><article class="v2-trust-box" data-reveal><h3>What AgentRiskLayer does</h3><ul><li>Defines the assessed system and scope.</li><li>Separates declared from observed evidence.</li><li>Records findings and controlled test evidence.</li><li>Tracks remediation and exact retesting.</li><li>Supports evidence-linked deployment decisions.</li></ul></article><article class="v2-trust-box" data-reveal data-reveal-delay="1"><h3>What AgentRiskLayer does not claim</h3><ul><li>Accredited certification.</li><li>Guaranteed security or a risk-free system.</li><li>Government or regulatory approval.</li><li>Automatic regulatory compliance.</li><li>That a declaration is equivalent to verification.</li></ul></article></div>
+        <div class="button-row"><a class="button primary" href="/trust.html">Open Trust Centre</a><a class="button ghost" href="/methodology.html">Review methodology</a></div>
+      </div>
+    </section>
+
+    <section class="v2-final">
+      <div class="v2-final-inner" data-reveal><span class="eyebrow">Start with one agent</span><h2>Find the first risk before it becomes a real incident.</h2><p>See what the agent can access, what it can change and where the evidence is still missing.</p><div class="button-row"><a class="button primary button-xl" href="/assessment.html">Check an agent free <span aria-hidden="true">→</span></a><a class="button ghost button-xl" href="/demo.html">See the controlled demo</a></div></div>
     </section>
   </main>
 
-  <footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/checks/mcp-server-risk-assessment">MCP server risk assessment</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/risk-library.html">Risk library</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
+  <footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/demo.html">Interactive demo</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/risk-library.html">Risk library</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
   <script type="module" src="/analytics.js"></script>
 </body>
 </html>
