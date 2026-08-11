@@ -79,6 +79,10 @@ jobs:
               'assert.match(await visibleText(),/require confirmation/);\nawait click(\'[data-bulk-control="ARL-KB-001"]\');',
               'assert.match(await visibleText(),/require confirmation/);\nawait navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls`);await wait(\'document.body.innerText.includes("Review suggested controls")\');\nawait click(\'[data-bulk-control="ARL-KB-001"]\');'
           )
+          source = source.replace(
+              'await call(\'Page.reload\');await wait(\'document.body.innerText.includes("2 of 108 controls reviewed")\');',
+              'await navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}`);await wait(\'document.body.innerText.includes("2 of 108 controls reviewed")\');'
+          )
           Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
           PY
           node /tmp/verify-control-intelligence-browser.mjs
