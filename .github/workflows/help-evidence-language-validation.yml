@@ -1,0 +1,29 @@
+name: Help evidence language validation
+
+on:
+  push:
+    branches:
+      - fix/help-evidence-language-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Static checks
+        run: npm run check
+      - name: Focused Help Centre regression
+        run: node --test tests/customer-journey-ux.test.js
+      - name: Full regression suite
+        run: npm test
