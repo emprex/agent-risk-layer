@@ -47,9 +47,46 @@ jobs:
           python3 -m http.server 4173 --directory public > /tmp/arl-v2-http.log 2>&1 &
           echo $! > /tmp/arl-v2-http.pid
           sleep 2
-      - name: Browser audit
+      - name: Public browser audit
         if: steps.regression.outcome == 'success'
         run: node scripts/audit-website-v2.mjs
+      - name: Start disposable authenticated application
+        if: steps.regression.outcome == 'success'
+        env:
+          NODE_ENV: test
+          HOST: 127.0.0.1
+          PORT: 3311
+          BASE_URL: http://127.0.0.1:3311
+          SESSION_SECRET: website-v2-disposable-session-secret-20260811
+          SUPPORT_EMAIL: support@agentrisklayer.com
+          PRODUCT_STAGE: test
+        run: |
+          node server.js > /tmp/arl-v2-app.log 2>&1 &
+          echo $! > /tmp/arl-v2-app.pid
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3311/api/health >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat /tmp/arl-v2-app.log
+          exit 1
+      - name: Start disposable Chromium CDP
+        if: steps.regression.outcome == 'success'
+        run: |
+          CHROME="$(node --input-type=module -e "import { chromium } from 'playwright'; process.stdout.write(chromium.executablePath())")"
+          "$CHROME" --headless=new --no-sandbox --disable-dev-shm-usage --remote-debugging-port=9223 --user-data-dir=/tmp/arl-v2-cdp about:blank > /tmp/arl-v2-chrome.log 2>&1 &
+          echo $! > /tmp/arl-v2-chrome.pid
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:9223/json/list >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          cat /tmp/arl-v2-chrome.log
+          exit 1
+      - name: Authenticated visible-controls journey
+        if: steps.regression.outcome == 'success'
+        env:
+          CDP_LIST_URL: http://127.0.0.1:9223/json/list
+          BROWSER_BASE_URL: http://127.0.0.1:3311
+        run: node scripts/verify-control-intelligence-browser.mjs | tee test-artifacts/website-v2/authenticated-journey.txt
       - name: Upload visual evidence and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
