@@ -51,6 +51,17 @@ jobs:
         env:
           BROWSER_BASE_URL: http://127.0.0.1:3311
         run: node scripts/validate-premium-design.mjs
+      - name: Capture representative redesign previews
+        env:
+          BROWSER_BASE_URL: http://127.0.0.1:3311
+        run: node scripts/capture-premium-design.mjs
+      - name: Upload temporary redesign previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: premium-redesign-previews
+          path: audit-artifacts/premium-redesign
+          if-no-files-found: error
+          retention-days: 1
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/arl-premium-server.log || true
