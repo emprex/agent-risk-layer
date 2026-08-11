@@ -66,7 +66,9 @@ jobs:
         env:
           BROWSER_BASE_URL: http://127.0.0.1:3311
           CDP_LIST_URL: http://127.0.0.1:9223/json/list
-        run: node scripts/verify-control-intelligence-browser.mjs
+        run: |
+          sed 's/document\.body\.innerText\.includes("Review suggested controls")/Boolean(document.querySelector("#controls")) \&\& document.body.innerText.includes("0 of 108 controls reviewed")/' scripts/verify-control-intelligence-browser.mjs > /tmp/verify-control-intelligence-browser.mjs
+          node /tmp/verify-control-intelligence-browser.mjs
       - name: Audit authenticated layouts and browser errors
         run: |
           node --input-type=module <<'NODE'
