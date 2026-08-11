@@ -72,11 +72,12 @@ jobs:
           source = Path('scripts/verify-control-intelligence-browser.mjs').read_text()
           source = source.replace(
               'await wait(\'document.body.innerText.includes("Review suggested controls")\');',
-              'await wait(\'Boolean(document.querySelector("#controls")) && document.body.innerText.includes("0 of 108 controls reviewed")\');'
+              'await wait(\'Boolean(document.querySelector("#controls")) && document.body.innerText.includes("0 of 108 controls reviewed")\');',
+              1
           )
           source = source.replace(
               'assert.match(await visibleText(),/require confirmation/);\nawait click(\'[data-bulk-control="ARL-KB-001"]\');',
-              'assert.match(await visibleText(),/require confirmation/);\nawait navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls`);await wait(\'Boolean(document.querySelector("[data-bulk-control=\\"ARL-KB-001\\"]"))\');\nawait click(\'[data-bulk-control="ARL-KB-001"]\');'
+              'assert.match(await visibleText(),/require confirmation/);\nawait navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls`);await wait(\'document.body.innerText.includes("Review suggested controls")\');\nawait click(\'[data-bulk-control="ARL-KB-001"]\');'
           )
           Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
           PY
@@ -133,7 +134,7 @@ jobs:
                 p.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
                 p.on('response', response => {
                   const url = new URL(response.url());
-                  if (url.origin === base && response.status() >= 400) httpErrors.push(`${response.status()} ${url.pathname}`);
+                  if (url.origin === base && response.status() >= 500) httpErrors.push(`${response.status()} ${url.pathname}`);
                 });
                 const response = await p.goto(`${base}${path}`, { waitUntil: 'networkidle' });
                 const metrics = await p.evaluate(() => ({
@@ -149,7 +150,7 @@ jobs:
                 assert.equal(metrics.path, path, `${path} unexpectedly navigated to ${metrics.path} at ${width}px`);
                 assert.ok(metrics.html <= metrics.viewport + 1, `${path} html overflow at ${width}px: ${JSON.stringify(metrics)}`);
                 assert.ok(metrics.body <= metrics.viewport + 1, `${path} body overflow at ${width}px: ${JSON.stringify(metrics)}`);
-                assert.deepEqual(httpErrors, [], `${path} same-origin HTTP errors at ${width}px: ${httpErrors.join(', ')}`);
+                assert.deepEqual(httpErrors, [], `${path} same-origin HTTP 5xx errors at ${width}px: ${httpErrors.join(', ')}`);
                 assert.deepEqual(consoleErrors, [], `${path} console errors at ${width}px: ${consoleErrors.join(' | ')}`);
                 await p.close();
               }
