@@ -1,0 +1,26 @@
+name: Audit premium production redesign
+
+on:
+  push:
+    branches:
+      - audit/premium-production-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install disposable browser tooling
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Audit deployed production redesign
+        run: node scripts/audit-premium-production.mjs
