@@ -1,0 +1,44 @@
+name: Validate Website v2
+
+on:
+  push:
+    branches:
+      - design/website-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install product dependencies
+        run: npm ci
+      - name: Syntax and regression tests
+        run: |
+          npm run check
+          npm test
+      - name: Install disposable browser tooling
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Serve public build
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/arl-v2-http.log 2>&1 &
+          echo $! > /tmp/arl-v2-http.pid
+          sleep 2
+      - name: Browser audit
+        run: node scripts/audit-website-v2.mjs
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-v2-visual-evidence
+          path: test-artifacts/website-v2
+          if-no-files-found: ignore
