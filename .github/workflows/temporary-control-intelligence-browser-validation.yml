@@ -41,7 +41,7 @@ jobs:
       - name: Disposable PostgreSQL Control Intelligence validation
         env:
           TEST_DATABASE_URL: postgresql://arl:arl_test_password@127.0.0.1:5432/arl_disposable_test
-        run: npm run test:control-intelligence-postgres
+        run: node scripts/test-control-intelligence-postgres.mjs
       - name: Start test server
         run: |
           rm -f ./data/browser-validation.sqlite ./data/browser-validation.sqlite-shm ./data/browser-validation.sqlite-wal
