@@ -1,0 +1,76 @@
+name: Disposable customer journey audit
+
+on:
+  push:
+    branches:
+      - audit/customer-journey-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install product dependencies
+        run: npm ci
+
+      - name: Static checks
+        run: npm run check
+
+      - name: Full regression suite
+        run: npm test
+
+      - name: End-to-end smoke journey
+        run: npm run smoke
+        env:
+          NODE_ENV: test
+
+      - name: Install disposable browser verifier
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Run visible browser customer journey
+        env:
+          PORT: '3311'
+          HOST: 127.0.0.1
+          BASE_URL: http://127.0.0.1:3311
+          BROWSER_BASE_URL: http://127.0.0.1:3311
+          AUDIT_OUT_DIR: audit-artifacts/customer-journey
+          DEMO_MODE: 'true'
+          NODE_ENV: test
+          SESSION_SECRET: disposable-customer-journey-secret-1234567890
+          DATABASE_PATH: /tmp/arl-customer-journey.sqlite
+          ADMIN_EMAIL: owner@example.com
+          SUPPORT_EMAIL: support@example.com
+        run: |
+          rm -f /tmp/arl-customer-journey.sqlite /tmp/arl-customer-journey.sqlite-shm /tmp/arl-customer-journey.sqlite-wal
+          node server.js >/tmp/arl-customer-journey-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 80); do
+            if curl -fsS http://127.0.0.1:3311/api/health >/dev/null; then break; fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then cat /tmp/arl-customer-journey-server.log; exit 1; fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:3311/api/health >/dev/null
+          node scripts/verify-customer-journey-browser.mjs
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-journey-audit
+          path: audit-artifacts/customer-journey
+          if-no-files-found: warn
+          retention-days: 1
