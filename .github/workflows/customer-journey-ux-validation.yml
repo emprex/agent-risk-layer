@@ -70,13 +70,30 @@ jobs:
             for (const path of ['/demo.html', '/trust.html']) {
               const page = await mobile.newPage();
               await page.goto(`http://127.0.0.1:4173${path}`, { waitUntil: 'domcontentloaded' });
-              const dimensions = await page.evaluate(() => ({
-                viewport: window.innerWidth,
-                html: document.documentElement.scrollWidth,
-                body: document.body.scrollWidth,
-              }));
-              assert.ok(dimensions.html <= dimensions.viewport + 1, `${path} html overflows: ${JSON.stringify(dimensions)}`);
-              assert.ok(dimensions.body <= dimensions.viewport + 1, `${path} body overflows: ${JSON.stringify(dimensions)}`);
+              const layout = await page.evaluate(() => {
+                const viewport = window.innerWidth;
+                const offenders = [...document.querySelectorAll('body *')].map((element) => {
+                  const rect = element.getBoundingClientRect();
+                  const style = getComputedStyle(element);
+                  return {
+                    tag: element.tagName.toLowerCase(),
+                    id: element.id || '',
+                    className: typeof element.className === 'string' ? element.className : '',
+                    left: Math.round(rect.left * 10) / 10,
+                    right: Math.round(rect.right * 10) / 10,
+                    width: Math.round(rect.width * 10) / 10,
+                    display: style.display,
+                    minWidth: style.minWidth,
+                    gridTemplateColumns: style.gridTemplateColumns,
+                    overflowX: style.overflowX,
+                    text: String(element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+                  };
+                }).filter((item) => item.display !== 'none' && item.width > 0 && (item.right > viewport + 1 || item.left < -1)).slice(0, 20);
+                return { viewport, html: document.documentElement.scrollWidth, body: document.body.scrollWidth, offenders };
+              });
+              console.log(path, JSON.stringify(layout));
+              assert.ok(layout.html <= layout.viewport + 1, `${path} html overflows: ${JSON.stringify(layout)}`);
+              assert.ok(layout.body <= layout.viewport + 1, `${path} body overflows: ${JSON.stringify(layout)}`);
               await page.close();
             }
             await mobile.close();
