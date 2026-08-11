@@ -26,21 +26,41 @@ async function auditPage(context, path, width, { expectAuth = false } = {}) {
   assert.ok(response, `Missing response for ${path}`);
   assert.ok(response.status() < 500, `${path} returned ${response.status()}`);
   if (expectAuth) assert.equal(new URL(page.url()).pathname, path, `${path} unexpectedly redirected`);
-  const state = await page.evaluate(() => ({
-    path: location.pathname,
-    viewport: innerWidth,
-    htmlWidth: document.documentElement.scrollWidth,
-    bodyWidth: document.body.scrollWidth,
-    premiumLink: Boolean(document.querySelector('link[data-arl-premium-theme]')),
-    premiumMediaLink: Boolean(document.querySelector('link[data-arl-premium-media]')),
-    brand: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
-    hiddenViolations: [...document.querySelectorAll('[hidden]')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id || el.className || el.tagName).slice(0, 10),
-  }));
+  const state = await page.evaluate(() => {
+    const viewport = innerWidth;
+    const overflowElements = [...document.querySelectorAll('body *')]
+      .map((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          element: `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.className && typeof el.className === 'string' ? `.${el.className.trim().replace(/\s+/g, '.')}` : ''}`,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          position: style.position,
+          overflowX: style.overflowX,
+        };
+      })
+      .filter((item) => item.width > 0 && (item.right > viewport + 1 || item.left < -1))
+      .sort((a, b) => b.width - a.width)
+      .slice(0, 12);
+    return {
+      path: location.pathname,
+      viewport,
+      htmlWidth: document.documentElement.scrollWidth,
+      bodyWidth: document.body.scrollWidth,
+      premiumLink: Boolean(document.querySelector('link[data-arl-premium-theme]')),
+      premiumMediaLink: Boolean(document.querySelector('link[data-arl-premium-media]')),
+      brand: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+      hiddenViolations: [...document.querySelectorAll('[hidden]')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id || el.className || el.tagName).slice(0, 10),
+      overflowElements,
+    };
+  });
   assert.equal(state.premiumLink, true, `${path} premium stylesheet was not loaded`);
   assert.equal(state.premiumMediaLink, true, `${path} premium media stylesheet was not loaded`);
   assert.equal(state.brand.toLowerCase(), '#16b8ff', `${path} premium brand token missing`);
-  assert.ok(state.htmlWidth <= state.viewport + 1, `${path} html overflow at ${width}: ${state.htmlWidth}/${state.viewport}`);
-  assert.ok(state.bodyWidth <= state.viewport + 1, `${path} body overflow at ${width}: ${state.bodyWidth}/${state.viewport}`);
+  assert.ok(state.htmlWidth <= state.viewport + 1, `${path} html overflow at ${width}: ${state.htmlWidth}/${state.viewport}; offenders=${JSON.stringify(state.overflowElements)}`);
+  assert.ok(state.bodyWidth <= state.viewport + 1, `${path} body overflow at ${width}: ${state.bodyWidth}/${state.viewport}; offenders=${JSON.stringify(state.overflowElements)}`);
   assert.deepEqual(state.hiddenViolations, [], `${path} has visible [hidden] controls`);
   assert.deepEqual(serverErrors, [], `${path} same-origin 5xx errors: ${serverErrors.join(', ')}`);
   assert.deepEqual(consoleErrors, [], `${path} console errors: ${consoleErrors.join(' | ')}`);
