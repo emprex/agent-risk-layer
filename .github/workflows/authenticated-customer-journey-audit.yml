@@ -83,6 +83,10 @@ jobs:
               'await call(\'Page.reload\');await wait(\'document.body.innerText.includes("2 of 108 controls reviewed")\');',
               'await navigate(`/control-intelligence.html?projectId=${encodeURIComponent(projectId)}`);await wait(\'document.body.innerText.includes("2 of 108 controls reviewed")\');'
           )
+          source = source.replace(
+              'await wait(\'document.body.innerText.includes("Create a finding")\');await call(\'Page.reload\');await wait(\'Boolean(document.querySelector("#evidenceForm"))\');',
+              'await wait(\'document.body.innerText.includes("Attach observed evidence to the failed test")\');await wait(\'Boolean(document.querySelector("#evidenceForm"))\');'
+          )
           Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
           PY
           node /tmp/verify-control-intelligence-browser.mjs
