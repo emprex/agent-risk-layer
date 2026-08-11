@@ -32,10 +32,12 @@ async function auditPage(context, path, width, { expectAuth = false } = {}) {
     htmlWidth: document.documentElement.scrollWidth,
     bodyWidth: document.body.scrollWidth,
     premiumLink: Boolean(document.querySelector('link[data-arl-premium-theme]')),
+    premiumMediaLink: Boolean(document.querySelector('link[data-arl-premium-media]')),
     brand: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
     hiddenViolations: [...document.querySelectorAll('[hidden]')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id || el.className || el.tagName).slice(0, 10),
   }));
   assert.equal(state.premiumLink, true, `${path} premium stylesheet was not loaded`);
+  assert.equal(state.premiumMediaLink, true, `${path} premium media stylesheet was not loaded`);
   assert.equal(state.brand.toLowerCase(), '#16b8ff', `${path} premium brand token missing`);
   assert.ok(state.htmlWidth <= state.viewport + 1, `${path} html overflow at ${width}: ${state.htmlWidth}/${state.viewport}`);
   assert.ok(state.bodyWidth <= state.viewport + 1, `${path} body overflow at ${width}: ${state.bodyWidth}/${state.viewport}`);
@@ -63,22 +65,21 @@ try {
   await register.check('#termsAccepted');
   await register.click('#registerForm button[type=submit]');
   await register.waitForURL((url) => url.pathname === '/verify.html', { timeout: 15000 });
-  const dashboardLink = register.locator('a[href="/dashboard.html"]');
-  if (await dashboardLink.count()) await dashboardLink.click();
+  const openDashboard = register.getByRole('link', { name: 'Open dashboard' });
+  if (await openDashboard.count()) await openDashboard.click();
+  else await register.getByRole('link', { name: 'Dashboard', exact: true }).first().click();
   await register.waitForURL((url) => url.pathname === '/dashboard.html', { timeout: 15000 });
+  const storageState = await context.storageState();
   await register.close();
+  await context.close();
 
   for (const viewport of viewports) {
-    await context.setDefaultTimeout(15000);
-    const current = context.pages()[0];
-    if (current) await current.close();
-    const sized = await browser.newContext({ viewport, storageState: await context.storageState() });
+    const sized = await browser.newContext({ viewport, storageState });
     for (const path of appPages) report.authenticated.push(await auditPage(sized, path, viewport.width, { expectAuth: true }));
     await sized.close();
   }
-  await context.close();
 
-  report.assertions.push('premium theme loaded on all sampled public and authenticated pages');
+  report.assertions.push('premium theme and media layer loaded on all sampled public and authenticated pages');
   report.assertions.push('no sampled document-level horizontal overflow at 1440/390/360');
   report.assertions.push('no sampled visible [hidden] controls');
   report.assertions.push('no sampled same-origin 5xx responses or console errors');
