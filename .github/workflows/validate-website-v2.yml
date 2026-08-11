@@ -20,10 +20,24 @@ jobs:
           cache: npm
       - name: Install product dependencies
         run: npm ci
-      - name: Syntax and regression tests
+      - name: Syntax check
+        run: npm run check
+      - name: Website v2 focused tests
+        run: node --test tests/premium-visual-system.test.js
+      - name: Full regression suite
+        id: regression
+        continue-on-error: true
         run: |
-          npm run check
-          npm test
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/arl-v2-test.log
+      - name: Capture compact regression diagnostics
+        if: steps.regression.outcome == 'failure'
+        run: |
+          mkdir -p test-artifacts/diagnostics
+          tail -n 160 /tmp/arl-v2-test.log > test-artifacts/diagnostics/regression-tail.txt
+      - name: Fail on regression failure
+        if: steps.regression.outcome == 'failure'
+        run: exit 1
       - name: Install disposable browser tooling
         run: |
           npm install --no-save playwright@1.54.2
@@ -35,10 +49,10 @@ jobs:
           sleep 2
       - name: Browser audit
         run: node scripts/audit-website-v2.mjs
-      - name: Upload visual evidence
+      - name: Upload visual evidence and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: website-v2-visual-evidence
-          path: test-artifacts/website-v2
+          name: website-v2-validation-evidence
+          path: test-artifacts
           if-no-files-found: ignore
