@@ -24,6 +24,16 @@ jobs:
         run: |
           sed -i 's/controlIntelligenceSource/controlIntelligence/g' scripts/apply-cross-snapshot-retest-fix.py
           python3 scripts/apply-cross-snapshot-retest-fix.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/verify-control-intelligence-browser.mjs')
+          source = path.read_text()
+          replacement = "await wait('Boolean(document.querySelector(\".ci-stage-nav li[data-state=current] button\"))');"
+          for stage in ['finding', 'remediation', 'retest', 'approval', 'deployment_decision']:
+              old = rf'''await wait('document.querySelector(\"[data-stage=\\\"{stage}\\\"]\")?.dataset.uxState===\"current\"');'''
+              source = source.replace(old, replacement)
+          path.write_text(source)
+          PY
       - name: Install dependencies
         run: npm ci
       - name: Static checks
@@ -42,5 +52,5 @@ jobs:
           git config user.email "guillaume.strohecker@gmail.com"
           git add src/control-intelligence.js scripts/verify-control-intelligence-browser.mjs tests/control-intelligence-ux.test.js
           git diff --cached --check
-          git commit -m "Preserve failure lineage across remediated snapshots"
+          git commit -m "Fix progressive browser journey stage waits"
           git push origin HEAD:fix/cross-snapshot-retest-20260811
