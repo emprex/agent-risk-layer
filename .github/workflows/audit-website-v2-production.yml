@@ -1,0 +1,32 @@
+name: Audit Website v2 production
+
+on:
+  push:
+    branches:
+      - audit/website-v2-production-20260811
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install disposable browser tooling
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Audit production Website v2
+        run: node scripts/audit-website-v2-production.mjs
+      - name: Upload production visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-v2-production-audit
+          path: test-artifacts/website-v2-production
+          if-no-files-found: ignore
