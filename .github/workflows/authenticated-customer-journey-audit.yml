@@ -88,8 +88,43 @@ jobs:
               'await wait(\'document.body.innerText.includes("Attach observed evidence to the failed test")\');await wait(\'Boolean(document.querySelector("#evidenceForm"))\');'
           )
           source = source.replace(
-              "await type('#findingAsset'",
-              "await wait('Boolean(document.querySelector(\"#findingForm\"))');await type('#findingAsset'",
+              "await click('[data-stage=\"finding\"] summary');",
+              "await wait('Boolean(document.querySelector(\"#findingForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await click('[data-stage=\"remediation\"] summary');",
+              "await wait('Boolean(document.querySelector(\"#remediationForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await call('Page.reload');await click('[data-stage=\"remediation\"] summary');",
+              "await call('Page.reload');await wait('Boolean(document.querySelector(\"#implementationForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await call('Page.reload');await click('[data-stage=\"remediation\"] summary');",
+              "await call('Page.reload');await wait('Boolean(document.querySelector(\"#snapshotForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await click('[data-stage=\"retest\"] summary');",
+              "await wait('Boolean(document.querySelector(\"#retestForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await call('Page.reload');await click('[data-stage=\"retest\"] summary');",
+              "await call('Page.reload');await wait('Boolean(document.querySelector(\"#closureForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await click('[data-stage=\"approval\"] summary');",
+              "await wait('Boolean(document.querySelector(\"#approvalForm\"))');",
+              1
+          )
+          source = source.replace(
+              "await call('Page.reload');await click('[data-stage=\"deployment_decision\"] summary');",
+              "await call('Page.reload');await wait('Boolean(document.querySelector(\"[data-stage=\\\"deployment_decision\\\"] a\"))');",
               1
           )
           Path('/tmp/verify-control-intelligence-browser.mjs').write_text(source)
