@@ -89,8 +89,7 @@ function decorateRiskContext() {
 
 function buildStageNavigator(stages) {
   const journey = document.querySelector('.ci-journey');
-  if (!journey) return;
-  journey.previousElementSibling?.classList.contains('ci-stage-nav') && journey.previousElementSibling.remove();
+  if (!journey || journey.previousElementSibling?.classList.contains('ci-stage-nav')) return;
   const nav = document.createElement('nav');
   nav.className = 'ci-stage-nav';
   nav.setAttribute('aria-label', 'Control assessment progress');
@@ -143,9 +142,7 @@ function decorateJourney() {
     const titleNode = summary?.querySelector('span');
     if (titleNode) titleNode.textContent = stageLabels[key] || titleNode.textContent;
     if (stateNode) stateNode.textContent = state.replaceAll('_', ' ');
-    if (summary && !summary.querySelector('.ci-stage-help')) {
-      summary.insertAdjacentElement('afterend', text('p', 'ci-stage-help', stageHelp[key] || ''));
-    }
+    if (summary) summary.insertAdjacentElement('afterend', text('p', 'ci-stage-help', stageHelp[key] || ''));
     if (state === 'current') stage.open = true;
     else stage.open = false;
   }
@@ -172,6 +169,11 @@ function wrapSubstep(form, { title: label, status, open, locked, note }) {
   }
 }
 
+function setFieldValue(id, value) {
+  const field = document.querySelector(`#${id}`);
+  if (field && value != null && String(value).length) field.value = String(value);
+}
+
 let remediationProbeRunning = false;
 async function decorateRemediationProgress() {
   if (!isControlPage || remediationProbeRunning || !projectId || !controlId) return;
@@ -196,6 +198,18 @@ async function decorateRemediationProgress() {
     const implementationSaved = Boolean(verification.artifactId);
     const failed = (detail.testHistory || detail.tests || []).find((item) => item.result === 'failed' && item.executionKind !== 'retest');
     const changedSnapshot = Boolean(failed?.systemSnapshotId && detail.systemSnapshot?.id && failed.systemSnapshotId !== detail.systemSnapshot.id);
+
+    if (planSaved) {
+      setFieldValue('rootCause', verification.rootCause);
+      setFieldValue('correctiveAction', verification.correctiveAction);
+      setFieldValue('targetEnvironment', verification.targetEnvironment);
+      setFieldValue('rollbackPlan', verification.rollbackPlan);
+      setFieldValue('validationPlan', verification.validationPlan);
+    }
+    if (implementationSaved) {
+      setFieldValue('changeReference', verification.changeReference);
+      setFieldValue('implementationLimitations', verification.limitations);
+    }
 
     wrapSubstep(document.querySelector('#remediationForm'), {
       title: '1. Remediation plan',
