@@ -42,5 +42,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Initialize PostgreSQL schema
+        run: node --input-type=module -e "import { initialiseDatabase } from './src/db.js'; await initialiseDatabase();"
       - run: node --test tests/control-intelligence-journey.test.js tests/control-intelligence-failure-handoff.test.js tests/control-intelligence-ux.test.js
       - run: npm test
