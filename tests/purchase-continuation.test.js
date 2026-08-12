@@ -29,7 +29,7 @@ test('assessment purchase continuation stores only a non-secret assessment ident
   assert.doesNotMatch(JSON.stringify(continuation), /secret-access-token/);
 });
 
-test('path continuation remains same-origin and drops query parameters before storage', () => {
+test('subscription continuation is limited to pricing and drops query parameters before storage', () => {
   const now = 1_700_000_000_000;
   assert.deepEqual(buildPostVerifyContinuation({
     claimAssessmentId: '',
@@ -43,19 +43,28 @@ test('path continuation remains same-origin and drops query parameters before st
   });
   assert.equal(buildPostVerifyContinuation({
     claimAssessmentId: '',
+    next: '/dashboard.html?next=secret',
+    origin,
+    now,
+  }), null);
+  assert.equal(buildPostVerifyContinuation({
+    claimAssessmentId: '',
     next: 'https://attacker.example/steal',
     origin,
     now,
   }), null);
 });
 
-test('stored continuation expires and rejects unsafe paths', () => {
+test('stored continuation expires and rejects unsafe or unrelated paths', () => {
   const now = 1_700_000_000_000;
   assert.equal(parsePostVerifyContinuation(JSON.stringify({
     kind: 'path', path: '/pricing.html', expiresAt: now - 1,
   }), { origin, now }), null);
   assert.equal(parsePostVerifyContinuation(JSON.stringify({
     kind: 'path', path: '//attacker.example', expiresAt: now + 1000,
+  }), { origin, now }), null);
+  assert.equal(parsePostVerifyContinuation(JSON.stringify({
+    kind: 'path', path: '/dashboard.html', expiresAt: now + 1000,
   }), { origin, now }), null);
   assert.equal(parsePostVerifyContinuation('{bad json', { origin, now }), null);
 });
