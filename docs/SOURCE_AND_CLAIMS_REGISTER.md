@@ -6,6 +6,12 @@ Permitted claim: “AgentRiskLayer Control Intelligence connects a project’s v
 
 Boundary: this does not establish certification, accreditation, exhaustive coverage, regulatory approval, independent validation or guaranteed security. Controls remain candidate content. Framework mappings remain informative. No customer outcome, benchmark or time-saved claim is supported.
 
+## Runtime exact-action approval
+
+Permitted claim: “The hosted AgentRiskLayer Guard can require a server-issued, short-lived exact-action human approval bound to the workspace, project, authoritative environment, tool and canonical argument digest; changed arguments, expired or revoked approvals and consumed/replayed approvals are denied.” Evidence: `src/access-control.js`, `src/control-plane.js`, `src/runtime-policy.js`, migration 008 and control-plane/access-control tests.
+
+Boundary: exact-action approval binds only the values supplied to the guarded action. It does not prove a material amount, target or other value that is resolved or changed downstream after the Guard decision. Dynamic material values require an authoritative prepare/quote or equivalent commitment before execution, or separately reviewed downstream enforcement. Per-action approval is not an aggregate spend, usage or resource-budget control. Cumulative ceilings must be enforced atomically by an authoritative system that accounts for retries, idempotency and concurrency. Protection also depends on the real execution path being forced through the Guard or an equivalent enforcement point.
+
 ## Design-partner evidence cases
 
 Permitted claim before live testing: “AgentRiskLayer uses a version-bound design-partner protocol that preserves declarations separately from observed and test-generated evidence, links findings to reproduction evidence, and requires remediation and retest before a fixed-control claim is made.” Evidence: `docs/DESIGN_PARTNER_EVIDENCE_CASE_PROTOCOL.md`.
@@ -54,6 +60,7 @@ The catalogue is original AgentRiskLayer content. External standards and guidanc
 - Retrieved/reviewed: 2026-08-05; catalogue engineering review: 2026-08-06
 - External intelligence/benchmark claim review: 2026-08-09
 - Design-partner publication protocol review: 2026-08-09
+- Runtime exact-action approval boundary review: 2026-08-12
 - Earliest scheduled entry review: 2026-10-04 (critical entries); each entry follows its own risk-based interval
 - Earlier review is required after a material source update, new attack evidence, customer incident, control bypass or architecture change.
 
