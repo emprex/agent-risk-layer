@@ -62,6 +62,11 @@ function currentFinding(data) {
   return (data.findings || []).find((item) => !CLOSED_FINDING_STATES.has(item.status)) || null;
 }
 
+function hasVerifiedRetestEvidence(data, retest) {
+  if (!retest) return false;
+  return [...(data.evidence || []), ...(data.evidenceHistory || [])].some((item) => verified(item) && item.testExecutionId === retest.id);
+}
+
 export function deriveControlJourney(data = {}, remediationRecord = null) {
   const applicability = data.applicability || {};
   const tests = data.tests || [];
@@ -138,11 +143,13 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
       return finish({ failed, finding });
     }
 
-    // Keep the user at evidence review until the open finding is actually closed.
+    const closureEvidenceVerified = hasVerifiedRetestEvidence(data, retest);
     currentStage = 'retest';
-    nextAction = 'Review the passed retest evidence and close the finding.';
+    nextAction = closureEvidenceVerified
+      ? 'Review the verified passed retest evidence and close the finding.'
+      : 'Verify evidence for the passed exact retest before closing the finding.';
     deploymentImpact = 'blocker';
-    return finish({ failed, finding, retest, closureRequired: true });
+    return finish({ failed, finding, retest, closureRequired: true, closureEvidenceVerified });
   }
 
   const executed = tests.filter((item) => item.result !== 'planned');
@@ -206,6 +213,7 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
       finding: extra.finding || finding || null,
       retest: extra.retest || null,
       closureRequired: Boolean(extra.closureRequired),
+      closureEvidenceVerified: extra.closureEvidenceVerified == null ? null : Boolean(extra.closureEvidenceVerified),
       remediation: extra.remediation || null,
     };
   }
