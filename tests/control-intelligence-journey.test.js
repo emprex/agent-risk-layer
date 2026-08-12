@@ -94,7 +94,7 @@ test('passed test with verified bound evidence can advance to deployment decisio
 });
 
 test('passed exact retest keeps an open finding in closure review', () => {
-  const oldFailure = { ...failed, systemSnapshotId: 'sys_old' };
+  const oldFailure = { ...failed, systemSnapshotId: 'sys_old', findingId: 'rem_1' };
   const retest = {
     id: 'ctx_retest',
     result: 'passed',
@@ -112,4 +112,17 @@ test('passed exact retest keeps an open finding in closure review', () => {
   assert.equal(journey.currentStage, 'retest');
   assert.equal(journey.closureRequired, true);
   assert.match(journey.nextAction, /close the finding/i);
+});
+
+test('a failure bound to a closed finding is not reopened by the browser journey', () => {
+  const oldFailure = { ...failed, systemSnapshotId: 'sys_old', findingId: 'rem_closed' };
+  const passed = { ...planned, id: 'ctx_passed', result: 'passed' };
+  const journey = deriveControlJourney(detail({
+    tests: [passed],
+    testHistory: [passed, oldFailure],
+    evidence: [{ id: 'cei_pass', testExecutionId: passed.id, verificationState: 'verified', retentionStatus: 'active' }],
+    findings: [{ id: 'rem_closed', status: 'verified_closed' }],
+  }));
+  assert.equal(journey.failedExecution, null);
+  assert.equal(journey.currentStage, 'deployment_decision');
 });
