@@ -44,12 +44,14 @@ function setContinueLink(href, continuation) {
     await api('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
     const continuation = readContinuation();
     let href = null;
+    let continuationResolved = !continuation;
     try {
       href = await continuationTarget(continuation);
+      continuationResolved = true;
     } catch {
       href = null;
     }
-    clearContinuation();
+    if (continuationResolved) clearContinuation();
     root.className = 'success-box';
     root.innerHTML = '<strong>Email verified.</strong><p>You can now purchase reports and run authorised inspection and red-team workflows.</p>';
     setContinueLink(href, continuation);
