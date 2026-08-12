@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Agent Security Assessment | AgentRiskLayer</title>
+  <meta name="description" content="Assess an AI agent’s permissions, MCP and tool access, prompt-injection exposure, autonomy, human approvals, runtime controls, remediation and evidence.">
+  <link rel="canonical" href="https://agentrisklayer.com/ai-agent-security-assessment.html">
+  <meta property="og:title" content="AI Agent Security Assessment | AgentRiskLayer">
+  <meta property="og:description" content="Assess what an AI agent can access, what can influence it, what actions it can take and what evidence supports deployment.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://agentrisklayer.com/ai-agent-security-assessment.html">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/analytics.css">
+  <script type="module" src="/shared.js"></script>
+  <script type="module" src="/site-shell.js"></script>
+</head>
+<body class="v10-home" data-shell="public">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="site-header site-header-v10" data-site-header>
+    <a class="brand brand-v10" href="/" aria-label="AgentRiskLayer home"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a>
+    <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Primary navigation">
+      <a href="/index.html#product">Product</a><a href="/demo.html">See it work</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a>
+      <a class="nav-signin" data-auth-link href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="v10-hero">
+      <div class="v10-hero-copy">
+        <span class="eyebrow">Evidence-based security review for tool-using AI</span>
+        <h1>AI Agent Security Assessment</h1>
+        <p class="hero-copy">Assess what an AI agent can access, what can influence it, what actions it can take and what evidence supports a deployment decision.</p>
+        <div class="button-row">
+          <a class="button primary button-xl" href="/assessment.html">Start the free agent check <span aria-hidden="true">→</span></a>
+          <a class="button ghost button-xl" href="/sample-report.html">See an example report</a>
+        </div>
+        <div class="v10-proof-line" aria-label="Assessment starting points">
+          <span><b>5–10 minutes</b> for the first check</span>
+          <span><b>No card</b> to start</span>
+          <span><b>£99 once</b> for the reviewed Security Assessment</span>
+        </div>
+      </div>
+
+      <aside class="v10-control-visual" aria-label="AI agent security assessment evidence chain">
+        <div class="visual-topbar"><span>Agent security review</span><span class="live-state"><i></i> Evidence first</span></div>
+        <div class="visual-flow">
+          <div class="visual-node"><small>Declared capability</small><strong>MCP + customer data</strong><span>Agent can call external tools</span></div>
+          <div class="visual-arrow" aria-hidden="true">→</div>
+          <div class="visual-gate"><span class="brand-mark">AR</span><small>AgentRiskLayer checks</small><strong>Access + action + approval</strong></div>
+          <div class="visual-arrow" aria-hidden="true">→</div>
+          <div class="visual-node blocked"><small>Decision</small><strong>Evidence required</strong><span>No finding without an observed failure</span></div>
+        </div>
+        <div class="visual-evidence">
+          <span><i>✓</i> Declarations remain separate from observed evidence</span>
+          <span><i>✓</i> Findings require an observed or reproducible failure</span>
+          <span><i>✓</i> Remediation is followed by exact retest</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="v10-audience-strip" aria-label="When to assess an AI agent">
+      <span>Useful before launch, customer review or expanded authority</span>
+      <b>MCP agents</b><b>Tool-using agents</b><b>Autonomous workflows</b><b>Customer-facing agents</b><b>Internal agents</b>
+    </section>
+
+    <section class="content-section v10-problem-section">
+      <div class="section-heading v10-split-heading">
+        <div><span class="eyebrow">What changes the risk</span><h2>“AI agent” is not one security profile.</h2></div>
+        <p>An assistant that drafts text is different from an agent with persistent memory, MCP tools, scheduled execution, customer data, financial authority or the ability to delegate work to other agents.</p>
+      </div>
+      <div class="v10-question-grid">
+        <article><span>01</span><h3>Authority</h3><p>Can the agent only recommend, or can it write records, send messages, change permissions, deploy code or move money?</p></article>
+        <article><span>02</span><h3>Influence</h3><p>Can users, email, files, websites, tool output or stored memory inject instructions into the workflow?</p></article>
+        <article><span>03</span><h3>Autonomy</h3><p>Does it act only when asked, or can it run on schedules, react to events, replan, chain goals or continue without immediate approval?</p></article>
+        <article><span>04</span><h3>Recovery</h3><p>Can policy, memory, tooling, workflow and changed data be rolled back after a bad or manipulated action?</p></article>
+      </div>
+    </section>
+
+    <section class="v10-product-band">
+      <div class="content-section">
+        <div class="section-heading v10-split-heading">
+          <div><span class="eyebrow">What the assessment covers</span><h2>From capability and access to evidence and deployment.</h2></div>
+          <p>The review follows the same evidence chain used inside AgentRiskLayer. Capabilities can make controls relevant, but they do not become vulnerabilities by themselves.</p>
+        </div>
+        <div class="v10-capability-grid">
+          <article class="capability-card"><div class="capability-icon">1</div><div><small>PROFILE</small><h3>Agent capabilities</h3><p>Record autonomy, memory, tool discovery, delegation, trigger mode, learning or adaptation, evaluator authority and recovery scope.</p></div></article>
+          <article class="capability-card"><div class="capability-icon">2</div><div><small>ACCESS</small><h3>Data and permissions</h3><p>Review identities, tenant scope, customer data, secrets, files, databases, networks and administrative access.</p></div></article>
+          <article class="capability-card"><div class="capability-icon">3</div><div><small>TOOLS</small><h3>MCP and action surface</h3><p>Review tool trust, dynamic discovery, external services, write authority, action validation and downstream enforcement boundaries.</p></div></article>
+          <article class="capability-card"><div class="capability-icon">4</div><div><small>ATTACK</small><h3>Prompt injection and misuse</h3><p>Test authorised scenarios where untrusted input tries to influence tool calls, approvals, data access or protected actions.</p></div></article>
+          <article class="capability-card"><div class="capability-icon">5</div><div><small>CONTROL</small><h3>Human approval and runtime policy</h3><p>Check whether high-impact actions are bound to the exact action, target, parameters, value and validity period before execution.</p></div></article>
+          <article class="capability-card"><div class="capability-icon">6</div><div><small>PROVE</small><h3>Evidence, remediation and retest</h3><p>Connect observed controls, test evidence, findings, remediation ownership, exact retest and the resulting deployment decision.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section v10-how-section">
+      <div class="section-heading vertical">
+        <span class="eyebrow">Evidence model</span>
+        <h2>A security claim is not the same as security evidence.</h2>
+        <p>AgentRiskLayer keeps each stage separate so missing information is not silently converted into a vulnerability and a declared safeguard is not treated as verified control evidence.</p>
+      </div>
+      <ol class="v10-journey">
+        <li><span>1</span><div><small>DECLARE</small><h3>Declared controls and capabilities</h3><p>The owner describes the exact agent version, its access, tools, autonomy, approvals and safeguards.</p></div></li>
+        <li><span>2</span><div><small>OBSERVE</small><h3>Observed controls and tests</h3><p>Code, configuration, inspection output, authorised tests and runtime records are collected separately from declarations.</p></div></li>
+        <li><span>3</span><div><small>FIND</small><h3>Findings only when supported</h3><p>A finding requires an observed or reproducible failure. Unknown, missing or inconclusive information remains an information gap.</p></div></li>
+        <li><span>4</span><div><small>DECIDE</small><h3>Fix, retest and decide</h3><p>Remediation is recorded, the exact failure is retested and current evidence supports a proceed, hold or do-not-deploy decision.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="v10-example-band">
+      <div class="content-section v10-example-layout">
+        <div>
+          <span class="eyebrow">Example assessment question</span>
+          <h2>An MCP-enabled support agent can issue refunds. What proves the action is controlled?</h2>
+          <p>A useful answer needs more than “human approval is enabled.” The assessment checks where approval is enforced, what exact action and value are bound to it, whether it can be replayed, what happens when parameters change and what evidence records the decision.</p>
+          <div class="button-row"><a class="button primary" href="/checks/mcp-server-risk-assessment">Review the MCP risk assessment</a><a class="button ghost" href="/runtime.html">See runtime protection</a></div>
+        </div>
+        <div class="v10-example-result">
+          <span class="example-label">Assessment rule</span>
+          <strong>PROVE IT</strong>
+          <p>Capability → applicable control → test → evidence → finding only if failure is demonstrated.</p>
+          <dl><div><dt>Unknown information?</dt><dd>Context required</dd></div><div><dt>Failed test?</dt><dd>Finding path</dd></div><div><dt>Fix recorded?</dt><dd>Exact retest</dd></div></dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="content-section v10-pricing-preview">
+      <div class="section-heading v10-split-heading">
+        <div><span class="eyebrow">Start with one agent</span><h2>Free qualification first. Reviewed evidence when you need it.</h2></div>
+        <p>The free check helps identify what needs review. The £99 Security Assessment is the one-off reviewed assessment path shown in AgentRiskLayer pricing.</p>
+      </div>
+      <div class="v10-price-grid">
+        <article><small>QUALIFY</small><h3>Free agent check</h3><strong>£0</strong><p>Describe the agent, its access and safeguards and get an initial risk view.</p><a class="button ghost full" href="/assessment.html">Start free</a></article>
+        <article class="recommended"><small>REVIEW</small><h3>Security Assessment</h3><strong>£99 <em>once</em></strong><p>Reviewed evidence, controlled attack testing, remediation actions and a deployment decision.</p><a class="button primary full" href="/assessment.html">Start with the free check</a></article>
+        <article><small>OPERATE</small><h3>Runtime protection</h3><strong>From £29 <em>/month</em></strong><p>Ongoing projects, runtime decisions, retention and team workflows.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></article>
+      </div>
+    </section>
+
+    <section class="content-section">
+      <div class="section-heading vertical"><span class="eyebrow">Questions buyers and builders ask</span><h2>AI agent security assessment FAQ</h2></div>
+      <div class="v10-question-grid">
+        <article><h3>Is this a certification?</h3><p>No. AgentRiskLayer Security Assessment is a proprietary assessment against the AgentRiskLayer Control Profile. It is not an accredited certification or a guarantee that a system is risk-free.</p></article>
+        <article><h3>Does an unknown capability become a finding?</h3><p>No. Unknown or unconfirmed information remains context. A finding requires an observed or reproducible control failure.</p></article>
+        <article><h3>Can the assessment cover MCP agents?</h3><p>Yes. The assessment can review MCP and other tool-enabled agents, including tool trust, permissions, external dependencies, action validation, prompt injection exposure and approval boundaries.</p></article>
+        <article><h3>What happens after a finding is fixed?</h3><p>The remediation is recorded against the changed system version and the exact original failure is retested before closure.</p></article>
+        <article><h3>Do I need to expose secrets?</h3><p>No. The assessment is designed around privacy-safe descriptions and evidence. Do not enter credentials or secrets into the assessment fields.</p></article>
+        <article><h3>Where can I see the methodology?</h3><p>Read the <a href="/methodology.html">assessment methodology</a>, <a href="/trust.html">Trust Centre</a> and <a href="/sample-report.html">sample report</a> before starting.</p></article>
+      </div>
+    </section>
+
+    <section class="content-section v10-final-cta">
+      <div><span class="eyebrow">Assess one real agent</span><h2>Find out what it can do and what evidence you still need.</h2><p>Start free. Unknowns remain unknown. Findings require evidence.</p></div>
+      <a class="button primary button-xl" href="/assessment.html">Start the AI agent security assessment <span aria-hidden="true">→</span></a>
+    </section>
+  </main>
+
+  <footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/ai-agent-security-assessment.html">AI agent security assessment</a><a href="/checks/mcp-server-risk-assessment">MCP server risk assessment</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/risk-library.html">Risk library</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support, not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
+  <script type="module" src="/analytics.js"></script>
+</body>
+</html>
