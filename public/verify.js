@@ -1,36 +1,20 @@
 import { api, escapeHtml, qs } from './shared.js';
+import { parsePostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY, targetForContinuation } from './purchase-continuation.js';
 
 const root = document.querySelector('#verifyStatus');
 const token = qs('token');
-const postVerifyContinuationKey = 'arl_post_verify_continue';
 
 function readContinuation() {
-  let raw;
   try {
-    raw = localStorage.getItem(postVerifyContinuationKey);
+    return parsePostVerifyContinuation(localStorage.getItem(POST_VERIFY_CONTINUATION_KEY), { origin: location.origin });
   } catch {
     return null;
   }
-  if (!raw) return null;
-  try {
-    const value = JSON.parse(raw);
-    if (!value || Number(value.expiresAt) < Date.now()) return null;
-    if (value.kind === 'assessment' && typeof value.assessmentId === 'string' && value.assessmentId) {
-      return { kind: 'assessment', assessmentId: value.assessmentId };
-    }
-    if (value.kind === 'path' && typeof value.path === 'string' && value.path.startsWith('/') && !value.path.startsWith('//')) {
-      const candidate = new URL(value.path, location.origin);
-      if (candidate.origin === location.origin) return { kind: 'path', path: `${candidate.pathname}${candidate.hash || ''}` };
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }
 
 function clearContinuation() {
   try {
-    localStorage.removeItem(postVerifyContinuationKey);
+    localStorage.removeItem(POST_VERIFY_CONTINUATION_KEY);
   } catch {
     // The continuation is optional and contains no credentials.
   }
@@ -38,11 +22,9 @@ function clearContinuation() {
 
 async function continuationTarget(continuation) {
   if (!continuation) return null;
-  if (continuation.kind === 'path') return continuation.path;
+  if (continuation.kind === 'path') return targetForContinuation(continuation);
   const dashboard = await api('/api/dashboard');
-  const assessment = (dashboard.assessments || []).find((item) => item.id === continuation.assessmentId);
-  if (!assessment?.access_token) return '/dashboard.html';
-  return `/result.html?id=${encodeURIComponent(assessment.id)}&token=${encodeURIComponent(assessment.access_token)}`;
+  return targetForContinuation(continuation, dashboard.assessments || []);
 }
 
 function setContinueLink(href, continuation) {
