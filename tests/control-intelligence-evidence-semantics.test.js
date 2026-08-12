@@ -239,7 +239,7 @@ test('legacy artifact-only verified retest evidence is treated as unverified and
     findingId: lineage.finding.id,
     userId: f.userId,
     input: { systemSnapshotId: current.id, expectedUpdatedAt: detail.findings.find((item) => item.id === lineage.finding.id).updatedAt, limitations: 'Synthetic one-trial retest.' },
-  }), /source that actually proves the exact retest outcome/i);
+  }), /qualifying evidence that proves the exact retest outcome/i);
 
   await assert.rejects(() => recordDeploymentDecision({
     projectId: f.project.id,
