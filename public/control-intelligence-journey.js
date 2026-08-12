@@ -30,13 +30,22 @@ function stageStates(currentStage, completed = [], notRequired = []) {
   ]));
 }
 
+function closedFindingIds(data) {
+  return new Set((data.findings || [])
+    .filter((item) => CLOSED_FINDING_STATES.has(item.status))
+    .map((item) => item.id));
+}
+
 function initialFailure(data) {
+  const closed = closedFindingIds(data);
   const tests = [...(data.testHistory || []), ...(data.tests || [])];
   const seen = new Set();
   return tests.find((item) => {
     if (!item?.id || seen.has(item.id)) return false;
     seen.add(item.id);
-    return item.result === 'failed' && item.executionKind !== 'retest';
+    if (item.result !== 'failed' || item.executionKind === 'retest') return false;
+    if (item.findingId && closed.has(item.findingId)) return false;
+    return true;
   }) || null;
 }
 
@@ -82,7 +91,7 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
   }
   completed.push('applicability');
 
-  // A reproduced failure is safety-significant and must never be hidden by a later plan.
+  // A reproduced unresolved failure is safety-significant and must never be hidden by a later plan.
   if (failed) {
     completed.push('test');
     const hasFailureEvidence = evidence.some((item) => observedFailureEvidence(item, failed.id))
@@ -129,7 +138,7 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
       return finish({ failed, finding });
     }
 
-    // Keep the user at the evidence review until the open finding is actually closed.
+    // Keep the user at evidence review until the open finding is actually closed.
     currentStage = 'retest';
     nextAction = 'Review the passed retest evidence and close the finding.';
     deploymentImpact = 'blocker';
