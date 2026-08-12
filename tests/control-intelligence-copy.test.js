@@ -7,7 +7,11 @@ const source = readFileSync(new URL('../public/control-intelligence-control.js',
 test('test-result confirmation does not turn inconclusive evidence into a finding', () => {
   assert.match(
     source,
-    /Test result saved\. Attach evidence before determining whether a finding exists\./,
+    /Test result saved\./,
+  );
+  assert.match(
+    source,
+    /Attach evidence to the executed test\./,
   );
   assert.doesNotMatch(
     source,
