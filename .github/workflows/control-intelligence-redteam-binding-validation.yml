@@ -1,0 +1,56 @@
+name: Control Intelligence Red Team binding validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'migrations/020_control_intelligence_redteam_binding.sql'
+      - 'src/control-intelligence.js'
+      - 'src/control-redteam-evidence.js'
+      - 'public/control-intelligence-control.html'
+      - 'public/control-intelligence-redteam-binding.js'
+      - 'tests/control-intelligence-*'
+      - '.github/workflows/control-intelligence-redteam-binding-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentrisk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agentrisk_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Initialize PostgreSQL schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_test
+        run: node --input-type=module -e "import { initialiseDatabase } from './src/db.js'; await initialiseDatabase();"
+      - name: Run focused Control Intelligence PostgreSQL tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_test
+        run: node --test tests/control-intelligence-evidence-semantics.test.js tests/control-intelligence-redteam-binding.test.js tests/control-intelligence-journey.test.js tests/control-intelligence-ux.test.js
+      - name: Run full test suite with the supported test adapter
+        run: npm test
