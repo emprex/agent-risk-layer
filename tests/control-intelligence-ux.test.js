@@ -8,13 +8,17 @@ const control = read('public/control-intelligence-control.html');
 const ux = read('public/control-intelligence-ux.js');
 const css = read('public/control-intelligence-ux.css');
 const controlPlane = read('src/control-plane.js');
-const controlIntelligence = read('src/control-intelligence.js');
+const controlIntelligenceCore = read('src/control-intelligence-core.js');
+const controlIntelligenceFacade = read('src/control-intelligence.js');
+const focusedControl = read('public/control-intelligence-control.js');
+const journey = read('public/control-intelligence-journey.js');
 
 test('Control Intelligence pages load the progressive workflow UX', () => {
   for (const html of [overview, control]) {
     assert.match(html, /control-intelligence-ux\.css/);
     assert.match(html, /control-intelligence-ux\.js/);
   }
+  assert.match(control, /control-intelligence-safe-defaults\.js/);
 });
 
 test('control workflow uses progressive evidence wording and remediation substeps', () => {
@@ -36,13 +40,13 @@ test('guided remediation plan and implementation metadata survive the server ver
   assert.doesNotMatch(controlPlane, /const safe = privacySafeObject\(input, 30\);\s*const allowed = new Set\([^)]*rootCause/s);
 });
 
-test('remediation remains the current stage until implementation and a changed system snapshot both exist', () => {
-  assert.match(controlIntelligence, /const implementationRecorded =/);
-  assert.match(controlIntelligence, /const remediatedSnapshotReady =/);
-  assert.match(controlIntelligence, /const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady/);
-  assert.match(controlIntelligence, /open\.length && implementationRecorded/);
-  assert.doesNotMatch(controlIntelligence, /\bremediating\b/);
-  assert.match(controlIntelligence, /Create a remediated system snapshot before retesting\./);
+test('core remediation gating remains unchanged behind the compatibility facade', () => {
+  assert.match(controlIntelligenceCore, /const implementationRecorded =/);
+  assert.match(controlIntelligenceCore, /const remediatedSnapshotReady =/);
+  assert.match(controlIntelligenceCore, /const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady/);
+  assert.match(controlIntelligenceCore, /open\.length && implementationRecorded/);
+  assert.doesNotMatch(controlIntelligenceCore, /\bremediating\b/);
+  assert.match(controlIntelligenceCore, /Create a remediated system snapshot before retesting\./);
 });
 
 test('browser bulk review saves decisions independently instead of losing valid rows', () => {
@@ -63,15 +67,31 @@ test('responsive workflow navigation avoids a horizontal step rail', () => {
   assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(css, /@media\(max-width:430px\)\{\.ci-tabs,\.ci-metrics,\.ci-stage-nav ol\{grid-template-columns:1fr\}/);
   assert.match(css, /\.ci-bulk-row-error/);
+  assert.match(css, /\.ci-focus-stepper ol\{display:grid/);
+  assert.match(css, /\.ci-current-action/);
 });
 
+test('cross-snapshot failure lineage remains in the unchanged core implementation', () => {
+  assert.match(controlIntelligenceCore, /const currentTests = data\.tests\.filter/);
+  assert.match(controlIntelligenceCore, /const historicalTests = \(data\.testHistory \|\| data\.tests\)/);
+  assert.match(controlIntelligenceCore, /const currentEvidence = data\.evidence\.filter/);
+  assert.match(controlIntelligenceCore, /const historicalEvidence = \(data\.evidenceHistory \|\| data\.evidence\)/);
+  assert.match(controlIntelligenceCore, /const tests = open\.length \? historicalTests : currentTests/);
+  assert.match(controlIntelligenceCore, /row\.test_execution_id===initialFailure\?\.id/);
+  assert.match(controlIntelligenceCore, /verifiedEvidence=currentEvidence\.some/);
+});
 
-test('cross-snapshot failure lineage is retained only for the open-finding retest path', () => {
-  assert.match(controlIntelligence, /const currentTests = data\.tests\.filter/);
-  assert.match(controlIntelligence, /const historicalTests = \(data\.testHistory \|\| data\.tests\)/);
-  assert.match(controlIntelligence, /const currentEvidence = data\.evidence\.filter/);
-  assert.match(controlIntelligence, /const historicalEvidence = \(data\.evidenceHistory \|\| data\.evidence\)/);
-  assert.match(controlIntelligence, /const tests = open\.length \? historicalTests : currentTests/);
-  assert.match(controlIntelligence, /row\.test_execution_id===initialFailure\?\.id/);
-  assert.match(controlIntelligence, /verifiedEvidence=currentEvidence\.some/);
+test('focused control workflow never lets a later plan hide a reproduced failure', () => {
+  assert.match(controlIntelligenceFacade, /A reproduced failure is already recorded for this control/);
+  assert.match(controlIntelligenceFacade, /Attach observed evidence to the failed test/);
+  assert.match(journey, /must never be hidden by a later plan/);
+  assert.match(journey, /Create the finding from the reproduced failure/);
+});
+
+test('focused control workflow exposes one editable current action', () => {
+  assert.match(focusedControl, /Only the current action is editable/);
+  assert.match(focusedControl, /Saved evidence history/);
+  assert.match(focusedControl, /Advanced evidence details/);
+  assert.match(focusedControl, /filter\(\(item\) => item\.result !== 'planned'\)/);
+  assert.doesNotMatch(focusedControl, /Test name/);
 });
