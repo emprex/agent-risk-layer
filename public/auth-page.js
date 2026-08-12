@@ -1,4 +1,5 @@
 import { api, hideError, qs, setBusy, showError, warmCsrf } from './shared.js';
+import { buildPostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY } from './purchase-continuation.js';
 
 const tabs = [...document.querySelectorAll('[data-tab]')];
 const login = document.querySelector('#loginForm');
@@ -10,7 +11,6 @@ const claimAssessmentId = qs('claimAssessmentId');
 const claimToken = qs('claimToken');
 const requestedNext = qs('next') || '/dashboard.html';
 const next = requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/dashboard.html';
-const postVerifyContinuationKey = 'arl_post_verify_continue';
 let challengeToken = '';
 
 function selectTab(name, { focus = false } = {}) {
@@ -33,25 +33,11 @@ function selectTab(name, { focus = false } = {}) {
   history.replaceState(null, '', url);
 }
 
-function continuationRecord() {
-  const expiresAt = Date.now() + (30 * 60 * 1000);
-  if (claimAssessmentId) {
-    return { kind: 'assessment', assessmentId: claimAssessmentId, expiresAt };
-  }
-  try {
-    const candidate = new URL(next, location.origin);
-    if (candidate.origin !== location.origin) return null;
-    return { kind: 'path', path: `${candidate.pathname}${candidate.hash || ''}`, expiresAt };
-  } catch {
-    return null;
-  }
-}
-
 function rememberPostVerifyContinuation() {
-  const record = continuationRecord();
+  const record = buildPostVerifyContinuation({ claimAssessmentId, next, origin: location.origin });
   if (!record) return;
   try {
-    localStorage.setItem(postVerifyContinuationKey, JSON.stringify(record));
+    localStorage.setItem(POST_VERIFY_CONTINUATION_KEY, JSON.stringify(record));
   } catch {
     // Continuation is a convenience only. Checkout authorization remains server-enforced.
   }
