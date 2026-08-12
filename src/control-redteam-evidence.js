@@ -71,6 +71,12 @@ export function redTeamTrustFromRow(row) {
   if (descriptor.verificationScope !== REDTEAM_VERIFICATION_SCOPE) {
     return { state: 'unverified', reason: 'Red-team evidence is missing the required integrity-verification scope.' };
   }
+  if (!row.redteam_baseline_run_id || !row.redteam_case_id
+      || descriptor.redteamRunId !== row.redteam_run_id
+      || descriptor.redteamBaselineRunId !== row.redteam_baseline_run_id
+      || descriptor.redteamCaseId !== row.redteam_case_id) {
+    return { state: 'unverified', reason: 'Red-team evidence provenance IDs do not match the integrity-bound evidence descriptor.' };
+  }
   if (Number(row.redteam_signature_valid) !== 1) {
     return { state: 'unverified', reason: 'The linked red-team run no longer has a valid uploaded signature.' };
   }
@@ -86,8 +92,8 @@ export function redTeamTrustFromRow(row) {
     verificationScope: REDTEAM_VERIFICATION_SCOPE,
     trustBoundary: descriptor.trustBoundary || REDTEAM_TRUST_BOUNDARY,
     redteamRunId: row.redteam_run_id,
-    redteamBaselineRunId: row.redteam_baseline_run_id || null,
-    redteamCaseId: row.redteam_case_id || null,
+    redteamBaselineRunId: row.redteam_baseline_run_id,
+    redteamCaseId: row.redteam_case_id,
   };
 }
 
