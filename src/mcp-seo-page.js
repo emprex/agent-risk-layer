@@ -48,7 +48,7 @@ export function renderMcpServerRiskAssessmentPage(baseUrl) {
           <a class="button ghost button-xl" href="/sample-report.html">See an example report</a>
         </div>
         <div class="v10-proof-line" aria-label="Assessment principles">
-          <span><b>Same URL</b> for assessment and retest history</span>
+          <span><b>Version-bound</b> assessment and retest evidence</span>
           <span><b>Unknown is not a finding</b></span>
           <span><b>Observed failure</b> required for a finding</span>
         </div>
