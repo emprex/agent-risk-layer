@@ -45,6 +45,18 @@ function markCurrentNavigation() {
   });
 }
 
+function ensureSeoAcquisitionLink() {
+  if (document.body.dataset.shell !== 'public' || document.querySelector('a[href="/ai-agent-security-assessment.html"]')) return;
+  const productHeading = [...document.querySelectorAll('footer strong')].find((node) => node.textContent.trim() === 'Product');
+  const productColumn = productHeading?.parentElement;
+  if (!productColumn) return;
+  const link = document.createElement('a');
+  link.href = '/ai-agent-security-assessment.html';
+  link.textContent = 'AI agent security assessment';
+  const mcpLink = productColumn.querySelector('a[href="/checks/mcp-server-risk-assessment"]');
+  productColumn.insertBefore(link, mcpLink || productHeading.nextSibling);
+}
+
 function menuLabel(open) {
   return open ? 'Close menu' : 'Open menu';
 }
@@ -158,5 +170,6 @@ window.addEventListener('pagehide', () => setMenu(false));
 
 syncNavigationForViewport();
 markCurrentNavigation();
+ensureSeoAcquisitionLink();
 
 hydrateNav().catch(() => null);
