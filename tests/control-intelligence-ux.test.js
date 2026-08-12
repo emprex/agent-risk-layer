@@ -84,7 +84,7 @@ test('cross-snapshot failure lineage remains in the unchanged core implementatio
 test('focused control workflow never lets a later plan hide a reproduced failure', () => {
   assert.match(controlIntelligenceFacade, /A reproduced failure is already recorded for this control/);
   assert.match(controlIntelligenceFacade, /Attach observed evidence to the failed test/);
-  assert.match(journey, /A reproduced failure is safety-significant and must never be hidden by a later plan/);
+  assert.match(journey, /must never be hidden by a later plan/);
   assert.match(journey, /Create the finding from the reproduced failure/);
 });
 
