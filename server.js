@@ -260,7 +260,7 @@ const server = http.createServer(async (req, res) => {
                 }
                 await createSession(res, user.id);
                 await claimAssessmentForUser(body.claimAssessmentId, body.claimToken, user.id);
-                await insertEvent('user_logged_in', user.id);
+                await insertEvent('user_logged_in_mfa', userId);
                 return json(res, 200, { user });
             }
             catch (error) {
@@ -308,7 +308,7 @@ const server = http.createServer(async (req, res) => {
             }
             const verification = await createEmailVerification(req.user.id);
             if (verification)
-                await sendEmailVerification({ userId: req.user.id, to: req.user.email, token: verification.token });
+                await sendEmailVerification({ userId: req.user.id, to: user.email, token: verification.token });
             return json(res, 200, { ok: true, demoVerificationUrl: config.demoMode && verification ? `/verify.html?token=${encodeURIComponent(verification.token)}` : null });
         }
         if (req.method === 'POST' && url.pathname === '/api/auth/reauth') {
@@ -1231,9 +1231,15 @@ const server = http.createServer(async (req, res) => {
             return text(res, 200, renderSecurityTxt());
         match = url.pathname.match(/^\/checks\/([^/]+)$/);
         if (req.method === 'GET' && match) {
-            const page = seoPages[decodeURIComponent(match[1])];
-            if (page)
+            const slug = decodeURIComponent(match[1]);
+            const page = seoPages[slug];
+            if (page) {
+                if (slug === 'mcp-server-risk-assessment') {
+                    const { renderMcpServerRiskAssessmentPage } = await import('./src/mcp-seo-page.js');
+                    return html(res, 200, renderMcpServerRiskAssessmentPage(config.baseUrl));
+                }
                 return html(res, 200, renderSeoPage(page));
+            }
         }
         if (req.method === 'GET' || req.method === 'HEAD')
             return serveStatic(url.pathname, req, res);
@@ -1243,7 +1249,7 @@ const server = http.createServer(async (req, res) => {
         console.error(error);
         if (!res.headersSent) {
             const status = error.statusCode || (error.code === 'BODY_TOO_LARGE' ? 413 : error.code === 'INVALID_JSON' ? 400 : 500);
-            const message = error.code === 'BODY_TOO_LARGE' ? 'Request body is too large.' : error.code === 'INVALID_JSON' ? 'Request body contains invalid JSON.' : 'Unexpected server error.';
+            const message = error.code === 'BODY_TOO_LARGE' ? 'Request body is too large.' : error.code === 'INVALID_JSON' ? 400 : 500;
             return json(res, status, { error: message });
         }
         res.end();
