@@ -14,6 +14,7 @@ import {
   recordControlTestExecution,
   recordDeploymentDecision,
 } from '../src/control-intelligence.js';
+import { recordControlTestExecution as recordCoreControlTestExecution } from '../src/control-intelligence-core.js';
 
 const randomId = (prefix) => `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
 
@@ -127,6 +128,70 @@ test('failed guided test advances on bound unverified observed evidence without 
   const decision = await recordDeploymentDecision({ projectId: f.project.id, userId: f.userId, input: { systemSnapshotId: snapshot.id, rationale: 'Unverified failure evidence and open finding remain unresolved.' } });
   assert.equal(decision.decision, 'hold');
   assert.equal(decision.summary.controlsWithObservedEvidence, 0);
+});
+
+test('a later planned test cannot mask an existing reproduced failure', async () => {
+  const f = await fixture('failure-plan-mask');
+  const snapshot = await applicableControl(f, 'ARL-KB-031', 'input:user_messages');
+  const failed = await recordControlTestExecution({
+    projectId: f.project.id,
+    controlId: 'ARL-KB-031',
+    userId: f.userId,
+    input: {
+      systemSnapshotId: snapshot.id,
+      result: 'failed',
+      inputReference: 'Synthetic direct instruction override.',
+      expectedResult: 'The instruction must not change authority.',
+      observedResult: 'The synthetic target changed authority and attempted the prohibited action.',
+      failureReason: 'Authority changed from untrusted content.',
+    },
+  });
+
+  await assert.rejects(() => recordControlTestExecution({
+    projectId: f.project.id,
+    controlId: 'ARL-KB-031',
+    userId: f.userId,
+    input: {
+      systemSnapshotId: snapshot.id,
+      result: 'planned',
+      inputReference: 'A second plan must not hide the failure.',
+    },
+  }), /reproduced failure is already recorded/i);
+
+  // Recreate the legacy state that existed before the guard so the read-path repair is regression tested.
+  await recordCoreControlTestExecution({
+    projectId: f.project.id,
+    controlId: 'ARL-KB-031',
+    userId: f.userId,
+    input: {
+      systemSnapshotId: snapshot.id,
+      result: 'planned',
+      inputReference: 'Legacy later plan recorded after the failure.',
+      expectedResult: 'The original failure still controls the journey.',
+    },
+  });
+
+  let detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: 'ARL-KB-031', userId: f.userId });
+  assert.equal(detail.chain.currentStage, 'evidence');
+  assert.match(detail.chain.nextAction, /failed test|failure/i);
+
+  await recordControlEvidence({
+    projectId: f.project.id,
+    controlId: 'ARL-KB-031',
+    userId: f.userId,
+    input: {
+      systemSnapshotId: snapshot.id,
+      testExecutionId: failed.id,
+      evidenceClass: 'observed',
+      sourceType: 'test_output',
+      sourceReference: 'Legacy-mask regression evidence',
+      limitations: 'Synthetic test evidence.',
+    },
+  });
+
+  detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: 'ARL-KB-031', userId: f.userId });
+  assert.equal(detail.chain.currentStage, 'finding');
+  assert.ok(detail.chain.completedStages.includes('evidence'));
 });
 
 test('inconclusive guided test stays in the test stage', async () => {
