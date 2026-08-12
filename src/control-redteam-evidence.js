@@ -6,6 +6,7 @@ export const REDTEAM_TRUST_BOUNDARY = 'Integrity-verified redacted outcomes from
 const BIND_ROLES = new Set(['admin', 'owner']);
 const EVIDENCE_CLASS = 'test_generated';
 const SOURCE_TYPE = 'redteam_run';
+const SUPERSEDED_TRUST_REASON = 'Legacy verification for this exact retest is superseded by a qualifying integrity-verified customer-operated Red Team evidence binding. The historical descriptor and digest are preserved in the trust revision log.';
 
 function error(message, statusCode = 409) {
   return Object.assign(new Error(message), { statusCode });
@@ -22,6 +23,13 @@ function parse(value, fallback) {
 function time(value) {
   const parsed = Date.parse(value || '');
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function appendLimitation(existing, addition) {
+  const current = String(existing || '').trim();
+  if (!current) return addition;
+  if (current.includes(addition)) return current;
+  return `${current} ${addition}`;
 }
 
 function targetDescriptor(row) {
@@ -95,6 +103,59 @@ export function redTeamTrustFromRow(row) {
     redteamBaselineRunId: row.redteam_baseline_run_id,
     redteamCaseId: row.redteam_case_id,
   };
+}
+
+async function supersedeInvalidLegacyRetestTrust({ project, snapshot, retest, replacementEvidenceId, userId, createdAt }) {
+  const rows = await db.prepare(`SELECT * FROM control_evidence_items
+    WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND test_execution_id=?
+      AND id<>? AND verification_state='verified' AND retention_status='active' AND redteam_run_id IS NULL AND runtime_event_id IS NULL`)
+    .all(project.workspace_id, project.id, snapshot.id, retest.entry_id, retest.id, replacementEvidenceId);
+  for (const row of rows) {
+    const predatesRetest = time(row.observed_at) != null && time(retest.completed_at) != null && time(row.observed_at) < time(retest.completed_at);
+    const artifactOnly = Boolean(row.remediation_artifact_id);
+    const approvalOnly = Boolean(row.approval_id);
+    if (!predatesRetest && !artifactOnly && !approvalOnly) continue;
+
+    const previousDescriptor = parse(row.descriptor_json, null);
+    if (!previousDescriptor || !/^[a-f0-9]{64}$/i.test(String(row.integrity_digest || ''))) {
+      throw error('Legacy retest evidence cannot be safely superseded because its previous descriptor or digest is unavailable.');
+    }
+    const limitations = appendLimitation(row.limitations, SUPERSEDED_TRUST_REASON);
+    const nextDescriptor = {
+      ...previousDescriptor,
+      verificationState: 'stale',
+      limitations,
+      trustSupersededByEvidenceId: replacementEvidenceId,
+      trustSupersededAt: createdAt,
+    };
+    const nextDigest = intelligenceDigest(nextDescriptor);
+    const revisionDescriptor = {
+      schema: 'arl.control-evidence-trust-revision.v1',
+      workspaceId: project.workspace_id,
+      projectId: project.id,
+      evidenceId: row.id,
+      replacementEvidenceId,
+      previousVerificationState: row.verification_state,
+      newVerificationState: 'stale',
+      reason: SUPERSEDED_TRUST_REASON,
+      previousIntegrityDigest: row.integrity_digest,
+      actorId: userId,
+      createdAt,
+    };
+    const revisionDigest = intelligenceDigest(revisionDescriptor);
+    await db.prepare(`INSERT INTO control_evidence_trust_revisions
+      (id,workspace_id,project_id,evidence_id,replacement_evidence_id,previous_verification_state,new_verification_state,reason,previous_descriptor_json,previous_integrity_digest,revision_digest,actor_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(id('cetr_'), project.workspace_id, project.id, row.id, replacementEvidenceId, row.verification_state, 'stale', SUPERSEDED_TRUST_REASON,
+        row.descriptor_json, row.integrity_digest, revisionDigest, userId, createdAt);
+    await db.prepare('UPDATE control_evidence_items SET verification_state=?,descriptor_json=?,integrity_digest=?,limitations=? WHERE id=? AND project_id=?')
+      .run('stale', canonicalJson(nextDescriptor), nextDigest, limitations, row.id, project.id);
+    await db.prepare(`INSERT INTO security_audit_log
+      (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(id('aud_'), project.workspace_id, project.id, 'user', userId, 'control_intelligence.evidence_trust_superseded', 'control_evidence', row.id,
+        JSON.stringify({ replacementEvidenceId, previousVerificationState: row.verification_state, newVerificationState: 'stale', previousIntegrityDigest: row.integrity_digest, newIntegrityDigest: nextDigest, revisionDigest }), createdAt);
+  }
 }
 
 export async function recordRedTeamEvidenceBinding({ projectId, controlId, userId, input = {} }) {
@@ -230,6 +291,8 @@ export async function recordRedTeamEvidenceBinding({ projectId, controlId, userI
       .run(evidenceId, project.workspace_id, projectId, snapshot.id, controlId, retest.id, finding.id, EVIDENCE_CLASS, SOURCE_TYPE,
         descriptor.sourceReference, null, null, null, finding.id, descriptor.observedAt, userId, integrityDigest, canonicalJson(descriptor),
         'internal', 'active', 'verified', limitations, createdAt, retestRun.id, baselineRun.id, caseId);
+
+    await supersedeInvalidLegacyRetestTrust({ project, snapshot, retest, replacementEvidenceId: evidenceId, userId, createdAt });
 
     await db.prepare(`INSERT INTO security_audit_log
       (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
