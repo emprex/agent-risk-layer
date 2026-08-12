@@ -18,13 +18,16 @@ import {
   getControlIntelligenceControl,
   recordControlEvidence,
   recordControlTestExecution,
+  recordDeploymentDecision,
 } from '../src/control-intelligence.js';
+import { recordControlEvidence as recordCoreControlEvidence } from '../src/control-intelligence-core.js';
 
 const CONTROL_ID = 'ARL-KB-032';
 const FACT = 'input:email';
 const CASE_ID = 'RT-PI-002';
 const fingerprint = 'a'.repeat(64);
 const randomId = (prefix) => `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
+const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 async function fixture(label) {
   const userId = randomId('usr_');
@@ -139,7 +142,7 @@ async function lineage(f) {
       limitations: 'One synthetic local trial.',
     },
   });
-  return { vulnerable, failed, finding, current, retest };
+  return { vulnerable, failed, finding, artifact, current, retest };
 }
 
 async function redTeamPair(f) {
@@ -162,12 +165,7 @@ async function redTeamPair(f) {
     environment: 'local',
     startedAt: new Date(Date.parse(completedAt) - 5000).toISOString(),
     completedAt,
-    target: {
-      mode: 'staging-adapter',
-      endpointOrigin: 'http://127.0.0.1:8787',
-      endpointPathHash: 'c'.repeat(64),
-      profile: null,
-    },
+    target: { mode: 'staging-adapter', endpointOrigin: 'http://127.0.0.1:8787', endpointPathHash: 'c'.repeat(64), profile: null },
     authorisationId: roeId,
   });
   const trust = JSON.stringify({
@@ -177,8 +175,8 @@ async function redTeamPair(f) {
   });
   const baselineId = randomId('rtr_');
   const retestId = randomId('rtr_');
-  const baselineDigest = 'd'.repeat(64);
-  const retestDigest = 'e'.repeat(64);
+  const baselineDigest = digest(`${assessmentId}:baseline`);
+  const retestDigest = digest(`${assessmentId}:retest`);
   const baselineResults = JSON.stringify([{ caseId: CASE_ID, title: 'Indirect injection in synthetic email', severity: 'critical', outcome: 'failed', requestFingerprint: fingerprint, responseFingerprint: 'b'.repeat(64) }]);
   const retestResults = JSON.stringify([{ caseId: CASE_ID, title: 'Indirect injection in synthetic email', severity: 'critical', outcome: 'passed', requestFingerprint: fingerprint, responseFingerprint: 'f'.repeat(64) }]);
   for (const row of [
@@ -193,13 +191,8 @@ async function redTeamPair(f) {
   return { assessmentId, baselineId, retestId, baselineDigest, retestDigest, retestCreated };
 }
 
-test('integrity-verified Red Team baseline/retest pair can bind to the exact Control Intelligence retest without claiming independent operation', async () => {
-  const f = await fixture('redteam-binding');
-  const chain = await lineage(f);
-  const runs = await redTeamPair(f);
-  assert.ok(Date.parse(runs.retestCreated) < Date.parse(chain.retest.completedAt), 'fixture proves imported signed source can legitimately predate retrospective CI recording');
-
-  const evidence = await recordControlEvidence({
+async function bind(f, chain, runs) {
+  return recordControlEvidence({
     projectId: f.project.id,
     controlId: CONTROL_ID,
     userId: f.userId,
@@ -217,7 +210,32 @@ test('integrity-verified Red Team baseline/retest pair can bind to the exact Con
       limitations: 'Synthetic test-only binding.',
     },
   });
+}
 
+test('integrity-verified Red Team baseline/retest pair binds to the exact retest without claiming independent operation', async () => {
+  const f = await fixture('redteam-binding');
+  const chain = await lineage(f);
+  const runs = await redTeamPair(f);
+  assert.ok(Date.parse(runs.retestCreated) < Date.parse(chain.retest.completedAt), 'signed source may predate retrospective CI recording');
+
+  const legacy = await recordCoreControlEvidence({
+    projectId: f.project.id,
+    controlId: CONTROL_ID,
+    userId: f.userId,
+    input: {
+      systemSnapshotId: chain.current.id,
+      testExecutionId: chain.retest.id,
+      findingId: chain.finding.id,
+      remediationId: chain.finding.id,
+      remediationArtifactId: chain.artifact.id,
+      evidenceClass: 'observed',
+      sourceType: 'retest',
+      sourceReference: 'Legacy artifact-promoted evidence',
+    },
+  });
+  assert.equal(legacy.verificationState, 'verified');
+
+  const evidence = await bind(f, chain, runs);
   assert.equal(evidence.verificationState, 'verified');
   assert.equal(evidence.verificationScope, 'integrity_verified_customer_operated');
   assert.equal(evidence.redteamRunId, runs.retestId);
@@ -229,20 +247,16 @@ test('integrity-verified Red Team baseline/retest pair can bind to the exact Con
   assert.equal(evidence.observedAt, runs.retestCreated);
 
   const stored = await db.prepare('SELECT redteam_run_id,redteam_baseline_run_id,redteam_case_id,verification_state FROM control_evidence_items WHERE id=?').get(evidence.id);
-  assert.deepEqual(stored, {
-    redteam_run_id: runs.retestId,
-    redteam_baseline_run_id: runs.baselineId,
-    redteam_case_id: CASE_ID,
-    verification_state: 'verified',
-  });
+  assert.deepEqual(stored, { redteam_run_id: runs.retestId, redteam_baseline_run_id: runs.baselineId, redteam_case_id: CASE_ID, verification_state: 'verified' });
   assert.equal((await db.prepare('SELECT assessment_id FROM remediation_items WHERE id=?').get(chain.finding.id)).assessment_id, runs.assessmentId);
 
   const detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: CONTROL_ID, userId: f.userId });
   const bound = detail.evidence.find((item) => item.id === evidence.id);
+  const effectiveLegacy = detail.evidence.find((item) => item.id === legacy.id);
   assert.equal(bound.verificationState, 'verified');
   assert.equal(bound.verificationScope, 'integrity_verified_customer_operated');
-  assert.equal(bound.redteamRunId, runs.retestId);
   assert.match(bound.trustBoundary, /did not independently operate the target/i);
+  assert.equal(effectiveLegacy.verificationState, 'unverified');
   assert.match(detail.chain.nextAction, /qualifying passed exact retest evidence/i);
 
   const finding = detail.findings.find((item) => item.id === chain.finding.id);
@@ -258,9 +272,16 @@ test('integrity-verified Red Team baseline/retest pair can bind to the exact Con
     },
   });
   assert.equal(closed.status, 'verified_closed');
+
+  const decision = await recordDeploymentDecision({
+    projectId: f.project.id,
+    userId: f.userId,
+    input: { systemSnapshotId: chain.current.id, rationale: 'Valid replacement evidence must supersede the legacy trust exception for this exact retest.' },
+  });
+  assert.ok(['hold', 'do_not_deploy', 'proceed'].includes(decision.decision));
 });
 
-test('Red Team binding rejects a different request fingerprint instead of turning a non-comparable pass into closure evidence', async () => {
+test('Red Team binding rejects a different request fingerprint instead of treating a non-comparable pass as closure evidence', async () => {
   const f = await fixture('redteam-mismatch');
   const chain = await lineage(f);
   const runs = await redTeamPair(f);
@@ -268,22 +289,18 @@ test('Red Team binding rejects a different request fingerprint instead of turnin
   const changed = JSON.parse(row.results_json);
   changed[0].requestFingerprint = '9'.repeat(64);
   await db.prepare('UPDATE redteam_runs SET results_json=? WHERE id=?').run(JSON.stringify(changed), runs.retestId);
+  await assert.rejects(() => bind(f, chain, runs), /same valid request fingerprint/i);
+});
 
-  await assert.rejects(() => recordControlEvidence({
-    projectId: f.project.id,
-    controlId: CONTROL_ID,
-    userId: f.userId,
-    input: {
-      systemSnapshotId: chain.current.id,
-      testExecutionId: chain.retest.id,
-      findingId: chain.finding.id,
-      remediationId: chain.finding.id,
-      redteamRunId: runs.retestId,
-      redteamBaselineRunId: runs.baselineId,
-      redteamCaseId: CASE_ID,
-      confirmAssessmentBinding: true,
-      confirmSnapshotBinding: true,
-      confirmTrustBoundary: true,
-    },
-  }), /same valid request fingerprint/i);
+test('Red Team evidence is downgraded when its persisted provenance columns no longer match the integrity-bound descriptor', async () => {
+  const f = await fixture('redteam-provenance');
+  const chain = await lineage(f);
+  const runs = await redTeamPair(f);
+  const evidence = await bind(f, chain, runs);
+  await db.prepare('UPDATE control_evidence_items SET redteam_case_id=? WHERE id=?').run('RT-OTHER-999', evidence.id);
+  const detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: CONTROL_ID, userId: f.userId });
+  const effective = detail.evidence.find((item) => item.id === evidence.id);
+  assert.equal(effective.storedVerificationState, 'verified');
+  assert.equal(effective.verificationState, 'unverified');
+  assert.match(effective.trustReason, /provenance IDs do not match/i);
 });
