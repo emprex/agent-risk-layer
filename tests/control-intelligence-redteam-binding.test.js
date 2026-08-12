@@ -256,7 +256,12 @@ test('integrity-verified Red Team baseline/retest pair binds to the exact retest
   assert.equal(bound.verificationState, 'verified');
   assert.equal(bound.verificationScope, 'integrity_verified_customer_operated');
   assert.match(bound.trustBoundary, /did not independently operate the target/i);
-  assert.equal(effectiveLegacy.verificationState, 'unverified');
+  assert.equal(effectiveLegacy.verificationState, 'stale');
+  const revision = await db.prepare('SELECT previous_verification_state,new_verification_state,previous_integrity_digest,replacement_evidence_id FROM control_evidence_trust_revisions WHERE evidence_id=?').get(legacy.id);
+  assert.equal(revision.previous_verification_state, 'verified');
+  assert.equal(revision.new_verification_state, 'stale');
+  assert.equal(revision.previous_integrity_digest, legacy.integrityDigest);
+  assert.equal(revision.replacement_evidence_id, evidence.id);
   assert.match(detail.chain.nextAction, /qualifying passed exact retest evidence/i);
 
   const finding = detail.findings.find((item) => item.id === chain.finding.id);
