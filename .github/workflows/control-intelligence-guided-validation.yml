@@ -1,0 +1,29 @@
+name: Control Intelligence guided workflow validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'public/control-intelligence-*'
+      - 'src/control-intelligence*'
+      - 'tests/control-intelligence*'
+      - '.github/workflows/control-intelligence-guided-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --test tests/control-intelligence-journey.test.js tests/control-intelligence-failure-handoff.test.js tests/control-intelligence-ux.test.js
+      - run: npm test
