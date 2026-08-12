@@ -124,7 +124,7 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
   assert.match(script,/Assessment progress/);assert.match(script,/Review suggested controls/);
-  assert.match(detailScript,/Previous control/);assert.match(detailScript,/Save and next/);assert.match(detailScript,/beforeunload/);
+  assert.match(detailScript,/>Previous<\/a>/);assert.match(detailScript,/>All controls<\/a>/);assert.match(detailScript,/>Next<\/a>/);assert.match(detailScript,/beforeunload/);
   assert.doesNotMatch(script,/href=\\?"#controls/);assert.match(script,/expectedCurrentSnapshotId/);assert.match(script,/expectedCurrentDecisionId/);
   assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/overflow-x:auto/);
   for(const html of [overview,detail]){assert.match(html,/name="viewport"/);assert.match(html,/skip-link/);assert.match(html,/aria-label/);assert.doesNotMatch(html,/runtime_event|action_digest|workspace_id|token_digest/);}
