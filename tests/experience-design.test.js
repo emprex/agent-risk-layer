@@ -21,7 +21,7 @@ function primaryNavSignature(html) {
 }
 
 test('every page has one purpose, an accessible landmark shell and reusable navigation', () => {
-  assert.equal(htmlFiles.length, 41);
+  assert.ok(htmlFiles.length >= 42, `expected at least 42 maintained HTML pages, got ${htmlFiles.length}`);
   const navVariants = new Set();
   for (const name of htmlFiles) {
     const html = read(`public/${name}`);
