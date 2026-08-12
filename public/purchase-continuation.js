@@ -8,8 +8,8 @@ export function buildPostVerifyContinuation({ claimAssessmentId, next, origin, n
   }
   try {
     const candidate = new URL(next || '/dashboard.html', origin);
-    if (candidate.origin !== origin) return null;
-    return { kind: 'path', path: `${candidate.pathname}${candidate.hash || ''}`, expiresAt };
+    if (candidate.origin !== origin || candidate.pathname !== '/pricing.html') return null;
+    return { kind: 'path', path: `/pricing.html${candidate.hash || ''}`, expiresAt };
   } catch {
     return null;
   }
@@ -23,10 +23,10 @@ export function parsePostVerifyContinuation(raw, { origin, now = Date.now() }) {
     if (value.kind === 'assessment' && typeof value.assessmentId === 'string' && value.assessmentId.trim()) {
       return { kind: 'assessment', assessmentId: value.assessmentId.trim() };
     }
-    if (value.kind === 'path' && typeof value.path === 'string' && value.path.startsWith('/') && !value.path.startsWith('//')) {
+    if (value.kind === 'path' && typeof value.path === 'string' && value.path.startsWith('/pricing.html') && !value.path.startsWith('//')) {
       const candidate = new URL(value.path, origin);
-      if (candidate.origin !== origin) return null;
-      return { kind: 'path', path: `${candidate.pathname}${candidate.hash || ''}` };
+      if (candidate.origin !== origin || candidate.pathname !== '/pricing.html') return null;
+      return { kind: 'path', path: `/pricing.html${candidate.hash || ''}` };
     }
   } catch {
     return null;
