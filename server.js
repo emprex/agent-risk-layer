@@ -1231,9 +1231,15 @@ const server = http.createServer(async (req, res) => {
             return text(res, 200, renderSecurityTxt());
         match = url.pathname.match(/^\/checks\/([^/]+)$/);
         if (req.method === 'GET' && match) {
-            const page = seoPages[decodeURIComponent(match[1])];
-            if (page)
+            const slug = decodeURIComponent(match[1]);
+            const page = seoPages[slug];
+            if (page) {
+                if (slug === 'mcp-server-risk-assessment') {
+                    const { renderMcpServerRiskAssessmentPage } = await import('./src/mcp-seo-page.js');
+                    return html(res, 200, renderMcpServerRiskAssessmentPage(config.baseUrl));
+                }
                 return html(res, 200, renderSeoPage(page));
+            }
         }
         if (req.method === 'GET' || req.method === 'HEAD')
             return serveStatic(url.pathname, req, res);
