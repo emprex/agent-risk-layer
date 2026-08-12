@@ -18,7 +18,7 @@ test('SEO discovery endpoints remain enabled', () => {
 test('sitemap uses absolute canonical-origin URLs from production config', () => {
   const server = read('server.js');
   assert.match(server, /config\.baseUrl \+ item/);
-  for (const pathName of ['/', '/assessment.html', '/pricing.html', '/trust.html', '/methodology.html', '/runtime.html']) {
+  for (const pathName of ['/', '/assessment.html', '/ai-agent-security-assessment.html', '/pricing.html', '/trust.html', '/methodology.html', '/runtime.html']) {
     assert.ok(server.includes(`'${pathName}'`), `${pathName} should remain discoverable through the sitemap`);
   }
 });
