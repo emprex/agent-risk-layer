@@ -24,6 +24,7 @@ test('MCP risk page targets the existing URL with descriptive search metadata', 
 
 test('MCP risk page preserves AgentRiskLayer finding and retest semantics', () => {
     const html = renderMcpServerRiskAssessmentPage('https://agentrisklayer.com');
+    assert.match(html, /Version-bound<\/b> assessment and retest evidence/);
     assert.match(html, /Unknown is not a finding/);
     assert.match(html, /observed or reproducible failure/i);
     assert.match(html, /exact retest/i);
@@ -64,8 +65,8 @@ test('MCP risk page keeps strong internal paths to assessment, runtime, evidence
 
 test('existing MCP route delegates only the MCP slug to the dedicated renderer', () => {
     const server = read('server.js');
+    assert.ok(server.includes("url.pathname.match(/^\\/checks\\/([^/]+)$/)"));
     assert.match(server, /renderMcpServerRiskAssessmentPage/);
     assert.match(server, /slug === 'mcp-server-risk-assessment'/);
     assert.match(server, /renderSeoPage\(page\)/);
-    assert.match(server, /\/checks\/\(\[\^\/\]\+\)/);
 });
