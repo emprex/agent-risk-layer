@@ -93,7 +93,7 @@ test('passed test with verified bound evidence can advance to deployment decisio
   assert.equal(journey.deploymentImpact, 'satisfied');
 });
 
-test('passed exact retest keeps an open finding in closure review', () => {
+test('passed exact retest with only unverified evidence keeps closure blocked', () => {
   const oldFailure = { ...failed, systemSnapshotId: 'sys_old', findingId: 'rem_1' };
   const retest = {
     id: 'ctx_retest',
@@ -106,11 +106,36 @@ test('passed exact retest keeps an open finding in closure review', () => {
   const journey = deriveControlJourney(detail({
     tests: [retest],
     testHistory: [retest, oldFailure],
+    evidence: [{ id: 'cei_retest', testExecutionId: retest.id, verificationState: 'unverified', retentionStatus: 'active' }],
     evidenceHistory: [{ id: 'cei_failure', testExecutionId: oldFailure.id, verificationState: 'unverified', retentionStatus: 'active' }],
     findings: [{ id: 'rem_1', status: 'evidence_attached' }],
   }), { id: 'rem_1', verification: { rootCause: 'x', artifactId: 'art_1' } });
   assert.equal(journey.currentStage, 'retest');
   assert.equal(journey.closureRequired, true);
+  assert.equal(journey.closureEvidenceVerified, false);
+  assert.match(journey.nextAction, /verify evidence/i);
+});
+
+test('passed exact retest needs verified retest evidence before closure review', () => {
+  const oldFailure = { ...failed, systemSnapshotId: 'sys_old', findingId: 'rem_1' };
+  const retest = {
+    id: 'ctx_retest',
+    result: 'passed',
+    executionKind: 'retest',
+    retestOfExecutionId: oldFailure.id,
+    findingId: 'rem_1',
+    systemSnapshotId: 'sys_current',
+  };
+  const journey = deriveControlJourney(detail({
+    tests: [retest],
+    testHistory: [retest, oldFailure],
+    evidence: [{ id: 'cei_retest', testExecutionId: retest.id, verificationState: 'verified', retentionStatus: 'active' }],
+    evidenceHistory: [{ id: 'cei_failure', testExecutionId: oldFailure.id, verificationState: 'unverified', retentionStatus: 'active' }],
+    findings: [{ id: 'rem_1', status: 'evidence_attached' }],
+  }), { id: 'rem_1', verification: { rootCause: 'x', artifactId: 'art_1' } });
+  assert.equal(journey.currentStage, 'retest');
+  assert.equal(journey.closureRequired, true);
+  assert.equal(journey.closureEvidenceVerified, true);
   assert.match(journey.nextAction, /close the finding/i);
 });
 
