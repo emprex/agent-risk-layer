@@ -1,4 +1,5 @@
 import { api, hideError, qs, setBusy, showError, warmCsrf } from './shared.js';
+import { buildPostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY } from './purchase-continuation.js';
 
 const tabs = [...document.querySelectorAll('[data-tab]')];
 const login = document.querySelector('#loginForm');
@@ -30,6 +31,52 @@ function selectTab(name, { focus = false } = {}) {
   if (name === 'register') url.searchParams.set('mode', 'register');
   else url.searchParams.delete('mode');
   history.replaceState(null, '', url);
+}
+
+function rememberPostVerifyContinuation() {
+  const record = buildPostVerifyContinuation({ claimAssessmentId, next, origin: location.origin });
+  if (!record) return;
+  try {
+    localStorage.setItem(POST_VERIFY_CONTINUATION_KEY, JSON.stringify(record));
+  } catch {
+    // Continuation is a convenience only. Checkout authorization remains server-enforced.
+  }
+}
+
+function showVerificationWait() {
+  login.hidden = true;
+  register.hidden = true;
+  mfa.hidden = true;
+  hideError(errorBox);
+  document.querySelector('#authTitle').textContent = 'Check your email';
+  noticeBox.hidden = false;
+  noticeBox.textContent = '';
+
+  const message = document.createElement('p');
+  message.textContent = 'Your account is created. Verify your email, then come back here and continue. We will return you to the purchase you started.';
+  const status = document.createElement('p');
+  status.className = 'muted small-copy';
+  status.textContent = 'Waiting for email verification.';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'button primary';
+  button.textContent = 'I have verified my email';
+  button.addEventListener('click', async () => {
+    setBusy(button, true, 'Checking…');
+    try {
+      const { user } = await api('/api/auth/me');
+      if (user?.emailVerified) {
+        location.href = next;
+        return;
+      }
+      status.textContent = 'Your email is not verified yet. Use the verification link in your inbox, then try again.';
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  noticeBox.append(message, status, button);
 }
 
 tabs.forEach((tab) => tab.addEventListener('click', () => selectTab(tab.dataset.tab, { focus: true })));
@@ -89,8 +136,16 @@ async function submitRegister(event) {
       claimAssessmentId, claimToken,
     }) });
     sessionStorage.setItem('arl_registration_notice', 'Account created. Check your inbox and verify your email to unlock all security operations.');
-    if (data.demoVerificationUrl) location.href = data.demoVerificationUrl;
-    else location.href = '/dashboard.html?welcome=1';
+    rememberPostVerifyContinuation();
+    if (data.demoVerificationUrl) {
+      location.href = data.demoVerificationUrl;
+      return;
+    }
+    if (data.verificationRequired) {
+      showVerificationWait();
+      return;
+    }
+    location.href = next;
   } catch (error) {
     showError(errorBox, error.message);
   } finally {
