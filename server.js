@@ -48,7 +48,7 @@ const mimeTypes = {
     '.js': 'text/javascript; charset=utf-8',
     '.mjs': 'text/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
-    '.svg': 'image/svg+xml',
+    '.svg': 'image/svg+xml; charset=utf-8',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
@@ -376,6 +376,7 @@ const server = http.createServer(async (req, res) => {
                         throw Object.assign(new Error('You do not have permission to create an update from this assessment.'), { statusCode: 403 });
                 }
                 const answers = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? { ...body.answers } : {};
+                // Revision lineage is server-derived evidence; never trust a caller-supplied lineage marker.
                 delete answers.__source_assessment_id;
                 if (sourceAssessment) answers.__source_assessment_id = sourceAssessment.id;
                 const result = evaluateAssessment(answers, { agentType, sourceAssessmentId: sourceAssessment?.id || null });
@@ -559,8 +560,8 @@ const server = http.createServer(async (req, res) => {
         if (req.method === 'GET' && match) {
             if (!requireUser(req, res))
                 return;
-            const redTeamRun = await getRedTeamRun({ runId: decodeURIComponent(match[1]), userId: req.user.id });
-            return redTeamRun ? json(res, 200, { run: redTeamRun }) : json(res, 404, { error: 'Red-team run not found.' });
+            const run = await getRedTeamRun({ runId: decodeURIComponent(match[1]), userId: req.user.id });
+            return run ? json(res, 200, { run }) : json(res, 404, { error: 'Red-team run not found.' });
         }
         if (req.method === 'POST' && url.pathname === '/api/checkout') {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
@@ -1256,6 +1257,8 @@ async function handleProjectGuard(req, res) {
     if (!/^arl_live_[a-f0-9]{10}_[A-Za-z0-9_-]{32,}$/.test(rawToken))
         return json(res, 401, { error: 'Invalid project API key.', code: 'invalid_api_key' });
     try {
+        // Protect the authentication path from database-amplification abuse while
+        // leaving enough headroom for legitimate high-volume enterprise clients.
         if (!await rateLimitAllowed(req, { windowMs: 60000, max: 30000, bucket: 'guard-auth', penaltyMs: 1000 })) {
             res.setHeader('Retry-After', '60');
             return json(res, 429, { error: 'Runtime authentication rate limit reached. Retry after the rate-limit window.', code: 'rate_limit' });
