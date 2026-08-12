@@ -221,12 +221,17 @@ function retestAction() {
   const failed = journey.failedExecution;
   const finding = activeFinding();
   if (!failed || !finding) return '<p>No failure is ready for exact retest.</p>';
+  if (journey.closureRequired && journey.closureEvidenceVerified === false) {
+    return `<div class="ci-action-copy"><span class="eyebrow">Step 6 · Retest</span><h2>The exact retest passed, but the observation is still unverified.</h2><p>Keep the finding open until a system-generated evidence source actually proves the retest outcome. The remediation implementation artifact proves that the change exists; it does not verify what happened during the retest.</p></div>
+    <div class="ci-success-callout"><strong>Passed customer-operated retest</strong><span>${esc(journey.retest?.observedResult || 'The retest passed against the changed snapshot.')}</span></div>
+    <div class="ci-trust-note"><strong>Closure blocked</strong><span>Owner-entered results, approval records and implementation artifacts cannot independently verify a retest. Attach a qualifying system-generated observation before closing this finding.</span></div>`;
+  }
   if (journey.closureRequired) {
-    return `<div class="ci-action-copy"><span class="eyebrow">Step 6 · Retest</span><h2>The exact retest passed. Review the evidence before closing the finding.</h2><p>Passing a retest does not silently close a finding. Confirm the remaining limitations and residual risk first.</p></div>
+    return `<div class="ci-action-copy"><span class="eyebrow">Step 6 · Retest</span><h2>The exact retest passed. Review the verified evidence before closing the finding.</h2><p>Passing a retest does not silently close a finding. Confirm the remaining limitations and residual risk first.</p></div>
     <div class="ci-success-callout"><strong>Passed exact retest</strong><span>${esc(journey.retest?.observedResult || 'The retest passed against the changed snapshot.')}</span></div>
     <form id="closureForm" class="ci-form ci-focus-form">
       ${field('Remaining limitations and residual risk', 'closureLimitations', 'textarea', '', 'required')}
-      <button class="button primary button-xl" type="submit">Close finding after evidence review</button>
+      <button class="button primary button-xl" type="submit">Close finding after verified evidence review</button>
     </form>`;
   }
   return `<div class="ci-action-copy"><span class="eyebrow">Step 6 · Retest</span><h2>Repeat the exact original failure against the changed version.</h2><p>Keep the original attack input and expected safe result. Only the system version should have changed.</p></div>
@@ -278,7 +283,7 @@ function compactHistory() {
   if (!tests.length && !evidence.length && !findings.length) return '';
   return `<details class="panel ci-history-panel"><summary>Saved evidence history</summary>
     ${tests.length ? `<h3>Tests</h3><ul class="ci-record-list">${tests.slice(0, 12).map((item) => `<li><strong>${esc(human(item.result))}</strong><span>${esc(item.observedResult || item.inputReference || 'Planned test')}</span><small>${esc(item.completedAt || item.startedAt || '')}</small></li>`).join('')}</ul>` : ''}
-    ${evidence.length ? `<h3>Evidence</h3><ul class="ci-record-list">${evidence.slice(0, 12).map((item) => `<li><strong>${esc(human(item.verificationState))}</strong><span>${esc(item.sourceReference)}</span><small>${esc(item.observedAt || '')}</small></li>`).join('')}</ul>` : ''}
+    ${evidence.length ? `<h3>Evidence</h3><ul class="ci-record-list">${evidence.slice(0, 12).map((item) => `<li><strong>${esc(human(item.verificationState))}</strong><span>${esc(item.sourceReference)}</span><small>${esc(item.observedAt || '')}${item.trustReason ? ` · ${esc(item.trustReason)}` : ''}</small></li>`).join('')}</ul>` : ''}
     ${findings.length ? `<h3>Findings</h3><ul class="ci-record-list">${findings.slice(0, 12).map((item) => `<li><strong>${esc(item.title)}</strong><span>${esc(human(item.status))}</span><small>${esc(item.contextualSeverity || 'severity requires project context')}</small></li>`).join('')}</ul>` : ''}
   </details>`;
 }
@@ -453,7 +458,7 @@ function wire() {
           testExecutionId: execution.execution.id,
           findingId: finding.id,
           remediationId: finding.id,
-          remediationArtifactId: artifactId,
+          limitations: 'Customer-operated retest result. Remediation implementation evidence is tracked separately and does not verify this observation.',
         }),
       });
     }
@@ -470,7 +475,7 @@ function wire() {
         limitations: document.querySelector('#closureLimitations').value,
       }),
     });
-  }, 'Finding closed after evidence review.');
+  }, 'Finding closed after verified evidence review.');
 
   const approval = document.querySelector('#approvalForm');
   submit(approval, () => {
