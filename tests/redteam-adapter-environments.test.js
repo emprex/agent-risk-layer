@@ -37,10 +37,30 @@ test('Red Team UI can generate an exact-case baseline or retest command', () => 
   assert.match(source, /Leave blank to run the full catalogue/);
 });
 
-test('adapter authorisation history surfaces its environment and bound origin when present', () => {
+test('exact retests can reuse the same active Rules of Engagement instead of creating a new record', () => {
+  const source = read('public/redteam.js');
+
+  assert.match(source, /id="authorisationChoice"/);
+  assert.match(source, /Reuse the same active authorisation for a failed baseline and its exact retest/);
+  assert.match(source, /authorisations\.find\(a=>a\.id===existingId&&a\.status==='active'\)/);
+  assert.match(source, /Using existing Rules of Engagement/);
+  assert.match(source, /authorisationId:authorisation\?\.id\|\|null/);
+});
+
+test('reused Rules of Engagement fail closed on expiry and known endpoint-origin mismatch', () => {
+  const source = read('public/redteam.js');
+
+  assert.match(source, /Date\.parse\(authorisation\.windowEnd\)<=Date\.now\(\)/);
+  assert.match(source, /adapter endpoint origin does not match the selected Rules of Engagement authorisation/i);
+  assert.match(source, /parsedEndpoint\.origin!==authorisation\.endpointOrigin/);
+});
+
+test('authorisation and campaign history expose provenance IDs needed by the evidence-binding workflow', () => {
   const source = read('public/redteam.js');
 
   assert.match(source, /escapeHtml\(a\.environment\)/);
   assert.match(source, /a\.endpointOrigin/);
   assert.match(source, /escapeHtml\(a\.endpointOrigin\)/);
+  assert.match(source, /escapeHtml\(a\.id\)/);
+  assert.match(source, /Run ID \$\{escapeHtml\(x\.id\)\}/);
 });
