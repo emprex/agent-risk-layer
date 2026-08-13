@@ -256,7 +256,7 @@ export function validateRedTeamBundle(bundle) {
             return invalid('Unsupported schema.');
         if (!bundle.integrity || typeof bundle.integrity !== 'object')
             return invalid('Integrity block is missing.');
-        if (!bundle.runner || !/^(?:4\.(?:1|[2-9]|[1-9][0-9])|5\.(?:0|1))\./.test(String(bundle.runner.version || '')))
+        if (!bundle.runner || !/^(?:4\.(?:1|[2-9]|[1-9][0-9])|5\.(?:0|1|2))\./.test(String(bundle.runner.version || '')))
             return invalid('Unsupported runner version.');
         const digest = officialRunnerDigest();
         if (!digest || !safeEqual(digest, String(bundle.runner.buildDigest || '')))

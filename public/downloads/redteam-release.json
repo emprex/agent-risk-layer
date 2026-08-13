@@ -1,9 +1,9 @@
 {
   "name": "AgentRisk Red Team Runner",
-  "version": "5.1.0",
-  "policyVersion": "arl-redteam-policy-2026.09",
+  "version": "5.2.0",
+  "policyVersion": "arl-redteam-policy-2026.10",
   "bundleSchema": "arl.redteam.bundle.v1",
-  "runnerSha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5",
+  "runnerSha256": "10cbb4d5caf60cd9ac6afac64cb5ee869660c221980c2b3b3b26517e36e71ff4",
   "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
   "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7",
   "safetyContract": [
