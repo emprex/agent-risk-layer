@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/analytics.css">
   <script type="module" src="/shared.js"></script>
   <script type="module" src="/commercial-surfaces.js"></script>
+  <script type="module" src="/visual-story.js"></script>
   <script type="module" src="/site-shell.js"></script>
 </head>
 <body class="v10-home" data-shell="public">
@@ -43,16 +44,18 @@
         </div>
       </div>
 
-      <aside class="v10-control-visual" aria-label="Example AgentRiskLayer decision">
+      <aside class="v10-control-visual" data-policy-story aria-label="Interactive synthetic example of an AgentRiskLayer decision">
+        <span class="synthetic-ribbon">Interactive synthetic example</span>
         <div class="visual-topbar"><span>Support agent · proposed action</span><span class="live-state"><i></i> Policy active</span></div>
         <div class="visual-flow">
           <div class="visual-node"><small>AI agent wants to</small><strong>Refund order</strong><span>£2,500 · customer email instruction</span></div>
           <div class="visual-arrow" aria-hidden="true">→</div>
           <div class="visual-gate"><span class="brand-mark">AR</span><small>AgentRiskLayer checks</small><strong>Policy + approval + context</strong></div>
           <div class="visual-arrow" aria-hidden="true">→</div>
-          <div class="visual-node blocked"><small>Decision</small><strong>Blocked</strong><span>Exact human approval missing</span></div>
+          <div class="visual-node blocked" data-story-decision><small>Decision</small><strong>Ready to check</strong><span>Review the proposed action</span></div>
         </div>
-        <div class="visual-evidence">
+        <button class="story-check" type="button" data-story-check>Check action <span aria-hidden="true">→</span></button>
+        <div class="visual-evidence" data-story-evidence aria-live="polite">
           <span><i>✓</i> Tool call never reached the refund system</span>
           <span><i>✓</i> Raw email and arguments were not retained</span>
           <span><i>✓</i> Rule, policy version and evidence digest recorded</span>
@@ -93,6 +96,13 @@
           <article class="capability-card"><div class="capability-icon">#</div><div><small>Prove</small><h3>Decision evidence</h3><p>Keep a clear record of what was checked, observed, blocked, approved and retested.</p><ul><li>Integrity-digested reports</li><li>Evidence digests</li><li>Explicit limitations</li></ul></div></article>
         </div>
       </div>
+    </section>
+
+    <section class="evidence-signal-band" aria-labelledby="evidenceSignalTitle">
+      <div class="evidence-signal-intro"><span class="eyebrow">Evidence becomes a decision</span><h2 id="evidenceSignalTitle">Follow the signal, not the claim.</h2><p>Each stage keeps its own meaning. A declaration becomes proof only through observation, testing and an exact retest.</p></div>
+      <ol class="evidence-signal" aria-label="AgentRiskLayer evidence chain">
+        <li><i></i><span>Declared</span><small>Customer fact</small></li><li><i></i><span>Observed</span><small>Technical evidence</small></li><li class="signal-risk"><i></i><span>Finding</span><small>Supported failure</small></li><li><i></i><span>Controlled</span><small>Remediation</small></li><li class="signal-verified"><i></i><span>Retested</span><small>Exact scope</small></li><li class="signal-decision"><i></i><span>Decision</span><small>With limitations</small></li>
+      </ol>
     </section>
 
     <section class="content-section v10-how-section" id="how-it-works">

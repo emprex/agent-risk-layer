@@ -43,7 +43,12 @@ if (targetUrl) {
   await call('Page.navigate', { url: targetUrl });
   await new Promise(resolve => setTimeout(resolve, 1500));
 }
+if (process.env.SCREENSHOT_DISMISS_CONSENT === 'true') {
+  await call('Runtime.evaluate', { expression: `document.querySelector('[data-analytics-consent="denied"]')?.click()` });
+  await new Promise(resolve => setTimeout(resolve, 150));
+}
 await call('Runtime.evaluate', { expression: `scrollTo(0, ${Math.max(0, scrollY)})` });
+await new Promise(resolve => setTimeout(resolve, 250));
 const { data } = await call('Page.captureScreenshot', { format: 'png', fromSurface: true });
 await fs.writeFile(outputPath, Buffer.from(data, 'base64'));
 socket.close();

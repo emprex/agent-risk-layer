@@ -1,7 +1,7 @@
 import { hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
-for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia']]) {
+for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia'], ['/visual-experience.css', 'arlVisualExperience']]) {
   if (document.querySelector(`link[href="${href}"]`)) continue;
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
