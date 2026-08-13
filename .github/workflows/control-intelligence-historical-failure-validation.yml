@@ -5,13 +5,16 @@ on:
     branches: [main]
     paths:
       - 'src/control-intelligence.js'
+      - 'src/control-intelligence-service.js'
       - 'src/control-intelligence-historical.js'
       - 'public/control-intelligence-control.js'
       - 'public/control-intelligence-journey.js'
       - 'tests/control-intelligence-historical-failure.test.js'
+      - 'tests/control-intelligence-historical-project-gates.test.js'
       - 'tests/control-intelligence-historical-ui.test.js'
       - 'tests/control-intelligence-failure-handoff.test.js'
       - 'tests/control-intelligence-evidence-semantics.test.js'
+      - 'tests/control-intelligence-ux.test.js'
       - '.github/workflows/control-intelligence-historical-failure-validation.yml'
   workflow_dispatch:
 
@@ -53,6 +56,6 @@ jobs:
       - name: Run focused Control Intelligence tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_test
-        run: node --test tests/control-intelligence-historical-failure.test.js tests/control-intelligence-historical-ui.test.js tests/control-intelligence-failure-handoff.test.js tests/control-intelligence-evidence-semantics.test.js
+        run: node --test tests/control-intelligence-historical-failure.test.js tests/control-intelligence-historical-project-gates.test.js tests/control-intelligence-historical-ui.test.js tests/control-intelligence-failure-handoff.test.js tests/control-intelligence-evidence-semantics.test.js tests/control-intelligence-ux.test.js
       - name: Run full test suite with the supported test adapter
         run: npm test
