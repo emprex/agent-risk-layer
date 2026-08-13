@@ -1,6 +1,12 @@
 import * as core from './control-intelligence-core.js';
 import { db } from './db.js';
 import { recordRedTeamEvidenceBinding, redTeamTrustFromRow } from './control-redteam-evidence.js';
+import {
+  assertRetestSnapshotAfterImplementation,
+  maybeCreateHistoricalControlFinding,
+  maybeRecordHistoricalFailureEvidence,
+  remediationSnapshotState,
+} from './control-intelligence-historical.js';
 
 export * from './control-intelligence-core.js';
 
@@ -142,7 +148,7 @@ function repairedStageStates(currentStage, completedStages, notRequiredStages) {
   ]));
 }
 
-function repairFailureJourney(detail) {
+async function repairFailureJourney(detail) {
   if (!detail?.chain) return detail;
   const { failed, open } = unresolvedFailure(detail);
   if (!failed && !open) return detail;
@@ -159,32 +165,38 @@ function repairFailureJourney(detail) {
   if (approvalRequired) notRequired.delete('approval');
   else notRequired.add('approval');
 
-  const failureEvidence = open ? true : (detail.evidence || []).some((item) => item.testExecutionId === failed?.id
+  const evidencePool = [...(detail.evidence || []), ...(detail.evidenceHistory || [])];
+  const failureEvidence = open ? true : evidencePool.some((item) => item.testExecutionId === failed?.id
     && item.retentionStatus === 'active'
     && ['unverified', 'verified'].includes(item.verificationState));
 
   let currentStage = 'evidence';
   let nextAction = 'Attach observed evidence to the failed test.';
   let deploymentImpact = 'hold';
+  let remediationState = null;
 
   if (failureEvidence) {
     completed.add('evidence');
-    if (!open && !(detail.findings || []).length) {
+    if (!open && !(detail.findings || []).some((item) => !CLOSED_FINDING_STATES.has(item.status))) {
       currentStage = 'finding';
       nextAction = 'Create or link a finding for the failed test.';
       deploymentImpact = 'blocker';
     } else {
-      const finding = open || (detail.findings || [])[0];
+      const finding = open || (detail.findings || []).find((item) => !CLOSED_FINDING_STATES.has(item.status));
       completed.add('finding');
       deploymentImpact = 'blocker';
-      const implementationRecorded = finding && finding.status !== 'open';
-      const remediatedSnapshotReady = Boolean(failed?.systemSnapshotId
-        && detail.systemSnapshot?.id
-        && failed.systemSnapshotId !== detail.systemSnapshot.id);
+      remediationState = await remediationSnapshotState({
+        projectId: detail.projectId || detail.project?.id || finding?.projectId,
+        currentSnapshotId: detail.systemSnapshot?.id,
+        failedSnapshotId: failed?.systemSnapshotId,
+        findingId: finding?.id,
+      });
+      const implementationRecorded = Boolean(remediationState.implementationRecorded);
+      const remediatedSnapshotReady = Boolean(remediationState.remediatedSnapshotReady);
       if (!implementationRecorded || !remediatedSnapshotReady) {
         currentStage = 'remediation';
         nextAction = implementationRecorded && !remediatedSnapshotReady
-          ? 'Create a remediated system snapshot before retesting.'
+          ? 'Create a changed system snapshot after the remediation implementation evidence before retesting.'
           : 'Record and implement remediation.';
       } else {
         completed.add('remediation');
@@ -215,6 +227,7 @@ function repairFailureJourney(detail) {
   chain.blockedStages = STAGES.filter((stage) => chain.stageStates[stage] === 'blocked');
   chain.missingStages = STAGES.filter((stage) => chain.stageStates[stage] === 'current');
   chain.missingRequirements = [nextAction];
+  chain.remediationState = remediationState;
   chain.availableActions = currentStage === 'evidence'
     ? ['record_evidence']
     : currentStage === 'finding'
@@ -232,7 +245,9 @@ function repairFailureJourney(detail) {
 export async function getControlIntelligenceControl(args) {
   const raw = await core.getControlIntelligenceControl(args);
   const rows = await evidenceTrustRows(args.projectId, raw.systemSnapshot?.id, args.controlId);
-  return repairFailureJourney(applyEffectiveEvidenceTrust(raw, rows));
+  const trusted = applyEffectiveEvidenceTrust(raw, rows);
+  if (!trusted.projectId) trusted.projectId = args.projectId;
+  return repairFailureJourney(trusted);
 }
 
 export async function getControlIntelligence(args) {
@@ -298,6 +313,10 @@ export async function recordControlEvidence(args) {
   if (input.redteamRunId || input.redteamBaselineRunId || input.redteamCaseId) {
     return recordRedTeamEvidenceBinding({ ...args, input });
   }
+
+  const historical = await maybeRecordHistoricalFailureEvidence({ ...args, input });
+  if (historical.handled) return historical.result;
+
   if (input.testExecutionId) {
     const detail = await core.getControlIntelligenceControl({
       projectId: args.projectId,
@@ -328,6 +347,12 @@ export async function recordControlEvidence(args) {
     input.limitations = appendLimitation(input.limitations, APPROVAL_TRUST_LIMIT);
   }
   return core.recordControlEvidence({ ...args, input });
+}
+
+export async function createControlFinding(args) {
+  const historical = await maybeCreateHistoricalControlFinding(args);
+  if (historical.handled) return historical.result;
+  return core.createControlFinding(args);
 }
 
 export async function closeControlFinding(args) {
@@ -371,6 +396,10 @@ export async function recordDeploymentDecision(args) {
 
 export async function recordControlTestExecution(args) {
   const result = String(args?.input?.result || '').trim().toLowerCase();
+  const executionKind = String(args?.input?.executionKind || 'initial').trim().toLowerCase();
+  if (executionKind === 'retest') {
+    await assertRetestSnapshotAfterImplementation(args);
+  }
   if (result === 'planned') {
     const detail = await core.getControlIntelligenceControl({
       projectId: args.projectId,
