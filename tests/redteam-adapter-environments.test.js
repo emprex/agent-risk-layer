@@ -62,5 +62,6 @@ test('authorisation and campaign history expose provenance IDs needed by the evi
   assert.match(source, /a\.endpointOrigin/);
   assert.match(source, /escapeHtml\(a\.endpointOrigin\)/);
   assert.match(source, /escapeHtml\(a\.id\)/);
-  assert.match(source, /Run ID \$\{escapeHtml\(x\.id\)\}/);
+  assert.match(source, /runId=escapeHtml\(x\?\.id\|\|'unknown'\)/);
+  assert.match(source, /Run ID \$\{runId\}/);
 });
