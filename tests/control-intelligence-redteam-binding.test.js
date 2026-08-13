@@ -289,6 +289,26 @@ test('integrity-verified Red Team baseline/retest pair binds to the exact retest
   assert.ok(['hold', 'do_not_deploy', 'proceed'].includes(decision.decision));
 });
 
+test('Red Team binding orders recovered evidence by signed campaign completion time, not database ingestion time', async () => {
+  const f = await fixture('redteam-recovered-chronology');
+  const chain = await lineage(f);
+  const runs = await redTeamPair(f);
+
+  const futureBaselineIngestion = new Date(Date.now() + 10 * 60_000).toISOString();
+  await db.prepare('UPDATE redteam_runs SET created_at=? WHERE id=?').run(futureBaselineIngestion, runs.baselineId);
+  const rows = await db.prepare('SELECT id,created_at,campaign_json FROM redteam_runs WHERE id IN (?,?)').all(runs.baselineId, runs.retestId);
+  const baseline = rows.find((row) => row.id === runs.baselineId);
+  const retest = rows.find((row) => row.id === runs.retestId);
+  assert.ok(Date.parse(retest.created_at) < Date.parse(baseline.created_at), 'database ingestion order is intentionally reversed');
+  assert.ok(Date.parse(JSON.parse(retest.campaign_json).completedAt) > Date.parse(JSON.parse(baseline.campaign_json).completedAt), 'signed execution chronology remains baseline then retest');
+
+  const evidence = await bind(f, chain, runs);
+  assert.equal(evidence.verificationState, 'verified');
+  assert.equal(evidence.redteamRunId, runs.retestId);
+  assert.equal(evidence.redteamBaselineRunId, runs.baselineId);
+  assert.equal(evidence.observedAt, runs.retestCreated);
+});
+
 test('Red Team binding rejects a different request fingerprint instead of treating a non-comparable pass as closure evidence', async () => {
   const f = await fixture('redteam-mismatch');
   const chain = await lineage(f);

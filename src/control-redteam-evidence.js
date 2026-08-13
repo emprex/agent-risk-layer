@@ -217,7 +217,14 @@ export async function recordRedTeamEvidenceBinding({ projectId, controlId, userI
     if (retestRun.authorisation_id !== baselineRun.authorisation_id) throw error('Baseline and retest runs must use the same Rules of Engagement authorisation.');
     if (!sameTarget(retestMeta.target, baselineMeta.target)) throw error('Baseline and retest runs do not describe the same authorised adapter target.');
     if (retestRun.policy_version !== baselineRun.policy_version) throw error('Baseline and retest runs must use the same red-team policy version for an exact comparison.');
-    if (time(retestRun.created_at) <= time(baselineRun.created_at)) throw error('The retest run must be newer than the failed baseline run.');
+    const baselineCampaignForChronology = parse(baselineRun.campaign_json, {});
+    const retestCampaignForChronology = parse(retestRun.campaign_json, {});
+    const baselineCompletedAt = time(baselineCampaignForChronology.completedAt);
+    const retestCompletedAt = time(retestCampaignForChronology.completedAt);
+    if (baselineCompletedAt == null || retestCompletedAt == null) {
+      throw error('Baseline and retest runs must contain valid signed campaign completion timestamps.');
+    }
+    if (retestCompletedAt <= baselineCompletedAt) throw error('The retest campaign must have completed after the failed baseline campaign.');
 
     const failedCase = resultForCase(baselineRun, caseId);
     const passedCase = resultForCase(retestRun, caseId);
