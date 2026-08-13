@@ -74,6 +74,55 @@ test('server remediation chronology prevents browser from treating a pre-fix sna
   assert.equal(ready.currentStage, 'retest');
 });
 
+test('changed remediation snapshot does not rewind an unresolved historical finding to applicability', () => {
+  const finding = { id: 'rem_hist', status: 'evidence_attached' };
+  const remediationRecord = {
+    id: finding.id,
+    verification: {
+      rootCause: 'Untrusted data crossed the authority boundary.',
+      correctiveAction: 'Require exact action authorisation.',
+      validationPlan: 'Repeat the exact historical failure.',
+      artifactId: 'art_fix',
+    },
+  };
+
+  const journey = deriveControlJourney(detail({
+    applicability: {},
+    systemSnapshot: { id: 'sys_v3' },
+    findings: [finding],
+    evidenceHistory: [{
+      id: 'cei_v1',
+      testExecutionId: failed.id,
+      systemSnapshotId: failed.systemSnapshotId,
+      verificationState: 'unverified',
+      retentionStatus: 'active',
+    }],
+    chain: { remediationState: { implementationRecorded: true, remediatedSnapshotReady: true } },
+  }), remediationRecord);
+
+  assert.equal(journey.currentStage, 'retest');
+  assert.equal(journey.failedExecution.id, failed.id);
+  assert.equal(journey.finding.id, finding.id);
+  assert.ok(journey.completedStages.includes('applicability'));
+  assert.ok(journey.completedStages.includes('remediation'));
+  assert.match(journey.nextAction, /exact original failure/i);
+});
+
+test('a changed snapshot without an unresolved failure still requires a fresh applicability decision', () => {
+  const journey = deriveControlJourney(detail({
+    applicability: {},
+    tests: [],
+    testHistory: [],
+    evidence: [],
+    evidenceHistory: [],
+    findings: [],
+    chain: {},
+  }));
+
+  assert.equal(journey.currentStage, 'applicability');
+  assert.ok(!journey.completedStages.includes('applicability'));
+});
+
 test('historical evidence and finding submissions use the failed execution snapshot, not the current snapshot', () => {
   const source = fs.readFileSync(new URL('../public/control-intelligence-control.js', import.meta.url), 'utf8');
   assert.match(source, /systemSnapshotId:\s*execution\.systemSnapshotId\s*\|\|\s*data\.systemSnapshot\.id/);

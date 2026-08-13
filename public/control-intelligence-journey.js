@@ -81,23 +81,12 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
   let nextAction = 'Confirm whether this control applies to this system.';
   let deploymentImpact = 'hold';
 
-  if (applicability.status === 'not_applicable') {
-    completed.push('applicability');
-    notRequired.push('test', 'evidence', 'finding', 'remediation', 'retest', 'approval');
-    currentStage = 'deployment_decision';
-    nextAction = 'Review the project deployment decision.';
-    deploymentImpact = 'not_applicable';
-    return finish();
-  }
-
-  if (applicability.status !== 'applicable') {
-    notRequired.push('finding', 'remediation', 'retest', 'approval');
-    return finish();
-  }
-  completed.push('applicability');
-
   // A reproduced unresolved failure is safety-significant and must never be hidden by a later plan.
+  // Its remediation lineage survives creation of a changed snapshot. A new snapshot intentionally
+  // has no current applicability decision, but that must not rewind an open finding to Step 1 or
+  // hide the exact retest that the server already requires for the historical failure.
   if (failed) {
+    completed.push('applicability');
     completed.push('test');
     // Creating a finding is a server-guarded workflow transition that already required
     // active observed evidence for this reproduced failure. Later snapshot/evidence
@@ -160,6 +149,21 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
     deploymentImpact = 'blocker';
     return finish({ failed, finding, retest, closureRequired: true, closureEvidenceVerified });
   }
+
+  if (applicability.status === 'not_applicable') {
+    completed.push('applicability');
+    notRequired.push('test', 'evidence', 'finding', 'remediation', 'retest', 'approval');
+    currentStage = 'deployment_decision';
+    nextAction = 'Review the project deployment decision.';
+    deploymentImpact = 'not_applicable';
+    return finish();
+  }
+
+  if (applicability.status !== 'applicable') {
+    notRequired.push('finding', 'remediation', 'retest', 'approval');
+    return finish();
+  }
+  completed.push('applicability');
 
   const executed = tests.filter((item) => item.result !== 'planned');
   const latest = tests[0] || null;
