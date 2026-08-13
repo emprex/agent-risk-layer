@@ -63,10 +63,12 @@ async function evidenceTrustRows(projectId, snapshotId, controlId = null) {
   const params = controlId ? [projectId, snapshotId, controlId] : [projectId, snapshotId];
   return db.prepare(`SELECT e.id,e.entry_id,e.verification_state,e.retention_status,e.remediation_artifact_id,e.runtime_event_id,e.approval_id,e.observed_at,e.test_execution_id,e.descriptor_json,
       e.redteam_run_id,e.redteam_baseline_run_id,e.redteam_case_id,t.completed_at,
-      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at
+      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
+      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
     FROM control_evidence_items e
     LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
     LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
+    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
     WHERE e.project_id=? AND e.system_snapshot_id=?${controlFilter}`)
     .all(...params);
 }
@@ -341,10 +343,12 @@ export async function closeControlFinding(args) {
   if (!retest) return core.closeControlFinding(args);
 
   const evidenceRows = await db.prepare(`SELECT e.*,t.completed_at,
-      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at
+      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
+      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
     FROM control_evidence_items e
     LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
     LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
+    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
     WHERE e.project_id=? AND e.system_snapshot_id=? AND e.entry_id=? AND e.test_execution_id=? AND e.finding_id=? AND e.remediation_id=? AND e.retention_status='active'
     ORDER BY e.observed_at DESC`)
     .all(args.projectId, detail.systemSnapshot.id, args.controlId, retest.id, finding.id, finding.id);
