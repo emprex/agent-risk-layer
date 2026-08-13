@@ -44,3 +44,9 @@ test('Red Team run detail fails evidence-neutrally when summary metadata is inco
   assert.match(source,/Controlled adapter evidence/);
   assert.doesNotMatch(source,/Controlled staging evidence/);
 });
+
+test('Red Team run listing resolves async public summaries before HTTP serialization',()=>{
+  const source=read('src/redteam.js');
+  assert.match(source,/return await Promise\.all\(rows\.map\(publicRunSummary\)\)/);
+  assert.doesNotMatch(source,/\.all\(assessmentId, userId\)\)\.map\(publicRunSummary\)/);
+});
