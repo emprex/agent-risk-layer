@@ -56,12 +56,12 @@ function communityCard() {
 }
 function assessmentCard(plan) {
   return `<article class="pricing-card-v10 recommended">
-    <div class="plan-heading"><span class="plan-purpose">REVIEWED DECISION</span><span class="plan-badge">Recommended first purchase</span><h3>${escapeHtml(plan.name)}</h3><p>Evidence-led review and a decision for one agent.</p></div>
+    <div class="plan-heading"><span class="plan-purpose">EVIDENCE-LED DECISION</span><span class="plan-badge">Recommended first purchase</span><h3>${escapeHtml(plan.name)}</h3><p>Assessment workflows and an evidence-bounded report for one agent.</p></div>
     <div class="plan-price">${money(plan.amountPence)} <small>one time</small></div>
     <a class="button primary full" href="/assessment.html">Start with the free check</a>
     <div class="plan-outcome"><strong>Best when you need to:</strong><span>Support a launch, customer review or accountable go/no-go decision.</span></div>
-    <ul class="plain-plan-list"><li>Complete risk and evidence review</li><li>Controlled attack simulation</li><li>Prioritised fixes with named ownership</li><li>Retest criteria and deployment decision</li><li>Signed report and PDF delivery</li></ul>
-    <p class="plan-note">Complete the private check before checkout.</p>
+    <ul class="plain-plan-list"><li>Complete declared-risk report</li><li>Local evidence and controlled-test workflows</li><li>Prioritised fixes with named ownership</li><li>Retest criteria and evidence-bounded decision</li><li>Integrity-digested report and PDF delivery</li></ul>
+    <p class="plan-note">Complete the private check before checkout. Inspection and testing require customer-operated tools and are reported only when completed.</p>
   </article>`;
 }
 function recurringCard(key, plan) {

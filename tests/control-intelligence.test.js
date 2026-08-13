@@ -28,10 +28,14 @@ test('system snapshots are deterministic, immutable and bind all control evaluat
   const f=await fixture('snapshot');
   assert.equal(canonicalJson({b:2,a:1}),'{"a":1,"b":2}');
   assert.equal(intelligenceDigest({b:2,a:1}),intelligenceDigest({a:1,b:2}));
-  const input={architecture:{summary:'Support agent',components:[{id:'orchestrator',label:'Agent orchestrator'}]},models:[{provider:'test',model:'synthetic'}],tools:[{name:'ticket_read',access:'read'}],identities:[{role:'support-agent'}],dataSources:[{type:'synthetic-tickets',classification:'internal'}],networkAccess:[],autonomyLevel:'bounded',approvalConfiguration:{highImpact:'required'},assessmentConfiguration:{profile:'ARL-RKA-1.2.0'},source:'test'};
+  const input={architecture:{summary:'Support agent',components:[{id:'orchestrator',label:'Agent orchestrator'}]},models:[{provider:'test',model:'synthetic'}],tools:[{name:'ticket_read',access:'read'}],identities:[{role:'support-agent'}],dataSources:[{type:'synthetic-tickets',classification:'internal'}],networkAccess:[],autonomyLevel:'bounded',approvalConfiguration:{highImpact:'required'},assessmentConfiguration:{profile:'ARL-RKA-1.2.0',architectureFacts:['input:user_messages','tool:read']},source:'test'};
   const first=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input});
   assert.equal(first.created,true);assert.match(first.snapshot.contentDigest,/^[a-f0-9]{64}$/);
   assert.equal((await db.prepare('SELECT COUNT(*) count FROM control_snapshot_evaluations WHERE system_snapshot_id=?').get(first.snapshot.id)).count,108);
+  const prioritised=await getControlIntelligence({projectId:f.project.id,userId:f.userId,limit:50});
+  assert.ok(prioritised.summary.suggestedControls>0);
+  assert.equal(prioritised.summary.candidatesNeedingReview,prioritised.summary.suggestedControls);
+  assert.equal(prioritised.summary.nextAction.suggested.level,'suggested');
   const repeated=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input});
   assert.equal(repeated.created,false);assert.equal(repeated.snapshot.id,first.snapshot.id);
   await assert.rejects(()=>createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{apiKey:'must-not-store'}}}),/Sensitive field/i);
@@ -123,7 +127,7 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   assert.equal((overview.match(/>Control Intelligence<\/a>/g)||[]).length,0);
   assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
-  assert.match(script,/Assessment progress/);assert.match(script,/Review suggested controls/);
+  assert.match(script,/Architecture-derived review/);assert.match(script,/candidate controls reviewed/);assert.match(script,/Review suggested controls/);
   assert.match(detailScript,/>Previous<\/a>/);assert.match(detailScript,/>All controls<\/a>/);assert.match(detailScript,/>Next<\/a>/);assert.match(detailScript,/beforeunload/);
   assert.doesNotMatch(script,/href=\\?"#controls/);assert.match(script,/expectedCurrentSnapshotId/);assert.match(script,/expectedCurrentDecisionId/);
   assert.match(css,/@media\(max-width:760px\)/);assert.match(css,/overflow-x:auto/);

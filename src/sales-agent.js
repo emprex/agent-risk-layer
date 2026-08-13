@@ -131,8 +131,8 @@ export function draftOutreach(prospect, messageType = 'first_message', channel =
   const useCase = prospect.agentUseCase || 'your AI-agent workflow';
   const bodies = {
     connection: `Hi ${buyer} — I saw that ${company} is working on ${useCase}. I focus on security testing for AI agents with real tools and permissions. I would be interested to follow what you are building.`,
-    first_message: `Thanks for connecting, ${buyer}. AgentRiskLayer tests what can happen when an AI agent receives malicious instructions, misuses a tool, or acts beyond its intended authority. We produce a signed assessment, remediation list, and deployment decision. I noticed ${signal}. Have you already tested the agent's tool permissions and prompt-injection paths?`,
-    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for our £99 Agent Security Assessment. It includes deterministic inspection, controlled red-team testing, remediation priorities, retesting, and a signed report. Would a 15-minute demonstration be useful this week?`,
+    first_message: `Thanks for connecting, ${buyer}. AgentRiskLayer tests what can happen when an AI agent receives malicious instructions, misuses a tool, or acts beyond its intended authority. We produce an integrity-digested assessment, remediation list, and evidence-bounded deployment decision. I noticed ${signal}. Have you already tested the agent's tool permissions and prompt-injection paths?`,
+    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for our £99 AI Agent Security Assessment. It includes a full evidence-bounded report plus customer-operated inspection, controlled-testing, remediation and retest workflows. The report claims only work actually completed. Would a 15-minute demonstration be useful this week?`,
     follow_up: `Hi ${buyer} — one practical question: if the agent took an unsafe action tomorrow, could ${company} show exactly which controls were tested before deployment? That evidence gap is what AgentRiskLayer is designed to close.`,
   };
   const body = bodies[messageType];

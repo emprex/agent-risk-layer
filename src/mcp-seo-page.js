@@ -155,11 +155,11 @@ export function renderMcpServerRiskAssessmentPage(baseUrl) {
     <section class="content-section v10-pricing-preview">
       <div class="section-heading v10-split-heading">
         <div><span class="eyebrow">From free check to evidence</span><h2>Start with the MCP agent you actually plan to deploy.</h2></div>
-        <p>The free check qualifies the architecture and missing evidence. The one-off reviewed Security Assessment adds evidence review, controlled attack testing, remediation actions and deployment decision support.</p>
+        <p>The free check qualifies the architecture and missing evidence. The one-off AI Agent Security Assessment unlocks the full report and customer-operated evidence, controlled-testing, remediation and retest workflows; only completed work is reported as performed.</p>
       </div>
       <div class="v10-price-grid">
         <article><small>QUALIFY</small><h3>Free agent check</h3><strong>£0</strong><p>Describe the MCP server, agent, tools, permissions and safeguards and get an initial risk view.</p><a class="button ghost full" href="/assessment.html?type=MCP-enabled%20agent">Start free</a></article>
-        <article class="recommended"><small>REVIEW</small><h3>Security Assessment</h3><strong>£99 <em>once</em></strong><p>Reviewed evidence, controlled attack testing, remediation actions and a deployment decision.</p><a class="button primary full" href="/assessment.html?type=MCP-enabled%20agent">Start with the free check</a></article>
+        <article class="recommended"><small>ASSESS</small><h3>AI Agent Security Assessment</h3><strong>£99 <em>once</em></strong><p>Full report and PDF plus evidence, controlled-testing, remediation and exact-retest workflows for one agent.</p><a class="button primary full" href="/assessment.html?type=MCP-enabled%20agent">Start with the free check</a></article>
         <article><small>OPERATE</small><h3>Runtime protection</h3><strong>From £29 <em>/month</em></strong><p>Ongoing runtime decisions, approvals, evidence retention and project workflows.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></article>
       </div>
     </section>

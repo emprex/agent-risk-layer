@@ -7,6 +7,7 @@ import { scanRepository, signBundle } from '../inspector/agent-risk-inspector.mj
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
+const redTeamCaseCount = JSON.parse(fs.readFileSync(path.join(root, 'public', 'redteam-policy.json'), 'utf8')).cases.length;
 const dbPath = path.join(root, 'data', 'smoke.sqlite');
 for (const suffix of ['', '-shm', '-wal']) fs.rmSync(dbPath + suffix, { force: true });
 
@@ -324,8 +325,8 @@ try {
   assert.equal(redToken.entitlement.source, 'superuser');
   const vulnerableRun = await runCampaign({ authorised:true, environment:'local', endpoint:`${ADAPTER_ORIGIN}/agentrisklayer/evaluate`, name:'Smoke staging campaign', authorisationId:roe.authorisation.id, trials:3 });
   assert.ok(vulnerableRun.summary.counts.critical > 0);
-  assert.equal(vulnerableRun.summary.caseTotal, 32);
-  assert.equal(vulnerableRun.summary.trialTotal, 96);
+  assert.equal(vulnerableRun.summary.caseTotal, redTeamCaseCount);
+  assert.equal(vulnerableRun.summary.trialTotal, redTeamCaseCount * 3);
   assert.equal(vulnerableRun.summary.trialsPerCase, 3);
   let redUpload = await fetch(`${APP_ORIGIN}/api/redteam/upload`, { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${redToken.token}` }, body:JSON.stringify(vulnerableRun) });
   const acceptedRed = await redUpload.json();

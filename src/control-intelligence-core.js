@@ -617,7 +617,14 @@ function buildGraph(access, snapshot, chains, data) {
 
 function summarizeChains(chains, data) {
   const reviewed=chains.filter(x=>x.completedStages.includes('applicability')).length;const applicable=chains.filter(x=>x.applicabilityStatus==='applicable'&&x.completedStages.includes('applicability'));
-  return { catalogueControls:chains.length,reviewedControls:reviewed,notApplicableControls:chains.filter(x=>x.applicabilityStatus==='not_applicable'&&x.completedStages.includes('applicability')).length,contextRequiredControls:chains.filter(x=>x.applicabilityStatus==='unknown').length,suggestedControls:chains.filter(x=>x.suggested?.status==='suggested').length,applicableControls: applicable.length,
+  const suggested=chains.filter(x=>x.suggested?.level==='suggested');
+  const suggestedReviewed=suggested.filter(x=>x.completedStages.includes('applicability')).length;
+  const prioritisedNextAction=chains.find(x=>x.currentStage==='applicability'&&x.suggested?.level==='suggested')
+    || chains.find(x=>x.currentStage!=='deployment_decision'&&x.completedStages.includes('applicability'))
+    || chains.find(x=>x.currentStage==='applicability')
+    || chains.find(x=>x.currentStage!=='deployment_decision')
+    || null;
+  return { catalogueControls:chains.length,reviewedControls:reviewed,notApplicableControls:chains.filter(x=>x.applicabilityStatus==='not_applicable'&&x.completedStages.includes('applicability')).length,contextRequiredControls:chains.filter(x=>x.applicabilityStatus==='unknown').length,suggestedControls:suggested.length,suggestedReviewedControls:suggestedReviewed,candidatesNeedingReview:suggested.length-suggestedReviewed,applicableControls: applicable.length,
     controlsNeedingAssessment: chains.length-reviewed,
     controlsWithObservedEvidence: chains.filter((x) => x.chainStatus === 'controlled_with_evidence').length,
     controlsMissingEvidence: applicable.length?applicable.filter((x) => !x.completedStages.includes('evidence')).length:null,
@@ -629,7 +636,7 @@ function summarizeChains(chains, data) {
     blockedUnsafeActions: data.runtime.filter((x) => x.decision === 'deny').length,
     approvalsPending: data.approvals.filter((x) => x.status === 'active' && Date.parse(x.expires_at) > Date.now()).length,
     deploymentBlockers: chains.filter((x) => ['blocker','integrity_failure'].includes(x.deploymentImpact)).length,
-    nextAction:chains.find(x=>x.currentStage==='applicability')||chains.find(x=>x.currentStage!=='deployment_decision')||null };
+    nextAction:prioritisedNextAction };
 }
 
 async function requireAccess(projectId, userId, roles, lock=false) {

@@ -189,7 +189,7 @@ test('commercial catalogue contains only the approved current prices', () => {
     amountPence: plan.amountPence,
     recurring: plan.recurring,
   }])), {
-    pro_report: { name: 'AI agent security assessment', amountPence: 9900, recurring: false },
+    pro_report: { name: 'AI Agent Security Assessment', amountPence: 9900, recurring: false },
     developer_monthly: { name: 'Developer', amountPence: 2900, recurring: true },
     team_monthly: { name: 'Team', amountPence: 9900, recurring: true },
     agency_monthly: { name: 'Agency', amountPence: 24900, recurring: true },
@@ -205,6 +205,13 @@ test('commercial catalogue contains only the approved current prices', () => {
   assert.match(stripeMaintenance, /name: 'AI Agent Security Assessment'/);
   assert.doesNotMatch(stripeMaintenance, /name: 'Founding Security Assessment'|founding security assessment\./i);
   assert.match(stripeMaintenance, /lookupKey: 'agentrisklayer_founding_assessment_gbp_99_v900'/);
+});
+
+test('£99 offer describes actual fulfilment and never implies payment performs technical work', () => {
+  const publicCopy = ['public/index.html', 'public/pricing.html', 'public/pricing.js', 'public/result.js'].map(read).join('\n');
+  assert.match(publicCopy, /Purchasing does not itself perform a human review, run a test or certify the agent/);
+  assert.match(publicCopy, /reported only when completed/);
+  assert.doesNotMatch(publicCopy, /signed PDF report|signed report and PDF delivery/i);
 });
 
 test('legacy checkout branch and stale public validation counters are removed safely', () => {

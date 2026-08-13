@@ -86,7 +86,7 @@ export const config = {
 export const plans = {
     pro_report: {
         key: 'pro_report',
-        name: 'AI agent security assessment',
+        name: 'AI Agent Security Assessment',
         amountPence: 9900,
         recurring: false,
         reportTier: 'pro',
