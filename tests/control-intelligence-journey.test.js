@@ -151,3 +151,29 @@ test('a failure bound to a closed finding is not reopened by the browser journey
   assert.equal(journey.failedExecution, null);
   assert.equal(journey.currentStage, 'deployment_decision');
 });
+
+test('verified-closed exact remediation on the changed snapshot does not regress to applicability', () => {
+  const oldFailure = { ...failed, id: 'ctx_closed_failure', systemSnapshotId: 'sys_old', findingId: 'rem_closed_exact' };
+  const retest = {
+    id: 'ctx_closed_retest',
+    result: 'passed',
+    executionKind: 'retest',
+    retestOfExecutionId: oldFailure.id,
+    findingId: 'rem_closed_exact',
+    systemSnapshotId: 'sys_current',
+  };
+  const journey = deriveControlJourney(detail({
+    applicability: { status: 'context_required' },
+    tests: [retest],
+    testHistory: [retest, oldFailure],
+    evidence: [{ id: 'cei_closed_retest', testExecutionId: retest.id, verificationState: 'verified', retentionStatus: 'active' }],
+    findings: [{ id: 'rem_closed_exact', status: 'verified_closed' }],
+  }));
+  assert.equal(journey.failedExecution, null);
+  assert.equal(journey.currentStage, 'deployment_decision');
+  assert.equal(journey.deploymentImpact, 'satisfied');
+  for (const stage of ['applicability', 'test', 'evidence', 'finding', 'remediation', 'retest']) {
+    assert.equal(journey.stageStates[stage], 'complete');
+  }
+  assert.equal(journey.stageStates.approval, 'not_required');
+});
