@@ -1,0 +1,38 @@
+name: Temporary clean Red Team recovery branch
+
+on:
+  push:
+    branches:
+      - fix/redteam-recovery-upload
+    paths:
+      - .github/workflows/redteam-recovery-clean-branch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  clean-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/redteam-recovery-upload
+          fetch-depth: 0
+      - name: Build clean branch from main
+        run: |
+          git fetch origin main
+          git switch -C fix/redteam-recovery-upload-clean origin/main
+          git checkout 62e3287612a7b5d2ee8c01bc20fe309819bbd0da -- \
+            REDTEAM_ARCHITECTURE.md \
+            public/redteam.js \
+            server.js \
+            src/redteam.js \
+            tests/redteam-adapter-environments.test.js \
+            tests/v42-hardening.test.js
+          git diff --check --cached
+      - name: Commit clean verified change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Recover completed Red Team evidence safely"
+          git push -u origin fix/redteam-recovery-upload-clean
