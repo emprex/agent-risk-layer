@@ -12,7 +12,7 @@ import { buildAssessmentReport } from './src/report-service.js';
 import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail } from './src/email.js';
 import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
-import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
+import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
 import { bindPendingCheckoutSession, createPendingCheckout, failPendingCheckoutCreation, fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
 import { claimStripeEvent, completeStripeEvent, failStripeEvent, recoverAbandonedStripeEvent } from './src/stripe-events.js';
 import { subscriptionAccessDecision, subscriptionBlocksAccountDeletion, subscriptionBlocksCheckout } from './src/subscription-access.js';
@@ -530,6 +530,20 @@ const server = http.createServer(async (req, res) => {
             }
             catch (error) {
                 return json(res, 400, { error: error.message });
+            }
+        }
+        if (req.method === 'POST' && url.pathname === '/api/redteam/recovery-tokens') {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 6, bucket: 'redteam-recovery-token', identity: req.user.id }))
+                return json(res, 429, { error: 'Too many red-team recovery requests.' });
+            try {
+                const body = await readBody(req, 2 * 1024 * 1024);
+                return json(res, 201, await createRedTeamRecoveryToken({ userId: req.user.id, assessmentId: cleanText(body.assessmentId, 80), bundle: body.bundle }));
+            }
+            catch (error) {
+                const status = error.code === 'BODY_TOO_LARGE' ? 413 : 400;
+                return json(res, status, { error: error.code === 'BODY_TOO_LARGE' ? 'Evidence bundle exceeds 2 MB.' : error.message });
             }
         }
         if (req.method === 'POST' && url.pathname === '/api/redteam/tokens') {

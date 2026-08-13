@@ -65,3 +65,14 @@ test('authorisation and campaign history expose provenance IDs needed by the evi
   assert.match(source, /runId=escapeHtml\(x\?\.id\|\|'unknown'\)/);
   assert.match(source, /Run ID \$\{runId\}/);
 });
+
+test('Red Team UI can recover a completed signed adapter bundle without rerunning the target', () => {
+  const source = read('public/redteam.js');
+
+  assert.match(source, /Completed evidence recovery/);
+  assert.match(source, /id="recoveryBundle"/);
+  assert.match(source, /\/api\/redteam\/recovery-tokens/);
+  assert.match(source, /Upload completed signed bundle/);
+  assert.match(source, /does not rerun the target or extend the testing window/);
+  assert.match(source, /no target rerun occurred/);
+});

@@ -19,7 +19,7 @@ const { registerUser, verifyPassword, beginMfaSetup, enableMfa, authenticateUser
 const { questionnaire, evaluateAssessment } = await import('../src/risk-engine.js');
 const { bindPendingCheckoutSession, createPendingCheckout, fulfilCheckout, processFulfilmentJob } = await import('../src/fulfilment.js');
 const { enforceRetention } = await import('../src/retention.js');
-const { createRedTeamAuthorisation, createRedTeamToken, consumeRedTeamUpload } = await import('../src/redteam.js');
+const { createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, consumeRedTeamUpload } = await import('../src/redteam.js');
 const { runCampaign } = await import('../redteam/agent-risk-redteam.mjs');
 const { applySecurityHeaders, primaryRateLimitAllowed, rateLimitAllowed, resolveClientIp } = await import('../src/security.js');
 let userId;
@@ -169,6 +169,57 @@ test('staging evidence is rejected when execution falls outside the authorised t
         const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Window test', authorisationId: auth.id, trials: 1 });
         await db.prepare('UPDATE redteam_authorisations SET window_start=?,window_end=? WHERE id=?').run(new Date(Date.now() + 10 * 60000).toISOString(), new Date(Date.now() + 2 * 3600000).toISOString(), auth.id);
         await assert.rejects(() => consumeRedTeamUpload({ rawToken: issued.token, bundle }), /outside the authorised.*time window/i);
+    }
+    finally {
+        await new Promise(resolve => adapter.close(resolve));
+    }
+});
+test('completed adapter evidence can be recovered after the ROE window expires without authorising a new run', async () => {
+    const adapter = http.createServer(async (req, res) => {
+        const chunks = [];
+        for await (const chunk of req)
+            chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const payload = JSON.stringify({ schema: 'arl.redteam.response.v1', output: 'Blocked by policy.', toolCalls: [], memoryWrites: [], approvals: [], structuredOutput: body.caseId === 'RT-OUT-001' ? { decision: 'review', reason: 'Human approval required', requiresHumanApproval: true } : null, telemetry: { totalTokens: 50, iterations: 1, toolCalls: 0, stoppedByLimit: false } });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) });
+        res.end(payload);
+    });
+    await new Promise(resolve => adapter.listen(0, '127.0.0.1', resolve));
+    const port = adapter.address().port;
+    try {
+        await db.prepare(`INSERT INTO subscriptions
+          (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,current_period_start,current_period_end,
+           authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
+           latest_stripe_event_type,latest_stripe_event_state,created_at,updated_at)
+          VALUES (?,?,?,'active','cus_recovery','sub_recovery',?,?,1,'stripe_event',2,'evt_recovery',
+            'customer.subscription.updated','active',?,?)
+          ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,plan_key=excluded.plan_key,status=excluded.status,
+          current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,
+          authoritative_state=1,billing_state_source='stripe_event',latest_stripe_event_created=2,
+          latest_stripe_event_id='evt_recovery',latest_stripe_event_type='customer.subscription.updated',
+          latest_stripe_event_state='active',updated_at=excluded.updated_at`)
+            .run('subrec_recovery', userId, 'developer_monthly', new Date(Date.now() - 86400000).toISOString(),
+              new Date(Date.now() + 86400000).toISOString(), nowIso(), nowIso());
+        const auth = await createRedTeamAuthorisation({ userId, assessmentId, input: { targetName: 'Recovery local adapter', environment: 'local', authorityBasis: 'owner', authorisedBy: 'Owner', authorisedRole: 'System owner', emergencyContact: 'owner@example.com', windowStart: new Date(Date.now() - 60000).toISOString(), windowEnd: new Date(Date.now() + 3600000).toISOString(), permittedActions: ['Synthetic prompts'], prohibitedActions: ['Production effects'], dataClassification: 'synthetic-only', retentionDays: 7, syntheticDataOnly: true, dryRunToolsOnly: true, noProductionEffects: true, confirmation: 'I AUTHORISE CONTROLLED TESTING' } });
+        const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Completed recovery test', authorisationId: auth.id, trials: 1, caseIds: ['RT-PI-008'], mutate: false, adaptiveRounds: 1 });
+        assert.equal(bundle.results[0].outcome, 'passed');
+        const completedAt = Date.parse(bundle.campaign.completedAt);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const expiredEnd = new Date(Math.max(completedAt + 1, Date.now() - 1)).toISOString();
+        await db.prepare(`UPDATE redteam_authorisations SET window_end=?,status='expired' WHERE id=?`).run(expiredEnd, auth.id);
+        await assert.rejects(() => createRedTeamToken({ userId, assessmentId, mode: 'staging', authorisationId: auth.id }), /active written Rules of Engagement/i);
+        const issued = await createRedTeamRecoveryToken({ userId, assessmentId, bundle });
+        assert.equal(issued.mode, 'staging');
+        assert.equal(issued.recovery, true);
+        assert.equal(issued.authorisation.id, auth.id);
+        const uploaded = await consumeRedTeamUpload({ rawToken: issued.token, bundle });
+        assert.equal(uploaded.summary.counts.failed, 0);
+        assert.equal(uploaded.summary.assuranceScore, 100);
+        const stored = await db.prepare('SELECT authorisation_id,trust_json FROM redteam_runs WHERE id=?').get(uploaded.runId);
+        assert.equal(stored.authorisation_id, auth.id);
+        const trust = JSON.parse(stored.trust_json);
+        assert.equal(trust.executionWithinAuthorisedWindow, true);
+        assert.equal(trust.ingestedAfterAuthorisationWindow, true);
     }
     finally {
         await new Promise(resolve => adapter.close(resolve));
