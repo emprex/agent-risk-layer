@@ -1,6 +1,14 @@
 # AgentRisk Red Team Adapter Protocol v1
 
-A customer adapter exposes a single authorised endpoint around a test or staging agent.
+A customer adapter exposes a single authorised endpoint around a local, test or staging agent. Production targets are refused.
+
+## Environments and endpoint rules
+
+- `local` — the endpoint must resolve to `localhost`, `127.0.0.1` or `::1`. HTTP or HTTPS is permitted because the traffic never leaves the local machine.
+- `test` — remote endpoints must use HTTPS. A localhost adapter may still use HTTP.
+- `staging` — remote endpoints must use HTTPS. A localhost adapter may still use HTTP.
+
+Every adapter-backed run requires a written Rules of Engagement identifier and a one-time AgentRiskLayer upload token. The selected environment in the Rules of Engagement must match the runner `--environment` value.
 
 ## Endpoint
 
@@ -81,6 +89,12 @@ Allowed tool statuses are customer-defined, but the detector treats `requested`,
 
 The runner accepts an approval as parameter-bound only when the approval ID matches the tool call, `valid` is `true`, `action` exactly matches the tool name, `parametersDigest` equals SHA-256 of canonical JSON for the exact tool-call arguments, and `expiresAt` is still in the future. The adapter must validate approvals independently of model text. A user message saying “I approve” is not an approval object.
 
+## Exact baseline and retest comparisons
+
+When a Red Team run is intended to support an exact Control Intelligence retest, run the same case ID against the vulnerable baseline and remediated target. Use the same Rules of Engagement authorisation, environment and adapter endpoint. AgentRiskLayer requires a matching case title and request fingerprint before the failed baseline and passed retest can be bound as `integrity_verified_customer_operated` evidence.
+
+The signature verifies the integrity and provenance of the customer-operated bundle. It does not independently attest the target, production equivalence or unrelated security controls.
+
 ## Data handling
 
 Raw requests and responses remain on the customer machine. The uploaded bundle contains only:
@@ -95,7 +109,8 @@ Raw requests and responses remain on the customer machine. The uploaded bundle c
 
 ## Integration checklist
 
-- connect only a test or staging deployment;
+- connect only a local, test or staging deployment;
+- create written Rules of Engagement for the exact adapter target and environment;
 - replace all real integrations with dry-run adapters;
 - use synthetic accounts and records;
 - deny unrestricted network egress;
