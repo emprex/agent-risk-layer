@@ -12,7 +12,7 @@ function parseJson(value, fallback = null) {
 }
 
 function unresolvedHistoricalFailure(detail) {
-  if ((detail.findings || []).some((item) => !CLOSED_FINDING_STATES.has(item.status))) return null;
+  const open = (detail.findings || []).find((item) => !CLOSED_FINDING_STATES.has(item.status)) || null;
   const closedIds = new Set((detail.findings || [])
     .filter((item) => CLOSED_FINDING_STATES.has(item.status))
     .map((item) => item.id));
@@ -22,11 +22,11 @@ function unresolvedHistoricalFailure(detail) {
   return tests.find((item) => {
     if (!item?.id || seen.has(item.id)) return false;
     seen.add(item.id);
-    return item.result === 'failed'
-      && item.executionKind !== 'retest'
-      && item.systemSnapshotId
-      && item.systemSnapshotId !== currentSnapshotId
-      && (!item.findingId || !closedIds.has(item.findingId));
+    if (item.result !== 'failed' || item.executionKind === 'retest') return false;
+    if (!item.systemSnapshotId || item.systemSnapshotId === currentSnapshotId) return false;
+    if (item.findingId && closedIds.has(item.findingId)) return false;
+    if (open?.id && item.findingId !== open.id) return false;
+    return true;
   }) || null;
 }
 
@@ -109,6 +109,7 @@ function advanceHistoricalFailureToFinding(detail, history) {
   if (!qualifying || detail.chain?.currentStage !== 'evidence') return detail;
   const completedStages = [...new Set([...(detail.chain.completedStages || []), 'applicability', 'test', 'evidence'])];
   const notRequiredStages = (detail.chain.notRequiredStages || []).filter((stage) => stage !== 'finding');
+  const states = stageStates('finding', completedStages, notRequiredStages);
   const chain = {
     ...detail.chain,
     currentStage: 'finding',
@@ -117,13 +118,19 @@ function advanceHistoricalFailureToFinding(detail, history) {
     chainStatus: 'test_failed',
     completedStages,
     notRequiredStages,
-    stageStates: stageStates('finding', completedStages, notRequiredStages),
+    stageStates: states,
     missingStages: ['finding'],
     missingRequirements: ['Create or link a finding for the historical failed test.'],
-    blockedStages: STAGES.filter((stage) => stageStates('finding', completedStages, notRequiredStages)[stage] === 'blocked'),
+    blockedStages: STAGES.filter((stage) => states[stage] === 'blocked'),
     availableActions: ['create_finding'],
   };
   return { ...detail, chain };
+}
+
+function mergeEvidence(existing = [], historical = []) {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of historical) if (!byId.has(item.id)) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => Date.parse(b.observedAt || 0) - Date.parse(a.observedAt || 0));
 }
 
 export async function getControlIntelligenceControl(args) {
@@ -132,8 +139,10 @@ export async function getControlIntelligenceControl(args) {
   if (!failure) return detail;
   const historical = await historicalFailureEvidence(args.projectId, args.controlId, failure);
   if (!historical.length) return detail;
-  const existingIds = new Set((detail.evidenceHistory || []).map((item) => item.id));
-  const evidenceHistory = [...(detail.evidenceHistory || []), ...historical.filter((item) => !existingIds.has(item.id))]
-    .sort((a, b) => Date.parse(b.observedAt || 0) - Date.parse(a.observedAt || 0));
-  return advanceHistoricalFailureToFinding({ ...detail, evidenceHistory }, historical);
+  const withHistory = {
+    ...detail,
+    evidence: mergeEvidence(detail.evidence || [], historical),
+    evidenceHistory: mergeEvidence(detail.evidenceHistory || [], historical),
+  };
+  return advanceHistoricalFailureToFinding(withHistory, historical);
 }
