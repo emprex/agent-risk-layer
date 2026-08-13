@@ -6,7 +6,7 @@ permissions:
   contents: write
 jobs:
   patch-and-test:
-    if: github.event.head_commit.message == 'Fix deployment lineage validation environment'
+    if: github.event.head_commit.message == 'Run corrected deployment lineage validation'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
