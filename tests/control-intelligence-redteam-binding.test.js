@@ -247,7 +247,10 @@ test('integrity-verified Red Team baseline/retest pair binds to the exact retest
   assert.equal(evidence.observedAt, runs.retestCreated);
 
   const stored = await db.prepare('SELECT redteam_run_id,redteam_baseline_run_id,redteam_case_id,verification_state FROM control_evidence_items WHERE id=?').get(evidence.id);
-  assert.deepEqual(stored, { redteam_run_id: runs.retestId, redteam_baseline_run_id: runs.baselineId, redteam_case_id: CASE_ID, verification_state: 'verified' });
+  assert.equal(stored.redteam_run_id, runs.retestId);
+  assert.equal(stored.redteam_baseline_run_id, runs.baselineId);
+  assert.equal(stored.redteam_case_id, CASE_ID);
+  assert.equal(stored.verification_state, 'verified');
   assert.equal((await db.prepare('SELECT assessment_id FROM remediation_items WHERE id=?').get(chain.finding.id)).assessment_id, runs.assessmentId);
 
   const detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: CONTROL_ID, userId: f.userId });
