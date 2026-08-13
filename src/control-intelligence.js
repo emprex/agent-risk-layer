@@ -1,139 +1,160 @@
-import * as core from './control-intelligence-core.js';
-import { db } from './db.js';
-import { recordRedTeamEvidenceBinding, redTeamTrustFromRow } from './control-redteam-evidence.js';
+import { db, id, nowIso } from './db.js';
+import { intelligenceDigest } from './control-intelligence-core.js';
+import {
+  createControlFinding as createServiceControlFinding,
+  getControlIntelligence as getServiceControlIntelligence,
+  getControlIntelligenceControl as getServiceControlIntelligenceControl,
+  getControlIntelligenceReportSummary as getServiceControlIntelligenceReportSummary,
+  recordControlEvidence as recordServiceControlEvidence,
+  recordDeploymentDecision as recordServiceDeploymentDecision,
+} from './control-intelligence-service.js';
 
-export * from './control-intelligence-core.js';
+export * from './control-intelligence-service.js';
 
 const CLOSED_FINDING_STATES = new Set(['verified_closed', 'accepted_risk']);
 const STAGES = ['applicability', 'test', 'evidence', 'finding', 'remediation', 'retest', 'approval', 'deployment_decision'];
-const IMPLEMENTATION_TRUST_LIMIT = 'A remediation implementation artifact proves that a change artifact exists; it does not verify the observed test or retest outcome.';
-const APPROVAL_TRUST_LIMIT = 'An approval record verifies the approval event; by itself it does not verify the observed test or retest outcome.';
-const TEMPORAL_TRUST_LIMIT = 'Evidence cannot verify a test outcome when its observed timestamp predates completion of the linked test.';
 
-function semanticError(message, statusCode = 409) {
-  return Object.assign(new Error(message), { statusCode });
+function parseJson(value, fallback = null) {
+  try { return JSON.parse(value); } catch { return fallback; }
 }
 
-function parseTime(value) {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function appendLimitation(existing, addition) {
-  const current = String(existing || '').trim();
-  if (!current) return addition;
-  if (current.includes(addition)) return current;
-  return `${current} ${addition}`;
-}
-
-function effectiveEvidenceTrust(row) {
-  const storedState = row?.verification_state || row?.verificationState || 'unverified';
-  if (storedState !== 'verified') return { state: storedState, reason: null };
-
-  if (row?.redteam_run_id || row?.redteamRunId) {
-    return redTeamTrustFromRow(row) || { state: 'unverified', reason: 'The linked red-team evidence could not be validated.' };
-  }
-
-  const observedAt = parseTime(row.observed_at || row.observedAt);
-  const completedAt = parseTime(row.completed_at || row.completedAt);
-  if (row.test_execution_id || row.testExecutionId) {
-    if (completedAt != null && (observedAt == null || observedAt < completedAt)) {
-      return { state: 'unverified', reason: TEMPORAL_TRUST_LIMIT };
-    }
-    const runtimeId = row.runtime_event_id || row.runtimeEventId;
-    const approvalId = row.approval_id || row.approvalId;
-    const artifactId = row.remediation_artifact_id || row.remediationArtifactId;
-    if (artifactId && !runtimeId) return { state: 'unverified', reason: IMPLEMENTATION_TRUST_LIMIT };
-    if (approvalId && !runtimeId) return { state: 'unverified', reason: APPROVAL_TRUST_LIMIT };
-  }
-
-  const artifactId = row.remediation_artifact_id || row.remediationArtifactId;
-  const runtimeId = row.runtime_event_id || row.runtimeEventId;
-  const approvalId = row.approval_id || row.approvalId;
-  if (artifactId && !runtimeId && !approvalId) {
-    return { state: 'unverified', reason: IMPLEMENTATION_TRUST_LIMIT };
-  }
-  return { state: 'verified', reason: null };
-}
-
-async function evidenceTrustRows(projectId, snapshotId, controlId = null) {
-  if (!projectId || !snapshotId) return [];
-  const controlFilter = controlId ? ' AND e.entry_id=?' : '';
-  const params = controlId ? [projectId, snapshotId, controlId] : [projectId, snapshotId];
-  return db.prepare(`SELECT e.id,e.entry_id,e.verification_state,e.retention_status,e.remediation_artifact_id,e.runtime_event_id,e.approval_id,e.observed_at,e.test_execution_id,e.descriptor_json,
-      e.redteam_run_id,e.redteam_baseline_run_id,e.redteam_case_id,t.completed_at,
-      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
-      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
-    FROM control_evidence_items e
-    LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
-    LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
-    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
-    WHERE e.project_id=? AND e.system_snapshot_id=?${controlFilter}`)
-    .all(...params);
-}
-
-function effectiveEvidenceMap(rows) {
-  return new Map(rows.map((row) => [row.id, effectiveEvidenceTrust(row)]));
-}
-
-function applyEffectiveEvidenceTrust(detail, rows) {
-  const trust = effectiveEvidenceMap(rows);
-  const evidence = (detail.evidence || []).map((item) => {
-    const effective = trust.get(item.id);
-    if (!effective) return item;
-    const patch = {};
-    if (effective.state !== item.verificationState) {
-      patch.storedVerificationState = item.verificationState;
-      patch.verificationState = effective.state;
-      patch.trustReason = effective.reason;
-    } else if (effective.reason) {
-      patch.trustReason = effective.reason;
-    }
-    if (effective.verificationScope) patch.verificationScope = effective.verificationScope;
-    if (effective.trustBoundary) patch.trustBoundary = effective.trustBoundary;
-    if (effective.redteamRunId) patch.redteamRunId = effective.redteamRunId;
-    if (effective.redteamBaselineRunId) patch.redteamBaselineRunId = effective.redteamBaselineRunId;
-    if (effective.redteamCaseId) patch.redteamCaseId = effective.redteamCaseId;
-    return Object.keys(patch).length ? { ...item, ...patch } : item;
-  });
-  return { ...detail, evidence };
-}
-
-function unresolvedFailure(detail) {
-  const findings = detail.findings || [];
-  const closedIds = new Set(findings.filter((item) => CLOSED_FINDING_STATES.has(item.status)).map((item) => item.id));
-  const open = findings.find((item) => !CLOSED_FINDING_STATES.has(item.status));
+function unresolvedHistoricalFailure(detail) {
+  const open = (detail.findings || []).find((item) => !CLOSED_FINDING_STATES.has(item.status)) || null;
+  const closedIds = new Set((detail.findings || [])
+    .filter((item) => CLOSED_FINDING_STATES.has(item.status))
+    .map((item) => item.id));
+  const currentSnapshotId = detail.systemSnapshot?.id;
   const tests = [...(detail.testHistory || []), ...(detail.tests || [])];
   const seen = new Set();
-  const failed = tests.find((item) => {
+  return tests.find((item) => {
     if (!item?.id || seen.has(item.id)) return false;
     seen.add(item.id);
     if (item.result !== 'failed' || item.executionKind === 'retest') return false;
+    if (!item.systemSnapshotId || item.systemSnapshotId === currentSnapshotId) return false;
     if (item.findingId && closedIds.has(item.findingId)) return false;
-    if (open?.id && item.findingId && item.findingId !== open.id) return false;
+    if (open?.id && item.findingId !== open.id) return false;
     return true;
   }) || null;
-  return { failed, open };
 }
 
-function passedExactRetest(detail, failed, finding) {
-  if (!failed || !finding) return null;
-  return (detail.testHistory || detail.tests || []).find((item) => item.executionKind === 'retest'
-    && item.result === 'passed'
-    && item.retestOfExecutionId === failed.id
-    && item.findingId === finding.id
-    && item.systemSnapshotId !== failed.systemSnapshotId) || null;
+function verifyAndSerializeHistoricalEvidence(row) {
+  const descriptor = parseJson(row?.descriptor_json, null);
+  if (!descriptor || intelligenceDigest(descriptor) !== row.integrity_digest) {
+    throw Object.assign(new Error('Historical failure evidence integrity verification failed.'), {
+      statusCode: 503,
+      code: 'CONTROL_INTELLIGENCE_INTEGRITY_FAILURE',
+    });
+  }
+  if (descriptor.projectId !== row.project_id
+    || descriptor.systemSnapshotId !== row.system_snapshot_id
+    || descriptor.controlId !== row.entry_id
+    || (descriptor.testExecutionId || null) !== (row.test_execution_id || null)
+    || descriptor.evidenceClass !== row.evidence_class
+    || descriptor.sourceType !== row.source_type
+    || descriptor.sourceReference !== row.source_reference
+    || descriptor.retentionStatus !== row.retention_status
+    || descriptor.verificationState !== row.verification_state) {
+    throw Object.assign(new Error('Historical failure evidence provenance does not match its stored descriptor.'), {
+      statusCode: 503,
+      code: 'CONTROL_INTELLIGENCE_INTEGRITY_FAILURE',
+    });
+  }
+
+  const storedVerificationState = row.verification_state;
+  const verificationState = storedVerificationState === 'verified' ? 'unverified' : storedVerificationState;
+  const trustReason = storedVerificationState === 'verified'
+    ? 'Historical pre-finding evidence is treated conservatively as unverified in the handoff view; finding creation depends on the reproduced failure and observed evidence, not an upgraded trust claim.'
+    : null;
+  return {
+    id: row.id,
+    ...descriptor,
+    systemSnapshotId: row.system_snapshot_id,
+    controlId: row.entry_id,
+    testExecutionId: row.test_execution_id || null,
+    findingId: row.finding_id || null,
+    evidenceClass: row.evidence_class,
+    sourceType: row.source_type,
+    sourceReference: row.source_reference,
+    observedAt: row.observed_at,
+    collectorId: row.collector_id || null,
+    sensitivityClassification: row.sensitivity_classification,
+    retentionStatus: row.retention_status,
+    verificationState,
+    limitations: row.limitations,
+    integrityDigest: row.integrity_digest,
+    ...(storedVerificationState !== verificationState ? { storedVerificationState } : {}),
+    ...(trustReason ? { trustReason } : {}),
+  };
 }
 
-function hasVerifiedRetestEvidence(detail, retest) {
-  if (!retest) return false;
-  return (detail.evidence || []).some((item) => item.testExecutionId === retest.id
-    && item.retentionStatus === 'active'
-    && item.verificationState === 'verified');
+async function historicalFailureEvidence(projectId, controlId, failure) {
+  if (!failure?.id || !failure.systemSnapshotId) return [];
+  const rows = await db.prepare(`SELECT e.* FROM control_evidence_items e
+    JOIN control_test_executions t ON t.id=e.test_execution_id
+      AND t.project_id=e.project_id
+      AND t.system_snapshot_id=e.system_snapshot_id
+      AND t.entry_id=e.entry_id
+    WHERE e.project_id=? AND e.entry_id=? AND e.system_snapshot_id=? AND e.test_execution_id=?
+      AND t.result='failed' AND t.execution_kind='initial'
+    ORDER BY e.observed_at DESC LIMIT 50`)
+    .all(projectId, controlId, failure.systemSnapshotId, failure.id);
+  return rows.map(verifyAndSerializeHistoricalEvidence);
 }
 
-function repairedStageStates(currentStage, completedStages, notRequiredStages) {
+async function currentSnapshotId(projectId) {
+  const row = await db.prepare("SELECT id FROM system_snapshots WHERE project_id=? AND status='current'").get(projectId);
+  return row?.id || null;
+}
+
+async function unresolvedHistoricalFailureRows(projectId, snapshotId) {
+  if (!projectId || !snapshotId) return [];
+  return db.prepare(`SELECT t.id,t.entry_id,t.system_snapshot_id,t.finding_id,t.completed_at,r.status AS finding_status
+    FROM control_test_executions t
+    LEFT JOIN remediation_items r ON r.id=t.finding_id AND r.project_id=t.project_id
+    WHERE t.project_id=? AND t.result='failed' AND t.execution_kind='initial' AND t.system_snapshot_id<>?
+      AND (t.finding_id IS NULL OR r.id IS NULL OR r.status NOT IN ('verified_closed','accepted_risk'))
+    ORDER BY t.completed_at ASC,t.id ASC`)
+    .all(projectId, snapshotId);
+}
+
+async function historicalOpenFindings(projectId, snapshotId) {
+  if (!projectId || !snapshotId) return [];
+  return db.prepare(`SELECT DISTINCT r.id,r.title,r.severity,r.status,r.updated_at,b.entry_id,b.system_snapshot_id
+    FROM remediation_items r
+    JOIN control_finding_bindings b ON b.finding_id=r.id AND b.project_id=r.project_id
+    WHERE r.project_id=? AND b.system_snapshot_id<>? AND r.status NOT IN ('verified_closed','accepted_risk')
+    ORDER BY r.updated_at DESC,r.id DESC`)
+    .all(projectId, snapshotId);
+}
+
+async function staleCurrentDeploymentDecision(projectId, userId, reassessmentTrigger, sourceType, sourceId) {
+  const decisions = await db.prepare(`SELECT id,workspace_id,system_snapshot_id FROM control_deployment_decisions
+    WHERE project_id=? AND status='current'`).all(projectId);
+  if (!decisions.length) return 0;
+  const timestamp = nowIso();
+  await db.transaction(async () => {
+    await db.prepare(`UPDATE control_deployment_decisions
+      SET status='stale',reassessment_trigger=? WHERE project_id=? AND status='current'`)
+      .run(reassessmentTrigger, projectId);
+    for (const decision of decisions) {
+      await db.prepare(`INSERT INTO security_audit_log
+        (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+        .run(id('aud_'), decision.workspace_id, projectId, 'user', userId,
+          'control_intelligence.deployment_decision_staled', 'deployment_decision', decision.id,
+          JSON.stringify({ reassessmentTrigger, sourceType, sourceId, systemSnapshotId: decision.system_snapshot_id }), timestamp);
+    }
+  });
+  return decisions.length;
+}
+
+async function staleIfHistoricalWrite(projectId, userId, snapshotId, trigger, sourceType, sourceId) {
+  const current = await currentSnapshotId(projectId);
+  if (!current || !snapshotId || snapshotId === current) return 0;
+  return staleCurrentDeploymentDecision(projectId, userId, trigger, sourceType, sourceId);
+}
+
+function stageStates(currentStage, completedStages = [], notRequiredStages = []) {
   const completed = new Set(completedStages);
   const notRequired = new Set(notRequiredStages);
   return Object.fromEntries(STAGES.map((stage) => [
@@ -142,249 +163,145 @@ function repairedStageStates(currentStage, completedStages, notRequiredStages) {
   ]));
 }
 
-function repairFailureJourney(detail) {
-  if (!detail?.chain) return detail;
-  const { failed, open } = unresolvedFailure(detail);
-  if (!failed && !open) return detail;
-
-  const chain = { ...detail.chain };
-  const approvalRequired = Boolean(detail.approvalRequirements?.length);
-  const completed = new Set(chain.completedStages || []);
-  const notRequired = new Set((chain.notRequiredStages || []).filter((stage) => !['finding', 'remediation', 'retest'].includes(stage)));
-  completed.add('applicability');
-  completed.add('test');
-  notRequired.delete('finding');
-  notRequired.delete('remediation');
-  notRequired.delete('retest');
-  if (approvalRequired) notRequired.delete('approval');
-  else notRequired.add('approval');
-
-  const failureEvidence = open ? true : (detail.evidence || []).some((item) => item.testExecutionId === failed?.id
-    && item.retentionStatus === 'active'
+function advanceHistoricalFailureToFinding(detail, history) {
+  const qualifying = history.some((item) => item.retentionStatus === 'active'
     && ['unverified', 'verified'].includes(item.verificationState));
-
-  let currentStage = 'evidence';
-  let nextAction = 'Attach observed evidence to the failed test.';
-  let deploymentImpact = 'hold';
-
-  if (failureEvidence) {
-    completed.add('evidence');
-    if (!open && !(detail.findings || []).length) {
-      currentStage = 'finding';
-      nextAction = 'Create or link a finding for the failed test.';
-      deploymentImpact = 'blocker';
-    } else {
-      const finding = open || (detail.findings || [])[0];
-      completed.add('finding');
-      deploymentImpact = 'blocker';
-      const implementationRecorded = finding && finding.status !== 'open';
-      const remediatedSnapshotReady = Boolean(failed?.systemSnapshotId
-        && detail.systemSnapshot?.id
-        && failed.systemSnapshotId !== detail.systemSnapshot.id);
-      if (!implementationRecorded || !remediatedSnapshotReady) {
-        currentStage = 'remediation';
-        nextAction = implementationRecorded && !remediatedSnapshotReady
-          ? 'Create a remediated system snapshot before retesting.'
-          : 'Record and implement remediation.';
-      } else {
-        completed.add('remediation');
-        const retest = passedExactRetest(detail, failed, finding);
-        currentStage = 'retest';
-        if (retest && open) {
-          nextAction = hasVerifiedRetestEvidence(detail, retest)
-            ? 'Review the qualifying passed exact retest evidence and close the finding.'
-            : 'Verify evidence for the passed exact retest before closing the finding.';
-        } else if (!retest) {
-          nextAction = 'Retest the exact original failure against the remediated snapshot.';
-        } else {
-          completed.add('retest');
-          currentStage = approvalRequired ? 'approval' : 'deployment_decision';
-          nextAction = approvalRequired ? 'Complete the required exact-action approval.' : 'Review the project deployment decision.';
-        }
-      }
-    }
-  }
-
-  chain.currentStage = currentStage;
-  chain.nextAction = nextAction;
-  chain.deploymentImpact = deploymentImpact;
-  chain.chainStatus = open ? (open.status === 'open' ? 'finding_open' : 'remediation_in_progress') : 'test_failed';
-  chain.completedStages = [...completed];
-  chain.notRequiredStages = [...notRequired];
-  chain.stageStates = repairedStageStates(currentStage, chain.completedStages, chain.notRequiredStages);
-  chain.blockedStages = STAGES.filter((stage) => chain.stageStates[stage] === 'blocked');
-  chain.missingStages = STAGES.filter((stage) => chain.stageStates[stage] === 'current');
-  chain.missingRequirements = [nextAction];
-  chain.availableActions = currentStage === 'evidence'
-    ? ['record_evidence']
-    : currentStage === 'finding'
-      ? ['create_finding']
-      : currentStage === 'remediation'
-        ? ['record_remediation']
-        : currentStage === 'retest'
-          ? ['record_retest']
-          : currentStage === 'approval'
-            ? ['record_approval']
-            : [];
+  if (!qualifying || detail.chain?.currentStage !== 'evidence') return detail;
+  const completedStages = [...new Set([...(detail.chain.completedStages || []), 'applicability', 'test', 'evidence'])];
+  const notRequiredStages = (detail.chain.notRequiredStages || []).filter((stage) => stage !== 'finding');
+  const states = stageStates('finding', completedStages, notRequiredStages);
+  const chain = {
+    ...detail.chain,
+    currentStage: 'finding',
+    nextAction: 'Create or link a finding for the historical failed test.',
+    deploymentImpact: 'blocker',
+    chainStatus: 'test_failed',
+    completedStages,
+    notRequiredStages,
+    stageStates: states,
+    missingStages: ['finding'],
+    missingRequirements: ['Create or link a finding for the historical failed test.'],
+    blockedStages: STAGES.filter((stage) => states[stage] === 'blocked'),
+    availableActions: ['create_finding'],
+  };
   return { ...detail, chain };
 }
 
+function mergeEvidence(existing = [], historical = []) {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  for (const item of historical) if (!byId.has(item.id)) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => Date.parse(b.observedAt || 0) - Date.parse(a.observedAt || 0));
+}
+
 export async function getControlIntelligenceControl(args) {
-  const raw = await core.getControlIntelligenceControl(args);
-  const rows = await evidenceTrustRows(args.projectId, raw.systemSnapshot?.id, args.controlId);
-  return repairFailureJourney(applyEffectiveEvidenceTrust(raw, rows));
+  const detail = await getServiceControlIntelligenceControl(args);
+  const failure = unresolvedHistoricalFailure(detail);
+  if (!failure) return detail;
+  const historical = await historicalFailureEvidence(args.projectId, args.controlId, failure);
+  if (!historical.length) return detail;
+  const withHistory = {
+    ...detail,
+    evidence: mergeEvidence(detail.evidence || [], historical),
+    evidenceHistory: mergeEvidence(detail.evidenceHistory || [], historical),
+  };
+  return advanceHistoricalFailureToFinding(withHistory, historical);
 }
 
 export async function getControlIntelligence(args) {
-  const result = await core.getControlIntelligence(args);
-  if (!result?.items?.length) return result;
+  const result = await getServiceControlIntelligence(args);
+  const snapshotId = result?.systemSnapshot?.id;
+  if (!snapshotId || !result?.items?.length) return result;
+  const historical = await unresolvedHistoricalFailureRows(args.projectId, snapshotId);
+  if (!historical.length) return { ...result, summary: { ...result.summary, historicalUnresolvedFailures: 0, historicalFailureControls: 0 } };
 
-  let testsToRunDelta = 0;
-  let blockersDelta = 0;
-  const repairedItems = [];
-  for (const item of result.items) {
-    if (['finding_open', 'remediation_in_progress'].includes(item.chainStatus)) {
-      try {
-        const detail = await getControlIntelligenceControl({
-          projectId: args.projectId,
-          controlId: item.controlId,
-          userId: args.userId,
-        });
-        const repaired = { ...item, ...detail.chain };
-        if (item.currentStage === 'test' && repaired.currentStage !== 'test') testsToRunDelta -= 1;
-        if (item.deploymentImpact !== 'blocker' && repaired.deploymentImpact === 'blocker') blockersDelta += 1;
-        repairedItems.push(repaired);
-        continue;
-      } catch {
-        // Preserve the core result if the focused repair cannot be loaded.
-      }
-    }
-    repairedItems.push(item);
+  const affectedIds = new Set(historical.map((row) => row.entry_id));
+  const untriagedIds = new Set(historical.filter((row) => !row.finding_id).map((row) => row.entry_id));
+  let additionalBlockers = 0;
+  for (const controlId of untriagedIds) {
+    const baseline = await getServiceControlIntelligenceControl({ projectId: args.projectId, controlId, userId: args.userId });
+    if (baseline.chain?.deploymentImpact !== 'blocker') additionalBlockers += 1;
   }
 
-  const rows = await evidenceTrustRows(args.projectId, result.systemSnapshot?.id);
-  const invalidStoredVerified = rows.filter((row) => row.verification_state === 'verified' && effectiveEvidenceTrust(row).state !== 'verified');
-  const validVerifiedControls = new Set(rows.filter((row) => row.retention_status === 'active' && effectiveEvidenceTrust(row).state === 'verified').map((row) => row.entry_id));
+  let testsToRunDelta = 0;
+  const items = [];
+  for (const item of result.items) {
+    if (!affectedIds.has(item.controlId)) {
+      items.push(item);
+      continue;
+    }
+    const detail = await getControlIntelligenceControl({ projectId: args.projectId, controlId: item.controlId, userId: args.userId });
+    if (item.currentStage === 'test' && detail.chain?.currentStage !== 'test') testsToRunDelta -= 1;
+    items.push({ ...item, ...detail.chain });
+  }
+
   const summary = result.summary ? {
     ...result.summary,
     testsToRun: Math.max(0, Number(result.summary.testsToRun || 0) + testsToRunDelta),
-    deploymentBlockers: Math.max(0, Number(result.summary.deploymentBlockers || 0) + blockersDelta),
-    controlsWithObservedEvidence: Math.min(Number(result.summary.controlsWithObservedEvidence || 0), validVerifiedControls.size),
-    evidenceTrustExceptions: invalidStoredVerified.length,
+    deploymentBlockers: Number(result.summary.deploymentBlockers || 0) + additionalBlockers,
+    historicalUnresolvedFailures: historical.length,
+    historicalFailureControls: affectedIds.size,
+    historicalUntriagedFailures: historical.filter((row) => !row.finding_id).length,
   } : result.summary;
-  return { ...result, items: repairedItems, summary };
+  return { ...result, items, summary };
 }
 
 export async function getControlIntelligenceReportSummary(args) {
-  const report = await core.getControlIntelligenceReportSummary(args);
-  if (!report?.systemSnapshot?.id) return report;
-  const rows = await evidenceTrustRows(args.projectId, report.systemSnapshot.id);
-  const validVerifiedControls = new Set(rows.filter((row) => row.retention_status === 'active' && effectiveEvidenceTrust(row).state === 'verified').map((row) => row.entry_id));
-  const invalidStoredVerified = rows.filter((row) => row.verification_state === 'verified' && effectiveEvidenceTrust(row).state !== 'verified');
-  const applicableIds = (report.applicabilityDecisions || []).filter((item) => item.decision === 'applicable').map((item) => item.controlId);
+  const report = await getServiceControlIntelligenceReportSummary(args);
+  const snapshotId = report?.systemSnapshot?.id;
+  if (!snapshotId) return report;
+  const [failures, findings] = await Promise.all([
+    unresolvedHistoricalFailureRows(args.projectId, snapshotId),
+    historicalOpenFindings(args.projectId, snapshotId),
+  ]);
+  const untriaged = failures.filter((row) => !row.finding_id).map((row) => ({
+    testExecutionId: row.id,
+    controlId: row.entry_id,
+    failedSnapshotId: row.system_snapshot_id,
+    completedAt: row.completed_at,
+    status: 'reproduced_failure_requires_triage',
+  }));
+  const historicalFindings = findings.map((row) => ({
+    id: row.id,
+    controlId: row.entry_id,
+    failedSnapshotId: row.system_snapshot_id,
+    title: row.title,
+    status: row.status,
+    contextualSeverity: row.severity || null,
+    updatedAt: row.updated_at,
+  }));
+  const pending = untriaged.length + historicalFindings.length;
+  const limitation = 'Unresolved reproduced failures and findings from superseded snapshots remain historical provenance and continue to block or hold deployment until triaged, remediated and retested; they are not rewritten onto the current snapshot.';
   return {
     ...report,
-    observedControls: validVerifiedControls.size,
-    missingEvidence: applicableIds.filter((controlId) => !validVerifiedControls.has(controlId)),
-    stale: Boolean(report.stale || invalidStoredVerified.length),
-    limitations: invalidStoredVerified.length
-      ? [...(report.limitations || []), 'Legacy evidence whose stored verification depended only on remediation implementation artifacts or impossible test timing is treated as unverified by the current evidence policy.']
-      : report.limitations,
+    historicalRiskPending: pending > 0,
+    historicalUntriagedFailures: untriaged,
+    historicalOpenFindings: historicalFindings,
+    limitations: pending ? [...new Set([...(report.limitations || []), limitation])] : report.limitations,
   };
 }
 
 export async function recordControlEvidence(args) {
-  const input = { ...(args?.input || {}) };
-  if (input.redteamRunId || input.redteamBaselineRunId || input.redteamCaseId) {
-    return recordRedTeamEvidenceBinding({ ...args, input });
-  }
-  if (input.testExecutionId) {
-    const detail = await core.getControlIntelligenceControl({
-      projectId: args.projectId,
-      controlId: args.controlId,
-      userId: args.userId,
-    });
-    const candidates = [...(detail.tests || []), ...(detail.testHistory || [])];
-    const execution = candidates.find((item) => item.id === input.testExecutionId);
-    if (execution?.completedAt) {
-      const completedAt = parseTime(execution.completedAt);
-      if (input.observedAt) {
-        const observedAt = parseTime(input.observedAt);
-        if (observedAt == null) throw semanticError('Evidence observedAt must be a valid timestamp.', 400);
-        if (completedAt != null && observedAt < completedAt) {
-          throw semanticError('Evidence observedAt cannot precede completion of the linked test.');
-        }
-      } else {
-        input.observedAt = execution.completedAt;
-      }
-    }
-  }
-
-  if (input.remediationArtifactId && !input.runtimeEventId && !input.approvalId) {
-    delete input.remediationArtifactId;
-    input.limitations = appendLimitation(input.limitations, IMPLEMENTATION_TRUST_LIMIT);
-  }
-  if (input.testExecutionId && input.approvalId && !input.runtimeEventId) {
-    input.limitations = appendLimitation(input.limitations, APPROVAL_TRUST_LIMIT);
-  }
-  return core.recordControlEvidence({ ...args, input });
+  const result = await recordServiceControlEvidence(args);
+  await staleIfHistoricalWrite(args.projectId, args.userId, result?.systemSnapshotId,
+    'historical_failure_evidence', 'control_evidence', result?.id || null);
+  return result;
 }
 
-export async function closeControlFinding(args) {
-  const detail = await getControlIntelligenceControl({
-    projectId: args.projectId,
-    controlId: args.controlId,
-    userId: args.userId,
-  });
-  const finding = (detail.findings || []).find((item) => item.id === args.findingId);
-  if (!finding) return core.closeControlFinding(args);
-  const { failed } = unresolvedFailure(detail);
-  const retest = passedExactRetest(detail, failed, finding);
-  if (!retest) return core.closeControlFinding(args);
-
-  const evidenceRows = await db.prepare(`SELECT e.*,t.completed_at,
-      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
-      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
-    FROM control_evidence_items e
-    LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
-    LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
-    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
-    WHERE e.project_id=? AND e.system_snapshot_id=? AND e.entry_id=? AND e.test_execution_id=? AND e.finding_id=? AND e.remediation_id=? AND e.retention_status='active'
-    ORDER BY e.observed_at DESC`)
-    .all(args.projectId, detail.systemSnapshot.id, args.controlId, retest.id, finding.id, finding.id);
-  const trusted = evidenceRows.find((row) => effectiveEvidenceTrust(row).state === 'verified' && (row.runtime_event_id || row.redteam_run_id));
-  if (!trusted) {
-    throw semanticError('Finding closure requires qualifying evidence that proves the exact retest outcome. A snapshot-bound runtime observation can qualify. An integrity-verified customer-operated Red Team run can also qualify when it is explicitly bound to the same failed case and retest; its signature verifies bundle integrity, not independent operation of the target.');
-  }
-  return core.closeControlFinding(args);
+export async function createControlFinding(args) {
+  const result = await createServiceControlFinding(args);
+  await staleIfHistoricalWrite(args.projectId, args.userId, result?.snapshotId,
+    'historical_failure_finding', 'remediation', result?.id || null);
+  return result;
 }
 
 export async function recordDeploymentDecision(args) {
-  const overview = await core.getControlIntelligence({ projectId: args.projectId, userId: args.userId, limit: 1 });
-  const rows = await evidenceTrustRows(args.projectId, overview.systemSnapshot?.id);
-  const invalidStoredVerified = rows.filter((row) => row.verification_state === 'verified' && effectiveEvidenceTrust(row).state !== 'verified');
-  if (invalidStoredVerified.length) {
-    throw semanticError('Deployment decision blocked: current snapshot contains legacy evidence whose stored verification is not valid under the current evidence policy. Reassess with trustworthy evidence before recording a deployment decision.');
-  }
-  return core.recordDeploymentDecision(args);
-}
-
-export async function recordControlTestExecution(args) {
-  const result = String(args?.input?.result || '').trim().toLowerCase();
-  if (result === 'planned') {
-    const detail = await core.getControlIntelligenceControl({
-      projectId: args.projectId,
-      controlId: args.controlId,
-      userId: args.userId,
-    });
-    const { failed, open } = unresolvedFailure(detail);
-    if (failed || open) {
-      throw semanticError('A reproduced failure is already recorded for this control. Attach evidence, create the finding, and remediate it before planning another initial test.');
-    }
-    const existingPlan = (detail.tests || []).find((item) => item.result === 'planned' && item.executionKind !== 'retest');
-    if (existingPlan) {
-      throw semanticError('A planned test already exists for this control. Record the observed result instead of creating another plan.');
+  const snapshotId = await currentSnapshotId(args.projectId);
+  if (snapshotId) {
+    const historical = await unresolvedHistoricalFailureRows(args.projectId, snapshotId);
+    const untriaged = historical.filter((row) => !row.finding_id);
+    if (untriaged.length) {
+      throw Object.assign(new Error(`Deployment decision blocked: ${untriaged.length} reproduced failure${untriaged.length === 1 ? '' : 's'} from superseded system snapshots still require evidence and finding triage before a current deployment decision can be recorded.`), { statusCode: 409 });
     }
   }
-  return core.recordControlTestExecution(args);
+  return recordServiceDeploymentDecision(args);
 }

@@ -121,11 +121,16 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
     completed.push('finding');
 
     const verification = remediationRecord?.verification || {};
+    const serverRemediation = data.chain?.remediationState || null;
     const planSaved = Boolean(verification.rootCause || verification.correctiveAction || verification.validationPlan);
-    const implementationSaved = Boolean(verification.artifactId);
-    const remediatedSnapshot = Boolean(failed.systemSnapshotId
-      && data.systemSnapshot?.id
-      && failed.systemSnapshotId !== data.systemSnapshot.id);
+    const implementationSaved = serverRemediation
+      ? Boolean(serverRemediation.implementationRecorded)
+      : Boolean(verification.artifactId);
+    const remediatedSnapshot = serverRemediation
+      ? Boolean(serverRemediation.remediatedSnapshotReady)
+      : Boolean(failed.systemSnapshotId
+        && data.systemSnapshot?.id
+        && failed.systemSnapshotId !== data.systemSnapshot.id);
 
     if (!planSaved || !implementationSaved || !remediatedSnapshot) {
       currentStage = 'remediation';
@@ -133,7 +138,7 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
         ? 'Define the remediation plan.'
         : !implementationSaved
           ? 'Record evidence of the implemented fix.'
-          : 'Create the changed system snapshot that contains the fix.';
+          : 'Create the changed system snapshot after the implementation evidence so the retest targets the actual fixed version.';
       deploymentImpact = 'blocker';
       return finish({ failed, finding, remediation: { planSaved, implementationSaved, remediatedSnapshot } });
     }

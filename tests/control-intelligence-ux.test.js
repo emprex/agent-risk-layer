@@ -10,6 +10,7 @@ const css = read('public/control-intelligence-ux.css');
 const controlPlane = read('src/control-plane.js');
 const controlIntelligenceCore = read('src/control-intelligence-core.js');
 const controlIntelligenceFacade = read('src/control-intelligence.js');
+const controlIntelligenceService = read('src/control-intelligence-service.js');
 const focusedControl = read('public/control-intelligence-control.js');
 const journey = read('public/control-intelligence-journey.js');
 
@@ -82,8 +83,9 @@ test('cross-snapshot failure lineage remains in the unchanged core implementatio
 });
 
 test('focused control workflow never lets a later plan hide a reproduced failure', () => {
-  assert.match(controlIntelligenceFacade, /A reproduced failure is already recorded for this control/);
-  assert.match(controlIntelligenceFacade, /Attach observed evidence to the failed test/);
+  assert.match(controlIntelligenceFacade, /export \* from '\.\/control-intelligence-service\.js'/);
+  assert.match(controlIntelligenceService, /A reproduced failure is already recorded for this control/);
+  assert.match(controlIntelligenceService, /Attach observed evidence to the failed test/);
   assert.match(journey, /must never be hidden by a later plan/);
   assert.match(journey, /Create the finding from the reproduced failure/);
 });

@@ -61,7 +61,7 @@ function submit(form, work, success) {
 }
 
 function activeFinding() {
-  return journey?.finding || data?.findings?.find((item) => !['verified_closed', 'accepted_risk'].includes(item.status)) || data?.findings?.[0] || null;
+  return journey?.finding || data?.findings?.find((item) => !['verified_closed', 'accepted_risk'].includes(item.status)) || null;
 }
 
 function stageLabel(stage) {
@@ -140,20 +140,28 @@ function sideEffect(id = 'sideEffect', selected = 'none') {
   return `<label>Side-effect outcome<select id="${id}">${options.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`;
 }
 
+function allTestExecutions() {
+  const combined = [...(data.tests || []), ...(data.testHistory || [])];
+  const seen = new Set();
+  return combined.filter((item) => item?.id && !seen.has(item.id) && seen.add(item.id));
+}
+
 function evidenceForm() {
-  const executed = (data.tests || []).filter((item) => item.result !== 'planned');
-  const failedId = journey.failedExecution?.id;
-  const preferred = failedId || executed.find((item) => item.result === 'passed')?.id || executed[0]?.id || '';
+  const exactFailure = journey.failedExecution || null;
+  const executed = exactFailure ? [exactFailure] : (data.tests || []).filter((item) => item.result !== 'planned');
+  const preferred = exactFailure?.id || executed.find((item) => item.result === 'passed')?.id || executed[0]?.id || '';
+  const historical = Boolean(exactFailure?.systemSnapshotId && exactFailure.systemSnapshotId !== data.systemSnapshot?.id);
   return `<div class="ci-action-copy"><span class="eyebrow">Step 3 · Evidence</span><h2>Attach evidence to the executed test.</h2><p>The evidence must identify what was actually observed and which test produced it. Owner-entered test output remains <strong>unverified</strong> unless it is backed by a system-generated evidence source.</p></div>
-  ${journey.failedExecution ? `<div class="ci-failure-callout"><strong>Reproduced failure</strong><span>${esc(journey.failedExecution.observedResult || 'Failed test recorded.')}</span></div>` : ''}
+  ${exactFailure ? `<div class="ci-failure-callout"><strong>Reproduced failure</strong><span>${esc(exactFailure.observedResult || 'Failed test recorded.')}</span></div>` : ''}
+  ${historical ? `<div class="ci-trust-note"><strong>Historical failure provenance</strong><span>This failure belongs to immutable snapshot ${esc(exactFailure.systemSnapshotId)}. New evidence will remain bound to that historical snapshot and will not be rewritten onto current snapshot ${esc(data.systemSnapshot.id)}.</span></div>` : ''}
   <form id="evidenceForm" class="ci-form ci-focus-form">
     ${field('Evidence title', 'evidenceTitle', 'text', '', 'required')}
-    ${field('What was observed?', 'evidenceObserved', 'textarea', journey.failedExecution?.observedResult || '', 'required')}
-    <label>Executed test<select id="evidenceTest" required><option value="">Select an executed test</option>${executed.map((item) => `<option value="${esc(item.id)}" ${item.id === preferred ? 'selected' : ''}>${esc(human(item.result))} · ${esc(item.completedAt || item.startedAt || '')}</option>`).join('')}</select></label>
+    ${field('What was observed?', 'evidenceObserved', 'textarea', exactFailure?.observedResult || '', 'required')}
+    <label>Executed test<select id="evidenceTest" required><option value="">Select an executed test</option>${executed.map((item) => `<option value="${esc(item.id)}" ${item.id === preferred ? 'selected' : ''}>${esc(human(item.result))} · ${esc(item.completedAt || item.startedAt || '')}${item.systemSnapshotId ? ` · ${esc(item.systemSnapshotId)}` : ''}</option>`).join('')}</select></label>
     <label>Source type<select id="evidenceSource"><option value="test_output">Test output</option><option value="customer_observation">Customer observation</option><option value="review_record">Review record</option></select></label>
     ${field('Source reference or digest', 'evidenceReference', 'text', '', 'required')}
-    ${sideEffect('evidenceSideEffect', journey.failedExecution ? 'executed_reversible' : 'none')}
-    ${field('Limitations', 'evidenceLimitations', 'textarea', journey.failedExecution ? 'Owner-executed evidence. State the exact test boundary and anything that was not independently verified.' : '')}
+    ${sideEffect('evidenceSideEffect', exactFailure ? 'unknown' : 'none')}
+    ${field('Limitations', 'evidenceLimitations', 'textarea', exactFailure ? 'Owner-executed evidence. State the exact test boundary and anything that was not independently verified.' : '')}
     <div class="ci-trust-note"><strong>Trust boundary</strong><span>Recording evidence does not automatically verify it. Verification state stays explicit in the evidence record.</span></div>
     <button class="button primary button-xl" type="submit">Attach evidence</button>
   </form>`;
@@ -162,7 +170,9 @@ function evidenceForm() {
 function findingForm() {
   const failed = journey.failedExecution;
   if (!failed) return '<p>No reproduced failure is available for a finding.</p>';
+  const historical = failed.systemSnapshotId && failed.systemSnapshotId !== data.systemSnapshot?.id;
   return `<div class="ci-action-copy"><span class="eyebrow">Step 4 · Finding</span><h2>Create a finding from the reproduced failure.</h2><p>The test and evidence are already immutable. Describe the affected operation, demonstrated impact and immediate containment without expanding the claim beyond what was observed.</p></div>
+  ${historical ? `<div class="ci-trust-note"><strong>Historical finding provenance</strong><span>The finding will be bound to failed snapshot ${esc(failed.systemSnapshotId)}. Remediation and retesting will then continue against a later changed snapshot.</span></div>` : ''}
   <div class="ci-observed-proof"><div><small>Expected</small><p>${esc(failed.expectedResult || 'No expected result recorded.')}</p></div><div><small>Observed</small><p>${esc(failed.observedResult || 'No observed result recorded.')}</p></div></div>
   <form id="findingForm" class="ci-form ci-focus-form">
     ${field('Finding title', 'findingTitle', 'text', `${data.control.title} — reproduced failure`, 'required')}
@@ -207,7 +217,7 @@ function remediationAction() {
       <button class="button primary button-xl" type="submit">Record implementation evidence</button>
     </form>`;
   }
-  return `<div class="ci-action-copy"><span class="eyebrow">Step 5 · Fix</span><h2>Create the immutable version that contains the fix.</h2><p>Prior failure evidence remains attached to the vulnerable snapshot. The retest must run against this changed version.</p></div>
+  return `<div class="ci-action-copy"><span class="eyebrow">Step 5 · Fix</span><h2>Create the immutable version that contains the fix.</h2><p>Prior failure evidence remains attached to the vulnerable snapshot. The new snapshot must be created after the implementation evidence, and the retest must run against that changed version.</p></div>
   <form id="snapshotForm" class="ci-form ci-focus-form">
     <div class="ci-proof-strip"><strong>Current snapshot</strong><span>${esc(data.systemSnapshot.versionIdentifier)} · ${esc(data.systemSnapshot.contentDigest?.slice(0, 16) || '')}…</span></div>
     ${field('Updated architecture description', 'snapshotArchitecture', 'textarea', data.systemSnapshot.architecture?.summary || '', 'required')}
@@ -336,17 +346,22 @@ function wire() {
   }, 'Test result saved.');
 
   const evidence = document.querySelector('#evidenceForm');
-  submit(evidence, () => api(`/api/projects/${projectId}/control-intelligence/controls/${controlId}/evidence`, {
-    method: 'POST',
-    body: JSON.stringify({
-      systemSnapshotId: data.systemSnapshot.id,
-      evidenceClass: 'observed',
-      sourceType: document.querySelector('#evidenceSource').value,
-      sourceReference: `${document.querySelector('#evidenceTitle').value}: ${document.querySelector('#evidenceObserved').value} (${document.querySelector('#evidenceReference').value})`,
-      testExecutionId: document.querySelector('#evidenceTest').value,
-      limitations: `Side effect: ${document.querySelector('#evidenceSideEffect').value}. ${document.querySelector('#evidenceLimitations').value}`,
-    }),
-  }), 'Evidence recorded with its trust state kept explicit.');
+  submit(evidence, () => {
+    const executionId = document.querySelector('#evidenceTest').value;
+    const execution = allTestExecutions().find((item) => item.id === executionId);
+    if (!execution) throw new Error('Reload: the selected test execution is no longer available.');
+    return api(`/api/projects/${projectId}/control-intelligence/controls/${controlId}/evidence`, {
+      method: 'POST',
+      body: JSON.stringify({
+        systemSnapshotId: execution.systemSnapshotId || data.systemSnapshot.id,
+        evidenceClass: 'observed',
+        sourceType: document.querySelector('#evidenceSource').value,
+        sourceReference: `${document.querySelector('#evidenceTitle').value}: ${document.querySelector('#evidenceObserved').value} (${document.querySelector('#evidenceReference').value})`,
+        testExecutionId: executionId,
+        limitations: `Side effect: ${document.querySelector('#evidenceSideEffect').value}. ${document.querySelector('#evidenceLimitations').value}`,
+      }),
+    });
+  }, 'Evidence recorded with its trust state kept explicit.');
 
   const finding = document.querySelector('#findingForm');
   submit(finding, () => {
@@ -356,7 +371,7 @@ function wire() {
     return api(`/api/projects/${projectId}/control-intelligence/controls/${controlId}/findings`, {
       method: 'POST',
       body: JSON.stringify({
-        systemSnapshotId: data.systemSnapshot.id,
+        systemSnapshotId: failed.systemSnapshotId || data.systemSnapshot.id,
         testExecutionId: failed.id,
         title: document.querySelector('#findingTitle').value,
         narrative: document.querySelector('#findingNarrative').value,
@@ -497,7 +512,7 @@ async function load() {
     api(`/api/projects/${projectId}/remediations`).catch(() => ({ remediations: [] })),
   ]);
   data = detail;
-  const openFinding = data.findings?.find((item) => !['verified_closed', 'accepted_risk'].includes(item.status)) || data.findings?.[0];
+  const openFinding = data.findings?.find((item) => !['verified_closed', 'accepted_risk'].includes(item.status)) || null;
   remediationRecord = openFinding ? remediationList.remediations?.find((item) => item.id === openFinding.id) || null : null;
   journey = deriveControlJourney(data, remediationRecord);
   render();
