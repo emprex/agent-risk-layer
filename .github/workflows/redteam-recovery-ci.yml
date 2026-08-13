@@ -1,0 +1,46 @@
+name: Temporary Red Team recovery validation
+
+on:
+  push:
+    branches:
+      - fix/redteam-recovery-upload
+    paths:
+      - .github/workflows/redteam-recovery-ci.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/redteam-recovery-upload
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Apply recovery fix
+        run: python3 scripts/apply-redteam-recovery-fix.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Static checks
+        run: npm run check
+      - name: Focused recovery and Red Team tests
+        env:
+          NODE_ENV: test
+        run: node --test tests/redteam-adapter-environments.test.js tests/redteam.test.js tests/v42-hardening.test.js tests/control-intelligence-redteam-binding.test.js
+      - name: Full test suite
+        env:
+          NODE_ENV: test
+        run: npm test
+      - name: Diff check
+        run: git diff --check
+      - name: Commit verified fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/redteam.js server.js public/redteam.js tests/redteam-adapter-environments.test.js tests/v42-hardening.test.js REDTEAM_ARCHITECTURE.md
+          git commit -m "Recover completed Red Team evidence safely"
+          git push origin HEAD:fix/redteam-recovery-upload
