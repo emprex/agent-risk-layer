@@ -86,13 +86,20 @@ export function redTeamTrustFromRow(row) {
     return { state: 'unverified', reason: 'Red-team evidence provenance IDs do not match the integrity-bound evidence descriptor.' };
   }
   if (Number(row.redteam_signature_valid) !== 1) {
-    return { state: 'unverified', reason: 'The linked red-team run no longer has a valid uploaded signature.' };
+    return { state: 'unverified', reason: 'The linked red-team retest run no longer has a valid uploaded signature.' };
   }
   if (!row.redteam_bundle_digest || descriptor.sourceDigest !== row.redteam_bundle_digest) {
-    return { state: 'unverified', reason: 'The linked red-team bundle digest does not match the evidence source digest.' };
+    return { state: 'unverified', reason: 'The linked red-team retest bundle digest does not match the evidence source digest.' };
   }
-  if (row.redteam_retention_expires_at && time(row.redteam_retention_expires_at) <= Date.now()) {
-    return { state: 'stale', reason: 'The linked red-team source is outside its retained evidence window.' };
+  if (Number(row.redteam_baseline_signature_valid) !== 1) {
+    return { state: 'unverified', reason: 'The linked red-team failed baseline no longer has a valid uploaded signature.' };
+  }
+  if (!row.redteam_baseline_bundle_digest || descriptor.baselineBundleDigest !== row.redteam_baseline_bundle_digest) {
+    return { state: 'unverified', reason: 'The linked red-team failed baseline digest no longer matches the integrity-bound evidence descriptor.' };
+  }
+  if ((row.redteam_retention_expires_at && time(row.redteam_retention_expires_at) <= Date.now())
+      || (row.redteam_baseline_retention_expires_at && time(row.redteam_baseline_retention_expires_at) <= Date.now())) {
+    return { state: 'stale', reason: 'A linked red-team source is outside its retained evidence window.' };
   }
   return {
     state: 'verified',
