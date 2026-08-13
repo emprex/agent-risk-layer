@@ -1,0 +1,75 @@
+name: Red Team refund approval evidence supported validation
+
+on:
+  push:
+    branches:
+      - fix/redteam-refund-approval-evidence
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentrisk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agentrisk_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/redteam-refund-approval-evidence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Apply the already-reviewed scoped patch
+        run: |
+          awk '
+            /python - <<.PY./ { capture=1; next }
+            capture && /^          PY$/ { capture=0; exit }
+            capture { sub(/^          /, ""); print }
+          ' .github/workflows/redteam-refund-approval-evidence-validation-pg.yml > /tmp/redteam-refund-patch.py
+          test -s /tmp/redteam-refund-patch.py
+          python /tmp/redteam-refund-patch.py
+      - name: Build published Red Team release assets
+        run: node scripts/build-redteam-release.mjs
+      - run: npm run check
+      - name: Initialize PostgreSQL schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_test
+        run: node --input-type=module -e "import { initialiseDatabase } from './src/db.js'; await initialiseDatabase();"
+      - name: Run focused Red Team tests with PostgreSQL configured
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/agentrisk_test
+        run: node --test tests/redteam.test.js
+      - name: Run full suite with the supported default test adapter
+        run: npm test
+      - name: Review and commit intended changes
+        run: |
+          git status --short
+          git diff --check
+          git diff --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add redteam/agent-risk-redteam.mjs src/redteam.js tests/redteam.test.js REDTEAM_ADAPTER_PROTOCOL.md public/downloads/agent-risk-redteam.mjs public/downloads/agent-risk-redteam.mjs.sha256 public/downloads/agent-risk-redteam-adapter-example.mjs public/downloads/agent-risk-redteam-adapter-example.mjs.sha256 public/downloads/agentrisk-redteam-ci.example.yml public/downloads/agentrisk-redteam-ci.example.yml.sha256 public/downloads/redteam-release.json public/redteam-policy.json
+          git diff --cached --check
+          git commit -m "Add exact refund approval red-team evidence case"
+          git push origin HEAD:fix/redteam-refund-approval-evidence
