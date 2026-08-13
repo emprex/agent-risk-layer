@@ -11,6 +11,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/analytics.css">
+  <link rel="stylesheet" href="/flagship.css">
   <script type="module" src="/shared.js"></script>
   <script type="module" src="/commercial-surfaces.js"></script>
   <script type="module" src="/visual-story.js"></script>
@@ -28,7 +29,7 @@
   </header>
 
   <main id="main-content">
-    <section class="v10-hero">
+    <section class="v10-hero flagship-hero" data-trace-stage="ready">
       <div class="v10-hero-copy">
         <span class="eyebrow">Security for AI agents that can take real action</span>
         <h1>Know what your agent can do. Stop what it should not.</h1>
@@ -44,7 +45,7 @@
         </div>
       </div>
 
-      <aside class="v10-control-visual" data-policy-story aria-label="Interactive synthetic example of an AgentRiskLayer decision">
+      <aside class="v10-control-visual flagship-trace" data-policy-story aria-label="Interactive synthetic example of an AgentRiskLayer decision">
         <span class="synthetic-ribbon">Interactive synthetic example</span>
         <div class="visual-topbar"><span>Support agent · proposed action</span><span class="live-state"><i></i> Policy active</span></div>
         <div class="visual-flow">
@@ -61,6 +62,7 @@
           <span><i>✓</i> Rule, policy version and evidence digest recorded</span>
         </div>
       </aside>
+      <div class="hero-trace-label trace-label-input" aria-hidden="true">01 · UNTRUSTED INPUT</div><div class="hero-trace-label trace-label-boundary" aria-hidden="true">02 · CONTROL BOUNDARY</div><div class="hero-trace-label trace-label-proof" aria-hidden="true">03 · EVIDENCE TRACE</div>
     </section>
 
     <section class="v10-audience-strip" aria-label="Who AgentRiskLayer is for">
@@ -115,7 +117,7 @@
       </ol>
     </section>
 
-    <section class="v10-example-band">
+    <section class="v10-example-band flagship-failure-act">
       <div class="content-section v10-example-layout">
         <div><span class="eyebrow">Example: customer support agent</span><h2>A hidden email instruction asks for a £2,500 refund.</h2><p>The model proposes the refund, but the model does not have authority. AgentRiskLayer blocks the action because no server-issued approval matches the exact customer, order and amount.</p><div class="button-row"><a class="button primary" href="/demo.html">See the full example</a><a class="button ghost" href="/downloads/agentrisklayer-controlled-support-agent-proof.json" download>Download the proof manifest</a></div></div>
         <div class="v10-example-result">
@@ -129,7 +131,7 @@
       <div class="v10-price-grid commercial-preview-grid" data-commercial-preview><div class="loading"><div class="spinner"></div>Loading current options…</div></div>
     </section>
 
-    <section class="v10-trust-band">
+    <section class="v10-trust-band flagship-proof-act">
       <div class="content-section v10-trust-layout">
         <div><span class="eyebrow">Trust through boundaries</span><h2>Clear evidence. Clear limitations. No security theatre.</h2><p>AgentRiskLayer separates what a customer declares, what the platform observes, what controlled tests reproduce and what happens at runtime.</p></div>
         <div class="v10-trust-points"><span><i>✓</i> Private by default</span><span><i>✓</i> Raw hosted prompts and tool arguments not retained</span><span><i>✓</i> Exact-action, time-bound approvals</span><span><i>✓</i> Signed or hashed evidence where appropriate</span><span><i>✓</i> No claim of accredited certification or guaranteed security</span></div>

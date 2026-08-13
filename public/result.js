@@ -111,6 +111,8 @@ function render() {
   const controls = assessment.controls || full.controls || [];
   const primaryTarget = unresolvedCount ? '#informationNeeded' : '#priorityRisks';
   const primaryLabel = unresolvedCount ? (findings.length ? 'Review information and fixes' : 'Complete missing information') : 'See what to fix first';
+  const traceStart = findings[0]?.title || (unresolvedCount ? 'Information required' : 'Assessed agent');
+  const traceEnd = decision.state === 'proceed' ? 'Controlled path' : decision.state === 'stop' ? 'Supported failure' : 'Decision unresolved';
   root.className = 'plain-result-layout';
   root.innerHTML = `
     <section class="plain-result-main">
@@ -121,6 +123,7 @@ function render() {
           <h1>${escapeHtml(decision.title)}</h1>
           <p>${escapeHtml(decision.explanation)}</p>
         </div>
+        <div class="result-decision-trace ${escapeHtml(decision.state)}" aria-label="Assessment decision path"><span><small>SIGNAL</small>${escapeHtml(traceStart)}</span><i></i><span><small>AGENT</small>${escapeHtml(assessment.name)}</span><i></i><span class="trace-break"><small>BOUNDARY</small>${escapeHtml(traceEnd)}</span></div>
         <div class="decision-actions">
           <a class="button primary" href="${primaryTarget}">${primaryLabel}</a>
           ${isOwner ? '<a class="button ghost" href="/dashboard.html">Save and return to my work</a>' : '<a class="button ghost" href="/auth.html">Create an account to save this result</a>'}

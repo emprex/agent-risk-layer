@@ -103,6 +103,7 @@ let timer = null;
 function renderStep(index, { focus = false } = {}) {
   currentStep = Math.max(0, Math.min(index, steps.length - 1));
   const step = steps[currentStep];
+  workbench.dataset.demoStage = String(currentStep);
   consoleTitle.textContent = step.title;
   policyStatus.className = `demo-v2-policy-status ${step.tone}`;
   policyStatus.innerHTML = `<i></i> ${step.status}`;
