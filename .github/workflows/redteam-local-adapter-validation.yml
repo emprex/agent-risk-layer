@@ -1,0 +1,27 @@
+name: Red Team local adapter validation
+
+on:
+  push:
+    branches:
+      - fix/redteam-local-adapter-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Focused Red Team regression tests
+        run: NODE_ENV=test node --test tests/redteam.test.js tests/redteam-adapter-environments.test.js
+      - name: Full test suite
+        run: npm test
