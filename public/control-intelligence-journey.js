@@ -67,6 +67,30 @@ function hasVerifiedRetestEvidence(data, retest) {
   return [...(data.evidence || []), ...(data.evidenceHistory || [])].some((item) => verified(item) && item.testExecutionId === retest.id);
 }
 
+function verifiedClosedRemediation(data) {
+  const currentSnapshotId = data.systemSnapshot?.id;
+  if (!currentSnapshotId) return null;
+  const tests = [...(data.testHistory || []), ...(data.tests || [])];
+  const evidence = [...(data.evidence || []), ...(data.evidenceHistory || [])];
+  for (const finding of (data.findings || []).filter((item) => item.status === 'verified_closed')) {
+    const failures = tests.filter((item) => item?.result === 'failed'
+      && item.executionKind !== 'retest'
+      && item.findingId === finding.id);
+    for (const failed of failures) {
+      const retest = tests.find((item) => item.executionKind === 'retest'
+        && item.result === 'passed'
+        && item.retestOfExecutionId === failed.id
+        && item.findingId === finding.id
+        && item.systemSnapshotId === currentSnapshotId
+        && item.systemSnapshotId !== failed.systemSnapshotId);
+      if (!retest) continue;
+      const proof = evidence.find((item) => verified(item) && item.testExecutionId === retest.id);
+      if (proof) return { finding, failed, retest, proof };
+    }
+  }
+  return null;
+}
+
 export function deriveControlJourney(data = {}, remediationRecord = null) {
   const applicability = data.applicability || {};
   const tests = data.tests || [];
@@ -80,6 +104,27 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
   let currentStage = 'applicability';
   let nextAction = 'Confirm whether this control applies to this system.';
   let deploymentImpact = 'hold';
+
+  // A verified closure is the end of the exact remediation lineage, not a reason to rewind the
+  // changed snapshot to Scope. The current snapshot was already the target of the exact retest,
+  // and qualifying verified evidence was required before closure. This continuation is scoped to
+  // that same closed finding/retest lineage and does not carry applicability to unrelated snapshots.
+  const closedLineage = verifiedClosedRemediation(data);
+  if (!failed && !finding && closedLineage) {
+    completed.push('applicability', 'test', 'evidence', 'finding', 'remediation', 'retest');
+    if (approvalRequired && !approvalComplete) {
+      currentStage = 'approval';
+      nextAction = 'Complete the required exact-action approval.';
+      deploymentImpact = 'hold';
+      return finish({ retest: closedLineage.retest });
+    }
+    if (approvalComplete) completed.push('approval');
+    else notRequired.push('approval');
+    currentStage = 'deployment_decision';
+    nextAction = 'Review the project deployment decision.';
+    deploymentImpact = 'satisfied';
+    return finish({ retest: closedLineage.retest });
+  }
 
   // A reproduced unresolved failure is safety-significant and must never be hidden by a later plan.
   // Its remediation lineage survives creation of a changed snapshot. A new snapshot intentionally
