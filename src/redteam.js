@@ -79,7 +79,7 @@ export async function revokeRedTeamAuthorisation({ authorisationId, userId }) {
         throw new Error('Active authorisation not found.');
     return { ok: true, revokedAt: at };
 }
-export async function createRedTeamToken({ userId, assessmentId, mode = 'simulation', authorisationId = null }) {
+export async function createRedTeamToken({ userId, assessmentId, mode = 'simulation', authorisationId = null, recoveryBundle = null }) {
     const assessment = await db.prepare('SELECT id, paid_tier FROM assessments WHERE id = ? AND user_id = ?').get(assessmentId, userId);
     if (!assessment)
         throw new Error('Assessment not found.');
@@ -87,12 +87,31 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     if (!['simulation', 'staging'].includes(requestedMode))
         throw new Error('Campaign mode must be simulation or staging.');
     let authorisation = null;
+    let recoveryValidation = null;
     if (requestedMode === 'staging') {
-        authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id = ? AND assessment_id = ? AND user_id = ? AND status='active' AND window_end > ?`).get(authorisationId, assessmentId, userId, nowIso());
-        if (!authorisation)
-            throw new Error('Create an active written Rules of Engagement authorisation before generating a staging campaign.');
-        if (Date.parse(authorisation.window_start) > Date.now() + 15 * 60000)
-            throw new Error('The authorised testing window has not started yet.');
+        if (recoveryBundle) {
+            recoveryValidation = validateRedTeamBundle(recoveryBundle);
+            if (!recoveryValidation.valid)
+                throw new Error(`Red-team recovery bundle rejected: ${recoveryValidation.error}`);
+            if (recoveryBundle.campaign?.target?.mode !== 'staging-adapter')
+                throw new Error('Only completed adapter evidence can use recovery upload.');
+            const bundleAuthorisationId = clean(recoveryBundle.campaign?.authorisationId || '', 80);
+            if (!authorisationId || bundleAuthorisationId !== authorisationId)
+                throw new Error('Recovery bundle is not bound to the selected Rules of Engagement.');
+            authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id = ? AND assessment_id = ? AND user_id = ?`).get(authorisationId, assessmentId, userId);
+            if (!authorisation)
+                throw new Error('The Rules of Engagement for this recovery bundle were not found.');
+            assertBundleWithinAuthorisation(recoveryBundle, authorisation);
+            if (await db.prepare('SELECT 1 AS ok FROM redteam_runs WHERE bundle_digest = ?').get(recoveryValidation.digest))
+                throw new Error('This red-team bundle has already been uploaded.');
+        }
+        else {
+            authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id = ? AND assessment_id = ? AND user_id = ? AND status='active' AND window_end > ?`).get(authorisationId, assessmentId, userId, nowIso());
+            if (!authorisation)
+                throw new Error('Create an active written Rules of Engagement authorisation before generating a staging campaign.');
+            if (Date.parse(authorisation.window_start) > Date.now() + 15 * 60000)
+                throw new Error('The authorised testing window has not started yet.');
+        }
     }
     const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required
       FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(userId);
@@ -121,7 +140,13 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     const createdAt = nowIso();
     const expiresAt = new Date(Date.now() + REDTEAM_TOKEN_TTL_MS).toISOString();
     await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
-    return { token: raw, expiresAt, assessmentId, mode: requestedMode, authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement: { source: superuser ? 'superuser' : subscription?.plan_key || 'founding_assessment', limit: superuser ? null : limit, used: superuser || subscription ? recentRuns : assessmentRuns } };
+    return { token: raw, expiresAt, assessmentId, mode: requestedMode, recovery: Boolean(recoveryBundle), authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement: { source: superuser ? 'superuser' : subscription?.plan_key || 'founding_assessment', limit: superuser ? null : limit, used: superuser || subscription ? recentRuns : assessmentRuns } };
+}
+export async function createRedTeamRecoveryToken({ userId, assessmentId, bundle }) {
+    const authorisationId = clean(bundle?.campaign?.authorisationId || '', 80);
+    if (!authorisationId)
+        throw new Error('Completed adapter evidence must contain its Rules of Engagement authorisation ID.');
+    return await createRedTeamToken({ userId, assessmentId, mode: 'staging', authorisationId, recoveryBundle: bundle });
 }
 export async function consumeRedTeamUpload({ rawToken, bundle }) {
     if (!rawToken || !rawToken.startsWith('red_'))
@@ -139,22 +164,10 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
     if (targetMode === 'staging') {
         if (!tokenRow.authorisation_id || bundle.campaign?.authorisationId !== tokenRow.authorisation_id)
             throw new Error('Red-team bundle is not bound to the issued Rules of Engagement.');
-        authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id=? AND user_id=? AND assessment_id=? AND status='active' AND window_end > ?`).get(tokenRow.authorisation_id, tokenRow.user_id, tokenRow.assessment_id, nowIso());
+        authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id=? AND user_id=? AND assessment_id=?`).get(tokenRow.authorisation_id, tokenRow.user_id, tokenRow.assessment_id);
         if (!authorisation)
-            throw new Error('The Rules of Engagement are missing, revoked, or expired.');
-        if (String(bundle.campaign?.environment || '') !== authorisation.environment)
-            throw new Error('Campaign environment does not match the approved Rules of Engagement.');
-        if (authorisation.endpoint_origin && String(bundle.campaign?.target?.endpointOrigin || '') !== authorisation.endpoint_origin)
-            throw new Error('Campaign endpoint does not match the approved Rules of Engagement.');
-        const skewMs = 5 * 60000;
-        const startedAt = Date.parse(bundle.campaign?.startedAt);
-        const completedAt = Date.parse(bundle.campaign?.completedAt);
-        const windowStart = Date.parse(authorisation.window_start);
-        const windowEnd = Date.parse(authorisation.window_end);
-        if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt < startedAt)
-            throw new Error('Campaign start and completion timestamps are invalid.');
-        if (startedAt < windowStart - skewMs || completedAt > windowEnd + skewMs)
-            throw new Error('Campaign execution falls outside the authorised Rules of Engagement time window.');
+            throw new Error('The Rules of Engagement are missing.');
+        assertBundleWithinAuthorisation(bundle, authorisation);
     }
     const results = normaliseResults(bundle.results);
     const summary = recomputeSummary(results, bundle.summary);
@@ -174,6 +187,7 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
         runnerBuildDigest: clean(bundle.runner?.buildDigest, 64),
         receivedAt: createdAt,
         boundary: 'Integrity-verified redacted outcomes from a customer-operated local/test/staging run. AgentRiskLayer did not independently operate the target or retain raw transcripts.',
+        ...(authorisation ? { executionWithinAuthorisedWindow: true, ingestedAfterAuthorisationWindow: Date.now() > Date.parse(authorisation.window_end) } : {}),
     };
     await db.transaction(async () => {
         const claimed = await db.prepare(`UPDATE redteam_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?`).run(createdAt, tokenRow.id, createdAt);
@@ -240,6 +254,29 @@ export function attachRedTeamToResult(result, run) {
                         : `${result.headline} The selected controlled red-team cases did not reproduce a material failure within the declared scope.`,
         scoring: { ...(result.scoring || {}), redTeamRisk: run.summary.riskScore, redTeamAssurance: run.summary.assuranceScore, redTeamDoesNotLowerDeclaredRisk: true },
     };
+}
+function assertBundleWithinAuthorisation(bundle, authorisation) {
+    if (String(bundle.campaign?.environment || '') !== authorisation.environment)
+        throw new Error('Campaign environment does not match the approved Rules of Engagement.');
+    if (authorisation.endpoint_origin && String(bundle.campaign?.target?.endpointOrigin || '') !== authorisation.endpoint_origin)
+        throw new Error('Campaign endpoint does not match the approved Rules of Engagement.');
+    const skewMs = 5 * 60000;
+    const startedAt = Date.parse(bundle.campaign?.startedAt);
+    const completedAt = Date.parse(bundle.campaign?.completedAt);
+    const windowStart = Date.parse(authorisation.window_start);
+    const windowEnd = Date.parse(authorisation.window_end);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt < startedAt)
+        throw new Error('Campaign start and completion timestamps are invalid.');
+    if (!Number.isFinite(windowStart) || !Number.isFinite(windowEnd) || windowEnd <= windowStart)
+        throw new Error('Rules of Engagement time window is invalid.');
+    if (startedAt < windowStart - skewMs || completedAt > windowEnd + skewMs)
+        throw new Error('Campaign execution falls outside the authorised Rules of Engagement time window.');
+    const revokedAt = Date.parse(authorisation.revoked_at || '');
+    if (authorisation.status === 'revoked' && !Number.isFinite(revokedAt))
+        throw new Error('Rules of Engagement revocation time is unavailable.');
+    if (Number.isFinite(revokedAt) && completedAt > revokedAt + skewMs)
+        throw new Error('Campaign execution continued after the Rules of Engagement were revoked.');
+    return true;
 }
 export function validateRedTeamBundle(bundle) {
     try {

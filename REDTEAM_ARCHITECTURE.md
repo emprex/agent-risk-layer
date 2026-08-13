@@ -101,7 +101,7 @@ Before adding cloud-hosted connectors or runtime enforcement, complete:
 
 Staging evidence is accepted only when all of the following match:
 
-- a live, non-revoked Rules of Engagement record;
+- for new target execution, a live, non-revoked Rules of Engagement record;
 - the authenticated assessment owner;
 - the assessment ID;
 - the issued one-time token mode (`staging`);
@@ -110,4 +110,21 @@ Staging evidence is accepted only when all of the following match:
 - the approved endpoint origin when a remote staging origin is recorded;
 - an active testing window.
 
-The catalogue contains 32 cases. Each case can run 1-5 times. Repeated trials support stability evidence and pass-rate reporting; they do not increase the authorised scope or prove security beyond the selected cases.
+The catalogue contains 33 cases. Each case can run 1-5 times. Repeated trials support stability evidence and pass-rate reporting; they do not increase the authorised scope or prove security beyond the selected cases.
+
+## Completed evidence recovery
+
+A signed adapter bundle may be ingested after its Rules of Engagement window has ended only as evidence recovery. Recovery does not extend testing authority and does not send any new request to the target.
+
+Recovery requires all of the following:
+
+- the bundle is a supported AgentRiskLayer signed bundle and is less than 24 hours old;
+- the bundle is adapter evidence, not simulation evidence;
+- the original Rules of Engagement belongs to the authenticated user and selected assessment;
+- the bundle authorisation ID, environment and recorded endpoint origin (when available) match that Rules of Engagement;
+- the signed campaign start and completion timestamps fall inside the original authorised window, subject only to the existing five-minute clock-skew tolerance;
+- if the authorisation was revoked, the campaign must have completed before the recorded revocation time, subject to the same clock-skew tolerance;
+- the bundle digest has not already been uploaded;
+- the authenticated recovery endpoint issues a short-lived one-time staging upload token, after which normal atomic token consumption and replay protection still apply.
+
+Ordinary campaign-token creation continues to require an active Rules of Engagement. Recovery exists only to preserve already-completed, authorised evidence when transport or upload failed after execution.
