@@ -6,7 +6,7 @@ on:
       - fix/redteam-run-listing-promises
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,5 +15,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: node --test tests/redteam-history-rendering.test.js tests/redteam.test.js tests/redteam-adapter-environments.test.js tests/control-intelligence-redteam-binding.test.js
-      - run: npm test
+      - name: Focused Red Team and Control Intelligence regressions
+        run: NODE_ENV=test node --test tests/redteam-history-rendering.test.js tests/redteam.test.js tests/redteam-adapter-environments.test.js tests/control-intelligence-redteam-binding.test.js
+      - name: Full test suite
+        run: npm test
