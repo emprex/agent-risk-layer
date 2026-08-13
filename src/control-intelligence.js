@@ -1,5 +1,6 @@
 import * as core from './control-intelligence-core.js';
 import { db } from './db.js';
+import { recordRedTeamEvidenceBinding, redTeamTrustFromRow } from './control-redteam-evidence.js';
 
 export * from './control-intelligence-core.js';
 
@@ -30,6 +31,10 @@ function effectiveEvidenceTrust(row) {
   const storedState = row?.verification_state || row?.verificationState || 'unverified';
   if (storedState !== 'verified') return { state: storedState, reason: null };
 
+  if (row?.redteam_run_id || row?.redteamRunId) {
+    return redTeamTrustFromRow(row) || { state: 'unverified', reason: 'The linked red-team evidence could not be validated.' };
+  }
+
   const observedAt = parseTime(row.observed_at || row.observedAt);
   const completedAt = parseTime(row.completed_at || row.completedAt);
   if (row.test_execution_id || row.testExecutionId) {
@@ -56,9 +61,14 @@ async function evidenceTrustRows(projectId, snapshotId, controlId = null) {
   if (!projectId || !snapshotId) return [];
   const controlFilter = controlId ? ' AND e.entry_id=?' : '';
   const params = controlId ? [projectId, snapshotId, controlId] : [projectId, snapshotId];
-  return db.prepare(`SELECT e.id,e.entry_id,e.verification_state,e.retention_status,e.remediation_artifact_id,e.runtime_event_id,e.approval_id,e.observed_at,e.test_execution_id,t.completed_at
+  return db.prepare(`SELECT e.id,e.entry_id,e.verification_state,e.retention_status,e.remediation_artifact_id,e.runtime_event_id,e.approval_id,e.observed_at,e.test_execution_id,e.descriptor_json,
+      e.redteam_run_id,e.redteam_baseline_run_id,e.redteam_case_id,t.completed_at,
+      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
+      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
     FROM control_evidence_items e
     LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
+    LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
+    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
     WHERE e.project_id=? AND e.system_snapshot_id=?${controlFilter}`)
     .all(...params);
 }
@@ -71,13 +81,21 @@ function applyEffectiveEvidenceTrust(detail, rows) {
   const trust = effectiveEvidenceMap(rows);
   const evidence = (detail.evidence || []).map((item) => {
     const effective = trust.get(item.id);
-    if (!effective || effective.state === item.verificationState) return item;
-    return {
-      ...item,
-      storedVerificationState: item.verificationState,
-      verificationState: effective.state,
-      trustReason: effective.reason,
-    };
+    if (!effective) return item;
+    const patch = {};
+    if (effective.state !== item.verificationState) {
+      patch.storedVerificationState = item.verificationState;
+      patch.verificationState = effective.state;
+      patch.trustReason = effective.reason;
+    } else if (effective.reason) {
+      patch.trustReason = effective.reason;
+    }
+    if (effective.verificationScope) patch.verificationScope = effective.verificationScope;
+    if (effective.trustBoundary) patch.trustBoundary = effective.trustBoundary;
+    if (effective.redteamRunId) patch.redteamRunId = effective.redteamRunId;
+    if (effective.redteamBaselineRunId) patch.redteamBaselineRunId = effective.redteamBaselineRunId;
+    if (effective.redteamCaseId) patch.redteamCaseId = effective.redteamCaseId;
+    return Object.keys(patch).length ? { ...item, ...patch } : item;
   });
   return { ...detail, evidence };
 }
@@ -174,7 +192,7 @@ function repairFailureJourney(detail) {
         currentStage = 'retest';
         if (retest && open) {
           nextAction = hasVerifiedRetestEvidence(detail, retest)
-            ? 'Review the verified passed exact retest evidence and close the finding.'
+            ? 'Review the qualifying passed exact retest evidence and close the finding.'
             : 'Verify evidence for the passed exact retest before closing the finding.';
         } else if (!retest) {
           nextAction = 'Retest the exact original failure against the remediated snapshot.';
@@ -277,6 +295,9 @@ export async function getControlIntelligenceReportSummary(args) {
 
 export async function recordControlEvidence(args) {
   const input = { ...(args?.input || {}) };
+  if (input.redteamRunId || input.redteamBaselineRunId || input.redteamCaseId) {
+    return recordRedTeamEvidenceBinding({ ...args, input });
+  }
   if (input.testExecutionId) {
     const detail = await core.getControlIntelligenceControl({
       projectId: args.projectId,
@@ -321,14 +342,19 @@ export async function closeControlFinding(args) {
   const retest = passedExactRetest(detail, failed, finding);
   if (!retest) return core.closeControlFinding(args);
 
-  const evidenceRows = await db.prepare(`SELECT e.*,t.completed_at FROM control_evidence_items e
+  const evidenceRows = await db.prepare(`SELECT e.*,t.completed_at,
+      r.signature_valid AS redteam_signature_valid,r.bundle_digest AS redteam_bundle_digest,r.retention_expires_at AS redteam_retention_expires_at,
+      rb.signature_valid AS redteam_baseline_signature_valid,rb.bundle_digest AS redteam_baseline_bundle_digest,rb.retention_expires_at AS redteam_baseline_retention_expires_at
+    FROM control_evidence_items e
     LEFT JOIN control_test_executions t ON t.id=e.test_execution_id AND t.project_id=e.project_id
+    LEFT JOIN redteam_runs r ON r.id=e.redteam_run_id
+    LEFT JOIN redteam_runs rb ON rb.id=e.redteam_baseline_run_id
     WHERE e.project_id=? AND e.system_snapshot_id=? AND e.entry_id=? AND e.test_execution_id=? AND e.finding_id=? AND e.remediation_id=? AND e.retention_status='active'
     ORDER BY e.observed_at DESC`)
     .all(args.projectId, detail.systemSnapshot.id, args.controlId, retest.id, finding.id, finding.id);
-  const trusted = evidenceRows.find((row) => effectiveEvidenceTrust(row).state === 'verified' && row.runtime_event_id);
+  const trusted = evidenceRows.find((row) => effectiveEvidenceTrust(row).state === 'verified' && (row.runtime_event_id || row.redteam_run_id));
   if (!trusted) {
-    throw semanticError('Finding closure requires verified evidence from a source that actually proves the exact retest outcome. Owner-entered results, approval records, and remediation implementation artifacts do not independently verify a retest.');
+    throw semanticError('Finding closure requires qualifying evidence that proves the exact retest outcome. A snapshot-bound runtime observation can qualify. An integrity-verified customer-operated Red Team run can also qualify when it is explicitly bound to the same failed case and retest; its signature verifies bundle integrity, not independent operation of the target.');
   }
   return core.closeControlFinding(args);
 }
