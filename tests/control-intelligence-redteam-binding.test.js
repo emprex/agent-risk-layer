@@ -62,7 +62,7 @@ async function applicableSnapshot(f, summary) {
   return snapshot;
 }
 
-async function lineage(f) {
+async function lineage(f, { reassessCurrent = true } = {}) {
   const vulnerable = await applicableSnapshot(f, 'Synthetic vulnerable v1');
   const failed = await recordControlTestExecution({
     projectId: f.project.id,
@@ -123,7 +123,9 @@ async function lineage(f) {
     userId: f.userId,
     patch: { status: 'evidence_attached', verification: { artifactId: artifact.id, changeReference: 'synthetic-v2' } },
   });
-  const current = await applicableSnapshot(f, 'Synthetic remediated v2');
+  const current = reassessCurrent
+    ? await applicableSnapshot(f, 'Synthetic remediated v2')
+    : (await createSystemSnapshot({ projectId: f.project.id, userId: f.userId, input: { architecture: { summary: 'Synthetic remediated v2' }, assessmentConfiguration: { architectureFacts: [FACT] }, source: 'test' } })).snapshot;
   const retest = await recordControlTestExecution({
     projectId: f.project.id,
     controlId: CONTROL_ID,
@@ -331,4 +333,27 @@ test('Red Team evidence is downgraded when its persisted provenance columns no l
   assert.equal(effective.storedVerificationState, 'verified');
   assert.equal(effective.verificationState, 'unverified');
   assert.match(effective.trustReason, /provenance IDs do not match/i);
+});
+
+
+test('deployment decision treats a verified-closed exact remediation lineage as satisfied without inventing a new applicability revision', async () => {
+  const f = await fixture('redteam-closed-lineage-decision');
+  const chain = await lineage(f, { reassessCurrent: false });
+  const raw = await db.prepare('SELECT applicability_status FROM control_snapshot_evaluations WHERE project_id=? AND system_snapshot_id=? AND entry_id=?').get(f.project.id, chain.current.id, CONTROL_ID);
+  assert.equal(raw.applicability_status, 'unknown');
+  const rawCounts = await db.prepare(`SELECT SUM(CASE WHEN applicability_status='applicable' THEN 1 ELSE 0 END) applicable, SUM(CASE WHEN applicability_status='unknown' THEN 1 ELSE 0 END) unknown_count FROM control_snapshot_evaluations WHERE project_id=? AND system_snapshot_id=?`).get(f.project.id, chain.current.id);
+  const runs = await redTeamPair(f);
+  await bind(f, chain, runs);
+  const detail = await getControlIntelligenceControl({ projectId: f.project.id, controlId: CONTROL_ID, userId: f.userId });
+  const finding = detail.findings.find((item) => item.id === chain.finding.id);
+  await closeControlFinding({ projectId: f.project.id, controlId: CONTROL_ID, findingId: chain.finding.id, userId: f.userId, input: { systemSnapshotId: chain.current.id, expectedUpdatedAt: finding.updatedAt, limitations: 'Exact synthetic closure only.' } });
+  const decision = await recordDeploymentDecision({ projectId: f.project.id, userId: f.userId, input: { systemSnapshotId: chain.current.id } });
+  assert.equal(decision.decision, 'hold');
+  assert.equal(decision.summary.applicableControls, Number(rawCounts.applicable) + 1);
+  assert.equal(decision.summary.controlsNeedingAssessment, Number(rawCounts.unknown_count) - 1);
+  assert.equal(decision.summary.verifiedClosedRemediationControls, 1);
+  assert.ok(decision.summary.completedRetests >= 1);
+  assert.ok(decision.reasons.includes('material_context_missing'));
+  const after = await db.prepare('SELECT applicability_status FROM control_snapshot_evaluations WHERE project_id=? AND system_snapshot_id=? AND entry_id=?').get(f.project.id, chain.current.id, CONTROL_ID);
+  assert.equal(after.applicability_status, 'unknown');
 });
