@@ -1,0 +1,19 @@
+name: Temporary Red Team run listing validation
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/redteam-run-listing-promises
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --test tests/redteam-history-rendering.test.js tests/redteam.test.js tests/redteam-adapter-environments.test.js tests/control-intelligence-redteam-binding.test.js
+      - run: npm test
