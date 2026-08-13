@@ -5,6 +5,7 @@ const outputPath = process.argv[2];
 const width = Number(process.argv[3] || 1440);
 const height = Number(process.argv[4] || 1100);
 const targetUrl = process.argv[5];
+const scrollY = Number(process.argv[6] || 0);
 
 if (!outputPath) throw new Error('Usage: node scripts/capture-browser-screenshot.mjs <output.png> [width] [height]');
 
@@ -40,9 +41,9 @@ await call('Emulation.setDeviceMetricsOverride', {
 });
 if (targetUrl) {
   await call('Page.navigate', { url: targetUrl });
-  await new Promise(resolve => setTimeout(resolve, 700));
+  await new Promise(resolve => setTimeout(resolve, 1500));
 }
-await call('Runtime.evaluate', { expression: 'scrollTo(0, 0)' });
+await call('Runtime.evaluate', { expression: `scrollTo(0, ${Math.max(0, scrollY)})` });
 const { data } = await call('Page.captureScreenshot', { format: 'png', fromSurface: true });
 await fs.writeFile(outputPath, Buffer.from(data, 'base64'));
 socket.close();

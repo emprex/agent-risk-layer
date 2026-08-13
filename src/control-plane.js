@@ -9,18 +9,13 @@ import { deliverSecurityEventSystem } from './workspaces.js';
 import { subscriptionAccessDecision } from './subscription-access.js';
 import { prepareRiskKnowledgeRuntimeEvidencePurge, prepareRiskKnowledgeSubjectPurge } from './risk-knowledge.js';
 import { prepareControlIntelligenceSourcePurge } from './control-intelligence.js';
+import { PLAN_ENTITLEMENTS } from './commercial-catalogue.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
 export const GUIDED_PROTECTION_CHECK_SCHEMA = 'arl.guided-protection-check.v1';
 
-export const PLAN_ENTITLEMENTS = Object.freeze({
-  community: Object.freeze({ projects: 1, runtimeRequestsPerMonth: 10_000, runtimeRequestsPerMinute: 60, retentionDays: 7, apiKeysPerProject: 2, name: 'Community' }),
-  developer_monthly: Object.freeze({ projects: 3, runtimeRequestsPerMonth: 50_000, runtimeRequestsPerMinute: 600, retentionDays: 30, apiKeysPerProject: 5, name: 'Developer' }),
-  team_monthly: Object.freeze({ projects: 15, runtimeRequestsPerMonth: 250_000, runtimeRequestsPerMinute: 2_500, retentionDays: 90, apiKeysPerProject: 15, name: 'Team' }),
-  agency_monthly: Object.freeze({ projects: 50, runtimeRequestsPerMonth: 1_000_000, runtimeRequestsPerMinute: 10_000, retentionDays: 180, apiKeysPerProject: 30, name: 'Agency' }),
-  enterprise: Object.freeze({ projects: 500, runtimeRequestsPerMonth: 10_000_000, runtimeRequestsPerMinute: 30_000, retentionDays: 365, apiKeysPerProject: 100, name: 'Enterprise' }),
-});
+export { PLAN_ENTITLEMENTS };
 
 export const PROJECT_KINDS = Object.freeze({ RUNTIME: 'runtime', ASSESSMENT_CASE: 'assessment_case' });
 

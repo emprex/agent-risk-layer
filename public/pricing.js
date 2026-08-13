@@ -1,16 +1,6 @@
 import { api, escapeHtml, money, setBusy, showError } from './shared.js';
 import { resolvePricingMode } from './pricing-mode.js';
 
-const entitlements = {
-  developer_monthly: ['3 security projects', '50,000 Guard decisions/month', '30-day runtime evidence retention', '5 active keys per project', '10 authorised red-team campaigns/30 days'],
-  team_monthly: ['15 security projects', '250,000 Guard decisions/month', '90-day runtime evidence retention', '15 active keys per project', 'Shared workspaces, five roles and SCIM', '25 authorised red-team campaigns/30 days'],
-  agency_monthly: ['50 security projects', '1,000,000 Guard decisions/month', '180-day runtime evidence retention', '30 active keys per project', 'Multi-assessment portfolio and signed integrations', '50 authorised red-team campaigns/30 days'],
-};
-const summaries = {
-  developer_monthly: 'For one builder who needs to protect and recheck several agents.',
-  team_monthly: 'For a team that needs shared ownership, evidence and live protection.',
-  agency_monthly: 'For a service provider managing security work across customer projects.',
-};
 const errorBox = document.querySelector('#pricingError');
 let pricingMode = { mode: 'unknown', allowCheckout: false, showDemoNotice: false, message: '' };
 
@@ -28,9 +18,8 @@ async function init() {
       demoNotice.textContent = '';
       demoNotice.hidden = true;
     }
-    const cards = [communityCard(), assessmentCard(cfg.prices.pro_report), ...['developer_monthly', 'team_monthly', 'agency_monthly'].map((key) => recurringCard(key, cfg.prices[key])), enterpriseCard()];
     const grid = document.querySelector('#pricingGrid');
-    grid.innerHTML = cards.join('');
+    grid.innerHTML = renderCatalogue(cfg.catalogue, Boolean(cfg.user));
     grid.querySelectorAll('[data-checkout]').forEach((button) => button.addEventListener('click', startCheckout));
     if (!pricingMode.allowCheckout) {
       grid.querySelectorAll('[data-checkout]').forEach((button) => {
@@ -44,48 +33,22 @@ async function init() {
   } catch (error) { showError(errorBox, error.message); }
 }
 
-function communityCard() {
-  return `<article class="pricing-card-v10">
-    <div class="plan-heading"><span class="plan-purpose">START HERE</span><h3>Community</h3><p>Understand one agent and try live protection before buying.</p></div>
-    <div class="plan-price">£0 <small>forever</small></div>
-    <a class="button ghost full" href="/assessment.html">Check an agent free</a>
-    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Find the first risks and protect one active project.</span></div>
-    <ul class="plain-plan-list"><li>1 security project</li><li>10,000 Guard decisions each month</li><li>7-day runtime evidence retention</li><li>2 active API keys</li><li>Private risk check and local Inspector</li></ul>
-    <p class="plan-note">No payment card required.</p>
-  </article>`;
+function formatLimit(value) { return Number(value).toLocaleString('en-GB'); }
+function limitList(plan) {
+  const limits = plan.limits || {};
+  return [limits.projects && `${formatLimit(limits.projects)} security ${limits.projects === 1 ? 'project' : 'projects'}`, limits.runtimeRequestsPerMonth && `${formatLimit(limits.runtimeRequestsPerMonth)} Guard decisions/month`, limits.retentionDays && `${limits.retentionDays}-day evidence retention`, limits.apiKeysPerProject && `${limits.apiKeysPerProject} active keys per project`, limits.redTeamRuns && `${limits.redTeamRuns} controlled-test runs/30 days`].filter(Boolean);
 }
-function assessmentCard(plan) {
-  return `<article class="pricing-card-v10 recommended">
-    <div class="plan-heading"><span class="plan-purpose">EVIDENCE-LED DECISION</span><span class="plan-badge">Recommended first purchase</span><h3>${escapeHtml(plan.name)}</h3><p>Assessment workflows and an evidence-bounded report for one agent.</p></div>
-    <div class="plan-price">${money(plan.amountPence)} <small>one time</small></div>
-    <a class="button primary full" href="/assessment.html">Start with the free check</a>
-    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Support a launch, customer review or accountable go/no-go decision.</span></div>
-    <ul class="plain-plan-list"><li>Complete declared-risk report</li><li>Local evidence and controlled-test workflows</li><li>Prioritised fixes with named ownership</li><li>Retest criteria and evidence-bounded decision</li><li>Integrity-digested report and PDF delivery</li></ul>
-    <p class="plan-note">Complete the private check before checkout. Inspection and testing require customer-operated tools and are reported only when completed.</p>
-  </article>`;
+function tier(plan) {
+  return `<article class="protect-tier"><div><h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(plan.description)}</p></div><strong>${money(plan.amountPence).replace('.00','')} <small>/month</small></strong><ul>${limitList(plan).map((item)=>`<li>${escapeHtml(item)}</li>`).join('')}</ul><button class="button ghost full" data-checkout="${plan.key}">Choose ${escapeHtml(plan.name)}</button></article>`;
 }
-function recurringCard(key, plan) {
-  const featured = key === 'team_monthly';
-  const purpose = key === 'developer_monthly' ? 'FOR BUILDERS' : key === 'team_monthly' ? 'FOR SHARED OWNERSHIP' : 'FOR CLIENT WORK';
-  const outcome = key === 'developer_monthly' ? 'Protect several agents as one builder.' : key === 'team_monthly' ? 'Share projects, roles and evidence across a team.' : 'Manage a larger portfolio of customer security work.';
-  return `<article class="pricing-card-v10 ${featured ? 'recommended' : ''}">
-    <div class="plan-heading"><span class="plan-purpose">${purpose}</span>${featured ? '<span class="plan-badge">Best for teams</span>' : ''}<h3>${escapeHtml(plan.name)}</h3><p>${escapeHtml(summaries[key])}</p></div>
-    <div class="plan-price">${money(plan.amountPence).replace('.00', '')} <small>per month</small></div>
-    <button class="button ${featured ? 'primary' : 'ghost'} full" data-checkout="${key}">Choose ${escapeHtml(plan.name)}</button>
-    <div class="plan-outcome"><strong>Best when you need to:</strong><span>${escapeHtml(outcome)}</span></div>
-    <ul class="plain-plan-list">${entitlements[key].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
-    <p class="plan-note">Cancel through the Stripe billing portal.</p>
-  </article>`;
-}
-function enterpriseCard() {
-  return `<article class="pricing-card-v10 enterprise-plan">
-    <div class="plan-heading"><span class="plan-purpose">SCOPED ASSURANCE</span><h3>Enterprise</h3><p>Higher limits, procurement support and tailored deployment work.</p></div>
-    <div class="plan-price">From £6,000 <small>per year</small></div>
-    <a class="button ghost full" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20Enterprise">Request a scoped proposal</a>
-    <div class="plan-outcome"><strong>Best when you need to:</strong><span>Qualify a larger deployment and agree exact operational requirements.</span></div>
-    <ul class="plain-plan-list"><li>Up to 500 projects and 10m checks/month</li><li>365-day evidence retention</li><li>SSO, SCIM and signed integrations</li><li>Deployment and security-review support</li><li>Custom limits and commercial terms</li></ul>
-    <p class="plan-note">Proposal only after technical qualification.</p>
-  </article>`;
+function renderCatalogue(catalogue, authenticated) {
+  if (!catalogue) throw new Error('Current commercial catalogue is unavailable.');
+  const start=catalogue.community, assess=catalogue.pro_report, enterprise=catalogue.enterprise;
+  const protect=['developer_monthly','team_monthly','agency_monthly'].map((key)=>catalogue[key]);
+  return `<article class="commercial-step start-step" data-commercial-group="start"><div class="commercial-index">01</div><div><span class="plan-purpose">START</span><h2>${escapeHtml(start.name)}</h2><p>${escapeHtml(start.description)}</p></div><div class="commercial-price">£0</div><a class="button ghost" href="/assessment.html">Check an agent free</a></article>
+  <article class="commercial-step assess-step" data-commercial-group="assess"><div class="commercial-index">02</div><div><span class="plan-purpose">ASSESS · PRIMARY PAID STEP</span><h2>${escapeHtml(assess.name)}</h2><p>${escapeHtml(assess.description)}</p><ul class="assessment-includes">${assess.includes.map((item)=>`<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="truth-note">Purchasing does not itself perform a human review, run a test or certify the agent. Inspection and controlled testing are reported only when completed.</p></div><div class="commercial-price">${money(assess.amountPence).replace('.00','')} <small>once</small></div><a class="button primary button-xl" href="/assessment.html">${authenticated ? 'Continue assessment' : 'Start assessment'}</a></article>
+  <section class="commercial-step protect-step" data-commercial-group="protect"><div class="commercial-index">03</div><div class="protect-heading"><div><span class="plan-purpose">PROTECT</span><h2>Ongoing protection</h2><p>Choose capacity only after deciding you need ongoing runtime protection.</p></div><div class="commercial-price">From ${money(protect[0].amountPence).replace('.00','')} <small>/month</small></div></div><div class="protect-tier-grid">${protect.map(tier).join('')}</div></section>
+  <article class="commercial-step enterprise-step" data-commercial-group="enterprise"><div class="commercial-index">04</div><div><span class="plan-purpose">ENTERPRISE</span><h2>${escapeHtml(enterprise.name)}</h2><p>${escapeHtml(enterprise.description)}</p></div><div class="commercial-price">From ${money(enterprise.amountPence).replace('.00','')} <small>/year</small></div><a class="button ghost" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20Enterprise">Request scoped proposal</a></article>`;
 }
 
 async function startCheckout(event) {

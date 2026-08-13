@@ -23,7 +23,7 @@ async function init() {
       <div class="dashboard-grid section-gap">
         <section class="panel">
           <div class="section-heading compact-heading"><div><span class="eyebrow">Plan</span><h2>Plan and billing</h2></div><a class="button ghost small" href="/pricing.html">Compare plans</a></div>
-          ${subscriptionHtml(data.subscription)}
+          ${subscriptionHtml(data.subscription, data.controlPlane?.entitlement)}
         </section>
         <section class="panel">
           <h2>Payment and report delivery</h2>
@@ -169,10 +169,10 @@ function assessmentHtml(assessment) {
   </article>`;
 }
 
-function subscriptionHtml(subscription) {
+function subscriptionHtml(subscription, entitlement = {}) {
   if (dashboardData?.user?.isSuperuser) return `<div class="subscription-card"><strong>Owner access</strong><p class="muted">Reports and technical tools are enabled for the owner account. Production owner operations still require MFA.</p><a class="button ghost full" href="/admin.html">Owner operations</a></div>`;
-  if (!subscription) return `<div class="subscription-card"><strong>Community · £0</strong><p class="muted">One security project, 10,000 runtime checks each month and seven-day event retention.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></div>`;
-  return `<div class="subscription-card"><strong>${escapeHtml(subscription.plan_key.replaceAll('_', ' '))}</strong><p class="muted">Status: ${escapeHtml(subscription.status)}${subscription.current_period_end ? `<br>Current period ends ${new Date(subscription.current_period_end).toLocaleDateString('en-GB')}` : ''}</p><button class="button ghost full" id="billingPortal">Manage billing</button>${subscription.stripe_subscription_id?.startsWith('demo_') && subscription.status === 'active' ? '<button class="button danger full" id="cancelDemo">Cancel demo plan</button>' : ''}</div>`;
+  if (!subscription) return `<div class="subscription-card"><strong>${escapeHtml(entitlement.name || 'Current plan')}</strong><p class="muted">${Number(entitlement.projects || 0)} active project allowance · ${Number(entitlement.runtimeRequestsPerMonth || 0).toLocaleString('en-GB')} Guard decisions/month · ${Number(entitlement.retentionDays || 0)}-day retention.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></div>`;
+  return `<div class="subscription-card"><strong>${escapeHtml(entitlement.name || subscription.plan_key.replaceAll('_', ' '))}</strong><p class="muted">Status: ${escapeHtml(subscription.status)}${subscription.current_period_end ? `<br>Current period ends ${new Date(subscription.current_period_end).toLocaleDateString('en-GB')}` : ''}</p><button class="button ghost full" id="billingPortal">Manage billing</button>${subscription.stripe_subscription_id?.startsWith('demo_') && subscription.status === 'active' ? '<button class="button danger full" id="cancelDemo">Cancel demo plan</button>' : ''}</div>`;
 }
 
 function wireEvents() {

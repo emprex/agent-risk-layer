@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { isIP } from 'node:net';
+import { BILLABLE_PLANS } from './commercial-catalogue.js';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 export const defaultBindHost = '0.0.0.0';
@@ -83,36 +84,7 @@ export const config = {
         agency_monthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY || '',
     },
 };
-export const plans = {
-    pro_report: {
-        key: 'pro_report',
-        name: 'AI Agent Security Assessment',
-        amountPence: 9900,
-        recurring: false,
-        reportTier: 'pro',
-    },
-    developer_monthly: {
-        key: 'developer_monthly',
-        name: 'Developer',
-        amountPence: 2900,
-        recurring: true,
-        reportTier: 'pro',
-    },
-    team_monthly: {
-        key: 'team_monthly',
-        name: 'Team',
-        amountPence: 9900,
-        recurring: true,
-        reportTier: 'pro',
-    },
-    agency_monthly: {
-        key: 'agency_monthly',
-        name: 'Agency',
-        amountPence: 24900,
-        recurring: true,
-        reportTier: 'pro',
-    },
-};
+export const plans = BILLABLE_PLANS;
 
 function isManagedPostgresUrl(value) {
     try {

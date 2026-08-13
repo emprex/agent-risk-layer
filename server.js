@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { assertSafeProductionConfig, config, launchReadiness, plans } from './src/config.js';
+import { publicCommercialCatalogue } from './src/commercial-catalogue.js';
 import { db, id, initialiseDatabase, insertEvent, nowIso } from './src/db.js';
 import { authenticateUser, beginMfaSetup, changePassword, clearSession, completeMfaLogin, createEmailVerification, createMfaLoginChallenge, createPasswordReset, createSession, disableMfa, enableMfa, getUserFromRequest, reauthenticateSession, registerUser, resetPassword, verifyEmailToken } from './src/auth.js';
 import { evaluateAssessment, questionnaire, evidenceOptions } from './src/risk-engine.js';
@@ -125,7 +126,8 @@ const server = http.createServer(async (req, res) => {
                 termsVersion: config.termsVersion,
                 supportEmail: config.supportEmail,
                 user: req.user,
-                prices: Object.fromEntries(Object.values(plans).map((plan) => [plan.key, { name: plan.name, amountPence: plan.amountPence, recurring: plan.recurring }])),
+                catalogue: publicCommercialCatalogue(),
+                prices: Object.fromEntries(Object.values(plans).map((plan) => [plan.key, { name: plan.name, amountPence: plan.amountPence, currency: plan.currency, recurrence: plan.recurrence, recurring: plan.recurring }])),
             });
         }
         if (req.method === 'GET' && url.pathname === '/api/questionnaire')

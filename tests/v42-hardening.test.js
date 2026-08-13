@@ -235,9 +235,11 @@ test('CSP forbids inline styles and public pages contain no inline style attribu
         assert.doesNotMatch(fs.readFileSync(path.join(root, 'public', name), 'utf8'), /\sstyle\s*=/i, name);
 });
 test('Agency pricing makes no unimplemented workspace claim', () => {
-    const source = fs.readFileSync(path.join(root, 'public', 'pricing.js'), 'utf8');
-    assert.doesNotMatch(source, /client assessment and inspection workspaces/i);
-    assert.match(source, /Multi-assessment portfolio/);
+    const pricing = fs.readFileSync(path.join(root, 'public', 'pricing.js'), 'utf8');
+    const catalogue = fs.readFileSync(path.join(root, 'src', 'commercial-catalogue.js'), 'utf8');
+    assert.doesNotMatch(`${pricing}\n${catalogue}`, /client assessment and inspection workspaces/i);
+    assert.match(catalogue, /Manage security work across customer projects/);
+    assert.match(pricing, /catalogue\[key\]/);
 });
 function totp(secret, now = Date.now()) {
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

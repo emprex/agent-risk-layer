@@ -4,6 +4,7 @@ import path from 'node:path';
 import { db, id, nowIso } from './db.js';
 import { config } from './config.js';
 import { subscriptionAccessDecision } from './subscription-access.js';
+import { COMMERCIAL_CATALOGUE } from './commercial-catalogue.js';
 export const REDTEAM_SCHEMA = 'arl.redteam.bundle.v1';
 export const REDTEAM_TOKEN_TTL_MS = 15 * 60000;
 export const MAX_REDTEAM_AGE_MS = 24 * 60 * 60000;
@@ -122,14 +123,10 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     let limit = 0;
     if (superuser)
         limit = Number.MAX_SAFE_INTEGER;
-    else if (subscription?.plan_key === 'agency_monthly')
-        limit = 50;
-    else if (subscription?.plan_key === 'team_monthly')
-        limit = 25;
-    else if (subscription?.plan_key === 'developer_monthly')
-        limit = 10;
+    else if (subscription?.plan_key)
+        limit = Number(COMMERCIAL_CATALOGUE[subscription.plan_key]?.limits?.redTeamRuns || 0);
     else if (assessment.paid_tier === 'pro')
-        limit = 2;
+        limit = COMMERCIAL_CATALOGUE.pro_report.limits.redTeamRuns;
     if (!limit)
         throw new Error('A paid security assessment or active Developer, Team, or Agency subscription is required for controlled red-team evidence.');
     if (!superuser && subscription && recentRuns >= limit)
