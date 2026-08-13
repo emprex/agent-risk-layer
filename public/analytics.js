@@ -104,7 +104,7 @@ function showConsentBanner() {
   const banner = document.createElement('section');
   banner.id = 'analyticsConsent';
   banner.className = 'analytics-consent';
-  banner.setAttribute('role', 'dialog');
+  banner.setAttribute('role', 'region');
   banner.setAttribute('aria-label', 'Analytics preference');
   banner.innerHTML = `
     <div>
@@ -112,8 +112,8 @@ function showConsentBanner() {
       <p>We use optional Google Analytics to understand website use and improve AgentRiskLayer. Analytics loads only if you accept. We do not use advertising cookies.</p>
     </div>
     <div class="analytics-consent-actions">
-      <button type="button" class="button ghost small" data-analytics-consent="denied">Reject optional analytics</button>
-      <button type="button" class="button primary small" data-analytics-consent="granted">Accept analytics</button>
+      <button type="button" class="button ghost small" data-analytics-consent="denied">Reject</button>
+      <button type="button" class="button primary small" data-analytics-consent="granted">Accept</button>
       <a href="/privacy.html">Privacy notice</a>
     </div>`;
   document.body.appendChild(banner);

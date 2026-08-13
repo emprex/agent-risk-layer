@@ -66,7 +66,9 @@ test('overview makes the first-eight preview explicit and routes to all controls
 test('responsive workflow navigation avoids a horizontal step rail', () => {
   assert.match(css, /\.ci-stage-nav ol\{display:grid/);
   assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(css, /@media\(max-width:430px\)\{\.ci-tabs,\.ci-metrics,\.ci-stage-nav ol\{grid-template-columns:1fr\}/);
+  assert.match(css, /@media\(max-width:430px\).*\.ci-shell\{width:100%;max-width:100%;overflow:hidden\}/);
+  assert.match(css, /\.ci-tabs,\.ci-metrics,\.ci-stage-nav ol\{grid-template-columns:1fr\}/);
+  assert.match(css, /\.ci-shell \.page-heading h1\{[^}]*overflow-wrap:anywhere/);
   assert.match(css, /\.ci-bulk-row-error/);
   assert.match(css, /\.ci-focus-stepper ol\{display:grid/);
   assert.match(css, /\.ci-current-action/);
