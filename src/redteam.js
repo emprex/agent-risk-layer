@@ -62,10 +62,8 @@ export async function createRedTeamAuthorisation({ userId, assessmentId, input =
     (id, user_id, assessment_id, target_name, endpoint_origin, environment, authority_basis, authorised_by, authorised_role,
      emergency_contact, window_start, window_end, permitted_actions_json, prohibited_actions_json, data_classification,
      retention_days, synthetic_data_only, dry_run_tools_only, status, attestation_text, accepted_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?, ?, ?)`)
-        .run(authorisationId, userId, assessmentId, targetName, environment === 'staging' ? new URL(endpointOrigin).origin : null, environment, authorityBasis, authorisedBy, authorisedRole, emergencyContact, new Date(start).toISOString(), new Date(end).toISOString(), JSON.stringify(permitted), JSON.stringify(prohibited), dataClassification, retentionDays, confirmation, createdAt, createdAt);
-    await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_authorisation_created', ?, ?)`)
-        .run(id('evt_'), userId, JSON.stringify({ authorisationId, assessmentId, environment, windowEnd: new Date(end).toISOString() }), createdAt);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?, ?, ?)`).run(authorisationId, userId, assessmentId, targetName, environment === 'staging' ? new URL(endpointOrigin).origin : null, environment, authorityBasis, authorisedBy, authorisedRole, emergencyContact, new Date(start).toISOString(), new Date(end).toISOString(), JSON.stringify(permitted), JSON.stringify(prohibited), dataClassification, retentionDays, confirmation, createdAt, createdAt);
+    await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_authorisation_created', ?, ?)`).run(id('evt_'), userId, JSON.stringify({ authorisationId, assessmentId, environment, windowEnd: new Date(end).toISOString() }), createdAt);
     return publicAuthorisation(await db.prepare('SELECT * FROM redteam_authorisations WHERE id = ?').get(authorisationId));
 }
 export async function listRedTeamAuthorisations({ assessmentId, userId }) {
@@ -122,8 +120,7 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     const raw = `red_${crypto.randomBytes(32).toString('base64url')}`;
     const createdAt = nowIso();
     const expiresAt = new Date(Date.now() + REDTEAM_TOKEN_TTL_MS).toISOString();
-    await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`)
-        .run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
+    await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
     return { token: raw, expiresAt, assessmentId, mode: requestedMode, authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement: { source: superuser ? 'superuser' : subscription?.plan_key || 'founding_assessment', limit: superuser ? null : limit, used: superuser || subscription ? recentRuns : assessmentRuns } };
 }
 export async function consumeRedTeamUpload({ rawToken, bundle }) {
@@ -166,9 +163,7 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
     const previous = await db.prepare('SELECT id, summary_json, results_json FROM redteam_runs WHERE assessment_id = ? ORDER BY created_at DESC LIMIT 1').get(tokenRow.assessment_id);
     const delta = buildDelta(previous, summary, results);
     const createdAt = nowIso();
-    const retentionExpiresAt = authorisation
-        ? new Date(Date.parse(bundle.campaign.completedAt) + Number(authorisation.retention_days || 30) * 86400000).toISOString()
-        : null;
+    const retentionExpiresAt = authorisation ? new Date(Date.parse(bundle.campaign.completedAt) + Number(authorisation.retention_days || 30) * 86400000).toISOString() : null;
     const runId = id('rtr_');
     const trust = {
         signatureValid: true,
@@ -189,11 +184,9 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
         await db.prepare(`INSERT INTO redteam_runs
       (id, user_id, assessment_id, authorisation_id, schema_version, runner_version, policy_version, bundle_digest, signature_valid,
        campaign_json, scope_json, summary_json, results_json, trust_json, delta_json, retention_expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(runId, tokenRow.user_id, tokenRow.assessment_id, authorisation?.id || null, bundle.schema, trust.runnerVersion, trust.policyVersion, validation.digest, JSON.stringify(campaign), JSON.stringify(scope), JSON.stringify(summary), JSON.stringify(results), JSON.stringify(trust), JSON.stringify(delta), retentionExpiresAt, createdAt);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run(runId, tokenRow.user_id, tokenRow.assessment_id, authorisation?.id || null, bundle.schema, trust.runnerVersion, trust.policyVersion, validation.digest, JSON.stringify(campaign), JSON.stringify(scope), JSON.stringify(summary), JSON.stringify(results), JSON.stringify(trust), JSON.stringify(delta), retentionExpiresAt, createdAt);
         await db.prepare('UPDATE assessments SET updated_at = ? WHERE id = ?').run(createdAt, tokenRow.assessment_id);
-        await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_uploaded', ?, ?)`)
-            .run(id('evt_'), tokenRow.user_id, JSON.stringify({ runId, assessmentId: tokenRow.assessment_id, riskScore: summary.riskScore, assuranceScore: summary.assuranceScore, failed: summary.counts.failed, critical: summary.counts.critical }), createdAt);
+        await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_uploaded', ?, ?)`).run(id('evt_'), tokenRow.user_id, JSON.stringify({ runId, assessmentId: tokenRow.assessment_id, riskScore: summary.riskScore, assuranceScore: summary.assuranceScore, failed: summary.counts.failed, critical: summary.counts.critical }), createdAt);
     });
     return { runId, assessmentId: tokenRow.assessment_id, summary, trust, delta };
 }
@@ -201,8 +194,8 @@ export async function listRedTeamRunsForAssessment({ assessmentId, userId }) {
     const assessment = await db.prepare('SELECT id FROM assessments WHERE id = ? AND user_id = ?').get(assessmentId, userId);
     if (!assessment)
         throw new Error('Assessment not found.');
-    return (await db.prepare(`SELECT id, assessment_id, runner_version, policy_version, bundle_digest, campaign_json, scope_json, summary_json, trust_json, delta_json, retention_expires_at, created_at FROM redteam_runs WHERE assessment_id = ? AND user_id = ? ORDER BY created_at DESC`)
-        .all(assessmentId, userId)).map(publicRunSummary);
+    const rows = await db.prepare(`SELECT id, assessment_id, runner_version, policy_version, bundle_digest, campaign_json, scope_json, summary_json, trust_json, delta_json, retention_expires_at, created_at FROM redteam_runs WHERE assessment_id = ? AND user_id = ? ORDER BY created_at DESC`).all(assessmentId, userId);
+    return await Promise.all(rows.map(publicRunSummary));
 }
 export async function getRedTeamRun({ runId, userId }) {
     const row = await db.prepare('SELECT * FROM redteam_runs WHERE id = ? AND user_id = ?').get(runId, userId);
