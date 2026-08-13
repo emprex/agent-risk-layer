@@ -1,6 +1,13 @@
-import { db } from './db.js';
+import { db, id, nowIso } from './db.js';
 import { intelligenceDigest } from './control-intelligence-core.js';
-import { getControlIntelligenceControl as getServiceControlIntelligenceControl } from './control-intelligence-service.js';
+import {
+  createControlFinding as createServiceControlFinding,
+  getControlIntelligence as getServiceControlIntelligence,
+  getControlIntelligenceControl as getServiceControlIntelligenceControl,
+  getControlIntelligenceReportSummary as getServiceControlIntelligenceReportSummary,
+  recordControlEvidence as recordServiceControlEvidence,
+  recordDeploymentDecision as recordServiceDeploymentDecision,
+} from './control-intelligence-service.js';
 
 export * from './control-intelligence-service.js';
 
@@ -94,6 +101,59 @@ async function historicalFailureEvidence(projectId, controlId, failure) {
   return rows.map(verifyAndSerializeHistoricalEvidence);
 }
 
+async function currentSnapshotId(projectId) {
+  const row = await db.prepare("SELECT id FROM system_snapshots WHERE project_id=? AND status='current'").get(projectId);
+  return row?.id || null;
+}
+
+async function unresolvedHistoricalFailureRows(projectId, snapshotId) {
+  if (!projectId || !snapshotId) return [];
+  return db.prepare(`SELECT t.id,t.entry_id,t.system_snapshot_id,t.finding_id,t.completed_at,r.status AS finding_status
+    FROM control_test_executions t
+    LEFT JOIN remediation_items r ON r.id=t.finding_id AND r.project_id=t.project_id
+    WHERE t.project_id=? AND t.result='failed' AND t.execution_kind='initial' AND t.system_snapshot_id<>?
+      AND (t.finding_id IS NULL OR r.id IS NULL OR r.status NOT IN ('verified_closed','accepted_risk'))
+    ORDER BY t.completed_at ASC,t.id ASC`)
+    .all(projectId, snapshotId);
+}
+
+async function historicalOpenFindings(projectId, snapshotId) {
+  if (!projectId || !snapshotId) return [];
+  return db.prepare(`SELECT DISTINCT r.id,r.title,r.severity,r.status,r.updated_at,b.entry_id,b.system_snapshot_id
+    FROM remediation_items r
+    JOIN control_finding_bindings b ON b.finding_id=r.id AND b.project_id=r.project_id
+    WHERE r.project_id=? AND b.system_snapshot_id<>? AND r.status NOT IN ('verified_closed','accepted_risk')
+    ORDER BY r.updated_at DESC,r.id DESC`)
+    .all(projectId, snapshotId);
+}
+
+async function staleCurrentDeploymentDecision(projectId, userId, reassessmentTrigger, sourceType, sourceId) {
+  const decisions = await db.prepare(`SELECT id,workspace_id,system_snapshot_id FROM control_deployment_decisions
+    WHERE project_id=? AND status='current'`).all(projectId);
+  if (!decisions.length) return 0;
+  const timestamp = nowIso();
+  await db.transaction(async () => {
+    await db.prepare(`UPDATE control_deployment_decisions
+      SET status='stale',reassessment_trigger=? WHERE project_id=? AND status='current'`)
+      .run(reassessmentTrigger, projectId);
+    for (const decision of decisions) {
+      await db.prepare(`INSERT INTO security_audit_log
+        (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+        .run(id('aud_'), decision.workspace_id, projectId, 'user', userId,
+          'control_intelligence.deployment_decision_staled', 'deployment_decision', decision.id,
+          JSON.stringify({ reassessmentTrigger, sourceType, sourceId, systemSnapshotId: decision.system_snapshot_id }), timestamp);
+    }
+  });
+  return decisions.length;
+}
+
+async function staleIfHistoricalWrite(projectId, userId, snapshotId, trigger, sourceType, sourceId) {
+  const current = await currentSnapshotId(projectId);
+  if (!current || !snapshotId || snapshotId === current) return 0;
+  return staleCurrentDeploymentDecision(projectId, userId, trigger, sourceType, sourceId);
+}
+
 function stageStates(currentStage, completedStages = [], notRequiredStages = []) {
   const completed = new Set(completedStages);
   const notRequired = new Set(notRequiredStages);
@@ -145,4 +205,103 @@ export async function getControlIntelligenceControl(args) {
     evidenceHistory: mergeEvidence(detail.evidenceHistory || [], historical),
   };
   return advanceHistoricalFailureToFinding(withHistory, historical);
+}
+
+export async function getControlIntelligence(args) {
+  const result = await getServiceControlIntelligence(args);
+  const snapshotId = result?.systemSnapshot?.id;
+  if (!snapshotId || !result?.items?.length) return result;
+  const historical = await unresolvedHistoricalFailureRows(args.projectId, snapshotId);
+  if (!historical.length) return { ...result, summary: { ...result.summary, historicalUnresolvedFailures: 0, historicalFailureControls: 0 } };
+
+  const affectedIds = new Set(historical.map((row) => row.entry_id));
+  const untriagedIds = new Set(historical.filter((row) => !row.finding_id).map((row) => row.entry_id));
+  let additionalBlockers = 0;
+  for (const controlId of untriagedIds) {
+    const baseline = await getServiceControlIntelligenceControl({ projectId: args.projectId, controlId, userId: args.userId });
+    if (baseline.chain?.deploymentImpact !== 'blocker') additionalBlockers += 1;
+  }
+
+  let testsToRunDelta = 0;
+  const items = [];
+  for (const item of result.items) {
+    if (!affectedIds.has(item.controlId)) {
+      items.push(item);
+      continue;
+    }
+    const detail = await getControlIntelligenceControl({ projectId: args.projectId, controlId: item.controlId, userId: args.userId });
+    if (item.currentStage === 'test' && detail.chain?.currentStage !== 'test') testsToRunDelta -= 1;
+    items.push({ ...item, ...detail.chain });
+  }
+
+  const summary = result.summary ? {
+    ...result.summary,
+    testsToRun: Math.max(0, Number(result.summary.testsToRun || 0) + testsToRunDelta),
+    deploymentBlockers: Number(result.summary.deploymentBlockers || 0) + additionalBlockers,
+    historicalUnresolvedFailures: historical.length,
+    historicalFailureControls: affectedIds.size,
+    historicalUntriagedFailures: historical.filter((row) => !row.finding_id).length,
+  } : result.summary;
+  return { ...result, items, summary };
+}
+
+export async function getControlIntelligenceReportSummary(args) {
+  const report = await getServiceControlIntelligenceReportSummary(args);
+  const snapshotId = report?.systemSnapshot?.id;
+  if (!snapshotId) return report;
+  const [failures, findings] = await Promise.all([
+    unresolvedHistoricalFailureRows(args.projectId, snapshotId),
+    historicalOpenFindings(args.projectId, snapshotId),
+  ]);
+  const untriaged = failures.filter((row) => !row.finding_id).map((row) => ({
+    testExecutionId: row.id,
+    controlId: row.entry_id,
+    failedSnapshotId: row.system_snapshot_id,
+    completedAt: row.completed_at,
+    status: 'reproduced_failure_requires_triage',
+  }));
+  const historicalFindings = findings.map((row) => ({
+    id: row.id,
+    controlId: row.entry_id,
+    failedSnapshotId: row.system_snapshot_id,
+    title: row.title,
+    status: row.status,
+    contextualSeverity: row.severity || null,
+    updatedAt: row.updated_at,
+  }));
+  const pending = untriaged.length + historicalFindings.length;
+  const limitation = 'Unresolved reproduced failures and findings from superseded snapshots remain historical provenance and continue to block or hold deployment until triaged, remediated and retested; they are not rewritten onto the current snapshot.';
+  return {
+    ...report,
+    historicalRiskPending: pending > 0,
+    historicalUntriagedFailures: untriaged,
+    historicalOpenFindings: historicalFindings,
+    limitations: pending ? [...new Set([...(report.limitations || []), limitation])] : report.limitations,
+  };
+}
+
+export async function recordControlEvidence(args) {
+  const result = await recordServiceControlEvidence(args);
+  await staleIfHistoricalWrite(args.projectId, args.userId, result?.systemSnapshotId,
+    'historical_failure_evidence', 'control_evidence', result?.id || null);
+  return result;
+}
+
+export async function createControlFinding(args) {
+  const result = await createServiceControlFinding(args);
+  await staleIfHistoricalWrite(args.projectId, args.userId, result?.snapshotId,
+    'historical_failure_finding', 'remediation', result?.id || null);
+  return result;
+}
+
+export async function recordDeploymentDecision(args) {
+  const snapshotId = await currentSnapshotId(args.projectId);
+  if (snapshotId) {
+    const historical = await unresolvedHistoricalFailureRows(args.projectId, snapshotId);
+    const untriaged = historical.filter((row) => !row.finding_id);
+    if (untriaged.length) {
+      throw Object.assign(new Error(`Deployment decision blocked: ${untriaged.length} reproduced failure${untriaged.length === 1 ? '' : 's'} from superseded system snapshots still require evidence and finding triage before a current deployment decision can be recorded.`), { statusCode: 409 });
+    }
+  }
+  return recordServiceDeploymentDecision(args);
 }
