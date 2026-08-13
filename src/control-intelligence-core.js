@@ -286,6 +286,29 @@ export async function closeControlFinding({projectId,controlId,findingId,userId,
   });return result;
 }
 
+async function verifiedClosedRemediationControlIds(access, snapshot, currentEvidence = []) {
+  const rows = await db.prepare(`SELECT rt.entry_id,rt.id retest_id,failed.id failed_id,r.id finding_id
+    FROM control_test_executions rt
+    JOIN control_test_executions failed ON failed.id=rt.retest_of_execution_id
+      AND failed.workspace_id=rt.workspace_id AND failed.project_id=rt.project_id AND failed.entry_id=rt.entry_id
+    JOIN remediation_items r ON r.id=rt.finding_id AND r.project_id=rt.project_id
+    JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=rt.workspace_id
+      AND b.project_id=rt.project_id AND b.entry_id=rt.entry_id AND b.system_snapshot_id=failed.system_snapshot_id
+    WHERE rt.workspace_id=? AND rt.project_id=? AND rt.system_snapshot_id=?
+      AND rt.execution_kind='retest' AND rt.result='passed'
+      AND rt.finding_id=failed.finding_id AND rt.remediation_id=rt.finding_id
+      AND rt.original_snapshot_id=failed.system_snapshot_id AND rt.original_snapshot_id<>rt.system_snapshot_id
+      AND failed.execution_kind='initial' AND failed.result='failed'
+      AND r.status='verified_closed'`)
+    .all(access.project.workspace_id,access.project.id,snapshot.id);
+  if (!rows.length) return new Set();
+  const evidenceByTest = new Set(currentEvidence.filter((row) => row.verification_state==='verified' && row.retention_status==='active').map((row) => row.test_execution_id));
+  const failedRows = await db.prepare(`SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND id IN (${rows.map(()=>'?').join(',')})`)
+    .all(access.project.workspace_id,access.project.id,...rows.map((row)=>row.failed_id));
+  await verifyRows(failedRows,'content_digest','test');
+  return new Set(rows.filter((row) => evidenceByTest.has(row.retest_id)).map((row) => row.entry_id));
+}
+
 async function deriveDeploymentDecision(access, snapshot) {
   const evaluations = await db.prepare('SELECT * FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id, access.project.id, snapshot.id);
   await verifyRows(evaluations,'content_digest','evaluation');
@@ -298,9 +321,12 @@ async function deriveDeploymentDecision(access, snapshot) {
     JOIN control_snapshot_evaluations c ON c.workspace_id=b.workspace_id AND c.project_id=b.project_id AND c.system_snapshot_id=b.system_snapshot_id AND c.entry_id=b.entry_id
     WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk')`).all(access.project.workspace_id,snapshot.id,access.project.id);
   const unboundFindings=Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items r WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk') AND NOT EXISTS (SELECT 1 FROM control_finding_bindings b WHERE b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=?)`).get(access.project.id,access.project.workspace_id,access.project.id,snapshot.id)).count||0);
-  const applicable = evaluations.filter((row) => row.applicability_status === 'applicable');
-  const unknown = evaluations.filter((row) => row.applicability_status === 'unknown');
+  const closedSatisfied = await verifiedClosedRemediationControlIds(access,snapshot,evidence);
+  const effectiveEvaluations = evaluations.map((row) => closedSatisfied.has(row.entry_id) && row.applicability_status==='unknown' ? { ...row, applicability_status: 'applicable' } : row);
+  const applicable = effectiveEvaluations.filter((row) => row.applicability_status === 'applicable');
+  const unknown = effectiveEvaluations.filter((row) => row.applicability_status === 'unknown');
   const tested = new Set(tests.filter((row) => row.result === 'passed' && (row.execution_kind==='initial'||validRetest(row,tests,findings))).map((row) => row.entry_id));
+  for (const controlId of closedSatisfied) tested.add(controlId);
   const observed = new Set(evidence.filter((row) => ['verified'].includes(row.verification_state) && row.retention_status === 'active').map((row) => row.entry_id));
   const missingEvidence = applicable.filter((row) => !tested.has(row.entry_id) || !observed.has(row.entry_id)).length;
   const criticalBlockers = findings.filter((row) => row.contextual_severity === 'critical' && row.severity_status === 'evaluated').length;
@@ -311,7 +337,7 @@ async function deriveDeploymentDecision(access, snapshot) {
   const summary = { applicableControls: applicable.length, controlsNeedingAssessment: unknown.length,
     controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, openFindings: findings.length,
     criticalBlockers, failedTests: tests.filter((row) => row.result === 'failed').length,
-    completedRetests: tests.filter((row) => validRetest(row,tests,findings)).length,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
+    completedRetests: new Set([...tests.filter((row) => validRetest(row,tests,findings)).map((row)=>row.entry_id),...closedSatisfied]).size,verifiedClosedRemediationControls:closedSatisfied.size,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
   const reasons=[]; if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
   const common={summary,reasons,evidenceIds:evidence.filter(x=>x.verification_state==='verified'&&x.retention_status==='active').map(x=>x.id).sort(),requiredApprovals,controlProfileDigest:intelligenceDigest(evaluations.map(x=>({id:x.entry_id,digest:x.entry_digest})).sort((a,b)=>a.id.localeCompare(b.id)))};
   if (criticalBlockers) return { ...common,decision: 'do_not_deploy', rationale: 'An open evaluated Critical finding blocks deployment.' };
