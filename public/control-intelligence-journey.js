@@ -81,10 +81,10 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
   let nextAction = 'Confirm whether this control applies to this system.';
   let deploymentImpact = 'hold';
 
-  // An unresolved reproduced failure is safety-significant and its remediation lineage
-  // survives creation of a changed snapshot. A new snapshot intentionally has no current
-  // applicability decision, but that must not rewind an open finding to Step 1 or hide the
-  // exact retest that the server already requires for the historical failure.
+  // A reproduced unresolved failure is safety-significant and must never be hidden by a later plan.
+  // Its remediation lineage survives creation of a changed snapshot. A new snapshot intentionally
+  // has no current applicability decision, but that must not rewind an open finding to Step 1 or
+  // hide the exact retest that the server already requires for the historical failure.
   if (failed) {
     completed.push('applicability');
     completed.push('test');
