@@ -6,7 +6,7 @@ permissions:
   contents: write
 jobs:
   patch-and-test:
-    if: github.event.head_commit.message == 'Run deployment lineage validation'
+    if: github.event.head_commit.message == 'Fix deployment lineage validation environment'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +18,7 @@ jobs:
       - run: python scripts/patch-deployment-closed-lineage.py
       - run: npm ci
       - run: npm run check
-      - run: node --test tests/control-intelligence-redteam-binding.test.js
+      - run: NODE_ENV=test node --test tests/control-intelligence-redteam-binding.test.js
       - run: npm test
       - name: Commit validated patch
         run: |
