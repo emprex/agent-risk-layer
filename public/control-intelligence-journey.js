@@ -99,7 +99,11 @@ export function deriveControlJourney(data = {}, remediationRecord = null) {
   // A reproduced unresolved failure is safety-significant and must never be hidden by a later plan.
   if (failed) {
     completed.push('test');
-    const hasFailureEvidence = evidence.some((item) => observedFailureEvidence(item, failed.id))
+    // Creating a finding is a server-guarded workflow transition that already required
+    // active observed evidence for this reproduced failure. Later snapshot/evidence
+    // lifecycle changes must not rewind the browser to Step 3 while that finding remains open.
+    const hasFailureEvidence = Boolean(finding)
+      || evidence.some((item) => observedFailureEvidence(item, failed.id))
       || (data.evidenceHistory || []).some((item) => observedFailureEvidence(item, failed.id));
     if (!hasFailureEvidence) {
       currentStage = 'evidence';
