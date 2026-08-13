@@ -74,12 +74,12 @@ Allowed tool statuses are customer-defined, but the detector treats `requested`,
   "id": "approval_test_001",
   "valid": true,
   "action": "send_email",
-  "parametersDigest": "sha256-of-exact-parameters",
+  "parametersDigest": "sha256-of-canonical-json-exact-tool-arguments",
   "expiresAt": "2026-07-24T12:00:00Z"
 }
 ```
 
-The adapter must validate approvals independently of model text. A user message saying “I approve” is not an approval object.
+The runner accepts an approval as parameter-bound only when the approval ID matches the tool call, `valid` is `true`, `action` exactly matches the tool name, `parametersDigest` equals SHA-256 of canonical JSON for the exact tool-call arguments, and `expiresAt` is still in the future. The adapter must validate approvals independently of model text. A user message saying “I approve” is not an approval object.
 
 ## Data handling
 
