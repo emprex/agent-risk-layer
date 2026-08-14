@@ -1,4 +1,11 @@
 import { api, escapeHtml, setBusy, showError } from './shared.js';
+import {
+  assessmentEnvironment,
+  assessmentProjects,
+  linkedAssessmentRemediations,
+  matchingAssessmentProject,
+  remediationFindingKey,
+} from './assessment-remediation.js';
 
 const root = document.querySelector('#controlPlaneRoot');
 const errorBox = document.querySelector('#controlPlaneError');
@@ -10,6 +17,11 @@ let revealedApproval = null;
 let refreshTimer = null;
 let technicalMode = sessionStorage.getItem('arl_control_plane_mode') === 'technical';
 let guidedCheck = null;
+const handoffParams = new URLSearchParams(location.search);
+const assessmentId = handoffParams.get('assessment') || '';
+const assessmentToken = handoffParams.get('token') || '';
+let assessmentContext = null;
+let assessmentProjectConfirmed = false;
 const runtimeProjects = () => (overview?.projects || []).filter((item) => item.projectKind !== 'assessment_case');
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
@@ -22,17 +34,30 @@ document.querySelector('#logout').addEventListener('click', async () => {
 init();
 
 async function init() {
-  if (['#runtime', '#policy', '#inventory', '#remediation', '#audit'].includes(location.hash)) technicalMode = true;
+  if (assessmentId || ['#runtime', '#policy', '#inventory', '#remediation', '#audit'].includes(location.hash)) technicalMode = true;
   try {
     await loadOverview();
-    const availableRuntimeProjects = runtimeProjects();
-    if (selectedProjectId && availableRuntimeProjects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
-    else if (availableRuntimeProjects[0]) await loadProject(availableRuntimeProjects[0].id);
+    if (assessmentId) {
+      const tokenQuery = assessmentToken ? `?token=${encodeURIComponent(assessmentToken)}` : '';
+      const payload = await api(`/api/assessments/${encodeURIComponent(assessmentId)}${tokenQuery}`);
+      assessmentContext = payload.assessment;
+      const exactProject = matchingAssessmentProject(overview, assessmentContext);
+      if (exactProject) {
+        await loadProject(exactProject.id);
+        assessmentProjectConfirmed = true;
+      }
+    } else {
+      const availableRuntimeProjects = runtimeProjects();
+      if (selectedProjectId && availableRuntimeProjects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
+      else if (availableRuntimeProjects[0]) await loadProject(availableRuntimeProjects[0].id);
+    }
     render();
     startRefresh();
   } catch (error) {
-    if (/sign in/i.test(error.message)) location.href = `/auth.html?next=${encodeURIComponent('/control-plane.html')}`;
-    else fail(error);
+    if (/sign in/i.test(error.message)) {
+      const next = `${location.pathname}${location.search}${location.hash}`;
+      location.href = `/auth.html?next=${encodeURIComponent(next)}`;
+    } else fail(error);
   }
 }
 
@@ -46,11 +71,74 @@ async function loadProject(projectId) {
   sessionStorage.setItem('arl_selected_project', projectId);
 }
 
+function assessmentFindings() {
+  return (assessmentContext?.result?.findings || []).filter((item) =>
+    item.status !== 'information-required' && item.kind !== 'information-required');
+}
+
+function assessmentReturnHref() {
+  const params = new URLSearchParams({ id: assessmentId });
+  if (assessmentToken) params.set('token', assessmentToken);
+  return `/result.html?${params.toString()}`;
+}
+
+function assessmentHandoffPanel() {
+  const candidates = assessmentProjects(overview);
+  const canCreateCase = Boolean(overview.assessmentCases?.canCreate);
+  const canCreateRuntime = runtimeProjects().length < Number(overview.entitlement?.projects || 0);
+  const first = assessmentFindings()[0];
+  return `<section class="panel assessment-handoff">
+    <span class="eyebrow">Assessment → remediation</span>
+    <h2>Choose where to track ${escapeHtml(assessmentContext.name)} fixes</h2>
+    <p>This assessment is not linked to a remediation project yet. Nothing will be added to another agent unless you explicitly choose it.</p>
+    ${first ? `<div class="assessment-handoff-finding"><small>First declared weakness</small><strong>${escapeHtml(first.title)}</strong><span>${escapeHtml(first.recommendation)}</span></div>` : ''}
+    ${candidates.length ? `<form id="assessmentProjectForm" class="auth-form"><div class="field"><label for="assessmentProjectSelect">Existing project or assessment case</label><select id="assessmentProjectSelect" required><option value="">Choose the matching agent</option>${candidates.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.projectKind === 'assessment_case' ? 'evidence-only case' : item.environment || 'project')}</option>`).join('')}</select><small>Only choose an existing project when it represents this exact Northstar deployment and version.</small></div><button class="button ghost" type="submit">Use selected project</button></form>` : ''}
+    ${canCreateCase || canCreateRuntime ? `<div class="assessment-create-scope"><span>Recommended</span><p>Create a dedicated scope for this exact assessment so its fixes and evidence cannot mix with another agent.</p><button class="button primary" id="createAssessmentRemediationCase" type="button">Create dedicated remediation scope</button></div>` : '<div class="notice warning">Your current plan has no unused project slot. Choose a genuinely matching project above or change plan before tracking these fixes.</div>'}
+    <a class="button ghost small" href="${assessmentReturnHref()}">Back to assessment result</a>
+  </section>`;
+}
+
+function assessmentRemediationWorkspace() {
+  const findings = assessmentFindings();
+  const linked = linkedAssessmentRemediations(project, assessmentId);
+  const linkedKeys = new Set(linked.map((item) => item.finding_key));
+  const remaining = findings.filter((finding) => !linkedKeys.has(remediationFindingKey(assessmentId, finding)));
+  const first = remaining[0];
+  return `<section class="assessment-remediation-workspace">
+    <section class="panel assessment-scope-banner">
+      <div><span class="eyebrow">Correct remediation scope</span><h2>${escapeHtml(assessmentContext.name)}</h2><p>${escapeHtml(assessmentContext.agentType || 'AI agent')} · assessment ${escapeHtml(assessmentId)}</p></div>
+      <div><strong>${linked.length}</strong><span>fixes tracked</span></div>
+      <a class="button ghost small" href="${assessmentReturnHref()}">Return to result</a>
+    </section>
+    <section id="remediation" class="control-section assessment-only-remediation">
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Fix and check again</span><h2>Own, fix and retest.</h2><p>Each fix below is bound to this assessment and the selected ${escapeHtml(project.name)} scope.</p></div><span class="status-pill">${linked.filter((item) => !['verified_closed', 'accepted_risk'].includes(item.status)).length} open</span></div>
+      <div class="runtime-grid">
+        <article class="panel"><h3>${remaining.length ? 'Add the next required fix' : 'All declared findings are being tracked'}</h3>
+          ${remaining.length ? `<form id="remediationForm" class="auth-form">
+            <div class="field"><label for="assessmentFinding">Declared weakness</label><select id="assessmentFinding">${remaining.map((finding) => `<option value="${escapeHtml(finding.id)}">${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</option>`).join('')}</select></div>
+            <div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" value="${escapeHtml(first.recommendation)}"></div>
+            <div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity">${['critical','high','medium','low'].map((severity) => `<option ${severity === first.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div>
+            <p class="microcopy"><strong>Proof expected:</strong> ${escapeHtml(first.verification)}</p>
+            <button class="button primary" type="submit">Track this fix</button>
+          </form>` : '<p class="success-box">Every declared weakness from this assessment already has a linked remediation record.</p>'}
+        </article>
+        <article class="panel"><h3>Fixes linked to this assessment</h3><div class="remediation-list">${linked.length ? linked.map(remediationRow).join('') : '<p class="muted">No fixes recorded yet. Add the first confirmed weakness.</p>'}</div></article>
+      </div>
+    </section>
+  </section>`;
+}
+
 function render() {
   root.className = '';
-  root.innerHTML = technicalMode
-    ? `${overviewHeader()}<div class="control-plane-layout technical-mode">${projectRail()}<section class="control-plane-main">${project ? projectView() : emptyProject()}</section></div>`
-    : `<div class="guided-control-layout">${project ? `${guidedProjectContext()}${projectView()}` : emptyProject()}</div>`;
+  if (assessmentContext) {
+    root.innerHTML = assessmentProjectConfirmed && project
+      ? assessmentRemediationWorkspace()
+      : assessmentHandoffPanel();
+  } else {
+    root.innerHTML = technicalMode
+      ? `${overviewHeader()}<div class="control-plane-layout technical-mode">${projectRail()}<section class="control-plane-main">${project ? projectView() : emptyProject()}</section></div>`
+      : `<div class="guided-control-layout">${project ? `${guidedProjectContext()}${projectView()}` : emptyProject()}</div>`;
+  }
   bind();
 }
 
@@ -352,6 +440,9 @@ function bind() {
   document.querySelectorAll('[data-project-id]').forEach((button) => button.addEventListener('click', async () => {
     try { await loadProject(button.dataset.projectId); revealedKey = ''; revealedApproval = null; render(); } catch (error) { fail(error); }
   }));
+  document.querySelector('#assessmentProjectForm')?.addEventListener('submit', confirmAssessmentProject);
+  document.querySelector('#createAssessmentRemediationCase')?.addEventListener('click', createAssessmentRemediationProject);
+  document.querySelector('#assessmentFinding')?.addEventListener('change', syncAssessmentFinding);
   document.querySelector('#createProject')?.addEventListener('submit', createProject);
   document.querySelector('#createAssessmentCase')?.addEventListener('submit', createAssessmentCase);
   document.querySelector('#createKeyButton')?.addEventListener('click', createKey);
@@ -411,6 +502,46 @@ async function createProject(event) {
     const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({ name: document.querySelector('#projectName').value, environment: document.querySelector('#projectEnvironment').value }) });
     await loadOverview(); await loadProject(result.project.id); render();
   } catch (error) { fail(error); setBusy(button, false); }
+}
+
+async function confirmAssessmentProject(event) {
+  event.preventDefault();
+  const projectId = document.querySelector('#assessmentProjectSelect')?.value;
+  if (!projectId) return fail(new Error('Choose the project that represents this exact assessed agent.'));
+  try {
+    await loadProject(projectId);
+    assessmentProjectConfirmed = true;
+    render();
+    document.querySelector('#remediation')?.scrollIntoView({ behavior: 'smooth' });
+  } catch (error) { fail(error); }
+}
+
+async function createAssessmentRemediationProject(event) {
+  const button = event.currentTarget;
+  setBusy(button, true, 'Creating safe scope…');
+  try {
+    const canCreateCase = Boolean(overview.assessmentCases?.canCreate);
+    const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({
+      workspaceId: project?.workspaceId || undefined,
+      name: assessmentContext.name,
+      environment: assessmentEnvironment(assessmentContext),
+      projectKind: canCreateCase ? 'assessment_case' : 'runtime',
+    }) });
+    await loadOverview();
+    await loadProject(result.project.id);
+    assessmentProjectConfirmed = true;
+    render();
+    document.querySelector('#remediation')?.scrollIntoView({ behavior: 'smooth' });
+  } catch (error) { fail(error); setBusy(button, false); }
+}
+
+function syncAssessmentFinding(event) {
+  const finding = assessmentFindings().find((item) => item.id === event.currentTarget.value);
+  if (!finding) return;
+  document.querySelector('#remediationTitle').value = finding.recommendation;
+  document.querySelector('#remediationSeverity').value = finding.severity;
+  const proof = event.currentTarget.form?.querySelector('.microcopy');
+  if (proof) proof.innerHTML = `<strong>Proof expected:</strong> ${escapeHtml(finding.verification)}`;
 }
 
 async function createAssessmentCase(event) {
@@ -508,7 +639,19 @@ async function createRemediation(event) {
   const button = event.currentTarget.querySelector('button');
   setBusy(button, true, 'Adding…');
   try {
-    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations`, { method: 'POST', body: JSON.stringify({ title: document.querySelector('#remediationTitle').value, severity: document.querySelector('#remediationSeverity').value, ownerEmail: document.querySelector('#remediationOwner').value }) });
+    const finding = assessmentContext
+      ? assessmentFindings().find((item) => item.id === document.querySelector('#assessmentFinding')?.value)
+      : null;
+    const payload = {
+      title: document.querySelector('#remediationTitle').value,
+      severity: document.querySelector('#remediationSeverity').value,
+      ownerEmail: document.querySelector('#remediationOwner').value,
+      ...(finding ? {
+        assessmentId,
+        findingKey: remediationFindingKey(assessmentId, finding),
+      } : {}),
+    };
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations`, { method: 'POST', body: JSON.stringify(payload) });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); setBusy(button, false); }
 }
