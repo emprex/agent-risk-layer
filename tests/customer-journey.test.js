@@ -98,6 +98,8 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /Security information completeness/);
   assert.match(js, /Create updated assessment/);
   assert.match(js, /Correct or update answers/);
+  assert.match(js, /assessmentRemediationHref/);
+  assert.doesNotMatch(js, /href="\/control-plane\\.html#remediation">Track fixes/);
   assert.match(js, /Technical score and evidence details/);
   assert.match(js, /Aggregate declared score/);
   assert.match(js, /Highest declared finding/);
@@ -140,6 +142,11 @@ test('assessment continuation preserves history and limits raw-answer prefill to
 test('control plane defaults to one human next step and preserves specialist controls on demand', () => {
   const html = read('public/control-plane.html');
   const js = read('public/control-plane.js');
+  assert.match(js, /assessmentId = handoffParams\\.get\\('assessment'\\)/);
+  assert.match(js, /Nothing will be added to another agent unless you explicitly choose it/);
+  assert.match(js, /assessmentProjectConfirmed/);
+  assert.match(js, /assessmentId,/);
+  assert.match(js, /findingKey: remediationFindingKey/);
   assert.match(html, /Stop unsafe actions before they reach your systems/);
   assert.match(html, /Begin with one safe built-in example/);
   assert.doesNotMatch(html, /AI security control plane/i);
