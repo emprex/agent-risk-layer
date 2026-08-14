@@ -1,0 +1,24 @@
+name: Temporary commercial workspace validation
+
+on:
+  push:
+    branches:
+      - validate/commercial-workspace-ux
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node --test tests/commercial-workspace-ux.test.js
+      - run: npm test
