@@ -22,5 +22,7 @@ test('assessment remediation owner is enforced at the server boundary', () => {
 
 test('legacy missing owners can be repaired without recreating remediation', () => {
   assert.match(browserSource, /method: 'PATCH', body: JSON\.stringify\(\{ ownerEmail \}\)/);
-  assert.match(browserSource, /Assign the missing owner/);
+  assert.match(browserSource, /Edit details/);
+  assert.match(browserSource, /name="severity"/);
+  assert.match(browserSource, /JSON\.stringify\(\{ ownerEmail, severity:/);
 });
