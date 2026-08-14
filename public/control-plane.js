@@ -110,28 +110,78 @@ function assessmentRemediationWorkspace() {
   const linkedKeys = new Set(linked.map((item) => item.finding_key));
   const remaining = findings.filter((finding) => !linkedKeys.has(remediationFindingKey(assessmentId, finding)));
   const first = remaining[0];
+  const owner = defaultRemediationOwner(linked);
+  const progress = remediationProgress(linked);
+  const urgent = linked.filter((item) => ['critical', 'high'].includes(item.severity));
+  const planned = linked.filter((item) => !['critical', 'high'].includes(item.severity));
+  const next = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9))[0];
+  const remainingPreview = remaining.map((finding) => `<li><span class="status-pill">${escapeHtml(finding.severity)}</span><div><strong>${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.recommendation)}</small></div></li>`).join('');
+  const planning = remaining.length ? `
+    <section class="panel remediation-plan-card">
+      <span class="eyebrow">Recommended</span>
+      <h3>Create the complete remediation plan</h3>
+      <p>Assign the remaining ${remaining.length} fixes once. You can edit every item later. This records responsibility only—it does not claim anything is implemented or verified.</p>
+      <form id="bulkRemediationForm" class="auth-form">
+        <div class="field"><label for="bulkRemediationOwner">Who will coordinate these fixes?</label><input id="bulkRemediationOwner" type="email" required autocomplete="email" value="${escapeHtml(owner)}" placeholder="Example: security@company.com"><small>Applied to all remaining fixes. Individual owners can be changed later.</small></div>
+        <details class="plan-review"><summary>Review ${remaining.length} proposed fixes</summary><ol>${remainingPreview}</ol></details>
+        <button class="button primary" type="submit">Assign ${remaining.length} remaining fix${remaining.length === 1 ? '' : 'es'}</button>
+      </form>
+      <details class="manual-remediation"><summary>Adjust and track one fix instead</summary>
+        <form id="remediationForm" class="auth-form">
+          <div class="field"><label for="assessmentFinding">Declared weakness</label><select id="assessmentFinding">${remaining.map((finding) => `<option value="${escapeHtml(finding.id)}">${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</option>`).join('')}</select></div>
+          <div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" value="${escapeHtml(first.recommendation)}"></div>
+          <div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity">${['critical','high','medium','low'].map((severity) => `<option ${severity === first.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" required autocomplete="email" value="${escapeHtml(owner)}" placeholder="Example: security@company.com" aria-describedby="remediationOwnerHelp"><small id="remediationOwnerHelp">Required — enter the email of the person accountable for completing this fix.</small></div></div>
+          <p class="microcopy"><strong>Proof expected:</strong> ${escapeHtml(first.verification)}</p>
+          <button class="button ghost" type="submit">Track this fix only</button>
+        </form>
+      </details>
+    </section>` : `
+    <section class="panel remediation-complete-card">
+      <span class="eyebrow">Remediation plan created</span>
+      <h3>Every declared weakness has an owner.</h3>
+      <p>The plan is ready. Assignment is not proof of implementation, so the assessment remains unchanged until evidence is attached and retests pass.</p>
+      <div class="remediation-milestones">
+        <div><strong>${linked.length}</strong><span>assigned</span></div>
+        <div><strong>${progress.implemented}</strong><span>with evidence</span></div>
+        <div><strong>${progress.retested}</strong><span>retested</span></div>
+        <div><strong>${progress.verified}</strong><span>verified closed</span></div>
+      </div>
+      ${next ? `<div class="next-remediation"><div><small>Start here</small><strong>${escapeHtml(next.finding_key.split(':').at(-1))} · ${escapeHtml(next.title)}</strong><span>Work on the highest-priority fix first. Evidence and retesting come later.</span></div><button class="button primary" type="button" data-open-remediation="${escapeHtml(next.id)}">Start this fix</button></div>` : ''}
+    </section>`;
   return `<section class="assessment-remediation-workspace">
     <section class="panel assessment-scope-banner">
       <div><span class="eyebrow">Correct remediation scope</span><h2>${escapeHtml(assessmentContext.name)}</h2><p>${escapeHtml(assessmentContext.agentType || 'AI agent')} · assessment ${escapeHtml(assessmentId)}</p></div>
-      <div><strong>${linked.length}</strong><span>fixes tracked</span></div>
+      <div><strong>${linked.length} of ${findings.length}</strong><span>fixes assigned</span><small>${remaining.length} remaining</small></div>
       <a class="button ghost small" href="${assessmentReturnHref()}">Return to result</a>
     </section>
     <section id="remediation" class="control-section assessment-only-remediation">
-      <div class="section-heading compact-heading"><div><span class="eyebrow">Fix and check again</span><h2>Own, fix and retest.</h2><p>Each fix below is bound to this assessment and the selected ${escapeHtml(project.name)} scope.</p></div><span class="status-pill">${linked.filter((item) => !['verified_closed', 'accepted_risk'].includes(item.status)).length} open</span></div>
-      <div class="runtime-grid">
-        <article class="panel"><h3>${remaining.length ? 'Add the next required fix' : 'All declared findings are being tracked'}</h3>
-          ${remaining.length ? `<form id="remediationForm" class="auth-form">
-            <div class="field"><label for="assessmentFinding">Declared weakness</label><select id="assessmentFinding">${remaining.map((finding) => `<option value="${escapeHtml(finding.id)}">${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</option>`).join('')}</select></div>
-            <div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" value="${escapeHtml(first.recommendation)}"></div>
-            <div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity">${['critical','high','medium','low'].map((severity) => `<option ${severity === first.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" required autocomplete="email" placeholder="Example: security@company.com" aria-describedby="remediationOwnerHelp"><small id="remediationOwnerHelp">Required — enter the email of the person accountable for completing this fix.</small></div></div>
-            <p class="microcopy"><strong>Proof expected:</strong> ${escapeHtml(first.verification)}</p>
-            <button class="button primary" type="submit">Track this fix</button>
-          </form>` : '<p class="success-box">Every declared weakness from this assessment already has a linked remediation record.</p>'}
-        </article>
-        <article class="panel"><h3>Fixes linked to this assessment</h3><div class="remediation-list">${linked.length ? linked.map(remediationRow).join('') : '<p class="muted">No fixes recorded yet. Add the first confirmed weakness.</p>'}</div></article>
-      </div>
+      <div class="section-heading compact-heading"><div><span class="eyebrow">Fix and check again</span><h2>A clear plan, then one fix at a time.</h2><p>Each fix is bound to this assessment and the selected ${escapeHtml(project.name)} scope.</p></div><span class="status-pill">${linked.filter((item) => !['verified_closed', 'accepted_risk'].includes(item.status)).length} open</span></div>
+      ${planning}
+      <section class="panel remediation-plan-list">
+        <div class="section-heading compact-heading"><div><h3>Your remediation plan</h3><p>Open a fix only when you are ready to work on it.</p></div><strong>${linked.length}</strong></div>
+        ${linked.length ? `${remediationGroup('Do first', urgent, true)}${remediationGroup('Harden next', planned, false)}` : '<p class="muted">No fixes assigned yet. Create the plan above when you are ready.</p>'}
+      </section>
     </section>
   </section>`;
+}
+
+function defaultRemediationOwner(items) {
+  const counts = new Map();
+  for (const item of items) if (item.owner_email) counts.set(item.owner_email, (counts.get(item.owner_email) || 0) + 1);
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || '';
+}
+
+function remediationProgress(items) {
+  return {
+    implemented: items.filter((item) => ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status)).length,
+    retested: items.filter((item) => ['retested', 'verified_closed'].includes(item.status)).length,
+    verified: items.filter((item) => item.status === 'verified_closed').length,
+  };
+}
+
+function remediationGroup(title, items, open) {
+  if (!items.length) return '';
+  return `<details class="remediation-group" ${open ? 'open' : ''}><summary><span>${escapeHtml(title)}</span><strong>${items.length}</strong></summary><div class="remediation-list">${items.map(remediationRow).join('')}</div></details>`;
 }
 
 function render() {
@@ -422,7 +472,7 @@ function remediationRow(item) {
     ? `<small>${escapeHtml(item.finding_key)} · ${escapeHtml(item.owner_email)}</small>`
     : `<small>${escapeHtml(item.finding_key)} · <strong>Owner required</strong></small>`;
   const ownerRepair = `<details class="remediation-edit"><summary>Edit details</summary><form class="mini-form remediation-owner-repair" data-remediation-owner-form="${escapeHtml(item.id)}"><div class="form-grid"><div class="field"><label for="severity-${escapeHtml(item.id)}">Severity</label><select id="severity-${escapeHtml(item.id)}" name="severity">${['critical','high','medium','low'].map((severity) => `<option value="${severity}" ${severity === item.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="owner-${escapeHtml(item.id)}">Owner</label><input id="owner-${escapeHtml(item.id)}" name="ownerEmail" type="email" required autocomplete="email" value="${escapeHtml(item.owner_email || '')}" placeholder="Example: security@company.com"></div></div><button class="button primary small" type="submit">Save details</button><small>Changes are added to the project audit trail.</small></form></details>`;
-  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail">${ownerRepair}<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
+  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail">${ownerRepair}<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
 }
 
 function nextRemediationOptions(status) {
@@ -460,6 +510,8 @@ function bind() {
   document.querySelector('#policyForm')?.addEventListener('submit', savePolicy);
   document.querySelector('#inventoryForm')?.addEventListener('submit', saveInventory);
   document.querySelector('#remediationForm')?.addEventListener('submit', createRemediation);
+  document.querySelector('#bulkRemediationForm')?.addEventListener('submit', createBulkRemediations);
+  document.querySelectorAll('[data-open-remediation]').forEach((button) => button.addEventListener('click', openRemediation));
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
   document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
@@ -643,6 +695,54 @@ async function saveInventory(event) {
     await api(`/api/projects/${encodeURIComponent(project.id)}/inventory`, { method: 'POST', body: JSON.stringify({ source: document.querySelector('#inventorySource').value, documents }) });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error instanceof SyntaxError ? new Error('Inventory must be valid JSON.') : error); setBusy(button, false); }
+}
+
+async function createBulkRemediations(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const ownerInput = document.querySelector('#bulkRemediationOwner');
+  const ownerEmail = ownerInput.value.trim();
+  if (!ownerEmail) {
+    ownerInput.setCustomValidity('Enter the person responsible for coordinating these fixes.');
+    ownerInput.reportValidity();
+    return;
+  }
+  const linkedKeys = new Set(linkedAssessmentRemediations(project, assessmentId).map((item) => item.finding_key));
+  const remaining = assessmentFindings().filter((finding) => !linkedKeys.has(remediationFindingKey(assessmentId, finding)));
+  const button = form.querySelector('button[type="submit"]');
+  setBusy(button, true, `Assigning ${remaining.length} fixes…`);
+  errorBox.classList.remove('show');
+  let created = 0;
+  try {
+    for (const finding of remaining) {
+      await api(`/api/projects/${encodeURIComponent(project.id)}/remediations`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: finding.recommendation,
+          severity: finding.severity,
+          ownerEmail,
+          assessmentId,
+          findingKey: remediationFindingKey(assessmentId, finding),
+        }),
+      });
+      created += 1;
+    }
+    await loadProject(project.id); await loadOverview(); render();
+    document.querySelector('.remediation-complete-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (error) {
+    await loadProject(project.id); await loadOverview(); render();
+    fail(new Error(`${created} fix${created === 1 ? '' : 'es'} assigned before the process stopped. Nothing was duplicated. ${error.message}`));
+  }
+}
+
+function openRemediation(event) {
+  const row = document.querySelector(`[data-remediation-id="${CSS.escape(event.currentTarget.dataset.openRemediation)}"]`);
+  const group = row?.closest('.remediation-group');
+  if (group) group.open = true;
+  if (row) {
+    row.open = true;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 async function createRemediation(event) {
