@@ -76,4 +76,14 @@ test('focused control keeps assessment remediation context and evidence boundari
   assert.match(focusedSource, /Return to remediation plan/);
   assert.match(focusedSource, /You may confirm Applicable with a specific reason/);
   assert.match(focusedSource, /human scope decision, not evidence that the control works/);
+  assert.match(focusedSource, /Developer test pack/);
+  assert.match(focusedSource, /copyDeveloperTestPack/);
+});
+
+test('remediation plan recognises a started or inconclusive control workflow', () => {
+  assert.match(source, /assessmentControlProgress/);
+  assert.match(source, /'F-01': 'ARL-KB-090'/);
+  assert.match(source, /Test inconclusive — connect the staging agent/);
+  assert.match(source, /Continue this fix/);
+  assert.match(source, /No control evidence was created/);
 });
