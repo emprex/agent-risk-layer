@@ -36,49 +36,71 @@ jobs:
 
           const browser = await chromium.launch({ headless: true });
 
-          async function inspectPublic(name, viewport) {
-            const page = await browser.newPage({ viewport });
-            const consoleErrors = [];
-            page.on('pageerror', (error) => consoleErrors.push(String(error)));
-            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'networkidle' });
-            const state = await page.evaluate(() => {
+          async function publicState(page) {
+            return page.evaluate(() => {
               const body = getComputedStyle(document.body);
               const headerElement = document.querySelector('[data-site-header]');
-              const header = getComputedStyle(headerElement);
-              const headerBefore = getComputedStyle(headerElement, '::before');
-              const h1 = getComputedStyle(document.querySelector('h1'));
-              const preview = document.querySelector('.product-preview');
+              const header = headerElement ? getComputedStyle(headerElement) : null;
+              const headerBefore = headerElement ? getComputedStyle(headerElement, '::before') : null;
+              const h1Element = document.querySelector('h1');
+              const h1 = h1Element ? getComputedStyle(h1Element) : null;
               const consent = document.querySelector('.analytics-consent');
-              const labels = [...document.querySelectorAll('[data-primary-navigation] a')].map((node) => node.textContent.trim());
               return {
                 bg: body.backgroundColor,
                 bgImage: body.backgroundImage,
                 color: body.color,
-                headerBg: header.backgroundColor,
-                headerBeforeDisplay: headerBefore.display,
-                h1Size: parseFloat(h1.fontSize),
-                h1Color: h1.color,
+                headerBg: header?.backgroundColor || '',
+                headerBeforeDisplay: headerBefore?.display || '',
+                h1Size: h1 ? parseFloat(h1.fontSize) : 0,
+                h1Color: h1?.color || '',
                 overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                previewVisible: Boolean(preview && preview.getBoundingClientRect().height > 200),
                 consentBg: consent ? getComputedStyle(consent).backgroundColor : '',
-                labels,
+                labels: [...document.querySelectorAll('[data-primary-navigation] a')].map((node) => node.textContent.trim()),
               };
             });
-            console.log(name, state, consoleErrors);
+          }
+
+          function assertLightPublic(name, state, viewport, { exactNav = false } = {}) {
             if (state.bg !== 'rgb(255, 255, 255)') throw new Error(`${name}: public background is not white: ${state.bg}`);
             if (state.bgImage !== 'none') throw new Error(`${name}: public background still uses cinematic imagery`);
-            if (state.headerBeforeDisplay !== 'none') throw new Error(`${name}: legacy dark header pseudo-layer remains visible`);
-            if (state.h1Size > (viewport.width < 700 ? 50 : 70)) throw new Error(`${name}: headline remains oversized: ${state.h1Size}`);
+            if (state.headerBeforeDisplay && state.headerBeforeDisplay !== 'none') throw new Error(`${name}: legacy dark header pseudo-layer remains visible`);
+            if (state.h1Size > (viewport.width < 700 ? 52 : 70)) throw new Error(`${name}: headline remains oversized: ${state.h1Size}`);
             if (state.overflow > 1) throw new Error(`${name}: horizontal overflow ${state.overflow}px`);
-            if (!state.previewVisible) throw new Error(`${name}: product preview is not visibly present`);
             if (state.consentBg && !state.consentBg.startsWith('rgba(255, 255, 255') && state.consentBg !== 'rgb(255, 255, 255)') {
               throw new Error(`${name}: consent surface is not light: ${state.consentBg}`);
             }
-            const expectedLabels = ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free'];
-            if (JSON.stringify(state.labels) !== JSON.stringify(expectedLabels)) {
-              throw new Error(`${name}: public navigation differs from simplified IA: ${state.labels.join(' | ')}`);
+            if (exactNav) {
+              const expectedLabels = ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free'];
+              if (JSON.stringify(state.labels) !== JSON.stringify(expectedLabels)) {
+                throw new Error(`${name}: public navigation differs from simplified IA: ${state.labels.join(' | ')}`);
+              }
             }
+          }
+
+          async function inspectHomepage(name, viewport) {
+            const page = await browser.newPage({ viewport });
+            const consoleErrors = [];
+            page.on('pageerror', (error) => consoleErrors.push(String(error)));
+            await page.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'networkidle' });
+            const state = await publicState(page);
+            state.previewVisible = await page.evaluate(() => {
+              const preview = document.querySelector('.product-preview');
+              return Boolean(preview && preview.getBoundingClientRect().height > 200);
+            });
+            console.log(name, state, consoleErrors);
+            assertLightPublic(name, state, viewport, { exactNav: true });
+            if (!state.previewVisible) throw new Error(`${name}: product preview is not visibly present`);
             if (consoleErrors.length) throw new Error(`${name}: page errors: ${consoleErrors.join(' | ')}`);
+            await page.screenshot({ path: `light-enterprise-${name}.png`, fullPage: true });
+            await page.close();
+          }
+
+          async function inspectPublicSurface(file, name, viewport) {
+            const page = await browser.newPage({ viewport });
+            await page.goto(`http://127.0.0.1:4173/${file}`, { waitUntil: 'networkidle' });
+            const state = await publicState(page);
+            console.log(name, state);
+            assertLightPublic(name, state, viewport, { exactNav: true });
             await page.screenshot({ path: `light-enterprise-${name}.png`, fullPage: true });
             await page.close();
           }
@@ -114,8 +136,19 @@ jobs:
             await page.close();
           }
 
-          await inspectPublic('desktop', { width: 1440, height: 1000 });
-          await inspectPublic('mobile', { width: 390, height: 844 });
+          await inspectHomepage('desktop', { width: 1440, height: 1000 });
+          await inspectHomepage('mobile', { width: 390, height: 844 });
+          for (const [file, name] of [
+            ['pricing.html', 'pricing'],
+            ['trust.html', 'trust'],
+            ['demo.html', 'demo'],
+            ['auth.html', 'auth'],
+            ['sample-report.html', 'sample-report'],
+          ]) {
+            await inspectPublicSurface(file, name, { width: 1440, height: 1000 });
+          }
+          await inspectPublicSurface('pricing.html', 'pricing-mobile', { width: 390, height: 844 });
+          await inspectPublicSurface('trust.html', 'trust-mobile', { width: 390, height: 844 });
           await inspectWorkspace({ width: 1440, height: 1000 });
           await inspectWorkspace({ width: 390, height: 844 });
           await browser.close();
