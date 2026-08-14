@@ -1103,7 +1103,7 @@ const server = http.createServer(async (req, res) => {
             try {
                 return json(res, 201, { artifact: await registerRemediationEvidenceArtifact({
                     projectId: decodeURIComponent(match[1]), itemId: decodeURIComponent(match[2]), userId: req.user.id,
-                    artifactType: cleanText(body.artifactType, 30), sourceId: cleanText(body.sourceId, 100),
+                    artifactType: cleanText(body.artifactType, 30), sourceType: cleanText(body.sourceType, 40), sourceId: cleanText(body.sourceId, 100),
                 }) });
             }
             catch (error) {

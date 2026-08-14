@@ -190,6 +190,37 @@ test('only valid registered project-scoped artifacts can satisfy remediation rea
     patch: { status: 'evidence_attached', verification: { artifactId: artifactA.id } } }), /missing, invalid/i);
 });
 
+test('current project runtime policy can be integrity-bound as implementation evidence', async () => {
+  const fixture = await projectFixture();
+  const item = await createRemediationItem({ projectId: fixture.project.id, userId: fixture.owner.id,
+    input: { title: 'Remove prohibited shell access from the runtime policy' } });
+  const published = await updateSecurityProject({ projectId: fixture.project.id, userId: fixture.owner.id,
+    patch: { policy: { mode: 'enforce', allowedTools: ['crm.read'], deniedTools: ['shell.exec'] } } });
+  const artifact = await registerRemediationEvidenceArtifact({ projectId: fixture.project.id, itemId: item.id,
+    userId: fixture.owner.id, artifactType: 'implementation', sourceType: 'runtime_policy' });
+  assert.equal(artifact.sourceType, 'runtime_policy');
+  assert.equal(artifact.sourceId, fixture.project.id);
+  const attached = await updateRemediationItem({ projectId: fixture.project.id, itemId: item.id, userId: fixture.owner.id,
+    patch: { status: 'evidence_attached', verification: { artifactId: artifact.id } } });
+  assert.equal(attached.status, 'evidence_attached');
+  assert.equal(verificationOf(attached).artifactEvidenceType, 'verified_artifact');
+  assert.equal(published.policyVersion, '2');
+});
+
+test('runtime policy implementation evidence fails closed after the policy changes', async () => {
+  const fixture = await projectFixture();
+  const item = await createRemediationItem({ projectId: fixture.project.id, userId: fixture.owner.id,
+    input: { title: 'Constrain runtime tool authority' } });
+  await updateSecurityProject({ projectId: fixture.project.id, userId: fixture.owner.id,
+    patch: { policy: { mode: 'enforce', deniedTools: ['shell.exec'] } } });
+  const artifact = await registerRemediationEvidenceArtifact({ projectId: fixture.project.id, itemId: item.id,
+    userId: fixture.owner.id, artifactType: 'implementation', sourceType: 'runtime_policy' });
+  await updateSecurityProject({ projectId: fixture.project.id, userId: fixture.owner.id,
+    patch: { policy: { mode: 'enforce', deniedTools: ['shell.exec', 'filesystem.write'] } } });
+  await assert.rejects(() => updateRemediationItem({ projectId: fixture.project.id, itemId: item.id, userId: fixture.owner.id,
+    patch: { status: 'evidence_attached', verification: { artifactId: artifact.id } } }), /digest verification failed/i);
+});
+
 test('legacy closed remediation upgrade is explicit, idempotent, authorised, and preserves history', async () => {
   const fixture = await projectFixture();
   const outsider = await user();

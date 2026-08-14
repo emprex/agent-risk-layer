@@ -102,6 +102,14 @@ test('progressive disclosure preserves the complete specialist capability set', 
   assert.match(read('public/methodology.html'), /Deployment decision/);
 });
 
+test('remediation evidence uses an in-page project artifact selector instead of a disappearing prompt', () => {
+  const source = read('public/control-plane.js');
+  assert.match(source, /Artifact that proves this implementation/);
+  assert.match(source, /Current published runtime policy/);
+  assert.match(source, /data-remediation-evidence-form/);
+  assert.doesNotMatch(source, /prompt\('AgentRiskLayer inventory snapshot ID/);
+});
+
 test('trust and conversion pages state evidence boundaries instead of unsupported assurance', () => {
   const pages = ['public/index.html', 'public/trust.html', 'public/methodology.html', 'public/security-center.html', 'public/standards.html', 'public/sample-report.html'].map(read).join('\n');
   assert.match(pages, /not an accredited certification/i);

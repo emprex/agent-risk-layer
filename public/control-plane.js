@@ -606,7 +606,24 @@ function remediationRow(item) {
     : controlProgress?.latestResult === 'inconclusive'
       ? 'Test inconclusive'
       : (item.compatibilityState || item.status).replaceAll('_', ' ');
-  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
+  const evidenceForm = item.status === 'open' ? remediationEvidenceForm(item) : '';
+  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}${evidenceForm}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
+}
+
+function remediationEvidenceForm(item) {
+  const policyEligible = Date.parse(project.policyPublishedAt) >= Date.parse(item.created_at);
+  const inventoryOptions = (project.inventory || [])
+    .filter((snapshot) => Date.parse(snapshot.createdAt) >= Date.parse(item.created_at))
+    .map((snapshot) => `<option value="asset_snapshot:${escapeHtml(snapshot.id)}">Inventory snapshot · ${escapeHtml(snapshot.source)} · ${dateTime(snapshot.createdAt)}</option>`)
+    .join('');
+  return `<form class="mini-form remediation-evidence-form" data-remediation-evidence-form="${escapeHtml(item.id)}">
+    <div class="field"><label for="evidence-source-${escapeHtml(item.id)}">Artifact that proves this implementation</label><select id="evidence-source-${escapeHtml(item.id)}" name="evidenceSource" required>
+      <option value="runtime_policy" ${policyEligible ? '' : 'disabled'}>Current published runtime policy v${escapeHtml(project.policyVersion)} · ${policyEligible ? 'recommended for tool and action rules' : 'predates this remediation; publish the implementation first'}</option>
+      ${inventoryOptions}
+    </select></div>
+    <button class="button primary small" type="submit" ${policyEligible || inventoryOptions ? '' : 'disabled'}>Attach implementation evidence</button>
+    <small>Choose the project artifact that directly proves the change. Runtime policy evidence proves configuration; the following retest must prove behaviour.</small>
+  </form>`;
 }
 
 function assessmentRemediationGuide(item) {
@@ -642,7 +659,7 @@ function evidenceLabelFor(item) {
 
 function nextRemediationOptions(status) {
   const options = {
-    open: [['evidence_attached', 'Attach evidence'], ['accepted_risk', 'Accept risk']],
+    open: [['accepted_risk', 'Accept risk']],
     evidence_attached: [['ready_for_retest', 'Ready for retest'], ['open', 'Return to open']],
     ready_for_retest: [['retested', 'Record retest'], ['evidence_attached', 'Return to evidence']],
     retested: [['verified_closed', 'Verify closed'], ['ready_for_retest', 'Retest again']],
@@ -682,6 +699,7 @@ function bind() {
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
   document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
+  document.querySelectorAll('[data-remediation-evidence-form]').forEach((form) => form.addEventListener('submit', attachRemediationEvidence));
   document.querySelectorAll('[data-remediation-owner-form]').forEach((form) => form.addEventListener('submit', repairRemediationOwner));
   document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
@@ -988,12 +1006,6 @@ async function updateRemediation(event) {
   const verification = {};
   let retestCriteria;
   try {
-    if (status === 'evidence_attached') {
-      const sourceId = prompt('AgentRiskLayer inventory snapshot ID for the implemented change:') || '';
-      const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}/evidence`,
-        { method: 'POST', body: JSON.stringify({ artifactType: 'implementation', sourceId }) });
-      verification.artifactId = registered.artifact.id;
-    }
     if (status === 'ready_for_retest') {
       retestCriteria = {
         ruleId: prompt('Required rule/control identifier (for example ARL-IN-001):') || '',
@@ -1012,6 +1024,26 @@ async function updateRemediation(event) {
     });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); target.disabled = false; }
+}
+
+async function attachRemediationEvidence(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const remediationId = form.dataset.remediationEvidenceForm;
+  const selected = form.elements.evidenceSource.value;
+  const [sourceType, sourceId = ''] = selected.split(':', 2);
+  setBusy(button, true, 'Attaching…');
+  try {
+    const registered = await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}/evidence`, {
+      method: 'POST', body: JSON.stringify({ artifactType: 'implementation', sourceType, sourceId }),
+    });
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'evidence_attached', verification: { artifactId: registered.artifact.id } }),
+    });
+    await loadProject(project.id); await loadOverview(); render();
+    document.querySelector(`[data-remediation-id="${CSS.escape(remediationId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (error) { fail(error); setBusy(button, false); }
 }
 
 async function beginEvidenceUpgrade(event) {

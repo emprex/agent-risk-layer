@@ -626,17 +626,24 @@ export async function createRemediationItem({ projectId, userId, input = {} }) {
   return db.prepare('SELECT * FROM remediation_items WHERE id=?').get(itemId);
 }
 
-export async function registerRemediationEvidenceArtifact({ projectId, itemId, userId, artifactType, sourceId }) {
+export async function registerRemediationEvidenceArtifact({ projectId, itemId, userId, artifactType, sourceType = 'asset_snapshot', sourceId }) {
   const access = await requireProjectRole(projectId, userId, REVIEW_ROLES);
   const remediation = await db.prepare('SELECT id,status,verification_json,created_at FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
   if (!remediation) throw notFound('Remediation item not found.');
   if (!['implementation', 'retest'].includes(artifactType)) throw badRequest('Evidence artifact type must be implementation or retest.');
   if (artifactType === 'retest') throw badRequest('Retest evidence must be bound to predeclared criteria during runtime execution.');
+  const cleanSourceType = clean(sourceType, 40).toLowerCase() || 'asset_snapshot';
   const cleanSourceId = clean(sourceId, 100);
-  const sourceType = 'asset_snapshot';
-  const source = await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?')
-    .get(cleanSourceId, projectId);
-  if (!source) throw badRequest(`A valid AgentRiskLayer ${sourceType.replace('_', ' ')} from this project is required.`);
+  let source;
+  if (cleanSourceType === 'asset_snapshot') {
+    source = await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?')
+      .get(cleanSourceId, projectId);
+  } else if (cleanSourceType === 'runtime_policy') {
+    source = runtimePolicyEvidenceSource(access.project);
+  } else {
+    throw badRequest('Implementation evidence source must be a project asset snapshot or the current published runtime policy.');
+  }
+  if (!source) throw badRequest(`A valid AgentRiskLayer ${cleanSourceType.replace('_', ' ')} from this project is required.`);
   if (artifactType === 'implementation' && (normaliseRemediationStatus(remediation.status) !== 'open'
     || Date.parse(source.created_at) < Date.parse(remediation.created_at)))
     throw badRequest('Implementation evidence must be recorded after this remediation was opened.');
@@ -647,10 +654,10 @@ export async function registerRemediationEvidenceArtifact({ projectId, itemId, u
   await db.prepare(`INSERT INTO remediation_evidence_artifacts
     (id,workspace_id,project_id,remediation_id,artifact_type,source_type,source_id,lifecycle_state,content_json,content_digest,created_by,created_at)
     VALUES (?,?,?,?,?,?,?,'active',?,?,?,?)`)
-    .run(artifactId, access.project.workspace_id, projectId, itemId, artifactType, sourceType, source.id, canonical, contentDigest, userId, timestamp);
+    .run(artifactId, access.project.workspace_id, projectId, itemId, artifactType, cleanSourceType, source.id, canonical, contentDigest, userId, timestamp);
   await audit({ workspaceId: access.project.workspace_id, projectId, actorType: 'user', actorId: userId, action: 'remediation.evidence_registered',
-    targetType: 'remediation_evidence_artifact', targetId: artifactId, metadata: { remediationId: itemId, artifactType, contentDigest } });
-  return { id: artifactId, projectId, remediationId: itemId, artifactType, sourceType, sourceId: source.id,
+    targetType: 'remediation_evidence_artifact', targetId: artifactId, metadata: { remediationId: itemId, artifactType, sourceType: cleanSourceType, contentDigest } });
+  return { id: artifactId, projectId, remediationId: itemId, artifactType, sourceType: cleanSourceType, sourceId: source.id,
     lifecycleState: 'active', digest: contentDigest, createdAt: timestamp };
 }
 
@@ -833,6 +840,8 @@ async function verifiedArtifactEvidence({ access, projectId, itemId, artifactId,
     throw badRequest(`Registered ${artifactType} evidence artifact is missing, invalid, or outside this remediation.`);
   const source = artifact.source_type === 'asset_snapshot'
     ? await db.prepare('SELECT id,source,source_digest,summary_json,drift_json,created_at FROM asset_snapshots WHERE id=? AND project_id=?').get(artifact.source_id, projectId)
+    : artifact.source_type === 'runtime_policy'
+      ? runtimePolicyEvidenceSource(access.project)
     : artifact.source_type === 'runtime_event'
       ? await db.prepare(`SELECT id,request_id,decision,observed_decision,severity,rule_ids_json,policy_version,policy_digest,policy_published_at,created_at
           FROM runtime_events WHERE id=? AND project_id=?`).get(artifact.source_id, projectId)
@@ -855,6 +864,24 @@ async function verifiedArtifactEvidence({ access, projectId, itemId, artifactId,
       retestPolicyDigest: source.policy_digest,
       retestPolicyPublishedAt: source.policy_published_at,
     } : {}),
+  };
+}
+
+function runtimePolicyEvidenceSource(project) {
+  const policy = compileRuntimePolicy(parseJson(project.policy_json, {}));
+  const version = String(project.policy_version || '');
+  const policyDigest = String(project.policy_digest || '');
+  const publishedAt = project.policy_published_at || null;
+  if (!version || !policyDigest || !publishedAt || !safeEqualDigest(policyDigest, policyIdentityDigest(policy, project.id))) return null;
+  return {
+    id: project.id,
+    schema: 'arl.runtime-policy-evidence.v1',
+    project_id: project.id,
+    policy_version: version,
+    policy_digest: policyDigest,
+    policy_published_at: publishedAt,
+    policy,
+    created_at: publishedAt,
   };
 }
 
