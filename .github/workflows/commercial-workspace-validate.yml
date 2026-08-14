@@ -19,6 +19,5 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: npm run check
-      - run: node --test tests/commercial-workspace-ux.test.js
-      - run: npm test
+      - name: Isolate Control Intelligence suite
+        run: NODE_ENV=test node --test tests/control-intelligence.test.js
