@@ -529,7 +529,11 @@ function assessmentRemediationGuide(item) {
   if (!playbook) return '';
   const evidenceReady = ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status);
   const intelligenceParams = new URLSearchParams({ projectId: project.id, view: 'overview', assessment: assessmentId, finding: findingId, remediation: item.id });
-  const intelligenceHref = `/control-intelligence.html?${intelligenceParams.toString()}`;
+  const matchedControlId = assessmentControlMap[findingId];
+  if (matchedControlId) intelligenceParams.set('controlId', matchedControlId);
+  const intelligenceHref = matchedControlId
+    ? `/control-intelligence-control.html?${intelligenceParams.toString()}`
+    : `/control-intelligence.html?${intelligenceParams.toString()}`;
   const controlProgress = assessmentControlProgress.get(findingId);
   const progressNote = controlProgress?.latestResult === 'inconclusive' ? '<div class="notice warning"><strong>Test inconclusive</strong><span>No control evidence was created. Connect the staging agent or give the developer test pack to the implementation owner, then rerun this exact test.</span></div>' : '';
   return `<section class="implementation-playbook">
@@ -537,7 +541,7 @@ function assessmentRemediationGuide(item) {
     <ol class="playbook-steps"><li><span>1</span><div><strong>Implement</strong><p>${escapeHtml(playbook.outcome)}</p></div></li><li><span>2</span><div><strong>Capture the right proof</strong><p>${escapeHtml(playbook.proof)}</p></div></li><li><span>3</span><div><strong>Test it</strong><p>${escapeHtml(playbook.test)}</p></div></li></ol>
     <div class="evidence-trust-note"><strong>${evidenceReady ? 'Evidence is linked' : 'No evidence linked yet'}</strong><span>${evidenceReady ? 'Continue with the recorded retest and verification state.' : 'An inventory snapshot is not accepted unless it proves this exact control. Record matching evidence in Control Intelligence; customer evidence remains unverified until it is integrity-bound and reviewed.'}</span></div>
     ${progressNote}
-    <div class="button-row"><a class="button primary small" href="${intelligenceHref}">${evidenceReady ? 'Review evidence' : 'Add matching evidence'}</a><button class="button ghost small" type="button" data-copy-playbook="${escapeHtml(findingId)}">Copy checklist</button></div>
+    <div class="button-row"><a class="button primary small" href="${intelligenceHref}">${evidenceReady ? 'Review evidence' : controlProgress?.started ? 'Continue evidence task' : 'Add matching evidence'}</a><button class="button ghost small" type="button" data-copy-playbook="${escapeHtml(findingId)}">Copy checklist</button></div>
     ${evidenceReady ? `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabelFor(item))}</p><p><strong>Retest result:</strong> ${escapeHtml(item.verification?.retestResult || 'Not run')}</p><label>Next verified step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Choose when ready</option>${nextRemediationOptions(item.status)}</select></label>` : ''}
   </section>`;
 }
