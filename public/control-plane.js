@@ -22,6 +22,8 @@ const assessmentId = handoffParams.get('assessment') || '';
 const assessmentToken = handoffParams.get('token') || '';
 let assessmentContext = null;
 let assessmentProjectConfirmed = false;
+const assessmentControlProgress = new Map();
+const assessmentControlMap = Object.freeze({ 'F-01': 'ARL-KB-090' });
 const runtimeProjects = () => (overview?.projects || []).filter((item) => item.projectKind !== 'assessment_case');
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
@@ -51,6 +53,7 @@ async function init() {
           break;
         }
       }
+      await loadAssessmentControlProgress();
     } else {
       const availableRuntimeProjects = runtimeProjects();
       if (selectedProjectId && availableRuntimeProjects.some((item) => item.id === selectedProjectId)) await loadProject(selectedProjectId);
@@ -64,6 +67,26 @@ async function init() {
       location.href = `/auth.html?next=${encodeURIComponent(next)}`;
     } else fail(error);
   }
+}
+
+async function loadAssessmentControlProgress() {
+  assessmentControlProgress.clear();
+  if (!project || !assessmentId) return;
+  const linked = linkedAssessmentRemediations(project, assessmentId);
+  await Promise.all(linked.map(async (item) => {
+    const findingId = item.finding_key?.split(':').at(-1);
+    const controlId = assessmentControlMap[findingId];
+    if (!controlId) return;
+    try {
+      const detail = await api(`/api/projects/${encodeURIComponent(project.id)}/control-intelligence/controls/${encodeURIComponent(controlId)}`);
+      const tests = [...(detail.tests || []), ...(detail.testHistory || [])].filter((test, index, all) => test?.id && all.findIndex((candidate) => candidate.id === test.id) === index);
+      const latest = tests.sort((left, right) => String(right.completedAt || right.startedAt || '').localeCompare(String(left.completedAt || left.startedAt || '')))[0] || null;
+      const started = detail.applicability?.status === 'applicable' || tests.length > 0;
+      assessmentControlProgress.set(findingId, { controlId, started, latestResult: latest?.result || '', nextAction: detail.chain?.nextAction || '' });
+    } catch {
+      // Progress is helpful context, never a reason to block the remediation plan.
+    }
+  }));
 }
 
 async function loadOverview() {
@@ -115,6 +138,9 @@ function assessmentRemediationWorkspace() {
   const urgent = linked.filter((item) => ['critical', 'high'].includes(item.severity));
   const planned = linked.filter((item) => !['critical', 'high'].includes(item.severity));
   const next = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9))[0];
+  const nextFindingId = next?.finding_key?.split(':').at(-1);
+  const nextProgress = assessmentControlProgress.get(nextFindingId);
+  const nextStatus = nextProgress?.latestResult === 'inconclusive' ? 'Test inconclusive — connect the staging agent or hand the test pack to a developer.' : nextProgress?.started ? (nextProgress.nextAction || 'Continue the recorded control workflow.') : 'Work on the highest-priority fix first. Evidence and retesting come later.';
   const remainingPreview = remaining.map((finding) => `<li><span class="status-pill">${escapeHtml(finding.severity)}</span><div><strong>${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.recommendation)}</small></div></li>`).join('');
   const planning = remaining.length ? `
     <section class="panel remediation-plan-card">
@@ -146,7 +172,7 @@ function assessmentRemediationWorkspace() {
         <div><strong>${progress.retested}</strong><span>retested</span></div>
         <div><strong>${progress.verified}</strong><span>verified closed</span></div>
       </div>
-      ${next ? `<div class="next-remediation"><div><small>Start here</small><strong>${escapeHtml(next.finding_key.split(':').at(-1))} · ${escapeHtml(next.title)}</strong><span>Work on the highest-priority fix first. Evidence and retesting come later.</span></div><button class="button primary" type="button" data-open-remediation="${escapeHtml(next.id)}">Start this fix</button></div>` : ''}
+      ${next ? `<div class="next-remediation"><div><small>${nextProgress?.started ? 'Continue here' : 'Start here'}</small><strong>${escapeHtml(nextFindingId)} · ${escapeHtml(next.title)}</strong><span>${escapeHtml(nextStatus)}</span></div><button class="button primary" type="button" data-open-remediation="${escapeHtml(next.id)}">${nextProgress?.started ? 'Continue this fix' : 'Start this fix'}</button></div>` : ''}
     </section>`;
   return `<section class="assessment-remediation-workspace">
     <section class="panel assessment-scope-banner">
@@ -504,10 +530,13 @@ function assessmentRemediationGuide(item) {
   const evidenceReady = ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status);
   const intelligenceParams = new URLSearchParams({ projectId: project.id, view: 'overview', assessment: assessmentId, finding: findingId, remediation: item.id });
   const intelligenceHref = `/control-intelligence.html?${intelligenceParams.toString()}`;
+  const controlProgress = assessmentControlProgress.get(findingId);
+  const progressNote = controlProgress?.latestResult === 'inconclusive' ? '<div class="notice warning"><strong>Test inconclusive</strong><span>No control evidence was created. Connect the staging agent or give the developer test pack to the implementation owner, then rerun this exact test.</span></div>' : '';
   return `<section class="implementation-playbook">
     <div class="playbook-heading"><span class="eyebrow">Your implementation guide</span><h4>What done looks like</h4><p>${escapeHtml(playbook.outcome)}</p></div>
     <ol class="playbook-steps"><li><span>1</span><div><strong>Implement</strong><p>${escapeHtml(playbook.outcome)}</p></div></li><li><span>2</span><div><strong>Capture the right proof</strong><p>${escapeHtml(playbook.proof)}</p></div></li><li><span>3</span><div><strong>Test it</strong><p>${escapeHtml(playbook.test)}</p></div></li></ol>
     <div class="evidence-trust-note"><strong>${evidenceReady ? 'Evidence is linked' : 'No evidence linked yet'}</strong><span>${evidenceReady ? 'Continue with the recorded retest and verification state.' : 'An inventory snapshot is not accepted unless it proves this exact control. Record matching evidence in Control Intelligence; customer evidence remains unverified until it is integrity-bound and reviewed.'}</span></div>
+    ${progressNote}
     <div class="button-row"><a class="button primary small" href="${intelligenceHref}">${evidenceReady ? 'Review evidence' : 'Add matching evidence'}</a><button class="button ghost small" type="button" data-copy-playbook="${escapeHtml(findingId)}">Copy checklist</button></div>
     ${evidenceReady ? `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabelFor(item))}</p><p><strong>Retest result:</strong> ${escapeHtml(item.verification?.retestResult || 'Not run')}</p><label>Next verified step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Choose when ready</option>${nextRemediationOptions(item.status)}</select></label>` : ''}
   </section>`;
