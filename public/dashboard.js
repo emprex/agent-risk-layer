@@ -1,47 +1,28 @@
 import { api, escapeHtml, money, riskClass, setBusy, showError } from './shared.js';
+import { assessmentProjects, matchingAssessmentProject } from './assessment-remediation.js';
 
 const root = document.querySelector('#dashboardRoot');
 let dashboardData;
 let pendingMfaSecret = '';
+let selectedGroup = null;
 
 async function init() {
   try {
     dashboardData = await api('/api/dashboard');
     const data = dashboardData;
-    document.querySelector('#welcome').textContent = `Welcome back, ${data.user.email.split('@')[0]}.`;
+    const groups = groupAssessments(data.assessments || []);
+    selectedGroup = chooseAgentGroup(groups);
     root.className = '';
-    root.innerHTML = `
-      ${verificationBanner(data.user)}
-      ${data.user.isSuperuser ? '<div class="notice"><strong>Owner access is active.</strong> Advanced reports and owner operations are available. Production owner actions still require MFA. <a class="text-link" href="/admin.html">Open owner operations</a></div>' : ''}
-      ${todayActions(data)}
-      ${progressOverview(data)}
-      <section id="risks" class="panel section-gap">
-        <div class="section-heading compact-heading"><div><span class="eyebrow">Your agents</span><h2>Checks and next actions</h2><p>Open a result to see what information, evidence or remediation is needed next.</p></div><a class="button primary small" href="/assessment.html">Check another agent</a></div>
-        <div class="assessment-list">${data.assessments.length ? data.assessments.map(assessmentHtml).join('') : emptyAssessments()}</div>
-      </section>
-      ${advancedTools(data)}
-      <div class="dashboard-grid section-gap">
-        <section class="panel">
-          <div class="section-heading compact-heading"><div><span class="eyebrow">Plan</span><h2>Plan and billing</h2></div><a class="button ghost small" href="/pricing.html">Compare plans</a></div>
-          ${subscriptionHtml(data.subscription, data.controlPlane?.entitlement)}
-        </section>
-        <section class="panel">
-          <h2>Payment and report delivery</h2>
-          ${data.purchases.length ? data.purchases.slice(0, 12).map(purchaseHtml).join('') : '<p class="muted">No payments yet.</p>'}
-        </section>
-      </div>
-      <section id="settings" class="panel section-gap account-settings">
-        <div class="section-heading compact-heading"><div><span class="eyebrow">Account security</span><h2>Privacy and account settings</h2></div><a class="button ghost small" href="/api/account/export">Download my data</a></div>
-        <div id="accountMessage" class="success-box" hidden></div><div id="accountError" class="error-box"></div>
-        <div class="settings-grid">
-          ${mfaHtml(data.user)}
-          <form id="passwordForm" class="auth-form settings-card"><h3>Change password</h3><div class="field"><label for="currentPassword">Current password</label><input id="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label for="newPassword">New password</label><input id="newPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></div><button class="button ghost" type="submit">Update password</button></form>
-          <form id="deleteAccountForm" class="auth-form settings-card danger-zone"><h3>Delete account</h3><p class="muted small-copy">Permanently removes account data. Active subscriptions must be cancelled first.</p><div class="field"><label for="deletePassword">Password</label><input id="deletePassword" type="password" autocomplete="current-password" required></div>${data.user.mfaEnabled ? '<div class="field"><label for="deleteMfaCode">Authenticator or recovery code</label><input id="deleteMfaCode" type="text" autocomplete="one-time-code" required></div>' : ''}<div class="field"><label for="deleteConfirmation">Type DELETE</label><input id="deleteConfirmation" type="text" required autocomplete="off"></div><button class="button danger" type="submit">Delete account permanently</button></form>
-        </div>
-      </section>`;
+    root.innerHTML = renderWorkspace(data, groups, selectedGroup);
     wireEvents();
+    if (location.hash === '#settings') document.querySelector('#settings')?.setAttribute('open', '');
     const registrationNotice = sessionStorage.getItem('arl_registration_notice');
-    if (registrationNotice) { accountMessage(registrationNotice); sessionStorage.removeItem('arl_registration_notice'); }
+    if (registrationNotice) {
+      document.querySelector('#settings')?.setAttribute('open', '');
+      accountMessage(registrationNotice);
+      sessionStorage.removeItem('arl_registration_notice');
+    }
+    await hydrateDeploymentEvidence(data, selectedGroup);
   } catch (error) {
     if (error.message.includes('Sign in')) location.href = `/auth.html?next=${encodeURIComponent('/dashboard.html')}`;
     else root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div>`;
@@ -56,31 +37,178 @@ function isIncompleteAssessment(assessment) {
   return String(assessment.risk_band || assessment.riskBand || '').toLowerCase() === 'undetermined';
 }
 
-function todayActions(data) {
-  const assessments = data.assessments || [];
-  const projects = data.controlPlane?.projects || [];
-  const openFixes = Number(data.controlPlane?.totals?.openRemediations || 0);
-  const incomplete = assessments.filter(isIncompleteAssessment);
-  const scoreable = assessments.filter((item) => !isIncompleteAssessment(item));
-  const highest = [...scoreable].sort((a, b) => Number(b.score) - Number(a.score))[0];
-  const reviewTarget = incomplete[0] || highest || assessments[0];
-  const critical = scoreable.filter((item) => String(item.risk_band || item.riskBand || '').toLowerCase() === 'critical').length;
-  let recommended;
-  if (!assessments.length) recommended = { eyebrow: 'Recommended first step', title: 'Check one AI agent', text: 'Answer simple questions about access, data, actions and recovery. You will receive a clear decision and the first risks to address.', href: '/assessment.html', action: 'Start the free check', time: 'About 5–10 minutes' };
-  else if (critical || (highest && Number(highest.score) >= 75)) recommended = { eyebrow: 'Urgent review', title: `Review ${highest.name}`, text: 'This is currently your highest recorded declared risk. Read the decision first, then assign the most important confirmed fix.', href: assessmentLink(highest), action: 'Review the result', time: 'Start with the first confirmed finding' };
-  else if (incomplete.length) recommended = { eyebrow: 'Information required', title: `Complete ${incomplete[0].name}`, text: 'This check is on hold because material security information is still unanswered. Open the result, confirm the missing context with the agent owner, then create an updated assessment with the clarified answers.', href: assessmentLink(incomplete[0]), action: 'Review missing information', time: 'Unknowns are not vulnerabilities' };
-  else if (openFixes) recommended = { eyebrow: 'Work in progress', title: `Close ${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}`, text: 'Confirm the owner, attach implementation evidence and retest the same risk before marking it closed.', href: '/control-plane.html#remediation', action: 'Open required fixes', time: 'Evidence required before closure' };
-  else if (!projects.length) recommended = { eyebrow: 'Next protection step', title: 'See live protection work', text: 'Run the safe built-in example before connecting code. It shows missing, changed and reused approvals being blocked.', href: '/control-plane.html', action: 'Run the safe example', time: 'About 30 seconds' };
-  else recommended = { eyebrow: 'Keep control current', title: 'Review your latest agent decisions', text: 'Check what the runtime policy allowed or blocked and whether any new access or behaviour needs attention.', href: '/control-plane.html', action: 'Review live protection', time: 'No terminal required' };
+function normalise(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
-  return `<section class="v10-dashboard-next" aria-labelledby="todayActionsTitle">
-    <article class="dashboard-recommended-action"><div><span class="eyebrow">${escapeHtml(recommended.eyebrow)}</span><h2 id="todayActionsTitle">${escapeHtml(recommended.title)}</h2><p>${escapeHtml(recommended.text)}</p><small>${escapeHtml(recommended.time)}</small></div><a class="button primary button-xl" href="${recommended.href}">${escapeHtml(recommended.action)} →</a></article>
-    <div class="dashboard-secondary-actions" aria-label="Other security tasks">
-      <a href="/assessment.html"><span>Check</span><strong>Assess another agent</strong><small>Understand risk and the next action</small></a>
-      <a href="${reviewTarget ? assessmentLink(reviewTarget) : '/sample-report.html'}"><span>Review</span><strong>${reviewTarget ? 'Open the latest result' : 'See an example result'}</strong><small>Information, findings, decision and proof</small></a>
-      <a href="/control-plane.html"><span>Protect</span><strong>Open live protection</strong><small>Safe example, policies and decisions</small></a>
+function groupAssessments(assessments) {
+  const groups = new Map();
+  for (const assessment of assessments) {
+    const key = `${normalise(assessment.name)}::${normalise(assessment.agent_type)}`;
+    if (!groups.has(key)) groups.set(key, { key, name: assessment.name, agentType: assessment.agent_type, assessments: [] });
+    groups.get(key).assessments.push(assessment);
+  }
+  return [...groups.values()];
+}
+
+function chooseAgentGroup(groups) {
+  if (!groups.length) return null;
+  const params = new URLSearchParams(location.search);
+  const requestedAssessment = params.get('assessment') || sessionStorage.getItem('arl_selected_assessment') || '';
+  const selected = groups.find((group) => group.assessments.some((assessment) => assessment.id === requestedAssessment)) || groups[0];
+  const latest = selected.assessments[0];
+  if (latest?.id) sessionStorage.setItem('arl_selected_assessment', latest.id);
+  return selected;
+}
+
+function matchingProject(data, assessment) {
+  if (!assessment) return null;
+  return matchingAssessmentProject(data.controlPlane || {}, {
+    name: assessment.name,
+    agentType: assessment.agent_type,
+  });
+}
+
+function assessmentPosture(assessment) {
+  if (!assessment) return { state: 'unresolved', title: 'Not assessed', detail: 'Run an assessment to establish the current declared posture.' };
+  if (isIncompleteAssessment(assessment)) {
+    return { state: 'information', title: 'Information required', detail: 'Material assessment context is still unknown. Unknown information is not a vulnerability.' };
+  }
+  const band = String(assessment.risk_band || 'Not determined');
+  const state = normalise(band) === 'critical' ? 'critical' : ['high', 'moderate'].includes(normalise(band)) ? 'hold' : 'unresolved';
+  return { state, title: `${band} declared risk`, detail: `${assessment.score}/100 aggregate assessment score. This is not a deployment decision.` };
+}
+
+function nextActionForAssessment(assessment, project) {
+  if (!assessment) return { title: 'Assess one AI agent', detail: 'Describe its current access, data, actions and safeguards.', label: 'Start assessment', href: '/assessment.html' };
+  if (isIncompleteAssessment(assessment)) return { title: 'Complete the missing security information', detail: 'Confirm unknown architecture and control facts with the agent owner before relying on a deployment posture.', label: 'Review missing information', href: assessmentLink(assessment) };
+  const band = normalise(assessment.risk_band);
+  if (band === 'critical' || band === 'high') return { title: 'Review the highest-priority declared weaknesses', detail: 'Open the current result, then create remediation work only for weaknesses actually supported by the assessment.', label: 'Open current result', href: assessmentLink(assessment) };
+  if (project) return { title: 'Review deployment evidence for this exact agent', detail: 'Check applicable controls, evidence, tests, remediation and the current server-recorded deployment decision.', label: 'Open deployment evidence', href: `/control-intelligence.html?projectId=${encodeURIComponent(project.id)}` };
+  if (assessment.latest_inspection_summary) return { title: 'Review the latest observed evidence', detail: 'The assessment has technical inspection evidence. Review what it observed and whether the assessed version changed.', label: 'Open evidence', href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}` };
+  return { title: 'Add evidence when stronger assurance is needed', detail: 'The assessment is still primarily declared information until it is linked to reviewed or repeatable evidence.', label: 'Add technical evidence', href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}` };
+}
+
+function renderWorkspace(data, groups, group) {
+  const latest = group?.assessments?.[0] || null;
+  const project = matchingProject(data, latest);
+  if (project?.id) sessionStorage.setItem('arl_selected_project', project.id);
+  const posture = assessmentPosture(latest);
+  const next = nextActionForAssessment(latest, project);
+  return `
+    ${verificationBanner(data.user)}
+    ${group ? agentCommandHtml(group, latest, project, posture, next, groups) : emptyAgentWorkspace()}
+    ${group ? agentEvidenceSummary(group, latest, project) : ''}
+    ${group ? assessmentHistory(group) : ''}
+    ${allAgentsHtml(groups, group)}
+    ${workspaceSecondary(data)}
+    ${settingsHtml(data)}
+  `;
+}
+
+function agentCommandHtml(group, latest, project, posture, next, groups) {
+  const projectQuery = project?.id ? `?projectId=${encodeURIComponent(project.id)}` : '';
+  const findingsHref = `/control-plane.html?assessment=${encodeURIComponent(latest.id)}#remediation`;
+  const evidenceHref = `/inspector.html?assessment=${encodeURIComponent(latest.id)}`;
+  const runtimeHref = project?.id ? `/control-plane.html?projectId=${encodeURIComponent(project.id)}#runtime` : '/control-plane.html#runtime';
+  const deploymentHref = project?.id ? `/control-intelligence.html?projectId=${encodeURIComponent(project.id)}` : assessmentLink(latest);
+  return `<section class="workspace-agent-command" aria-labelledby="activeAgentTitle">
+    <div class="workspace-agent-command-head">
+      <div class="workspace-agent-identity"><span class="eyebrow">Current agent</span><h2 id="activeAgentTitle">${escapeHtml(group.name)}</h2><p>${escapeHtml(group.agentType)} · latest assessment ${new Date(latest.created_at).toLocaleDateString('en-GB')}${project ? ` · ${escapeHtml(project.environment || project.projectKind || 'project')}` : ''}</p></div>
+      ${groups.length > 1 ? `<div class="workspace-agent-selector"><label for="workspaceAgentSelect">Switch agent</label><select id="workspaceAgentSelect">${groups.map((item) => `<option value="${escapeHtml(item.assessments[0].id)}" ${item.key === group.key ? 'selected' : ''}>${escapeHtml(item.name)} · ${escapeHtml(item.agentType)}</option>`).join('')}</select></div>` : ''}
     </div>
+    <div class="workspace-status-grid">
+      <div class="workspace-status-card" id="deploymentEvidenceState" data-state="unresolved"><small>Deployment evidence</small><strong>${project ? 'Loading recorded decision…' : 'No linked decision'}</strong><p>${project ? 'Reading the server-recorded decision for this exact project.' : 'This assessment is not yet linked to a matching evidence project. No deployment state is inferred.'}</p></div>
+      <div class="workspace-status-card" data-state="${escapeHtml(posture.state)}"><small>Latest assessment</small><strong>${escapeHtml(posture.title)}</strong><p>${escapeHtml(posture.detail)}</p></div>
+      <div class="workspace-next-action"><small>Next action</small><strong>${escapeHtml(next.title)}</strong><p>${escapeHtml(next.detail)}</p><a class="button primary small" href="${next.href}">${escapeHtml(next.label)}</a></div>
+    </div>
+    <nav class="workspace-local-nav" data-local-navigation aria-label="${escapeHtml(group.name)} workspace"><a href="/dashboard.html?assessment=${encodeURIComponent(latest.id)}" aria-current="page">Summary</a><a href="${findingsHref}">Findings</a><a href="${deploymentHref}">${project ? 'Controls' : 'Assessment'}</a><a href="${evidenceHref}">Evidence</a><a href="${runtimeHref}">Runtime</a><a href="#agentHistory">History</a></nav>
   </section>`;
+}
+
+function emptyAgentWorkspace() {
+  return `<section class="workspace-agent-command"><div class="workspace-empty"><span class="eyebrow">No agent assessed yet</span><h2>Start with one AI agent.</h2><p>Describe the current system and AgentRiskLayer will keep unknown information separate from confirmed weaknesses.</p><a class="button primary" href="/assessment.html">Assess my first agent</a></div></section>`;
+}
+
+function agentEvidenceSummary(group, assessment, project) {
+  const inspection = assessment.latest_inspection_summary;
+  const redteam = assessment.latest_redteam_summary;
+  return `<div class="workspace-content-grid">
+    <section class="workspace-section"><div class="workspace-section-heading"><div><span class="eyebrow">Why this is the current posture</span><h2>What is known now</h2><p>Declared assessment state stays separate from observed and test-generated evidence.</p></div></div><div class="workspace-signal-grid" id="agentEvidenceSignals">
+      <div class="workspace-signal"><small>Declared assessment</small><strong>${isIncompleteAssessment(assessment) ? 'Information incomplete' : `${escapeHtml(assessment.risk_band)} · ${assessment.score}/100`}</strong></div>
+      <div class="workspace-signal"><small>Observed evidence</small><strong>${inspection ? 'Inspection recorded' : 'No inspection recorded'}</strong></div>
+      <div class="workspace-signal"><small>Attack-test evidence</small><strong>${redteam ? 'Test run recorded' : 'No attack test recorded'}</strong></div>
+    </div></section>
+    <aside class="workspace-section"><span class="eyebrow">Scope</span><h3>${escapeHtml(group.name)}</h3><p class="muted">${project ? `Linked project: ${escapeHtml(project.name)}` : 'No exact-name evidence project is linked from this dashboard view.'}</p><p class="muted small-copy">Assessment, observed evidence and runtime evidence keep their own provenance. Absence of evidence is not converted into a vulnerability.</p></aside>
+  </div>`;
+}
+
+function assessmentHistory(group) {
+  const [latest, ...history] = group.assessments;
+  return `<section class="workspace-section section-gap" id="agentHistory"><div class="workspace-section-heading"><div><span class="eyebrow">Assessment history</span><h2>${escapeHtml(group.name)}</h2><p>The newest assessment is shown first. Earlier records remain immutable history.</p></div><a class="button ghost small" href="${assessmentLink(latest)}">Open current result</a></div>
+    ${history.length ? `<details class="workspace-history"><summary><span>Previous assessments (${history.length})</span><span>View history</span></summary><div class="workspace-history-body workspace-agent-list">${history.map((assessment) => assessmentHistoryRow(assessment)).join('')}</div></details>` : '<p class="muted">No previous assessment for this agent.</p>'}
+  </section>`;
+}
+
+function assessmentHistoryRow(assessment) {
+  const status = isIncompleteAssessment(assessment) ? 'Information required' : `${assessment.risk_band} · ${assessment.score}/100`;
+  return `<article class="workspace-agent-row"><div><h3>${escapeHtml(status)}</h3><p>${new Date(assessment.created_at).toLocaleDateString('en-GB')} · ${escapeHtml(assessment.scoring_version || 'assessment')}</p></div><div class="workspace-agent-row-actions"><a class="button ghost small" href="${assessmentLink(assessment)}">Open</a><button class="icon-button" title="Delete assessment" aria-label="Delete ${escapeHtml(assessment.name)} assessment from ${new Date(assessment.created_at).toLocaleDateString('en-GB')}" data-delete-assessment="${escapeHtml(assessment.id)}">×</button></div></article>`;
+}
+
+function allAgentsHtml(groups, selected) {
+  if (!groups.length) return '';
+  return `<section class="workspace-section section-gap"><div class="workspace-section-heading"><div><span class="eyebrow">All agents</span><h2>${groups.length} ${groups.length === 1 ? 'agent' : 'agents'} in this account</h2><p>Each row shows the latest assessment only. Open History on an agent for older records.</p></div></div><div class="workspace-agent-list">${groups.map((group) => {
+    const latest = group.assessments[0];
+    const state = isIncompleteAssessment(latest) ? 'Information required' : `${latest.risk_band} · ${latest.score}/100`;
+    return `<article class="workspace-agent-row"><div><h3>${escapeHtml(group.name)}${group.key === selected?.key ? ' · Current' : ''}</h3><p>${escapeHtml(group.agentType)} · ${escapeHtml(state)} · checked ${new Date(latest.created_at).toLocaleDateString('en-GB')}</p></div><div class="workspace-agent-row-actions"><a class="button ${group.key === selected?.key ? 'ghost' : 'primary'} small" href="/dashboard.html?assessment=${encodeURIComponent(latest.id)}">${group.key === selected?.key ? 'Viewing' : 'Open agent'}</a></div></article>`;
+  }).join('')}</div></section>`;
+}
+
+function workspaceSecondary(data) {
+  return `<details class="workspace-secondary"><summary><span>Specialist tools and supporting progress</span><small>Inspector, Control Intelligence, runtime, risk library and workflow status</small></summary><div class="workspace-secondary-body">${progressOverview(data)}${advancedTools(data)}</div></details>`;
+}
+
+function settingsHtml(data) {
+  return `<details id="settings" class="workspace-secondary section-gap"><summary><span>Account, plan and privacy settings</span><small>Billing, MFA, data export and owner operations</small></summary><div class="workspace-secondary-body">
+    ${data.user.isSuperuser ? '<div class="workspace-admin-note"><strong>Owner access is active.</strong> Production owner operations remain MFA-gated. <a class="text-link" href="/admin.html">Open owner operations</a></div>' : ''}
+    <div class="dashboard-grid section-gap"><section class="panel"><div class="section-heading compact-heading"><div><span class="eyebrow">Plan</span><h2>Plan and billing</h2></div><a class="button ghost small" href="/pricing.html">Compare plans</a></div>${subscriptionHtml(data.subscription, data.controlPlane?.entitlement)}</section><section class="panel"><h2>Payment and report delivery</h2>${data.purchases.length ? data.purchases.slice(0, 12).map(purchaseHtml).join('') : '<p class="muted">No payments yet.</p>'}</section></div>
+    <section class="panel section-gap account-settings"><div class="section-heading compact-heading"><div><span class="eyebrow">Account security</span><h2>Privacy and account settings</h2></div><a class="button ghost small" href="/api/account/export">Download my data</a></div><div id="accountMessage" class="success-box" hidden></div><div id="accountError" class="error-box"></div><div class="settings-grid">${mfaHtml(data.user)}<form id="passwordForm" class="auth-form settings-card"><h3>Change password</h3><div class="field"><label for="currentPassword">Current password</label><input id="currentPassword" type="password" autocomplete="current-password" required></div><div class="field"><label for="newPassword">New password</label><input id="newPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></div><button class="button ghost" type="submit">Update password</button></form><form id="deleteAccountForm" class="auth-form settings-card danger-zone"><h3>Delete account</h3><p class="muted small-copy">Permanently removes account data. Active subscriptions must be cancelled first.</p><div class="field"><label for="deletePassword">Password</label><input id="deletePassword" type="password" autocomplete="current-password" required></div>${data.user.mfaEnabled ? '<div class="field"><label for="deleteMfaCode">Authenticator or recovery code</label><input id="deleteMfaCode" type="text" autocomplete="one-time-code" required></div>' : ''}<div class="field"><label for="deleteConfirmation">Type DELETE</label><input id="deleteConfirmation" type="text" required autocomplete="off"></div><button class="button danger" type="submit">Delete account permanently</button></form></div></section>
+  </div></details>`;
+}
+
+async function hydrateDeploymentEvidence(data, group) {
+  const assessment = group?.assessments?.[0];
+  const project = matchingProject(data, assessment);
+  const card = document.querySelector('#deploymentEvidenceState');
+  if (!project || !card) return;
+  try {
+    const payload = await api(`/api/projects/${encodeURIComponent(project.id)}/control-intelligence?limit=1`);
+    if (group !== selectedGroup) return;
+    const deployment = payload.deploymentState || null;
+    const summary = payload.summary || {};
+    if (!deployment?.decision) {
+      card.dataset.state = 'unresolved';
+      card.querySelector('strong').textContent = 'No decision recorded';
+      card.querySelector('p').textContent = 'The project exists, but no current server-recorded deployment decision is available. No HOLD or PROCEED state is inferred.';
+    } else {
+      const decision = String(deployment.decision).replaceAll('_', ' ');
+      const normalised = normalise(deployment.decision).replaceAll('_', ' ');
+      card.dataset.state = normalised.includes('proceed') ? 'proceed' : normalised.includes('do not') ? 'stop' : 'hold';
+      card.querySelector('strong').textContent = decision;
+      card.querySelector('p').textContent = deployment.rationale || 'Server-recorded deployment decision.';
+    }
+    const signals = document.querySelector('#agentEvidenceSignals');
+    if (signals) {
+      const blockers = summary.deploymentBlockers;
+      const missing = summary.controlsMissingEvidence;
+      const findings = summary.findingsAwaitingRemediation;
+      signals.insertAdjacentHTML('beforeend', `${blockers != null ? `<div class="workspace-signal"><small>Deployment blockers</small><strong>${Number(blockers)}</strong></div>` : ''}${missing != null ? `<div class="workspace-signal"><small>Controls missing evidence</small><strong>${Number(missing)}</strong></div>` : ''}${findings != null ? `<div class="workspace-signal"><small>Open evidence-chain findings</small><strong>${Number(findings)}</strong></div>` : ''}`);
+    }
+  } catch (error) {
+    card.dataset.state = 'unresolved';
+    card.querySelector('strong').textContent = 'Decision unavailable';
+    card.querySelector('p').textContent = `Could not load the current deployment evidence: ${error.message}`;
+  }
 }
 
 function progressOverview(data) {
@@ -92,54 +220,26 @@ function progressOverview(data) {
   const openFixes = Number(totals.openRemediations || 0);
   const protectedRequests = Number(totals.runtimeRequestsMonth || 0);
   const reviewStep = incompleteCount
-    ? { label: 'Complete missing information', complete: false, detail: `${incompleteCount} incomplete ${incompleteCount === 1 ? 'check needs' : 'checks need'} clarification`, href: '#risks' }
-    : { label: 'Address urgent findings', complete: assessed && urgent === 0, detail: urgent ? `${urgent} critical ${urgent === 1 ? 'result needs' : 'results need'} attention` : assessed ? 'No critical result recorded' : 'Complete a check first', href: '#risks' };
+    ? { label: 'Complete missing information', complete: false, detail: `${incompleteCount} incomplete ${incompleteCount === 1 ? 'check needs' : 'checks need'} clarification`, href: '/dashboard.html' }
+    : { label: 'Address urgent findings', complete: assessed && urgent === 0, detail: urgent ? `${urgent} critical ${urgent === 1 ? 'result needs' : 'results need'} attention` : assessed ? 'No critical result recorded' : 'Complete a check first', href: '/dashboard.html' };
   const steps = [
-    { label: 'Check the risk', complete: assessed, detail: assessed ? `${Number(data.stats.assessments || 0)} saved ${Number(data.stats.assessments || 0) === 1 ? 'check' : 'checks'}` : 'No agent checked yet', href: '/assessment.html' },
+    { label: 'Assess', complete: assessed, detail: assessed ? `${Number(data.stats.assessments || 0)} saved assessments` : 'No agent assessed yet', href: '/assessment.html' },
     reviewStep,
-    { label: 'Track and verify fixes', complete: assessed && incompleteCount === 0 && openFixes === 0, detail: incompleteCount ? 'Clarify the missing security information before creating fixes' : openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
-    { label: 'Protect live actions', complete: protectedRequests > 0, detail: protectedRequests ? `${protectedRequests.toLocaleString('en-GB')} decisions this month` : 'No live decision recorded yet', href: '/control-plane.html' },
+    { label: 'Remediate and retest', complete: assessed && incompleteCount === 0 && openFixes === 0, detail: incompleteCount ? 'Clarify missing information first' : openFixes ? `${openFixes} open ${openFixes === 1 ? 'fix' : 'fixes'}` : assessed ? 'No open fix recorded' : 'No work recorded yet', href: '/control-plane.html#remediation' },
+    { label: 'Runtime evidence', complete: protectedRequests > 0, detail: protectedRequests ? `${protectedRequests.toLocaleString('en-GB')} decisions this month` : 'No runtime decision recorded yet', href: '/control-plane.html#runtime' },
   ];
-  const complete = steps.filter((step) => step.complete).length;
-  return `<section class="v10-progress-panel"><div class="progress-panel-heading"><div><span class="eyebrow">Your progress</span><h2>${complete} of ${steps.length} security steps active</h2><p>This is a guide, not an automatic deployment approval.</p></div><strong>${Math.round((complete / steps.length) * 100)}%</strong></div><ol class="v10-task-list">${steps.map((step, index) => `<li class="${step.complete ? 'complete' : ''}"><a href="${step.href}"><span>${step.complete ? '✓' : index + 1}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.detail)}</small></div><b>${step.complete ? 'Active' : 'Next'}</b></a></li>`).join('')}</ol></section>`;
-}
-
-function emptyAssessments() {
-  return '<div class="empty-state customer-empty"><h3>No agents checked yet</h3><p>Start with one agent. The result will explain the main risks and what to do next.</p><a class="button primary" href="/assessment.html">Check my first agent</a></div>';
+  return `<section class="panel section-gap"><div class="section-heading compact-heading"><div><span class="eyebrow">Supporting workflow status</span><h2>Evidence journey</h2><p>This is workflow progress, not an automatic deployment approval.</p></div></div><ol class="v10-task-list">${steps.map((step, index) => `<li class="${step.complete ? 'complete' : ''}"><a href="${step.href}"><span>${step.complete ? '✓' : index + 1}</span><div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.detail)}</small></div><b>${step.complete ? 'Recorded' : 'Next'}</b></a></li>`).join('')}</ol></section>`;
 }
 
 function advancedTools(data) {
-  const totals = data.controlPlane?.totals || {};
-  const projects = data.controlPlane?.projects || [];
-  const entitlement = data.controlPlane?.entitlement || { name: 'Community', runtimeRequestsPerMonth: 10000, retentionDays: 7 };
-  const readinessLinks = projects.slice(0, 5).map((project) => `<a href="/risk-readiness.html?projectId=${encodeURIComponent(project.id)}"><strong>${escapeHtml(project.name)} evidence readiness</strong><span>Applicability, evidence states and deployment gates</span></a>`).join('');
-  return `<details class="panel section-gap advanced-tools">
-    <summary><span><strong>Technical tools</strong><small>Inspector, attack simulation, runtime policies, API keys, inventory and audit evidence</small></span><span>Open advanced tools</span></summary>
-    <div class="advanced-tools-body">
-      <p>These tools are for developers, security teams and auditors. You do not need them to understand your first result.</p>
-      <div class="technical-tool-grid">
-        <a href="/control-intelligence.html"><strong>Control Intelligence</strong><span>Architecture, controls, evidence chain and deployment decision</span></a>
-        <a href="/control-plane.html"><strong>Live protection</strong><span>Policies, keys and runtime decisions</span></a>
-        <a href="/inspector.html"><strong>Code and configuration check</strong><span>Local, read-only technical evidence</span></a>
-        <a href="/redteam.html"><strong>Attack simulation</strong><span>Controlled tests for authorised systems</span></a>
-        <a href="/workspaces.html"><strong>Team access</strong><span>Roles, workspaces and integrations</span></a>
-        <a href="/risk-library.html"><strong>Risk library</strong><span>Problem, bounded check and remediation guidance</span></a>
-        ${readinessLinks}
-      </div>
-      <div class="technical-usage-line"><span>${escapeHtml(entitlement.name)} plan</span><span>${Number(totals.projects || 0)} projects</span><span>${Number(totals.assets || 0)} assets tracked</span><span>${entitlement.retentionDays || 7}-day retention</span></div>
-    </div>
-  </details>`;
+  const projects = assessmentProjects(data.controlPlane || {});
+  const readinessLinks = projects.slice(0, 5).map((project) => `<a href="/risk-readiness.html?projectId=${encodeURIComponent(project.id)}"><strong>${escapeHtml(project.name)} readiness</strong><span>Applicability, evidence states and deployment gates</span></a>`).join('');
+  return `<section class="panel section-gap"><div class="section-heading compact-heading"><div><span class="eyebrow">Specialist views</span><h2>Technical tools</h2><p>Open these when you need deeper evidence, testing or runtime policy detail.</p></div></div><div class="technical-tool-grid"><a href="/control-intelligence.html"><strong>Deployment evidence</strong><span>Controls, tests, evidence chain and server-recorded decision</span></a><a href="/inspector.html"><strong>Technical inspection</strong><span>Local, read-only observed evidence</span></a><a href="/redteam.html"><strong>Attack simulation</strong><span>Controlled tests for authorised systems</span></a><a href="/control-plane.html#runtime"><strong>Runtime</strong><span>Policies, approvals and runtime decisions</span></a><a href="/risk-library.html"><strong>Risk library</strong><span>Problem, bounded check and remediation guidance</span></a>${readinessLinks}</div></section>`;
 }
 
 function verificationBanner(user) {
   if (user.emailVerified) return '';
-  return `<section class="notice verification-banner"><div><strong>Verify your email to use paid and technical workflows</strong><p>Your saved checks remain available. Verification protects report purchases, local inspection and attack-test authorisations.</p></div><button id="resendVerification" class="button ghost small">Resend verification email</button></section>`;
-}
-
-function mfaHtml(user) {
-  if (user.mfaEnabled) return `<form id="mfaDisableForm" class="auth-form settings-card"><h3>Multi-factor authentication</h3><p class="pass-text">Enabled</p><p class="muted small-copy">A TOTP authenticator or unused recovery code is required at sign-in.</p><div class="field"><label for="mfaDisablePassword">Password</label><input id="mfaDisablePassword" type="password" required autocomplete="current-password"></div><div class="field"><label for="mfaDisableCode">Authenticator or recovery code</label><input id="mfaDisableCode" type="text" required autocomplete="one-time-code"></div><button class="button danger" type="submit">Disable MFA</button></form>`;
-  if (!user.emailVerified) return `<section class="settings-card"><h3>Multi-factor authentication</h3><p class="muted">Verify your email before enabling MFA.</p></section>`;
-  return `<form id="mfaSetupForm" class="auth-form settings-card"><h3>Multi-factor authentication</h3><p class="muted small-copy">Protect your account with any TOTP authenticator app.</p><div class="field"><label for="mfaSetupPassword">Password</label><input id="mfaSetupPassword" type="password" required autocomplete="current-password"></div><button class="button ghost" type="submit">Start MFA setup</button><div id="mfaSetupDetails" hidden><div class="field"><label for="mfaSecret">Manual setup secret</label><input id="mfaSecret" readonly></div><p class="muted small-copy">Add the secret to your authenticator, then enter the six-digit code.</p><div class="field"><label for="mfaEnableCode">Authentication code</label><input id="mfaEnableCode" type="text" inputmode="numeric" autocomplete="one-time-code"></div><button id="enableMfaButton" class="button primary" type="button">Enable MFA</button></div></form>`;
+  return `<section class="notice verification-banner"><div><strong>Verify your email to use paid and technical workflows</strong><p>Your saved assessments remain available. Verification protects report purchases, local inspection and attack-test authorisations.</p></div><button id="resendVerification" class="button ghost small">Resend verification email</button></section>`;
 }
 
 function purchaseHtml(purchase) {
@@ -149,33 +249,24 @@ function purchaseHtml(purchase) {
   return `<div class="assessment-row"><div><strong>${escapeHtml(purchase.product_key.replaceAll('_', ' '))}</strong><div class="assessment-meta"><span>${new Date(purchase.created_at).toLocaleDateString('en-GB')}</span><span>${escapeHtml(fulfilment)}</span><span>${escapeHtml(email)}</span></div>${problem ? `<p class="fail-text small-copy">${escapeHtml(problem)}</p>` : ''}</div><span>${money(purchase.amount_pence, false, purchase.currency)}</span></div>`;
 }
 
-function assessmentHtml(assessment) {
-  const incomplete = isIncompleteAssessment(assessment);
-  const urgent = assessment.risk_band === 'Critical' || assessment.risk_band === 'High';
-  const next = incomplete
-    ? 'Complete missing security information before a deployment decision'
-    : urgent
-      ? 'Fix the highest confirmed risks before wider use'
-      : assessment.latest_inspection_summary
-        ? 'Review the latest evidence and check again after changes'
-        : 'Add proof or a technical check when you need stronger assurance';
-  const status = incomplete
-    ? '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'
-    : `<span class="risk-pill ${riskClass(assessment.risk_band)}">${escapeHtml(assessment.risk_band)} declared risk</span><strong>${assessment.score}/100</strong>`;
-  return `<article class="customer-assessment-row">
-    <div class="assessment-status-block">${status}</div>
-    <div class="assessment-main"><h3>${escapeHtml(assessment.name)}</h3><p>${escapeHtml(assessment.agent_type)} · checked ${new Date(assessment.created_at).toLocaleDateString('en-GB')}</p><div class="assessment-next"><small>Next action</small><strong>${escapeHtml(next)}</strong></div></div>
-    <div class="assessment-simple-actions"><a class="button primary small" href="${assessmentLink(assessment)}">Open result</a><button class="icon-button" title="Delete assessment" aria-label="Delete ${escapeHtml(assessment.name)}" data-delete-assessment="${escapeHtml(assessment.id)}">×</button></div>
-  </article>`;
-}
-
 function subscriptionHtml(subscription, entitlement = {}) {
   if (dashboardData?.user?.isSuperuser) return `<div class="subscription-card"><strong>Owner access</strong><p class="muted">Reports and technical tools are enabled for the owner account. Production owner operations still require MFA.</p><a class="button ghost full" href="/admin.html">Owner operations</a></div>`;
   if (!subscription) return `<div class="subscription-card"><strong>${escapeHtml(entitlement.name || 'Current plan')}</strong><p class="muted">${Number(entitlement.projects || 0)} active project allowance · ${Number(entitlement.runtimeRequestsPerMonth || 0).toLocaleString('en-GB')} Guard decisions/month · ${Number(entitlement.retentionDays || 0)}-day retention.</p><a class="button ghost full" href="/pricing.html">Compare plans</a></div>`;
   return `<div class="subscription-card"><strong>${escapeHtml(entitlement.name || subscription.plan_key.replaceAll('_', ' '))}</strong><p class="muted">Status: ${escapeHtml(subscription.status)}${subscription.current_period_end ? `<br>Current period ends ${new Date(subscription.current_period_end).toLocaleDateString('en-GB')}` : ''}</p><button class="button ghost full" id="billingPortal">Manage billing</button>${subscription.stripe_subscription_id?.startsWith('demo_') && subscription.status === 'active' ? '<button class="button danger full" id="cancelDemo">Cancel demo plan</button>' : ''}</div>`;
 }
 
+function mfaHtml(user) {
+  if (user.mfaEnabled) return `<form id="mfaDisableForm" class="auth-form settings-card"><h3>Multi-factor authentication</h3><p class="pass-text">Enabled</p><p class="muted small-copy">A TOTP authenticator or unused recovery code is required at sign-in.</p><div class="field"><label for="mfaDisablePassword">Password</label><input id="mfaDisablePassword" type="password" required autocomplete="current-password"></div><div class="field"><label for="mfaDisableCode">Authenticator or recovery code</label><input id="mfaDisableCode" type="text" required autocomplete="one-time-code"></div><button class="button danger" type="submit">Disable MFA</button></form>`;
+  if (!user.emailVerified) return `<section class="settings-card"><h3>Multi-factor authentication</h3><p class="muted">Verify your email before enabling MFA.</p></section>`;
+  return `<form id="mfaSetupForm" class="auth-form settings-card"><h3>Multi-factor authentication</h3><p class="muted small-copy">Protect your account with any TOTP authenticator app.</p><div class="field"><label for="mfaSetupPassword">Password</label><input id="mfaSetupPassword" type="password" required autocomplete="current-password"></div><button class="button ghost" type="submit">Start MFA setup</button><div id="mfaSetupDetails" hidden><div class="field"><label for="mfaSecret">Manual setup secret</label><input id="mfaSecret" readonly></div><p class="muted small-copy">Add the secret to your authenticator, then enter the six-digit code.</p><div class="field"><label for="mfaEnableCode">Authentication code</label><input id="mfaEnableCode" type="text" inputmode="numeric" autocomplete="one-time-code"></div><button id="enableMfaButton" class="button primary" type="button">Enable MFA</button></div></form>`;
+}
+
 function wireEvents() {
+  document.querySelector('#workspaceAgentSelect')?.addEventListener('change', (event) => {
+    const assessmentId = event.target.value;
+    sessionStorage.setItem('arl_selected_assessment', assessmentId);
+    location.href = `/dashboard.html?assessment=${encodeURIComponent(assessmentId)}`;
+  });
   document.querySelector('#resendVerification')?.addEventListener('click', resendVerification);
   document.querySelector('#billingPortal')?.addEventListener('click', billingPortal);
   document.querySelector('#cancelDemo')?.addEventListener('click', cancelDemo);
@@ -199,5 +290,5 @@ async function deleteAccount(event) { event.preventDefault(); if (!confirm('This
 function accountMessage(message) { const box = document.querySelector('#accountMessage'); if (!box) return; box.textContent = message; box.hidden = false; document.querySelector('#accountError')?.classList.remove('show'); }
 function accountError(message) { const box = document.querySelector('#accountError'); if (box) showError(box, message); }
 
-document.querySelector('#logout').addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST', body: '{}' }); location.href = '/'; });
+document.querySelector('#logout')?.addEventListener('click', async () => { await api('/api/auth/logout', { method: 'POST', body: '{}' }); location.href = '/'; });
 init();
