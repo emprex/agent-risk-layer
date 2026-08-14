@@ -36,6 +36,8 @@ function ensureWorkspaceStyles() {
   document.head.appendChild(stylesheet);
 }
 
+// Client-side project context is navigation state only. Every destination API must still
+// authorise the requested workspace/project server-side before returning or mutating data.
 function currentProjectContext() {
   const params = new URLSearchParams(location.search);
   const requested = params.get('projectId') || '';
