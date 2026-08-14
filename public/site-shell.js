@@ -1,15 +1,41 @@
 import { api, hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
-for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia'], ['/visual-experience.css', 'arlVisualExperience']]) {
-  if (document.querySelector(`link[href="${href}"]`)) continue;
+const WORKSPACE_STYLES = Object.freeze(['/security-workspace.css', '/workspace-app.css']);
+const PUBLIC_EXPERIENCE_STYLES = Object.freeze([
+  ['/premium-theme.css', 'arlPremiumTheme'],
+  ['/premium-media.css', 'arlPremiumMedia'],
+  ['/visual-experience.css', 'arlVisualExperience'],
+]);
+
+function workspaceRequest() {
+  if (document.body?.dataset.shell === 'app') return true;
+  const params = new URLSearchParams(location.search);
+  return location.pathname.endsWith('/help.html') && params.get('from') === 'workspace';
+}
+
+function ensureStylesheet(href, dataKey = '') {
+  if (document.querySelector(`link[href="${href}"]`)) return;
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
   stylesheet.href = href;
-  stylesheet.dataset[dataKey] = '';
+  if (dataKey) stylesheet.dataset[dataKey] = '';
   document.head.appendChild(stylesheet);
 }
 
+function prepareVisualSystem() {
+  if (workspaceRequest()) {
+    document.body.dataset.shell = 'app';
+    for (const [href] of PUBLIC_EXPERIENCE_STYLES) {
+      document.querySelectorAll(`link[href="${href}"]`).forEach((node) => node.remove());
+    }
+    for (const href of WORKSPACE_STYLES) ensureStylesheet(href, href === '/workspace-app.css' ? 'arlWorkspaceApp' : 'arlSecurityWorkspace');
+    return;
+  }
+  for (const [href, dataKey] of PUBLIC_EXPERIENCE_STYLES) ensureStylesheet(href, dataKey);
+}
+
+prepareVisualSystem();
 applyDocumentSeo();
 
 const header = document.querySelector('[data-site-header]');
@@ -23,36 +49,52 @@ const workspaceNavigation = Object.freeze([
   { key: 'assess', label: 'Assess', href: '/assessment.html' },
   { key: 'findings', label: 'Findings', href: '/control-plane.html#remediation' },
   { key: 'evidence', label: 'Evidence', href: '/inspector.html' },
-  { key: 'runtime', label: 'Runtime', href: '/control-plane.html#runtime' },
+  { key: 'runtime', label: 'Runtime', href: '/control-plane.html' },
   { key: 'settings', label: 'Settings', href: '/dashboard.html#settings' },
 ]);
 
-function ensureWorkspaceStyles() {
-  if (document.querySelector('link[href="/security-workspace.css"]')) return;
-  const stylesheet = document.createElement('link');
-  stylesheet.rel = 'stylesheet';
-  stylesheet.href = '/security-workspace.css';
-  stylesheet.dataset.arlSecurityWorkspace = '';
-  document.head.appendChild(stylesheet);
+function updateWorkspaceView() {
+  if (document.body.dataset.shell !== 'app') return;
+  document.body.dataset.workspaceView = location.hash ? location.hash.slice(1) : 'summary';
 }
 
-// Client-side project context is navigation state only. Every destination API must still
-// authorise the requested workspace/project server-side before returning or mutating data.
-function currentProjectContext() {
+function normaliseLegacyRuntimeRoute() {
+  if (document.body.dataset.shell !== 'app') return;
+  if (!location.pathname.endsWith('/control-plane.html') || location.hash !== '#runtime') return;
+  sessionStorage.removeItem('arl_control_plane_mode');
+  history.replaceState({}, '', `${location.pathname}${location.search}`);
+}
+
+normaliseLegacyRuntimeRoute();
+updateWorkspaceView();
+
+// Selected IDs are navigation hints only. Destination APIs remain responsible for
+// workspace, tenant, project and role authorisation before returning or mutating data.
+function currentNavigationContext() {
   const params = new URLSearchParams(location.search);
-  const requested = params.get('projectId') || '';
-  if (requested) {
-    sessionStorage.setItem('arl_selected_project', requested);
-    return requested;
-  }
-  return sessionStorage.getItem('arl_selected_project') || '';
+  const requestedProject = params.get('projectId') || '';
+  const requestedAssessment = params.get('assessment') || '';
+  if (requestedProject) sessionStorage.setItem('arl_selected_project', requestedProject);
+  if (requestedAssessment) sessionStorage.setItem('arl_selected_assessment', requestedAssessment);
+  return {
+    projectId: requestedProject || sessionStorage.getItem('arl_selected_project') || '',
+    assessmentId: requestedAssessment || sessionStorage.getItem('arl_selected_assessment') || '',
+  };
 }
 
-function contextualHref(item, projectId) {
-  if (!projectId) return item.href;
-  if (item.key === 'findings' || item.key === 'runtime') {
-    const [pathname, hash = ''] = item.href.split('#');
-    return `${pathname}?projectId=${encodeURIComponent(projectId)}${hash ? `#${hash}` : ''}`;
+function contextualHref(item, context) {
+  if (item.key === 'overview' && context.assessmentId) {
+    return `/dashboard.html?assessment=${encodeURIComponent(context.assessmentId)}`;
+  }
+  if (item.key === 'findings') {
+    if (context.assessmentId) return `/control-plane.html?assessment=${encodeURIComponent(context.assessmentId)}#remediation`;
+    if (context.projectId) return `/control-plane.html?projectId=${encodeURIComponent(context.projectId)}#remediation`;
+  }
+  if (item.key === 'evidence' && context.assessmentId) {
+    return `/inspector.html?assessment=${encodeURIComponent(context.assessmentId)}`;
+  }
+  if (item.key === 'runtime' && context.projectId) {
+    return `/control-plane.html?projectId=${encodeURIComponent(context.projectId)}`;
   }
   return item.href;
 }
@@ -80,26 +122,29 @@ function ensureLogoutButton() {
 
 function applyWorkspaceNavigation() {
   if (!navigation) return;
-  ensureWorkspaceStyles();
-  document.body.dataset.shell = 'app';
-  const projectId = currentProjectContext();
+  prepareVisualSystem();
+  const context = currentNavigationContext();
   const logout = navigation.querySelector('#logout');
   navigation.querySelectorAll('a').forEach((link) => link.remove());
+
   for (const item of workspaceNavigation) {
     const link = document.createElement('a');
-    link.href = contextualHref(item, projectId);
+    link.href = contextualHref(item, context);
     link.textContent = item.label;
     link.dataset.workspaceKey = item.key;
     navigation.insertBefore(link, logout || null);
   }
+
   const help = document.createElement('a');
   const helpParams = new URLSearchParams({ from: 'workspace' });
-  if (projectId) helpParams.set('projectId', projectId);
+  if (context.projectId) helpParams.set('projectId', context.projectId);
+  if (context.assessmentId) helpParams.set('assessment', context.assessmentId);
   help.href = `/help.html?${helpParams.toString()}`;
   help.textContent = 'Help';
   help.className = 'workspace-help-nav';
   help.dataset.workspaceKey = 'help';
   navigation.insertBefore(help, logout || null);
+
   ensureLogoutButton();
   navigation.dataset.workspaceNavigation = 'true';
   markCurrentNavigation();
@@ -181,9 +226,7 @@ function setMenu(open, { focus = false, restoreFocus = false } = {}) {
   if (!header || !menuButton || !navigation) return;
   const nextOpen = Boolean(open && mobileNavigation.matches);
 
-  if (nextOpen && !header.classList.contains('menu-open')) {
-    lastFocusedElement = document.activeElement;
-  }
+  if (nextOpen && !header.classList.contains('menu-open')) lastFocusedElement = document.activeElement;
 
   header.classList.toggle('menu-open', nextOpen);
   menuButton.setAttribute('aria-expanded', String(nextOpen));
@@ -194,9 +237,7 @@ function setMenu(open, { focus = false, restoreFocus = false } = {}) {
   menuScrim?.setAttribute('aria-hidden', String(!nextOpen));
   setNavigationAvailability(nextOpen);
 
-  if (focus && nextOpen) {
-    requestAnimationFrame(() => navigation.querySelector('a[href], button:not([disabled])')?.focus());
-  }
+  if (focus && nextOpen) requestAnimationFrame(() => navigation.querySelector('a[href], button:not([disabled])')?.focus());
 
   if (restoreFocus && !nextOpen) {
     const target = lastFocusedElement instanceof HTMLElement && document.contains(lastFocusedElement)
@@ -220,7 +261,22 @@ menuButton?.addEventListener('click', () => {
 menuScrim?.addEventListener('click', () => setMenu(false, { restoreFocus: true }));
 
 navigation?.addEventListener('click', (event) => {
-  if (event.target.closest('a')) setMenu(false);
+  const link = event.target.closest('a[href]');
+  if (link?.dataset.workspaceKey === 'runtime') sessionStorage.removeItem('arl_control_plane_mode');
+  if (link) setMenu(false);
+});
+
+// Old local links may still point to #runtime. Normalise those to the customer runtime
+// home and clear the specialist-mode preference before navigation.
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href]');
+  if (!link || document.body.dataset.shell !== 'app') return;
+  const target = new URL(link.href, location.origin);
+  if (!target.pathname.endsWith('/control-plane.html') || target.hash !== '#runtime') return;
+  event.preventDefault();
+  sessionStorage.removeItem('arl_control_plane_mode');
+  target.hash = '';
+  location.href = `${target.pathname}${target.search}`;
 });
 
 document.addEventListener('keydown', (event) => {
@@ -259,12 +315,12 @@ function syncNavigationForViewport() {
 }
 
 async function initialiseShell() {
-  if (document.body.dataset.shell === 'app') applyWorkspaceNavigation();
+  if (workspaceRequest()) applyWorkspaceNavigation();
   else markCurrentNavigation();
   ensureSeoAcquisitionLink();
 
   const user = await hydrateNav().catch(() => null);
-  if (location.pathname.endsWith('/help.html') && user) {
+  if (location.pathname.endsWith('/help.html') && user && new URLSearchParams(location.search).get('from') === 'workspace') {
     applyWorkspaceNavigation();
     const brand = document.querySelector('.brand-v10');
     if (brand) {
@@ -280,6 +336,7 @@ async function initialiseShell() {
 mobileNavigation.addEventListener('change', syncNavigationForViewport);
 window.addEventListener('hashchange', () => {
   setMenu(false);
+  updateWorkspaceView();
   markCurrentNavigation();
 });
 window.addEventListener('pagehide', () => setMenu(false));
