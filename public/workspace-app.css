@@ -1,0 +1,704 @@
+/*
+ * AgentRiskLayer authenticated application shell.
+ *
+ * This file is presentation-only. It deliberately separates the operational
+ * workspace from the public marketing visual system. It does not derive or
+ * mutate security decisions, evidence trust, findings, approvals, billing,
+ * authorisation or persistence.
+ */
+
+:root {
+  --app-nav-width: 224px;
+  --app-bg: #09111a;
+  --app-nav: #0b141d;
+  --app-surface: #0e1923;
+  --app-surface-raised: #111e29;
+  --app-line: #20303c;
+  --app-line-soft: #182732;
+  --app-text: #eef5f7;
+  --app-muted: #9aabb4;
+  --app-subtle: #70848e;
+  --app-accent: #55d7e8;
+  --app-good: #61d5ad;
+  --app-warn: #e8b763;
+  --app-bad: #f27b76;
+}
+
+body[data-shell="app"] {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--app-bg) !important;
+  background-image: none !important;
+  color: var(--app-text);
+}
+
+body[data-shell="app"]::before,
+body[data-shell="app"]::after {
+  display: none !important;
+}
+
+body[data-shell="app"] .site-header,
+body[data-shell="app"] .site-header-v10,
+body[data-shell="app"] .app-header-v10 {
+  background: var(--app-nav) !important;
+  background-image: none !important;
+  border-color: var(--app-line) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body[data-shell="app"] .brand,
+body[data-shell="app"] .brand-v10 {
+  color: var(--app-text) !important;
+}
+
+body[data-shell="app"] .brand-mark {
+  background: var(--app-accent) !important;
+  background-image: none !important;
+  color: #071116 !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .brand-v10 small {
+  color: var(--app-subtle) !important;
+  letter-spacing: .02em !important;
+}
+
+body[data-shell="app"] .primary-navigation > a {
+  color: var(--app-muted) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .primary-navigation > a:hover,
+body[data-shell="app"] .primary-navigation > a:focus-visible,
+body[data-shell="app"] .primary-navigation > a[aria-current="page"],
+body[data-shell="app"] .primary-navigation > a[aria-current="location"] {
+  color: var(--app-text) !important;
+  background: #13222d !important;
+}
+
+body[data-shell="app"] .button,
+body[data-shell="app"] button {
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .button.primary {
+  border-color: #67d8e5 !important;
+  background: var(--app-accent) !important;
+  background-image: none !important;
+  color: #061116 !important;
+  text-shadow: none !important;
+}
+
+body[data-shell="app"] .button.primary:hover,
+body[data-shell="app"] .button.primary:focus-visible {
+  background: #74dfeb !important;
+}
+
+body[data-shell="app"] .button.ghost,
+body[data-shell="app"] .button.secondary,
+body[data-shell="app"] .icon-button {
+  border-color: var(--app-line) !important;
+  background: transparent !important;
+  background-image: none !important;
+  color: var(--app-text) !important;
+}
+
+body[data-shell="app"] .panel,
+body[data-shell="app"] .workspace-agent-command,
+body[data-shell="app"] .workspace-section,
+body[data-shell="app"] .workspace-secondary,
+body[data-shell="app"] .workspace-technical,
+body[data-shell="app"] .result-decision-card,
+body[data-shell="app"] .ci-panel,
+body[data-shell="app"] .ci-card,
+body[data-shell="app"] .assessment-stage {
+  background: var(--app-surface) !important;
+  background-image: none !important;
+  border-color: var(--app-line) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+body[data-shell="app"] .eyebrow,
+body[data-shell="app"] [class*="eyebrow"] {
+  display: inline-block;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--app-subtle) !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+  letter-spacing: .11em !important;
+  text-transform: uppercase;
+}
+
+body[data-shell="app"] h1,
+body[data-shell="app"] h2,
+body[data-shell="app"] h3 {
+  text-shadow: none !important;
+}
+
+body[data-shell="app"] .workspace-page-header,
+body[data-shell="app"] .page-heading,
+body[data-shell="app"] .app-page-heading,
+body[data-shell="app"] .assessment-intro,
+body[data-shell="app"] .ci-workspace-header,
+body[data-shell="app"] .result-agent-header {
+  margin: 0 !important;
+  padding: 4px 0 20px !important;
+  border-bottom: 1px solid var(--app-line-soft) !important;
+}
+
+body[data-shell="app"] .workspace-page-header h1,
+body[data-shell="app"] .page-heading h1,
+body[data-shell="app"] .app-page-heading h1,
+body[data-shell="app"] .assessment-intro h1,
+body[data-shell="app"] .ci-workspace-header h1,
+body[data-shell="app"] .result-agent-header h1 {
+  margin: 4px 0 5px !important;
+  max-width: 880px;
+  font-size: clamp(28px, 3vw, 34px) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.025em !important;
+}
+
+body[data-shell="app"] .workspace-page-header p,
+body[data-shell="app"] .page-heading p,
+body[data-shell="app"] .app-page-heading p,
+body[data-shell="app"] .assessment-intro > p,
+body[data-shell="app"] .ci-workspace-header p,
+body[data-shell="app"] .result-agent-header p {
+  margin: 0 !important;
+  max-width: 760px;
+  color: var(--app-muted) !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+body[data-shell="app"] .context-help-link {
+  border-color: var(--app-line) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] input,
+body[data-shell="app"] select,
+body[data-shell="app"] textarea {
+  border-color: var(--app-line) !important;
+  background: #0a141d !important;
+  color: var(--app-text) !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] input:focus,
+body[data-shell="app"] select:focus,
+body[data-shell="app"] textarea:focus,
+body[data-shell="app"] a:focus-visible,
+body[data-shell="app"] button:focus-visible {
+  outline: 2px solid var(--app-accent) !important;
+  outline-offset: 2px;
+}
+
+/* Dashboard: decision and next action dominate; declared score is supporting context. */
+body[data-shell="app"] .workspace-agent-command {
+  margin-top: 18px !important;
+  border-radius: 10px !important;
+}
+
+body[data-shell="app"] .workspace-agent-command-head {
+  padding: 18px 20px 16px !important;
+  background: transparent !important;
+}
+
+body[data-shell="app"] .workspace-agent-identity h2 {
+  font-size: clamp(24px, 2.6vw, 30px) !important;
+}
+
+body[data-shell="app"] .workspace-status-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, .8fr) !important;
+  grid-template-areas:
+    "decision action"
+    "assessment action";
+  border-top: 1px solid var(--app-line-soft);
+}
+
+body[data-shell="app"] .workspace-status-grid > .workspace-status-card:first-child {
+  grid-area: decision;
+  padding: 22px 20px 16px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--app-line-soft) !important;
+}
+
+body[data-shell="app"] .workspace-status-grid > .workspace-status-card:nth-child(2) {
+  grid-area: assessment;
+  padding: 13px 20px 16px !important;
+  border: 0 !important;
+}
+
+body[data-shell="app"] .workspace-status-grid > .workspace-next-action {
+  grid-area: action;
+  padding: 22px !important;
+  border: 0 !important;
+  border-left: 1px solid var(--app-line) !important;
+  background: var(--app-surface-raised) !important;
+}
+
+body[data-shell="app"] .workspace-status-card strong {
+  font-size: 22px !important;
+}
+
+body[data-shell="app"] .workspace-next-action strong {
+  font-size: 18px !important;
+}
+
+body[data-shell="app"] .workspace-status-card[data-state="proceed"] strong { color: var(--app-good) !important; }
+body[data-shell="app"] .workspace-status-card[data-state="hold"] strong,
+body[data-shell="app"] .workspace-status-card[data-state="unresolved"] strong,
+body[data-shell="app"] .workspace-status-card[data-state="information"] strong { color: var(--app-warn) !important; }
+body[data-shell="app"] .workspace-status-card[data-state="stop"] strong,
+body[data-shell="app"] .workspace-status-card[data-state="critical"] strong { color: var(--app-bad) !important; }
+
+body[data-shell="app"] .workspace-local-nav,
+body[data-shell="app"] .ci-tabs,
+body[data-shell="app"] .control-tabs {
+  border-color: var(--app-line-soft) !important;
+  background: transparent !important;
+}
+
+body[data-shell="app"] .workspace-local-nav a,
+body[data-shell="app"] .ci-tabs button,
+body[data-shell="app"] .control-tabs a {
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--app-muted) !important;
+}
+
+body[data-shell="app"] .workspace-local-nav a[aria-current="page"],
+body[data-shell="app"] .ci-tabs button[aria-selected="true"],
+body[data-shell="app"] .control-tabs a:target {
+  background: #14232e !important;
+  color: var(--app-text) !important;
+}
+
+body[data-shell="app"] .workspace-section {
+  border-radius: 9px !important;
+}
+
+body[data-shell="app"] .workspace-signal-grid {
+  gap: 0 !important;
+}
+
+body[data-shell="app"] .workspace-signal {
+  padding: 11px 14px !important;
+  border: 0 !important;
+  border-right: 1px solid var(--app-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+body[data-shell="app"] .workspace-signal:last-child { border-right: 0 !important; }
+
+body[data-shell="app"] .workspace-agent-row,
+body[data-shell="app"] .finding-work-item,
+body[data-shell="app"] .scan-row {
+  border-color: var(--app-line-soft) !important;
+  border-radius: 7px !important;
+  background: #0b151e !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Result: remove marketing treatment; keep decision -> reason -> action. */
+body[data-shell="app"] .result-decision-card {
+  padding: 22px !important;
+  border-width: 1px 1px 1px 3px !important;
+  border-radius: 9px !important;
+}
+
+body[data-shell="app"] .result-decision-card h2 {
+  font-size: clamp(26px, 3vw, 34px) !important;
+}
+
+body[data-shell="app"] .result-reason-grid > div {
+  background: transparent !important;
+  border-color: var(--app-line-soft) !important;
+  border-radius: 6px !important;
+}
+
+body[data-shell="app"] .result-next-action {
+  border-color: var(--app-line) !important;
+  background: var(--app-surface-raised) !important;
+  box-shadow: none !important;
+}
+
+/* Assessment: workflow first, marketing copy demoted. */
+body[data-shell="app"] .assessment-intro {
+  padding-bottom: 14px !important;
+}
+
+body[data-shell="app"] .assessment-assurance {
+  margin-top: 10px !important;
+  gap: 16px !important;
+  color: var(--app-subtle) !important;
+  font-size: 11px !important;
+}
+
+body[data-shell="app"] .assessment-assurance span {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .assessment-stage {
+  border-radius: 9px !important;
+}
+
+body[data-shell="app"] .assessment-phase-track span,
+body[data-shell="app"] .progress-bar {
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .guided-option,
+body[data-shell="app"] .guided-option-grid > * {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Evidence / Inspector: evidence is a scoped task, not a second product. */
+body[data-shell="app"] #inspectorRoot .workspace-status-grid {
+  grid-template-columns: minmax(0, .8fr) minmax(0, .8fr) minmax(320px, 1fr) !important;
+  grid-template-areas: none !important;
+}
+
+body[data-shell="app"] #inspectorRoot .workspace-status-grid > * {
+  grid-area: auto !important;
+  border: 0 !important;
+  border-right: 1px solid var(--app-line-soft) !important;
+  padding: 16px 18px !important;
+  background: transparent !important;
+}
+
+body[data-shell="app"] #inspectorRoot .workspace-status-grid > :last-child {
+  border-right: 0 !important;
+  background: var(--app-surface-raised) !important;
+}
+
+/* Runtime: show operational next action before journey/admin architecture. */
+body[data-shell="app"] .guided-control-layout {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+body[data-shell="app"] .customer-control-home {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+}
+
+body[data-shell="app"] .customer-control-home > .human-next-card { order: 1; }
+body[data-shell="app"] .customer-control-home > .guided-result { order: 2; }
+body[data-shell="app"] .customer-control-home > .guided-explainer { order: 2; }
+body[data-shell="app"] .customer-control-home > .plain-activity { order: 3; }
+body[data-shell="app"] .customer-control-home > .v10-control-choices { order: 4; }
+body[data-shell="app"] .customer-control-home > .guided-progress-v10 { order: 5; }
+body[data-shell="app"] .customer-control-home > .v10-specialist-note { order: 6; }
+body[data-shell="app"] .customer-control-home > .owner-assessment-cases { order: 20; }
+
+body[data-shell="app"] .guided-project-context,
+body[data-shell="app"] .human-next-card,
+body[data-shell="app"] .guided-progress-v10,
+body[data-shell="app"] .guided-result,
+body[data-shell="app"] .guided-explainer,
+body[data-shell="app"] .plain-activity,
+body[data-shell="app"] .v10-control-choices > article,
+body[data-shell="app"] .owner-assessment-cases {
+  border-color: var(--app-line) !important;
+  background: var(--app-surface) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .guided-plan-summary {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 5px !important;
+  line-height: 1.4 !important;
+}
+
+body[data-shell="app"] .owner-assessment-cases {
+  margin-top: 18px !important;
+  opacity: .82;
+  border-style: dashed !important;
+}
+
+body[data-shell="app"] .owner-assessment-cases h2 {
+  font-size: 18px !important;
+}
+
+body[data-shell="app"] .technical-controls-wrap,
+body[data-shell="app"] .control-plane-layout,
+body[data-shell="app"] .project-rail,
+body[data-shell="app"] .project-command-header,
+body[data-shell="app"] .runtime-grid > .panel {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Findings navigation should open a work view, not the whole technical console. */
+body[data-shell="app"][data-workspace-view="remediation"] .control-overview,
+body[data-shell="app"][data-workspace-view="remediation"] .customer-control-home,
+body[data-shell="app"][data-workspace-view="remediation"] .project-rail,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > #runtime,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > #policy,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > #inventory,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > #audit,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > .control-tabs,
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > .journey-panel {
+  display: none !important;
+}
+
+body[data-shell="app"][data-workspace-view="remediation"] .control-plane-layout,
+body[data-shell="app"][data-workspace-view="remediation"] .control-plane-main {
+  display: block !important;
+  width: 100% !important;
+  max-width: 1120px !important;
+  margin-inline: auto !important;
+}
+
+body[data-shell="app"][data-workspace-view="remediation"] #technicalControls > .project-command-header {
+  margin-bottom: 14px !important;
+}
+
+body[data-shell="app"][data-workspace-view="remediation"] #remediation {
+  display: block !important;
+  margin-top: 0 !important;
+}
+
+/* Deployment evidence: decision first, provenance quiet. */
+body[data-shell="app"] .ci-shell {
+  max-width: 1120px !important;
+}
+
+body[data-shell="app"] .risk-knowledge-disclaimer.workspace-trust-note {
+  margin: 12px 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--app-subtle) !important;
+  font-size: 11px !important;
+}
+
+body[data-shell="app"] .workspace-trust-note summary {
+  cursor: pointer;
+  color: var(--app-muted);
+  font-weight: 650;
+}
+
+body[data-shell="app"] .workspace-trust-note p {
+  margin: 8px 0 0;
+  max-width: 860px;
+}
+
+/* Technical values remain available, but are never the loudest visual element. */
+body[data-shell="app"] code,
+body[data-shell="app"] pre,
+body[data-shell="app"] .hash,
+body[data-shell="app"] [class*="digest"] {
+  text-shadow: none !important;
+}
+
+body[data-shell="app"] pre {
+  border-color: var(--app-line) !important;
+  background: #071018 !important;
+  box-shadow: none !important;
+}
+
+body[data-shell="app"] .app-footer-v10,
+body[data-shell="app"] .site-footer-v10 {
+  display: none !important;
+}
+
+@media (min-width: 961px) {
+  body[data-shell="app"] {
+    padding-left: var(--app-nav-width) !important;
+  }
+
+  body[data-shell="app"] .site-header,
+  body[data-shell="app"] .site-header-v10,
+  body[data-shell="app"] .app-header-v10 {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: var(--app-nav-width) !important;
+    max-width: none !important;
+    min-height: 100vh !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 20px 14px !important;
+    border: 0 !important;
+    border-right: 1px solid var(--app-line) !important;
+  }
+
+  body[data-shell="app"] .brand,
+  body[data-shell="app"] .brand-v10 {
+    width: 100% !important;
+    margin: 0 0 24px !important;
+    padding: 0 4px 18px !important;
+    border-bottom: 1px solid var(--app-line-soft);
+  }
+
+  body[data-shell="app"] .menu-toggle {
+    display: none !important;
+  }
+
+  body[data-shell="app"] .primary-navigation {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 3px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+    transform: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body[data-shell="app"] .primary-navigation > a {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-height: 38px !important;
+    padding: 8px 10px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    font-weight: 650 !important;
+  }
+
+  body[data-shell="app"] .primary-navigation .workspace-help-nav {
+    margin-top: auto !important;
+  }
+
+  body[data-shell="app"] .primary-navigation #logout {
+    width: 100% !important;
+    min-height: 38px !important;
+    margin-top: 6px !important;
+    justify-content: center !important;
+  }
+
+  body[data-shell="app"] .app-shell,
+  body[data-shell="app"] .assessment-shell,
+  body[data-shell="app"] main.app-shell,
+  body[data-shell="app"] main.assessment-shell {
+    width: min(calc(100% - 48px), 1180px) !important;
+    max-width: 1180px !important;
+    margin: 0 auto !important;
+    padding: 28px 0 64px !important;
+  }
+
+  body[data-shell="app"] .menu-scrim {
+    display: none !important;
+  }
+}
+
+@media (max-width: 960px) {
+  body[data-shell="app"] {
+    padding-left: 0 !important;
+  }
+
+  body[data-shell="app"] .site-header,
+  body[data-shell="app"] .site-header-v10,
+  body[data-shell="app"] .app-header-v10 {
+    position: sticky !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 10px 16px !important;
+  }
+
+  body[data-shell="app"] .app-shell,
+  body[data-shell="app"] .assessment-shell {
+    width: min(calc(100% - 28px), 1180px) !important;
+    margin-inline: auto !important;
+    padding-top: 20px !important;
+  }
+
+  body[data-shell="app"] .workspace-status-grid,
+  body[data-shell="app"] #inspectorRoot .workspace-status-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-areas: "decision" "assessment" "action" !important;
+  }
+
+  body[data-shell="app"] .workspace-status-grid > *,
+  body[data-shell="app"] #inspectorRoot .workspace-status-grid > * {
+    grid-area: auto !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--app-line-soft) !important;
+  }
+
+  body[data-shell="app"] .workspace-status-grid > :last-child,
+  body[data-shell="app"] #inspectorRoot .workspace-status-grid > :last-child {
+    border-bottom: 0 !important;
+  }
+
+  body[data-shell="app"] .workspace-content-grid,
+  body[data-shell="app"] .result-body-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body[data-shell="app"] .workspace-signal-grid,
+  body[data-shell="app"] .result-reason-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  body[data-shell="app"] .workspace-page-header,
+  body[data-shell="app"] .result-agent-header,
+  body[data-shell="app"] .ci-workspace-header {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  body[data-shell="app"] .workspace-agent-command-head {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  body[data-shell="app"] .workspace-agent-selector {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body[data-shell="app"] .workspace-signal-grid,
+  body[data-shell="app"] .result-reason-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body[data-shell="app"] .workspace-agent-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  body[data-shell="app"] .workspace-agent-row-actions {
+    justify-content: flex-start !important;
+  }
+}
