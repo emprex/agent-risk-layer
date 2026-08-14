@@ -41,10 +41,15 @@ async function init() {
       const tokenQuery = assessmentToken ? `?token=${encodeURIComponent(assessmentToken)}` : '';
       const payload = await api(`/api/assessments/${encodeURIComponent(assessmentId)}${tokenQuery}`);
       assessmentContext = payload.assessment;
-      const exactProject = matchingAssessmentProject(overview, assessmentContext);
-      if (exactProject) {
-        await loadProject(exactProject.id);
-        assessmentProjectConfirmed = true;
+      const candidates = assessmentProjects(overview);
+      for (const candidate of candidates) {
+        const candidateProject = (await api(`/api/projects/${encodeURIComponent(candidate.id)}`)).project;
+        if (linkedAssessmentRemediations(candidateProject, assessmentId).length) {
+          project = candidateProject;
+          selectedProjectId = candidate.id;
+          assessmentProjectConfirmed = true;
+          break;
+        }
       }
     } else {
       const availableRuntimeProjects = runtimeProjects();
@@ -84,6 +89,7 @@ function assessmentReturnHref() {
 
 function assessmentHandoffPanel() {
   const candidates = assessmentProjects(overview);
+  const suggested = matchingAssessmentProject(overview, assessmentContext);
   const canCreateCase = Boolean(overview.assessmentCases?.canCreate);
   const canCreateRuntime = runtimeProjects().length < Number(overview.entitlement?.projects || 0);
   const first = assessmentFindings()[0];
@@ -92,7 +98,7 @@ function assessmentHandoffPanel() {
     <h2>Choose where to track ${escapeHtml(assessmentContext.name)} fixes</h2>
     <p>This assessment is not linked to a remediation project yet. Nothing will be added to another agent unless you explicitly choose it.</p>
     ${first ? `<div class="assessment-handoff-finding"><small>First declared weakness</small><strong>${escapeHtml(first.title)}</strong><span>${escapeHtml(first.recommendation)}</span></div>` : ''}
-    ${candidates.length ? `<form id="assessmentProjectForm" class="auth-form"><div class="field"><label for="assessmentProjectSelect">Existing project or assessment case</label><select id="assessmentProjectSelect" required><option value="">Choose the matching agent</option>${candidates.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.projectKind === 'assessment_case' ? 'evidence-only case' : item.environment || 'project')}</option>`).join('')}</select><small>Only choose an existing project when it represents this exact Northstar deployment and version.</small></div><button class="button ghost" type="submit">Use selected project</button></form>` : ''}
+    ${candidates.length ? `<form id="assessmentProjectForm" class="auth-form"><div class="field"><label for="assessmentProjectSelect">Existing project or assessment case</label><select id="assessmentProjectSelect" required><option value="">Choose the matching agent</option>${candidates.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === suggested?.id ? 'selected' : ''}>${escapeHtml(item.name)} · ${escapeHtml(item.projectKind === 'assessment_case' ? 'evidence-only case' : item.environment || 'project')}${item.id === suggested?.id ? ' · possible name match' : ''}</option>`).join('')}</select><small>Only choose an existing project when it represents this exact Northstar deployment and version.</small></div><button class="button ghost" type="submit">Use selected project</button></form>` : ''}
     ${canCreateCase || canCreateRuntime ? `<div class="assessment-create-scope"><span>Recommended</span><p>Create a dedicated scope for this exact assessment so its fixes and evidence cannot mix with another agent.</p><button class="button primary" id="createAssessmentRemediationCase" type="button">Create dedicated remediation scope</button></div>` : '<div class="notice warning">Your current plan has no unused project slot. Choose a genuinely matching project above or change plan before tracking these fixes.</div>'}
     <a class="button ghost small" href="${assessmentReturnHref()}">Back to assessment result</a>
   </section>`;
