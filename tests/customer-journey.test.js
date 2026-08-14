@@ -53,8 +53,13 @@ test('assessment presents one guided question at a time, captures unusual agents
   assert.match(js, /type === 'Other' && description\.length < 10/);
   assert.match(js, /payloadAnswers\.__system_description/);
   assert.match(html, /revisionNotice/);
+  assert.match(html, /revisionQuestionNav/);
+  assert.match(html, /Jump to a question/);
   assert.match(js, /updateFrom/);
   assert.match(js, /flowQuestions/);
+  assert.match(js, /renderRevisionQuestionNav/);
+  assert.match(js, /data-question-index/);
+  assert.match(js, /Save updated result/);
   assert.match(js, /previous assessment remains unchanged/i);
   assert.doesNotMatch(js, /localStorage/);
   assert.match(js, /saved\?\.evidence \|\| 'customer_assertion'/);
