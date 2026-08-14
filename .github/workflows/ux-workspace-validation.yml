@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,9 +27,29 @@ jobs:
           node --check public/assessment.js
           node --check public/control-intelligence.js
           node --check public/inspector.js
+          node --check tests/workspace-browser-acceptance.mjs
       - name: Repository check
         run: npm run check
       - name: Commercial workspace contracts
         run: node --test tests/commercial-workspace-ux.test.js
+      - name: Install temporary browser test runtime
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Responsive browser acceptance
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/arl-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 1
+          node tests/workspace-browser-acceptance.mjs
+      - name: Upload browser acceptance screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-browser-acceptance
+          path: test-artifacts/workspace-browser
+          if-no-files-found: ignore
+          retention-days: 2
       - name: Full regression suite
         run: npm test
