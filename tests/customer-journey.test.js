@@ -92,6 +92,7 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /Not determined/);
   assert.match(js, /Security information completeness/);
   assert.match(js, /Create updated assessment/);
+  assert.match(js, /Correct or update answers/);
   assert.match(js, /Technical score and evidence details/);
   assert.match(js, /Aggregate declared score/);
   assert.match(js, /Highest declared finding/);
