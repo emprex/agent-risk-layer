@@ -1460,6 +1460,18 @@ body::before {
 .remediation-group > .remediation-list { padding: .3rem .8rem .8rem; }
 .remediation-edit { margin-bottom: .8rem; }
 .assessment-scope-banner > div:nth-child(2) small { color: var(--muted); }
+.implementation-playbook { display: grid; gap: 1rem; }
+.playbook-heading { display: grid; gap: .35rem; }
+.playbook-heading h4,
+.playbook-heading p { margin: 0; }
+.playbook-heading p { color: var(--text); line-height: 1.55; max-width: 780px; }
+.playbook-steps { display: grid; gap: .65rem; list-style: none; margin: 0; padding: 0; }
+.playbook-steps li { display: grid; grid-template-columns: 2rem 1fr; gap: .75rem; align-items: start; padding: .8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.playbook-steps li > span { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 999px; color: #fff; background: var(--blue); font-weight: 850; }
+.playbook-steps li div { display: grid; gap: .25rem; }
+.playbook-steps p { margin: 0; color: var(--muted); line-height: 1.5; }
+.evidence-trust-note { display: grid; gap: .25rem; padding: .85rem 1rem; border-left: 4px solid var(--orange); border-radius: 8px; background: rgba(255,159,67,.08); }
+.evidence-trust-note span { color: var(--muted); line-height: 1.45; }
 
 @media (max-width: 720px) {
   .remediation-milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
