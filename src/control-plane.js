@@ -608,7 +608,9 @@ export async function createRemediationItem({ projectId, userId, input = {} }) {
   if (title.length < 3) throw badRequest('Remediation title must contain at least three characters.');
   const severity = SEVERITIES.has(input.severity) ? input.severity : 'medium';
   const findingKey = clean(input.findingKey || input.finding_key || `manual-${digest(title).slice(0, 16)}`, 160);
-  const ownerEmail = validEmail(input.ownerEmail || input.owner_email) ? clean(input.ownerEmail || input.owner_email, 254).toLowerCase() : null;
+  const suppliedOwnerEmail = clean(input.ownerEmail || input.owner_email, 254).toLowerCase();
+  if (input.assessmentId && !validEmail(suppliedOwnerEmail)) throw badRequest('A valid owner email is required for assessment remediation.');
+  const ownerEmail = suppliedOwnerEmail ? (validEmail(suppliedOwnerEmail) ? suppliedOwnerEmail : null) : null;
   const dueAt = validOptionalDate(input.dueAt || input.due_at);
   const itemId = id('rem_');
   const timestamp = nowIso();
@@ -688,7 +690,8 @@ async function updateRemediationItemTransaction({ projectId, itemId, userId, pat
   const title = patch.title == null ? current.title : clean(patch.title, 240);
   const severity = patch.severity == null ? current.severity : clean(patch.severity, 20).toLowerCase();
   if (!SEVERITIES.has(severity)) throw badRequest('Unknown severity.');
-  const ownerEmail = patch.ownerEmail == null ? current.owner_email : (validEmail(patch.ownerEmail) ? clean(patch.ownerEmail, 254).toLowerCase() : null);
+  const ownerEmail = patch.ownerEmail == null ? current.owner_email : clean(patch.ownerEmail, 254).toLowerCase();
+  if (patch.ownerEmail != null && !validEmail(ownerEmail)) throw badRequest('A valid owner email is required.');
   const dueAt = patch.dueAt == null ? current.due_at : validOptionalDate(patch.dueAt);
   const previousVerification = parseJson(current.verification_json, {});
   let verification = patch.verification == null ? previousVerification : { ...previousVerification, ...sanitiseVerificationInput(patch.verification) };
