@@ -119,6 +119,10 @@ export async function hydrateNav() {
 }
 
 export function hydrateHelpLink() {
+  // Public v10 pages intentionally keep primary navigation focused on Product,
+  // How it works, Pricing, Trust and conversion. Help remains available in the
+  // footer. The authenticated shell owns its own contextual Help destination.
+  if (document.body?.dataset.shell === 'public' || document.body?.dataset.shell === 'app') return;
   const nav = document.querySelector('.site-header nav');
   if (!nav || nav.querySelector('a[href^="/help.html"]')) return;
   const link = document.createElement('a');
@@ -134,7 +138,6 @@ export function hydrateHelpLink() {
   const logout = nav.querySelector('#logout');
   nav.insertBefore(link, authLink || logout || null);
 }
-
 
 export function hydrateFooterLinks() {
   const footer = document.querySelector('footer');
