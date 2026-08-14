@@ -74,4 +74,6 @@ test('focused control keeps assessment remediation context and evidence boundari
   assert.match(focusedSource, /declared weakness, not an observed failure/);
   assert.match(focusedSource, /existing remediation stays open until implementation evidence exists and the retest passes/);
   assert.match(focusedSource, /Return to remediation plan/);
+  assert.match(focusedSource, /You may confirm Applicable with a specific reason/);
+  assert.match(focusedSource, /human scope decision, not evidence that the control works/);
 });
