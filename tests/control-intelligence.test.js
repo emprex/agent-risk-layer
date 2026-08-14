@@ -144,6 +144,16 @@ test('guided applicability is snapshot-bound, revisioned, role-enforced and driv
   const final=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-031',userId:f.userId});assert.equal(final.applicability.history.length,2);assert.equal(final.chain.deploymentImpact,'not_applicable');assert.deepEqual(final.chain.notRequiredStages,['test','evidence','finding','remediation','retest','approval']);
 });
 
+test('manual review can confirm applicable with a reason when the snapshot has no structured facts',async()=>{
+  const f=await fixture('manual-applicability');
+  const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Customer-declared consequential refund assistant'},assessmentConfiguration:{architectureFacts:[]},source:'assessment_remediation_handoff'}});
+  const before=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId});
+  const saved=await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId,input:{snapshotId:snapshot.id,decision:'applicable',reason:'The refund assistant participates in consequential actions that require a reconstructable audit trail.',architectureFactIds:[],expectedEvaluationDigest:before.applicability.evaluationDigest}});
+  assert.equal(saved.decision,'applicable');
+  assert.deepEqual(saved.architectureFactIds,[]);
+  await assert.rejects(()=>assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'The system has no consequential action capability.',architectureFactIds:[],expectedEvaluationDigest:saved.evaluationDigest}}),/require at least one confirmed architecture fact/i);
+});
+
 test('current records are unique and stale compare-and-swap writers fail closed',async()=>{
   const f=await fixture('cas');const one=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'one'},source:'test'}});
   const two=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'two'},source:'test',expectedCurrentSnapshotId:one.snapshot.id}});
