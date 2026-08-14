@@ -102,14 +102,14 @@ jobs:
               if (state.headerPosition !== 'fixed') throw new Error(`${name}: desktop rail is not fixed`);
               if (state.headerWidth < 210 || state.headerWidth > 240) throw new Error(`${name}: unexpected desktop rail width ${state.headerWidth}`);
               if (state.navDirection !== 'column') throw new Error(`${name}: desktop navigation is not vertical`);
-              if (grid && state.gridColumns.trim().split(/\s+/).length < 2) throw new Error(`${name}: desktop status hierarchy collapsed unexpectedly`);
+              if (state.gridColumns && state.gridColumns.trim().split(/\s+/).length < 2) throw new Error(`${name}: desktop status hierarchy collapsed unexpectedly`);
             } else {
               if (parseFloat(state.bodyPaddingLeft) !== 0) throw new Error(`${name}: mobile retained desktop rail padding`);
               if (state.headerPosition !== 'sticky') throw new Error(`${name}: mobile shell should use sticky header`);
-              if (grid && state.gridColumns.trim().split(/\s+/).length !== 1) throw new Error(`${name}: mobile status hierarchy is not single-column`);
+              if (state.gridColumns && state.gridColumns.trim().split(/\s+/).length !== 1) throw new Error(`${name}: mobile status hierarchy is not single-column`);
             }
-            if (next && owner && !(state.nextOrder < state.ownerOrder)) throw new Error(`${name}: owner workflow still precedes customer next action`);
-            if (plan && state.planDirection !== 'column') throw new Error(`${name}: plan metadata still runs together horizontally`);
+            if (state.nextOrder !== null && state.ownerOrder !== null && !(state.nextOrder < state.ownerOrder)) throw new Error(`${name}: owner workflow still precedes customer next action`);
+            if (state.planDirection !== null && state.planDirection !== 'column') throw new Error(`${name}: plan metadata still runs together horizontally`);
             await page.screenshot({ path: `workspace-${name}-${viewport.width}.png`, fullPage: true });
             await page.close();
           }
