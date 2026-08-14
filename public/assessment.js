@@ -1,5 +1,6 @@
 import { api, escapeHtml, hideError, qs, setBusy, showError } from './shared.js';
 import { buildRevisionQuestionFlow } from './assessment-revision.js';
+import { answerQualification, guidanceFor } from './assessment-guidance.js';
 
 const form = document.querySelector('#assessmentForm');
 const profileStep = document.querySelector('#profileStep');
@@ -15,6 +16,11 @@ const evidenceSelect = document.querySelector('#questionEvidence');
 const agentName = document.querySelector('#agentName');
 const agentType = document.querySelector('#agentType');
 const agentDescription = document.querySelector('#agentDescription');
+const questionGuidance = document.querySelector('#questionGuidance');
+const guidanceMeaning = document.querySelector('#guidanceMeaning');
+const guidanceChecks = document.querySelector('#guidanceChecks');
+const guidanceExample = document.querySelector('#guidanceExample');
+const answerQualificationBox = document.querySelector('#answerQualification');
 const revisionNotice = document.querySelector('#revisionNotice');
 const revisionReviewField = document.querySelector('#revisionReviewField');
 const reviewPreviousAnswers = document.querySelector('#reviewPreviousAnswers');
@@ -140,6 +146,27 @@ function plainEvidenceLabel(option) {
   return option.label;
 }
 
+function updateAnswerQualification(question, value) {
+  const copy = answerQualification(question, value);
+  answerQualificationBox.textContent = copy;
+  answerQualificationBox.hidden = !copy;
+}
+
+function renderQuestionGuidance(question, saved) {
+  const guidance = guidanceFor(question.id, agentType.value);
+  if (!guidance) {
+    questionGuidance.hidden = true;
+    answerQualificationBox.hidden = true;
+    return;
+  }
+  questionGuidance.hidden = false;
+  questionGuidance.open = false;
+  guidanceMeaning.textContent = guidance.meaning;
+  guidanceChecks.innerHTML = guidance.checks.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  guidanceExample.textContent = guidance.example;
+  updateAnswerQualification(question, saved?.value || '');
+}
+
 function renderStep() {
   hideError(errorBox);
   const totalSteps = flowQuestions.length + 1;
@@ -169,6 +196,7 @@ function renderStep() {
   document.querySelector('#questionDomain').textContent = question.domain;
   document.querySelector('#questionTitle').textContent = question.title;
   document.querySelector('#questionHelp').textContent = question.help;
+  renderQuestionGuidance(question, saved);
   document.querySelector('#questionOptions').innerHTML = question.options.map((option) => `
     <label class="guided-option ${option.value === 'unknown' ? 'not-sure' : ''}">
       <input type="radio" name="currentQuestion" value="${escapeHtml(option.value)}" ${saved?.value === option.value ? 'checked' : ''}>
@@ -220,6 +248,10 @@ function saveCurrentQuestion() {
 }
 
 agentType.addEventListener('change', updateDescriptionRequirement);
+form.addEventListener('change', (event) => {
+  if (event.target?.name !== 'currentQuestion' || stepIndex === 0) return;
+  updateAnswerQualification(flowQuestions[stepIndex - 1], event.target.value);
+});
 reviewPreviousAnswers?.addEventListener('change', () => {
   if (!sourceAssessmentId || stepIndex !== 0) return;
   refreshRevisionFlow();
