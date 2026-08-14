@@ -18,6 +18,7 @@ let revealedApproval = null;
 let refreshTimer = null;
 let technicalMode = sessionStorage.getItem('arl_control_plane_mode') === 'technical';
 let guidedCheck = null;
+let retestDraftRemediationId = '';
 const handoffParams = new URLSearchParams(location.search);
 const assessmentId = handoffParams.get('assessment') || '';
 const assessmentToken = handoffParams.get('token') || '';
@@ -511,9 +512,10 @@ function technicalProjectView() {
       <div class="runtime-grid"><article class="panel"><h3>Import a technical inventory</h3><p class="muted">A developer or security specialist can paste a deployment manifest. AgentRiskLayer stores the derived asset inventory, not credentials.</p><form id="inventoryForm" class="auth-form"><div class="field"><label for="inventorySource">Source label</label><input id="inventorySource" value="deployment-manifest" maxlength="40"></div><div class="field"><label for="inventoryJson">JSON manifest</label><textarea id="inventoryJson" rows="12" required placeholder='{"agent":{"name":"support-agent","model":"gpt-4.1","environment":"staging","tools":[{"kind":"tool","name":"crm.read"}]}}'></textarea></div><button class="button primary" type="submit">Analyse and compare</button></form></article><article class="panel"><h3>Latest access picture</h3>${latestInventory ? inventorySummary(latestInventory) : '<div class="empty-state"><p>No technical inventory has been imported.</p></div>'}</article></div>
       ${project.inventory.length ? `<article class="panel section-gap"><h3>Inventory history</h3>${inventoryHistory(project.inventory)}</article>` : ''}
     </section>
-    <section id="remediation" class="control-section">
+    <section id="remediation" class="control-section remediation-workspace">
       <div class="section-heading compact-heading"><div><span class="eyebrow">Fix and check again</span><h2>Own, fix and retest.</h2></div><span class="status-pill">${openItems.length} open</span></div>
-      <div class="runtime-grid"><article class="panel"><h3>Add a required fix</h3><form id="remediationForm" class="auth-form"><div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" placeholder="Remove shell access from support agent"></div><div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div><button class="button primary" type="submit">Add required fix</button></form></article><article class="panel"><h3>Fixes and retests</h3><div class="remediation-list">${project.remediations.length ? project.remediations.map(remediationRow).join('') : '<p class="muted">No remediation work recorded.</p>'}</div></article></div>
+      <article class="panel remediation-focus"><div class="section-heading compact-heading"><div><h3>${openItems.length ? 'Complete the active fix' : 'Fixes and retests'}</h3><p class="muted">Evidence, retest criteria and closure stay together here.</p></div></div><div class="remediation-list">${project.remediations.length ? project.remediations.map(remediationRow).join('') : '<p class="muted">No remediation work recorded.</p>'}</div></article>
+      <details class="panel add-remediation-panel" ${project.remediations.length ? '' : 'open'}><summary>Add another required fix</summary><form id="remediationForm" class="auth-form"><div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" placeholder="Remove shell access from support agent"></div><div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div><button class="button primary" type="submit">Add required fix</button></form></details>
     </section>
     <section id="audit" class="control-section"><div class="section-heading compact-heading"><div><span class="eyebrow">Audit evidence</span><h2>Who changed what and when.</h2></div></div><article class="panel">${auditTable(project.audit)}</article></section>
   </section>`;
@@ -607,7 +609,22 @@ function remediationRow(item) {
       ? 'Test inconclusive'
       : (item.compatibilityState || item.status).replaceAll('_', ' ');
   const evidenceForm = item.status === 'open' ? remediationEvidenceForm(item) : '';
-  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}${evidenceForm}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
+  const retestForm = retestDraftRemediationId === item.id ? remediationRetestForm(item) : '';
+  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}" ${retestForm ? 'open' : ''}><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}${evidenceForm}<label class="lifecycle-control">Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}${retestForm}</div></details>`;
+}
+
+function remediationRetestForm(item) {
+  const targetSuggestion = /shell/i.test(item.title) ? 'shell.exec' : '';
+  return `<form class="mini-form retest-criteria-form" data-retest-criteria-form="${escapeHtml(item.id)}">
+    <div class="retest-form-heading"><span class="eyebrow">Before running the retest</span><h4>Define the expected result</h4><p>This binds the next runtime check to this fix. All four fields are required.</p></div>
+    <div class="form-grid">
+      <div class="field"><label for="retest-rule-${escapeHtml(item.id)}">Rule that must apply</label><input id="retest-rule-${escapeHtml(item.id)}" name="ruleId" required placeholder="ARL-RUN-002"><small>Use the rule shown in the denied decision.</small></div>
+      <div class="field"><label for="retest-decision-${escapeHtml(item.id)}">Expected decision</label><select id="retest-decision-${escapeHtml(item.id)}" name="expectedDecision" required><option value="deny" selected>Deny — block the action</option><option value="allow">Allow — permit the action</option></select></div>
+      <div class="field"><label for="retest-action-${escapeHtml(item.id)}">Action type</label><select id="retest-action-${escapeHtml(item.id)}" name="actionType" required><option value="tool" selected>Tool call</option><option value="content.input">Input content</option><option value="content.output">Output content</option></select></div>
+      <div class="field"><label for="retest-target-${escapeHtml(item.id)}">Exact constrained target</label><input id="retest-target-${escapeHtml(item.id)}" name="targetIdentity" required value="${escapeHtml(targetSuggestion)}" placeholder="shell.exec"><small>For a tool test, enter its exact name.</small></div>
+    </div>
+    <div class="button-row"><button class="button primary small" type="submit">Save criteria and continue</button><button class="button ghost small" type="button" data-cancel-retest>Cancel</button></div>
+  </form>`;
 }
 
 function remediationEvidenceForm(item) {
@@ -700,6 +717,8 @@ function bind() {
   document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
   document.querySelectorAll('[data-remediation-evidence-form]').forEach((form) => form.addEventListener('submit', attachRemediationEvidence));
+  document.querySelectorAll('[data-retest-criteria-form]').forEach((form) => form.addEventListener('submit', saveRetestCriteria));
+  document.querySelectorAll('[data-cancel-retest]').forEach((button) => button.addEventListener('click', () => { retestDraftRemediationId = ''; render(); }));
   document.querySelectorAll('[data-remediation-owner-form]').forEach((form) => form.addEventListener('submit', repairRemediationOwner));
   document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
@@ -1001,29 +1020,49 @@ async function updateRemediation(event) {
   const target = event.currentTarget;
   if (!target?.value) return;
   const remediationId = target.dataset.remediationStatus;
-  target.disabled = true;
   const status = target.value;
+  if (status === 'ready_for_retest') {
+    retestDraftRemediationId = remediationId;
+    render();
+    requestAnimationFrame(() => document.querySelector(`[data-retest-criteria-form="${CSS.escape(remediationId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    return;
+  }
+  target.disabled = true;
   const verification = {};
-  let retestCriteria;
   try {
-    if (status === 'ready_for_retest') {
-      retestCriteria = {
-        ruleId: prompt('Required rule/control identifier (for example ARL-IN-001):') || '',
-        expectedDecision: prompt('Expected server decision: allow or deny')?.trim().toLowerCase() || '',
-        actionType: prompt('Action type: content.input, content.output or tool')?.trim().toLowerCase() || '',
-        targetIdentity: prompt(`Constrained target (project:${project.id} for content, or exact tool name):`)?.trim().toLowerCase() || '',
-        validityMinutes: 60,
-      };
-    }
     if (status === 'verified_closed') {
       const item = project.remediations.find((candidate) => candidate.id === remediationId);
       Object.assign(verification, item?.verification || {});
     }
     await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}`, {
-      method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined, retestCriteria }),
+      method: 'PATCH', body: JSON.stringify({ status, verification: Object.keys(verification).length ? verification : undefined }),
     });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); target.disabled = false; }
+}
+
+async function saveRetestCriteria(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const remediationId = form.dataset.retestCriteriaForm;
+  const data = new FormData(form);
+  setBusy(button, true, 'Saving…');
+  try {
+    const retestCriteria = {
+      ruleId: String(data.get('ruleId') || '').trim().toUpperCase(),
+      expectedDecision: String(data.get('expectedDecision') || '').trim().toLowerCase(),
+      actionType: String(data.get('actionType') || '').trim().toLowerCase(),
+      targetIdentity: String(data.get('targetIdentity') || '').trim().toLowerCase(),
+      validityMinutes: 60,
+    };
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(remediationId)}`, {
+      method: 'PATCH', body: JSON.stringify({ status: 'ready_for_retest', retestCriteria }),
+    });
+    retestDraftRemediationId = '';
+    await loadProject(project.id); await loadOverview(); render();
+    requestAnimationFrame(() => document.querySelector(`[data-remediation-id="${CSS.escape(remediationId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  } catch (error) { fail(error); setBusy(button, false); }
 }
 
 async function attachRemediationEvidence(event) {

@@ -110,6 +110,22 @@ test('remediation evidence uses an in-page project artifact selector instead of 
   assert.doesNotMatch(source, /prompt\('AgentRiskLayer inventory snapshot ID/);
 });
 
+test('retest criteria stay in one guided in-page workflow', () => {
+  const source = read('public/control-plane.js');
+  const css = read('public/styles.css');
+  assert.match(source, /Before running the retest/);
+  assert.match(source, /Define the expected result/);
+  assert.match(source, /Rule that must apply/);
+  assert.match(source, /Expected decision/);
+  assert.match(source, /Action type/);
+  assert.match(source, /Exact constrained target/);
+  assert.match(source, /data-retest-criteria-form/);
+  assert.match(source, /Save criteria and continue/);
+  assert.doesNotMatch(source, /prompt\('Required rule\/control identifier/);
+  assert.match(css, /\.control-tabs\{position:sticky/);
+  assert.match(source, /<summary>Add another required fix<\/summary>/);
+});
+
 test('trust and conversion pages state evidence boundaries instead of unsupported assurance', () => {
   const pages = ['public/index.html', 'public/trust.html', 'public/methodology.html', 'public/security-center.html', 'public/standards.html', 'public/sample-report.html'].map(read).join('\n');
   assert.match(pages, /not an accredited certification/i);
