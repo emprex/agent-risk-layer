@@ -2,6 +2,7 @@ import { api } from './shared.js';
 
 const path = location.pathname.split('/').pop() || 'index.html';
 const workspacePages = new Set(['dashboard.html', 'result.html', 'control-intelligence.html', 'assessment.html']);
+let enhancementScheduled = false;
 if (!workspacePages.has(path)) {
   // This asset is intentionally scoped to the controlled commercial workspace surfaces.
 } else {
@@ -72,7 +73,6 @@ function enhanceStaticCopy() {
   }
 }
 
-let enhancementScheduled = false;
 function scheduleEnhancement() {
   if (enhancementScheduled) return;
   enhancementScheduled = true;
