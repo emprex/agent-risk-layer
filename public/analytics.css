@@ -1,3 +1,14 @@
+/*
+ * The light visual system is imported synchronously from the final static
+ * stylesheet already present on public and authenticated pages. This prevents
+ * the legacy dark theme from flashing before site-shell.js finishes loading.
+ * The imported rules are scoped by data-shell and do not change application
+ * behaviour, security decisions or analytics behaviour.
+ */
+@import url('/design-tokens.css');
+@import url('/enterprise-light.css');
+@import url('/workspace-light.css');
+
 .analytics-consent {
   position: fixed;
   z-index: 10000;
