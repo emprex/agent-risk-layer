@@ -1,0 +1,27 @@
+name: Workspace real refactor validation
+
+on:
+  push:
+    branches:
+      - fix/authenticated-workspace-real-refactor-20260814
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: JavaScript syntax
+        run: npm run check
+      - name: Workspace contracts
+        run: node --test tests/commercial-workspace-ux.test.js tests/workspace-architecture-v2.test.js tests/flagship-art-direction.test.js tests/experience-design.test.js
+      - name: Full regression suite
+        run: npm test
