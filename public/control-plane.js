@@ -6,6 +6,7 @@ import {
   matchingAssessmentProject,
   remediationFindingKey,
 } from './assessment-remediation.js';
+import { assessmentFixControl } from './assessment-fix-controls.js';
 
 const root = document.querySelector('#controlPlaneRoot');
 const errorBox = document.querySelector('#controlPlaneError');
@@ -23,7 +24,6 @@ const assessmentToken = handoffParams.get('token') || '';
 let assessmentContext = null;
 let assessmentProjectConfirmed = false;
 const assessmentControlProgress = new Map();
-const assessmentControlMap = Object.freeze({ 'F-01': 'ARL-KB-090' });
 const runtimeProjects = () => (overview?.projects || []).filter((item) => item.projectKind !== 'assessment_case');
 
 const severityOrder = { critical: 1, high: 2, medium: 3, low: 4, none: 5 };
@@ -75,7 +75,7 @@ async function loadAssessmentControlProgress() {
   const linked = linkedAssessmentRemediations(project, assessmentId);
   await Promise.all(linked.map(async (item) => {
     const findingId = item.finding_key?.split(':').at(-1);
-    const controlId = assessmentControlMap[findingId];
+    const controlId = assessmentFixControl(findingId)?.controlId;
     if (!controlId) return;
     try {
       const detail = await api(`/api/projects/${encodeURIComponent(project.id)}/control-intelligence/controls/${encodeURIComponent(controlId)}`);
@@ -529,7 +529,7 @@ function assessmentRemediationGuide(item) {
   if (!playbook) return '';
   const evidenceReady = ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status);
   const intelligenceParams = new URLSearchParams({ projectId: project.id, view: 'overview', assessment: assessmentId, finding: findingId, remediation: item.id });
-  const matchedControlId = assessmentControlMap[findingId];
+  const matchedControlId = assessmentFixControl(findingId)?.controlId;
   if (matchedControlId) intelligenceParams.set('controlId', matchedControlId);
   const intelligenceHref = matchedControlId
     ? `/control-intelligence-control.html?${intelligenceParams.toString()}`
