@@ -1484,3 +1484,13 @@ body::before {
   .next-remediation { align-items: stretch; flex-direction: column; }
   .plan-review li { grid-template-columns: 1fr; }
 }
+.ci-task-declaration{font-size:1.05rem}
+.ci-task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.25rem 0}
+.ci-task-grid>div{display:grid;gap:.4rem;padding:1rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-2)}
+.ci-task-grid span{color:var(--text-muted);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.ci-task-workspace>.button{margin-right:.6rem;margin-top:.4rem}
+.ci-specialist-option{margin-top:1rem}
+.ci-assessment-context{border-left:4px solid var(--green)}
+.ci-assessment-context dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.35rem .8rem}
+.ci-assessment-context dd{margin:0;overflow-wrap:anywhere}
+@media (max-width:760px){.ci-task-grid{grid-template-columns:1fr}}
