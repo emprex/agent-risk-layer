@@ -141,7 +141,7 @@ function assessmentRemediationWorkspace() {
   const first = remaining[0];
   const owner = defaultRemediationOwner(linked);
   const progress = remediationProgress(linked);
-  const ordered = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9));
+  const ordered = [...linked].sort((left, right) => (severityOrder[left.severity] ?? 9) - (severityOrder[right.severity] ?? 9));
   const waiting = ordered.find((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive');
   const active = ordered
     .filter((item) => {
@@ -269,7 +269,7 @@ function assessmentWorkPackage(workPackage, index, items) {
   const verified = packageItems.filter((item) => item.status === 'verified_closed').length;
   const withEvidence = packageItems.filter((item) => ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status)).length;
   const waiting = packageItems.filter((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive').length;
-  const orderedPackageItems = [...packageItems].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9));
+  const orderedPackageItems = [...packageItems].sort((left, right) => (severityOrder[left.severity] ?? 9) - (severityOrder[right.severity] ?? 9));
   const active = orderedPackageItems
     .filter((item) => {
       const controlProgress = assessmentControlProgress.get(item.finding_key?.split(':').at(-1));
@@ -277,7 +277,10 @@ function assessmentWorkPackage(workPackage, index, items) {
     })
     .sort((left, right) => String(assessmentControlProgress.get(right.finding_key?.split(':').at(-1))?.latestAt || '').localeCompare(String(assessmentControlProgress.get(left.finding_key?.split(':').at(-1))?.latestAt || '')));
   const current = active[0]
-    || orderedPackageItems.find((item) => item.status !== 'verified_closed' && assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult !== 'inconclusive');
+    || orderedPackageItems.find((item) => {
+      const controlProgress = assessmentControlProgress.get(item.finding_key?.split(':').at(-1));
+      return item.status !== 'verified_closed' && !controlProgress?.started && controlProgress?.latestResult !== 'inconclusive';
+    });
   const blocked = orderedPackageItems.find((item) => item.status !== 'verified_closed');
   const packageAction = current || blocked;
   const currentFinding = packageAction?.finding_key?.split(':').at(-1);
