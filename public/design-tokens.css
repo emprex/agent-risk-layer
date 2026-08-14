@@ -35,3 +35,27 @@
   --arl-space-9: 96px;
   --arl-space-10: 128px;
 }
+
+/* Shared light shell baseline. The legacy v10 header painted a fixed dark
+ * pseudo-element behind every page; the new public and app shells own their
+ * background directly, so that decorative layer must not survive. */
+body[data-shell] .site-header-v10::before {
+  display: none !important;
+  content: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+}
+
+/* Consent is part of the customer-facing surface too. Keep it consistent with
+ * the light enterprise direction instead of reintroducing a dark cyber card. */
+body[data-shell] .analytics-consent {
+  color: var(--arl-text) !important;
+  background: rgba(255, 255, 255, .98) !important;
+  border: 1px solid var(--arl-border) !important;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, .12) !important;
+  backdrop-filter: blur(16px) !important;
+}
+body[data-shell] .analytics-consent strong { color: var(--arl-text) !important; }
+body[data-shell] .analytics-consent p { color: var(--arl-text-secondary) !important; }
+body[data-shell] .analytics-consent a { color: var(--arl-brand) !important; }
