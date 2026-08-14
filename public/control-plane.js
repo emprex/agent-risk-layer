@@ -421,7 +421,7 @@ function remediationRow(item) {
   const owner = item.owner_email
     ? `<small>${escapeHtml(item.finding_key)} · ${escapeHtml(item.owner_email)}</small>`
     : `<small>${escapeHtml(item.finding_key)} · <strong>Owner required</strong></small>`;
-  const ownerRepair = item.owner_email ? '' : `<form class="mini-form remediation-owner-repair" data-remediation-owner-form="${escapeHtml(item.id)}"><label for="owner-${escapeHtml(item.id)}">Assign the missing owner</label><div class="inline-field"><input id="owner-${escapeHtml(item.id)}" name="ownerEmail" type="email" required autocomplete="email" placeholder="Example: security@company.com"><button class="button primary small" type="submit">Save owner</button></div><small>Required before this fix can progress.</small></form>`;
+  const ownerRepair = `<details class="remediation-edit"><summary>Edit details</summary><form class="mini-form remediation-owner-repair" data-remediation-owner-form="${escapeHtml(item.id)}"><div class="form-grid"><div class="field"><label for="severity-${escapeHtml(item.id)}">Severity</label><select id="severity-${escapeHtml(item.id)}" name="severity">${['critical','high','medium','low'].map((severity) => `<option value="${severity}" ${severity === item.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="owner-${escapeHtml(item.id)}">Owner</label><input id="owner-${escapeHtml(item.id)}" name="ownerEmail" type="email" required autocomplete="email" value="${escapeHtml(item.owner_email || '')}" placeholder="Example: security@company.com"></div></div><button class="button primary small" type="submit">Save details</button><small>Changes are added to the project audit trail.</small></form></details>`;
   return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail">${ownerRepair}<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
 }
 
@@ -689,7 +689,7 @@ async function repairRemediationOwner(event) {
   setBusy(button, true, 'Saving…');
   try {
     await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(form.dataset.remediationOwnerForm)}`, {
-      method: 'PATCH', body: JSON.stringify({ ownerEmail }),
+      method: 'PATCH', body: JSON.stringify({ ownerEmail, severity: form.elements.severity.value }),
     });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); setBusy(button, false); }
