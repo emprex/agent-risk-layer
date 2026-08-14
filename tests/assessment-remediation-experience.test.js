@@ -30,3 +30,19 @@ test('remediations are chunked into priority groups', () => {
   assert.match(source, /remediationGroup\('Do first'/);
   assert.match(source, /remediationGroup\('Harden next'/);
 });
+
+test('assessment fixes provide control-specific implementation playbooks', () => {
+  assert.match(source, /const assessmentPlaybooks = Object\.freeze/);
+  for (let index = 1; index <= 17; index += 1) {
+    assert.match(source, new RegExp(`'F-${String(index).padStart(2, '0')}'`));
+  }
+  assert.match(source, /What done looks like/);
+  assert.match(source, /Capture the right proof/);
+  assert.match(source, /Copy checklist/);
+});
+
+test('assessment fixes do not use the generic inventory snapshot evidence prompt', () => {
+  assert.match(source, /An inventory snapshot is not accepted unless it proves this exact control/);
+  assert.match(source, /Record matching evidence in Control Intelligence/);
+  assert.match(source, /assessmentGuide \|\|/);
+});
