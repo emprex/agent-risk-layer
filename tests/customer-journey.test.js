@@ -142,7 +142,7 @@ test('assessment continuation preserves history and limits raw-answer prefill to
 test('control plane defaults to one human next step and preserves specialist controls on demand', () => {
   const html = read('public/control-plane.html');
   const js = read('public/control-plane.js');
-  assert.match(js, /assessmentId = handoffParams\\.get\\('assessment'\\)/);
+  assert.match(js, /assessmentId = handoffParams\.get\('assessment'\)/);
   assert.match(js, /Nothing will be added to another agent unless you explicitly choose it/);
   assert.match(js, /assessmentProjectConfirmed/);
   assert.match(js, /assessmentId,/);
