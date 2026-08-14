@@ -1,0 +1,35 @@
+name: UX workspace validation
+
+on:
+  push:
+    branches:
+      - ux/agent-centered-workspace-20260814
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Syntax check changed modules
+        run: |
+          node --check public/site-shell.js
+          node --check public/dashboard.js
+          node --check public/result.js
+          node --check public/assessment.js
+          node --check public/control-intelligence.js
+          node --check public/inspector.js
+      - name: Repository check
+        run: npm run check
+      - name: Commercial workspace contracts
+        run: node --test tests/commercial-workspace-ux.test.js
+      - name: Full regression suite
+        run: npm test
