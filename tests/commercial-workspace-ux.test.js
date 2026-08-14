@@ -16,22 +16,25 @@ test('authenticated customer surfaces use the shared source-level workspace and 
   for (const page of workspacePages) {
     const html = read(page);
     assert.match(html, /\/security-workspace\.css/);
+    assert.match(html, /\/workspace-app\.css/);
     assert.doesNotMatch(html, /\/workspace-ux\.(?:css|js)/);
   }
   for (const page of ['public/index.html', 'public/pricing.html', 'public/trust.html']) {
     const html = read(page);
-    assert.doesNotMatch(html, /\/security-workspace\.css/);
+    assert.doesNotMatch(html, /\/security-workspace\.css|\/workspace-app\.css/);
   }
 });
 
-test('shared authenticated shell owns one customer navigation vocabulary', () => {
+test('shared authenticated shell owns one customer navigation vocabulary and context remains non-authoritative', () => {
   const js = read('public/site-shell.js');
   for (const label of ['Overview', 'Assess', 'Findings', 'Evidence', 'Runtime', 'Settings']) {
     assert.match(js, new RegExp(`label: '${label}'`));
   }
   assert.match(js, /dataset\.workspaceNavigation = 'true'/);
   assert.match(js, /sessionStorage\.setItem\('arl_selected_project'/);
-  assert.match(js, /Client-side selected context|navigation state/i, 'site shell should explain or embody context-only handling');
+  assert.match(js, /sessionStorage\.setItem\('arl_selected_assessment'/);
+  assert.match(js, /navigation hints only/);
+  assert.match(js, /Destination APIs remain responsible/);
   assert.doesNotMatch(js, /textContent = 'Control Intelligence'/);
 });
 
@@ -97,4 +100,5 @@ test('documentation records replacement of the old DOM rearrangement approach', 
   assert.match(doc, /Client-side navigation state is not authorisation/);
   assert.match(doc, /Declared is not observed/);
   assert.equal(existsSync(new URL('../public/security-workspace.css', import.meta.url)), true);
+  assert.equal(existsSync(new URL('../public/workspace-app.css', import.meta.url)), true);
 });

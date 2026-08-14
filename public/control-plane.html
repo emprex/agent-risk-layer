@@ -4,17 +4,17 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Runtime and remediation | AgentRiskLayer</title>
   <meta name="description" content="Review runtime protection, current decisions, remediation and retest work for one AI agent project.">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/security-workspace.css"><link rel="stylesheet" href="/analytics.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/security-workspace.css"><link rel="stylesheet" href="/workspace-app.css"><link rel="stylesheet" href="/analytics.css">
   <script type="module" src="/site-shell.js"></script><script type="module" src="/control-plane.js?v=20260814.6"></script>
 </head>
-<body data-shell="app">
+<body class="workspace-control-page" data-shell="app">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header site-header-v10 app-header-v10" data-site-header>
     <a class="brand brand-v10" href="/dashboard.html" aria-label="AgentRiskLayer overview"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Security workspace</small></span></a><button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
-    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Workspace navigation"><a href="/dashboard.html">Overview</a><a href="/assessment.html">Assess</a><a href="/control-plane.html#remediation">Findings</a><a href="/inspector.html">Evidence</a><a href="/control-plane.html#runtime">Runtime</a><a href="/dashboard.html#settings">Settings</a><a class="workspace-help-nav" href="/help.html?from=workspace">Help</a><button class="button ghost small" id="logout" type="button">Log out</button></nav>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Workspace navigation"><a href="/dashboard.html">Overview</a><a href="/assessment.html">Assess</a><a href="/control-plane.html#remediation">Findings</a><a href="/inspector.html">Evidence</a><a href="/control-plane.html">Runtime</a><a href="/dashboard.html#settings">Settings</a><a class="workspace-help-nav" href="/help.html?from=workspace">Help</a><button class="button ghost small" id="logout" type="button">Log out</button></nav>
   </header>
   <main id="main-content" class="app-shell wide v10-control-shell">
-    <header class="page-heading app-page-heading"><div><span class="eyebrow">Runtime &amp; remediation</span><h1>Protect and fix the current agent.</h1><p>Review the selected project’s runtime decisions, required fixes, approvals and retests. Policy enforcement and evidence remain tied to the exact authorised project.</p></div><a class="context-help-link" href="/help.html?from=workspace#control-plane"><span>Help</span><strong>Runtime and remediation guide →</strong></a></header>
+    <header class="page-heading app-page-heading"><div><span class="eyebrow">Runtime &amp; fixes</span><h1>Runtime and remediation</h1><p>Work on the selected agent: review protection decisions, fix confirmed weaknesses and retest the exact control before closure.</p></div><a class="context-help-link" href="/help.html?from=workspace#control-plane"><span>Help</span><strong>Runtime and remediation guide →</strong></a></header>
     <div id="controlPlaneError" class="error-box" role="alert"></div>
     <div id="controlPlaneRoot" class="loading"><div class="spinner"></div>Loading runtime and remediation…</div>
   </main>

@@ -17,12 +17,13 @@ function primaryNavSignature(html) {
   return [...nav.matchAll(/<(?:a|button)\b[^>]*>([\s\S]*?)<\/(?:a|button)>/gi)]
     .map((match) => match[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
     .filter(Boolean)
+    .filter((label) => label !== 'Log out')
     .join('|');
 }
 
-test('every page has one purpose, an accessible landmark shell and reusable navigation', () => {
+test('every page has one purpose, an accessible landmark shell and one authenticated navigation vocabulary', () => {
   assert.ok(htmlFiles.length >= 42, `expected at least 42 maintained HTML pages, got ${htmlFiles.length}`);
-  const navVariants = new Set();
+  const appNavVariants = new Set();
   for (const name of htmlFiles) {
     const html = read(`public/${name}`);
     assert.match(html, /<title>[^<]+<\/title>/i, name);
@@ -39,9 +40,9 @@ test('every page has one purpose, an accessible landmark shell and reusable navi
     assert.doesNotMatch(html, /<style\b/i, name);
     const pageIds = ids(html);
     assert.equal(new Set(pageIds).size, pageIds.length, `${name} has duplicate IDs`);
-    navVariants.add(primaryNavSignature(html));
+    if (/data-shell=["']app["']/i.test(html)) appNavVariants.add(primaryNavSignature(html));
   }
-  assert.ok(navVariants.size <= 5, `expected at most five role-aware navigation variants, got ${navVariants.size}`);
+  assert.deepEqual([...appNavVariants], ['Overview|Assess|Findings|Evidence|Runtime|Settings|Help']);
 });
 
 test('public and signed-in navigation use stable human labels and one primary action', () => {
@@ -50,9 +51,10 @@ test('public and signed-in navigation use stable human labels and one primary ac
     assert.match(publicPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
   }
   const appPage = read('public/dashboard.html');
-  for (const label of ['Overview', 'Check risk', 'Live protection', 'Evidence', 'Help', 'Account']) {
+  for (const label of ['Overview', 'Assess', 'Findings', 'Evidence', 'Runtime', 'Settings', 'Help']) {
     assert.match(appPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
   }
+  assert.doesNotMatch(appPage, />Check risk<|>Live protection<|>Account</);
 });
 
 test('mobile navigation is visible, keyboard-operable and protected from legacy responsive rules', () => {

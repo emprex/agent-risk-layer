@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Security workspace | AgentRiskLayer</title>
-  <meta name="description" content="See each AI agent's current assessment posture, deployment evidence and next security action.">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/flagship.css"><link rel="stylesheet" href="/security-workspace.css"><link rel="stylesheet" href="/analytics.css">
+  <title>Agent overview | AgentRiskLayer</title>
+  <meta name="description" content="See the selected AI agent's current assessment posture, deployment evidence and next security action.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/security-workspace.css"><link rel="stylesheet" href="/workspace-app.css"><link rel="stylesheet" href="/analytics.css">
   <script type="module" src="/dashboard.js"></script><script type="module" src="/site-shell.js"></script>
 </head>
-<body class="flagship-dashboard-page" data-shell="app">
+<body class="workspace-overview-page" data-shell="app">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header site-header-v10 app-header-v10" data-site-header>
     <a class="brand brand-v10" href="/dashboard.html" aria-label="AgentRiskLayer overview"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Security workspace</small></span></a>
     <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
-    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Workspace navigation"><a href="/dashboard.html">Overview</a><a href="/assessment.html">Assess</a><a href="/control-plane.html#remediation">Findings</a><a href="/inspector.html">Evidence</a><a href="/control-plane.html#runtime">Runtime</a><a href="/dashboard.html#settings">Settings</a><a class="workspace-help-nav" href="/help.html?from=workspace">Help</a><button class="button ghost small" id="logout" type="button">Log out</button></nav>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Workspace navigation"><a href="/dashboard.html">Overview</a><a href="/assessment.html">Assess</a><a href="/control-plane.html#remediation">Findings</a><a href="/inspector.html">Evidence</a><a href="/control-plane.html">Runtime</a><a href="/dashboard.html#settings">Settings</a><a class="workspace-help-nav" href="/help.html?from=workspace">Help</a><button class="button ghost small" id="logout" type="button">Log out</button></nav>
   </header>
   <main id="main-content" class="app-shell wide v10-dashboard-shell">
-    <header class="workspace-page-header"><div><span class="eyebrow">Security workspace</span><h1>Your AI agents</h1><p>Open one agent to see its current posture, why it has that posture, and the next action that moves it toward a defensible deployment decision.</p></div><div class="workspace-page-actions"><a class="button primary small" href="/assessment.html">Assess another agent</a></div></header>
+    <header class="workspace-page-header"><div><span class="eyebrow">Overview</span><h1>AI agent security</h1><p>Select an agent, read its current posture, then take the one action that most improves the evidence for deployment.</p></div><div class="workspace-page-actions"><a class="button primary small" href="/assessment.html">Assess another agent</a></div></header>
     <div id="dashboardRoot" class="loading"><div class="spinner"></div>Loading your agents…</div>
   </main>
   <footer class="site-footer-v10 app-footer-v10"><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span><a href="/help.html?from=workspace">Help</a> · <a href="/trust.html">Trust</a> · <a href="/status.html">Status</a> · <a href="mailto:support@agentrisklayer.com">Contact support</a></span></div></footer>
