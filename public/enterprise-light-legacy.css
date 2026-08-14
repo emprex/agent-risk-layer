@@ -1,0 +1,212 @@
+/*
+ * Transitional normalization for legacy public components.
+ * These selectors remove literal dark campaign surfaces while their underlying
+ * workflows and data behavior remain unchanged.
+ */
+
+body[data-shell="public"] .demo-v2-outcome-card,
+body[data-shell="public"] .pricing-path,
+body[data-shell="public"] .trust-summary-card,
+body[data-shell="public"] .v10-purpose-card {
+  border: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: var(--arl-shadow-xs) !important;
+}
+body[data-shell="public"] .demo-v2-outcome-card span,
+body[data-shell="public"] .demo-v2-outcome-card dt,
+body[data-shell="public"] .pricing-path span,
+body[data-shell="public"] .trust-summary-card span,
+body[data-shell="public"] .trust-summary-card li,
+body[data-shell="public"] .v10-purpose-card span,
+body[data-shell="public"] .v10-purpose-card p {
+  color: var(--arl-text-secondary) !important;
+}
+body[data-shell="public"] .pricing-path strong {
+  border-color: #bfdbfe !important;
+  background: var(--arl-brand-soft) !important;
+  color: var(--arl-brand) !important;
+}
+body[data-shell="public"] .pricing-path i { color: #94a3b8 !important; }
+
+/* Demo */
+body[data-shell="public"] .demo-v2-workbench,
+body[data-shell="public"] .demo-v2-console,
+body[data-shell="public"] .demo-v2-panel,
+body[data-shell="public"] .demo-v2-console-grid {
+  background: #fff !important;
+  background-image: none !important;
+  border-color: var(--arl-border) !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .demo-v2-steps {
+  border: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+}
+body[data-shell="public"] .demo-v2-steps button {
+  background: transparent !important;
+  color: var(--arl-text-secondary) !important;
+}
+body[data-shell="public"] .demo-v2-steps button[aria-current="step"] {
+  background: var(--arl-brand-soft) !important;
+  color: var(--arl-brand) !important;
+}
+body[data-shell="public"] .demo-v2-console-top,
+body[data-shell="public"] .demo-v2-controls {
+  border-color: var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  color: var(--arl-text-secondary) !important;
+}
+body[data-shell="public"] .demo-v2-console-top > div i {
+  background: #cbd5e1 !important;
+}
+body[data-shell="public"] .demo-v2-content > *,
+body[data-shell="public"] .demo-v2-content pre,
+body[data-shell="public"] .demo-v2-content code,
+body[data-shell="public"] .demo-v2-content article,
+body[data-shell="public"] .demo-v2-content div {
+  border-color: var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  color: var(--arl-text-secondary) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .demo-v2-content strong,
+body[data-shell="public"] .demo-v2-content b { color: var(--arl-text) !important; }
+body[data-shell="public"] .demo-v2-journey-grid article {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: var(--arl-shadow-xs) !important;
+}
+body[data-shell="public"] .demo-v2-journey-grid article p,
+body[data-shell="public"] .demo-v2-journey-grid article span { color: var(--arl-text-secondary) !important; }
+body[data-shell="public"] .demo-v2-plain-language,
+body[data-shell="public"] .demo-v2-final {
+  border: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .demo-v2-flow {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  color: var(--arl-text-secondary) !important;
+}
+body[data-shell="public"] .demo-v2-flow strong {
+  border-color: #bfdbfe !important;
+  background: var(--arl-brand-soft) !important;
+  color: var(--arl-brand) !important;
+}
+body[data-shell="public"] .demo-v2-flow span { background: var(--arl-surface) !important; color: var(--arl-text) !important; border-color: var(--arl-border) !important; }
+
+/* Pricing */
+body[data-shell="public"] .v10-comparison-band {
+  border-color: var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+}
+body[data-shell="public"] .v10-comparison-points span {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  color: var(--arl-text-secondary) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .v10-pricing-faq details {
+  border-color: var(--arl-border) !important;
+  background: #fff !important;
+  color: var(--arl-text) !important;
+}
+
+/* Trust Centre */
+body[data-shell="public"] .v10-trust-control-band {
+  border-block: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+}
+body[data-shell="public"] .trust-control-grid article {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: var(--arl-shadow-xs) !important;
+}
+body[data-shell="public"] .trust-control-grid article span { color: var(--arl-brand) !important; }
+body[data-shell="public"] .trust-control-grid article p { color: var(--arl-text-secondary) !important; }
+body[data-shell="public"] .v10-limitations-band {
+  border-color: var(--arl-border) !important;
+  background: #fffbf5 !important;
+  background-image: none !important;
+}
+body[data-shell="public"] .plain-check-list li,
+body[data-shell="public"] .warning-list li {
+  border-color: var(--arl-border) !important;
+  background: #fff !important;
+  color: var(--arl-text-secondary) !important;
+}
+body[data-shell="public"] .v10-link-card-grid a {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .v10-link-card-grid a span { color: var(--arl-brand) !important; }
+
+/* Sample report */
+body[data-shell="public"] .v10-step-grid article,
+body[data-shell="public"] .v10-method-grid article,
+body[data-shell="public"] .v10-report-metrics article {
+  border: 1px solid var(--arl-border) !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: var(--arl-shadow-xs) !important;
+}
+body[data-shell="public"] .v10-step-grid article p,
+body[data-shell="public"] .v10-method-grid article p,
+body[data-shell="public"] .v10-report-metrics article span,
+body[data-shell="public"] .v10-report-metrics article small { color: var(--arl-text-secondary) !important; }
+body[data-shell="public"] .v10-step-grid article b,
+body[data-shell="public"] .v10-method-grid article > span { color: var(--arl-brand) !important; }
+body[data-shell="public"] .v10-report-preview {
+  gap: 14px !important;
+  background: transparent !important;
+}
+body[data-shell="public"] .v10-report-decision {
+  border: 1px solid #fecaca !important;
+  background: var(--arl-danger-soft) !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .v10-report-decision > span { color: var(--arl-danger) !important; }
+body[data-shell="public"] .v10-report-decision > strong { color: #991b1b !important; }
+body[data-shell="public"] .v10-report-decision p { color: #7f1d1d !important; }
+body[data-shell="public"] .v10-next-band {
+  border: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+
+/* Shared legacy conversion blocks should look like enterprise calls to action,
+ * not dark campaign panels. */
+body[data-shell="public"] .v10-final-cta {
+  border: 1px solid var(--arl-border) !important;
+  background: var(--arl-surface) !important;
+  background-image: none !important;
+  color: var(--arl-text) !important;
+  box-shadow: none !important;
+}
+body[data-shell="public"] .v10-final-cta p { color: var(--arl-text-secondary) !important; }
+
+@media (max-width: 680px) {
+  body[data-shell="public"] .demo-v2-plain-language,
+  body[data-shell="public"] .demo-v2-final,
+  body[data-shell="public"] .v10-next-band,
+  body[data-shell="public"] .v10-final-cta { padding: 24px !important; }
+}
