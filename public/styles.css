@@ -1423,3 +1423,46 @@ body::before {
   .assessment-scope-banner { grid-template-columns: 1fr; align-items: start; }
   .assessment-scope-banner > div:nth-child(2) { text-align: left; }
 }
+
+
+/* Assessment remediation: calm planning before technical evidence work */
+.remediation-plan-card,
+.remediation-complete-card,
+.remediation-plan-list { margin-top: 1rem; }
+.remediation-plan-card { border-color: rgba(60, 130, 246, .35); background: linear-gradient(135deg, rgba(60,130,246,.08), rgba(255,255,255,.98)); }
+.remediation-plan-card > p,
+.remediation-complete-card > p { max-width: 760px; }
+.plan-review,
+.manual-remediation,
+.remediation-group,
+.remediation-edit { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.plan-review summary,
+.manual-remediation summary,
+.remediation-group > summary,
+.remediation-edit > summary { cursor: pointer; font-weight: 750; padding: .9rem 1rem; }
+.plan-review ol { display: grid; gap: .65rem; list-style: none; margin: 0; padding: 0 1rem 1rem; }
+.plan-review li { display: grid; grid-template-columns: auto 1fr; gap: .75rem; align-items: start; padding-top: .65rem; border-top: 1px solid var(--line); }
+.plan-review li div { display: grid; gap: .2rem; }
+.plan-review li small { color: var(--muted); line-height: 1.45; }
+.manual-remediation { margin-top: .8rem; }
+.manual-remediation form,
+.remediation-edit form { padding: 0 1rem 1rem; }
+.remediation-milestones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.remediation-milestones div { display: grid; padding: 1rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.remediation-milestones strong { font-size: 1.6rem; }
+.remediation-milestones span { color: var(--muted); font-size: .86rem; }
+.next-remediation { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 1rem; border-radius: 14px; background: rgba(60,130,246,.09); }
+.next-remediation > div { display: grid; gap: .2rem; }
+.next-remediation small,
+.next-remediation span { color: var(--muted); }
+.remediation-group { margin-top: .75rem; overflow: clip; }
+.remediation-group > summary { display: flex; justify-content: space-between; align-items: center; background: rgba(15,23,42,.025); }
+.remediation-group > .remediation-list { padding: .3rem .8rem .8rem; }
+.remediation-edit { margin-bottom: .8rem; }
+.assessment-scope-banner > div:nth-child(2) small { color: var(--muted); }
+
+@media (max-width: 720px) {
+  .remediation-milestones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .next-remediation { align-items: stretch; flex-direction: column; }
+  .plan-review li { grid-template-columns: 1fr; }
+}
