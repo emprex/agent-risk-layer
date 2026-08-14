@@ -9,6 +9,9 @@ const errorBox = document.querySelector('#formError');
 const progressBar = document.querySelector('#progressBar');
 const progressText = document.querySelector('#progressText');
 const progressLabel = document.querySelector('#progressLabel');
+const phaseLabel = document.querySelector('#assessmentPhaseLabel');
+const questionLabel = document.querySelector('#assessmentQuestionLabel');
+const phaseTrack = document.querySelector('#assessmentPhaseTrack');
 const backButton = document.querySelector('#backButton');
 const nextButton = document.querySelector('#nextButton');
 const submitButton = document.querySelector('#submitAssessment');
@@ -28,6 +31,14 @@ const revisionQuestionNav = document.querySelector('#revisionQuestionNav');
 const revisionQuestionList = document.querySelector('#revisionQuestionList');
 const updateFrom = qs('updateFrom');
 const updateToken = qs('token');
+
+const ASSESSMENT_PHASES = Object.freeze([
+  'Agent & access',
+  'Data & inputs',
+  'Actions & authority',
+  'Controls & approval',
+  'Recovery & evidence',
+]);
 
 let questionnaire = [];
 let flowQuestions = [];
@@ -87,7 +98,6 @@ function refreshRevisionFlow() {
   const reviewAll = Boolean(reviewPreviousAnswers?.checked);
   const unresolvedCount = questionnaire.filter((question) => !answers.has(question.id) || answers.get(question.id)?.value === 'unknown').length;
   flowQuestions = buildRevisionQuestionFlow(questionnaire, answers, reviewAll);
-
   if (reviewAll || unresolvedCount === 0) {
     revisionNotice.textContent = `Creating an updated assessment from ${revisionSourceName}. Previous answers are prefilled for review and can be changed in this new assessment. The previous assessment remains unchanged.`;
   } else {
@@ -119,12 +129,37 @@ function answerSummary(question) {
   return option?.label || 'Information required';
 }
 
+function questionnaireNumber(question) {
+  const index = questionnaire.findIndex((item) => item.id === question?.id);
+  return index >= 0 ? index + 1 : Math.max(1, stepIndex);
+}
+
+function phaseIndexForQuestion(question) {
+  if (!question || !questionnaire.length) return 0;
+  const index = Math.max(0, questionnaire.findIndex((item) => item.id === question.id));
+  return Math.min(ASSESSMENT_PHASES.length - 1, Math.floor((index * ASSESSMENT_PHASES.length) / questionnaire.length));
+}
+
+function updatePhaseTracker(question = null) {
+  const activePhase = question ? phaseIndexForQuestion(question) : 0;
+  const label = ASSESSMENT_PHASES[activePhase];
+  const currentQuestionLabel = question ? `Question ${questionnaireNumber(question)}` : 'About the agent';
+  if (phaseLabel) phaseLabel.textContent = label;
+  if (questionLabel) questionLabel.textContent = currentQuestionLabel;
+  phaseTrack?.querySelectorAll('[data-phase]').forEach((node) => {
+    const index = Number(node.dataset.phase);
+    node.classList.toggle('complete', index < activePhase);
+    node.classList.toggle('active', index === activePhase);
+  });
+  return { label, currentQuestionLabel };
+}
+
 function renderRevisionQuestionNav() {
   if (!sourceAssessmentId || !revisionQuestionNav || !revisionQuestionList) return;
   revisionQuestionNav.hidden = false;
   revisionQuestionList.innerHTML = flowQuestions.map((question, index) => `
     <button class="revision-question-link ${stepIndex === index + 1 ? 'active' : ''}" data-question-index="${index + 1}" type="button">
-      <span>${index + 2}. ${escapeHtml(question.domain)}</span>
+      <span>Question ${questionnaireNumber(question)} · ${escapeHtml(question.domain)}</span>
       <strong>${escapeHtml(question.title)}</strong>
       <small>${escapeHtml(answerSummary(question))}</small>
     </button>`).join('');
@@ -169,9 +204,9 @@ function renderQuestionGuidance(question, saved) {
 
 function renderStep() {
   hideError(errorBox);
-  const totalSteps = flowQuestions.length + 1;
-  const currentStep = stepIndex + 1;
-  const percent = flowQuestions.length ? Math.round((stepIndex / flowQuestions.length) * 100) : 0;
+  const percent = questionnaire.length
+    ? Math.round((questionnaire.filter((question) => answers.has(question.id)).length / questionnaire.length) * 100)
+    : 0;
   progressBar.style.width = `${percent}%`;
   progressText.textContent = `${percent}%`;
   backButton.hidden = stepIndex === 0;
@@ -180,7 +215,8 @@ function renderStep() {
   if (stepIndex === 0) {
     profileStep.hidden = false;
     questionStage.hidden = true;
-    progressLabel.textContent = `Step 1 of ${totalSteps}`;
+    const phase = updatePhaseTracker();
+    progressLabel.textContent = phase.label;
     nextButton.hidden = false;
     submitButton.hidden = true;
     updateDescriptionRequirement();
@@ -191,8 +227,9 @@ function renderStep() {
   questionStage.hidden = false;
   const question = flowQuestions[stepIndex - 1];
   const saved = answers.get(question.id);
+  const phase = updatePhaseTracker(question);
   document.querySelector('#questionKind').textContent = question.kind === 'exposure' ? 'What could happen?' : 'What protection is in place?';
-  document.querySelector('#stepCount').textContent = `Step ${currentStep} of ${totalSteps}`;
+  document.querySelector('#stepCount').textContent = phase.currentQuestionLabel;
   document.querySelector('#questionDomain').textContent = question.domain;
   document.querySelector('#questionTitle').textContent = question.title;
   document.querySelector('#questionHelp').textContent = question.help;
@@ -205,7 +242,7 @@ function renderStep() {
 
   evidenceSelect.innerHTML = evidenceOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(plainEvidenceLabel(option))}</option>`).join('');
   evidenceSelect.value = saved?.evidence || 'customer_assertion';
-  progressLabel.textContent = `${question.domain} · step ${currentStep} of ${totalSteps}`;
+  progressLabel.textContent = `${phase.label} · ${phase.currentQuestionLabel}`;
   const last = stepIndex === flowQuestions.length;
   nextButton.hidden = last;
   submitButton.hidden = !last && !sourceAssessmentId;
@@ -324,6 +361,7 @@ form.addEventListener('submit', async (event) => {
       }),
     });
     sessionStorage.setItem('arl_last_assessment', JSON.stringify({ id: payload.assessment.id, token: payload.accessToken }));
+    sessionStorage.setItem('arl_selected_assessment', payload.assessment.id);
     location.href = `/result.html?id=${encodeURIComponent(payload.assessment.id)}&token=${encodeURIComponent(payload.accessToken)}`;
   } catch (error) {
     showError(errorBox, error.message);
