@@ -406,10 +406,11 @@ export async function screenGuardRequest({ rawToken, body = {}, authenticated = 
       .get(project.workspace_id, project.id);
     if (snapshot) {
       const remediation=retestCriteria?await db.prepare('SELECT finding_key FROM remediation_items WHERE id=? AND project_id=?').get(retestCriteria.remediation_id,project.id):null;
-      let controlId=String(remediation?.finding_key||'').match(/^ARL-KB-\d{3}/)?.[0]||null;let mapping=null;
+      const remediationControlId=String(remediation?.finding_key||'').match(/^ARL-KB-\d{3}/)?.[0]||null;
+      let controlId=remediationControlId;let mapping=null;
       if(!controlId&&reasons.length){const ruleIds=reasons.map(item=>item.ruleId);const marks=ruleIds.map(()=>'?').join(',');mapping=await db.prepare(`SELECT * FROM runtime_control_mappings WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND policy_version=? AND policy_digest=? AND rule_id IN (${marks}) ORDER BY rule_id,entry_id LIMIT 1`).get(project.workspace_id,project.id,snapshot.id,authoritativePolicy.version,authoritativePolicy.digest,...ruleIds);if(mapping){const source=parseJson(mapping.descriptor_json,null);if(!source||digest(canonicalJson(source))!==mapping.mapping_digest)throw conflict('Runtime control attribution integrity verification failed.');controlId=mapping.entry_id;}}
       const evaluation=controlId?await db.prepare('SELECT id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=?').get(project.workspace_id,project.id,snapshot.id,controlId):null;
-      if(retestCriteria&&!evaluation)throw conflict('Runtime retest cannot be bound to the current control snapshot.');
+      if(retestCriteria&&remediationControlId&&!evaluation)throw conflict('Runtime retest cannot be bound to the current control snapshot.');
       if(evaluation){const descriptor={schema:'arl.control-runtime-binding.v2',workspaceId:project.workspace_id,projectId:project.id,systemSnapshotId:snapshot.id,entryId:controlId,runtimeEventId,attributionMappingId:mapping?.id||null,policyVersion:authoritativePolicy.version,policyDigest:authoritativePolicy.digest,ruleIds:reasons.map(item=>item.ruleId),sideEffectOutcome:observedDecision,bindingType:'runtime_decision',createdAt:response.timestamp};
       await db.prepare(`INSERT INTO control_snapshot_runtime_bindings
         (id,workspace_id,project_id,system_snapshot_id,entry_id,runtime_event_id,attribution_mapping_id,binding_type,descriptor_json,content_digest,created_at)
