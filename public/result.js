@@ -1,4 +1,5 @@
 import { api, escapeHtml, qs, riskClass, setBusy } from './shared.js';
+import { assessmentRemediationHref } from './assessment-remediation.js';
 
 const root = document.querySelector('#resultRoot');
 const id = qs('id');
@@ -248,7 +249,7 @@ function proofForFinding(finding) {
 function remediationHtml(full) {
   const items = full.recommendations || [];
   if (!items.length) return '';
-  return `<section class="panel"><div class="section-heading compact-heading"><div><span class="eyebrow">Action plan</span><h2>Recommended fixes</h2><p>Work from top to bottom, record an owner and attach proof before checking again.</p></div><a class="button ghost small" href="/control-plane.html#remediation">Track fixes</a></div><div class="simple-remediation-list">${items.map((item, index) => `<article><span>${index + 1}</span><div><strong>${escapeHtml(item.text)}</strong><p>Priority: ${escapeHtml(item.priority)}. Mark it complete only after the change is implemented and verified.</p></div></article>`).join('')}</div></section>`;
+  return `<section class="panel"><div class="section-heading compact-heading"><div><span class="eyebrow">Action plan</span><h2>Recommended fixes</h2><p>Work from top to bottom, record an owner and attach proof before checking again.</p></div><a class="button ghost small" href="${assessmentRemediationHref({ assessmentId: assessment.id, token, isOwner })}">Track fixes</a></div><div class="simple-remediation-list">${items.map((item, index) => `<article><span>${index + 1}</span><div><strong>${escapeHtml(item.text)}</strong><p>Priority: ${escapeHtml(item.priority)}. Mark it complete only after the change is implemented and verified.</p></div></article>`).join('')}</div></section>`;
 }
 
 function technicalEvidenceHtml(full, paid) {
