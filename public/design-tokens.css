@@ -87,6 +87,16 @@ body[data-shell] .site-header-v10::before {
   backdrop-filter: none !important;
 }
 
+/* The old campaign pages used several independent 80–100px H1 rules. Keep the
+ * bespoke homepage scale, but normalise every other public hero to the same
+ * restrained enterprise hierarchy. */
+body[data-shell="public"]:not(.enterprise-home) main h1 {
+  max-width: 900px !important;
+  font-size: clamp(40px, 5.2vw, 62px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.045em !important;
+}
+
 /* Consent is part of the customer-facing surface too. Keep it consistent with
  * the light enterprise direction instead of reintroducing a dark cyber card. */
 body[data-shell] .analytics-consent {
@@ -99,3 +109,9 @@ body[data-shell] .analytics-consent {
 body[data-shell] .analytics-consent strong { color: var(--arl-text) !important; }
 body[data-shell] .analytics-consent p { color: var(--arl-text-secondary) !important; }
 body[data-shell] .analytics-consent a { color: var(--arl-brand) !important; }
+
+@media (max-width: 680px) {
+  body[data-shell="public"]:not(.enterprise-home) main h1 {
+    font-size: clamp(38px, 11vw, 48px) !important;
+  }
+}
