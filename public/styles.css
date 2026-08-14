@@ -1494,3 +1494,5 @@ body::before {
 .ci-assessment-context dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.35rem .8rem}
 .ci-assessment-context dd{margin:0;overflow-wrap:anywhere}
 @media (max-width:760px){.ci-task-grid{grid-template-columns:1fr}}
+.ci-developer-pack{margin:1rem 0;padding:1.1rem;border:1px solid rgba(45,212,163,.3);border-radius:14px;background:rgba(45,212,163,.06)}
+.ci-developer-pack ol{padding-left:1.3rem}.ci-developer-pack li{margin:.55rem 0}
