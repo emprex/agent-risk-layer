@@ -18,6 +18,8 @@ const agentDescription = document.querySelector('#agentDescription');
 const revisionNotice = document.querySelector('#revisionNotice');
 const revisionReviewField = document.querySelector('#revisionReviewField');
 const reviewPreviousAnswers = document.querySelector('#reviewPreviousAnswers');
+const revisionQuestionNav = document.querySelector('#revisionQuestionNav');
+const revisionQuestionList = document.querySelector('#revisionQuestionList');
 const updateFrom = qs('updateFrom');
 const updateToken = qs('token');
 
@@ -105,6 +107,23 @@ function applyRevisionSource(source) {
   revisionNotice.hidden = false;
 }
 
+function answerSummary(question) {
+  const saved = answers.get(question.id);
+  const option = question.options.find((item) => item.value === saved?.value);
+  return option?.label || 'Information required';
+}
+
+function renderRevisionQuestionNav() {
+  if (!sourceAssessmentId || !revisionQuestionNav || !revisionQuestionList) return;
+  revisionQuestionNav.hidden = false;
+  revisionQuestionList.innerHTML = flowQuestions.map((question, index) => `
+    <button class="revision-question-link ${stepIndex === index + 1 ? 'active' : ''}" data-question-index="${index + 1}" type="button">
+      <span>${index + 2}. ${escapeHtml(question.domain)}</span>
+      <strong>${escapeHtml(question.title)}</strong>
+      <small>${escapeHtml(answerSummary(question))}</small>
+    </button>`).join('');
+}
+
 function updateDescriptionRequirement() {
   const required = agentType.value === 'Other';
   agentDescription.required = required;
@@ -129,6 +148,7 @@ function renderStep() {
   progressBar.style.width = `${percent}%`;
   progressText.textContent = `${percent}%`;
   backButton.hidden = stepIndex === 0;
+  renderRevisionQuestionNav();
 
   if (stepIndex === 0) {
     profileStep.hidden = false;
@@ -160,7 +180,8 @@ function renderStep() {
   progressLabel.textContent = `${question.domain} · step ${currentStep} of ${totalSteps}`;
   const last = stepIndex === flowQuestions.length;
   nextButton.hidden = last;
-  submitButton.hidden = !last;
+  submitButton.hidden = !last && !sourceAssessmentId;
+  submitButton.textContent = sourceAssessmentId ? 'Save updated result' : 'Show my result';
   questionStage.focus?.();
 }
 
@@ -205,6 +226,22 @@ reviewPreviousAnswers?.addEventListener('change', () => {
   renderStep();
 });
 
+revisionQuestionList?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-question-index]');
+  if (!button || !sourceAssessmentId) return;
+  hideError(errorBox);
+  if (stepIndex === 0 && !validateProfile()) return;
+  if (stepIndex > 0) {
+    const selected = form.querySelector('input[name="currentQuestion"]:checked');
+    if (selected && !saveCurrentQuestion()) return;
+  }
+  const targetIndex = Number(button.dataset.questionIndex);
+  if (!Number.isInteger(targetIndex) || targetIndex < 1 || targetIndex > flowQuestions.length) return;
+  stepIndex = targetIndex;
+  renderStep();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
 nextButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex === 0 && !validateProfile()) return;
@@ -232,7 +269,8 @@ backButton.addEventListener('click', () => {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideError(errorBox);
-  if (stepIndex !== flowQuestions.length || !saveCurrentQuestion()) return;
+  if (stepIndex > 0 && !saveCurrentQuestion()) return;
+  if (!sourceAssessmentId && stepIndex !== flowQuestions.length) return;
   if (!validateProfile()) {
     stepIndex = 0;
     renderStep();
