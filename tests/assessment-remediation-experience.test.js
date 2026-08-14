@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, intelligenceSource] = await Promise.all([
+const [source, intelligenceSource, focusedSource] = await Promise.all([
   readFile(new URL('../public/control-plane.js', import.meta.url), 'utf8'),
   readFile(new URL('../public/control-intelligence.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/control-intelligence-control.js', import.meta.url), 'utf8'),
 ]);
 
 test('assessment remediation offers one calm bulk planning action', () => {
@@ -57,4 +58,20 @@ test('evidence handoff preserves the exact assessment fix and provides a focused
   assert.match(intelligenceSource, /Create foundation and continue/);
   assert.match(intelligenceSource, /handoffQuery/);
   assert.match(intelligenceSource, /Return to remediation plan/);
+});
+
+test('F-01 handoff opens its matching audit control without restarting the catalogue', () => {
+  assert.match(intelligenceSource, /'F-01':\{/);
+  assert.match(intelligenceSource, /controlId:'ARL-KB-090'/);
+  assert.match(intelligenceSource, /function handoffWorkspace/);
+  assert.match(intelligenceSource, /handoff\.assessmentId\?handoffWorkspace\(\)/);
+  assert.match(intelligenceSource, /not observed evidence and not a failed control test/);
+  assert.match(intelligenceSource, /Specialist option/);
+});
+
+test('focused control keeps assessment remediation context and evidence boundaries', () => {
+  assert.match(focusedSource, /const handoff = \{/);
+  assert.match(focusedSource, /declared weakness, not an observed failure/);
+  assert.match(focusedSource, /existing remediation stays open until implementation evidence exists and the retest passes/);
+  assert.match(focusedSource, /Return to remediation plan/);
 });
