@@ -123,7 +123,7 @@ function assessmentRemediationWorkspace() {
           ${remaining.length ? `<form id="remediationForm" class="auth-form">
             <div class="field"><label for="assessmentFinding">Declared weakness</label><select id="assessmentFinding">${remaining.map((finding) => `<option value="${escapeHtml(finding.id)}">${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</option>`).join('')}</select></div>
             <div class="field"><label for="remediationTitle">What must change?</label><input id="remediationTitle" required maxlength="240" value="${escapeHtml(first.recommendation)}"></div>
-            <div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity">${['critical','high','medium','low'].map((severity) => `<option ${severity === first.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" placeholder="security@company.com"></div></div>
+            <div class="form-grid"><div class="field"><label for="remediationSeverity">How serious is it?</label><select id="remediationSeverity">${['critical','high','medium','low'].map((severity) => `<option ${severity === first.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="remediationOwner">Who owns the fix?</label><input id="remediationOwner" type="email" required autocomplete="email" placeholder="Example: security@company.com" aria-describedby="remediationOwnerHelp"><small id="remediationOwnerHelp">Required — enter the email of the person accountable for completing this fix.</small></div></div>
             <p class="microcopy"><strong>Proof expected:</strong> ${escapeHtml(first.verification)}</p>
             <button class="button primary" type="submit">Track this fix</button>
           </form>` : '<p class="success-box">Every declared weakness from this assessment already has a linked remediation record.</p>'}
@@ -418,7 +418,11 @@ function remediationRow(item) {
     verification.retestReference ? `Customer-provided attestation: ${verification.retestReference} (unverified)` : 'Not attached';
   const upgrade = item.compatibilityState === 'evidence_upgrade_required'
     ? `<button class="button ghost small" data-evidence-upgrade="${escapeHtml(item.id)}">Start evidence upgrade</button>` : '';
-  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.finding_key)}${item.owner_email ? ` · ${escapeHtml(item.owner_email)}` : ''}</small></div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail"><p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
+  const owner = item.owner_email
+    ? `<small>${escapeHtml(item.finding_key)} · ${escapeHtml(item.owner_email)}</small>`
+    : `<small>${escapeHtml(item.finding_key)} · <strong>Owner required</strong></small>`;
+  const ownerRepair = item.owner_email ? '' : `<form class="mini-form remediation-owner-repair" data-remediation-owner-form="${escapeHtml(item.id)}"><label for="owner-${escapeHtml(item.id)}">Assign the missing owner</label><div class="inline-field"><input id="owner-${escapeHtml(item.id)}" name="ownerEmail" type="email" required autocomplete="email" placeholder="Example: security@company.com"><button class="button primary small" type="submit">Save owner</button></div><small>Required before this fix can progress.</small></form>`;
+  return `<details class="remediation-row"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail">${ownerRepair}<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label></div></details>`;
 }
 
 function nextRemediationOptions(status) {
@@ -459,6 +463,7 @@ function bind() {
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
   document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
+  document.querySelectorAll('[data-remediation-owner-form]').forEach((form) => form.addEventListener('submit', repairRemediationOwner));
   document.querySelectorAll('[data-evidence-upgrade]').forEach((button) => button.addEventListener('click', beginEvidenceUpgrade));
   document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', copyValue));
   document.querySelectorAll('#runGuidedCheck, #nextGuidedCheck').forEach((button) => button.addEventListener('click', runGuidedCheck));
@@ -642,6 +647,14 @@ async function saveInventory(event) {
 
 async function createRemediation(event) {
   event.preventDefault();
+  const ownerInput = document.querySelector('#remediationOwner');
+  const ownerEmail = ownerInput?.value.trim() || '';
+  if (assessmentContext && !ownerEmail) {
+    ownerInput.setCustomValidity('Enter the person responsible for this fix.');
+    ownerInput.reportValidity();
+    ownerInput.addEventListener('input', () => ownerInput.setCustomValidity(''), { once: true });
+    return;
+  }
   const button = event.currentTarget.querySelector('button');
   setBusy(button, true, 'Adding…');
   try {
@@ -651,13 +664,33 @@ async function createRemediation(event) {
     const payload = {
       title: document.querySelector('#remediationTitle').value,
       severity: document.querySelector('#remediationSeverity').value,
-      ownerEmail: document.querySelector('#remediationOwner').value,
+      ownerEmail,
       ...(finding ? {
         assessmentId,
         findingKey: remediationFindingKey(assessmentId, finding),
       } : {}),
     };
     await api(`/api/projects/${encodeURIComponent(project.id)}/remediations`, { method: 'POST', body: JSON.stringify(payload) });
+    await loadProject(project.id); await loadOverview(); render();
+  } catch (error) { fail(error); setBusy(button, false); }
+}
+
+async function repairRemediationOwner(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = form.elements.ownerEmail;
+  const ownerEmail = input.value.trim();
+  if (!ownerEmail) {
+    input.setCustomValidity('Enter the person responsible for this fix.');
+    input.reportValidity();
+    return;
+  }
+  const button = form.querySelector('button[type="submit"]');
+  setBusy(button, true, 'Saving…');
+  try {
+    await api(`/api/projects/${encodeURIComponent(project.id)}/remediations/${encodeURIComponent(form.dataset.remediationOwnerForm)}`, {
+      method: 'PATCH', body: JSON.stringify({ ownerEmail }),
+    });
     await loadProject(project.id); await loadOverview(); render();
   } catch (error) { fail(error); setBusy(button, false); }
 }
