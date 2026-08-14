@@ -1378,3 +1378,48 @@ body::before {
   .question-guidance summary { padding: .85rem .9rem; }
   .question-guidance-body { padding: .9rem; }
 }
+
+
+/* Assessment-to-remediation scope guard. */
+.assessment-handoff,
+.assessment-remediation-workspace { max-width: 1040px; margin: 2rem auto; }
+.assessment-handoff { display: grid; gap: 1.15rem; }
+.assessment-handoff h2,
+.assessment-scope-banner h2 { margin: 0; }
+.assessment-handoff > p { margin: 0; max-width: 760px; color: var(--muted); line-height: 1.6; }
+.assessment-handoff-finding {
+  display: grid;
+  gap: .35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(255, 159, 67, .3);
+  border-radius: 13px;
+  background: rgba(255, 159, 67, .07);
+}
+.assessment-handoff-finding small { color: var(--orange); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.assessment-handoff-finding span { color: #c9d5df; }
+.assessment-create-scope {
+  padding: 1.15rem;
+  border: 1px solid rgba(45, 212, 163, .3);
+  border-radius: 14px;
+  background: rgba(45, 212, 163, .07);
+}
+.assessment-create-scope > span { color: var(--green); font-size: .78rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+.assessment-create-scope p { color: #c2d5ce; }
+.assessment-scope-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 1.25rem;
+  align-items: center;
+  border-color: rgba(45, 212, 163, .34);
+}
+.assessment-scope-banner > div:nth-child(2) { display: grid; text-align: center; }
+.assessment-scope-banner > div:nth-child(2) strong { color: var(--green); font-size: 1.8rem; }
+.assessment-scope-banner p { margin: .35rem 0 0; color: var(--muted); }
+.assessment-only-remediation { margin-top: 1rem; }
+
+@media (max-width: 760px) {
+  .assessment-handoff,
+  .assessment-remediation-workspace { margin: 1rem auto; }
+  .assessment-scope-banner { grid-template-columns: 1fr; align-items: start; }
+  .assessment-scope-banner > div:nth-child(2) { text-align: left; }
+}
