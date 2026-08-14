@@ -8,22 +8,13 @@ import {
   normaliseCapabilityProfile,
   sameCapabilityProfile,
 } from './agent-capability-profile.js';
+import { ASSESSMENT_FIX_CONTROLS } from './assessment-fix-controls.js';
 
 document.querySelector('#logout')?.addEventListener('click',async()=>{await api('/api/auth/logout',{method:'POST',body:'{}'});location.href='/'});
 // Snapshot replacement forms use expectedCurrentSnapshotId for compare-and-swap; first creation has no predecessor.
 const root=document.querySelector('#ciRoot'),select=document.querySelector('#ciProject');
 let data,view=qs('view')||'overview',handoffAssessment=null;
 const handoff={assessmentId:qs('assessment')||'',findingId:qs('finding')||'',remediationId:qs('remediation')||''};
-const ASSESSMENT_CONTROL_MAP={
-  'F-01':{
-    controlId:'ARL-KB-090',
-    label:'Audit coverage',
-    weakness:'Can you reconstruct what the agent saw, decided and changed?',
-    outcome:'Correlate identity, inputs, relevant context, versions, decisions, actions, approvals and side effects.',
-    test:'Run one refund from request to side effect, then reconstruct the complete sequence from stored records.',
-    proof:'A redacted end-to-end trace from one repeatable test, with timestamps and matching IDs.',
-  },
-};
 const human=v=>String(v||'').replaceAll('_',' '),projectId=()=>select.value;
 const handoffQuery=()=>handoff.assessmentId?`&assessment=${encodeURIComponent(handoff.assessmentId)}&finding=${encodeURIComponent(handoff.findingId)}&remediation=${encodeURIComponent(handoff.remediationId)}`:'';
 const url=(v,status='')=>`/control-intelligence.html?projectId=${encodeURIComponent(projectId())}&view=${v}${status?`&status=${encodeURIComponent(status)}`:''}${handoffQuery()}`;
@@ -52,7 +43,7 @@ function decision(){const d=data.deploymentState,state=String(d?.decision||'hold
 function chain(){return `<section class="panel"><h2>Evidence chain</h2><p>Architecture and capabilities → control → test → evidence → finding when needed → remediation → exact retest → approval when required → decision.</p></section>${controls()}`}
 function controlHandoffUrl(task){return `/control-intelligence-control.html?projectId=${encodeURIComponent(projectId())}&controlId=${encodeURIComponent(task.controlId)}&assessment=${encodeURIComponent(handoff.assessmentId)}&finding=${encodeURIComponent(handoff.findingId)}&remediation=${encodeURIComponent(handoff.remediationId)}`}
 function handoffWorkspace(){
-  const task=ASSESSMENT_CONTROL_MAP[handoff.findingId];
+  const task=ASSESSMENT_FIX_CONTROLS[handoff.findingId];
   if(!task)return `<section class="panel ci-handoff-ready"><span class="eyebrow">${esc(handoff.findingId)} remediation task</span><h2>The system version is ready.</h2><p>This assessment item needs a specialist control match before evidence can be recorded. No finding or proof has been created automatically.</p><a class="button primary" href="/control-plane.html?assessment=${encodeURIComponent(handoff.assessmentId)}#remediation">Return to remediation plan</a></section>`;
   return `<section class="panel ci-handoff-ready ci-task-workspace"><span class="eyebrow">${esc(handoff.findingId)} · ${esc(task.label)}</span><h2>Now prove this one fix.</h2><p class="ci-task-declaration"><strong>Declared weakness:</strong> ${esc(task.weakness)}</p><p>This came from the assessment. It is a remediation requirement, not observed evidence and not a failed control test.</p><div class="ci-task-grid"><div><span>Implement</span><strong>${esc(task.outcome)}</strong></div><div><span>Test</span><strong>${esc(task.test)}</strong></div><div><span>Evidence to keep</span><strong>${esc(task.proof)}</strong></div></div><a class="button primary button-xl" href="${controlHandoffUrl(task)}">Continue with ${esc(task.controlId)}</a><a class="button ghost" href="/control-plane.html?assessment=${encodeURIComponent(handoff.assessmentId)}#remediation">Back to remediation plan</a></section><details class="panel ci-specialist-option"><summary>Specialist option</summary><p>Review the full control catalogue only when you need to change the wider assurance scope.</p><a class="button ghost small" href="/control-intelligence.html?projectId=${encodeURIComponent(projectId())}&view=controls">Open all controls</a></details>`;
 }
