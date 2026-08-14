@@ -17,31 +17,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          READY="$(curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/ready)"
-          CONFIG="$(curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/config)"
+          curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/ready -o /tmp/ready.json
+          curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/config -o /tmp/config.json
           PRICING_STATUS="$(curl --silent --show-error --output /tmp/pricing.html --write-out '%{http_code}' --max-time 20 https://agentrisklayer.com/pricing.html)"
-          printf '%s' "$READY" > /tmp/ready.json
-          printf '%s' "$CONFIG" > /tmp/config.json
+          echo "ready=$(cat /tmp/ready.json)"
+          echo "config_summary=$(jq -c '{productStage,demoMode,catalogue}' /tmp/config.json)"
           echo "pricing_status=$PRICING_STATUS"
-          node <<'NODE'
-          const fs = require('fs');
-          const ready = JSON.parse(fs.readFileSync('/tmp/ready.json','utf8'));
-          const cfg = JSON.parse(fs.readFileSync('/tmp/config.json','utf8'));
-          console.log('ready', JSON.stringify(ready));
-          console.log('config-summary', JSON.stringify({productStage:cfg.productStage,demoMode:cfg.demoMode,catalogue:cfg.catalogue}));
-          if (!(ready.ok === true || ready.ready === true)) throw new Error('Production readiness endpoint is not healthy');
-          if (cfg.productStage !== 'production') throw new Error(`Unexpected productStage ${cfg.productStage}`);
-          if (cfg.demoMode !== false) throw new Error(`Expected live billing demoMode=false, got ${cfg.demoMode}`);
-          const expected = {
-            pro_report: 9900,
-            developer_monthly: 2900,
-            team_monthly: 9900,
-            agency_monthly: 24900,
-          };
-          for (const [key, amount] of Object.entries(expected)) {
-            if (cfg.catalogue?.[key]?.amountPence !== amount) throw new Error(`${key} amount mismatch: ${cfg.catalogue?.[key]?.amountPence}`);
-          }
-NODE
+          jq -e '(.ok == true) or (.ready == true)' /tmp/ready.json >/dev/null
+          jq -e '.productStage == "production"' /tmp/config.json >/dev/null
+          jq -e '.demoMode == false' /tmp/config.json >/dev/null
+          jq -e '.catalogue.pro_report.amountPence == 9900' /tmp/config.json >/dev/null
+          jq -e '.catalogue.developer_monthly.amountPence == 2900' /tmp/config.json >/dev/null
+          jq -e '.catalogue.team_monthly.amountPence == 9900' /tmp/config.json >/dev/null
+          jq -e '.catalogue.agency_monthly.amountPence == 24900' /tmp/config.json >/dev/null
           test "$PRICING_STATUS" = "200"
           grep -q 'pricingGrid' /tmp/pricing.html
 
