@@ -86,4 +86,6 @@ test('remediation plan recognises a started or inconclusive control workflow', (
   assert.match(source, /Test inconclusive — connect the staging agent/);
   assert.match(source, /Continue this fix/);
   assert.match(source, /No control evidence was created/);
+  assert.match(source, /control-intelligence-control\.html/);
+  assert.match(source, /Continue evidence task/);
 });
