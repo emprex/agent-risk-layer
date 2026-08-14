@@ -99,6 +99,21 @@ body[data-shell="public"]:not(.enterprise-home) main h1 {
   letter-spacing: -.045em !important;
 }
 
+/* Production review polish: keep the product screenshot and primary action in
+ * the first desktop viewport instead of letting the headline dominate it. */
+body[data-shell="public"].enterprise-home .enterprise-hero {
+  min-height: 620px !important;
+  padding-top: 72px !important;
+  padding-bottom: 72px !important;
+  gap: 60px !important;
+}
+body[data-shell="public"].enterprise-home .enterprise-hero-copy h1 {
+  max-width: 650px !important;
+  font-size: clamp(46px, 5vw, 60px) !important;
+  line-height: 1 !important;
+  letter-spacing: -.05em !important;
+}
+
 /* Consent is part of the customer-facing surface too. Keep it consistent with
  * the light enterprise direction instead of reintroducing a dark cyber card. */
 body[data-shell] .analytics-consent {
@@ -112,8 +127,20 @@ body[data-shell] .analytics-consent strong { color: var(--arl-text) !important; 
 body[data-shell] .analytics-consent p { color: var(--arl-text-secondary) !important; }
 body[data-shell] .analytics-consent a { color: var(--arl-brand) !important; }
 
+@media (max-width: 900px) {
+  body[data-shell="public"].enterprise-home .enterprise-hero {
+    min-height: auto !important;
+    padding-top: 56px !important;
+    padding-bottom: 64px !important;
+    gap: 40px !important;
+  }
+}
+
 @media (max-width: 680px) {
   body[data-shell="public"]:not(.enterprise-home) main h1 {
     font-size: clamp(38px, 11vw, 48px) !important;
+  }
+  body[data-shell="public"].enterprise-home .enterprise-hero-copy h1 {
+    font-size: clamp(40px, 12vw, 48px) !important;
   }
 }
