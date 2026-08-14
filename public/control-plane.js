@@ -82,7 +82,13 @@ async function loadAssessmentControlProgress() {
       const tests = [...(detail.tests || []), ...(detail.testHistory || [])].filter((test, index, all) => test?.id && all.findIndex((candidate) => candidate.id === test.id) === index);
       const latest = tests.sort((left, right) => String(right.completedAt || right.startedAt || '').localeCompare(String(left.completedAt || left.startedAt || '')))[0] || null;
       const started = detail.applicability?.status === 'applicable' || tests.length > 0;
-      assessmentControlProgress.set(findingId, { controlId, started, latestResult: latest?.result || '', nextAction: detail.chain?.nextAction || '' });
+      assessmentControlProgress.set(findingId, {
+        controlId,
+        started,
+        latestResult: latest?.result || '',
+        latestAt: latest?.completedAt || latest?.startedAt || '',
+        nextAction: detail.chain?.nextAction || '',
+      });
     } catch {
       // Progress is helpful context, never a reason to block the remediation plan.
     }
@@ -137,10 +143,30 @@ function assessmentRemediationWorkspace() {
   const progress = remediationProgress(linked);
   const urgent = linked.filter((item) => ['critical', 'high'].includes(item.severity));
   const planned = linked.filter((item) => !['critical', 'high'].includes(item.severity));
-  const next = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9))[0];
+  const ordered = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9));
+  const waiting = ordered.find((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive');
+  const active = ordered
+    .filter((item) => {
+      const itemProgress = assessmentControlProgress.get(item.finding_key?.split(':').at(-1));
+      return itemProgress?.started && itemProgress.latestResult !== 'inconclusive';
+    })
+    .sort((left, right) => {
+      const leftAt = assessmentControlProgress.get(left.finding_key?.split(':').at(-1))?.latestAt || '';
+      const rightAt = assessmentControlProgress.get(right.finding_key?.split(':').at(-1))?.latestAt || '';
+      return rightAt.localeCompare(leftAt);
+    });
+  const next = active[0] || ordered.find((item) => item !== waiting && !assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.started) || waiting || ordered[0];
   const nextFindingId = next?.finding_key?.split(':').at(-1);
   const nextProgress = assessmentControlProgress.get(nextFindingId);
-  const nextStatus = nextProgress?.latestResult === 'inconclusive' ? 'Test inconclusive — connect the staging agent or hand the test pack to a developer.' : nextProgress?.started ? (nextProgress.nextAction || 'Continue the recorded control workflow.') : 'Work on the highest-priority fix first. Evidence and retesting come later.';
+  const nextStatus = nextProgress?.latestResult === 'planned'
+    ? 'Test planned — run it when the staging system is available.'
+    : nextProgress?.started
+      ? (nextProgress.nextAction || 'Continue the recorded control workflow.')
+      : 'Work on the highest-priority available fix. Evidence and retesting come later.';
+  const waitingFindingId = waiting?.finding_key?.split(':').at(-1);
+  const waitingCard = waiting && waiting !== next
+    ? `<div class="next-remediation waiting-remediation"><div><small>Waiting on developer</small><strong>${escapeHtml(waitingFindingId)} · ${escapeHtml(waiting.title)}</strong><span>Test inconclusive — connect the staging agent or hand the test pack to a developer.</span></div><button class="button ghost" type="button" data-open-remediation="${escapeHtml(waiting.id)}">View blocked fix</button></div>`
+    : '';
   const remainingPreview = remaining.map((finding) => `<li><span class="status-pill">${escapeHtml(finding.severity)}</span><div><strong>${escapeHtml(finding.id)} · ${escapeHtml(finding.title)}</strong><small>${escapeHtml(finding.recommendation)}</small></div></li>`).join('');
   const planning = remaining.length ? `
     <section class="panel remediation-plan-card">
@@ -172,7 +198,8 @@ function assessmentRemediationWorkspace() {
         <div><strong>${progress.retested}</strong><span>retested</span></div>
         <div><strong>${progress.verified}</strong><span>verified closed</span></div>
       </div>
-      ${next ? `<div class="next-remediation"><div><small>${nextProgress?.started ? 'Continue here' : 'Start here'}</small><strong>${escapeHtml(nextFindingId)} · ${escapeHtml(next.title)}</strong><span>${escapeHtml(nextStatus)}</span></div><button class="button primary" type="button" data-open-remediation="${escapeHtml(next.id)}">${nextProgress?.started ? 'Continue this fix' : 'Start this fix'}</button></div>` : ''}
+      ${waitingCard}
+      ${next ? `<div class="next-remediation"><div><small>${nextProgress?.started ? 'Continue working' : 'Start here'}</small><strong>${escapeHtml(nextFindingId)} · ${escapeHtml(next.title)}</strong><span>${escapeHtml(nextStatus)}</span></div><button class="button primary" type="button" data-open-remediation="${escapeHtml(next.id)}">${nextProgress?.started ? 'Continue this fix' : 'Start this fix'}</button></div>` : ''}
     </section>`;
   return `<section class="assessment-remediation-workspace">
     <section class="panel assessment-scope-banner">
@@ -499,7 +526,14 @@ function remediationRow(item) {
     : `<small>${escapeHtml(item.finding_key)} · <strong>Owner required</strong></small>`;
   const ownerRepair = `<details class="remediation-edit"><summary>Edit details</summary><form class="mini-form remediation-owner-repair" data-remediation-owner-form="${escapeHtml(item.id)}"><div class="form-grid"><div class="field"><label for="severity-${escapeHtml(item.id)}">Severity</label><select id="severity-${escapeHtml(item.id)}" name="severity">${['critical','high','medium','low'].map((severity) => `<option value="${severity}" ${severity === item.severity ? 'selected' : ''}>${severity}</option>`).join('')}</select></div><div class="field"><label for="owner-${escapeHtml(item.id)}">Owner</label><input id="owner-${escapeHtml(item.id)}" name="ownerEmail" type="email" required autocomplete="email" value="${escapeHtml(item.owner_email || '')}" placeholder="Example: security@company.com"></div></div><button class="button primary small" type="submit">Save details</button><small>Changes are added to the project audit trail.</small></form></details>`;
   const assessmentGuide = assessmentRemediationGuide(item);
-  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml((item.compatibilityState || item.status).replaceAll('_', ' '))}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
+  const findingId = item.assessment_id === assessmentId ? item.finding_key?.split(':').at(-1) : '';
+  const controlProgress = assessmentControlProgress.get(findingId);
+  const lifecycleLabel = controlProgress?.latestResult === 'planned'
+    ? 'Test planned'
+    : controlProgress?.latestResult === 'inconclusive'
+      ? 'Test inconclusive'
+      : (item.compatibilityState || item.status).replaceAll('_', ' ');
+  return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
 }
 
 const assessmentPlaybooks = Object.freeze({
