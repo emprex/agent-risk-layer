@@ -126,6 +126,7 @@ function render() {
         <div class="result-decision-trace ${escapeHtml(decision.state)}" aria-label="Assessment decision path"><span><small>SIGNAL</small>${escapeHtml(traceStart)}</span><i></i><span><small>AGENT</small>${escapeHtml(assessment.name)}</span><i></i><span class="trace-break"><small>BOUNDARY</small>${escapeHtml(traceEnd)}</span></div>
         <div class="decision-actions">
           <a class="button primary" href="${primaryTarget}">${primaryLabel}</a>
+          ${revisionSource ? `<a class="button ghost" href="${revisionHref()}">Correct or update answers</a>` : ''}
           ${isOwner ? '<a class="button ghost" href="/dashboard.html">Save and return to my work</a>' : '<a class="button ghost" href="/auth.html">Create an account to save this result</a>'}
         </div>
       </div>
