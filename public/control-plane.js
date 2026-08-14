@@ -269,14 +269,19 @@ function assessmentWorkPackage(workPackage, index, items) {
   const verified = packageItems.filter((item) => item.status === 'verified_closed').length;
   const withEvidence = packageItems.filter((item) => ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status)).length;
   const waiting = packageItems.filter((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive').length;
-  const active = packageItems
-    .filter((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.started)
+  const orderedPackageItems = [...packageItems].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9));
+  const active = orderedPackageItems
+    .filter((item) => {
+      const controlProgress = assessmentControlProgress.get(item.finding_key?.split(':').at(-1));
+      return controlProgress?.started && controlProgress.latestResult !== 'inconclusive' && item.status !== 'verified_closed';
+    })
     .sort((left, right) => String(assessmentControlProgress.get(right.finding_key?.split(':').at(-1))?.latestAt || '').localeCompare(String(assessmentControlProgress.get(left.finding_key?.split(':').at(-1))?.latestAt || '')));
   const current = active[0]
-    || packageItems.find((item) => item.status !== 'verified_closed' && assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult !== 'inconclusive')
-    || packageItems.find((item) => item.status !== 'verified_closed');
-  const currentFinding = current?.finding_key?.split(':').at(-1);
-  const status = verified === packageItems.length ? 'Verified' : waiting && !current ? 'Waiting on developer' : current ? 'Continue package' : 'Ready';
+    || orderedPackageItems.find((item) => item.status !== 'verified_closed' && assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult !== 'inconclusive');
+  const blocked = orderedPackageItems.find((item) => item.status !== 'verified_closed');
+  const packageAction = current || blocked;
+  const currentFinding = packageAction?.finding_key?.split(':').at(-1);
+  const status = verified === packageItems.length ? 'Verified' : current ? 'Continue package' : blocked ? 'View blocked package' : 'Ready';
   return `<section class="panel remediation-package">
     <div class="section-heading compact-heading">
       <div><p class="eyebrow">Work package ${index + 1} of ${assessmentWorkPackages.length}</p><h3>${escapeHtml(workPackage.title)}</h3><p>${escapeHtml(workPackage.outcome)}</p></div>
@@ -288,7 +293,7 @@ function assessmentWorkPackage(workPackage, index, items) {
       <span><strong>${packageItems.length - verified}</strong> remaining</span>
     </div>
     <div class="button-row">
-      ${current ? `<button class="button primary" type="button" data-open-remediation="${escapeHtml(current.id)}">${escapeHtml(status)}${currentFinding ? ` · ${escapeHtml(currentFinding)}` : ''}</button>` : ''}
+      ${packageAction ? `<button class="button primary" type="button" data-open-remediation="${escapeHtml(packageAction.id)}">${escapeHtml(status)}${currentFinding ? ` · ${escapeHtml(currentFinding)}` : ''}</button>` : ''}
       <button class="button secondary" type="button" data-copy-package="${escapeHtml(workPackage.id)}">Copy package test pack</button>
     </div>
     <details class="remediation-group"><summary><span>Expert detail · ${packageItems.length} individual controls</span><strong>${packageItems.length}</strong></summary><div class="remediation-list">${packageItems.map(remediationRow).join('')}</div></details>
