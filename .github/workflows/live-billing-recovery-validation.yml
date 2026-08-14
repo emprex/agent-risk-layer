@@ -1,0 +1,55 @@
+name: Live billing recovery validation
+
+on:
+  push:
+    branches:
+      - validate/live-billing-recovery-20260814
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate production readiness and billing surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          READY="$(curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/ready)"
+          CONFIG="$(curl --fail --silent --show-error --max-time 20 https://agentrisklayer.com/api/config)"
+          PRICING_STATUS="$(curl --silent --show-error --output /tmp/pricing.html --write-out '%{http_code}' --max-time 20 https://agentrisklayer.com/pricing.html)"
+          printf '%s' "$READY" > /tmp/ready.json
+          printf '%s' "$CONFIG" > /tmp/config.json
+          echo "pricing_status=$PRICING_STATUS"
+          node <<'NODE'
+          const fs = require('fs');
+          const ready = JSON.parse(fs.readFileSync('/tmp/ready.json','utf8'));
+          const cfg = JSON.parse(fs.readFileSync('/tmp/config.json','utf8'));
+          console.log('ready', JSON.stringify(ready));
+          console.log('config-summary', JSON.stringify({productStage:cfg.productStage,demoMode:cfg.demoMode,catalogue:cfg.catalogue}));
+          if (!(ready.ok === true || ready.ready === true)) throw new Error('Production readiness endpoint is not healthy');
+          if (cfg.productStage !== 'production') throw new Error(`Unexpected productStage ${cfg.productStage}`);
+          if (cfg.demoMode !== false) throw new Error(`Expected live billing demoMode=false, got ${cfg.demoMode}`);
+          const expected = {
+            pro_report: 9900,
+            developer_monthly: 2900,
+            team_monthly: 9900,
+            agency_monthly: 24900,
+          };
+          for (const [key, amount] of Object.entries(expected)) {
+            if (cfg.catalogue?.[key]?.amountPence !== amount) throw new Error(`${key} amount mismatch: ${cfg.catalogue?.[key]?.amountPence}`);
+          }
+NODE
+          test "$PRICING_STATUS" = "200"
+          grep -q 'pricingGrid' /tmp/pricing.html
+
+      - name: Verify checkout endpoint remains authenticated
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$(curl --silent --show-error --output /tmp/checkout.json --write-out '%{http_code}' --max-time 20 -X POST https://agentrisklayer.com/api/checkout -H 'content-type: application/json' --data '{"productKey":"developer_monthly"}')"
+          echo "checkout_unauthenticated_status=$STATUS"
+          cat /tmp/checkout.json
+          test "$STATUS" = "401"
