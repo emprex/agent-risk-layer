@@ -210,7 +210,7 @@ function assessmentRemediationWorkspace() {
       ${planning}
       <section class="panel remediation-plan-list">
         <div class="section-heading compact-heading"><div><h3>Your remediation plan</h3><p>Open a fix only when you are ready to work on it.</p></div><strong>${linked.length}</strong></div>
-        ${linked.length ? assessmentWorkPackageList(linked) : '<p class="muted">No fixes assigned yet. Create the plan above when you are ready.</p>'}
+        ${linked.length ? assessmentWorkPackageList(linked, next) : '<p class="muted">No fixes assigned yet. Create the plan above when you are ready.</p>'}
       </section>
     </section>
   </section>`;
@@ -257,11 +257,11 @@ const assessmentWorkPackages = Object.freeze([
   },
 ]);
 
-function assessmentWorkPackageList(items) {
-  return `<div class="remediation-work-packages">${assessmentWorkPackages.map((workPackage, index) => assessmentWorkPackage(workPackage, index, items)).join('')}</div>`;
+function assessmentWorkPackageList(items, recommendedItem) {
+  return `<div class="remediation-work-packages">${assessmentWorkPackages.map((workPackage, index) => assessmentWorkPackage(workPackage, index, items, recommendedItem)).join('')}</div>`;
 }
 
-function assessmentWorkPackage(workPackage, index, items) {
+function assessmentWorkPackage(workPackage, index, items, recommendedItem) {
   const packageItems = workPackage.findings
     .map((findingId) => items.find((item) => item.finding_key?.split(':').at(-1) === findingId))
     .filter(Boolean);
@@ -276,7 +276,9 @@ function assessmentWorkPackage(workPackage, index, items) {
       return controlProgress?.started && controlProgress.latestResult !== 'inconclusive' && item.status !== 'verified_closed';
     })
     .sort((left, right) => String(assessmentControlProgress.get(right.finding_key?.split(':').at(-1))?.latestAt || '').localeCompare(String(assessmentControlProgress.get(left.finding_key?.split(':').at(-1))?.latestAt || '')));
-  const current = active[0]
+  const recommended = orderedPackageItems.find((item) => item.id === recommendedItem?.id);
+  const current = recommended
+    || active[0]
     || orderedPackageItems.find((item) => {
       const controlProgress = assessmentControlProgress.get(item.finding_key?.split(':').at(-1));
       return item.status !== 'verified_closed' && !controlProgress?.started && controlProgress?.latestResult !== 'inconclusive';
