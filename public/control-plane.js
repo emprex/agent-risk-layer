@@ -141,8 +141,6 @@ function assessmentRemediationWorkspace() {
   const first = remaining[0];
   const owner = defaultRemediationOwner(linked);
   const progress = remediationProgress(linked);
-  const urgent = linked.filter((item) => ['critical', 'high'].includes(item.severity));
-  const planned = linked.filter((item) => !['critical', 'high'].includes(item.severity));
   const ordered = [...linked].sort((left, right) => (severityOrder[left.severity] || 9) - (severityOrder[right.severity] || 9));
   const waiting = ordered.find((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive');
   const active = ordered
@@ -212,7 +210,7 @@ function assessmentRemediationWorkspace() {
       ${planning}
       <section class="panel remediation-plan-list">
         <div class="section-heading compact-heading"><div><h3>Your remediation plan</h3><p>Open a fix only when you are ready to work on it.</p></div><strong>${linked.length}</strong></div>
-        ${linked.length ? `${remediationGroup('Do first', urgent, true)}${remediationGroup('Harden next', planned, false)}` : '<p class="muted">No fixes assigned yet. Create the plan above when you are ready.</p>'}
+        ${linked.length ? assessmentWorkPackageList(linked) : '<p class="muted">No fixes assigned yet. Create the plan above when you are ready.</p>'}
       </section>
     </section>
   </section>`;
@@ -230,6 +228,71 @@ function remediationProgress(items) {
     retested: items.filter((item) => ['retested', 'verified_closed'].includes(item.status)).length,
     verified: items.filter((item) => item.status === 'verified_closed').length,
   };
+}
+
+const assessmentWorkPackages = Object.freeze([
+  {
+    id: 'observe-contain',
+    title: 'Observe and contain',
+    outcome: 'Reconstruct important actions, detect unsafe behaviour, block releases after known failures and recover safely.',
+    findings: ['F-01', 'F-02', 'F-03', 'F-04', 'F-05'],
+  },
+  {
+    id: 'control-authority',
+    title: 'Control authority',
+    outcome: 'Limit who and what the agent can access, protect credentials and require exact external authorisation and approval.',
+    findings: ['F-06', 'F-07', 'F-08', 'F-09'],
+  },
+  {
+    id: 'protect-data-actions',
+    title: 'Protect data and actions',
+    outcome: 'Keep untrusted content, outputs, memory, sensitive data and network activity within independently enforced boundaries.',
+    findings: ['F-10', 'F-11', 'F-12', 'F-13', 'F-14'],
+  },
+  {
+    id: 'control-deployment',
+    title: 'Control the deployment',
+    outcome: 'Govern dependencies, enforce hard resource limits and assign one accountable owner for this deployment.',
+    findings: ['F-15', 'F-16', 'F-17'],
+  },
+]);
+
+function assessmentWorkPackageList(items) {
+  return `<div class="remediation-work-packages">${assessmentWorkPackages.map((workPackage, index) => assessmentWorkPackage(workPackage, index, items)).join('')}</div>`;
+}
+
+function assessmentWorkPackage(workPackage, index, items) {
+  const packageItems = workPackage.findings
+    .map((findingId) => items.find((item) => item.finding_key?.split(':').at(-1) === findingId))
+    .filter(Boolean);
+  if (!packageItems.length) return '';
+  const verified = packageItems.filter((item) => item.status === 'verified_closed').length;
+  const withEvidence = packageItems.filter((item) => ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status)).length;
+  const waiting = packageItems.filter((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult === 'inconclusive').length;
+  const active = packageItems
+    .filter((item) => assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.started)
+    .sort((left, right) => String(assessmentControlProgress.get(right.finding_key?.split(':').at(-1))?.latestAt || '').localeCompare(String(assessmentControlProgress.get(left.finding_key?.split(':').at(-1))?.latestAt || '')));
+  const current = active[0]
+    || packageItems.find((item) => item.status !== 'verified_closed' && assessmentControlProgress.get(item.finding_key?.split(':').at(-1))?.latestResult !== 'inconclusive')
+    || packageItems.find((item) => item.status !== 'verified_closed');
+  const currentFinding = current?.finding_key?.split(':').at(-1);
+  const status = verified === packageItems.length ? 'Verified' : waiting && !current ? 'Waiting on developer' : current ? 'Continue package' : 'Ready';
+  return `<section class="panel remediation-package">
+    <div class="section-heading compact-heading">
+      <div><p class="eyebrow">Work package ${index + 1} of ${assessmentWorkPackages.length}</p><h3>${escapeHtml(workPackage.title)}</h3><p>${escapeHtml(workPackage.outcome)}</p></div>
+      <strong>${verified} of ${packageItems.length} verified</strong>
+    </div>
+    <div class="assessment-stats compact-stats">
+      <span><strong>${withEvidence}</strong> with evidence</span>
+      <span><strong>${waiting}</strong> waiting</span>
+      <span><strong>${packageItems.length - verified}</strong> remaining</span>
+    </div>
+    <div class="button-row">
+      ${current ? `<button class="button primary" type="button" data-open-remediation="${escapeHtml(current.id)}">${escapeHtml(status)}${currentFinding ? ` · ${escapeHtml(currentFinding)}` : ''}</button>` : ''}
+      <button class="button secondary" type="button" data-copy-package="${escapeHtml(workPackage.id)}">Copy package test pack</button>
+    </div>
+    <details class="remediation-group"><summary><span>Expert detail · ${packageItems.length} individual controls</span><strong>${packageItems.length}</strong></summary><div class="remediation-list">${packageItems.map(remediationRow).join('')}</div></details>
+  </section>`;
 }
 
 function remediationGroup(title, items, open) {
@@ -536,30 +599,10 @@ function remediationRow(item) {
   return `<details class="remediation-row" data-remediation-id="${escapeHtml(item.id)}"><summary><span class="severity-bar ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.title)}</strong>${owner}</div><span class="status-pill">${escapeHtml(lifecycleLabel)}</span></summary><div class="remediation-detail">${ownerRepair}${assessmentGuide || `<p><strong>Implementation evidence:</strong> ${escapeHtml(evidenceLabel)}</p><p><strong>Retest evidence:</strong> ${escapeHtml(retestLabel)}</p><p><strong>Retest result:</strong> ${escapeHtml(verification.retestResult || 'Not run')}</p>${upgrade}<label>Next lifecycle step<select data-remediation-status="${escapeHtml(item.id)}"><option value="">Select next step</option>${nextRemediationOptions(item.status)}</select></label>`}</div></details>`;
 }
 
-const assessmentPlaybooks = Object.freeze({
-  'F-01': { outcome: 'Create one trace ID for every request and carry it through identity, inputs, retrieved context, model/prompt version, decisions, approvals, tool calls and side effects.', proof: 'A redacted end-to-end trace from one repeatable test, with timestamps and matching IDs.', test: 'Run one refund from request to side effect, then reconstruct the complete sequence from stored records.' },
-  'F-02': { outcome: 'Alert on denied actions, unusual volume, loops and suspected data exfiltration; define a containment action for each alert.', proof: 'A dated alert and containment record from a controlled unsafe-action test.', test: 'Trigger one safe denied action and confirm the alert reaches the owner and containment occurs within the target time.' },
-  'F-03': { outcome: 'Turn known attacks and business-rule failures into repeatable tests that block release when they fail.', proof: 'Dated regression output plus the CI/CD release-gate result.', test: 'Introduce one known failure in a test branch and confirm the release is blocked; restore the fix and confirm it passes.' },
-  'F-04': { outcome: 'List material changes—model, prompt, tools, permissions, data, policy and deployment—and automatically mark affected evidence stale.', proof: 'A change record showing evidence invalidation, targeted retest and approval.', test: 'Change one pinned component in staging and confirm the correct evidence is invalidated and retesting is required.' },
-  'F-05': { outcome: 'Provide a tested kill switch that removes agent authority, preserves relevant state and supports recovery to a known-good version.', proof: 'A timed containment exercise and recovery/retest record.', test: 'Run a staging exercise, measure time to containment, restore the known-good version and verify controls again.' },
-  'F-06': { outcome: 'Give the agent a dedicated identity with only the resources and actions needed for its stated job.', proof: 'A current permission export plus allowed and denied access-test results.', test: 'Confirm the required refund action works and an unrelated resource/action is denied.' },
-  'F-07': { outcome: 'Use scoped, short-lived credentials from a managed secret store; rotate them and keep them out of prompts, memory, logs and source.', proof: 'Secret-store/identity configuration, rotation record and leakage-test results.', test: 'Rotate a test credential, confirm the old value fails and scan every agent data path for secret exposure.' },
-  'F-08': { outcome: 'Place an authorisation check outside the model before every tool call, validating action, target, parameters and context.', proof: 'Policy configuration plus allowed- and denied-action decision records.', test: 'Send an allowed call and a changed-target or changed-parameter call; confirm only the exact allowed call reaches the tool.' },
-  'F-09': { outcome: 'Bind human approval to one exact action, target, value and short expiry, with single-use replay protection.', proof: 'Approval configuration plus changed, expired and replayed rejection records.', test: 'Approve one fictional refund, then change its amount, expire it and replay it; all three variants must be denied.' },
-  'F-10': { outcome: 'Label user and retrieved content as untrusted and enforce policy independently at every action boundary.', proof: 'Direct and indirect prompt-injection test results tied to the enforced policy.', test: 'Place a safe injection in user and retrieved content and confirm neither can override a denied action.' },
-  'F-11': { outcome: 'Validate model output schema, destination, content and business/security policy before any use or side effect.', proof: 'Validator configuration plus malformed and forbidden output rejection records.', test: 'Return malformed JSON and a forbidden destination/action; confirm both stop before side effects.' },
-  'F-12': { outcome: 'Partition memory by customer/session, validate writes, retain provenance and support expiry, correction, deletion and recovery.', proof: 'Memory configuration plus isolation, poisoning and recovery-test results.', test: 'Attempt cross-session retrieval and a poisoned write, then correct/delete it and confirm recovery.' },
-  'F-13': { outcome: 'Remove unnecessary sensitive fields before model processing and enforce purpose, access, retention and deletion rules.', proof: 'Reviewed data flow, minimisation configuration and retention/deletion records.', test: 'Send a test record containing unnecessary sensitive fields and confirm they never reach the model or retained evidence.' },
-  'F-14': { outcome: 'Default-deny outbound network access, allow only required destinations/protocols and monitor payloads and downloads.', proof: 'Network policy plus allowed- and denied-destination test records.', test: 'Reach one approved staging endpoint and one controlled unapproved endpoint; the second must be blocked and logged.' },
-  'F-15': { outcome: 'Maintain an approved inventory of models, tools, packages and MCP servers; pin versions and verify provenance before release.', proof: 'Version inventory with digests plus a reviewed dependency-change record.', test: 'Attempt a controlled unapproved or digest-mismatched dependency change and confirm the release is blocked.' },
-  'F-16': { outcome: 'Enforce hard token, time, retry, recursion and spend limits in code outside the model.', proof: 'Runtime limit configuration plus deterministic limit-exhaustion records.', test: 'Exhaust each limit safely in staging and confirm execution stops once, records the reason and does not retry indefinitely.' },
-  'F-17': { outcome: 'Name one accountable owner and document who operates, approves, monitors, contains and recovers this exact deployment.', proof: 'A dated ownership record tied to the assessed agent and version.', test: 'Ask the named owner to acknowledge the record and verify every responsibility has a person and escalation route.' },
-});
-
 function assessmentRemediationGuide(item) {
   if (!assessmentContext || item.assessment_id !== assessmentId) return '';
   const findingId = item.finding_key?.split(':').at(-1);
-  const playbook = assessmentPlaybooks[findingId];
+  const playbook = assessmentFixControl(findingId);
   if (!playbook) return '';
   const evidenceReady = ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status);
   const intelligenceParams = new URLSearchParams({ projectId: project.id, view: 'overview', assessment: assessmentId, finding: findingId, remediation: item.id });
@@ -625,6 +668,7 @@ function bind() {
   document.querySelector('#bulkRemediationForm')?.addEventListener('submit', createBulkRemediations);
   document.querySelectorAll('[data-open-remediation]').forEach((button) => button.addEventListener('click', openRemediation));
   document.querySelectorAll('[data-copy-playbook]').forEach((button) => button.addEventListener('click', copyRemediationPlaybook));
+  document.querySelectorAll('[data-copy-package]').forEach((button) => button.addEventListener('click', copyRemediationPackage));
   document.querySelectorAll('[data-revoke-key]').forEach((button) => button.addEventListener('click', revokeKey));
   document.querySelectorAll('[data-revoke-approval]').forEach((button) => button.addEventListener('click', revokeApproval));
   document.querySelectorAll('[data-remediation-status]').forEach((select) => select.addEventListener('change', updateRemediation));
@@ -636,9 +680,18 @@ function bind() {
   document.querySelectorAll('[data-open-technical]').forEach((button) => button.addEventListener('click', openTechnicalSection));
 }
 
+async function copyRemediationPackage(event) {
+  const workPackage = assessmentWorkPackages.find((candidate) => candidate.id === event.currentTarget.dataset.copyPackage);
+  if (!workPackage) return;
+  const controls = workPackage.findings.map((findingId) => ({ findingId, control: assessmentFixControl(findingId) })).filter(({ control }) => control);
+  const checklist = controls.map(({ findingId, control }) => `${findingId} · ${control.label}\nImplement: ${control.outcome}\nTest: ${control.test}\nProof: ${control.proof}`).join('\n\n');
+  await navigator.clipboard.writeText(`${workPackage.title} — coordinated developer test pack\n\nOutcome\n${workPackage.outcome}\n\n${checklist}\n\nEvidence rule\nOne coordinated run may produce a shared evidence bundle, but each result must be mapped to its exact control and current snapshot. Each control still requires its own applicability decision, evidence review, retest and closure.`);
+  event.currentTarget.textContent = 'Package test pack copied';
+}
+
 async function copyRemediationPlaybook(event) {
   const findingId = event.currentTarget.dataset.copyPlaybook;
-  const playbook = assessmentPlaybooks[findingId];
+  const playbook = assessmentFixControl(findingId);
   if (!playbook) return;
   await navigator.clipboard.writeText(`${findingId} remediation checklist\n\n1. Implement\n${playbook.outcome}\n\n2. Capture proof\n${playbook.proof}\n\n3. Retest\n${playbook.test}`);
   event.currentTarget.textContent = 'Checklist copied';
