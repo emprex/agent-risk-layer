@@ -9,12 +9,18 @@ document.querySelector('#logout')?.addEventListener('click', async () => {
 const root = document.querySelector('#ciControlRoot');
 const projectId = qs('projectId');
 const controlId = qs('controlId');
+const handoff = {
+  assessmentId: qs('assessment') || '',
+  findingId: qs('finding') || '',
+  remediationId: qs('remediation') || '',
+};
 let data = null;
 let remediationRecord = null;
 let journey = null;
 let dirty = false;
 
 const human = (value) => String(value || '').replaceAll('_', ' ');
+const handoffQuery = () => handoff.assessmentId ? `&assessment=${encodeURIComponent(handoff.assessmentId)}&finding=${encodeURIComponent(handoff.findingId)}&remediation=${encodeURIComponent(handoff.remediationId)}` : '';
 const field = (label, id, type = 'textarea', value = '', attributes = '') => `<label>${esc(label)}${type === 'textarea'
   ? `<textarea id="${id}" ${attributes}>${esc(value)}</textarea>`
   : `<input id="${id}" type="${type}" value="${esc(value)}" ${attributes}>`}</label>`;
@@ -298,11 +304,16 @@ function compactHistory() {
   </details>`;
 }
 
+function assessmentHandoff() {
+  if (!handoff.assessmentId) return '';
+  return `<section class="panel ci-assessment-context"><span class="eyebrow">Assessment remediation · ${esc(handoff.findingId)}</span><h2>Prove this fix for the current system version.</h2><p><strong>This is a declared weakness, not an observed failure.</strong> Confirm whether this control applies, run the planned test and attach matching evidence. The existing remediation stays open until implementation evidence exists and the retest passes.</p><dl><dt>Assessment</dt><dd><code>${esc(handoff.assessmentId)}</code></dd><dt>Remediation</dt><dd><code>${esc(handoff.remediationId)}</code></dd></dl><a class="button ghost small" href="/control-plane.html?assessment=${encodeURIComponent(handoff.assessmentId)}#remediation">Return to remediation plan</a></section>`;
+}
+
 function render() {
-  document.querySelector('#ciBack').href = `/control-intelligence.html?projectId=${encodeURIComponent(projectId)}`;
+  document.querySelector('#ciBack').href = handoff.assessmentId ? `/control-plane.html?assessment=${encodeURIComponent(handoff.assessmentId)}#remediation` : `/control-intelligence.html?projectId=${encodeURIComponent(projectId)}`;
   document.querySelector('#ciCrumb').textContent = data.control.id;
   root.className = '';
-  root.innerHTML = `<section class="page-heading ci-control-heading"><div><span class="eyebrow">${esc(data.control.category)}</span><h1>${esc(data.control.title)}</h1><p>${esc(controlId)} · snapshot ${esc(data.systemSnapshot.versionIdentifier)}</p></div><div class="ci-control-nav">${data.navigation?.previousControlId ? `<a class="button ghost small" href="/control-intelligence-control.html?projectId=${encodeURIComponent(projectId)}&controlId=${encodeURIComponent(data.navigation.previousControlId)}&return=controls">Previous</a>` : ''}<a class="button ghost small" href="/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls">All controls</a>${data.navigation?.nextControlId ? `<a class="button ghost small" href="/control-intelligence-control.html?projectId=${encodeURIComponent(projectId)}&controlId=${encodeURIComponent(data.navigation.nextControlId)}&return=controls">Next</a>` : ''}</div></section>
+  root.innerHTML = `${assessmentHandoff()}<section class="page-heading ci-control-heading"><div><span class="eyebrow">${esc(data.control.category)}</span><h1>${esc(data.control.title)}</h1><p>${esc(controlId)} · snapshot ${esc(data.systemSnapshot.versionIdentifier)}</p></div><div class="ci-control-nav">${handoff.assessmentId ? `<a class="button ghost small" href="/control-intelligence.html?projectId=${encodeURIComponent(projectId)}${handoffQuery()}">Fix overview</a>` : `${data.navigation?.previousControlId ? `<a class="button ghost small" href="/control-intelligence-control.html?projectId=${encodeURIComponent(projectId)}&controlId=${encodeURIComponent(data.navigation.previousControlId)}&return=controls">Previous</a>` : ''}<a class="button ghost small" href="/control-intelligence.html?projectId=${encodeURIComponent(projectId)}&view=controls">All controls</a>${data.navigation?.nextControlId ? `<a class="button ghost small" href="/control-intelligence-control.html?projectId=${encodeURIComponent(projectId)}&controlId=${encodeURIComponent(data.navigation.nextControlId)}&return=controls">Next</a>` : ''}`}</div></section>
   <section class="ci-focus-status"><div><span class="eyebrow">Do this next</span><h2>${esc(journey.nextAction)}</h2><p>Only the current action is editable. Saved evidence stays historical and future steps unlock from recorded evidence.</p></div><span class="ci-snapshot-chip">${esc(data.systemSnapshot.versionIdentifier)} · ${esc(data.systemSnapshot.contentDigest?.slice(0, 10) || '')}</span></section>
   ${stepper()}
   ${whyPanel()}
