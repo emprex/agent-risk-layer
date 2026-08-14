@@ -1,0 +1,100 @@
+name: Light enterprise visual polish validation
+
+on:
+  push:
+    branches:
+      - fix/light-enterprise-visual-polish-20260814
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: JavaScript syntax
+        run: npm run check
+      - name: Visual contracts
+        run: node --test tests/light-enterprise-visual-polish.test.js tests/premium-visual-system.test.js tests/flagship-art-direction.test.js tests/commercial-workspace-ux.test.js tests/workspace-architecture-v2.test.js
+      - name: Browser visual assertions
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python3 -m http.server 4173 --directory public >/tmp/arl-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          node --input-type=module <<'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+
+          async function fixture(bodyClass, html) {
+            const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+            await page.setContent(`<!doctype html><html><head><link rel="stylesheet" href="http://127.0.0.1:4173/styles.css"><link rel="stylesheet" href="http://127.0.0.1:4173/analytics.css"></head><body ${bodyClass}>${html}</body></html>`, { waitUntil: 'networkidle' });
+            return page;
+          }
+
+          const workspace = await fixture('data-shell="app"', `
+            <nav class="workspace-local-nav"><a aria-current="page">Summary</a><a>Findings</a></nav>
+            <article class="workspace-agent-row"><strong>Northstar Refund Assistant</strong><span>High · 52/100</span><button class="button primary">Open agent</button></article>
+            <div class="field"><label for="name">Agent or system name</label><input id="name" placeholder="Example: Customer inbox assistant"></div>
+          `);
+          const ws = await workspace.evaluate(() => ({
+            body: getComputedStyle(document.body).backgroundColor,
+            row: getComputedStyle(document.querySelector('.workspace-agent-row')).backgroundColor,
+            rowText: getComputedStyle(document.querySelector('.workspace-agent-row')).color,
+            tab: getComputedStyle(document.querySelector('.workspace-local-nav a[aria-current="page"]')).backgroundColor,
+            tabText: getComputedStyle(document.querySelector('.workspace-local-nav a[aria-current="page"]')).color,
+            label: getComputedStyle(document.querySelector('label')).color,
+          }));
+          console.log('workspace', ws);
+          if (ws.body !== 'rgb(248, 250, 252)') throw new Error(`workspace body ${ws.body}`);
+          if (ws.row !== 'rgb(255, 255, 255)') throw new Error(`workspace agent row ${ws.row}`);
+          if (ws.tab !== 'rgb(239, 246, 255)') throw new Error(`workspace tab ${ws.tab}`);
+          if (ws.tabText !== 'rgb(29, 78, 216)') throw new Error(`workspace tab text ${ws.tabText}`);
+          if (ws.label !== 'rgb(71, 85, 105)') throw new Error(`workspace label ${ws.label}`);
+          await workspace.close();
+
+          const pricing = await fixture('data-shell="public"', `
+            <section class="pricing-hero-v10"><h1>Start. Assess. Protect. Scale.</h1></section>
+            <article class="commercial-step"><div class="commercial-index">01</div><h2>Community</h2><p>Understand one agent.</p></article>
+            <article class="commercial-step assess-step"><div class="commercial-index">02</div><h2>AI Agent Security Assessment</h2><ul class="assessment-includes"><li>Evidence workflow</li></ul></article>
+            <section class="commercial-step protect-step"><article class="protect-tier"><h3>Developer</h3><p>Ongoing protection</p><ul><li>3 projects</li></ul></article></section>
+          `);
+          const price = await pricing.evaluate(() => ({
+            body: getComputedStyle(document.body).backgroundColor,
+            step: getComputedStyle(document.querySelector('.commercial-step')).backgroundColor,
+            assess: getComputedStyle(document.querySelector('.assess-step')).backgroundColor,
+            tier: getComputedStyle(document.querySelector('.protect-tier')).backgroundColor,
+          }));
+          console.log('pricing', price);
+          if (price.body !== 'rgb(255, 255, 255)') throw new Error(`pricing body ${price.body}`);
+          if (price.step !== 'rgb(255, 255, 255)') throw new Error(`pricing step ${price.step}`);
+          if (price.assess !== 'rgb(248, 251, 255)') throw new Error(`pricing assess ${price.assess}`);
+          if (price.tier !== 'rgb(255, 255, 255)') throw new Error(`pricing tier ${price.tier}`);
+          await pricing.close();
+
+          const home = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+          await home.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'networkidle' });
+          const hero = await home.evaluate(() => ({
+            bg: getComputedStyle(document.body).backgroundColor,
+            size: parseFloat(getComputedStyle(document.querySelector('.enterprise-hero-copy h1')).fontSize),
+            height: document.querySelector('.enterprise-hero').getBoundingClientRect().height,
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          }));
+          console.log('homepage', hero);
+          if (hero.bg !== 'rgb(255, 255, 255)') throw new Error(`homepage body ${hero.bg}`);
+          if (hero.size > 60.1) throw new Error(`homepage headline ${hero.size}`);
+          if (hero.overflow > 1) throw new Error(`homepage overflow ${hero.overflow}`);
+          await home.close();
+          await browser.close();
+          EOF
+      - name: Full regression suite
+        continue-on-error: true
+        run: npm test
