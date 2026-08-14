@@ -45,6 +45,8 @@ test('customer remediation compresses 17 controls into four guided work packages
   assert.match(source, /controlProgress\.latestResult !== 'inconclusive'/);
   assert.match(source, /orderedPackageItems\.find\(\(item\) => item\.status !== 'verified_closed'/);
   assert.match(source, /View blocked package/);
+  assert.match(source, /!controlProgress\?\.started/);
+  assert.match(source, /severityOrder\[left\.severity\] \?\? 9/);
 });
 
 test('assessment fixes use one shared control registry for implementation playbooks', () => {
