@@ -101,11 +101,12 @@ function whyPanel() {
 function applicabilityForm() {
   const a = data.applicability;
   const facts = [...new Set([...(data.architectureFacts || []), ...(a.architectureFactIds || []), ...(data.suggestion?.triggeringFacts || [])])];
+  const factChoices = facts.length ? `<div class="ci-check-grid">${facts.map((fact) => `<label><input type="checkbox" name="fact" value="${esc(fact)}" ${a.architectureFactIds?.includes(fact) ? 'checked' : ''}> ${esc(human(fact))}</label>`).join('')}</div>` : '<p class="ci-field-help"><strong>No structured facts are recorded for this snapshot.</strong> You may confirm Applicable with a specific reason. This records a human scope decision, not evidence that the control works. Not applicable remains unavailable until supporting facts are recorded.</p>';
   return `<div class="ci-action-copy"><span class="eyebrow">Step 1 · Scope</span><h2>Does this control apply to this exact system version?</h2><p>Choose one answer and support it with confirmed architecture facts. Unknown context stays unknown; it does not become a finding.</p></div>
   <form id="applicabilityForm" class="ci-form ci-focus-form">
     <fieldset><legend>Applicability</legend>${[['applicable', 'Applicable'], ['not_applicable', 'Not applicable'], ['context_required', 'More information required']].map(([value, label]) => `<label class="ci-choice"><input type="radio" name="decision" value="${value}" ${a.status === value ? 'checked' : ''} required> ${label}</label>`).join('')}</fieldset>
     ${field('Reason', 'appReason', 'textarea', a.reason || '', 'required minlength="10"')}
-    <fieldset><legend>Confirmed facts supporting this decision</legend><p class="ci-field-help">Select only facts that genuinely support this control decision.</p><div class="ci-check-grid">${facts.map((fact) => `<label><input type="checkbox" name="fact" value="${esc(fact)}" ${a.architectureFactIds?.includes(fact) ? 'checked' : ''}> ${esc(human(fact))}</label>`).join('')}</div></fieldset>
+    <fieldset><legend>Confirmed facts supporting this decision</legend><p class="ci-field-help">Select only facts that genuinely support this control decision.</p>${factChoices}</fieldset>
     <button class="button primary button-xl" type="submit">Save applicability</button>
   </form>`;
 }
