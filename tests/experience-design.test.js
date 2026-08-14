@@ -50,9 +50,10 @@ test('public and signed-in navigation use stable human labels and one primary ac
     assert.match(publicPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
   }
   const appPage = read('public/dashboard.html');
-  for (const label of ['Overview', 'Check risk', 'Live protection', 'Evidence', 'Help', 'Account']) {
+  for (const label of ['Overview', 'Assess', 'Findings', 'Evidence', 'Runtime', 'Settings', 'Help']) {
     assert.match(appPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
   }
+  assert.doesNotMatch(appPage, />Check risk<|>Live protection<|>Account</);
 });
 
 test('mobile navigation is visible, keyboard-operable and protected from legacy responsive rules', () => {
