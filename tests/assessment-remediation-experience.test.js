@@ -32,15 +32,23 @@ test('completion state distinguishes assignment, evidence, retest and verificati
   assert.match(source, /Start this fix/);
 });
 
-test('remediations are chunked into priority groups', () => {
-  assert.match(source, /remediationGroup\('Do first'/);
-  assert.match(source, /remediationGroup\('Harden next'/);
+test('customer remediation compresses 17 controls into four guided work packages', () => {
+  assert.match(source, /const assessmentWorkPackages = Object\.freeze/);
+  for (const title of ['Observe and contain', 'Control authority', 'Protect data and actions', 'Control the deployment']) {
+    assert.match(source, new RegExp(title));
+  }
+  assert.match(source, /Work package \$\{index \+ 1\} of/);
+  assert.match(source, /Copy package test pack/);
+  assert.match(source, /Expert detail · \$\{packageItems\.length\} individual controls/);
+  assert.match(source, /copyRemediationPackage/);
+  assert.match(source, /One coordinated run may produce a shared evidence bundle/);
 });
 
-test('assessment fixes provide control-specific implementation playbooks', () => {
-  assert.match(source, /const assessmentPlaybooks = Object\.freeze/);
+test('assessment fixes use one shared control registry for implementation playbooks', () => {
+  assert.doesNotMatch(source, /const assessmentPlaybooks/);
+  assert.match(source, /assessmentFixControl\(findingId\)/);
   for (let index = 1; index <= 17; index += 1) {
-    assert.match(source, new RegExp(`'F-${String(index).padStart(2, '0')}'`));
+    assert.match(mappingSource, new RegExp(`'F-${String(index).padStart(2, '0')}'`));
   }
   assert.match(source, /What done looks like/);
   assert.match(source, /Capture the right proof/);
