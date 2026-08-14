@@ -47,9 +47,10 @@ test('every page has one purpose, an accessible landmark shell and one authentic
 
 test('public and signed-in navigation use stable human labels and one primary action', () => {
   const publicPage = read('public/index.html');
-  for (const label of ['Product', 'See it work', 'Pricing', 'Trust', 'Help', 'Sign in', 'Check an agent free']) {
+  for (const label of ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free']) {
     assert.match(publicPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
   }
+  assert.doesNotMatch(publicPage, />See it work<|>Help<\/a>\s*<a class="nav-signin"/);
   const appPage = read('public/dashboard.html');
   for (const label of ['Overview', 'Assess', 'Findings', 'Evidence', 'Runtime', 'Settings', 'Help']) {
     assert.match(appPage, new RegExp(`>${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<`));
