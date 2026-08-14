@@ -1,4 +1,4 @@
-import { hydrateNav } from './shared.js';
+import { api, hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
 for (const [href, dataKey] of [['/premium-theme.css', 'arlPremiumTheme'], ['/premium-media.css', 'arlPremiumMedia'], ['/visual-experience.css', 'arlVisualExperience']]) {
@@ -18,12 +18,89 @@ const navigation = document.querySelector('[data-primary-navigation]');
 const mobileNavigation = window.matchMedia('(max-width: 900px)');
 let lastFocusedElement = null;
 
-if (document.body.dataset.shell === 'app' && navigation && !navigation.querySelector('a[href^="/control-intelligence"]')) {
-  const link = document.createElement('a');
-  link.href = '/control-intelligence.html';
-  link.textContent = 'Control Intelligence';
-  const liveProtection = navigation.querySelector('a[href="/control-plane.html"]');
-  navigation.insertBefore(link, liveProtection || navigation.firstElementChild);
+const workspaceNavigation = Object.freeze([
+  { key: 'overview', label: 'Overview', href: '/dashboard.html' },
+  { key: 'assess', label: 'Assess', href: '/assessment.html' },
+  { key: 'findings', label: 'Findings', href: '/control-plane.html#remediation' },
+  { key: 'evidence', label: 'Evidence', href: '/inspector.html' },
+  { key: 'runtime', label: 'Runtime', href: '/control-plane.html#runtime' },
+  { key: 'settings', label: 'Settings', href: '/dashboard.html#settings' },
+]);
+
+function ensureWorkspaceStyles() {
+  if (document.querySelector('link[href="/security-workspace.css"]')) return;
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = '/security-workspace.css';
+  stylesheet.dataset.arlSecurityWorkspace = '';
+  document.head.appendChild(stylesheet);
+}
+
+function currentProjectContext() {
+  const params = new URLSearchParams(location.search);
+  const requested = params.get('projectId') || '';
+  if (requested) {
+    sessionStorage.setItem('arl_selected_project', requested);
+    return requested;
+  }
+  return sessionStorage.getItem('arl_selected_project') || '';
+}
+
+function contextualHref(item, projectId) {
+  if (!projectId) return item.href;
+  if (item.key === 'findings' || item.key === 'runtime') {
+    const [pathname, hash = ''] = item.href.split('#');
+    return `${pathname}?projectId=${encodeURIComponent(projectId)}${hash ? `#${hash}` : ''}`;
+  }
+  return item.href;
+}
+
+function ensureLogoutButton() {
+  if (!navigation) return null;
+  let logout = navigation.querySelector('#logout');
+  if (logout) return logout;
+  logout = document.createElement('button');
+  logout.type = 'button';
+  logout.id = 'logout';
+  logout.className = 'button ghost small';
+  logout.textContent = 'Log out';
+  logout.dataset.siteShellLogout = 'true';
+  logout.addEventListener('click', async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST', body: '{}' });
+    } finally {
+      location.href = '/';
+    }
+  });
+  navigation.append(logout);
+  return logout;
+}
+
+function applyWorkspaceNavigation() {
+  if (!navigation) return;
+  ensureWorkspaceStyles();
+  document.body.dataset.shell = 'app';
+  const projectId = currentProjectContext();
+  const logout = navigation.querySelector('#logout');
+  navigation.querySelectorAll('a').forEach((link) => link.remove());
+  for (const item of workspaceNavigation) {
+    const link = document.createElement('a');
+    link.href = contextualHref(item, projectId);
+    link.textContent = item.label;
+    link.dataset.workspaceKey = item.key;
+    navigation.insertBefore(link, logout || null);
+  }
+  const help = document.createElement('a');
+  const helpParams = new URLSearchParams({ from: 'workspace' });
+  if (projectId) helpParams.set('projectId', projectId);
+  help.href = `/help.html?${helpParams.toString()}`;
+  help.textContent = 'Help';
+  help.className = 'workspace-help-nav';
+  help.dataset.workspaceKey = 'help';
+  navigation.insertBefore(help, logout || null);
+  ensureLogoutButton();
+  navigation.dataset.workspaceNavigation = 'true';
+  markCurrentNavigation();
 }
 
 function normalisePath(value) {
@@ -35,11 +112,26 @@ function normalisePath(value) {
   }
 }
 
+function workspaceCurrentKey() {
+  const page = normalisePath(location.pathname);
+  const hash = location.hash;
+  if (page === '/dashboard.html') return hash === '#settings' ? 'settings' : 'overview';
+  if (page === '/assessment.html' || page === '/result.html') return 'assess';
+  if (page === '/inspector.html' || page === '/inspection-detail.html') return 'evidence';
+  if (page === '/control-plane.html') return hash === '#remediation' ? 'findings' : 'runtime';
+  if (page === '/help.html') return 'help';
+  return '';
+}
+
 function markCurrentNavigation() {
   const current = normalisePath(location.pathname);
+  const workspaceKey = document.body.dataset.shell === 'app' ? workspaceCurrentKey() : '';
   document.querySelectorAll('[data-primary-navigation] a[href], [data-local-navigation] a[href]').forEach((link) => {
+    const linkWorkspaceKey = link.dataset.workspaceKey || '';
     const target = normalisePath(link.getAttribute('href'));
-    const match = target && (target === current || (target !== '/' && current.startsWith(target.replace(/\.html$/, ''))));
+    const match = workspaceKey && linkWorkspaceKey
+      ? workspaceKey === linkWorkspaceKey
+      : target && (target === current || (target !== '/' && current.startsWith(target.replace(/\.html$/, ''))));
     if (match) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
@@ -164,12 +256,31 @@ function syncNavigationForViewport() {
   setMenu(false);
 }
 
+async function initialiseShell() {
+  if (document.body.dataset.shell === 'app') applyWorkspaceNavigation();
+  else markCurrentNavigation();
+  ensureSeoAcquisitionLink();
+
+  const user = await hydrateNav().catch(() => null);
+  if (location.pathname.endsWith('/help.html') && user) {
+    applyWorkspaceNavigation();
+    const brand = document.querySelector('.brand-v10');
+    if (brand) {
+      brand.href = '/dashboard.html';
+      brand.setAttribute('aria-label', 'AgentRiskLayer overview');
+      const subtitle = brand.querySelector('small');
+      if (subtitle) subtitle.textContent = 'Security workspace';
+    }
+  }
+  markCurrentNavigation();
+}
+
 mobileNavigation.addEventListener('change', syncNavigationForViewport);
-window.addEventListener('hashchange', () => setMenu(false));
+window.addEventListener('hashchange', () => {
+  setMenu(false);
+  markCurrentNavigation();
+});
 window.addEventListener('pagehide', () => setMenu(false));
 
 syncNavigationForViewport();
-markCurrentNavigation();
-ensureSeoAcquisitionLink();
-
-hydrateNav().catch(() => null);
+initialiseShell();
