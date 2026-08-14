@@ -1,11 +1,20 @@
 import { api, hydrateNav } from './shared.js';
 import { applyDocumentSeo } from './seo.js';
 
-const WORKSPACE_STYLES = Object.freeze(['/security-workspace.css', '/workspace-app.css']);
+const WORKSPACE_STYLES = Object.freeze([
+  ['/design-tokens.css', 'arlDesignTokens'],
+  ['/security-workspace.css', 'arlSecurityWorkspace'],
+  ['/workspace-app.css', 'arlWorkspaceApp'],
+  ['/workspace-light.css', 'arlWorkspaceLight'],
+]);
 const PUBLIC_EXPERIENCE_STYLES = Object.freeze([
-  ['/premium-theme.css', 'arlPremiumTheme'],
-  ['/premium-media.css', 'arlPremiumMedia'],
-  ['/visual-experience.css', 'arlVisualExperience'],
+  ['/design-tokens.css', 'arlDesignTokens'],
+  ['/enterprise-light.css', 'arlEnterpriseLight'],
+]);
+const LEGACY_PUBLIC_STYLES = Object.freeze([
+  '/premium-theme.css',
+  '/premium-media.css',
+  '/visual-experience.css',
 ]);
 
 function workspaceRequest() {
@@ -24,14 +33,22 @@ function ensureStylesheet(href, dataKey = '') {
 }
 
 function prepareVisualSystem() {
+  for (const href of LEGACY_PUBLIC_STYLES) {
+    document.querySelectorAll(`link[href="${href}"]`).forEach((node) => node.remove());
+  }
+
   if (workspaceRequest()) {
     document.body.dataset.shell = 'app';
     for (const [href] of PUBLIC_EXPERIENCE_STYLES) {
+      if (href === '/design-tokens.css') continue;
       document.querySelectorAll(`link[href="${href}"]`).forEach((node) => node.remove());
     }
-    for (const href of WORKSPACE_STYLES) ensureStylesheet(href, href === '/workspace-app.css' ? 'arlWorkspaceApp' : 'arlSecurityWorkspace');
+    for (const [href, dataKey] of WORKSPACE_STYLES) ensureStylesheet(href, dataKey);
     return;
   }
+
+  document.body.dataset.shell = 'public';
+  document.querySelectorAll('link[href="/workspace-light.css"]').forEach((node) => node.remove());
   for (const [href, dataKey] of PUBLIC_EXPERIENCE_STYLES) ensureStylesheet(href, dataKey);
 }
 
@@ -43,6 +60,13 @@ const menuButton = document.querySelector('[data-menu-toggle]');
 const navigation = document.querySelector('[data-primary-navigation]');
 const mobileNavigation = window.matchMedia('(max-width: 900px)');
 let lastFocusedElement = null;
+
+const publicNavigation = Object.freeze([
+  { key: 'product', label: 'Product', href: '/#product' },
+  { key: 'how', label: 'How it works', href: '/#how-it-works' },
+  { key: 'pricing', label: 'Pricing', href: '/pricing.html' },
+  { key: 'trust', label: 'Trust', href: '/trust.html' },
+]);
 
 const workspaceNavigation = Object.freeze([
   { key: 'overview', label: 'Overview', href: '/dashboard.html' },
@@ -97,6 +121,35 @@ function contextualHref(item, context) {
     return `/control-plane.html?projectId=${encodeURIComponent(context.projectId)}`;
   }
   return item.href;
+}
+
+function applyPublicNavigation() {
+  if (!navigation || document.body.dataset.shell !== 'public') return;
+  navigation.replaceChildren();
+
+  for (const item of publicNavigation) {
+    const link = document.createElement('a');
+    link.href = item.href;
+    link.textContent = item.label;
+    link.dataset.publicKey = item.key;
+    navigation.append(link);
+  }
+
+  const signIn = document.createElement('a');
+  signIn.href = '/auth.html';
+  signIn.textContent = 'Sign in';
+  signIn.className = 'nav-signin';
+  signIn.dataset.authLink = '';
+  navigation.append(signIn);
+
+  const primary = document.createElement('a');
+  primary.href = '/assessment.html';
+  primary.textContent = 'Check an agent free';
+  primary.className = 'button primary small nav-primary-action';
+  navigation.append(primary);
+
+  navigation.dataset.publicNavigation = 'true';
+  markCurrentNavigation();
 }
 
 function ensureLogoutButton() {
@@ -170,15 +223,26 @@ function workspaceCurrentKey() {
   return '';
 }
 
+function publicCurrentKey() {
+  const page = normalisePath(location.pathname);
+  if (page === '/pricing.html') return 'pricing';
+  if (page === '/trust.html' || page === '/security-center.html' || page === '/methodology.html') return 'trust';
+  return '';
+}
+
 function markCurrentNavigation() {
   const current = normalisePath(location.pathname);
   const workspaceKey = document.body.dataset.shell === 'app' ? workspaceCurrentKey() : '';
+  const publicKey = document.body.dataset.shell === 'public' ? publicCurrentKey() : '';
   document.querySelectorAll('[data-primary-navigation] a[href], [data-local-navigation] a[href]').forEach((link) => {
     const linkWorkspaceKey = link.dataset.workspaceKey || '';
+    const linkPublicKey = link.dataset.publicKey || '';
     const target = normalisePath(link.getAttribute('href'));
     const match = workspaceKey && linkWorkspaceKey
       ? workspaceKey === linkWorkspaceKey
-      : target && (target === current || (target !== '/' && current.startsWith(target.replace(/\.html$/, ''))));
+      : publicKey && linkPublicKey
+        ? publicKey === linkPublicKey
+        : target && target !== '/' && (target === current || current.startsWith(target.replace(/\.html$/, '')));
     if (match) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
@@ -316,7 +380,7 @@ function syncNavigationForViewport() {
 
 async function initialiseShell() {
   if (workspaceRequest()) applyWorkspaceNavigation();
-  else markCurrentNavigation();
+  else applyPublicNavigation();
   ensureSeoAcquisitionLink();
 
   const user = await hydrateNav().catch(() => null);
