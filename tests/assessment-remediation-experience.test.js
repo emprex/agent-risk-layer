@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, intelligenceSource, focusedSource] = await Promise.all([
+const [source, intelligenceSource, focusedSource, mappingSource] = await Promise.all([
   readFile(new URL('../public/control-plane.js', import.meta.url), 'utf8'),
   readFile(new URL('../public/control-intelligence.js', import.meta.url), 'utf8'),
   readFile(new URL('../public/control-intelligence-control.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/assessment-fix-controls.js', import.meta.url), 'utf8'),
 ]);
+const knowledge = JSON.parse(await readFile(new URL('../public/risk-knowledge-public-v1.1.json', import.meta.url), 'utf8'));
 
 test('assessment remediation offers one calm bulk planning action', () => {
   assert.match(source, /Create the complete remediation plan/);
@@ -61,8 +63,7 @@ test('evidence handoff preserves the exact assessment fix and provides a focused
 });
 
 test('F-01 handoff opens its matching audit control without restarting the catalogue', () => {
-  assert.match(intelligenceSource, /'F-01':\{/);
-  assert.match(intelligenceSource, /controlId:'ARL-KB-090'/);
+  assert.match(mappingSource, /'F-01': \{ controlId: 'ARL-KB-090'/);
   assert.match(intelligenceSource, /function handoffWorkspace/);
   assert.match(intelligenceSource, /handoff\.assessmentId\?handoffWorkspace\(\)/);
   assert.match(intelligenceSource, /not observed evidence and not a failed control test/);
@@ -82,10 +83,26 @@ test('focused control keeps assessment remediation context and evidence boundari
 
 test('remediation plan recognises a started or inconclusive control workflow', () => {
   assert.match(source, /assessmentControlProgress/);
-  assert.match(source, /'F-01': 'ARL-KB-090'/);
+  assert.match(source, /assessmentFixControl\(findingId\)/);
   assert.match(source, /Test inconclusive — connect the staging agent/);
   assert.match(source, /Continue this fix/);
   assert.match(source, /No control evidence was created/);
   assert.match(source, /control-intelligence-control\.html/);
   assert.match(source, /Continue evidence task/);
+});
+
+test('all assessment fixes have one direct control mapping and a developer test pack', async () => {
+  const { ASSESSMENT_FIX_CONTROLS } = await import('../public/assessment-fix-controls.js');
+  assert.equal(Object.keys(ASSESSMENT_FIX_CONTROLS).length, 17);
+  assert.equal(new Set(Object.values(ASSESSMENT_FIX_CONTROLS).map((task) => task.controlId)).size, 17);
+  const catalogueIds = new Set(knowledge.entries.map((control) => control.id));
+  for (let index = 1; index <= 17; index += 1) {
+    const findingId = `F-${String(index).padStart(2, '0')}`;
+    const task = ASSESSMENT_FIX_CONTROLS[findingId];
+    assert.ok(task, `${findingId} must be mapped`);
+    assert.match(task.controlId, /^ARL-KB-\d{3}$/);
+    assert.ok(catalogueIds.has(task.controlId), `${findingId} must map to a real catalogue control`);
+    for (const field of ['weakness', 'outcome', 'test', 'proof']) assert.ok(task[field].length > 20, `${findingId}.${field} must be actionable`);
+  }
+  assert.match(focusedSource, /assessmentFixControl\(handoff\.findingId\)/);
 });
