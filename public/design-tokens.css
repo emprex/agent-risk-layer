@@ -1,0 +1,37 @@
+:root {
+  --arl-bg: #ffffff;
+  --arl-surface: #f8fafc;
+  --arl-surface-subtle: #f1f5f9;
+  --arl-surface-raised: #ffffff;
+  --arl-text: #0f172a;
+  --arl-text-secondary: #475569;
+  --arl-text-muted: #64748b;
+  --arl-border: #e2e8f0;
+  --arl-border-strong: #cbd5e1;
+  --arl-brand: #2563eb;
+  --arl-brand-hover: #1d4ed8;
+  --arl-brand-soft: #eff6ff;
+  --arl-success: #15803d;
+  --arl-success-soft: #f0fdf4;
+  --arl-warning: #b45309;
+  --arl-warning-soft: #fffbeb;
+  --arl-danger: #b91c1c;
+  --arl-danger-soft: #fef2f2;
+  --arl-radius-sm: 8px;
+  --arl-radius: 12px;
+  --arl-radius-lg: 16px;
+  --arl-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
+  --arl-shadow-sm: 0 8px 24px rgba(15, 23, 42, .06);
+  --arl-container: 1200px;
+  --arl-section: 104px;
+  --arl-space-1: 4px;
+  --arl-space-2: 8px;
+  --arl-space-3: 12px;
+  --arl-space-4: 16px;
+  --arl-space-5: 24px;
+  --arl-space-6: 32px;
+  --arl-space-7: 48px;
+  --arl-space-8: 64px;
+  --arl-space-9: 96px;
+  --arl-space-10: 128px;
+}
