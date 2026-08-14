@@ -27,6 +27,8 @@ test('enterprise tokens define a restrained light system with semantic status co
   assert.match(tokens, /--arl-success:\s*#15803d/);
   assert.match(tokens, /--arl-warning:\s*#b45309/);
   assert.match(tokens, /--arl-danger:\s*#b91c1c/);
+  assert.match(tokens, /site-header-v10::before[\s\S]*display:\s*none\s*!important/);
+  assert.match(tokens, /analytics-consent[\s\S]*background:\s*rgba\(255,\s*255,\s*255,\s*\.98\)\s*!important/);
 });
 
 test('public theme is white enterprise, removes cinematic treatment and keeps accessible focus/reduced motion', () => {
