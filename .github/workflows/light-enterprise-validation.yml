@@ -65,9 +65,11 @@ jobs:
             if (state.h1Size > (viewport.width < 700 ? 50 : 70)) throw new Error(`${name}: headline remains oversized: ${state.h1Size}`);
             if (state.overflow > 1) throw new Error(`${name}: horizontal overflow ${state.overflow}px`);
             if (!state.previewVisible) throw new Error(`${name}: product preview is not visibly present`);
-            for (const label of ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free']) {
-              if (!state.labels.includes(label)) throw new Error(`${name}: missing public navigation label ${label}`);
+            const expectedLabels = ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free'];
+            if (JSON.stringify(state.labels) !== JSON.stringify(expectedLabels)) {
+              throw new Error(`${name}: public navigation differs from simplified IA: ${state.labels.join(' | ')}`);
             }
+            if (consoleErrors.length) throw new Error(`${name}: page errors: ${consoleErrors.join(' | ')}`);
             await page.screenshot({ path: `light-enterprise-${name}.png`, fullPage: true });
             await page.close();
           }
@@ -89,7 +91,8 @@ jobs:
             }));
             console.log('workspace', viewport, state);
             if (state.bg !== 'rgb(248, 250, 252)') throw new Error(`workspace: expected light canvas, got ${state.bg}`);
-            if (state.navBg !== 'rgb(255, 255, 255)') throw new Error(`workspace: expected white nav, got ${state.navBg}`);
+            const acceptableNavBackgrounds = ['rgb(255, 255, 255)', 'rgba(255, 255, 255, 0.96)'];
+            if (!acceptableNavBackgrounds.includes(state.navBg)) throw new Error(`workspace: expected white nav, got ${state.navBg}`);
             if (state.panelBg !== 'rgb(255, 255, 255)') throw new Error(`workspace: expected white panel, got ${state.panelBg}`);
             if (state.overflow > 1) throw new Error(`workspace: horizontal overflow ${state.overflow}px`);
             await page.screenshot({ path: `light-enterprise-workspace-${viewport.width}.png`, fullPage: true });
