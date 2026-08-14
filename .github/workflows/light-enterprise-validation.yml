@@ -43,28 +43,37 @@ jobs:
             await page.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'networkidle' });
             const state = await page.evaluate(() => {
               const body = getComputedStyle(document.body);
-              const header = getComputedStyle(document.querySelector('[data-site-header]'));
+              const headerElement = document.querySelector('[data-site-header]');
+              const header = getComputedStyle(headerElement);
+              const headerBefore = getComputedStyle(headerElement, '::before');
               const h1 = getComputedStyle(document.querySelector('h1'));
               const preview = document.querySelector('.product-preview');
+              const consent = document.querySelector('.analytics-consent');
               const labels = [...document.querySelectorAll('[data-primary-navigation] a')].map((node) => node.textContent.trim());
               return {
                 bg: body.backgroundColor,
                 bgImage: body.backgroundImage,
                 color: body.color,
                 headerBg: header.backgroundColor,
+                headerBeforeDisplay: headerBefore.display,
                 h1Size: parseFloat(h1.fontSize),
                 h1Color: h1.color,
                 overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                 previewVisible: Boolean(preview && preview.getBoundingClientRect().height > 200),
+                consentBg: consent ? getComputedStyle(consent).backgroundColor : '',
                 labels,
               };
             });
             console.log(name, state, consoleErrors);
             if (state.bg !== 'rgb(255, 255, 255)') throw new Error(`${name}: public background is not white: ${state.bg}`);
             if (state.bgImage !== 'none') throw new Error(`${name}: public background still uses cinematic imagery`);
+            if (state.headerBeforeDisplay !== 'none') throw new Error(`${name}: legacy dark header pseudo-layer remains visible`);
             if (state.h1Size > (viewport.width < 700 ? 50 : 70)) throw new Error(`${name}: headline remains oversized: ${state.h1Size}`);
             if (state.overflow > 1) throw new Error(`${name}: horizontal overflow ${state.overflow}px`);
             if (!state.previewVisible) throw new Error(`${name}: product preview is not visibly present`);
+            if (state.consentBg && !state.consentBg.startsWith('rgba(255, 255, 255') && state.consentBg !== 'rgb(255, 255, 255)') {
+              throw new Error(`${name}: consent surface is not light: ${state.consentBg}`);
+            }
             const expectedLabels = ['Product', 'How it works', 'Pricing', 'Trust', 'Sign in', 'Check an agent free'];
             if (JSON.stringify(state.labels) !== JSON.stringify(expectedLabels)) {
               throw new Error(`${name}: public navigation differs from simplified IA: ${state.labels.join(' | ')}`);
@@ -77,22 +86,28 @@ jobs:
           async function inspectWorkspace(viewport) {
             const css = [
               fs.readFileSync('public/styles.css', 'utf8'),
+              fs.readFileSync('public/design-tokens.css', 'utf8'),
               fs.readFileSync('public/security-workspace.css', 'utf8'),
               fs.readFileSync('public/workspace-app.css', 'utf8'),
               fs.readFileSync('public/workspace-light.css', 'utf8'),
             ].join('\n');
             const page = await browser.newPage({ viewport });
             await page.setContent(`<style>${css}</style><body data-shell="app"><header class="site-header site-header-v10 app-header-v10"><a class="brand brand-v10"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Security workspace</small></span></a><nav class="primary-navigation"><a aria-current="page">Overview</a><a>Assess</a><a>Findings</a><a>Evidence</a><a>Runtime</a><a>Settings</a><a>Help</a></nav></header><main class="app-shell wide"><header class="workspace-page-header"><span class="eyebrow">Overview</span><h1>AI agent security</h1><p>Read the current posture and take the next action.</p></header><section class="workspace-agent-command"><div class="workspace-agent-command-head"><div class="workspace-agent-identity"><span class="eyebrow">Current agent</span><h2>CLARA</h2><p>Production candidate</p></div></div><div class="workspace-status-grid"><article class="workspace-status-card" data-state="unresolved"><span class="eyebrow">Deployment decision</span><strong>No decision recorded</strong><p>The server has not recorded a deployment decision.</p></article><article class="workspace-status-card" data-state="critical"><span class="eyebrow">Latest assessment</span><strong>High declared risk</strong><p>Supporting declared assessment context.</p></article><aside class="workspace-next-action"><span class="eyebrow">Next action</span><strong>Review the highest-priority finding</strong><p>Attach evidence and retest the exact control.</p><a class="button primary">Open finding</a></aside></div></section></main></body>`);
-            const state = await page.evaluate(() => ({
-              bg: getComputedStyle(document.body).backgroundColor,
-              navBg: getComputedStyle(document.querySelector('.site-header')).backgroundColor,
-              panelBg: getComputedStyle(document.querySelector('.workspace-agent-command')).backgroundColor,
-              overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-            }));
+            const state = await page.evaluate(() => {
+              const header = document.querySelector('.site-header');
+              return {
+                bg: getComputedStyle(document.body).backgroundColor,
+                navBg: getComputedStyle(header).backgroundColor,
+                headerBeforeDisplay: getComputedStyle(header, '::before').display,
+                panelBg: getComputedStyle(document.querySelector('.workspace-agent-command')).backgroundColor,
+                overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+              };
+            });
             console.log('workspace', viewport, state);
             if (state.bg !== 'rgb(248, 250, 252)') throw new Error(`workspace: expected light canvas, got ${state.bg}`);
             const acceptableNavBackgrounds = ['rgb(255, 255, 255)', 'rgba(255, 255, 255, 0.96)'];
             if (!acceptableNavBackgrounds.includes(state.navBg)) throw new Error(`workspace: expected white nav, got ${state.navBg}`);
+            if (state.headerBeforeDisplay !== 'none') throw new Error('workspace: legacy dark header pseudo-layer remains visible');
             if (state.panelBg !== 'rgb(255, 255, 255)') throw new Error(`workspace: expected white panel, got ${state.panelBg}`);
             if (state.overflow > 1) throw new Error(`workspace: horizontal overflow ${state.overflow}px`);
             await page.screenshot({ path: `light-enterprise-workspace-${viewport.width}.png`, fullPage: true });
