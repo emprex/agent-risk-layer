@@ -502,7 +502,8 @@ function assessmentRemediationGuide(item) {
   const playbook = assessmentPlaybooks[findingId];
   if (!playbook) return '';
   const evidenceReady = ['evidence_attached', 'ready_for_retest', 'retested', 'verified_closed'].includes(item.status);
-  const intelligenceHref = `/control-intelligence.html?projectId=${encodeURIComponent(project.id)}`;
+  const intelligenceParams = new URLSearchParams({ projectId: project.id, view: 'overview', assessment: assessmentId, finding: findingId, remediation: item.id });
+  const intelligenceHref = `/control-intelligence.html?${intelligenceParams.toString()}`;
   return `<section class="implementation-playbook">
     <div class="playbook-heading"><span class="eyebrow">Your implementation guide</span><h4>What done looks like</h4><p>${escapeHtml(playbook.outcome)}</p></div>
     <ol class="playbook-steps"><li><span>1</span><div><strong>Implement</strong><p>${escapeHtml(playbook.outcome)}</p></div></li><li><span>2</span><div><strong>Capture the right proof</strong><p>${escapeHtml(playbook.proof)}</p></div></li><li><span>3</span><div><strong>Test it</strong><p>${escapeHtml(playbook.test)}</p></div></li></ol>
