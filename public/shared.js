@@ -100,20 +100,81 @@ export function hideError(box) {
   box.classList.remove('show');
 }
 
+function isAnonymousAssessmentJourney() {
+  if (document.body?.dataset.shell !== 'app') return false;
+  return location.pathname.endsWith('/assessment.html') || location.pathname.endsWith('/result.html');
+}
+
+function anonymousAuthHref() {
+  const next = `${location.pathname}${location.search}${location.hash}`;
+  const params = new URLSearchParams({ next });
+  if (location.pathname.endsWith('/result.html')) {
+    const current = new URLSearchParams(location.search);
+    const assessmentId = current.get('id');
+    const token = current.get('token');
+    if (assessmentId && token) {
+      params.set('claimAssessmentId', assessmentId);
+      params.set('claimToken', token);
+    }
+  }
+  return `/auth.html?${params.toString()}`;
+}
+
+function hydrateAnonymousAssessmentNavigation() {
+  if (!isAnonymousAssessmentJourney()) return;
+  const navigation = document.querySelector('[data-primary-navigation]');
+  if (!navigation) return;
+
+  navigation.querySelector('#logout')?.remove();
+  navigation.replaceChildren();
+  const items = [
+    ['Home', '/'],
+    ['How it works', '/#how-it-works'],
+    ['Pricing', '/pricing.html'],
+    ['Trust', '/trust.html'],
+    ['Help', '/help.html'],
+  ];
+  for (const [label, href] of items) {
+    const link = document.createElement('a');
+    link.href = href;
+    link.textContent = label;
+    navigation.append(link);
+  }
+  const signIn = document.createElement('a');
+  signIn.href = anonymousAuthHref();
+  signIn.textContent = 'Sign in';
+  signIn.className = 'nav-signin';
+  signIn.dataset.authLink = '';
+  navigation.append(signIn);
+  delete navigation.dataset.workspaceNavigation;
+  navigation.dataset.anonymousAssessmentNavigation = 'true';
+  navigation.setAttribute('aria-label', 'Assessment navigation');
+
+  const brand = document.querySelector('.brand-v10');
+  if (brand) {
+    brand.href = '/';
+    brand.setAttribute('aria-label', 'AgentRiskLayer home');
+    const subtitle = brand.querySelector('small');
+    if (subtitle) subtitle.textContent = 'AI agent security';
+  }
+}
+
 export async function hydrateNav() {
   try {
     const { user } = await api('/api/auth/me');
+    if (!user) hydrateAnonymousAssessmentNavigation();
     document.querySelectorAll('[data-auth-link]').forEach((link) => {
       if (user) {
         link.textContent = 'Dashboard';
         link.href = '/dashboard.html';
-      } else {
+      } else if (!isAnonymousAssessmentJourney()) {
         link.textContent = 'Sign in';
         link.href = '/auth.html';
       }
     });
     return user;
   } catch {
+    hydrateAnonymousAssessmentNavigation();
     return null;
   }
 }
