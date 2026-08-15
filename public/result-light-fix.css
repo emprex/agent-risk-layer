@@ -1,0 +1,43 @@
+/* Result-only light-surface correction.
+ * Keeps the assessment score/risk summary readable in the light workspace.
+ * Presentation only: no assessment, evidence, scoring, billing or authorisation semantics change.
+ */
+body.workspace-result-page[data-shell="app"] .result-side-risk {
+  border: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk > strong {
+  color: #0f172a !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk small {
+  color: #64748b !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill.low {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill.moderate,
+body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill.high {
+  border-color: #fed7aa !important;
+  background: #fff7ed !important;
+  color: #9a3412 !important;
+}
+
+body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill.critical {
+  border-color: #fecaca !important;
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+}
