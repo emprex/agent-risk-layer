@@ -36,8 +36,13 @@ function metricValueByLabel(container, labelPattern) {
   return null;
 }
 
+function resultHasRendered() {
+  if (!root) return false;
+  return root.classList.contains('result-workspace') && Boolean(root.querySelector('.result-reason-grid'));
+}
+
 function correctMissingHighestSeverity() {
-  if (!root || !root.querySelector('.result-workspace')) return false;
+  if (!resultHasRendered()) return false;
 
   const findingCountText = root.querySelector('.result-reason-grid > div:first-child strong')?.textContent || '0';
   const findingCount = Number.parseInt(findingCountText, 10) || 0;
