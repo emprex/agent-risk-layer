@@ -71,3 +71,19 @@ body.workspace-assessment-page[data-shell="app"] .question-guidance[open] {
 body.workspace-assessment-page[data-shell="app"] .question-domain {
   color: #2563eb !important;
 }
+
+/* The last answer is not persisted into the assessment map until submit. Once the
+ * user has actually selected that final answer, the visible completion indicator
+ * should nevertheless reflect the completed questionnaire rather than stopping at 96%. */
+body.workspace-assessment-page[data-shell="app"] #assessmentForm:has(#submitAssessment:not([hidden])):has(input[name="currentQuestion"]:checked) .progress-bar {
+  width: 100% !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #assessmentForm:has(#submitAssessment:not([hidden])):has(input[name="currentQuestion"]:checked) #progressText {
+  font-size: 0 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #assessmentForm:has(#submitAssessment:not([hidden])):has(input[name="currentQuestion"]:checked) #progressText::after {
+  content: "100%";
+  font-size: 12px;
+}

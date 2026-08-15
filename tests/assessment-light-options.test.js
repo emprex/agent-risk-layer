@@ -22,3 +22,9 @@ test('assessment help and evidence disclosures remain light and readable', () =>
   assert.match(css, /\.question-guidance,[\s\S]*?\.evidence-details[\s\S]*?background:\s*#ffffff\s*!important/);
   assert.match(css, /\.question-guidance > summary,[\s\S]*?\.evidence-details > summary[\s\S]*?color:\s*#475569\s*!important/);
 });
+
+test('selected final answer presents the questionnaire as 100 percent complete before submit', () => {
+  const css = read('public/assessment-light-fix.css');
+  assert.match(css, /#assessmentForm:has\(#submitAssessment:not\(\[hidden\]\)\):has\(input\[name="currentQuestion"\]:checked\) \.progress-bar[\s\S]*?width:\s*100%\s*!important/);
+  assert.match(css, /#progressText::after[\s\S]*?content:\s*"100%"/);
+});
