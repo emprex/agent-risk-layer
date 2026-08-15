@@ -78,10 +78,10 @@ export const config = {
     backupRetentionDays: Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS || 30)),
     metricsToken: (process.env.METRICS_TOKEN || '').trim(),
     stripePrices: {
-        pro_report: process.env.STRIPE_PRICE_PRO_REPORT || '',
-        developer_monthly: process.env.STRIPE_PRICE_DEVELOPER_MONTHLY || '',
-        team_monthly: process.env.STRIPE_PRICE_TEAM_MONTHLY || '',
-        agency_monthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY || '',
+        pro_report: (process.env.STRIPE_PRICE_PRO_REPORT || '').trim(),
+        developer_monthly: (process.env.STRIPE_PRICE_DEVELOPER_MONTHLY || '').trim(),
+        team_monthly: (process.env.STRIPE_PRICE_TEAM_MONTHLY || '').trim(),
+        agency_monthly: (process.env.STRIPE_PRICE_AGENCY_MONTHLY || '').trim(),
     },
 };
 export const plans = BILLABLE_PLANS;
