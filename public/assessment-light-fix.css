@@ -1,0 +1,73 @@
+/* Assessment-only light-surface correction.
+ * Keeps answer choices readable and visually consistent with the light workspace.
+ * Presentation only: no assessment, evidence, scoring or authorisation semantics change.
+ */
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid {
+  gap: 10px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option,
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid > label {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .035) !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option:hover,
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid > label:hover {
+  border-color: #93c5fd !important;
+  background: #f8fbff !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option span,
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid > label span {
+  color: #1e293b !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option:has(input:checked),
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid > label:has(input:checked) {
+  border-color: #2563eb !important;
+  background: #eff6ff !important;
+  box-shadow: inset 0 0 0 1px #2563eb !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option:has(input:checked) span,
+body.workspace-assessment-page[data-shell="app"] .guided-option-grid > label:has(input:checked) span {
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option.not-sure {
+  border-style: dashed !important;
+  background: #f8fafc !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .guided-option input[type="radio"],
+body.workspace-assessment-page[data-shell="app"] .guided-option input[type="checkbox"] {
+  accent-color: #2563eb !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .question-guidance,
+body.workspace-assessment-page[data-shell="app"] .evidence-details {
+  border-color: #dbe5f0 !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .question-guidance > summary,
+body.workspace-assessment-page[data-shell="app"] .evidence-details > summary {
+  color: #475569 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .question-guidance:hover,
+body.workspace-assessment-page[data-shell="app"] .question-guidance[open] {
+  border-color: #bfdbfe !important;
+  background: #f8fbff !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .question-domain {
+  color: #2563eb !important;
+}
