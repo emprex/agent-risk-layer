@@ -9,9 +9,12 @@ if (root && assessmentId && token) init();
 
 async function init() {
   try {
-    const payload = await api(`/api/assessments/${encodeURIComponent(assessmentId)}?token=${encodeURIComponent(token)}`);
+    const [payload, auth] = await Promise.all([
+      api(`/api/assessments/${encodeURIComponent(assessmentId)}?token=${encodeURIComponent(token)}`),
+      api('/api/auth/me'),
+    ]);
     const assessment = payload.assessment;
-    if (!payload.isOwner || assessment?.paidTier !== 'free') return;
+    if (!auth.user?.isSuperuser || assessment?.paidTier !== 'free') return;
 
     const findings = (assessment.topFindings || assessment.result?.topFindings || assessment.result?.findings || [])
       .filter((item) => item?.status !== 'information-required' && item?.kind !== 'information-required');
@@ -26,9 +29,9 @@ async function init() {
       card.dataset.ownerCustomerPreview = 'true';
 
       const title = document.createElement('strong');
-      title.textContent = 'Owner customer-journey test';
+      title.textContent = 'Platform-owner customer-journey test';
       const detail = document.createElement('p');
-      detail.textContent = 'Preview the paid customer remediation workflow without charging yourself. This owner-only path does not grant the paid report, subscription or runtime entitlements.';
+      detail.textContent = 'Preview the paid customer remediation workflow without charging the platform owner. This internal path does not grant the paid report, subscription or runtime entitlements.';
       const action = document.createElement('a');
       action.className = 'button ghost';
       action.href = assessmentRemediationHref({ assessmentId: assessment.id, isOwner: true });
@@ -48,6 +51,6 @@ async function init() {
     observer.observe(root, { childList: true, subtree: true });
     setTimeout(() => observer.disconnect(), 5000);
   } catch {
-    // This owner-only preview must never interfere with the normal customer result or checkout path.
+    // This platform-owner-only preview must never interfere with the normal customer result or checkout path.
   }
 }
