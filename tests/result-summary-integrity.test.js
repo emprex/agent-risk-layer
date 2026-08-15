@@ -17,10 +17,10 @@ test('result score card is readable in the light workspace', () => {
   assert.match(css, /\.risk-pill\.critical[\s\S]*?background:\s*#fef2f2\s*!important/);
 });
 
-test('missing highest severity is derived only from rendered finding evidence and never overwrites an explicit value', () => {
+test('missing highest severity is derived only from rendered finding severity badges and never overwrites an explicit value', () => {
   const js = read('public/result-summary-integrity.js');
   assert.match(js, /highestVisibleFindingSeverity/);
-  assert.match(js, /#priorityRisks \.finding-work-item > summary \.evidence-chip/);
+  assert.match(js, /#priorityRisks \.finding-work-item > summary \.severity/);
   assert.match(js, /if \(!findingCount\) return true/);
   assert.match(js, /\^\(\?:none\|—\|-\)\?\$/i);
   assert.doesNotMatch(js, /fetch\(|XMLHttpRequest|\/api\//);
