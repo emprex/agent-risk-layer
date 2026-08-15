@@ -20,7 +20,7 @@ function severityLabel(value) {
 
 function highestVisibleFindingSeverity() {
   if (!root) return '';
-  return [...root.querySelectorAll('#priorityRisks .finding-work-item > summary .evidence-chip')]
+  return [...root.querySelectorAll('#priorityRisks .finding-work-item > summary .severity')]
     .map((node) => severityFromText(node.textContent))
     .filter(Boolean)
     .reduce((highest, current) => severityRank[current] > (severityRank[highest] || 0) ? current : highest, '');
