@@ -135,10 +135,15 @@
     const record = loadStored()[remediationId] || {};
     const command = curlFor(record);
     if (!command) return;
+    const width = button.getBoundingClientRect().width;
+    if (width) button.style.minWidth = `${Math.ceil(width)}px`;
     await navigator.clipboard.writeText(command);
     const previous = button.textContent;
     button.textContent = 'Copied';
-    window.setTimeout(() => { button.textContent = previous; }, 1200);
+    window.setTimeout(() => {
+      button.textContent = previous;
+      button.style.minWidth = '';
+    }, 1200);
   }
 
   async function resetRetestCriteria(button) {
@@ -146,36 +151,48 @@
     const record = loadStored()[remediationId] || {};
     const projectId = safeText(record.projectId || sessionStorage.getItem('arl_selected_project'));
     if (!projectId || !remediationId) return;
+    const panel = button.closest('[data-bound-retest-guidance]');
     const previous = button.textContent;
+    const width = button.getBoundingClientRect().width;
+    if (width) button.style.minWidth = `${Math.ceil(width)}px`;
     button.disabled = true;
     button.textContent = 'Resetting…';
+    if (panel) panel.dataset.busy = 'true';
     try {
-      const response = await originalFetch(`/api/projects/${encodeURIComponent(projectId)}/remediations/${encodeURIComponent(remediationId)}`, {
+      const { api } = await import('./shared.js');
+      await api(`/api/projects/${encodeURIComponent(projectId)}/remediations/${encodeURIComponent(remediationId)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'evidence_attached' }),
       });
-      if (!response.ok) {
-        let message = 'Could not reset retest criteria.';
-        try { message = (await response.json())?.error || message; } catch {}
-        throw new Error(message);
-      }
       const stored = loadStored();
       delete stored[remediationId];
       saveStored(stored);
       criteriaDrafts.delete(remediationId);
-      const projectResponse = await originalFetch(`/api/projects/${encodeURIComponent(projectId)}`);
-      if (projectResponse.ok) {
-        const payload = await projectResponse.json();
-        if (payload?.project) rememberProject(payload.project);
-      }
       location.hash = 'remediation';
       location.reload();
     } catch (error) {
       button.disabled = false;
       button.textContent = previous;
-      window.alert(error?.message || 'Could not reset retest criteria.');
+      button.style.minWidth = '';
+      if (panel) {
+        delete panel.dataset.busy;
+        let errorBox = panel.querySelector('[data-bound-retest-error]');
+        if (!errorBox) {
+          errorBox = document.createElement('p');
+          errorBox.dataset.boundRetestError = '';
+          errorBox.className = 'error-box show';
+          panel.append(errorBox);
+        }
+        errorBox.textContent = error?.message || 'Could not reset retest criteria.';
+      }
     }
+  }
+
+  function guidanceSignature(record) {
+    const criteria = exactCriteria(record);
+    return criteria && record.exactCriteriaCaptured === true
+      ? `run:${record.criteriaId}:${criteria.ruleId}:${criteria.expectedDecision}:${criteria.actionType}:${criteria.targetIdentity}`
+      : `reset:${record.criteriaId}`;
   }
 
   function renderBoundRetestGuidance() {
@@ -192,6 +209,15 @@
         panel.dataset.boundRetestGuidance = remediationId;
         row.prepend(panel);
       }
+      if (panel.dataset.busy === 'true') {
+        rendered = true;
+        continue;
+      }
+      const signature = guidanceSignature(record);
+      if (panel.dataset.renderSignature === signature) {
+        rendered = true;
+        continue;
+      }
       const criteria = exactCriteria(record);
       if (criteria && record.exactCriteriaCaptured === true) {
         panel.innerHTML = `<strong>Run the bound retest next</strong><p>The server requires this retest criteria ID. A normal Guard request without it will remain runtime evidence but will not satisfy this remediation.</p><p><strong>Expected:</strong> ${criteria.expectedDecision} · ${criteria.ruleId} · ${criteria.actionType} · <code>${criteria.targetIdentity}</code></p><button class="button primary small" type="button" data-copy-bound-retest="${remediationId}">Copy bound retest command</button>`;
@@ -200,6 +226,7 @@
         panel.innerHTML = `<strong>Retest criteria must be declared again</strong><p>This retest was created before the browser captured its exact rule, decision, action type and target. AgentRiskLayer will not guess those security criteria. Reset this retest, then save the four criteria again before running the generated command.</p><button class="button primary small" type="button" data-reset-bound-retest="${remediationId}">Reset retest criteria</button>`;
         panel.querySelector('[data-reset-bound-retest]')?.addEventListener('click', (event) => resetRetestCriteria(event.currentTarget));
       }
+      panel.dataset.renderSignature = signature;
       rendered = true;
     }
     return rendered;
