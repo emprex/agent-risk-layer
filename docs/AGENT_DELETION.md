@@ -8,7 +8,7 @@ For an agent linked to a Runtime/evidence project, deletion removes the linked `
 
 Payment and billing records are not deleted by this action. Their assessment/project references are detached by the existing `ON DELETE SET NULL` relationships so accounting history is preserved. Account deletion remains a separate workflow.
 
-For an assessment-only agent with no linked project, the dashboard removes the assessments in that agent history using the existing authenticated assessment-deletion endpoint.
+The dashboard exposes **Delete agent** only when it can resolve one exact linked project. Assessment-only records without a linked project continue to use the existing per-assessment history deletion control; they are not given a project-wide destructive action by this change.
 
 ## Approval and authorization
 
@@ -18,10 +18,11 @@ A linked-project deletion requires:
 - `owner` role for the exact linked project;
 - an owned anchor assessment;
 - an exact project-name/assessment-name scope match;
+- exactly one same-name project in the workspace, so the destructive target is unambiguous;
 - the operator to type the exact agent name as the confirmation value;
 - no other active workspace members.
 
-Shared-workspace deletion is rejected rather than allowing one member to erase evidence used by another tenant member.
+Shared-workspace deletion is rejected rather than allowing one member to erase evidence used by another tenant member. Ambiguous same-name project deletion is also rejected rather than guessing the destructive target.
 
 ## Evidence and retention boundaries
 
@@ -31,8 +32,8 @@ If an assessment is referenced by retained Risk Knowledge validation evidence, d
 
 ## Failure behavior
 
-Linked project and assessment-history deletion execute in one database transaction. A scope mismatch, confirmation mismatch, shared-workspace condition, retained validation reference, authorization failure or database constraint failure rolls back the operation. No partial linked-project deletion is accepted.
+Linked project and assessment-history deletion execute in one database transaction. A scope mismatch, ambiguous project scope, confirmation mismatch, shared-workspace condition, retained validation reference, authorization failure or database constraint failure rolls back the operation. No partial linked-project deletion is accepted.
 
 ## Verification requirements
 
-Regression coverage must verify exact confirmation, owner authorization, shared-workspace protection, project/key/runtime/inventory cascade deletion, preservation of an unrelated agent and invalidation of a deleted project's API key.
+Regression coverage must verify exact confirmation, owner authorization, shared-workspace protection, ambiguous-project protection, project/key/runtime/inventory cascade deletion, preservation of an unrelated agent and invalidation of a deleted project's API key.
