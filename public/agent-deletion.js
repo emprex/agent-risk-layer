@@ -60,27 +60,20 @@ async function deleteAgent(event) {
   if (!group) return workspaceError('Reload the workspace before deleting this agent.');
   const latest = group.assessments[0];
   const project = matchingProject(latest);
+  if (!project?.id) return workspaceError('This agent has no exact linked project, so project-wide deletion is not available from this view.');
   const name = group.name;
   const historyCount = group.assessments.length;
-  const scope = project
-    ? `This permanently deletes ${historyCount} assessment record${historyCount === 1 ? '' : 's'} for this agent and the linked project, including its connection keys, runtime decisions, inventory, remediation and Control Intelligence evidence. Payment and billing records are retained for accounting but are detached from the deleted agent.`
-    : `This permanently deletes ${historyCount} assessment record${historyCount === 1 ? '' : 's'} for this agent and their attached assessment evidence. Payment and billing records are retained for accounting but are detached from the deleted assessment.`;
+  const scope = `This permanently deletes ${historyCount} assessment record${historyCount === 1 ? '' : 's'} for this agent and the linked project, including its connection keys, runtime decisions, inventory, remediation and Control Intelligence evidence. Payment and billing records are retained for accounting but are detached from the deleted agent.`;
   const confirmation = window.prompt(`${scope}\n\nThis cannot be undone. Type the exact agent name to confirm:\n${name}`);
   if (confirmation == null) return;
   if (confirmation !== name) return workspaceError('Agent name did not match. Nothing was deleted.');
 
   setBusy(button, true, 'Deleting…');
   try {
-    if (project?.id) {
-      await api(`/api/projects/${encodeURIComponent(project.id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ deleteAgent: true, assessmentId: latest.id, confirmation }),
-      });
-    } else {
-      for (const assessment of group.assessments) {
-        await api(`/api/assessments/${encodeURIComponent(assessment.id)}`, { method: 'DELETE' });
-      }
-    }
+    await api(`/api/projects/${encodeURIComponent(project.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ deleteAgent: true, assessmentId: latest.id, confirmation }),
+    });
     sessionStorage.removeItem('arl_selected_project');
     sessionStorage.removeItem('arl_selected_assessment');
     sessionStorage.setItem('arl_agent_deleted_notice', `${name} was permanently deleted from this workspace.`);
@@ -100,6 +93,8 @@ function decorateRows() {
     const actions = row.querySelector('.workspace-agent-row-actions');
     if (!actions || actions.querySelector('[data-delete-agent]')) return;
     const group = groups[index];
+    const project = matchingProject(group.assessments[0]);
+    if (!project?.id) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'button danger small';
