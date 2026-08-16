@@ -1,0 +1,55 @@
+/* Runtime visual corrections from the 16 Aug 09:37 production walkthrough.
+   Presentation-only: no policy, evidence, authorisation or persistence semantics. */
+
+/* The access-picture summary is rendered in a narrow secondary column. Three
+   metric cards in one row become unreadable at browser zoom and constrained
+   desktop widths, so keep the evidence labels vertically readable. */
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics {
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div {
+  display: grid;
+  grid-template-columns: minmax(52px, auto) minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 2px;
+  min-width: 0;
+  padding: 10px 12px !important;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div > strong {
+  grid-row: 1 / span 2;
+  align-self: start;
+  white-space: nowrap;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div > span,
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div > small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.4;
+}
+
+/* Decision evidence has six columns. Preserve the table as a readable table
+   instead of allowing headers and values to collapse into one another. */
+.workspace-control-page.runtime-specialist-active #decisionEvidence {
+  overflow-x: auto !important;
+}
+
+.workspace-control-page.runtime-specialist-active #decisionEvidence .data-table {
+  min-width: 720px;
+}
+
+.workspace-control-page.runtime-specialist-active #decisionEvidence .data-table-head,
+.workspace-control-page.runtime-specialist-active #decisionEvidence .data-table-row {
+  column-gap: 10px !important;
+}
+
+@media (max-width: 760px) {
+  .workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
