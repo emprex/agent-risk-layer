@@ -20,6 +20,14 @@ test('persistent action uses only exact captured criteria', () => {
   assert.doesNotMatch(helper, /includes\(['"]shell['"]\)/);
 });
 
-test('Runtime loads persistent retest action helper', () => {
-  assert.match(html, /runtime-retest-persistent\.js\?v=20260816\.1/);
+test('persistent action reconciles server criteria id directly from current project', () => {
+  assert.match(helper, /reconcileFromServer/);
+  assert.match(helper, /new URLSearchParams\(location\.search\)\.get\('projectId'\)/);
+  assert.match(helper, /\/api\/projects\//);
+  assert.match(helper, /verification\?\.retestCriteriaId/);
+  assert.match(helper, /existing\?\.exactCriteriaCaptured !== true/);
+});
+
+test('Runtime loads current persistent retest action helper', () => {
+  assert.match(html, /runtime-retest-persistent\.js\?v=20260816\.2/);
 });
