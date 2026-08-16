@@ -9,7 +9,7 @@ const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 test('runtime specialist view loads isolated spacing corrections after the base workspace styles', () => {
   const html = read('public/control-plane.html');
   const workspaceIndex = html.indexOf('/runtime-workspace.css?v=20260816.1');
-  const spacingIndex = html.indexOf('/runtime-spacing.css?v=20260816.1');
+  const spacingIndex = html.indexOf('/runtime-spacing.css?v=20260816.2');
   assert.ok(workspaceIndex >= 0, 'runtime workspace stylesheet is loaded');
   assert.ok(spacingIndex > workspaceIndex, 'spacing corrections load after runtime workspace styles');
 });
@@ -25,4 +25,14 @@ test('runtime specialist spacing keeps compact hierarchy and responsive decision
   assert.match(css, /\.runtime-specialist-active \.data-table\s*\{[\s\S]*overflow-x:\s*auto/);
   assert.match(css, /@media \(max-width:\s*1180px\)[\s\S]*grid-template-columns:\s*repeat\(2,/);
   assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*grid-template-columns:\s*1fr !important/);
+});
+
+test('runtime specialist cards wrap plan, key, approval and inventory evidence safely', () => {
+  const css = read('public/runtime-spacing.css');
+  assert.match(css, /\.project-rail \.plain-plan-card\s*\{[\s\S]*display:\s*grid !important[\s\S]*gap:\s*7px/);
+  assert.match(css, /\.key-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto !important/);
+  assert.match(css, /\.key-row > div:first-child > span[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /#inventory \.asset-list\s*\{[\s\S]*grid-template-columns:\s*1fr !important/);
+  assert.match(css, /#inventory \.asset-list strong,[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /#inventory \.drift-banner\s*\{[\s\S]*flex-wrap:\s*wrap/);
 });
