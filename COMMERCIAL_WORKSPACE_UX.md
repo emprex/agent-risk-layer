@@ -66,6 +66,8 @@ The dashboard groups immutable assessment history under the agent rather than re
 
 The decision/evidence state and next action are visually dominant. The declared score is supporting context. The dashboard does not infer HOLD, PROCEED or DO NOT DEPLOY when no Control Intelligence deployment decision exists.
 
+The dashboard also reads the existing server-owned runtime evidence journey for the exact authorised project. When that journey reports `ready-for-deployment-review` and no Control Intelligence deployment decision exists, the dashboard may show **Ready for human review** and make the human deployment decision the next action. This readiness state is not a deployment decision and must never be rendered as PROCEED, HOLD or DO NOT DEPLOY. A server-recorded deployment decision always takes precedence. Runtime evidence copy is derived from current-policy journey steps rather than from the historical assessment score.
+
 ### Assessment
 
 The questionnaire remains one question at a time and keeps every existing question, answer, unknown-information rule, validation and submission semantic. Visible progress is grouped into five human phases:
