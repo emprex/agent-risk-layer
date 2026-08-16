@@ -1,6 +1,10 @@
 // Keep remediation retests bound to the server-created criteria that the backend
 // requires. Ordinary Guard calls remain valid runtime evidence, but they must not
 // be mistaken for a remediation retest unless retestCriteriaId is present.
+//
+// Important trust rule: never reconstruct missing criteria from a remediation title.
+// If the browser did not observe the exact criteria the user saved, return the
+// remediation to evidence_attached so the user can declare a fresh, auditable set.
 (() => {
   const originalFetch = window.fetch.bind(window);
   const criteriaDrafts = new Map();
@@ -22,6 +26,16 @@
     return String(value ?? '').trim();
   }
 
+  function exactCriteria(record) {
+    const ruleId = safeText(record?.ruleId).toUpperCase();
+    const expectedDecision = safeText(record?.expectedDecision).toLowerCase();
+    const actionType = safeText(record?.actionType).toLowerCase();
+    const targetIdentity = safeText(record?.targetIdentity).toLowerCase();
+    if (!ruleId || !['allow', 'deny'].includes(expectedDecision)
+      || !['tool', 'content.input', 'content.output'].includes(actionType) || !targetIdentity) return null;
+    return { ruleId, expectedDecision, actionType, targetIdentity };
+  }
+
   function captureCriteriaForm(event) {
     const form = event.target?.closest?.('[data-retest-criteria-form]');
     if (!form) return;
@@ -35,9 +49,10 @@
       actionType: safeText(data.get('actionType')).toLowerCase(),
       targetIdentity: safeText(data.get('targetIdentity')).toLowerCase(),
     };
+    if (!exactCriteria(draft)) return;
     criteriaDrafts.set(remediationId, draft);
     const stored = loadStored();
-    stored[remediationId] = { ...(stored[remediationId] || {}), ...draft };
+    stored[remediationId] = { ...(stored[remediationId] || {}), ...draft, exactCriteriaCaptured: true };
     saveStored(stored);
   }
 
@@ -51,9 +66,14 @@
     if (!project?.id) return;
     const stored = loadStored();
     for (const item of remediationRows(project)) {
-      const criteriaId = safeText(item?.verification?.retestCriteriaId);
-      if (!criteriaId || item.status !== 'ready_for_retest') continue;
       const remediationId = safeText(item.id);
+      if (!remediationId) continue;
+      if (item.status !== 'ready_for_retest') {
+        if (stored[remediationId]?.criteriaId) delete stored[remediationId];
+        continue;
+      }
+      const criteriaId = safeText(item?.verification?.retestCriteriaId);
+      if (!criteriaId) continue;
       const draft = criteriaDrafts.get(remediationId) || stored[remediationId] || {};
       stored[remediationId] = {
         ...draft,
@@ -83,53 +103,86 @@
     return response;
   };
 
-  function fallbackDetails(record) {
-    const title = safeText(record.remediationTitle).toLowerCase();
-    if ((!record.actionType || !record.targetIdentity) && title.includes('shell')) {
-      return { ...record, actionType: 'tool', targetIdentity: 'shell', expectedDecision: record.expectedDecision || 'deny', ruleId: record.ruleId || 'ARL-RUN-002' };
-    }
-    return record;
-  }
-
   function requestBody(record) {
-    const requestId = `retest-${safeText(record.targetIdentity || 'control').replace(/[^a-z0-9._-]+/gi, '-')}-${Date.now()}`;
+    const criteria = exactCriteria(record);
+    if (!criteria) return null;
+    const requestId = `retest-${criteria.targetIdentity.replace(/[^a-z0-9._-]+/gi, '-')}-${Date.now()}`;
     const body = {
       request_id: requestId,
       retestCriteriaId: record.criteriaId,
       metadata: { application: 'agent-retest' },
     };
-    if (record.actionType === 'tool') {
+    if (criteria.actionType === 'tool') {
       body.input = 'Bound remediation retest. Do not execute any external action unless AgentRiskLayer allows it.';
-      body.tool_call = { name: record.targetIdentity, arguments: { command: 'echo arl-retest' } };
-    } else if (record.actionType === 'content.input') {
-      body.input = record.targetIdentity;
-    } else if (record.actionType === 'content.output') {
-      body.output = record.targetIdentity;
+      body.tool_call = { name: criteria.targetIdentity, arguments: { command: 'echo arl-retest' } };
+    } else if (criteria.actionType === 'content.input') {
+      body.input = criteria.targetIdentity;
+    } else if (criteria.actionType === 'content.output') {
+      body.output = criteria.targetIdentity;
     }
     return body;
   }
 
   function curlFor(record) {
-    const body = JSON.stringify(requestBody(record), null, 2).replace(/'/g, "'\\''");
+    const request = requestBody(record);
+    if (!request) return '';
+    const body = JSON.stringify(request, null, 2).replace(/'/g, "'\\''");
     return `read -rsp "AgentRiskLayer connection key: " ARL_KEY\necho\n\ncurl -sS https://agentrisklayer.com/v1/guard \\\n  -H "Authorization: Bearer $ARL_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '${body}'\n\nunset ARL_KEY\necho`;
   }
 
   async function copyBoundRequest(button) {
     const remediationId = button.dataset.copyBoundRetest;
-    const record = fallbackDetails(loadStored()[remediationId] || {});
-    if (!record.criteriaId || !record.actionType || !record.targetIdentity) return;
-    await navigator.clipboard.writeText(curlFor(record));
+    const record = loadStored()[remediationId] || {};
+    const command = curlFor(record);
+    if (!command) return;
+    await navigator.clipboard.writeText(command);
     const previous = button.textContent;
     button.textContent = 'Copied';
     window.setTimeout(() => { button.textContent = previous; }, 1200);
   }
 
+  async function resetRetestCriteria(button) {
+    const remediationId = safeText(button.dataset.resetBoundRetest);
+    const record = loadStored()[remediationId] || {};
+    const projectId = safeText(record.projectId || sessionStorage.getItem('arl_selected_project'));
+    if (!projectId || !remediationId) return;
+    const previous = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Resetting…';
+    try {
+      const response = await originalFetch(`/api/projects/${encodeURIComponent(projectId)}/remediations/${encodeURIComponent(remediationId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'evidence_attached' }),
+      });
+      if (!response.ok) {
+        let message = 'Could not reset retest criteria.';
+        try { message = (await response.json())?.error || message; } catch {}
+        throw new Error(message);
+      }
+      const stored = loadStored();
+      delete stored[remediationId];
+      saveStored(stored);
+      criteriaDrafts.delete(remediationId);
+      const projectResponse = await originalFetch(`/api/projects/${encodeURIComponent(projectId)}`);
+      if (projectResponse.ok) {
+        const payload = await projectResponse.json();
+        if (payload?.project) rememberProject(payload.project);
+      }
+      location.hash = 'remediation';
+      location.reload();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = previous;
+      window.alert(error?.message || 'Could not reset retest criteria.');
+    }
+  }
+
   function renderBoundRetestGuidance() {
     const stored = loadStored();
     let rendered = false;
-    for (const [remediationId, raw] of Object.entries(stored)) {
-      const record = fallbackDetails(raw);
-      if (!record.criteriaId) continue;
+    for (const [remediationId, record] of Object.entries(stored)) {
+      if (!record?.criteriaId) continue;
       const row = document.querySelector(`[data-remediation-id="${CSS.escape(remediationId)}"] .remediation-detail`);
       if (!row) continue;
       let panel = row.querySelector('[data-bound-retest-guidance]');
@@ -139,11 +192,14 @@
         panel.dataset.boundRetestGuidance = remediationId;
         row.prepend(panel);
       }
-      const complete = Boolean(record.actionType && record.targetIdentity);
-      panel.innerHTML = complete
-        ? `<strong>Run the bound retest next</strong><p>The server requires this retest criteria ID. A normal Guard request without it will remain runtime evidence but will not satisfy this remediation.</p><p><strong>Expected:</strong> ${record.expectedDecision || 'saved decision'} · ${record.ruleId || 'saved rule'} · ${record.actionType} · <code>${record.targetIdentity}</code></p><button class="button primary small" type="button" data-copy-bound-retest="${remediationId}">Copy bound retest command</button>`
-        : `<strong>Run the bound retest next</strong><p>Retest criteria are active. Use the saved target and include <code>retestCriteriaId</code> <code>${record.criteriaId}</code> in the next Guard request. Ordinary Guard requests do not count as remediation retests.</p>`;
-      panel.querySelector('[data-copy-bound-retest]')?.addEventListener('click', (event) => copyBoundRequest(event.currentTarget));
+      const criteria = exactCriteria(record);
+      if (criteria && record.exactCriteriaCaptured === true) {
+        panel.innerHTML = `<strong>Run the bound retest next</strong><p>The server requires this retest criteria ID. A normal Guard request without it will remain runtime evidence but will not satisfy this remediation.</p><p><strong>Expected:</strong> ${criteria.expectedDecision} · ${criteria.ruleId} · ${criteria.actionType} · <code>${criteria.targetIdentity}</code></p><button class="button primary small" type="button" data-copy-bound-retest="${remediationId}">Copy bound retest command</button>`;
+        panel.querySelector('[data-copy-bound-retest]')?.addEventListener('click', (event) => copyBoundRequest(event.currentTarget));
+      } else {
+        panel.innerHTML = `<strong>Retest criteria must be declared again</strong><p>This retest was created before the browser captured its exact rule, decision, action type and target. AgentRiskLayer will not guess those security criteria. Reset this retest, then save the four criteria again before running the generated command.</p><button class="button primary small" type="button" data-reset-bound-retest="${remediationId}">Reset retest criteria</button>`;
+        panel.querySelector('[data-reset-bound-retest]')?.addEventListener('click', (event) => resetRetestCriteria(event.currentTarget));
+      }
       rendered = true;
     }
     return rendered;
@@ -171,9 +227,6 @@
     }
   }
 
-  // Recover an already-created ready-for-retest record after deploy/refresh. This
-  // fixes the real production case where criteria existed before this helper was
-  // loaded, so there was no client-side draft to intercept.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', recoverExistingRetest, { once: true });
   } else {
