@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { db } from '../src/db.js';
 import { createWorkspace, upsertMember } from '../src/workspaces.js';
 import {
@@ -120,7 +121,6 @@ test('agent deletion removes exact agent scope, revokes keys by cascade and pres
 });
 
 test('dashboard exposes bounded agent deletion without invoking account deletion', () => {
-  const fs = requireFs();
   const html = fs.readFileSync(new URL('../public/dashboard.html', import.meta.url), 'utf8');
   const ui = fs.readFileSync(new URL('../public/agent-deletion.js', import.meta.url), 'utf8');
   const controlPlane = fs.readFileSync(new URL('../src/control-plane.js', import.meta.url), 'utf8');
@@ -133,12 +133,3 @@ test('dashboard exposes bounded agent deletion without invoking account deletion
   assert.match(controlPlane, /patch\.deleteAgent === true/);
   assert.match(controlPlane, /deleteAgentScope/);
 });
-
-function requireFs() {
-  return globalThis.__agentDeletionFs ||= awaitImportFs();
-}
-
-function awaitImportFs() {
-  // Keep this test file synchronous after ESM initialisation without adding application dependencies.
-  return { readFileSync: (url, encoding) => process.getBuiltinModule('node:fs').readFileSync(url, encoding) };
-}
