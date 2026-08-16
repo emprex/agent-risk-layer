@@ -40,14 +40,22 @@ test('shared authenticated shell owns one customer navigation vocabulary and con
 
 test('dashboard is organised around agents and keeps deployment decisions server-authoritative', () => {
   const js = read('public/dashboard.js');
+  const evidenceState = read('public/dashboard-evidence-state.js');
   assert.match(js, /function groupAssessments/);
   assert.match(js, /Current agent/);
   assert.match(js, /Latest assessment/);
   assert.match(js, /Next action/);
   assert.match(js, /control-intelligence\?limit=1/);
+  assert.match(js, /dashboardEvidencePresentation/);
+  assert.match(js, /api\(`\/api\/projects\/\$\{encodeURIComponent\(project\.id\)\}`\)/);
   assert.match(js, /No decision recorded/);
   assert.match(js, /No HOLD or PROCEED state is inferred/);
   assert.match(js, /Previous assessments/);
+  assert.match(evidenceState, /ready-for-deployment-review/);
+  assert.match(evidenceState, /Ready for human review/);
+  assert.match(evidenceState, /No deployment decision has been recorded yet/);
+  assert.match(evidenceState, /Make the deployment decision/);
+  assert.match(evidenceState, /Current-policy allow, deny and retest evidence recorded/);
 });
 
 test('assessment keeps the questionnaire while presenting five human phases without a raw denominator', () => {
