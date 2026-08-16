@@ -1,0 +1,223 @@
+/* Runtime specialist spacing corrections observed during the 16 Aug customer walkthrough.
+   Presentation-only: no policy, approval, evidence, billing, authorisation or persistence semantics. */
+
+.workspace-control-page.runtime-specialist-active .control-overview {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin: 14px 0 12px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-overview article {
+  min-width: 0;
+  padding: 12px 14px !important;
+  border: 1px solid var(--runtime-line) !important;
+  border-radius: 9px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-overview article span,
+.workspace-control-page.runtime-specialist-active .control-overview article small {
+  display: block;
+  line-height: 1.35;
+}
+
+.workspace-control-page.runtime-specialist-active .control-plane-layout.technical-mode {
+  gap: 16px !important;
+  margin-top: 12px !important;
+  align-items: start !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail {
+  margin: 0 !important;
+  padding: 14px !important;
+  border-radius: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .rail-heading {
+  margin-bottom: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .project-list {
+  gap: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-button {
+  min-height: 0 !important;
+  padding: 10px !important;
+  gap: 9px !important;
+  border-radius: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .plain-plan-card,
+.workspace-control-page.runtime-specialist-active .entitlement-card {
+  margin-top: 12px !important;
+  padding: 12px !important;
+  border-radius: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap > * {
+  margin-block: 0 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .journey-panel,
+.workspace-control-page.runtime-specialist-active .project-command-header,
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap > .panel {
+  padding: 16px !important;
+  border-radius: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap .section-heading,
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap .section-heading.compact-heading {
+  gap: 14px !important;
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap .section-heading h2,
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap .section-heading h3 {
+  margin: 0 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap .section-heading p {
+  margin-top: 4px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .journey-steps {
+  gap: 6px !important;
+  margin-top: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .journey-steps a {
+  min-height: 38px !important;
+  padding: 8px 10px !important;
+  border-radius: 7px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .drift-banner {
+  margin-top: 10px !important;
+  padding: 10px 12px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-command-header {
+  margin-bottom: 0 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-command-header h2 {
+  margin: 2px 0 4px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-command-header p {
+  margin: 0 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .runtime-guided-back {
+  margin-top: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-tabs {
+  gap: 3px !important;
+  margin: 0 !important;
+  padding: 6px !important;
+  border: 1px solid var(--runtime-line) !important;
+  border-radius: 9px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-tabs a {
+  min-height: 36px !important;
+  padding: 7px 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-section {
+  margin: 0 !important;
+  padding: 0 !important;
+  scroll-margin-top: 72px;
+}
+
+.workspace-control-page.runtime-specialist-active .control-section + .control-section {
+  margin-top: 18px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-section > .section-heading {
+  margin-bottom: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .runtime-grid {
+  gap: 12px !important;
+  align-items: start !important;
+}
+
+.workspace-control-page.runtime-specialist-active .runtime-grid > .panel,
+.workspace-control-page.runtime-specialist-active #runtime > article.panel,
+.workspace-control-page.runtime-specialist-active #policy > .panel,
+.workspace-control-page.runtime-specialist-active #inventory > article.panel,
+.workspace-control-page.runtime-specialist-active #remediation > article.panel,
+.workspace-control-page.runtime-specialist-active #audit > article.panel {
+  padding: 16px !important;
+  border-radius: 9px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .section-gap {
+  margin-top: 12px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .key-list,
+.workspace-control-page.runtime-specialist-active .remediation-list,
+.workspace-control-page.runtime-specialist-active .plain-event-list {
+  gap: 8px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row,
+.workspace-control-page.runtime-specialist-active .remediation-row,
+.workspace-control-page.runtime-specialist-active .data-table-row,
+.workspace-control-page.runtime-specialist-active .data-table-head {
+  padding-block: 10px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .data-table {
+  overflow-x: auto;
+}
+
+.workspace-control-page.runtime-specialist-active #decisionEvidence {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 1180px) {
+  .workspace-control-page.runtime-specialist-active .control-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .runtime-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-control-page.runtime-specialist-active .control-overview {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .technical-controls-wrap,
+  .workspace-control-page.runtime-specialist-active .control-plane-layout.technical-mode {
+    gap: 10px !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .journey-panel,
+  .workspace-control-page.runtime-specialist-active .project-command-header,
+  .workspace-control-page.runtime-specialist-active .runtime-grid > .panel,
+  .workspace-control-page.runtime-specialist-active #runtime > article.panel,
+  .workspace-control-page.runtime-specialist-active #policy > .panel,
+  .workspace-control-page.runtime-specialist-active #inventory > article.panel,
+  .workspace-control-page.runtime-specialist-active #remediation > article.panel,
+  .workspace-control-page.runtime-specialist-active #audit > article.panel {
+    padding: 13px !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .control-tabs {
+    border-radius: 7px !important;
+  }
+}
