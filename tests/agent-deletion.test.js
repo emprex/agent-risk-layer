@@ -95,12 +95,19 @@ test('agent deletion is owner-only and blocks shared-workspace evidence erasure'
 
 test('agent deletion refuses an ambiguous same-name project target', async () => {
   const fixture = await deletionFixture();
-  await createSecurityProject({
-    userId: fixture.owner.userId,
-    workspaceId: fixture.workspace.id,
-    name: 'Disposable Support Agent',
-    environment: 'test',
-  });
+  const timestamp = new Date().toISOString();
+  await db.prepare(`INSERT INTO security_projects
+    (id,workspace_id,billing_user_id,created_by,name,slug,environment,status,policy_json,policy_version,retention_days,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,'test','archived','{}','1',7,?,?)`).run(
+    `prj_${crypto.randomUUID().replaceAll('-', '')}`,
+    fixture.workspace.id,
+    fixture.owner.userId,
+    fixture.owner.userId,
+    'Disposable Support Agent',
+    `disposable-support-agent-${crypto.randomUUID().slice(0, 8)}`,
+    timestamp,
+    timestamp,
+  );
   await assert.rejects(() => deleteAgentScope({
     projectId: fixture.project.id,
     userId: fixture.owner.userId,
