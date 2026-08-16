@@ -12,6 +12,6 @@ test('stage-three guidance targets Developer integration instead of generic runt
 
 test('stage-three navigation retry is bounded and does not use MutationObserver', () => {
   assert.doesNotMatch(source, /MutationObserver/);
-  assert.match(source, /attempts >= 30/);
+  assert.match(source, /attempts < 30/);
   assert.match(source, /setTimeout/);
 });
