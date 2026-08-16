@@ -47,13 +47,17 @@ test('dashboard is organised around agents and keeps deployment decisions server
   assert.match(js, /Next action/);
   assert.match(js, /control-intelligence\?limit=1/);
   assert.match(js, /dashboardEvidencePresentation/);
+  assert.match(js, /controlIntelligence: payload/);
+  assert.match(js, /presentation\.showControlSummary/);
   assert.match(js, /api\(`\/api\/projects\/\$\{encodeURIComponent\(project\.id\)\}`\)/);
   assert.match(js, /No decision recorded/);
   assert.match(js, /No HOLD or PROCEED state is inferred/);
   assert.match(js, /Previous assessments/);
+  assert.match(evidenceState, /Evidence foundation required/);
+  assert.match(evidenceState, /Deployment review in progress/);
   assert.match(evidenceState, /ready-for-deployment-review/);
   assert.match(evidenceState, /Ready for human review/);
-  assert.match(evidenceState, /No deployment decision has been recorded yet/);
+  assert.match(evidenceState, /immutable system scope/);
   assert.match(evidenceState, /Make the deployment decision/);
   assert.match(evidenceState, /Current-policy allow, deny and retest evidence recorded/);
 });
@@ -106,6 +110,7 @@ test('documentation records replacement of the old DOM rearrangement approach', 
   const doc = read('COMMERCIAL_WORKSPACE_UX.md');
   assert.match(doc, /replaces the previous `workspace-ux\.js` \/ `workspace-ux\.css` DOM-rearrangement experiment/);
   assert.match(doc, /Client-side navigation state is not authorisation/);
+  assert.match(doc, /Runtime completion by itself is not deployment-review readiness/);
   assert.match(doc, /Declared is not observed/);
   assert.equal(existsSync(new URL('../public/security-workspace.css', import.meta.url)), true);
   assert.equal(existsSync(new URL('../public/workspace-app.css', import.meta.url)), true);
