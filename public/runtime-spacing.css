@@ -186,6 +186,124 @@
   margin-top: 12px !important;
 }
 
+/* Keep the four compact specialist cards readable in narrow columns. */
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card {
+  display: grid !important;
+  gap: 7px !important;
+  line-height: 1.45 !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > strong,
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > span,
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > a {
+  display: block !important;
+  min-width: 0;
+  margin: 0 !important;
+  overflow-wrap: anywhere;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > strong {
+  font-size: 13px !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > span,
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > a {
+  font-size: 11px !important;
+  color: var(--runtime-muted) !important;
+}
+
+.workspace-control-page.runtime-specialist-active .project-rail .plain-plan-card > a {
+  padding-top: 7px;
+  border-top: 1px solid var(--runtime-line-soft);
+  color: #1746a2 !important;
+  font-weight: 650;
+}
+
+.workspace-control-page.runtime-specialist-active .runtime-grid > .panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: start !important;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row > div:first-child > strong,
+.workspace-control-page.runtime-specialist-active .key-row > div:first-child > span,
+.workspace-control-page.runtime-specialist-active .key-row > div:first-child > small {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row > div:first-child > span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row > div:last-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-control-page.runtime-specialist-active .key-row .status-dot {
+  white-space: nowrap;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-score {
+  flex-wrap: wrap;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics > div {
+  min-width: 0;
+  padding: 10px;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .inventory-metrics span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .drift-banner {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .asset-list {
+  grid-template-columns: 1fr !important;
+  gap: 7px !important;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .asset-list > div {
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  min-width: 0;
+}
+
+.workspace-control-page.runtime-specialist-active #inventory .asset-list strong,
+.workspace-control-page.runtime-specialist-active #inventory .asset-list small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @media (max-width: 1180px) {
   .workspace-control-page.runtime-specialist-active .control-overview {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -219,5 +337,17 @@
 
   .workspace-control-page.runtime-specialist-active .control-tabs {
     border-radius: 7px !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .key-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .key-row > div:last-child {
+    justify-content: flex-start;
+  }
+
+  .workspace-control-page.runtime-specialist-active #inventory .inventory-metrics {
+    grid-template-columns: 1fr !important;
   }
 }
