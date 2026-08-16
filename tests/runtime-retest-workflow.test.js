@@ -12,10 +12,17 @@ test('bound remediation retest helper preserves server binding semantics', () =>
   assert.doesNotMatch(helper, /MutationObserver/);
 });
 
+test('existing ready-for-retest state is recovered after deploy or refresh', () => {
+  assert.match(helper, /recoverExistingRetest/);
+  assert.match(helper, /arl_selected_project/);
+  assert.match(helper, /originalFetch\(`\/api\/projects\//);
+  assert.match(helper, /rememberProject\(payload\.project\)/);
+});
+
 test('bound retest helper loads before the runtime application module', () => {
-  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.1');
+  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.2');
   const appIndex = html.indexOf('/control-plane.js?v=20260814.6');
   assert.ok(helperIndex >= 0, 'bound retest helper must be loaded');
   assert.ok(appIndex >= 0, 'runtime app must be loaded');
-  assert.ok(helperIndex < appIndex, 'bound retest helper must intercept project responses before the runtime app starts');
+  assert.ok(helperIndex < appIndex, 'bound retest helper must recover or intercept project state before the runtime app starts');
 });

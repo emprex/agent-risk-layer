@@ -158,6 +158,28 @@
     }, 0);
   }
 
+  async function recoverExistingRetest() {
+    const projectId = safeText(sessionStorage.getItem('arl_selected_project'));
+    if (!projectId) return;
+    try {
+      const response = await originalFetch(`/api/projects/${encodeURIComponent(projectId)}`);
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (payload?.project) rememberProject(payload.project);
+    } catch {
+      // Recovery is UX-only. Never interfere with the authoritative workflow.
+    }
+  }
+
+  // Recover an already-created ready-for-retest record after deploy/refresh. This
+  // fixes the real production case where criteria existed before this helper was
+  // loaded, so there was no client-side draft to intercept.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', recoverExistingRetest, { once: true });
+  } else {
+    recoverExistingRetest();
+  }
+
   // The main module renders after API calls. A short bounded poll is enough to
   // place the guidance without a MutationObserver or a self-triggering loop.
   let attempts = 0;
