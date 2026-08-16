@@ -1,9 +1,52 @@
 /* Runtime visual corrections from the 16 Aug production walkthroughs.
    Presentation-only: no policy, evidence, authorisation or persistence semantics. */
 
-/* The inventory form and the access-evidence summary were being squeezed into
-   two columns at 1366px, making evidence labels collapse into vertical text.
-   Give the access picture a full row so the evidence state is actually readable. */
+/* Root cause observed at 1366x768 with normal browser zoom: specialist content
+   can expand to its min-content width inside the project rail + workspace shell.
+   Constrain every specialist layer to the available width and let long content
+   scroll inside its own panel instead of pushing the page off-screen. */
+.workspace-control-page.runtime-specialist-active .control-plane-layout.technical-mode {
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-plane-main,
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap,
+.workspace-control-page.runtime-specialist-active .control-section,
+.workspace-control-page.runtime-specialist-active .runtime-grid,
+.workspace-control-page.runtime-specialist-active .runtime-grid > *,
+.workspace-control-page.runtime-specialist-active .technical-controls-wrap > *,
+.workspace-control-page.runtime-specialist-active .control-section > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* At ordinary laptop/desktop widths the workspace already has the global nav
+   plus the protected-agent rail. A second internal column is too narrow and was
+   the source of the clipped Connection keys, Rules and Access map panels. */
+@media (max-width: 1500px) {
+  .workspace-control-page.runtime-specialist-active .runtime-grid,
+  .workspace-control-page.runtime-specialist-active .form-grid,
+  .workspace-control-page.runtime-specialist-active .choice-grid,
+  .workspace-control-page.runtime-specialist-active .policy-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Code and tabular evidence may legitimately be wider than the panel. Keep that
+   overflow local so it never widens the whole specialist workspace. */
+.workspace-control-page.runtime-specialist-active pre,
+.workspace-control-page.runtime-specialist-active .data-table {
+  max-width: 100%;
+}
+
+.workspace-control-page.runtime-specialist-active pre {
+  overflow-x: auto !important;
+}
+
+/* Access map: use the full row, then keep the evidence state readable. */
 .workspace-control-page.runtime-specialist-active #inventory .runtime-grid {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -53,15 +96,19 @@
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
-/* Decision evidence has six columns. Keep it a real table and scroll it instead
-   of compressing headings, request ids and timestamps into one another. */
+/* Decision evidence has six columns. Keep the table readable and scroll it
+   inside the evidence panel rather than expanding the page. */
 .workspace-control-page.runtime-specialist-active #decisionEvidence {
+  min-width: 0 !important;
+  max-width: 100% !important;
   overflow-x: auto !important;
+  overscroll-behavior-x: contain;
 }
 
 .workspace-control-page.runtime-specialist-active #decisionEvidence .data-table {
+  width: 900px !important;
   min-width: 900px !important;
-  width: max-content;
+  max-width: none !important;
 }
 
 .workspace-control-page.runtime-specialist-active #decisionEvidence .data-table-head,
@@ -74,6 +121,18 @@
 .workspace-control-page.runtime-specialist-active #decisionEvidence .data-table-row > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .workspace-control-page.runtime-specialist-active .control-plane-layout.technical-mode {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .workspace-control-page.runtime-specialist-active .project-rail {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }
 
 @media (max-width: 900px) {
