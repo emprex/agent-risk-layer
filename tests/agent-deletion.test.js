@@ -93,6 +93,24 @@ test('agent deletion is owner-only and blocks shared-workspace evidence erasure'
   assert.ok(await db.prepare('SELECT id FROM assessments WHERE id=?').get(fixture.currentAssessmentId));
 });
 
+test('agent deletion refuses an ambiguous same-name project target', async () => {
+  const fixture = await deletionFixture();
+  await createSecurityProject({
+    userId: fixture.owner.userId,
+    workspaceId: fixture.workspace.id,
+    name: 'Disposable Support Agent',
+    environment: 'test',
+  });
+  await assert.rejects(() => deleteAgentScope({
+    projectId: fixture.project.id,
+    userId: fixture.owner.userId,
+    assessmentId: fixture.currentAssessmentId,
+    confirmation: 'Disposable Support Agent',
+  }), /more than one project matches/i);
+  assert.ok(await db.prepare('SELECT id FROM security_projects WHERE id=?').get(fixture.project.id));
+  assert.ok(await db.prepare('SELECT id FROM assessments WHERE id=?').get(fixture.currentAssessmentId));
+});
+
 test('agent deletion removes exact agent scope, revokes keys by cascade and preserves unrelated agents', async () => {
   const fixture = await deletionFixture();
   const result = await deleteAgentScope({
@@ -120,7 +138,7 @@ test('agent deletion removes exact agent scope, revokes keys by cascade and pres
   assert.equal(JSON.parse(deletionEvent.properties_json).projectId, fixture.project.id);
 });
 
-test('dashboard exposes bounded agent deletion without invoking account deletion', () => {
+test('dashboard exposes bounded project-linked agent deletion without invoking account deletion', () => {
   const html = fs.readFileSync(new URL('../public/dashboard.html', import.meta.url), 'utf8');
   const ui = fs.readFileSync(new URL('../public/agent-deletion.js', import.meta.url), 'utf8');
   const controlPlane = fs.readFileSync(new URL('../src/control-plane.js', import.meta.url), 'utf8');
@@ -128,6 +146,7 @@ test('dashboard exposes bounded agent deletion without invoking account deletion
   assert.match(ui, /Delete agent/);
   assert.match(ui, /Type the exact agent name to confirm/);
   assert.match(ui, /Payment and billing records are retained/);
+  assert.match(ui, /if \(!project\?\.id\) return/);
   assert.match(ui, /deleteAgent: true/);
   assert.doesNotMatch(ui, /\/api\/account\/delete/);
   assert.match(controlPlane, /patch\.deleteAgent === true/);
