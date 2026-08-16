@@ -1,0 +1,208 @@
+/* Runtime workspace presentation guardrails.
+   Presentation-only: no policy, approval, evidence, billing or persistence semantics are changed. */
+
+.workspace-control-page[data-shell="app"] {
+  --runtime-bg: #f6f8fb;
+  --runtime-surface: #ffffff;
+  --runtime-surface-soft: #f8fafc;
+  --runtime-line: #dbe3eb;
+  --runtime-line-soft: #e8edf2;
+  --runtime-text: #172033;
+  --runtime-muted: #667085;
+  --runtime-subtle: #7a8798;
+  --runtime-accent: #2563eb;
+  --runtime-good: #138a63;
+  --runtime-warn: #a15c00;
+  --runtime-bad: #b42318;
+  background: var(--runtime-bg) !important;
+  color: var(--runtime-text) !important;
+}
+
+.workspace-control-page[data-shell="app"] .site-header,
+.workspace-control-page[data-shell="app"] .site-header-v10,
+.workspace-control-page[data-shell="app"] .app-header-v10 {
+  background: var(--runtime-surface) !important;
+  border-color: var(--runtime-line) !important;
+}
+
+.workspace-control-page[data-shell="app"] .brand,
+.workspace-control-page[data-shell="app"] .brand-v10,
+.workspace-control-page[data-shell="app"] .primary-navigation > a,
+.workspace-control-page[data-shell="app"] .page-heading,
+.workspace-control-page[data-shell="app"] .page-heading h1,
+.workspace-control-page[data-shell="app"] .app-page-heading,
+.workspace-control-page[data-shell="app"] .app-page-heading h1 {
+  color: var(--runtime-text) !important;
+}
+
+.workspace-control-page[data-shell="app"] .brand-v10 small,
+.workspace-control-page[data-shell="app"] .page-heading p,
+.workspace-control-page[data-shell="app"] .app-page-heading p,
+.workspace-control-page[data-shell="app"] .muted,
+.workspace-control-page[data-shell="app"] .small-copy {
+  color: var(--runtime-muted) !important;
+}
+
+.workspace-control-page[data-shell="app"] .primary-navigation > a:hover,
+.workspace-control-page[data-shell="app"] .primary-navigation > a:focus-visible,
+.workspace-control-page[data-shell="app"] .primary-navigation > a[aria-current="page"],
+.workspace-control-page[data-shell="app"] .primary-navigation > a[aria-current="location"] {
+  background: #eef4ff !important;
+  color: #1746a2 !important;
+}
+
+.workspace-control-page[data-shell="app"] .panel,
+.workspace-control-page[data-shell="app"] .guided-project-context,
+.workspace-control-page[data-shell="app"] .human-next-card,
+.workspace-control-page[data-shell="app"] .guided-progress-v10,
+.workspace-control-page[data-shell="app"] .guided-result,
+.workspace-control-page[data-shell="app"] .guided-explainer,
+.workspace-control-page[data-shell="app"] .plain-activity,
+.workspace-control-page[data-shell="app"] .v10-control-choices > article,
+.workspace-control-page[data-shell="app"] .owner-assessment-cases,
+.workspace-control-page[data-shell="app"] .control-overview article,
+.workspace-control-page[data-shell="app"] .project-rail,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap,
+.workspace-control-page[data-shell="app"] .project-command-header,
+.workspace-control-page[data-shell="app"] .runtime-grid > .panel {
+  background: var(--runtime-surface) !important;
+  background-image: none !important;
+  border-color: var(--runtime-line) !important;
+  color: var(--runtime-text) !important;
+  box-shadow: none !important;
+}
+
+.workspace-control-page[data-shell="app"] .project-button,
+.workspace-control-page[data-shell="app"] .entitlement-card,
+.workspace-control-page[data-shell="app"] .plain-plan-card,
+.workspace-control-page[data-shell="app"] .key-row,
+.workspace-control-page[data-shell="app"] .data-table-row,
+.workspace-control-page[data-shell="app"] .data-table-head,
+.workspace-control-page[data-shell="app"] .history-row,
+.workspace-control-page[data-shell="app"] .remediation-row,
+.workspace-control-page[data-shell="app"] .journey-steps a {
+  background: var(--runtime-surface) !important;
+  border-color: var(--runtime-line-soft) !important;
+  color: var(--runtime-text) !important;
+}
+
+.workspace-control-page[data-shell="app"] .project-button.active,
+.workspace-control-page[data-shell="app"] .control-tabs a:hover,
+.workspace-control-page[data-shell="app"] .control-tabs a:focus-visible {
+  background: #eef4ff !important;
+  border-color: #bfd2ff !important;
+  color: #1746a2 !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap,
+.workspace-control-page[data-shell="app"] .control-plane-main,
+.workspace-control-page[data-shell="app"] .control-plane-layout {
+  background: transparent !important;
+  color: var(--runtime-text) !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap h2,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap h3,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap h4,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap strong,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap label,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap span,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap p {
+  text-shadow: none !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap .muted,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap small,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap .small-copy {
+  color: var(--runtime-muted) !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap input,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap select,
+.workspace-control-page[data-shell="app"] .technical-controls-wrap textarea {
+  background: var(--runtime-surface) !important;
+  border-color: #cfd8e3 !important;
+  color: var(--runtime-text) !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap .button.primary {
+  background: var(--runtime-accent) !important;
+  border-color: var(--runtime-accent) !important;
+  color: #ffffff !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap .button.ghost,
+.workspace-control-page[data-shell="app"] .runtime-guided-back {
+  background: var(--runtime-surface) !important;
+  border-color: #cfd8e3 !important;
+  color: #344054 !important;
+}
+
+.workspace-control-page[data-shell="app"] .technical-controls-wrap pre {
+  background: #111827 !important;
+  border-color: #27364b !important;
+  color: #f8fafc !important;
+}
+
+.workspace-control-page[data-shell="app"] .control-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(246, 248, 251, .96) !important;
+  border-color: var(--runtime-line) !important;
+  backdrop-filter: blur(10px);
+}
+
+.workspace-control-page[data-shell="app"] .control-tabs a {
+  color: #475467 !important;
+}
+
+.workspace-control-page[data-shell="app"] .project-command-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start !important;
+  gap: 16px !important;
+}
+
+.workspace-control-page[data-shell="app"] .runtime-guided-back {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 4px;
+}
+
+/* The specialist view is a distinct workspace. Do not stack the customer journey above it. */
+.workspace-control-page.runtime-specialist-active .customer-control-home {
+  display: none !important;
+}
+
+.workspace-control-page.runtime-specialist-active .control-plane-layout {
+  align-items: start !important;
+}
+
+.workspace-control-page.runtime-specialist-active #decisionEvidence {
+  scroll-margin-top: 72px;
+  outline: 2px solid transparent;
+}
+
+.workspace-control-page[data-shell="app"] .decision-chip.deny,
+.workspace-control-page[data-shell="app"] .plain-decision.deny,
+.workspace-control-page[data-shell="app"] .plain-decision.blocked {
+  color: var(--runtime-bad) !important;
+}
+
+.workspace-control-page[data-shell="app"] .decision-chip.allow,
+.workspace-control-page[data-shell="app"] .plain-decision.allow {
+  color: var(--runtime-good) !important;
+}
+
+@media (max-width: 900px) {
+  .workspace-control-page[data-shell="app"] .project-command-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .workspace-control-page[data-shell="app"] .control-tabs {
+    top: 58px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
