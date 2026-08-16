@@ -12,6 +12,19 @@ test('bound remediation retest helper preserves server binding semantics', () =>
   assert.doesNotMatch(helper, /MutationObserver/);
 });
 
+test('retest command is generated only from exact criteria captured from the form', () => {
+  assert.match(helper, /exactCriteriaCaptured:\s*true/);
+  assert.match(helper, /record\.exactCriteriaCaptured === true/);
+  assert.doesNotMatch(helper, /fallbackDetails/);
+  assert.doesNotMatch(helper, /title\.includes\(['"]shell['"]\)/);
+});
+
+test('missing historical criteria are reset instead of guessed', () => {
+  assert.match(helper, /Reset retest criteria/);
+  assert.match(helper, /status:\s*'evidence_attached'/);
+  assert.match(helper, /AgentRiskLayer will not guess those security criteria/);
+});
+
 test('existing ready-for-retest state is recovered after deploy or refresh', () => {
   assert.match(helper, /recoverExistingRetest/);
   assert.match(helper, /arl_selected_project/);
@@ -20,7 +33,7 @@ test('existing ready-for-retest state is recovered after deploy or refresh', () 
 });
 
 test('bound retest helper loads before the runtime application module', () => {
-  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.2');
+  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.3');
   const appIndex = html.indexOf('/control-plane.js?v=20260814.6');
   assert.ok(helperIndex >= 0, 'bound retest helper must be loaded');
   assert.ok(appIndex >= 0, 'runtime app must be loaded');
