@@ -44,6 +44,12 @@ export async function deleteAgentScope({ projectId, userId, assessmentId, confir
       throw failure('The selected project does not match this agent. Reload the workspace before deleting anything.', 409, 'scope_mismatch');
     }
 
+    const sameNameProjects = Number((await db.prepare(`SELECT COUNT(*) count FROM security_projects
+      WHERE workspace_id=? AND lower(trim(name))=lower(trim(?))`).get(project.workspace_id, assessment.name))?.count || 0);
+    if (sameNameProjects !== 1) {
+      throw failure('More than one project matches this agent name. Deletion is blocked until the exact project scope is unambiguous.', 409, 'ambiguous_project_scope');
+    }
+
     const activeMembers = Number((await db.prepare(`SELECT COUNT(*) count FROM workspace_members
       WHERE workspace_id=? AND status='active'`).get(project.workspace_id))?.count || 0);
     if (activeMembers > 1) {
