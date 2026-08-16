@@ -44,3 +44,31 @@ test('an object with agent structure and a model is classified as an agent', () 
   const result = discoverAiAssets({ name: 'support-agent', model: 'gpt-5', tools: [{ kind: 'tool', name: 'crm.read' }] });
   assert.equal(result.assets.find((asset) => asset.name === 'support-agent')?.kind, 'agent');
 });
+
+test('manifest wrapper objects are not invented as AI assets from descendant provider text', () => {
+  const result = discoverAiAssets({
+    agent: {
+      kind: 'agent',
+      name: 'support-agent',
+      model: {
+        kind: 'model',
+        name: 'gpt-4.1',
+        provider: 'openai',
+        internetExposed: false,
+        privileged: false,
+      },
+      environment: 'staging',
+      internetExposed: false,
+      privileged: false,
+      tools: [
+        { kind: 'tool', name: 'crm.read', internetExposed: false, privileged: false },
+        { kind: 'tool', name: 'tickets.search', internetExposed: false, privileged: false },
+      ],
+    },
+  });
+  assert.deepEqual(result.assets.map((asset) => asset.name).sort(), ['crm.read', 'gpt-4.1', 'support-agent', 'tickets.search']);
+  assert.equal(result.summary.total, 4);
+  assert.equal(result.summary.privilegeUnknown, 0);
+  assert.equal(result.summary.internetExposureUnknown, 0);
+  assert.equal(result.summary.evidenceComplete, true);
+});

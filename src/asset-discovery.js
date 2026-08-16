@@ -24,7 +24,8 @@ function walk(value, path, assets, inheritedEnvironment) {
     const text = JSON.stringify(value).toLowerCase();
     const provider = detectProvider(text);
     const kind = detectKind(value, text);
-    if (provider || kind) {
+    const hasDirectIdentity = ['name', 'id', 'model', 'type', 'kind', 'provider'].some((key) => Object.prototype.hasOwnProperty.call(value, key));
+    if (kind || (provider && hasDirectIdentity)) {
         const name = String(value.name || value.id || value.model || value.type || `${kind || 'ai-asset'}-${assets.size + 1}`).slice(0, 160);
         const canonical = `${kind || 'agent'}:${provider || 'other'}:${name}:${path}`;
         const id = `asset_${crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 20)}`;
