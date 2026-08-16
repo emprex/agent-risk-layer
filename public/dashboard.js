@@ -1,5 +1,6 @@
 import { api, escapeHtml, money, riskClass, setBusy, showError } from './shared.js';
 import { assessmentProjects, matchingAssessmentProject } from './assessment-remediation.js';
+import { dashboardEvidencePresentation } from './dashboard-evidence-state.js';
 
 const root = document.querySelector('#dashboardRoot');
 let dashboardData;
@@ -120,7 +121,7 @@ function agentCommandHtml(group, latest, project, posture, next, groups) {
     <div class="workspace-status-grid">
       <div class="workspace-status-card" id="deploymentEvidenceState" data-state="unresolved"><small>Deployment evidence</small><strong>${project ? 'Loading recorded decision…' : 'No linked decision'}</strong><p>${project ? 'Reading the server-recorded decision for this exact project.' : 'This assessment is not yet linked to a matching evidence project. No deployment state is inferred.'}</p></div>
       <div class="workspace-status-card" data-state="${escapeHtml(posture.state)}"><small>Latest assessment</small><strong>${escapeHtml(posture.title)}</strong><p>${escapeHtml(posture.detail)}</p></div>
-      <div class="workspace-next-action"><small>Next action</small><strong>${escapeHtml(next.title)}</strong><p>${escapeHtml(next.detail)}</p><a class="button primary small" href="${next.href}">${escapeHtml(next.label)}</a></div>
+      <div class="workspace-next-action" id="dashboardNextAction"><small>Next action</small><strong>${escapeHtml(next.title)}</strong><p>${escapeHtml(next.detail)}</p><a class="button primary small" href="${next.href}">${escapeHtml(next.label)}</a></div>
     </div>
     <nav class="workspace-local-nav" data-local-navigation aria-label="${escapeHtml(group.name)} workspace"><a href="/dashboard.html?assessment=${encodeURIComponent(latest.id)}" aria-current="page">Summary</a><a href="${findingsHref}">Findings</a><a href="${deploymentHref}">${project ? 'Controls' : 'Assessment'}</a><a href="${evidenceHref}">Evidence</a><a href="${runtimeHref}">Runtime</a><a href="#agentHistory">History</a></nav>
   </section>`;
@@ -176,20 +177,68 @@ function settingsHtml(data) {
   </div></details>`;
 }
 
+function updateDashboardNextAction(action) {
+  if (!action) return;
+  const next = document.querySelector('#dashboardNextAction');
+  if (!next) return;
+  next.querySelector('strong').textContent = action.title;
+  next.querySelector('p').textContent = action.detail;
+  const link = next.querySelector('a');
+  if (link) {
+    link.textContent = action.label;
+    link.href = action.href;
+  }
+}
+
+function updateRuntimeEvidenceSignal(message) {
+  if (!message) return;
+  const signals = document.querySelector('#agentEvidenceSignals');
+  if (!signals) return;
+  let signal = document.querySelector('#runtimeEvidenceSignal');
+  if (!signal) {
+    signal = document.createElement('div');
+    signal.className = 'workspace-signal';
+    signal.id = 'runtimeEvidenceSignal';
+    const label = document.createElement('small');
+    label.textContent = 'Runtime evidence';
+    const value = document.createElement('strong');
+    signal.append(label, value);
+    signals.append(signal);
+  }
+  signal.querySelector('strong').textContent = message;
+}
+
 async function hydrateDeploymentEvidence(data, group) {
   const assessment = group?.assessments?.[0];
   const project = matchingProject(data, assessment);
   const card = document.querySelector('#deploymentEvidenceState');
   if (!project || !card) return;
   try {
-    const payload = await api(`/api/projects/${encodeURIComponent(project.id)}/control-intelligence?limit=1`);
+    const [controlIntelligenceResult, projectResult] = await Promise.allSettled([
+      api(`/api/projects/${encodeURIComponent(project.id)}/control-intelligence?limit=1`),
+      api(`/api/projects/${encodeURIComponent(project.id)}`),
+    ]);
     if (group !== selectedGroup) return;
+    if (controlIntelligenceResult.status !== 'fulfilled') throw controlIntelligenceResult.reason;
+    const payload = controlIntelligenceResult.value;
+    const exactProject = projectResult.status === 'fulfilled' ? projectResult.value?.project : null;
     const deployment = payload.deploymentState || null;
     const summary = payload.summary || {};
+    const presentation = dashboardEvidencePresentation({
+      journey: exactProject?.journey || null,
+      hasDeploymentDecision: Boolean(deployment?.decision),
+      projectId: project.id,
+    });
     if (!deployment?.decision) {
-      card.dataset.state = 'unresolved';
-      card.querySelector('strong').textContent = 'No decision recorded';
-      card.querySelector('p').textContent = 'The project exists, but no current server-recorded deployment decision is available. No HOLD or PROCEED state is inferred.';
+      if (presentation.deployment) {
+        card.dataset.state = presentation.deployment.state;
+        card.querySelector('strong').textContent = presentation.deployment.title;
+        card.querySelector('p').textContent = presentation.deployment.detail;
+      } else {
+        card.dataset.state = 'unresolved';
+        card.querySelector('strong').textContent = 'No decision recorded';
+        card.querySelector('p').textContent = 'The project exists, but no current server-recorded deployment decision is available. No HOLD or PROCEED state is inferred.';
+      }
     } else {
       const decision = String(deployment.decision).replaceAll('_', ' ');
       const normalised = normalise(deployment.decision).replaceAll('_', ' ');
@@ -197,6 +246,8 @@ async function hydrateDeploymentEvidence(data, group) {
       card.querySelector('strong').textContent = decision;
       card.querySelector('p').textContent = deployment.rationale || 'Server-recorded deployment decision.';
     }
+    updateDashboardNextAction(presentation.nextAction);
+    updateRuntimeEvidenceSignal(presentation.runtimeEvidence);
     const signals = document.querySelector('#agentEvidenceSignals');
     if (signals) {
       const blockers = summary.deploymentBlockers;
