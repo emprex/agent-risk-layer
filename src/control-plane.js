@@ -910,16 +910,21 @@ function projectJourney(project) {
   const policyPublishedMs = Date.parse(project.policyPublishedAt || '');
   const eventMatchesCurrentPolicy = (event) => {
     const eventMs = Date.parse(event.created_at || '');
-    return event.project_id === project.id
-      && event.policy_version === currentPolicyVersion
+    const eventPolicyPublishedMs = Date.parse(event.policy_published_at || '');
+    return String(event.project_id || '') === String(project.id || '')
+      && String(event.policy_version || '') === currentPolicyVersion
       && safeEqualDigest(event.policy_digest, currentPolicyDigest)
       && Number.isFinite(policyPublishedMs)
+      && Number.isFinite(eventPolicyPublishedMs)
+      && eventPolicyPublishedMs === policyPublishedMs
       && Number.isFinite(eventMs)
-      && eventMs >= policyPublishedMs
-      && event.policy_published_at === project.policyPublishedAt;
+      && eventMs >= policyPublishedMs;
   };
-  const hasAllowed = events.some((event) => eventMatchesCurrentPolicy(event) && event.decision === 'allow' && event.observed_decision === 'allow');
-  const hasBlocked = events.some((event) => eventMatchesCurrentPolicy(event) && event.decision === 'deny');
+  const hasAllowed = events.some((event) => eventMatchesCurrentPolicy(event)
+    && String(event.decision || '').toLowerCase() === 'allow'
+    && String(event.observed_decision || '').toLowerCase() === 'allow');
+  const hasBlocked = events.some((event) => eventMatchesCurrentPolicy(event)
+    && String(event.decision || '').toLowerCase() === 'deny');
   const hasOpenRemediation = (project.remediations || []).some((item) =>
     item.compatibilityState === 'evidence_upgrade_required'
     || !['verified_closed', 'accepted_risk'].includes(normaliseRemediationStatus(item.status)));
