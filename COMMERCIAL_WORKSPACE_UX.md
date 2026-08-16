@@ -66,7 +66,7 @@ The dashboard groups immutable assessment history under the agent rather than re
 
 The decision/evidence state and next action are visually dominant. The declared score is supporting context. The dashboard does not infer HOLD, PROCEED or DO NOT DEPLOY when no Control Intelligence deployment decision exists.
 
-The dashboard also reads the existing server-owned runtime evidence journey for the exact authorised project. When that journey reports `ready-for-deployment-review` and no Control Intelligence deployment decision exists, the dashboard may show **Ready for human review** and make the human deployment decision the next action. This readiness state is not a deployment decision and must never be rendered as PROCEED, HOLD or DO NOT DEPLOY. A server-recorded deployment decision always takes precedence. Runtime evidence copy is derived from current-policy journey steps rather than from the historical assessment score.
+The dashboard reads both the server-owned runtime evidence journey and Control Intelligence for the exact authorised project. Runtime completion by itself is not deployment-review readiness. **Ready for human review** is shown only when an immutable current system snapshot exists, Control Intelligence has no remaining required control stage, the current-policy runtime journey is complete, and no deployment decision has yet been recorded. If the system snapshot is missing, the dashboard directs the user to create the evidence foundation. If Control Intelligence still has a next required control stage, that stage takes precedence over the historical assessment score. A server-recorded deployment decision always takes precedence over readiness copy. Runtime evidence remains a separate provenance signal rather than being treated as inspection, red-team evidence or a deployment decision.
 
 ### Assessment
 
@@ -89,6 +89,8 @@ The assessment result is not silently re-labelled as the Control Intelligence de
 ### Deployment evidence / Control Intelligence
 
 The customer-facing entry is "Deployment evidence" while retaining Control Intelligence as the technical capability. The page starts with the customer question **Can this agent deploy?** The Summary view uses the current server-recorded deployment decision, rationale, blockers and next action. When no decision exists, the UI says that no deployment decision is recorded and does not style or default the state as HOLD.
+
+A Control Intelligence deployment decision requires a current immutable system snapshot. Runtime onboarding completion does not substitute for that snapshot, applicability review, control evidence, exact retests or required approvals. The dashboard therefore must not turn runtime journey completion into a deployment-readiness claim when the Control Intelligence foundation or required stages remain incomplete.
 
 The control-profile/legal trust statement remains present but is behind explicit scope/trust disclosure so it does not dominate the operational first viewport. Snapshot digests, capability profile data and aggregate metrics remain available as technical provenance.
 
@@ -128,7 +130,7 @@ This refactor must not change or bypass:
 - deployment decision derivation;
 - PostgreSQL, billing, Stripe, email or canonical customer data.
 
-Declared is not observed. Missing information is not a vulnerability. An inconclusive test is not a failed test. Implementation evidence is not a verified retest. Client-side navigation state is not authorisation.
+Declared is not observed. Missing information is not a vulnerability. An inconclusive test is not a failed test. Implementation evidence is not a verified retest. Client-side navigation state is not authorisation. Runtime journey completion is not a substitute for a Control Intelligence system snapshot or completed control review.
 
 ## Rollback boundary
 
