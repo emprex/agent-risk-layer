@@ -130,6 +130,15 @@ export async function getSecurityProject({ projectId, userId }) {
 }
 
 export async function updateSecurityProject({ projectId, userId, patch = {} }) {
+  if (patch.deleteAgent === true) {
+    const { deleteAgentScope } = await import('./agent-deletion.js');
+    return deleteAgentScope({
+      projectId,
+      userId,
+      assessmentId: patch.assessmentId,
+      confirmation: patch.confirmation,
+    });
+  }
   const access = await requireProjectRole(projectId, userId, MANAGE_ROLES);
   const current = access.project;
   const name = patch.name == null ? current.name : clean(patch.name, 100);
