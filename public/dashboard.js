@@ -226,6 +226,7 @@ async function hydrateDeploymentEvidence(data, group) {
     const summary = payload.summary || {};
     const presentation = dashboardEvidencePresentation({
       journey: exactProject?.journey || null,
+      controlIntelligence: payload,
       hasDeploymentDecision: Boolean(deployment?.decision),
       projectId: project.id,
     });
@@ -249,7 +250,7 @@ async function hydrateDeploymentEvidence(data, group) {
     updateDashboardNextAction(presentation.nextAction);
     updateRuntimeEvidenceSignal(presentation.runtimeEvidence);
     const signals = document.querySelector('#agentEvidenceSignals');
-    if (signals) {
+    if (signals && presentation.showControlSummary) {
       const blockers = summary.deploymentBlockers;
       const missing = summary.controlsMissingEvidence;
       const findings = summary.findingsAwaitingRemediation;
