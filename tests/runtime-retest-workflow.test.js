@@ -25,6 +25,19 @@ test('missing historical criteria are reset instead of guessed', () => {
   assert.match(helper, /AgentRiskLayer will not guess those security criteria/);
 });
 
+test('reset uses the shared CSRF-aware API helper', () => {
+  assert.match(helper, /await import\(['"]\.\/shared\.js['"]\)/);
+  assert.match(helper, /const \{ api \}/);
+  assert.doesNotMatch(helper, /window\.alert/);
+});
+
+test('guidance rendering is idempotent so action buttons do not wobble', () => {
+  assert.match(helper, /guidanceSignature/);
+  assert.match(helper, /panel\.dataset\.renderSignature === signature/);
+  assert.match(helper, /panel\.dataset\.busy === 'true'/);
+  assert.match(helper, /style\.minWidth/);
+});
+
 test('existing ready-for-retest state is recovered after deploy or refresh', () => {
   assert.match(helper, /recoverExistingRetest/);
   assert.match(helper, /arl_selected_project/);
@@ -33,7 +46,7 @@ test('existing ready-for-retest state is recovered after deploy or refresh', () 
 });
 
 test('bound retest helper loads before the runtime application module', () => {
-  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.3');
+  const helperIndex = html.indexOf('/runtime-retest-workflow.js?v=20260816.4');
   const appIndex = html.indexOf('/control-plane.js?v=20260814.6');
   assert.ok(helperIndex >= 0, 'bound retest helper must be loaded');
   assert.ok(appIndex >= 0, 'runtime app must be loaded');
