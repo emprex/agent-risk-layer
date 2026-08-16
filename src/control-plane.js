@@ -943,13 +943,14 @@ function projectJourney(project) {
   const hasActiveKey = (project.apiKeys || []).some((key) => key.status === 'active' && key.usable === true);
   const latestInventory = (project.inventory || [])[0] || null;
   const riskyInventoryDrift = latestInventory?.drift?.deploymentGate === 'review-required';
+  const inventoryEvidenceIncomplete = Boolean(latestInventory) && latestInventory.summary?.evidenceComplete !== true;
   const steps = [
     { id: 'project', label: 'Create project', complete: true, href: '#project' },
     { id: 'policy', label: 'Publish policy', complete: hasPublishedPolicy, href: '#policy' },
     { id: 'key', label: 'Issue key', complete: hasActiveKey, href: '#runtime' },
     { id: 'allowed', label: 'Test allowed action', complete: hasAllowed, href: '#runtime' },
     { id: 'blocked', label: 'Test blocked action', complete: hasBlocked, href: '#runtime' },
-    { id: 'inventory', label: 'Record inventory', complete: Boolean(latestInventory) && !riskyInventoryDrift, href: '#inventory' },
+    { id: 'inventory', label: 'Record inventory', complete: Boolean(latestInventory) && !riskyInventoryDrift && !inventoryEvidenceIncomplete, href: '#inventory' },
     { id: 'findings', label: 'Review findings', complete: hasBlocked || hasOpenRemediation, href: '#remediation' },
     { id: 'remediate', label: 'Remediate', complete: hasRemediationEvidence, href: '#remediation' },
     { id: 'retest', label: 'Retest', complete: hasRetest, href: '#remediation' },
@@ -961,6 +962,7 @@ function projectJourney(project) {
   if (!hasAllowed) blockingGaps.push('No allowed-action control test is recorded.');
   if (!hasBlocked) blockingGaps.push('No enforced blocked-action test is recorded.');
   if (!latestInventory) blockingGaps.push('No inventory evidence is recorded.');
+  if (inventoryEvidenceIncomplete) blockingGaps.push('Privilege or internet-exposure evidence is incomplete.');
   if (riskyInventoryDrift) blockingGaps.push('The latest inventory contains risky drift requiring review.');
   if (hasOpenRemediation) blockingGaps.push('Remediation work remains open.');
   if (hasBlocked && !hasRemediationEvidence) blockingGaps.push('No verified AgentRiskLayer artifact evidence is recorded.');
