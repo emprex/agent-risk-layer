@@ -20,8 +20,7 @@ export function applySecurityHeaders(res) {
 /**
  * Render and most reverse proxies append the address they observed to the end
  * of X-Forwarded-For. Client supplied values can appear on the left, so the
- * right-most valid address is used. This prevents the spoofing flaw caused by
- * trusting the first value.
+ * right-most trusted-hop address is used instead of trusting the first value.
  */
 export function resolveClientIp(req) {
     const forwarded = String(req.headers['x-forwarded-for'] || '')
@@ -85,9 +84,9 @@ export async function rateLimitAllowed(req, { windowMs = 60000, max = 180, bucke
             return allowed;
         });
     }
-    catch (error) {
-        // Authentication and write buckets fail closed. The broad read bucket can
-        // fail open so a transient database issue does not take down the whole site.
+    catch {
+        // Authentication and write buckets fail closed. Only callers that
+        // explicitly use the legacy `global` read bucket are allowed to fail open.
         return bucket === 'global';
     }
 }
@@ -136,9 +135,13 @@ export function verifyCsrf(req) {
         return false;
     const suppliedOrigin = normaliseOrigin(req.headers.origin);
     if (suppliedOrigin) {
+        const configuredOrigin = normaliseOrigin(config.baseUrl);
+        // In production the canonical configured origin is authoritative. Do not
+        // turn an attacker-controlled Host/X-Forwarded-Proto pair into an allowed
+        // CSRF origin. Request-derived origins remain useful only for local/test use.
         const allowedOrigins = new Set([
-            normaliseOrigin(config.baseUrl),
-            requestOrigin(req),
+            configuredOrigin,
+            ...(config.nodeEnv === 'production' ? [] : [requestOrigin(req)]),
         ].filter(Boolean));
         if (!allowedOrigins.has(suppliedOrigin))
             return false;
