@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm test 2>&1 | tee unit-test.log
+          timeout 120s npm test 2>&1 | tee unit-test.log
 
       - name: Upload unit-test log on failure
         if: failure() && steps.unit-tests.outcome == 'failure'
