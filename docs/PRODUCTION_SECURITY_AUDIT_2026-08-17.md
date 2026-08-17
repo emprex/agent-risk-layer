@@ -6,14 +6,8 @@
 - Baseline: `b239b95386f4474a76b0d830d3b1aaab6fe4c4cb`
 - Audit branch: `audit/production-hardening-20260817`
 - Product version declared in code: `10.1.1`
-- Control profile in customer-facing evidence UI: `ARL-RKA-1.2.0`
+- Control profile: `ARL-RKA-1.2.0`
 - Assessment type: proprietary code/security review and remediation. This is not an accredited certification and is not a guarantee that the system is risk-free.
-
-## Scope reviewed
-
-The review prioritised production trust boundaries and customer-critical paths: configuration/readiness, HTTP security and CSRF, authentication/session/MFA/reset/verification flows, roles and tenant/workspace membership, SCIM, outbound integrations, email delivery, Control Intelligence scope suggestions, model provenance and model artifact analysis. Existing billing, Stripe webhook, runtime-policy, approval, red-team, retention, deletion, database adapter and server-route code was inspected for interaction with these changes.
-
-The review was performed against repository source obtained from GitHub. The normal Debian checkout and production database were not available in this execution environment, so full repository tests, PostgreSQL integration tests and live production verification remain required before a deployment claim.
 
 ## Evidence principles preserved
 
@@ -21,76 +15,48 @@ The review was performed against repository source obtained from GitHub. The nor
 - Architecture matching is decision support, not a finding and not confirmed applicability.
 - Unknown or inconclusive information is not converted into a vulnerability.
 - Historical assessment evidence is not rewritten by later runtime evidence.
-- High-impact approval semantics remain bound to the exact action/context implemented by the existing Control Plane.
+- High-impact approvals remain bound to the exact action/context.
 
-## Corrected high-confidence defects
+## Corrected defects
 
-### Control-scope suggestion confidence
+The branch corrects the previously documented Control Intelligence suggestion-confidence issue, production CSRF origin trust, authentication single-use/MFA races, workspace/SCIM owner and identity integrity, model provenance validation and SafeTensors range validation.
 
-**Observed:** the previous server suggestion profile could mark a control `suggested` after a single broad metadata match. A later UI layer attempted to repair this by parsing rendered fact text, creating duplicated semantics and a regex-classification error risk.
+It also closes the three findings that were still listed as open in the earlier audit text:
 
-**Remediation:** `ARL-SUGGEST-1.1.0` now calculates conservative confidence server-side. A prepared applicability suggestion requires at least two triggering snapshot facts and at least one risk-bearing fact. The UI consumes the server classification and does not derive confidence independently. All applicability choices still require explicit confirmation.
+### Assessment ownership claim race — closed
 
-**Retest evidence added:** `tests/control-suggestions.test.js`, `tests/control-intelligence-scope-review-v2.test.js`.
+`claimAssessmentForUser` now performs one conditional database `UPDATE`. Ownership changes only when the assessment ID and access token match and the row is still unclaimed or already belongs to the same user. The previous read-then-write claim window is removed.
 
-### Production CSRF origin trust
+### Red-team quota reservation race — closed
 
-**Observed:** production origin verification included a request-derived Host origin alongside the configured canonical origin.
+Red-team token creation now runs in a database transaction, serializes per-account requests on PostgreSQL, counts completed runs plus active unused token reservations, and inserts the reservation before releasing the transaction. Expired unused tokens release their reservation. `tests/redteam-quota-concurrency.test.js` covers concurrent issuance and expiry release.
 
-**Remediation:** production accepts the canonical configured `BASE_URL` origin only. Request-derived origin allowance is limited to non-production environments. Existing double-submit token and SameSite controls are preserved.
+### Generic webhook SSRF boundary — closed for public webhook destinations
 
-**Retest evidence added:** `tests/csrf-origin.test.js`.
+Outbound integrations now require credential-free HTTPS public Internet destinations. DNS is resolved before connection; any private/reserved answer causes rejection; the chosen public address is pinned into the HTTPS request, preventing a second DNS lookup from rebinding the destination. Redirect following is not used and delivery is timeout-bounded. `tests/outbound-http.test.js` covers local/private addresses, mixed public/private DNS answers and public address pinning.
 
-### Authentication single-use token and MFA races
+Private enterprise webhook destinations remain intentionally unsupported by this policy. Supporting them later requires an explicit customer-controlled egress/allowlist design rather than weakening the public-destination boundary.
 
-**Observed:** reset, email verification, MFA challenge and recovery-code flows contained read-then-write windows that could permit concurrent consumers to race.
+## Verification completed
 
-**Remediation:** database transactions/row locks or compare-and-swap updates now protect reset-token consumption, email verification consumption, MFA login attempts/completion, recovery-code consumption, password changes and MFA enable/disable transitions.
+GitHub Actions CI run #35 for branch commit `4218bd018ac0406ae8a82c1b7d8d3390d6fe6e8d` completed successfully. Syntax checks, the complete unit/integration test stage, scenario regression and detection regression all passed. A focused repair run also passed 41/41 targeted tests before the complete CI run.
 
-**Retest evidence added:** `tests/auth-concurrency.test.js` for concurrent reset and verification consumption. Full PostgreSQL concurrency testing remains required.
+At final review, `main` remained at baseline `b239b95386f4474a76b0d830d3b1aaab6fe4c4cb`, PR #71 was mergeable and there were no unresolved review threads.
 
-### Workspace/SCIM owner integrity and identity conflicts
+## Remaining deployment-verification obligations
 
-**Observed:** SCIM could demote the last active owner, and simultaneous owner changes could race. SCIM external ID and email resolution could also ambiguously match different members.
+These are not unresolved source findings and do not block merge, but they must be verified against the exact merged/deployed commit before any production-readiness claim:
 
-**Remediation:** membership mutations serialize on the workspace row; last-owner checks run under that lock; external ID/email conflicts are rejected; SCIM email validation is shared with normal membership validation.
+1. Render deploys the exact merged `main` commit and `/api/health` and `/api/ready` are healthy with the expected PostgreSQL schema.
+2. Customer journey is verified end to end: account creation → sign-in → assessment → findings/report → payment → Stripe webhook → email → dashboard → remediation → retest → subscription management.
+3. Stripe live processing is confirmed without changing existing live prices or payment configuration.
+4. Transactional email delivery is confirmed with the existing provider/configuration.
+5. PostgreSQL backup and restoration evidence is confirmed.
+6. Critical public/authenticated pages and responsive behaviour are checked in production.
+7. Runtime completion remains distinct from a deployment decision; deployment evidence and human review remain required.
 
-**Retest evidence added:** `tests/workspaces.test.js`.
+## Branch decision
 
-### Outbound integration and transactional-email availability
+**Ready to merge for deployment verification.**
 
-**Observed:** outbound integration delivery and Resend email delivery did not have bounded request timeouts. Integration URLs also accepted embedded credentials.
-
-**Remediation:** ten-second abort timeouts and redirect blocking were added. Integration endpoints reject embedded credentials.
-
-**Limitation:** generic integration destinations remain an SSRF trust boundary. A complete DNS/IP destination policy must be designed around actual enterprise integration requirements rather than assuming that all private destinations are invalid.
-
-### Model provenance validation
-
-**Observed:** model source validation relied on a string prefix and model manifest evidence hashing depended on object key order.
-
-**Remediation:** source URLs must parse as credential-free HTTPS URLs with a hostname; manifest evidence uses canonical sorted JSON before hashing.
-
-**Retest evidence added:** `tests/model-security.test.js`.
-
-### SafeTensors range validation
-
-**Observed:** SafeTensors offsets were syntax-checked but not fully bounded to the artifact data section and overlapping tensor ranges were not rejected.
-
-**Remediation:** descriptor type, safe integer offsets, payload bounds and overlap checks are enforced.
-
-**Retest evidence added:** `tests/model-artifact-analysis.test.js`.
-
-## Open findings / limitations requiring further work
-
-These items are not claimed fixed by this branch:
-
-1. `server.js` assessment-claim flow has a concurrent claim window between reading an unclaimed assessment and updating ownership. The fix should be an atomic conditional claim/transaction, but `server.js` is intentionally not rewritten wholesale without executable regression coverage.
-2. Red-team entitlement/upload-token issuance requires atomic quota reservation to prevent concurrent token issuance from exceeding plan limits. This needs a quota-reservation design tied to token expiry/consumption rather than a cosmetic counter check.
-3. Generic webhook integrations remain an SSRF boundary. Current HTTPS/credential/redirect/timeout controls reduce risk but do not provide DNS-rebinding-safe destination enforcement.
-4. The repository has no GitHub Actions test status attached to this audit branch. The complete Node test suite and production PostgreSQL integration path must be executed from the normal checkout before merge/deploy.
-5. Production customer journeys, Render health/readiness, Stripe webhook processing, email delivery, backup/restore and responsive visual behaviour were not re-verified from this source-only execution environment.
-
-## Required pre-merge validation
-
-From the normal repository checkout, run the existing full test suite plus the newly added focused tests. Any failing test must be diagnosed before merge; do not weaken assertions merely to obtain a green run. After deployment, verify the normal-customer journey from account/sign-in through Northstar Control Intelligence, and confirm that no deployment decision is inferred from runtime completion.
+This is a source/CI decision only. It is not a certification, a guarantee of security or a claim that production verification has already completed.
