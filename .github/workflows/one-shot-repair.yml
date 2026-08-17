@@ -63,9 +63,9 @@ jobs:
           safe_inventory = "services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'] }]"
           safe_inventory_with_evidence = "services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'], public: false, privileged: false }]"
           replace('tests/control-plane.test.js', safe_inventory, safe_inventory_with_evidence, 3)
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: Run focused regressions
-        run: node --test tests/control-intelligence.test.js tests/control-plane.test.js tests/readiness-evidence.test.js tests/postgresql.test.js
+        run: NODE_ENV=test node --test tests/control-intelligence.test.js tests/control-plane.test.js tests/readiness-evidence.test.js tests/postgresql.test.js
       - run: git diff --check
       - name: Commit verified repairs and remove one-shot workflow
         run: |
