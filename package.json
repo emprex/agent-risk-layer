@@ -36,6 +36,6 @@
     "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs"
   },
   "dependencies": {
-    "pg": "8.22.0"
+    "pg": "8.23.0"
   }
 }
