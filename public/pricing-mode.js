@@ -12,9 +12,9 @@ export function resolvePricingMode(config = {}) {
   if (demoMode) {
     return {
       mode: 'demo',
-      allowCheckout: true,
+      allowCheckout: false,
       showDemoNotice: true,
-      message: 'Demo mode is active. Subscription checkout is simulated and can be cancelled from the dashboard.',
+      message: 'This non-production environment does not process live payments. Checkout is disabled here.',
     };
   }
   return {
