@@ -45,19 +45,21 @@ export async function upsertMember({ workspaceId, actorId, email, role = 'viewer
     const cleanEmail = normaliseMemberEmail(email);
     if (!ROLES.includes(role))
         throw new Error('Unknown workspace role.');
-    const existing = externalId
-        ? await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND external_id=?').get(workspaceId, externalId) : await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, cleanEmail);
-    const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
-    const timestamp = nowIso();
-    if (existing) {
-        await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
-        await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
-            .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
-    }
-    else {
-        await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
-    }
+    await db.transaction(async () => {
+        await lockWorkspace(workspaceId);
+        const existing = await resolveExistingMember(workspaceId, cleanEmail, externalId);
+        const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
+        const timestamp = nowIso();
+        if (existing) {
+            await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
+            await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
+                .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
+        }
+        else {
+            await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
+        }
+    });
     await insertEvent(active ? 'workspace_member_upserted' : 'workspace_member_deprovisioned', actorId, { workspaceId, email: cleanEmail, role });
     return await getWorkspace(workspaceId, actorId);
 }
@@ -138,18 +140,37 @@ async function upsertMemberSystem({ workspaceId, email, role, displayName, exter
     const cleanEmail = normaliseMemberEmail(email);
     if (!ROLES.includes(role))
         throw new Error('Unknown workspace role.');
-    const existing = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND (external_id=? OR email=?)').get(workspaceId, externalId || '', cleanEmail);
-    const timestamp = nowIso();
-    if (existing)
-        await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
-    const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
-    if (existing)
-        await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
-            .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
-    else
-        await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
-    return await db.prepare('SELECT id,user_id,email,display_name,role,status,external_id FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, cleanEmail);
+    return db.transaction(async () => {
+        await lockWorkspace(workspaceId);
+        const existing = await resolveExistingMember(workspaceId, cleanEmail, externalId);
+        const timestamp = nowIso();
+        if (existing)
+            await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
+        const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
+        if (existing)
+            await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
+                .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
+        else
+            await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
+        return await db.prepare('SELECT id,user_id,email,display_name,role,status,external_id FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, cleanEmail);
+    });
+}
+async function resolveExistingMember(workspaceId, email, externalId = '') {
+    const byEmail = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, email);
+    if (!externalId)
+        return byEmail || null;
+    const byExternalId = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND external_id=?').get(workspaceId, externalId);
+    if (byExternalId && byEmail && byExternalId.id !== byEmail.id)
+        throw new Error('SCIM identity conflict: external ID and email refer to different workspace members.');
+    return byExternalId || byEmail || null;
+}
+async function lockWorkspace(workspaceId) {
+    const lock = db.kind === 'postgres' ? ' FOR UPDATE' : '';
+    const row = await db.prepare(`SELECT id FROM workspaces WHERE id=?${lock}`).get(workspaceId);
+    if (!row)
+        throw forbidden('Workspace not found or access denied.');
+    return row;
 }
 async function membershipFor(workspaceId, userId) {
     return await db.prepare(`SELECT workspace_id workspaceId,user_id userId,role,status FROM workspace_members
