@@ -35,7 +35,8 @@ test('guidance rendering is idempotent so action buttons do not wobble', () => {
   assert.match(helper, /guidanceSignature/);
   assert.match(helper, /panel\.dataset\.renderSignature === signature/);
   assert.match(helper, /panel\.dataset\.busy === 'true'/);
-  assert.match(helper, /style\.minWidth/);
+  assert.match(helper, /retest-action-busy/);
+  assert.doesNotMatch(helper, /\.style\./);
 });
 
 test('existing ready-for-retest state is recovered after deploy or refresh', () => {
