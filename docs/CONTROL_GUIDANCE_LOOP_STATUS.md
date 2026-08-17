@@ -1,0 +1,1 @@
+Status: containment branch prepared from current main. Only the focused page loader is changed; the customer-guidance module remains in the repository but is not executed on that page until its observer is repaired.
