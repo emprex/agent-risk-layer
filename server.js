@@ -704,6 +704,85 @@ const server = http.createServer(async (req, res) => {
                 return json(res, error.statusCode || 400, { error: error.message });
             }
         }
+        match = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/members$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 200, { workspace: await upsertMember({ workspaceId: decodeURIComponent(match[1]), actorId: req.user.id, ...body }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
+        match = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/scim-token$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            try {
+                return json(res, 201, { token: await createScimToken(decodeURIComponent(match[1]), req.user.id), shownOnce: true });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
+        match = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/integrations$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 201, { integration: await configureIntegration({ workspaceId: decodeURIComponent(match[1]), actorId: req.user.id, ...body }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
+        match = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/events$/);
+        if (req.method === 'POST' && match) {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                return json(res, 200, { deliveries: await deliverSecurityEvent({ workspaceId: decodeURIComponent(match[1]), actorId: req.user.id, event: body }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
+        if (req.method === 'GET' && url.pathname === '/api/control-plane/overview') {
+            if (!requireUser(req, res))
+                return;
+            return json(res, 200, await controlPlaneOverview(req.user.id));
+        }
+        if (req.method === 'POST' && url.pathname === '/api/projects') {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            const body = await readBody(req);
+            try {
+                let workspaceId = cleanText(body.workspaceId, 100);
+                if (!workspaceId) {
+                    const workspaces = await listWorkspaces(req.user.id);
+                    workspaceId = workspaces[0]?.id || (await createWorkspace(req.user.id, `${req.user.email.split('@')[0]}'s security workspace`)).id;
+                }
+                return json(res, 201, { project: await createSecurityProject({ userId: req.user.id, workspaceId, name: body.name, environment: body.environment, projectKind: body.projectKind }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
+        match = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+        if (req.method === 'GET' && match) {
+            if (!requireUser(req, res))
+                return;
+            try {
+                return json(res, 200, { project: await getSecurityProject({ projectId: decodeURIComponent(match[1]), userId: req.user.id }) });
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message, code: error.code || undefined });
+            }
+        }
         if (req.method === 'PATCH' && match) {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
                 return;
@@ -1200,6 +1279,8 @@ async function handleProjectGuard(req, res) {
     if (!/^arl_live_[a-f0-9]{10}_[A-Za-z0-9_-]{32,}$/.test(rawToken))
         return json(res, 401, { error: 'Invalid project API key.', code: 'invalid_api_key' });
     try {
+        // Protect the authentication path from database-amplification abuse while
+        // leaving enough headroom for legitimate high-volume enterprise clients.
         if (!await rateLimitAllowed(req, { windowMs: 60000, max: 30000, bucket: 'guard-auth', penaltyMs: 1000 })) {
             res.setHeader('Retry-After', '60');
             return json(res, 429, { error: 'Runtime authentication rate limit reached. Retry after the rate-limit window.', code: 'rate_limit' });
@@ -1786,13 +1867,13 @@ async function serveBadge(res, shareToken) {
     res.end(svg);
 }
 async function claimAssessmentForUser(assessmentId, token, userId) {
-    if (!assessmentId || !token || !userId)
+    if (!assessmentId || !token)
         return false;
-    const result = await db.prepare(`UPDATE assessments
-      SET user_id = ?, updated_at = ?
-      WHERE id = ? AND access_token = ? AND (user_id IS NULL OR user_id = ?)`)
-        .run(userId, nowIso(), String(assessmentId), token, userId);
-    return result.changes === 1;
+    const row = await db.prepare('SELECT user_id, access_token FROM assessments WHERE id = ?').get(String(assessmentId));
+    if (!row || row.access_token !== token || (row.user_id && row.user_id !== userId))
+        return false;
+    await db.prepare('UPDATE assessments SET user_id = ?, updated_at = ? WHERE id = ?').run(userId, nowIso(), String(assessmentId));
+    return true;
 }
 async function hasActiveSubscription(userId) {
     if (!userId)
