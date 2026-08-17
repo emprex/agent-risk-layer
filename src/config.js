@@ -4,6 +4,8 @@ import { BILLABLE_PLANS } from './commercial-catalogue.js';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 export const defaultBindHost = '0.0.0.0';
+const resolvedNodeEnv = process.env.NODE_ENV || 'development';
+const resolvedProductStage = process.env.PRODUCT_STAGE || (resolvedNodeEnv === 'production' ? 'production' : 'development');
 
 function looksLikeNumericAddress(value) {
     const numericComponent = /^(?:[0-9]+|0[xX][0-9A-Fa-f]+)$/;
@@ -39,7 +41,7 @@ export const config = {
     appVersion: '10.1.1',
     scoringVersion: 'arl-risk-v3.4',
     termsVersion: process.env.TERMS_VERSION || '2026-07-22',
-    productStage: process.env.PRODUCT_STAGE || 'production',
+    productStage: resolvedProductStage,
     companyName: process.env.COMPANY_NAME || 'AgentRiskLayer',
     companyLegalName: (process.env.COMPANY_LEGAL_NAME || '').trim(),
     companyAddress: (process.env.COMPANY_ADDRESS || '').trim(),
@@ -48,7 +50,7 @@ export const config = {
     port: Number(process.env.PORT || 3000),
     host: parseBindHost(process.env.HOST),
     baseUrl: String(process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
-    nodeEnv: process.env.NODE_ENV || 'development',
+    nodeEnv: resolvedNodeEnv,
     demoMode: String(process.env.DEMO_MODE ?? 'true').toLowerCase() !== 'false',
     allowDemoInProduction: String(process.env.ALLOW_DEMO_IN_PRODUCTION || 'false').toLowerCase() === 'true',
     sessionSecret: process.env.SESSION_SECRET || defaultSessionSecret,
@@ -98,21 +100,22 @@ function isManagedPostgresUrl(value) {
     }
 }
 export function launchReadiness() {
+    const productionStage = config.productStage === 'production';
     const checks = [
-        { key: 'production_mode', label: 'NODE_ENV is production', ok: config.nodeEnv === 'production', required: false },
-        { key: 'managed_postgres', label: 'Managed PostgreSQL DATABASE_URL configured', ok: isManagedPostgresUrl(config.databaseUrl), required: config.nodeEnv === 'production' },
-        { key: 'secure_base_url', label: 'BASE_URL uses HTTPS', ok: config.baseUrl.startsWith('https://'), required: config.nodeEnv === 'production' },
-        { key: 'session_secret', label: 'Strong session secret configured', ok: config.sessionSecret.length >= 32 && config.sessionSecret !== defaultSessionSecret, required: config.nodeEnv === 'production' },
-        { key: 'live_payments', label: 'Demo payments disabled', ok: !config.demoMode, required: config.nodeEnv === 'production' && !config.allowDemoInProduction },
+        { key: 'production_mode', label: 'NODE_ENV is production', ok: config.nodeEnv === 'production', required: productionStage },
+        { key: 'managed_postgres', label: 'Managed PostgreSQL DATABASE_URL configured', ok: isManagedPostgresUrl(config.databaseUrl), required: productionStage },
+        { key: 'secure_base_url', label: 'BASE_URL uses HTTPS', ok: config.baseUrl.startsWith('https://'), required: productionStage },
+        { key: 'session_secret', label: 'Strong session secret configured', ok: config.sessionSecret.length >= 32 && config.sessionSecret !== defaultSessionSecret, required: productionStage },
+        { key: 'live_payments', label: 'Demo payments disabled', ok: !config.demoMode, required: productionStage && !config.allowDemoInProduction },
         { key: 'stripe_secret', label: 'Stripe secret configured', ok: Boolean(config.stripeSecretKey), required: !config.demoMode },
         { key: 'stripe_webhook', label: 'Stripe webhook secret configured', ok: Boolean(config.stripeWebhookSecret), required: !config.demoMode },
-        { key: 'billing_webhook_mode', label: 'Billing webhook mode is explicit', ok: ['enabled','maintenance'].includes(config.billingWebhookMode), required: config.nodeEnv === 'production' },
+        { key: 'billing_webhook_mode', label: 'Billing webhook mode is explicit', ok: ['enabled','maintenance'].includes(config.billingWebhookMode), required: productionStage },
         { key: 'stripe_prices', label: 'All Stripe price IDs configured', ok: Object.values(config.stripePrices).every(Boolean), required: !config.demoMode },
-        { key: 'email', label: 'Transactional email configured', ok: Boolean(config.resendApiKey) && !config.emailFrom.includes('example.com'), required: config.nodeEnv === 'production' },
-        { key: 'admin', label: 'Owner analytics email configured', ok: Boolean(config.adminEmail), required: config.nodeEnv === 'production' },
-        { key: 'support', label: 'Support email configured', ok: Boolean(config.supportEmail), required: config.nodeEnv === 'production' },
-        { key: 'legal_identity', label: 'Legal operator identity configured', ok: Boolean(config.companyLegalName && config.companyAddress && config.legalJurisdiction), required: config.nodeEnv === 'production' },
-        { key: 'metrics_auth', label: 'Protected production metrics token configured', ok: config.metricsToken.length >= 32, required: config.nodeEnv === 'production' },
+        { key: 'email', label: 'Transactional email configured', ok: Boolean(config.resendApiKey) && !config.emailFrom.includes('example.com'), required: productionStage },
+        { key: 'admin', label: 'Owner analytics email configured', ok: Boolean(config.adminEmail), required: productionStage },
+        { key: 'support', label: 'Support email configured', ok: Boolean(config.supportEmail), required: productionStage },
+        { key: 'legal_identity', label: 'Legal operator identity configured', ok: Boolean(config.companyLegalName && config.companyAddress && config.legalJurisdiction), required: productionStage },
+        { key: 'metrics_auth', label: 'Protected production metrics token configured', ok: config.metricsToken.length >= 32, required: productionStage },
     ];
     return {
         ready: checks.every((check) => !check.required || check.ok),
@@ -121,7 +124,7 @@ export function launchReadiness() {
 }
 export function assertSafeProductionConfig() {
     const readiness = launchReadiness();
-    if (config.nodeEnv !== 'production')
+    if (config.productStage !== 'production')
         return readiness;
     const failures = readiness.checks.filter((check) => check.required && !check.ok);
     if (failures.length) {
