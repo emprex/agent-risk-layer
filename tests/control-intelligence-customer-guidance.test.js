@@ -8,11 +8,13 @@ const overviewHtml = read('public/control-intelligence.html');
 const guidance = read('public/control-intelligence-customer-guidance.js');
 const css = read('public/control-intelligence-customer-guidance.css');
 
-test('Control Intelligence customer guidance is loaded on control and overview pages', () => {
+test('Control Intelligence customer guidance stays dormant until browser regression verification', () => {
   for (const html of [controlHtml, overviewHtml]) {
     assert.match(html, /control-intelligence-customer-guidance\.css/);
-    assert.match(html, /control-intelligence-customer-guidance\.js/);
+    assert.doesNotMatch(html, /control-intelligence-customer-guidance\.js/);
   }
+  assert.match(guidance, /function setText/);
+  assert.match(guidance, /queueMicrotask/);
 });
 
 test('applicability guidance separates relevance from vulnerability', () => {
