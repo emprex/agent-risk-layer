@@ -24,7 +24,7 @@ test('homepage product story is explicitly illustrative and keyboard operable', 
 test('homepage compresses the product into the customer mental model before specialist detail', async () => {
   const html = await read('../public/index.html');
   assert.match(html, /Assess\. Control\. Prove\./);
-  assert.match(html, /Know what your AI agent can access\. Stop unsafe actions\. Prove the controls worked\./);
+  assert.match(html, /Before your AI agent reaches production, know what it can do—and prove the controls worked\./);
   assert.match(html, /Declared[\s\S]*Observed[\s\S]*Finding[\s\S]*Remediation[\s\S]*Retest[\s\S]*Decision/);
   assert.doesNotMatch(html, /UNTRUSTED INPUT/);
 });

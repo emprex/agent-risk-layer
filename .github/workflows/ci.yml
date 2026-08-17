@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Unit and integration tests
+        id: unit-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 120s npm test 2>&1 | tee unit-test.log
+
+      - name: Upload unit-test log on failure
+        if: failure() && steps.unit-tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-log
+          path: unit-test.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Scenario regression
+        run: npm run test:scenarios
+
+      - name: Detection regression
+        run: npm run test:detection-benchmark

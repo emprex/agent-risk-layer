@@ -223,7 +223,7 @@ test('guided protection check proves the hosted approval path without API keys, 
 test('inventory drift blocks deployment review and remediation work is auditable', async () => {
   const { userId, project } = await fixture('staging');
   const baseline = await recordAssetSnapshot({ projectId: project.id, userId, source: 'repository', documents: {
-    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'] }],
+    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'], public: false, privileged: false }],
   } });
   assert.equal(baseline.drift.baseline, true);
   assert.equal(baseline.drift.deploymentGate, 'clear');
@@ -253,7 +253,7 @@ test('inventory drift blocks deployment review and remediation work is auditable
     /registered implementation evidence artifact/
   );
   const implementationSnapshot = await recordAssetSnapshot({ projectId: project.id, userId, source: 'remediation-evidence', documents: {
-    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'] }],
+    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'], public: false, privileged: false }],
   } });
   const implementationArtifact = await registerRemediationEvidenceArtifact({ projectId: project.id, itemId: item.id, userId, artifactType: 'implementation',
     sourceId: implementationSnapshot.id });
@@ -293,7 +293,7 @@ test('inventory drift blocks deployment review and remediation work is auditable
   assert.equal(projectState.journey.deploymentDecision, 'READY FOR HUMAN DEPLOYMENT REVIEW');
 
   await recordAssetSnapshot({ projectId: project.id, userId, source: 'repository', documents: {
-    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'] }],
+    services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'], public: false, privileged: false }],
   } });
   const reviewed = await getSecurityProject({ projectId: project.id, userId });
   assert.equal(reviewed.journey.deploymentDecision, 'READY FOR HUMAN DEPLOYMENT REVIEW');

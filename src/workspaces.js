@@ -2,7 +2,9 @@ import crypto from 'node:crypto';
 import { db, id, insertEvent, nowIso } from './db.js';
 import { ROLE_PERMISSIONS, authoriseWorkspaceAction } from './access-control.js';
 import { buildSecurityNotification, signWebhookPayload } from './enterprise-security.js';
+import { postJsonPinned, validateOutboundHttpsUrl } from './outbound-http.js';
 const ROLES = Object.freeze(Object.keys(ROLE_PERMISSIONS));
+const INTEGRATION_TIMEOUT_MS = 10000;
 export async function createWorkspace(userId, name) {
     const cleanName = String(name || '').trim().slice(0, 100);
     if (cleanName.length < 2)
@@ -41,25 +43,24 @@ export async function getWorkspace(workspaceId, userId) {
 }
 export async function upsertMember({ workspaceId, actorId, email, role = 'viewer', displayName = '', externalId = '', active = true }) {
     await requireAction(workspaceId, actorId, 'member:*');
-    const cleanEmail = String(email || '').trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail))
-        throw new Error('A valid member email is required.');
+    const cleanEmail = normaliseMemberEmail(email);
     if (!ROLES.includes(role))
         throw new Error('Unknown workspace role.');
-    const existing = externalId
-        ? await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND external_id=?').get(workspaceId, externalId) : await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, cleanEmail);
-    const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
-    const timestamp = nowIso();
-    if (existing) {
-        if (existing.role === 'owner' && (!active || role !== 'owner') && await ownerCount(workspaceId) <= 1)
-            throw new Error('A workspace must retain at least one active owner.');
-        await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
-            .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
-    }
-    else {
-        await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
-    }
+    await db.transaction(async () => {
+        await lockWorkspace(workspaceId);
+        const existing = await resolveExistingMember(workspaceId, cleanEmail, externalId);
+        const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
+        const timestamp = nowIso();
+        if (existing) {
+            await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
+            await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
+                .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
+        }
+        else {
+            await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
+        }
+    });
     await insertEvent(active ? 'workspace_member_upserted' : 'workspace_member_deprovisioned', actorId, { workspaceId, email: cleanEmail, role });
     return await getWorkspace(workspaceId, actorId);
 }
@@ -77,7 +78,7 @@ export async function authenticateScim(workspaceId, rawToken) {
     return row;
 }
 export async function provisionScimUser(workspaceId, input) {
-    const email = String(input.userName || input.emails?.[0]?.value || '').trim().toLowerCase();
+    const email = normaliseMemberEmail(input.userName || input.emails?.[0]?.value || '');
     const role = String(input.roles?.[0]?.value || input.role || 'viewer').toLowerCase();
     return await upsertMemberSystem({ workspaceId, email, role, displayName: input.displayName, externalId: input.externalId || input.id, active: input.active !== false });
 }
@@ -85,9 +86,7 @@ export async function configureIntegration({ workspaceId, actorId, type, name, e
     await requireAction(workspaceId, actorId, 'policy:*');
     if (!['generic', 'slack', 'jira'].includes(type))
         throw new Error('Unsupported integration type.');
-    const url = new URL(String(endpoint || ''));
-    if (url.protocol !== 'https:')
-        throw new Error('Integration endpoint must use HTTPS.');
+    const url = validateOutboundHttpsUrl(endpoint);
     if (String(secret || '').length < 32)
         throw new Error('Integration signing secret must contain at least 32 characters.');
     const integrationId = id('int_');
@@ -97,13 +96,13 @@ export async function configureIntegration({ workspaceId, actorId, type, name, e
     await insertEvent('workspace_integration_created', actorId, { workspaceId, integrationId, type });
     return { id: integrationId, workspaceId, type, name: String(name || type), endpoint: url.origin, status: 'active' };
 }
-export async function deliverSecurityEvent({ workspaceId, actorId, event, fetchImpl = fetch }) {
+export async function deliverSecurityEvent({ workspaceId, actorId, event, fetchImpl = null }) {
     await requireAction(workspaceId, actorId, 'event:*');
     const results = await deliverSecurityEventInternal({ workspaceId, event, fetchImpl });
     await insertEvent('workspace_security_event_delivered', actorId, { workspaceId, delivered: results.filter((item) => item.delivered).length, total: results.length });
     return results;
 }
-export async function deliverSecurityEventSystem({ workspaceId, event, fetchImpl = fetch }) {
+export async function deliverSecurityEventSystem({ workspaceId, event, fetchImpl = null }) {
     const results = await deliverSecurityEventInternal({ workspaceId, event, fetchImpl });
     await insertEvent('workspace_security_event_delivered', null, { workspaceId, delivered: results.filter((item) => item.delivered).length, total: results.length, actor: 'system' });
     return results;
@@ -114,38 +113,66 @@ async function deliverSecurityEventInternal({ workspaceId, event, fetchImpl }) {
     for (const integration of integrations) {
         const payload = buildSecurityNotification({ ...event, workspaceId }, integration.type);
         const signed = signWebhookPayload(payload, integration.secret);
+        const headers = {
+            'content-type': 'application/json',
+            'user-agent': 'AgentRiskLayer/10.1.1',
+            'x-agentrisk-timestamp': String(signed.timestamp),
+            'x-agentrisk-signature': signed.signature,
+        };
         try {
-            const response = await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', headers: {
-                    'content-type': 'application/json', 'user-agent': 'AgentRiskLayer/8.0',
-                    'x-agentrisk-timestamp': String(signed.timestamp), 'x-agentrisk-signature': signed.signature,
-                }, body: signed.body });
+            const response = fetchImpl
+                ? await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(INTEGRATION_TIMEOUT_MS), headers, body: signed.body })
+                : await postJsonPinned(integration.endpoint, { headers, body: signed.body, timeoutMs: INTEGRATION_TIMEOUT_MS });
             if (!response.ok)
                 throw new Error(`HTTP ${response.status}`);
             await db.prepare('UPDATE workspace_integrations SET last_delivery_at=?,last_error=NULL,updated_at=? WHERE id=?').run(nowIso(), nowIso(), integration.id);
             results.push({ id: integration.id, delivered: true });
         }
         catch (error) {
-            await db.prepare('UPDATE workspace_integrations SET last_error=?,updated_at=? WHERE id=?').run(String(error.message).slice(0, 500), nowIso(), integration.id);
-            results.push({ id: integration.id, delivered: false, error: String(error.message) });
+            const message = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+                ? `Delivery timed out after ${INTEGRATION_TIMEOUT_MS} ms`
+                : String(error?.message || 'Integration delivery failed');
+            await db.prepare('UPDATE workspace_integrations SET last_error=?,updated_at=? WHERE id=?').run(message.slice(0, 500), nowIso(), integration.id);
+            results.push({ id: integration.id, delivered: false, error: message });
         }
     }
     return results;
 }
 async function upsertMemberSystem({ workspaceId, email, role, displayName, externalId, active }) {
+    const cleanEmail = normaliseMemberEmail(email);
     if (!ROLES.includes(role))
         throw new Error('Unknown workspace role.');
-    const existing = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND (external_id=? OR email=?)').get(workspaceId, externalId || '', email);
-    const timestamp = nowIso();
-    if (existing?.role === 'owner' && !active && await ownerCount(workspaceId) <= 1)
-        throw new Error('A workspace must retain at least one active owner.');
-    const user = await db.prepare('SELECT id FROM users WHERE email=?').get(email);
-    if (existing)
-        await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
-            .run(user?.id || null, email, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
-    else
-        await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, email, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
-    return await db.prepare('SELECT id,user_id,email,display_name,role,status,external_id FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, email);
+    return db.transaction(async () => {
+        await lockWorkspace(workspaceId);
+        const existing = await resolveExistingMember(workspaceId, cleanEmail, externalId);
+        const timestamp = nowIso();
+        if (existing)
+            await assertWorkspaceRetainsOwner(workspaceId, existing, { role, active });
+        const user = await db.prepare('SELECT id FROM users WHERE email=?').get(cleanEmail);
+        if (existing)
+            await db.prepare(`UPDATE workspace_members SET user_id=?,email=?,display_name=?,role=?,status=?,external_id=?,updated_at=? WHERE id=?`)
+                .run(user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, existing.id);
+        else
+            await db.prepare(`INSERT INTO workspace_members (id,workspace_id,user_id,email,display_name,role,status,external_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('wsm_'), workspaceId, user?.id || null, cleanEmail, String(displayName || '').slice(0, 120), role, active ? 'active' : 'deprovisioned', externalId || null, timestamp, timestamp);
+        return await db.prepare('SELECT id,user_id,email,display_name,role,status,external_id FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, cleanEmail);
+    });
+}
+async function resolveExistingMember(workspaceId, email, externalId = '') {
+    const byEmail = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND email=?').get(workspaceId, email);
+    if (!externalId)
+        return byEmail || null;
+    const byExternalId = await db.prepare('SELECT * FROM workspace_members WHERE workspace_id=? AND external_id=?').get(workspaceId, externalId);
+    if (byExternalId && byEmail && byExternalId.id !== byEmail.id)
+        throw new Error('SCIM identity conflict: external ID and email refer to different workspace members.');
+    return byExternalId || byEmail || null;
+}
+async function lockWorkspace(workspaceId) {
+    const lock = db.kind === 'postgres' ? ' FOR UPDATE' : '';
+    const row = await db.prepare(`SELECT id FROM workspaces WHERE id=?${lock}`).get(workspaceId);
+    if (!row)
+        throw forbidden('Workspace not found or access denied.');
+    return row;
 }
 async function membershipFor(workspaceId, userId) {
     return await db.prepare(`SELECT workspace_id workspaceId,user_id userId,role,status FROM workspace_members
@@ -158,11 +185,23 @@ async function requireAction(workspaceId, userId, action) {
         throw forbidden('Workspace permission denied.');
     return membership;
 }
-async function ownerCount(workspaceId) { return (await db.prepare(`SELECT COUNT(*) count FROM workspace_members WHERE workspace_id=? AND role='owner' AND status='active'`).get(workspaceId)).count; }
+async function assertWorkspaceRetainsOwner(workspaceId, existing, { role, active }) {
+    if (existing?.role === 'owner' && (!active || role !== 'owner') && await ownerCount(workspaceId) <= 1)
+        throw new Error('A workspace must retain at least one active owner.');
+}
+async function ownerCount(workspaceId) { return Number((await db.prepare(`SELECT COUNT(*) count FROM workspace_members WHERE workspace_id=? AND role='owner' AND status='active'`).get(workspaceId)).count || 0); }
+function normaliseMemberEmail(value) {
+    const email = String(value || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254)
+        throw new Error('A valid member email is required.');
+    return email;
+}
 function digest(value) { return crypto.createHash('sha256').update(String(value || '')).digest('hex'); }
 function safeEqual(left, right) {
     try {
-        return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
+        const a = Buffer.from(String(left || ''));
+        const b = Buffer.from(String(right || ''));
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
     }
     catch {
         return false;
