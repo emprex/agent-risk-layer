@@ -33,7 +33,6 @@ export function validateOutboundHttpsUrl(value) {
   const url = value instanceof URL ? new URL(value.toString()) : new URL(String(value || ''));
   if (url.protocol !== 'https:') throw new Error('Integration endpoint must use HTTPS.');
   if (url.username || url.password) throw new Error('Integration endpoint must not contain embedded credentials.');
-  if (url.port && url.port !== '443') throw new Error('Integration endpoint must use the standard HTTPS port.');
   const hostname = url.hostname.toLowerCase();
   if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
     throw new Error('Integration endpoint must use a public Internet hostname.');
@@ -65,11 +64,11 @@ export async function postJsonPinned(value, { body, headers = {}, timeoutMs = 10
   const payload = typeof body === 'string' ? body : JSON.stringify(body ?? {});
   return new Promise((resolve, reject) => {
     let settled = false;
-    const finish = (callback, value) => {
+    const finish = (callback, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      callback(value);
+      callback(result);
     };
     const request = https.request(target.url, {
       method: 'POST',
