@@ -10,6 +10,7 @@ const WORKSPACE_STYLES = Object.freeze([
 const PUBLIC_EXPERIENCE_STYLES = Object.freeze([
   ['/design-tokens.css', 'arlDesignTokens'],
   ['/enterprise-light.css', 'arlEnterpriseLight'],
+  ['/mobile-navigation-fix.css', 'arlMobileNavigationFix'],
 ]);
 const LEGACY_PUBLIC_STYLES = Object.freeze([
   '/premium-theme.css',

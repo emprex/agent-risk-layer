@@ -1,0 +1,24 @@
+/* Mobile navigation stacking repair.
+ * enterprise-light.css intentionally owns the public header appearance but its
+ * z-index (60) placed the entire mobile menu below the scrim (998). The result
+ * was the opened navigation being blurred/dimmed and effectively unusable.
+ * Keep the header/menu above the scrim; the scrim must cover page content only.
+ */
+body[data-shell="public"] .site-header-v10 {
+  position: sticky !important;
+  z-index: 1000 !important;
+}
+
+@media (max-width: 900px) {
+  body[data-shell="public"] .site-header-v10.menu-open {
+    z-index: 1000 !important;
+  }
+
+  body[data-shell="public"] .site-header-v10 .primary-navigation {
+    z-index: 1002;
+  }
+
+  body[data-shell="public"] .menu-scrim {
+    z-index: 998;
+  }
+}
