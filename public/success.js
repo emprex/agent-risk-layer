@@ -1,11 +1,37 @@
 import { api, escapeHtml, qs } from './shared.js';
 const root = document.querySelector('#successRoot');
+
+function continuationFor(data) {
+  const purchase = data.purchase;
+  if (purchase?.assessment_id) {
+    return {
+      href: `/dashboard.html?assessment=${encodeURIComponent(purchase.assessment_id)}`,
+      label: 'Continue this assessment',
+      title: 'Payment complete. Continue with this agent.',
+      detail: 'Your £99 assessment access is ready. Continue with the same agent to review the current findings, assign the first fix, attach implementation evidence and retest the exact risk.',
+      secondaryHref: `/result.html?id=${encodeURIComponent(purchase.assessment_id)}`,
+      secondaryLabel: 'Open assessment result',
+    };
+  }
+  return {
+    href: '/dashboard.html',
+    label: 'Open workspace',
+    title: 'Your subscription is active.',
+    detail: 'Return to your workspace to continue protecting the agents already linked to this account.',
+    secondaryHref: '/assessment.html',
+    secondaryLabel: 'Assess an agent',
+  };
+}
+
 async function init() {
   try {
     const data = await api(`/api/checkout/status?session_id=${encodeURIComponent(qs('session_id') || '')}`);
     const item = data.purchase || data.subscription;
     if (!item) throw new Error('Payment is still being confirmed. Refresh this page in a moment.');
-    root.innerHTML = `<div class="success-box">Payment and fulfilment completed.</div><h1 class="page-title-medium">Your access is ready.</h1><p class="muted">${data.purchase?.assessment_id ? 'The report has been generated and email delivery has been attempted. It is also available from your dashboard.' : 'Your subscription is active and available from your dashboard.'}</p><div class="button-row"><a class="button primary" href="/dashboard.html">Open dashboard</a><a class="button ghost" href="/assessment.html">Run an assessment</a></div>`;
-  } catch (error) { root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div><div class="button-row"><a class="button primary" href="/dashboard.html">Check dashboard</a></div>`; }
+    const next = continuationFor(data);
+    root.innerHTML = `<div class="success-box">Payment and fulfilment completed.</div><span class="eyebrow">What happens next</span><h1 class="page-title-medium">${escapeHtml(next.title)}</h1><p class="muted">${escapeHtml(next.detail)}</p><div class="button-row"><a class="button primary" href="${next.href}">${escapeHtml(next.label)}</a><a class="button ghost" href="${next.secondaryHref}">${escapeHtml(next.secondaryLabel)}</a></div><p class="microcopy">Payment unlocks the assessment workflow. A finding is not closed until remediation evidence and a bounded retest support closure.</p>`;
+  } catch (error) {
+    root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div><p class="muted">If payment completed, your access remains bound to your account even if this confirmation page is delayed.</p><div class="button-row"><a class="button primary" href="/dashboard.html">Check my workspace</a></div>`;
+  }
 }
 init();
