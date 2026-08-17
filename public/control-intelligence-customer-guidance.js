@@ -13,6 +13,10 @@ const make = (tag, className, text) => {
   return node;
 };
 
+function setText(node, value) {
+  if (node && node.textContent !== value) node.textContent = value;
+}
+
 function addChoiceHelp(label, copy) {
   if (!label || label.querySelector('.ci-choice-explanation')) return;
   label.append(make('small', 'ci-choice-explanation', copy));
@@ -33,7 +37,7 @@ function enhanceApplicability() {
   addChoiceHelp(contextRequired, 'Use when you cannot decide from the known facts. Missing information remains unknown; it is not a finding.');
 
   const intro = form.previousElementSibling?.querySelector('p');
-  if (intro) intro.textContent = 'First decide whether this security question is relevant to the exact system version. Applicability only defines review scope; it does not say the control has failed.';
+  setText(intro, 'First decide whether this security question is relevant to the exact system version. Applicability only defines review scope; it does not say the control has failed.');
 }
 
 function executionGuidance(hasPlan) {
@@ -86,12 +90,15 @@ function updateTestButton(form, hasPlan) {
   if (!select || !button) return;
 
   const plannedOption = [...select.options].find((option) => option.value === 'planned');
-  if (plannedOption) plannedOption.textContent = 'Plan only — not executed';
+  setText(plannedOption, 'Plan only — not executed');
 
   const sync = () => {
-    if (select.value === 'planned') button.textContent = 'Save test plan — no evidence yet';
-    else if (select.value) button.textContent = 'Save executed test result';
-    else button.textContent = hasPlan ? 'Record executed result' : 'Choose test status';
+    const label = select.value === 'planned'
+      ? 'Save test plan — no evidence yet'
+      : select.value
+        ? 'Save executed test result'
+        : hasPlan ? 'Record executed result' : 'Choose test status';
+    setText(button, label);
   };
   if (select.dataset.customerGuidance !== 'true') {
     select.dataset.customerGuidance = 'true';
@@ -139,7 +146,7 @@ function enhanceControls() {
   actions?.insertAdjacentElement('beforebegin', guide);
 
   const selectSuggested = panel.querySelector('#selectSuggested');
-  if (selectSuggested) selectSuggested.textContent = 'Select architecture-matched controls';
+  setText(selectSuggested, 'Select architecture-matched controls');
 }
 
 function enhance() {
@@ -150,7 +157,15 @@ function enhance() {
 
 const root = document.querySelector(isControlPage ? '#ciControlRoot' : '#ciRoot');
 if (root) {
-  const observer = new MutationObserver(enhance);
+  let scheduled = false;
+  const observer = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      enhance();
+    });
+  });
   observer.observe(root, { childList: true, subtree: true });
 }
 enhance();
