@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { db, id, insertEvent, nowIso } from './db.js';
 import { ROLE_PERMISSIONS, authoriseWorkspaceAction } from './access-control.js';
 import { buildSecurityNotification, signWebhookPayload } from './enterprise-security.js';
+import { postJsonPinned, validateOutboundHttpsUrl } from './outbound-http.js';
 const ROLES = Object.freeze(Object.keys(ROLE_PERMISSIONS));
 const INTEGRATION_TIMEOUT_MS = 10000;
 export async function createWorkspace(userId, name) {
@@ -85,11 +86,7 @@ export async function configureIntegration({ workspaceId, actorId, type, name, e
     await requireAction(workspaceId, actorId, 'policy:*');
     if (!['generic', 'slack', 'jira'].includes(type))
         throw new Error('Unsupported integration type.');
-    const url = new URL(String(endpoint || ''));
-    if (url.protocol !== 'https:')
-        throw new Error('Integration endpoint must use HTTPS.');
-    if (url.username || url.password)
-        throw new Error('Integration endpoint must not contain embedded credentials.');
+    const url = validateOutboundHttpsUrl(endpoint);
     if (String(secret || '').length < 32)
         throw new Error('Integration signing secret must contain at least 32 characters.');
     const integrationId = id('int_');
@@ -99,13 +96,13 @@ export async function configureIntegration({ workspaceId, actorId, type, name, e
     await insertEvent('workspace_integration_created', actorId, { workspaceId, integrationId, type });
     return { id: integrationId, workspaceId, type, name: String(name || type), endpoint: url.origin, status: 'active' };
 }
-export async function deliverSecurityEvent({ workspaceId, actorId, event, fetchImpl = fetch }) {
+export async function deliverSecurityEvent({ workspaceId, actorId, event, fetchImpl = null }) {
     await requireAction(workspaceId, actorId, 'event:*');
     const results = await deliverSecurityEventInternal({ workspaceId, event, fetchImpl });
     await insertEvent('workspace_security_event_delivered', actorId, { workspaceId, delivered: results.filter((item) => item.delivered).length, total: results.length });
     return results;
 }
-export async function deliverSecurityEventSystem({ workspaceId, event, fetchImpl = fetch }) {
+export async function deliverSecurityEventSystem({ workspaceId, event, fetchImpl = null }) {
     const results = await deliverSecurityEventInternal({ workspaceId, event, fetchImpl });
     await insertEvent('workspace_security_event_delivered', null, { workspaceId, delivered: results.filter((item) => item.delivered).length, total: results.length, actor: 'system' });
     return results;
@@ -116,11 +113,16 @@ async function deliverSecurityEventInternal({ workspaceId, event, fetchImpl }) {
     for (const integration of integrations) {
         const payload = buildSecurityNotification({ ...event, workspaceId }, integration.type);
         const signed = signWebhookPayload(payload, integration.secret);
+        const headers = {
+            'content-type': 'application/json',
+            'user-agent': 'AgentRiskLayer/10.1.1',
+            'x-agentrisk-timestamp': String(signed.timestamp),
+            'x-agentrisk-signature': signed.signature,
+        };
         try {
-            const response = await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(INTEGRATION_TIMEOUT_MS), headers: {
-                    'content-type': 'application/json', 'user-agent': 'AgentRiskLayer/10.1.1',
-                    'x-agentrisk-timestamp': String(signed.timestamp), 'x-agentrisk-signature': signed.signature,
-                }, body: signed.body });
+            const response = fetchImpl
+                ? await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(INTEGRATION_TIMEOUT_MS), headers, body: signed.body })
+                : await postJsonPinned(integration.endpoint, { headers, body: signed.body, timeoutMs: INTEGRATION_TIMEOUT_MS });
             if (!response.ok)
                 throw new Error(`HTTP ${response.status}`);
             await db.prepare('UPDATE workspace_integrations SET last_delivery_at=?,last_error=NULL,updated_at=? WHERE id=?').run(nowIso(), nowIso(), integration.id);
