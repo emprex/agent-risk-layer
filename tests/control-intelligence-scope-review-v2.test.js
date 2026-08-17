@@ -13,9 +13,12 @@ test('Deployment Evidence loads one hardened compact scope-review layer', () => 
   assert.doesNotMatch(html, /control-intelligence-customer-guidance\.js/);
 });
 
-test('scope preparation is conservative and never auto-submits', () => {
-  assert.match(script, /facts\.length >= 2 && riskBearing/);
-  assert.match(script, /One broad fact such as staging or tool:read is not enough/);
+test('scope UI consumes server classification and never auto-submits', () => {
+  assert.match(script, /Server-side suggestion semantics remain authoritative/);
+  assert.match(script, /never derives confidence from rendered copy/);
+  assert.match(script, /const prepare = \/suggested check\|strong architecture match/i);
+  assert.doesNotMatch(script, /facts\.length >= 2/);
+  assert.doesNotMatch(script, /riskBearing/);
   assert.match(script, /decision\.value = 'applicable'/);
   assert.match(script, /Nothing is saved until you review and confirm the batch/);
   assert.doesNotMatch(script, /\.submit\s*\(/);
@@ -38,15 +41,15 @@ test('prepared rows use existing snapshot-bound applicability fields only', () =
   assert.match(script, /\[name="decision-\$\{index\}"\]/);
   assert.match(script, /\[name="reason-\$\{index\}"\]/);
   assert.match(script, /\[name="fact-\$\{index\}"\]/);
-  assert.match(script, /multiple confirmed architecture facts match this control/);
+  assert.match(script, /server identified a higher-confidence multi-fact architecture match/);
   assert.match(script, /individual applicability decisions for this exact snapshot/);
 });
 
-test('uncertain controls remain unselected and visible for customer confirmation', () => {
+test('uncertain selected controls remain unselected and visible for customer confirmation', () => {
   assert.match(script, /const prepared = Boolean\(meta\?\.prepare\)/);
   assert.match(script, /ci-scope-row-exception/);
   assert.match(script, /Confirmation required/);
-  assert.match(script, /need your confirmation because the snapshot match is too broad/);
+  assert.match(script, /not a server-classified higher-confidence scope suggestion/);
   assert.match(css, /#bulkForm>\.ci-scope-row-prepared\{display:none\}/);
   assert.match(css, /#bulkForm\.ci-show-prepared>\.ci-scope-row-prepared\{display:block\}/);
 });
