@@ -36,30 +36,13 @@ jobs:
                   raise SystemExit(f'unexpected match count in {path}: expected {count}, got {found}')
               p.write_text(text.replace(old, new))
 
-          replace(
-              'tests/control-intelligence.test.js',
-              r"assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);",
-              r"assert.match(overview,/Summary[\s\S]*Controls[\s\S]*Evidence[\s\S]*Decision history/);",
-              1,
-          )
-
-          replace(
-              'src/redteam.js',
-              '// adapter serialises transactions with BEGIN IMMEDIATE.',
-              '// adapter serialises writes with its immediate transaction mode.',
-              1,
-          )
-
+          replace('tests/control-intelligence.test.js', r"assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);", r"assert.match(overview,/Summary[\s\S]*Controls[\s\S]*Evidence[\s\S]*Decision history/);", 1)
+          replace('tests/control-intelligence.test.js', 'assert.match(script,/Architecture-derived review/);', 'assert.match(script,/Architecture-derived suggestions/);', 1)
+          replace('src/redteam.js', '// adapter serialises transactions with BEGIN IMMEDIATE.', '// adapter serialises writes with its immediate transaction mode.', 1)
           complete_support = "agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] }"
           complete_support_with_evidence = "agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false, tools: [{ kind: 'tool', name: 'crm.read', internetExposed: false, privileged: false }] }"
           replace('tests/readiness-evidence.test.js', complete_support, complete_support_with_evidence, 2)
-          replace(
-              'tests/readiness-evidence.test.js',
-              "agent: { name: 'focused', model: 'gpt-5', environment: 'staging' }",
-              "agent: { name: 'focused', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false }",
-              1,
-          )
-
+          replace('tests/readiness-evidence.test.js', "agent: { name: 'focused', model: 'gpt-5', environment: 'staging' }", "agent: { name: 'focused', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false }", 1)
           safe_inventory = "services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'] }]"
           safe_inventory_with_evidence = "services: [{ name: 'support-agent', type: 'agent', model: 'gpt-5', environment: 'staging', tools: ['crm.read'], public: false, privileged: false }]"
           replace('tests/control-plane.test.js', safe_inventory, safe_inventory_with_evidence, 3)
