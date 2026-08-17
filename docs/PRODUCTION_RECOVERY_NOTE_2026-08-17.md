@@ -1,0 +1,1 @@
+Immediate recovery action: disable loading of the newly introduced customer-guidance JavaScript on Control Intelligence pages until the MutationObserver loop is repaired and browser-verified. The CSS and documentation may remain; no server/evidence state changes are involved. This restores the pre-2da4e947 execution path while preserving Northstar data.
