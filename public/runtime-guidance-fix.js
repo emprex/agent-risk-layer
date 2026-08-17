@@ -1,6 +1,5 @@
-// Clarify the stage-three guided Runtime action without changing protection semantics.
-// The project already has a connection key at this point, so "Connect my agent"
-// is misleading. Keep the website terminology aligned with the destination section.
+// Clarify customer-facing Runtime and remediation guidance without changing
+// protection, evidence or authorisation semantics.
 
 function findDeveloperIntegration() {
   const headings = [...document.querySelectorAll('#runtime article.panel h3')];
@@ -50,13 +49,23 @@ function clarifyRuntimeGuidance() {
   return true;
 }
 
-// The main Runtime module renders after its API calls complete. Poll briefly for
-// the guided card instead of observing DOM mutations. This keeps the helper
-// bounded and prevents the page-unresponsive failure fixed earlier.
-if (!clarifyRuntimeGuidance()) {
-  let attempts = 0;
-  const timer = window.setInterval(() => {
-    attempts += 1;
-    if (clarifyRuntimeGuidance() || attempts >= 50) window.clearInterval(timer);
-  }, 100);
+function clarifyAssessmentScopeCopy() {
+  const candidates = [...document.querySelectorAll('.assessment-handoff small')];
+  const stale = candidates.find((item) => item.textContent?.includes('this exact Northstar deployment and version'));
+  if (!stale) return false;
+  stale.textContent = 'Only choose an existing project when it represents this exact assessed agent, deployment and version.';
+  return true;
 }
+
+// The main Runtime module renders after its API calls complete. Poll briefly for
+// the relevant customer-facing elements instead of observing all DOM mutations.
+let attempts = 0;
+const timer = window.setInterval(() => {
+  attempts += 1;
+  const runtimeDone = clarifyRuntimeGuidance();
+  const scopeDone = clarifyAssessmentScopeCopy();
+  if ((runtimeDone && scopeDone) || attempts >= 50) window.clearInterval(timer);
+}, 100);
+
+clarifyRuntimeGuidance();
+clarifyAssessmentScopeCopy();
