@@ -1,6 +1,7 @@
 // Normal-customer scope review for Control Intelligence.
 // This module only prepares and compresses the existing applicability form.
 // It does not submit, persist, or infer findings, evidence, test results, approvals or deployment decisions.
+// Server-side suggestion semantics remain authoritative; this layer never derives confidence from rendered copy.
 
 const root = document.querySelector('#ciRoot');
 let selectedMeta = new Map();
@@ -14,19 +15,6 @@ const make = (tag, className, value) => {
   return node;
 };
 
-function parseFacts(value) {
-  return String(value || '').split(',').map((item) => item.trim().replaceAll('\\:', ':').replaceAll('\\_', '_')).filter(Boolean);
-}
-
-function confidenceFor(meta) {
-  const facts = parseFacts(meta?.factText);
-  const riskBearing = facts.some((fact) => /^(audience:customer_facing|data:|tool:(write|payment|admin|code_execution|deployment)|authority:|identity:(tenant_scope|roles))$/.test(fact));
-  // One broad fact such as staging or tool:read is not enough to prepare an applicability decision.
-  // Preparation is intentionally conservative: at least two confirmed facts and one risk-bearing fact are required.
-  const prepare = Boolean(meta?.serverSuggested && facts.length >= 2 && riskBearing);
-  return { facts, prepare };
-}
-
 function captureSelection() {
   const map = new Map();
   document.querySelectorAll('[data-bulk-control]:checked').forEach((box) => {
@@ -37,15 +25,18 @@ function captureSelection() {
     const rationale = text(row.querySelector('p'));
     const smalls = [...row.querySelectorAll('small')].map(text).filter(Boolean);
     const factText = smalls.at(-1) || '';
-    const meta = {
+    // control-intelligence.js renders server `suggested` as a strong architecture match.
+    // Since ARL-SUGGEST-1.1.0 only emits `suggested` for higher-confidence multi-fact matches,
+    // the UI can prepare that choice without reparsing or reclassifying facts itself.
+    const prepare = /suggested check|strong architecture match/i.test(status);
+    map.set(box.dataset.bulkControl, {
       controlId: box.dataset.bulkControl,
       status,
       title,
       rationale,
       factText,
-      serverSuggested: /suggested check|strong architecture match/i.test(status),
-    };
-    map.set(box.dataset.bulkControl, { ...meta, ...confidenceFor(meta) });
+      prepare,
+    });
   });
   selectedMeta = map;
 }
@@ -66,7 +57,7 @@ function decorateControls() {
   guideCopy.append(
     make('span', 'eyebrow', 'Customer scope review'),
     make('h3', '', 'Review the uncertain scope, not 108 controls one by one'),
-    make('p', '', 'AgentRiskLayer can prepare only higher-confidence applicability suggestions from multiple confirmed snapshot facts. Broad or single-fact matches stay unselected for your confirmation. Nothing is saved until you review and confirm the batch.'),
+    make('p', '', 'AgentRiskLayer prepares only higher-confidence suggestions identified by the server from multiple confirmed snapshot facts. Broad or single-fact matches stay unselected for confirmation. Nothing is saved until you review and confirm the batch.'),
   );
   const principles = document.createElement('div');
   principles.className = 'ci-scope-principles';
@@ -89,7 +80,7 @@ function decorateControls() {
 
   panel.querySelectorAll('.ci-control-row').forEach((row) => {
     const status = row.querySelector('.ci-status');
-    if (status && /suggested/i.test(status.textContent || '')) status.textContent = 'Suggested check · architecture match';
+    if (status && /suggested/i.test(status.textContent || '')) status.textContent = 'Suggested check · higher-confidence architecture match';
     const title = row.querySelector('h3');
     if (title && !row.querySelector('.ci-security-question-label')) {
       title.insertAdjacentElement('beforebegin', make('span', 'ci-security-question-label', 'Security question — not a finding'));
@@ -112,7 +103,7 @@ function setRowState(fieldset, meta) {
     decision.value = 'applicable';
     facts.forEach((fact) => { fact.checked = true; });
     const confirmedFacts = facts.map((fact) => human(fact.value)).join(', ');
-    reason.value = `Suggested as relevant to this exact system snapshot because multiple confirmed architecture facts match this control: ${confirmedFacts}.`;
+    reason.value = `Suggested as relevant to this exact system snapshot because the server identified a higher-confidence multi-fact architecture match: ${confirmedFacts}.`;
   }
 
   fieldset.classList.add(prepared ? 'ci-scope-row-prepared' : 'ci-scope-row-exception');
@@ -174,7 +165,7 @@ function compactBulkReview() {
 
   section.querySelector('h2').textContent = 'Review scope before saving';
   const intro = section.querySelector('h2 + p');
-  if (intro) intro.textContent = 'Only higher-confidence matches are prepared. Single-fact or broad matches remain unselected and visible below for confirmation. Suggestions are not saved until you confirm.';
+  if (intro) intro.textContent = 'Only server-classified higher-confidence matches are prepared. Any broader selected match stays unselected and visible below for confirmation. Suggestions are not saved until you confirm.';
 
   const summary = document.createElement('div');
   summary.className = 'ci-scope-review-summary';
@@ -206,7 +197,7 @@ function compactBulkReview() {
   }
 
   if (exceptions) {
-    const exceptionNote = make('div', 'ci-scope-exception-note', `${exceptions} control${exceptions === 1 ? '' : 's'} need your confirmation because the snapshot match is too broad to prepare an applicability decision safely.`);
+    const exceptionNote = make('div', 'ci-scope-exception-note', `${exceptions} control${exceptions === 1 ? '' : 's'} need your confirmation because the selected match is not a server-classified higher-confidence scope suggestion.`);
     form.insertAdjacentElement('beforebegin', exceptionNote);
   }
 
