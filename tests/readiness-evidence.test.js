@@ -52,12 +52,12 @@ async function publishAndExercise({ owner, project }) {
     policyVersion: '999', policyDigest: 'f'.repeat(64),
   } });
   const inventory = await recordAssetSnapshot({ projectId: project.id, userId: owner.id, source: 'test', documents: {
-    agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] },
+    agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false, tools: [{ kind: 'tool', name: 'crm.read', internetExposed: false, privileged: false }] },
   } });
   const remediation = await createRemediationItem({ projectId: project.id, userId: owner.id,
     input: { title: 'Close runtime finding', findingKey: `runtime-${crypto.randomUUID()}` } });
   const implementationSnapshot = await recordAssetSnapshot({ projectId: project.id, userId: owner.id, source: 'implementation-test', documents: {
-    agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', tools: [{ kind: 'tool', name: 'crm.read' }] },
+    agent: { name: 'support-agent', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false, tools: [{ kind: 'tool', name: 'crm.read', internetExposed: false, privileged: false }] },
   } });
   const implementation = await registerRemediationEvidenceArtifact({ projectId: project.id, itemId: remediation.id, userId: owner.id,
     artifactType: 'implementation', sourceId: implementationSnapshot.id });
@@ -82,7 +82,7 @@ async function prepareRetest(fixture, criteria = blockedInputCriteria(fixture.pr
   const item = await createRemediationItem({ projectId: fixture.project.id, userId: fixture.owner.id,
     input: { title: `Focused retest ${crypto.randomUUID()}`, findingKey: `finding-${crypto.randomUUID()}` } });
   const snapshot = await recordAssetSnapshot({ projectId: fixture.project.id, userId: fixture.owner.id, source: 'focused-retest',
-    documents: { agent: { name: 'focused', model: 'gpt-5', environment: 'staging' } } });
+    documents: { agent: { name: 'focused', model: 'gpt-5', environment: 'staging', internetExposed: false, privileged: false } } });
   const artifact = await registerRemediationEvidenceArtifact({ projectId: fixture.project.id, itemId: item.id, userId: fixture.owner.id,
     artifactType: 'implementation', sourceId: snapshot.id });
   await updateRemediationItem({ projectId: fixture.project.id, itemId: item.id, userId: fixture.owner.id,

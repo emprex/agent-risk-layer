@@ -121,7 +121,7 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     await db.transaction(async () => {
         // PostgreSQL needs an explicit per-account row lock so concurrent token
         // requests cannot both observe the same allowance. The SQLite test
-        // adapter serialises transactions with BEGIN IMMEDIATE.
+        // adapter serialises writes with its immediate transaction mode.
         if (db.kind === 'postgres') {
             const lockedUser = await db.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(userId);
             if (!lockedUser)
