@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { db, id, nowIso } from './db.js';
+const EMAIL_TIMEOUT_MS = 10000;
 export async function sendReportEmail({ userId, to, assessmentName, pdfBuffer, filename }) {
     const subject = `Your AgentRiskLayer report — ${assessmentName}`;
     const html = emailShell(`
@@ -63,6 +64,8 @@ async function sendEmail({ userId, to, subject, html, attachments }) {
     try {
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
+            redirect: 'error',
+            signal: AbortSignal.timeout(EMAIL_TIMEOUT_MS),
             headers: { Authorization: `Bearer ${config.resendApiKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ from: config.emailFrom, to: [to], subject, html, attachments }),
         });
@@ -73,8 +76,11 @@ async function sendEmail({ userId, to, subject, html, attachments }) {
         return payload;
     }
     catch (error) {
-        await log(userId, to, subject, 'failed', null, error.message);
-        throw error;
+        const message = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+            ? `Email delivery timed out after ${EMAIL_TIMEOUT_MS} ms`
+            : String(error?.message || 'Email delivery failed.');
+        await log(userId, to, subject, 'failed', null, message);
+        throw new Error(message, { cause: error });
     }
 }
 function emailShell(content) {
