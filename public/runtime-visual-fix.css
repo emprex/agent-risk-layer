@@ -123,6 +123,20 @@
   overflow-wrap: anywhere;
 }
 
+.bound-retest-command {
+  margin-top: .75rem;
+}
+
+.bound-retest-command-text {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+
+.retest-action-busy {
+  min-width: 9rem;
+}
+
 @media (max-width: 1180px) {
   .workspace-control-page.runtime-specialist-active .control-plane-layout.technical-mode {
     grid-template-columns: minmax(0, 1fr) !important;
