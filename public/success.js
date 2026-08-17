@@ -9,8 +9,8 @@ function continuationFor(data) {
       label: 'Continue this assessment',
       title: 'Payment complete. Continue with this agent.',
       detail: 'Your £99 assessment access is ready. Continue with the same agent to review the current findings, assign the first fix, attach implementation evidence and retest the exact risk.',
-      secondaryHref: `/result.html?id=${encodeURIComponent(purchase.assessment_id)}`,
-      secondaryLabel: 'Open assessment result',
+      secondaryHref: `/dashboard.html?assessment=${encodeURIComponent(purchase.assessment_id)}#agentHistory`,
+      secondaryLabel: 'View assessment history',
     };
   }
   return {
