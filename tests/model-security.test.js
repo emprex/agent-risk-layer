@@ -13,3 +13,19 @@ test('quarantines digest mismatch, unknown publisher and executable payload', ()
   assert.equal(result.decision, 'quarantine');
   assert.ok(result.findings.length >= 4);
 });
+
+test('rejects malformed or credential-bearing HTTPS model sources', () => {
+  const digest = 'a'.repeat(64);
+  for (const source of ['https://', 'https://user:password@models.example/safe', 'javascript:alert(1)']) {
+    const result = verifyModelManifest({ modelId:'source-test', source, publisher:'Acme', license:'Apache-2.0', sha256:digest, files:[] }, { expectedSha256:digest, allowedPublishers:['Acme'] });
+    assert.equal(result.decision, 'quarantine');
+    assert.ok(result.findings.some((finding) => finding.ruleId === 'ARL-MOD-002'));
+  }
+});
+
+test('manifest evidence digest is canonical across object key order', () => {
+  const digest = 'a'.repeat(64);
+  const left = verifyModelManifest({ modelId:'safe-1', source:'https://models.example/safe', publisher:'Acme', license:'Apache-2.0', sha256:digest, files:[] });
+  const right = verifyModelManifest({ files:[], sha256:digest, license:'Apache-2.0', publisher:'Acme', source:'https://models.example/safe', modelId:'safe-1' });
+  assert.equal(left.evidence.manifestDigest, right.evidence.manifestDigest);
+});
