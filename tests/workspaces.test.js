@@ -17,8 +17,10 @@ test('workspace roles enforce boundaries and preserve an owner', async () => {
     await upsertMember({ workspaceId: workspace.id, actorId: owner, email, role: 'viewer' });
     assert.equal((await getWorkspace(workspace.id, viewer)).role, 'viewer');
     await assert.rejects(async () => await upsertMember({ workspaceId: workspace.id, actorId: viewer, email: 'other@example.com', role: 'admin' }), /permission denied/i);
+    const ownerEmail = (await db.prepare('SELECT email FROM users WHERE id=?').get(owner)).email;
+    await assert.rejects(async () => await upsertMember({ workspaceId: workspace.id, actorId: owner, email: ownerEmail, role: 'admin' }), /retain at least one active owner/i);
 });
-test('SCIM token provisions and deprovisions users', async () => {
+test('SCIM token provisions and deprovisions users without removing the last owner', async () => {
     const owner = await user(`scim-${crypto.randomUUID()}@example.com`);
     const workspace = await createWorkspace(owner, 'SCIM team');
     const token = await createScimToken(workspace.id, owner);
@@ -28,10 +30,19 @@ test('SCIM token provisions and deprovisions users', async () => {
     assert.equal(member.status, 'active');
     member = await provisionScimUser(workspace.id, { externalId: 'idp-42', userName: 'member@example.com', active: false, role: 'analyst' });
     assert.equal(member.status, 'deprovisioned');
+    await assert.rejects(async () => await provisionScimUser(workspace.id, { userName: 'not-an-email', active: true, role: 'viewer' }), /valid member email/i);
+    const ownerRow = await db.prepare('SELECT external_id,email FROM workspace_members WHERE workspace_id=? AND user_id=?').get(workspace.id, owner);
+    await assert.rejects(async () => await provisionScimUser(workspace.id, {
+        externalId: ownerRow.external_id || ownerRow.email,
+        userName: ownerRow.email,
+        active: true,
+        role: 'viewer',
+    }), /retain at least one active owner/i);
 });
-test('signed integration delivery records success', async () => {
+test('signed integration delivery records success and rejects embedded endpoint credentials', async () => {
     const owner = await user(`integration-${crypto.randomUUID()}@example.com`);
     const workspace = await createWorkspace(owner, 'Operations team');
+    await assert.rejects(() => configureIntegration({ workspaceId: workspace.id, actorId: owner, type: 'generic', name: 'Bad endpoint', endpoint: 'https://user:password@hooks.example.com/security', secret: 'integration-secret-with-at-least-32-characters' }), /embedded credentials/i);
     await configureIntegration({ workspaceId: workspace.id, actorId: owner, type: 'slack', name: 'SOC alerts', endpoint: 'https://hooks.example.com/security', secret: 'integration-secret-with-at-least-32-characters' });
     let delivered;
     const results = await deliverSecurityEvent({
@@ -42,5 +53,6 @@ test('signed integration delivery records success', async () => {
     });
     assert.equal(results[0].delivered, true);
     assert.match(delivered.request.headers['x-agentrisk-signature'], /^v1=/);
+    assert.ok(delivered.request.signal instanceof AbortSignal);
     assert.equal(Object.hasOwn((await getWorkspace(workspace.id, owner)).integrations[0], 'secret'), false);
 });
