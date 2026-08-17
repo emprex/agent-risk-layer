@@ -5,8 +5,8 @@ export function verifyModelManifest(manifest = {}, trust = {}) {
     const files = Array.isArray(manifest.files) ? manifest.files : [];
     if (!manifest.modelId)
         findings.push(finding('ARL-MOD-001', 'critical', 'Model identity is missing.'));
-    if (!manifest.source || !String(manifest.source).startsWith('https://'))
-        findings.push(finding('ARL-MOD-002', 'high', 'Model source is not an HTTPS origin.'));
+    if (!validHttpsSource(manifest.source))
+        findings.push(finding('ARL-MOD-002', 'high', 'Model source is not a valid credential-free HTTPS origin.'));
     if (!manifest.license)
         findings.push(finding('ARL-MOD-003', 'medium', 'Model licence is undeclared.'));
     if (!manifest.sha256 || !/^[a-f0-9]{64}$/i.test(manifest.sha256))
@@ -25,7 +25,7 @@ export function verifyModelManifest(manifest = {}, trust = {}) {
         decision: findings.some((f) => ['critical', 'high'].includes(f.severity)) ? 'quarantine' : 'allow',
         findings,
         evidence: {
-            manifestDigest: crypto.createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+            manifestDigest: crypto.createHash('sha256').update(canonicalJson(manifest)).digest('hex'),
             rawModelRetained: false,
             scannedFileCount: files.length,
         },
@@ -33,6 +33,20 @@ export function verifyModelManifest(manifest = {}, trust = {}) {
 }
 function finding(ruleId, severity, message) { return { ruleId, severity, message }; }
 function extension(name) { const i = String(name).lastIndexOf('.'); return i < 0 ? '' : String(name).slice(i).toLowerCase(); }
+function validHttpsSource(value) {
+    try {
+        const url = new URL(String(value || ''));
+        return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+    }
+    catch {
+        return false;
+    }
+}
+function canonicalJson(value) {
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+    return JSON.stringify(value);
+}
 function safeEqual(a, b) {
     const left = Buffer.from(String(a || '').toLowerCase());
     const right = Buffer.from(String(b || '').toLowerCase());
