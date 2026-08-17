@@ -44,9 +44,9 @@ test('assessment presents one guided question at a time, captures unusual agents
   assert.match(html, /Briefly describe what it does/);
   assert.match(html, /Autonomous \/ general-purpose agent/);
   assert.match(html, /required for “Other”/);
-  assert.match(html, /Do you have proof for this answer\?/);
-  assert.match(html, /supporting evidence to attach/i);
-  assert.match(html, /Verified evidence can never be created by selecting an option/i);
+  assert.match(html, /Evidence for this answer/);
+  assert.match(html, /answer remains unverified unless linked to reviewed evidence or a repeatable test later/i);
+  assert.match(html, /Selecting an option here never creates verified evidence/i);
   assert.match(js, /evidence_ready/);
   assert.doesNotMatch(html, /25 security controls/);
   assert.match(js, /flowQuestions\[stepIndex - 1\]/);
@@ -87,8 +87,8 @@ test('result page puts information gaps, real findings and practical next action
   const html = read('public/result.html');
   const js = read('public/result.js');
   assert.match(html, /AI-agent security assessment result/);
-  assert.match(js, /Your next action/);
-  assert.match(js, /Information needed/);
+  assert.match(js, /Next action/);
+  assert.match(js, /Information gaps/);
   assert.match(js, /unresolved assessment inputs, not discovered vulnerabilities/);
   assert.match(js, /No control weakness was established/);
   assert.match(js, /What could happen/);
@@ -97,10 +97,10 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /Not determined/);
   assert.match(js, /Security information completeness/);
   assert.match(js, /updated assessment/i);
-  assert.match(js, /Correct or update answers/);
+  assert.match(js, /Update answers/);
   assert.match(js, /assessmentRemediationHref/);
   assert.doesNotMatch(js, /href="\/control-plane\\.html#remediation">Track fixes/);
-  assert.match(js, /Technical score and evidence details/);
+  assert.match(js, /Technical score, controls and evidence/);
   assert.match(js, /Aggregate declared score/);
   assert.match(js, /Highest declared finding/);
   assert.match(js, /Not applicable — declared, not verified/);
@@ -113,15 +113,14 @@ test('dashboard calculates one recommended next action and keeps other work seco
   const js = read('public/dashboard.js');
   assert.match(html, /AI agent security/);
   assert.match(html, /take the one action that most improves the evidence for deployment/);
-  assert.match(js, /Recommended first step/);
-  assert.match(js, /Urgent review/);
-  assert.match(js, /Work in progress/);
-  assert.match(js, /Next protection step/);
-  assert.match(js, /dashboard-recommended-action/);
-  assert.match(js, /Other security tasks/);
-  assert.match(js, /This is a guide, not an automatic deployment approval/);
-  assert.match(js, /create an updated assessment with the clarified answers/);
-  assert.match(js, /Security information incomplete/);
+  assert.match(js, /function nextActionForAssessment/);
+  assert.match(js, /Next action/);
+  assert.match(js, /Complete the missing security information/);
+  assert.match(js, /Review the highest-priority declared weaknesses/);
+  assert.match(js, /Review deployment evidence for this exact agent/);
+  assert.match(js, /This is not a deployment decision/);
+  assert.match(js, /Unknown information is not a vulnerability/);
+  assert.match(js, /workspace-secondary/);
 });
 
 test('assessment continuation preserves history and limits raw-answer prefill to authorised callers', () => {
