@@ -114,30 +114,56 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
                 throw new Error('The authorised testing window has not started yet.');
         }
     }
-    const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required
-      FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(userId);
-    const subscription = subscriptions.find((candidate) => subscriptionAccessDecision(candidate).allowed) || null;
-    const superuser = Boolean(await db.prepare(`SELECT 1 ok FROM users WHERE id=? AND role='superuser'`).get(userId));
-    const recentRuns = (await db.prepare(`SELECT COUNT(*) AS count FROM redteam_runs WHERE user_id = ? AND created_at >= ?`).get(userId, new Date(Date.now() - 30 * 86400000).toISOString())).count;
-    const assessmentRuns = (await db.prepare('SELECT COUNT(*) AS count FROM redteam_runs WHERE assessment_id = ?').get(assessmentId)).count;
-    let limit = 0;
-    if (superuser)
-        limit = Number.MAX_SAFE_INTEGER;
-    else if (subscription?.plan_key)
-        limit = Number(COMMERCIAL_CATALOGUE[subscription.plan_key]?.limits?.redTeamRuns || 0);
-    else if (assessment.paid_tier === 'pro')
-        limit = COMMERCIAL_CATALOGUE.pro_report.limits.redTeamRuns;
-    if (!limit)
-        throw new Error('A paid security assessment or active Developer, Team, or Agency subscription is required for controlled red-team evidence.');
-    if (!superuser && subscription && recentRuns >= limit)
-        throw new Error(`Your plan includes ${limit} controlled red-team runs per rolling 30 days. The current allowance is used.`);
-    if (!superuser && !subscription && assessmentRuns >= limit)
-        throw new Error(`This Professional report includes ${limit} controlled red-team runs for the assessment. The allowance is used.`);
     const raw = `red_${crypto.randomBytes(32).toString('base64url')}`;
     const createdAt = nowIso();
     const expiresAt = new Date(Date.now() + REDTEAM_TOKEN_TTL_MS).toISOString();
-    await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
-    return { token: raw, expiresAt, assessmentId, mode: requestedMode, recovery: Boolean(recoveryBundle), authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement: { source: superuser ? 'superuser' : subscription?.plan_key || 'founding_assessment', limit: superuser ? null : limit, used: superuser || subscription ? recentRuns : assessmentRuns } };
+    let entitlement = null;
+    await db.transaction(async () => {
+        // PostgreSQL needs an explicit per-account row lock so concurrent token
+        // requests cannot both observe the same allowance. The SQLite test
+        // adapter serialises transactions with BEGIN IMMEDIATE.
+        if (db.kind === 'postgres') {
+            const lockedUser = await db.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(userId);
+            if (!lockedUser)
+                throw new Error('Account not found.');
+        }
+        const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required
+          FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(userId);
+        const subscription = subscriptions.find((candidate) => subscriptionAccessDecision(candidate).allowed) || null;
+        const superuser = Boolean(await db.prepare(`SELECT 1 ok FROM users WHERE id=? AND role='superuser'`).get(userId));
+        const rollingStart = new Date(Date.now() - 30 * 86400000).toISOString();
+        const recentRuns = Number((await db.prepare(`SELECT COUNT(*) AS count FROM redteam_runs WHERE user_id = ? AND created_at >= ?`).get(userId, rollingStart)).count || 0);
+        const assessmentRuns = Number((await db.prepare('SELECT COUNT(*) AS count FROM redteam_runs WHERE assessment_id = ?').get(assessmentId)).count || 0);
+        const activeUserReservations = Number((await db.prepare(`SELECT COUNT(*) AS count FROM redteam_tokens
+          WHERE user_id = ? AND used_at IS NULL AND expires_at > ?`).get(userId, createdAt)).count || 0);
+        const activeAssessmentReservations = Number((await db.prepare(`SELECT COUNT(*) AS count FROM redteam_tokens
+          WHERE assessment_id = ? AND used_at IS NULL AND expires_at > ?`).get(assessmentId, createdAt)).count || 0);
+        let limit = 0;
+        if (superuser)
+            limit = Number.MAX_SAFE_INTEGER;
+        else if (subscription?.plan_key)
+            limit = Number(COMMERCIAL_CATALOGUE[subscription.plan_key]?.limits?.redTeamRuns || 0);
+        else if (assessment.paid_tier === 'pro')
+            limit = COMMERCIAL_CATALOGUE.pro_report.limits.redTeamRuns;
+        if (!limit)
+            throw new Error('A paid security assessment or active Developer, Team, or Agency subscription is required for controlled red-team evidence.');
+        if (!superuser && subscription && recentRuns + activeUserReservations >= limit)
+            throw new Error(`Your plan includes ${limit} controlled red-team runs per rolling 30 days. The current allowance is used or reserved by an active token.`);
+        if (!superuser && !subscription && assessmentRuns + activeAssessmentReservations >= limit)
+            throw new Error(`This Professional report includes ${limit} controlled red-team runs for the assessment. The allowance is used or reserved by an active token.`);
+        await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
+        const completedRuns = subscription ? recentRuns : assessmentRuns;
+        const existingReservations = subscription ? activeUserReservations : activeAssessmentReservations;
+        const reserved = superuser ? 0 : existingReservations + 1;
+        entitlement = {
+            source: superuser ? 'superuser' : subscription?.plan_key || 'founding_assessment',
+            limit: superuser ? null : limit,
+            used: superuser ? 0 : completedRuns,
+            reserved,
+            remaining: superuser ? null : Math.max(0, limit - completedRuns - reserved),
+        };
+    });
+    return { token: raw, expiresAt, assessmentId, mode: requestedMode, recovery: Boolean(recoveryBundle), authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement };
 }
 export async function createRedTeamRecoveryToken({ userId, assessmentId, bundle }) {
     const authorisationId = clean(bundle?.campaign?.authorisationId || '', 80);
