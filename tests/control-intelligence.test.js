@@ -28,7 +28,7 @@ test('system snapshots are deterministic, immutable and bind all control evaluat
   const f=await fixture('snapshot');
   assert.equal(canonicalJson({b:2,a:1}),'{"a":1,"b":2}');
   assert.equal(intelligenceDigest({b:2,a:1}),intelligenceDigest({a:1,b:2}));
-  const input={architecture:{summary:'Support agent',components:[{id:'orchestrator',label:'Agent orchestrator'}]},models:[{provider:'test',model:'synthetic'}],tools:[{name:'ticket_read',access:'read'}],identities:[{role:'support-agent'}],dataSources:[{type:'synthetic-tickets',classification:'internal'}],networkAccess:[],autonomyLevel:'bounded',approvalConfiguration:{highImpact:'required'},assessmentConfiguration:{profile:'ARL-RKA-1.2.0',architectureFacts:['input:user_messages','tool:read']},source:'test'};
+  const input={architecture:{summary:'Support agent',components:[{id:'orchestrator',label:'Agent orchestrator'}]},models:[{provider:'test',model:'synthetic'}],tools:[{name:'ticket_read',access:'read'}],identities:[{role:'support-agent'}],dataSources:[{type:'synthetic-tickets',classification:'internal'}],networkAccess:[],autonomyLevel:'bounded',approvalConfiguration:{highImpact:'required'},assessmentConfiguration:{profile:'ARL-RKA-1.2.0',architectureFacts:['audience:customer_facing','input:user_messages','tool:read']},source:'test'};
   const first=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input});
   assert.equal(first.created,true);assert.match(first.snapshot.contentDigest,/^[a-f0-9]{64}$/);
   assert.equal((await db.prepare('SELECT COUNT(*) count FROM control_snapshot_evaluations WHERE system_snapshot_id=?').get(first.snapshot.id)).count,108);
@@ -125,7 +125,7 @@ test('Control Intelligence UI has one clear navigation entry, text graph alterna
   const script=fs.readFileSync(path.join(root,'public/control-intelligence.js'),'utf8');
   const detailScript=fs.readFileSync(path.join(root,'public/control-intelligence-control.js'),'utf8');
   assert.equal((overview.match(/>Control Intelligence<\/a>/g)||[]).length,0);
-  assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/Control Intelligence/);
+  assert.match(fs.readFileSync(path.join(root,'public/site-shell.js'),'utf8'),/label: 'Evidence'/);
   assert.match(overview,/Overview[\s\S]*Controls[\s\S]*Evidence chain[\s\S]*Deployment decision/);
   assert.match(script,/Architecture-derived review/);assert.match(script,/candidate controls reviewed/);assert.match(script,/Review suggested controls/);
   assert.match(detailScript,/>Previous<\/a>/);assert.match(detailScript,/>All controls<\/a>/);assert.match(detailScript,/>Next<\/a>/);assert.match(detailScript,/beforeunload/);
@@ -149,9 +149,9 @@ test('manual review can confirm applicable with a reason when the snapshot has n
   const {snapshot}=await createSystemSnapshot({projectId:f.project.id,userId:f.userId,input:{architecture:{summary:'Customer-declared consequential refund assistant'},assessmentConfiguration:{architectureFacts:[]},source:'assessment_remediation_handoff'}});
   const before=await getControlIntelligenceControl({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId});
   const saved=await assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId,input:{snapshotId:snapshot.id,decision:'applicable',reason:'The refund assistant participates in consequential actions that require a reconstructable audit trail.',architectureFactIds:[],expectedEvaluationDigest:before.applicability.evaluationDigest}});
-  assert.equal(saved.decision,'applicable');
-  assert.deepEqual(saved.architectureFactIds,[]);
-  await assert.rejects(()=>assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'The system has no consequential action capability.',architectureFactIds:[],expectedEvaluationDigest:saved.evaluationDigest}}),/require at least one confirmed architecture fact/i);
+  assert.equal(saved.evaluation.decision,'applicable');
+  assert.deepEqual(saved.evaluation.architectureFactIds,[]);
+  await assert.rejects(()=>assessControlApplicability({projectId:f.project.id,controlId:'ARL-KB-090',userId:f.userId,input:{snapshotId:snapshot.id,decision:'not_applicable',reason:'The system has no consequential action capability.',architectureFactIds:[],expectedEvaluationDigest:saved.evaluation.evaluationDigest}}),/require at least one confirmed architecture fact/i);
 });
 
 test('current records are unique and stale compare-and-swap writers fail closed',async()=>{
