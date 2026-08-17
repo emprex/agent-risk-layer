@@ -11,12 +11,14 @@ test('production with live billing shows no demo notice and permits checkout', (
   });
 });
 
-test('non-production demo explicitly labels simulated checkout', () => {
+test('non-production demo disables public checkout instead of simulating a purchase', () => {
   const result = resolvePricingMode({ productStage: 'controlled-beta', demoMode: true });
   assert.equal(result.mode, 'demo');
-  assert.equal(result.allowCheckout, true);
+  assert.equal(result.allowCheckout, false);
   assert.equal(result.showDemoNotice, true);
-  assert.match(result.message, /simulated/i);
+  assert.match(result.message, /does not process live payments/i);
+  assert.match(result.message, /disabled/i);
+  assert.doesNotMatch(result.message, /simulated checkout/i);
 });
 
 test('production demo mismatch fails closed and never presents simulated checkout', () => {
