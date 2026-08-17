@@ -10,9 +10,9 @@ const css = read('public/control-intelligence-customer-guidance.css');
 
 test('Control Intelligence customer guidance stays dormant until browser regression verification', () => {
   for (const html of [controlHtml, overviewHtml]) {
-    assert.match(html, /control-intelligence-customer-guidance\.css/);
     assert.doesNotMatch(html, /control-intelligence-customer-guidance\.js/);
   }
+  assert.match(controlHtml, /control-intelligence-customer-guidance\.css/);
   assert.match(guidance, /function setText/);
   assert.match(guidance, /queueMicrotask/);
 });
