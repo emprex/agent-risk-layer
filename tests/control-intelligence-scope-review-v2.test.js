@@ -7,10 +7,10 @@ const html = read('public/control-intelligence.html');
 const script = read('public/control-intelligence-scope-review-v2.js');
 const css = read('public/control-intelligence-scope-review.css');
 
-test('Deployment Evidence loads the hardened compact scope-review layer', () => {
+test('Deployment Evidence loads one hardened compact scope-review layer', () => {
   assert.match(html, /control-intelligence-scope-review\.css/);
   assert.match(html, /control-intelligence-scope-review-v2\.js/);
-  assert.ok(html.indexOf('control-intelligence-customer-guidance.js') < html.indexOf('control-intelligence-scope-review-v2.js'));
+  assert.doesNotMatch(html, /control-intelligence-customer-guidance\.js/);
 });
 
 test('strong architecture matches are prepared as suggestions, never auto-submitted', () => {
