@@ -39,20 +39,40 @@ function parseSafetensors(bytes, maxTensorBytes, findings) {
     }
     try {
         const header = JSON.parse(bytes.subarray(8, 8 + headerLength).toString('utf8'));
+        if (!header || Array.isArray(header) || typeof header !== 'object')
+            throw new Error('SafeTensors header must be an object.');
         const tensors = Object.entries(header).filter(([key]) => key !== '__metadata__');
+        const dataLength = bytes.length - 8 - headerLength;
+        const ranges = [];
         let declaredBytes = 0;
         for (const [tensorName, tensor] of tensors) {
-            const [start, end] = tensor.data_offsets || [];
-            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start)
+            if (!tensor || Array.isArray(tensor) || typeof tensor !== 'object') {
+                findings.push(finding('critical', 'MODEL-TENSOR-DESCRIPTOR', `Tensor ${tensorName} has an invalid descriptor.`));
+                continue;
+            }
+            const [start, end] = Array.isArray(tensor.data_offsets) ? tensor.data_offsets : [];
+            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) {
                 findings.push(finding('critical', 'MODEL-TENSOR-OFFSET', `Tensor ${tensorName} has invalid offsets.`));
-            else {
-                declaredBytes = Math.max(declaredBytes, end);
-                if (end - start > maxTensorBytes)
-                    findings.push(finding('high', 'MODEL-TENSOR-SIZE', `Tensor ${tensorName} exceeds the configured size boundary.`));
+                continue;
+            }
+            if (end > dataLength) {
+                findings.push(finding('critical', 'MODEL-TENSOR-TRUNCATED', `Tensor ${tensorName} extends beyond the artifact data section.`));
+                continue;
+            }
+            declaredBytes = Math.max(declaredBytes, end);
+            if (end - start > maxTensorBytes)
+                findings.push(finding('high', 'MODEL-TENSOR-SIZE', `Tensor ${tensorName} exceeds the configured size boundary.`));
+            ranges.push({ start, end, tensorName });
+        }
+        ranges.sort((a, b) => a.start - b.start || a.end - b.end || a.tensorName.localeCompare(b.tensorName));
+        for (let index = 1; index < ranges.length; index += 1) {
+            const previous = ranges[index - 1];
+            const current = ranges[index];
+            if (current.start < previous.end) {
+                findings.push(finding('critical', 'MODEL-TENSOR-OVERLAP', `Tensor ${current.tensorName} overlaps tensor ${previous.tensorName}.`));
+                break;
             }
         }
-        if (declaredBytes > bytes.length - 8 - headerLength)
-            findings.push(finding('critical', 'MODEL-TENSOR-TRUNCATED', 'Declared tensor data exceeds artifact length.'));
         return { format: 'safetensors', tensors: tensors.length, declaredBytes, metadata: header.__metadata__ || {} };
     }
     catch {
