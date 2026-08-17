@@ -135,14 +135,13 @@
     const record = loadStored()[remediationId] || {};
     const command = curlFor(record);
     if (!command) return;
-    const width = button.getBoundingClientRect().width;
-    if (width) button.style.minWidth = `${Math.ceil(width)}px`;
+    button.classList.add('retest-action-busy');
     await navigator.clipboard.writeText(command);
     const previous = button.textContent;
     button.textContent = 'Copied';
     window.setTimeout(() => {
       button.textContent = previous;
-      button.style.minWidth = '';
+      button.classList.remove('retest-action-busy');
     }, 1200);
   }
 
@@ -153,8 +152,7 @@
     if (!projectId || !remediationId) return;
     const panel = button.closest('[data-bound-retest-guidance]');
     const previous = button.textContent;
-    const width = button.getBoundingClientRect().width;
-    if (width) button.style.minWidth = `${Math.ceil(width)}px`;
+    button.classList.add('retest-action-busy');
     button.disabled = true;
     button.textContent = 'Resetting…';
     if (panel) panel.dataset.busy = 'true';
@@ -173,7 +171,7 @@
     } catch (error) {
       button.disabled = false;
       button.textContent = previous;
-      button.style.minWidth = '';
+      button.classList.remove('retest-action-busy');
       if (panel) {
         delete panel.dataset.busy;
         let errorBox = panel.querySelector('[data-bound-retest-error]');
@@ -261,7 +259,7 @@
   }
 
   // The main module renders after API calls. A short bounded poll is enough to
-  // place the guidance without a MutationObserver or a self-triggering loop.
+  // place the guidance without a self-triggering DOM observer loop.
   let attempts = 0;
   const timer = window.setInterval(() => {
     attempts += 1;
