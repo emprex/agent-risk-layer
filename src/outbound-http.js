@@ -29,24 +29,31 @@ const blocked = new BlockList();
   ['2001:db8::', 32],
 ].forEach(([network, prefix]) => blocked.addSubnet(network, prefix, 'ipv6'));
 
+function addressHostname(hostname) {
+  const value = String(hostname || '').toLowerCase();
+  return value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
+}
+
 export function validateOutboundHttpsUrl(value) {
   const url = value instanceof URL ? new URL(value.toString()) : new URL(String(value || ''));
   if (url.protocol !== 'https:') throw new Error('Integration endpoint must use HTTPS.');
   if (url.username || url.password) throw new Error('Integration endpoint must not contain embedded credentials.');
   const hostname = url.hostname.toLowerCase();
+  const addressHost = addressHostname(hostname);
   if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
     throw new Error('Integration endpoint must use a public Internet hostname.');
   }
-  const family = isIP(hostname);
-  if (family && isBlockedAddress(hostname, family)) throw new Error('Integration endpoint must not target a private or reserved address.');
+  const family = isIP(addressHost);
+  if (family && isBlockedAddress(addressHost, family)) throw new Error('Integration endpoint must not target a private or reserved address.');
   return url;
 }
 
 export async function resolvePublicHttpsUrl(value, lookup = dns.lookup) {
   const url = validateOutboundHttpsUrl(value);
-  const literalFamily = isIP(url.hostname);
+  const addressHost = addressHostname(url.hostname);
+  const literalFamily = isIP(addressHost);
   const addresses = literalFamily
-    ? [{ address: url.hostname, family: literalFamily }]
+    ? [{ address: addressHost, family: literalFamily }]
     : await lookup(url.hostname, { all: true, verbatim: true });
   if (!Array.isArray(addresses) || addresses.length === 0) throw new Error('Integration endpoint hostname did not resolve.');
   for (const candidate of addresses) {
