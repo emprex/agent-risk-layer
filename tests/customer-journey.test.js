@@ -17,14 +17,14 @@ function safestAnswers() {
 
 test('homepage explains the product, audience, value and first action in plain language', () => {
   const html = read('public/index.html');
-  assert.match(html, /Know what your agent can do\. Stop what it should not\./);
-  assert.match(html, /helps you understand an AI agent’s access, block unsafe actions/i);
-  assert.match(html, /Business owners/);
-  assert.match(html, /Developers/);
-  assert.match(html, /Security teams/);
-  assert.match(html, /href="\/assessment\.html">Check an agent free/);
-  assert.match(html, /Four steps from uncertainty to a controlled decision/);
-  assert.match(html, /not an accredited certification or guarantee/i);
+  assert.match(html, /Before your AI agent reaches production, know what it can do—and prove the controls worked\./);
+  assert.match(html, /Map what it can access and change, verify the controls around it/i);
+  assert.match(html, /Assess\. Control\. Prove\./);
+  assert.match(html, /Before production/);
+  assert.match(html, /When a customer asks for proof/);
+  assert.match(html, /href="\/assessment\.html">Assess one agent free/);
+  assert.match(html, /From uncertainty to an evidence-backed decision in four steps/);
+  assert.match(html, /not accredited certifications or guarantees/i);
 });
 
 test('task chooser lets beginners select a situation without learning product architecture', () => {
@@ -39,8 +39,8 @@ test('task chooser lets beginners select a situation without learning product ar
 test('assessment presents one guided question at a time, captures unusual agents and treats proof honestly', () => {
   const html = read('public/assessment.html');
   const js = read('public/assessment.js');
-  assert.match(html, /one question at a time/i);
-  assert.match(html, /“I’m not sure” means information required—not a vulnerability/);
+  assert.match(html, /Which agent are you checking\?/i);
+  assert.match(html, /“I’m not sure” remains an information gap rather than a vulnerability/);
   assert.match(html, /Briefly describe what it does/);
   assert.match(html, /Autonomous \/ general-purpose agent/);
   assert.match(html, /required for “Other”/);
@@ -86,7 +86,7 @@ test('unknown answers fail closed as information gaps without inventing vulnerab
 test('result page puts information gaps, real findings and practical next actions before technical scoring', () => {
   const html = read('public/result.html');
   const js = read('public/result.js');
-  assert.match(html, /Security check result/);
+  assert.match(html, /AI-agent security assessment result/);
   assert.match(js, /Your next action/);
   assert.match(js, /Information needed/);
   assert.match(js, /unresolved assessment inputs, not discovered vulnerabilities/);
@@ -96,7 +96,7 @@ test('result page puts information gaps, real findings and practical next action
   assert.match(js, /How to prove it is fixed/);
   assert.match(js, /Not determined/);
   assert.match(js, /Security information completeness/);
-  assert.match(js, /Create updated assessment/);
+  assert.match(js, /updated assessment/i);
   assert.match(js, /Correct or update answers/);
   assert.match(js, /assessmentRemediationHref/);
   assert.doesNotMatch(js, /href="\/control-plane\\.html#remediation">Track fixes/);
@@ -111,7 +111,8 @@ test('result page puts information gaps, real findings and practical next action
 test('dashboard calculates one recommended next action and keeps other work secondary', () => {
   const html = read('public/dashboard.html');
   const js = read('public/dashboard.js');
-  assert.match(html, /Your next security step/);
+  assert.match(html, /AI agent security/);
+  assert.match(html, /take the one action that most improves the evidence for deployment/);
   assert.match(js, /Recommended first step/);
   assert.match(js, /Urgent review/);
   assert.match(js, /Work in progress/);
@@ -132,7 +133,7 @@ test('assessment continuation preserves history and limits raw-answer prefill to
   assert.match(server, /delete answers\.__source_assessment_id/);
   assert.match(server, /if \(sourceAssessment\) answers\.__source_assessment_id = sourceAssessment\.id/);
   assert.match(server, /You do not have permission to create an update from this assessment/);
-  assert.match(resultJs, /Create updated assessment/);
+  assert.match(resultJs, /updated assessment/i);
   assert.match(resultJs, /token && !isOwner/);
   assert.match(assessmentJs, /sourceAssessmentId/);
   assert.match(assessmentJs, /only unresolved questions need a new answer/i);
@@ -147,8 +148,8 @@ test('control plane defaults to one human next step and preserves specialist con
   assert.match(js, /assessmentProjectConfirmed/);
   assert.match(js, /assessmentId,/);
   assert.match(js, /findingKey: remediationFindingKey/);
-  assert.match(html, /Stop unsafe actions before they reach your systems/);
-  assert.match(html, /Begin with one safe built-in example/);
+  assert.match(html, /Runtime and remediation/);
+  assert.match(html, /review protection decisions, fix confirmed weaknesses and retest the exact control before closure/i);
   assert.doesNotMatch(html, /AI security control plane/i);
   assert.match(js, /Do this next/);
   assert.match(js, /Run the safe example/);
