@@ -1,0 +1,1 @@
+Owner action after deploy: hard refresh the exact Northstar focused Control Intelligence Test URL and confirm the page becomes responsive. No other state-reset action is required.
