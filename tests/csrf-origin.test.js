@@ -22,10 +22,15 @@ function tokenAndCookie(host) {
   const raw = headers.get('Set-Cookie');
   return { token, cookie: String(Array.isArray(raw) ? raw[0] : raw).split(';')[0] };
 }
-test('CSRF accepts the canonical host and the current Render/custom host but rejects unrelated origins', () => {
+test('CSRF accepts canonical and request-derived hosts in test but rejects unrelated origins', () => {
   const canonical = tokenAndCookie('agentrisklayer.com');
   assert.equal(verifyCsrf({ headers: { host: 'agentrisklayer.com', origin: 'https://agentrisklayer.com', cookie: canonical.cookie, 'x-csrf-token': canonical.token, 'x-forwarded-proto': 'https' }, socket: {} }), true);
   const render = tokenAndCookie('agent-risk-layer.onrender.com');
   assert.equal(verifyCsrf({ headers: { host: 'agent-risk-layer.onrender.com', origin: 'https://agent-risk-layer.onrender.com', cookie: render.cookie, 'x-csrf-token': render.token, 'x-forwarded-proto': 'https' }, socket: {} }), true);
   assert.equal(verifyCsrf({ headers: { host: 'agentrisklayer.com', origin: 'https://attacker.example', cookie: canonical.cookie, 'x-csrf-token': canonical.token, 'x-forwarded-proto': 'https' }, socket: {} }), false);
+});
+test('production implementation never promotes the request Host to an allowed CSRF origin', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'security.js'), 'utf8');
+  assert.match(source, /config\.nodeEnv === 'production' \? \[\] : \[requestOrigin\(req\)\]/);
+  assert.match(source, /configuredOrigin/);
 });
