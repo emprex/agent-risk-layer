@@ -20,6 +20,20 @@ test('workspace roles enforce boundaries and preserve an owner', async () => {
     const ownerEmail = (await db.prepare('SELECT email FROM users WHERE id=?').get(owner)).email;
     await assert.rejects(async () => await upsertMember({ workspaceId: workspace.id, actorId: owner, email: ownerEmail, role: 'admin' }), /retain at least one active owner/i);
 });
+test('concurrent owner demotions cannot leave a workspace ownerless', async () => {
+    const owner = await user(`owner-race-${crypto.randomUUID()}@example.com`);
+    const secondOwner = await user(`second-owner-${crypto.randomUUID()}@example.com`);
+    const workspace = await createWorkspace(owner, 'Owner race team');
+    const firstEmail = (await db.prepare('SELECT email FROM users WHERE id=?').get(owner)).email;
+    const secondEmail = (await db.prepare('SELECT email FROM users WHERE id=?').get(secondOwner)).email;
+    await upsertMember({ workspaceId: workspace.id, actorId: owner, email: secondEmail, role: 'owner' });
+    await Promise.allSettled([
+        upsertMember({ workspaceId: workspace.id, actorId: owner, email: firstEmail, role: 'viewer' }),
+        upsertMember({ workspaceId: workspace.id, actorId: owner, email: secondEmail, role: 'viewer' }),
+    ]);
+    const count = await db.prepare(`SELECT COUNT(*) count FROM workspace_members WHERE workspace_id=? AND role='owner' AND status='active'`).get(workspace.id);
+    assert.equal(Number(count.count), 1);
+});
 test('SCIM token provisions and deprovisions users without removing the last owner', async () => {
     const owner = await user(`scim-${crypto.randomUUID()}@example.com`);
     const workspace = await createWorkspace(owner, 'SCIM team');
@@ -38,6 +52,13 @@ test('SCIM token provisions and deprovisions users without removing the last own
         active: true,
         role: 'viewer',
     }), /retain at least one active owner/i);
+});
+test('SCIM rejects conflicting external-id and email identities', async () => {
+    const owner = await user(`scim-conflict-${crypto.randomUUID()}@example.com`);
+    const workspace = await createWorkspace(owner, 'SCIM conflict team');
+    await provisionScimUser(workspace.id, { externalId: 'idp-a', userName: 'member-a@example.com', active: true, role: 'analyst' });
+    await provisionScimUser(workspace.id, { externalId: 'idp-b', userName: 'member-b@example.com', active: true, role: 'analyst' });
+    await assert.rejects(async () => await provisionScimUser(workspace.id, { externalId: 'idp-a', userName: 'member-b@example.com', active: true, role: 'analyst' }), /SCIM identity conflict/i);
 });
 test('signed integration delivery records success and rejects embedded endpoint credentials', async () => {
     const owner = await user(`integration-${crypto.randomUUID()}@example.com`);
