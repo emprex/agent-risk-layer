@@ -55,8 +55,8 @@
     if (!box) {
       box = document.createElement('div');
       box.dataset.boundRetestCommand = '';
-      box.style.marginTop = '0.75rem';
-      box.innerHTML = '<p><strong>Bound retest command</strong> — verify it contains <code>retestCriteriaId</code> and the exact target before running it.</p><textarea readonly rows="13" spellcheck="false" style="width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical"></textarea><p data-bound-retest-copy-status class="muted"></p>';
+      box.className = 'bound-retest-command';
+      box.innerHTML = '<p><strong>Bound retest command</strong> — verify it contains <code>retestCriteriaId</code> and the exact target before running it.</p><textarea readonly rows="13" spellcheck="false" class="bound-retest-command-text"></textarea><p data-bound-retest-copy-status class="muted"></p>';
       button.insertAdjacentElement('afterend', box);
     }
     const textarea = box.querySelector('textarea');
