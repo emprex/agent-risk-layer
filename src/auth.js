@@ -90,7 +90,7 @@ export async function registerUser(email, password, termsAccepted = false) {
     const created = nowIso();
     const user = {
         id: id('usr_'), email: normalized, email_verified_at: null, mfa_enabled_at: null,
-        role: normalized === config.adminEmail ? 'superuser' : 'user',
+        role: normalized === String(config.adminEmail || '').trim().toLowerCase() ? 'superuser' : 'user',
         terms_version: config.termsVersion, terms_accepted_at: created, created_at: created,
     };
     try {
@@ -114,64 +114,85 @@ export async function authenticateUser(email, password) {
     return publicUser(row);
 }
 export async function createMfaLoginChallenge(userId) {
-    await db.prepare('DELETE FROM mfa_login_challenges WHERE user_id = ? OR expires_at <= ?').run(userId, nowIso());
     const token = `mfa_${b64(crypto.randomBytes(32))}`;
     const created = nowIso();
     const expires = new Date(Date.now() + MFA_CHALLENGE_MINUTES * 60000).toISOString();
-    await db.prepare(`INSERT INTO mfa_login_challenges (token_hash, user_id, expires_at, used_at, attempts, created_at)
-    VALUES (?, ?, ?, NULL, 0, ?)`)
-        .run(tokenHash(token, 'mfa-login'), userId, expires, created);
+    await db.transaction(async () => {
+        await lockUser(userId);
+        await db.prepare('DELETE FROM mfa_login_challenges WHERE user_id = ? OR expires_at <= ?').run(userId, created);
+        await db.prepare(`INSERT INTO mfa_login_challenges (token_hash, user_id, expires_at, used_at, attempts, created_at)
+      VALUES (?, ?, ?, NULL, 0, ?)`)
+            .run(tokenHash(token, 'mfa-login'), userId, expires, created);
+    });
     return { challengeToken: token, expiresAt: expires };
 }
 export async function completeMfaLogin(challengeToken, code) {
     const hash = tokenHash(String(challengeToken || ''), 'mfa-login');
-    const row = await db.prepare(`SELECT c.*, u.mfa_secret_encrypted, u.mfa_recovery_codes_json
-    FROM mfa_login_challenges c JOIN users u ON u.id=c.user_id
-    WHERE c.token_hash=? AND c.used_at IS NULL AND c.expires_at>?`).get(hash, nowIso());
-    if (!row || row.attempts >= 8)
-        throw new Error('The verification challenge is invalid or expired.');
-    await db.prepare('UPDATE mfa_login_challenges SET attempts=attempts+1 WHERE token_hash=?').run(hash);
-    const accepted = await verifyMfaCode(row.user_id, row.mfa_secret_encrypted, row.mfa_recovery_codes_json, code);
-    if (!accepted)
-        throw new Error('The authentication code is invalid.');
-    await db.prepare('UPDATE mfa_login_challenges SET used_at=? WHERE token_hash=?').run(nowIso(), hash);
-    return row.user_id;
+    return db.transaction(async () => {
+        const lock = db.kind === 'postgres' ? ' FOR UPDATE OF c, u' : '';
+        const row = await db.prepare(`SELECT c.*, u.mfa_secret_encrypted, u.mfa_recovery_codes_json
+      FROM mfa_login_challenges c JOIN users u ON u.id=c.user_id
+      WHERE c.token_hash=? AND c.used_at IS NULL AND c.expires_at>?${lock}`).get(hash, nowIso());
+        if (!row || Number(row.attempts || 0) >= 8)
+            throw new Error('The verification challenge is invalid or expired.');
+        const attempted = await db.prepare(`UPDATE mfa_login_challenges SET attempts=attempts+1
+      WHERE token_hash=? AND used_at IS NULL AND expires_at>? AND attempts<8`).run(hash, nowIso());
+        if (Number(attempted.changes || 0) !== 1)
+            throw new Error('The verification challenge is invalid or expired.');
+        const accepted = await verifyMfaCode(row.user_id, row.mfa_secret_encrypted, row.mfa_recovery_codes_json, code);
+        if (!accepted)
+            throw new Error('The authentication code is invalid.');
+        const used = await db.prepare('UPDATE mfa_login_challenges SET used_at=? WHERE token_hash=? AND used_at IS NULL').run(nowIso(), hash);
+        if (Number(used.changes || 0) !== 1)
+            throw new Error('The verification challenge was already completed.');
+        return row.user_id;
+    });
 }
 export async function createPasswordReset(email) {
     const normalized = normalizeEmail(email, false);
     const user = normalized ? await db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalized) : null;
     if (!user)
         return null;
-    await db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ? OR expires_at <= ?').run(user.id, nowIso());
     const token = b64(crypto.randomBytes(32));
     const created = nowIso();
     const expires = new Date(Date.now() + RESET_MINUTES * 60000).toISOString();
-    await db.prepare(`INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, used_at, created_at) VALUES (?, ?, ?, NULL, ?)`)
-        .run(tokenHash(token, 'password-reset'), user.id, expires, created);
+    await db.transaction(async () => {
+        await lockUser(user.id);
+        await db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ? OR expires_at <= ?').run(user.id, created);
+        await db.prepare(`INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, used_at, created_at) VALUES (?, ?, ?, NULL, ?)`)
+            .run(tokenHash(token, 'password-reset'), user.id, expires, created);
+    });
     return { token, user, expires };
 }
 export async function resetPassword(token, password) {
     validatePassword(password);
-    const row = await db.prepare(`SELECT token_hash, user_id FROM password_reset_tokens
-    WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`)
-        .get(tokenHash(String(token || ''), 'password-reset'), nowIso());
-    if (!row)
-        throw new Error('This reset link is invalid or has expired.');
+    const hash = tokenHash(String(token || ''), 'password-reset');
     const passwordHash = await hashPassword(password);
     const usedAt = nowIso();
-    await db.transaction(async () => {
+    return db.transaction(async () => {
+        const lock = db.kind === 'postgres' ? ' FOR UPDATE' : '';
+        const row = await db.prepare(`SELECT token_hash, user_id FROM password_reset_tokens
+      WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?${lock}`).get(hash, usedAt);
+        if (!row)
+            throw new Error('This reset link is invalid or has expired.');
+        const claimed = await db.prepare(`UPDATE password_reset_tokens SET used_at = ?
+      WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`).run(usedAt, row.token_hash, usedAt);
+        if (Number(claimed.changes || 0) !== 1)
+            throw new Error('This reset link is invalid or has expired.');
         await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, row.user_id);
-        await db.prepare('UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ?').run(usedAt, row.token_hash);
         await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(row.user_id);
+        return row.user_id;
     });
-    return row.user_id;
 }
 export async function changePassword(userId, currentPassword, newPassword) {
     const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId);
     if (!row || !await verifyPassword(String(currentPassword || ''), row.password_hash))
         throw new Error('Current password is incorrect.');
     validatePassword(newPassword);
-    await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(newPassword), userId);
+    const nextHash = await hashPassword(newPassword);
+    const changed = await db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?').run(nextHash, userId, row.password_hash);
+    if (Number(changed.changes || 0) !== 1)
+        throw new Error('Password changed concurrently. Sign in again and retry.');
     await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 }
 export async function verifyUserPassword(userId, password) {
@@ -182,25 +203,36 @@ export async function createEmailVerification(userId) {
     const user = await db.prepare('SELECT id, email, email_verified_at FROM users WHERE id=?').get(userId);
     if (!user || user.email_verified_at)
         return null;
-    await db.prepare('DELETE FROM email_verification_tokens WHERE user_id=? OR expires_at<=?').run(userId, nowIso());
     const token = `verify_${b64(crypto.randomBytes(32))}`;
+    const created = nowIso();
     const expires = new Date(Date.now() + config.emailVerificationHours * 3600000).toISOString();
-    await db.prepare('INSERT INTO email_verification_tokens (token_hash,user_id,expires_at,used_at,created_at) VALUES (?,?,?,NULL,?)')
-        .run(tokenHash(token, 'email-verification'), userId, expires, nowIso());
-    return { token, user, expires };
+    const createdToken = await db.transaction(async () => {
+        const current = await lockUser(userId, ['id', 'email', 'email_verified_at']);
+        if (!current || current.email_verified_at)
+            return false;
+        await db.prepare('DELETE FROM email_verification_tokens WHERE user_id=? OR expires_at<=?').run(userId, created);
+        await db.prepare('INSERT INTO email_verification_tokens (token_hash,user_id,expires_at,used_at,created_at) VALUES (?,?,?,NULL,?)')
+            .run(tokenHash(token, 'email-verification'), userId, expires, created);
+        return true;
+    });
+    return createdToken ? { token, user, expires } : null;
 }
 export async function verifyEmailToken(token) {
     const hash = tokenHash(String(token || ''), 'email-verification');
-    const row = await db.prepare(`SELECT token_hash,user_id FROM email_verification_tokens
-    WHERE token_hash=? AND used_at IS NULL AND expires_at>?`).get(hash, nowIso());
-    if (!row)
-        throw new Error('This verification link is invalid or expired.');
     const at = nowIso();
-    await db.transaction(async () => {
-        await db.prepare('UPDATE users SET email_verified_at=? WHERE id=?').run(at, row.user_id);
-        await db.prepare('UPDATE email_verification_tokens SET used_at=? WHERE token_hash=?').run(at, hash);
+    return db.transaction(async () => {
+        const lock = db.kind === 'postgres' ? ' FOR UPDATE' : '';
+        const row = await db.prepare(`SELECT token_hash,user_id FROM email_verification_tokens
+      WHERE token_hash=? AND used_at IS NULL AND expires_at>?${lock}`).get(hash, at);
+        if (!row)
+            throw new Error('This verification link is invalid or expired.');
+        const claimed = await db.prepare(`UPDATE email_verification_tokens SET used_at=?
+      WHERE token_hash=? AND used_at IS NULL AND expires_at>?`).run(at, hash, at);
+        if (Number(claimed.changes || 0) !== 1)
+            throw new Error('This verification link is invalid or expired.');
+        await db.prepare('UPDATE users SET email_verified_at=COALESCE(email_verified_at,?) WHERE id=?').run(at, row.user_id);
+        return row.user_id;
     });
-    return row.user_id;
 }
 export async function beginMfaSetup(userId, password) {
     if (!await verifyUserPassword(userId, password))
@@ -224,8 +256,10 @@ export async function enableMfa(userId, { password, secret, code }) {
         throw new Error('The authentication code is invalid.');
     const recoveryCodes = Array.from({ length: 10 }, () => `${randomCode(5)}-${randomCode(5)}`);
     const hashes = recoveryCodes.map((value) => tokenHash(value.toLowerCase(), 'mfa-recovery'));
-    await db.prepare(`UPDATE users SET mfa_secret_encrypted=?, mfa_enabled_at=?, mfa_recovery_codes_json=? WHERE id=?`)
-        .run(encrypt(cleanSecret), nowIso(), JSON.stringify(hashes), userId);
+    const changed = await db.prepare(`UPDATE users SET mfa_secret_encrypted=?, mfa_enabled_at=?, mfa_recovery_codes_json=?
+    WHERE id=? AND mfa_enabled_at IS NULL`).run(encrypt(cleanSecret), nowIso(), JSON.stringify(hashes), userId);
+    if (Number(changed.changes || 0) !== 1)
+        throw new Error('Multi-factor authentication is already enabled or changed concurrently.');
     await db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
     return { recoveryCodes };
 }
@@ -237,7 +271,10 @@ export async function disableMfa(userId, { password, code }) {
         throw new Error('Multi-factor authentication is not enabled.');
     if (!await verifyMfaCode(userId, row.mfa_secret_encrypted, row.mfa_recovery_codes_json, code))
         throw new Error('The authentication code is invalid.');
-    await db.prepare(`UPDATE users SET mfa_secret_encrypted=NULL,mfa_enabled_at=NULL,mfa_recovery_codes_json='[]' WHERE id=?`).run(userId);
+    const changed = await db.prepare(`UPDATE users SET mfa_secret_encrypted=NULL,mfa_enabled_at=NULL,mfa_recovery_codes_json='[]'
+    WHERE id=? AND mfa_enabled_at IS NOT NULL`).run(userId);
+    if (Number(changed.changes || 0) !== 1)
+        throw new Error('Multi-factor authentication changed concurrently.');
     await db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId);
 }
 export async function reauthenticateSession(req, password, code = '') {
@@ -249,9 +286,12 @@ export async function reauthenticateSession(req, password, code = '') {
         if (!await verifyMfaCode(user.id, row.mfa_secret_encrypted, row.mfa_recovery_codes_json, code))
             throw new Error('The authentication code is invalid.');
     }
-    await db.prepare('UPDATE sessions SET authenticated_at=?,mfa_verified=? WHERE token_hash=?')
-        .run(nowIso(), user.mfaEnabled ? 1 : 0, user._sessionTokenHash);
-    return publicUser({ ...user, authenticated_at: nowIso(), mfa_verified: user.mfaEnabled ? 1 : 0 });
+    const authenticatedAt = nowIso();
+    const changed = await db.prepare('UPDATE sessions SET authenticated_at=?,mfa_verified=? WHERE token_hash=?')
+        .run(authenticatedAt, user.mfaEnabled ? 1 : 0, user._sessionTokenHash);
+    if (Number(changed.changes || 0) !== 1)
+        throw new Error('Session expired during re-authentication.');
+    return publicUser({ ...user, authenticated_at: authenticatedAt, mfa_verified: user.mfaEnabled ? 1 : 0 });
 }
 export function requireRecentAuthentication(user, maxMinutes = 30) {
     return Boolean(user?.authenticatedAt && Date.now() - Date.parse(user.authenticatedAt) <= maxMinutes * 60000 && (!user.mfaEnabled || user.mfaVerified));
@@ -280,9 +320,11 @@ async function verifyMfaCode(userId, encryptedSecret, recoveryJson, code) {
     const hashes = parseJson(recoveryJson, []);
     const index = hashes.findIndex((hash) => safeEqual(hash, recoveryHash));
     if (index >= 0) {
+        const original = JSON.stringify(hashes);
         hashes.splice(index, 1);
-        await db.prepare('UPDATE users SET mfa_recovery_codes_json=? WHERE id=?').run(JSON.stringify(hashes), userId);
-        return true;
+        const consumed = await db.prepare(`UPDATE users SET mfa_recovery_codes_json=?
+      WHERE id=? AND mfa_recovery_codes_json=?`).run(JSON.stringify(hashes), userId, original);
+        return Number(consumed.changes || 0) === 1;
     }
     return false;
 }
@@ -369,6 +411,12 @@ function validatePassword(password) {
         throw new Error('Choose a stronger password.');
     if (!/[a-z]/i.test(value) || !/\d/.test(value))
         throw new Error('Password must include letters and a number.');
+}
+async function lockUser(userId, columns = ['id']) {
+    const safeColumns = columns.filter((column) => ['id', 'email', 'email_verified_at', 'mfa_enabled_at'].includes(column));
+    const select = safeColumns.length ? safeColumns.join(',') : 'id';
+    const lock = db.kind === 'postgres' ? ' FOR UPDATE' : '';
+    return db.prepare(`SELECT ${select} FROM users WHERE id=?${lock}`).get(userId);
 }
 function safeEqual(a, b) {
     try {
