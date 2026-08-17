@@ -1,27 +1,24 @@
-/* Mobile navigation stacking hotfix.
- * The customer-home rule historically lowered the unified header to z-index: 2,
- * placing the menu inside a stacking context below the menu scrim (z-index: 998).
- * Keep the header above its scrim so the scrim blurs/dims page content only.
+/* Mobile navigation stacking repair.
+ * enterprise-light.css intentionally owns the public header appearance but its
+ * z-index (60) placed the entire mobile menu below the scrim (998). The result
+ * was the opened navigation being blurred/dimmed and effectively unusable.
+ * Keep the header/menu above the scrim; the scrim must cover page content only.
  */
-.site-header-v10 {
-  z-index: 1000;
-}
-
-.customer-home .site-header-v10 {
-  position: sticky;
-  z-index: 1000;
+body[data-shell="public"] .site-header-v10 {
+  position: sticky !important;
+  z-index: 1000 !important;
 }
 
 @media (max-width: 900px) {
-  .site-header-v10.menu-open {
-    z-index: 1000;
+  body[data-shell="public"] .site-header-v10.menu-open {
+    z-index: 1000 !important;
   }
 
-  .site-header-v10 .primary-navigation {
+  body[data-shell="public"] .site-header-v10 .primary-navigation {
     z-index: 1002;
   }
 
-  .menu-scrim {
+  body[data-shell="public"] .menu-scrim {
     z-index: 998;
   }
 }
