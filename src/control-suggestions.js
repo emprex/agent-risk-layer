@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
-export const SUGGESTION_PROFILE_VERSION = 'ARL-SUGGEST-1.0.0';
-const MATCHING_METHOD='ordered title, category, problem-statement and applicability metadata rules with manual-review fallback';
+export const SUGGESTION_PROFILE_VERSION = 'ARL-SUGGEST-1.1.0';
+const MATCHING_METHOD = 'ordered title, category, problem-statement and applicability metadata rules with conservative multi-fact scope confidence and manual-review fallback';
 
 export const ARCHITECTURE_FACTS = Object.freeze([
   'audience:customer_facing','audience:internal','input:user_messages','input:email','input:uploaded_files','input:retrieved_documents','input:web_content','input:tool_output','input:memory',
@@ -21,7 +21,36 @@ const RULES = Object.freeze([
 ].map(([fact,pattern],priority)=>Object.freeze({fact,pattern,priority,rationale:`The assessed architecture includes ${fact.replace(':',' ').replaceAll('_',' ')}.`,limitations:'A metadata match identifies review priority only; it does not prove exposure or control applicability.'})));
 
 const stable = value => Array.isArray(value) ? `[${value.map(stable).join(',')}]` : value&&typeof value==='object' ? `{${Object.keys(value).sort().map(k=>`${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}` : JSON.stringify(value);
-export const SUGGESTION_PROFILE_DIGEST = crypto.createHash('sha256').update(stable({version:SUGGESTION_PROFILE_VERSION,matchingMethod:MATCHING_METHOD,facts:ARCHITECTURE_FACTS,rules:RULES.map(({fact,pattern,priority,rationale,limitations})=>({fact,pattern:pattern.source,flags:pattern.flags,priority,rationale,limitations}))})).digest('hex');
+
+function isRiskBearingFact(fact) {
+  return fact === 'audience:customer_facing'
+    || fact.startsWith('data:')
+    || ['tool:write','tool:payment','tool:admin','tool:code_execution','tool:deployment'].includes(fact)
+    || fact.startsWith('authority:')
+    || ['identity:tenant_scope','identity:roles'].includes(fact);
+}
+
+function scopeConfidence(triggeringFacts) {
+  const riskBearing = triggeringFacts.filter(isRiskBearingFact);
+  const high = triggeringFacts.length >= 2 && riskBearing.length >= 1;
+  return {
+    level: high ? 'high' : triggeringFacts.length ? 'review' : 'none',
+    prepareApplicability: high,
+    matchCount: triggeringFacts.length,
+    riskBearingFactCount: riskBearing.length,
+    limitations: high
+      ? 'Multiple confirmed architecture facts make this a higher-confidence review candidate, but a human must still confirm applicability.'
+      : 'The architecture match is too broad or sparse to prepare an applicability choice safely; explicit review is required.',
+  };
+}
+
+export const SUGGESTION_PROFILE_DIGEST = crypto.createHash('sha256').update(stable({
+  version:SUGGESTION_PROFILE_VERSION,
+  matchingMethod:MATCHING_METHOD,
+  facts:ARCHITECTURE_FACTS,
+  confidenceRule:'high only when >=2 triggering facts and >=1 risk-bearing fact',
+  rules:RULES.map(({fact,pattern,priority,rationale,limitations})=>({fact,pattern:pattern.source,flags:pattern.flags,priority,rationale,limitations}))
+})).digest('hex');
 
 export function suggestControls(entries, architectureFacts, snapshotId) {
   const facts=[...new Set((architectureFacts||[]).filter(f=>ARCHITECTURE_FACTS.includes(f)))].sort();
@@ -29,12 +58,37 @@ export function suggestControls(entries, architectureFacts, snapshotId) {
     const problem=typeof entry.problem_json==='string'?safeJson(entry.problem_json):entry.problem_json||entry.problem||{};
     const text=[entry.id,entry.title,entry.category,problem.statement,...(Array.isArray(problem.applicability)?problem.applicability:[])].filter(Boolean).join(' ');
     const matches=RULES.filter(rule=>facts.includes(rule.fact)&&rule.pattern.test(text)).sort((a,b)=>a.priority-b.priority||a.fact.localeCompare(b.fact));
-    const level=matches.length?'suggested':facts.length?'consider':'manual_review';
     const triggeringFacts=matches.map(x=>x.fact);
-    const rationale=matches.length?matches.map(x=>x.rationale).join(' '):level==='consider'?'No strong deterministic match was found; review this catalogue control because architecture coverage may be incomplete.':'Review this control manually; no structured architecture facts are confirmed.';
-    return {controlId:entry.id,controlTitle:entry.title,level,rationale,triggeringFacts,suggestionProfileVersion:SUGGESTION_PROFILE_VERSION,suggestionProfileDigest:SUGGESTION_PROFILE_DIGEST,controlDigest:entry.content_digest,snapshotId,requiresConfirmation:true,limitations:'Deterministic architecture matching is decision support and does not prove applicability.'};
+    const confidence=scopeConfidence(triggeringFacts);
+    const level=confidence.prepareApplicability?'suggested':matches.length?'consider':facts.length?'consider':'manual_review';
+    const rationale=matches.length?matches.map(x=>x.rationale).join(' '):level==='consider'?'No deterministic fact match was found; review this catalogue control because architecture coverage may be incomplete.':'Review this control manually; no structured architecture facts are confirmed.';
+    return {
+      controlId:entry.id,
+      controlTitle:entry.title,
+      level,
+      rationale,
+      triggeringFacts,
+      scopeConfidence:confidence.level,
+      prepareApplicability:confidence.prepareApplicability,
+      matchCount:confidence.matchCount,
+      riskBearingFactCount:confidence.riskBearingFactCount,
+      suggestionProfileVersion:SUGGESTION_PROFILE_VERSION,
+      suggestionProfileDigest:SUGGESTION_PROFILE_DIGEST,
+      controlDigest:entry.content_digest,
+      snapshotId,
+      requiresConfirmation:true,
+      limitations:`Deterministic architecture matching is decision support and does not prove applicability. ${confidence.limitations}`,
+    };
   });
 }
 
-export function suggestionProfile(){return {version:SUGGESTION_PROFILE_VERSION,digest:SUGGESTION_PROFILE_DIGEST,supportedArchitectureFacts:[...ARCHITECTURE_FACTS],ruleCount:RULES.length,matchingMethod:MATCHING_METHOD,limitations:'Suggestions prioritize review and never establish applicability.'};}
+export function suggestionProfile(){return {
+  version:SUGGESTION_PROFILE_VERSION,
+  digest:SUGGESTION_PROFILE_DIGEST,
+  supportedArchitectureFacts:[...ARCHITECTURE_FACTS],
+  ruleCount:RULES.length,
+  matchingMethod:MATCHING_METHOD,
+  confidenceRule:'Higher-confidence preparation requires at least two triggering facts and at least one risk-bearing fact; all choices still require human confirmation.',
+  limitations:'Suggestions prioritize review and never establish applicability.',
+};}
 function safeJson(value){try{return JSON.parse(value)}catch{return {}}}
