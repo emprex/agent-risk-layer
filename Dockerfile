@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --chown=node:node . .
+RUN npm run build:inspector-release
 ENV NODE_ENV=production
 EXPOSE 3000
 USER node
