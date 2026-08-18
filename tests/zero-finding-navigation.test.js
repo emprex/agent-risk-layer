@@ -19,10 +19,11 @@ test('zero actionable findings never enter remediation project selection', () =>
 
 test('current assessment navigation is distinct from starting a new assessment', () => {
   const nav = read('public/workspace-assessment-navigation.js');
-  assert.match(nav, /link\.textContent = 'Assessment'/);
-  assert.match(nav, /link\.href = `\/result\.html\?\$\{params\.toString\(\)\}`/);
-  assert.match(nav, /link\.textContent = 'New assessment'/);
+  assert.match(nav, /setLinkState\(link, 'Assessment', `\/result\.html\?\$\{params\.toString\(\)\}`\)/);
+  assert.match(nav, /setLinkState\(link, 'New assessment', '\/assessment\.html'\)/);
   assert.match(nav, /sessionStorage\.setItem\('arl_selected_assessment'/);
+  assert.match(nav, /if \(link\.textContent !== text\) link\.textContent = text/);
+  assert.match(nav, /if \(link\.getAttribute\('href'\) !== href\) link\.setAttribute\('href', href\)/);
 
   const dashboard = read('public/dashboard.html');
   const result = read('public/result.html');
