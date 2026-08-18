@@ -3,6 +3,37 @@ import { api, escapeHtml, setBusy } from './shared.js';
 const root=document.querySelector('#inspectorRoot');
 let assessments=[];
 let selectedId='';
+let activeTokenState=null;
+let tokenExpiryTimer=null;
+
+function tokenIsValidForSelected(){
+  if(!activeTokenState||activeTokenState.assessmentId!==selectedId)return false;
+  const expiresAt=Date.parse(activeTokenState.expiresAt);
+  return Number.isFinite(expiresAt)&&expiresAt>Date.now();
+}
+
+function syncTokenButton(){
+  const button=document.querySelector('#createToken');
+  if(!button)return;
+  const ready=tokenIsValidForSelected();
+  button.textContent=ready?'Token ready':activeTokenState?.assessmentId===selectedId?'Create new token':'Create inspection command';
+  button.disabled=ready;
+}
+
+function scheduleTokenExpiry(){
+  if(tokenExpiryTimer)clearTimeout(tokenExpiryTimer);
+  tokenExpiryTimer=null;
+  if(!activeTokenState)return;
+  const delay=Date.parse(activeTokenState.expiresAt)-Date.now();
+  if(!Number.isFinite(delay)||delay<=0){
+    syncTokenButton();
+    return;
+  }
+  tokenExpiryTimer=setTimeout(()=>{
+    tokenExpiryTimer=null;
+    syncTokenButton();
+  },Math.min(delay+50,2147483647));
+}
 
 async function init(){
   try{
@@ -41,18 +72,30 @@ function render(){
   });
   document.querySelector('#createToken')?.addEventListener('click',createToken);
   document.querySelector('#refreshScans')?.addEventListener('click',loadScans);
+  syncTokenButton();
+  scheduleTokenExpiry();
 }
 
 async function createToken(event){
-  if(!selectedId)return;
-  setBusy(event.currentTarget,true,'Creating…');
+  if(!selectedId||tokenIsValidForSelected()){
+    syncTokenButton();
+    return;
+  }
+  const button=event.currentTarget;
+  setBusy(button,true,'Creating…');
   try{
     const item=await api('/api/inspector/tokens',{method:'POST',body:JSON.stringify({assessmentId:selectedId})});
     const command=`curl -fsSLO ${location.origin}/downloads/agent-risk-inspector.mjs\ncurl -fsSLO ${location.origin}/downloads/agent-risk-inspector.mjs.sha256\nsha256sum -c agent-risk-inspector.mjs.sha256\nnode agent-risk-inspector.mjs scan . --authorised --environment production --upload ${location.origin} --token ${item.token} --out agentrisk-inspection.json`;
+    activeTokenState={assessmentId:selectedId,expiresAt:item.expiresAt,command};
     document.querySelector('#commandBox').innerHTML=`<section class="workspace-section section-gap"><div class="success-box">One-time token created. It expires ${new Date(item.expiresAt).toLocaleTimeString('en-GB')} and can be used once.</div><h2>Run against the exact assessed project</h2><ol><li>Open a terminal in the project folder.</li><li>Review the command. It downloads the public scanner and checksum, verifies the release, then runs the authorised scan.</li><li>Run the complete block:</li></ol><pre id="scanCommand">${escapeHtml(command)}</pre><button class="button ghost small" id="copyCommand">Copy command</button><p class="microcopy">The <code>--authorised</code> flag confirms you own the system or have explicit permission to inspect it. Treat the one-time token like a password until it expires.</p></section>`;
     document.querySelector('#copyCommand').addEventListener('click',()=>navigator.clipboard.writeText(command).then(()=>alert('Command copied.')));
-  }catch(error){alert(error.message)}
-  setBusy(event.currentTarget,false);
+  }catch(error){
+    alert(error.message);
+  }finally{
+    setBusy(button,false);
+    syncTokenButton();
+    scheduleTokenExpiry();
+  }
 }
 
 async function loadScans(){
