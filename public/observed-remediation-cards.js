@@ -19,35 +19,52 @@ function observedCard(finding, remediation, { noLongerReproduced = false, latest
   const ruleId = finding?.ruleId || 'Observed finding';
   const description = finding?.message || finding?.description || 'The authorised static inspection observed this condition in the assessed system.';
   const impact = ruleId === 'ARL-AI-006'
-    ? 'Malformed, hallucinated or attacker-influenced model output can reach a tool or business action and trigger unintended parameters or actions.'
+    ? 'Model-produced output can reach a tool or business action without an independent validation boundary.'
     : ruleId === 'ARL-AI-005'
-      ? 'Unbounded agent execution can cause runaway cost, degraded service or uncontrolled retries and tool activity.'
+      ? 'Agent execution can continue without explicit time, token, retry, tool-depth, concurrency or spend limits.'
       : 'The observed condition can weaken the control boundary described by this finding.';
-  const summaryAction = noLongerReproduced ? 'Review retest' : 'Open fix';
-  const evidenceText = noLongerReproduced
-    ? `Latest authorised Inspector retest no longer reports ${ruleId}. This is bounded retest evidence to review, not automatic closure.`
-    : `Latest authorised Inspector result · confidence ${finding?.confidence || 'unknown'}.`;
-  const verification = noLongerReproduced
-    ? 'The latest comparable inspection no longer reproduces this rule. Keep the remediation open until an accountable review accepts the bounded retest evidence and records closure.'
-    : 'This remediation remains open until bounded retest evidence supports closure. Assignment or implementation alone is not verification.';
+  const whyItMatters = ruleId === 'ARL-AI-006'
+    ? 'Malformed, hallucinated or attacker-influenced arguments can trigger the wrong refund, destination, parameters or other unintended business action.'
+    : ruleId === 'ARL-AI-005'
+      ? 'Runaway execution can create unexpected cost, service exhaustion, degraded availability or uncontrolled repeated tool activity.'
+      : description;
+  const inspectionClosed = remediation?.status === 'verified_closed'
+    && remediation?.verification?.retestSourceType === 'inspection';
+  const summaryAction = inspectionClosed ? 'Closure recorded' : noLongerReproduced ? 'Review retest' : 'Open fix';
+  const evidenceText = inspectionClosed
+    ? `An accountable reviewer accepted the bounded Inspector retest for ${ruleId}.`
+    : noLongerReproduced
+      ? `Latest authorised Inspector retest no longer reports ${ruleId}. This is bounded retest evidence to review, not automatic closure.`
+      : `Latest authorised Inspector result · confidence ${finding?.confidence || 'unknown'}.`;
+  const verification = inspectionClosed
+    ? 'Closure applies to this exact static finding and assessed scope. It does not independently prove runtime behaviour, production equivalence or unrelated controls.'
+    : noLongerReproduced
+      ? 'The latest comparable inspection no longer reproduces this rule. Keep the remediation open until an accountable review accepts the bounded retest evidence and records closure.'
+      : 'This remediation remains open until bounded retest evidence supports closure. Assignment or implementation alone is not verification.';
   const scanMeta = noLongerReproduced && latestInspection
     ? `<p><strong>Retest source</strong><br>Inspection ${escapeHtml(latestInspection.id || '')} · scanner ${escapeHtml(latestInspection.scannerVersion || 'unknown')} · policy ${escapeHtml(latestInspection.policyVersion || 'unknown')}.</p>`
     : '';
+  const closureAction = noLongerReproduced && !inspectionClosed && latestInspection?.id
+    ? `<div class="notice success observed-closure-review"><strong>Accountable closure review</strong><p>Accept only if this latest bounded static retest is the evidence you intend to rely on for this exact finding. This does not prove runtime behaviour or unrelated controls.</p><button class="button primary" type="button" data-accept-observed-retest data-remediation-id="${escapeHtml(remediation.id)}" data-inspection-id="${escapeHtml(latestInspection.id)}" data-rule-id="${escapeHtml(ruleId)}">Accept retest evidence and close finding</button><p class="error-box" data-observed-closure-error hidden></p></div>`
+    : inspectionClosed
+      ? `<div class="notice success"><strong>Verified closed</strong><br>Accountable closure review recorded against Inspector ${escapeHtml(remediation?.verification?.retestArtifactId || latestInspection?.id || '')}. Reassess if the model, tools, permissions, data, prompts or environment change.</div>`
+      : '';
   return `<details class="remediation-row observed-remediation-card${noLongerReproduced ? ' observed-retest-ready' : ''}" data-remediation-id="${escapeHtml(remediation.id)}">
     <summary>
       <span class="status-pill">${escapeHtml(finding?.severity || remediation?.severity || 'medium')}</span>
-      <span><strong>${escapeHtml(ruleId)} · ${escapeHtml(title)}</strong><small>${escapeHtml(noLongerReproduced ? 'Retest evidence available' : statusLabel(remediation))} · owner ${escapeHtml(remediation?.owner_email || 'unassigned')}</small></span>
+      <span><strong>${escapeHtml(ruleId)} · ${escapeHtml(title)}</strong><small>${escapeHtml(inspectionClosed ? 'Verified closed' : noLongerReproduced ? 'Retest evidence available' : statusLabel(remediation))} · owner ${escapeHtml(remediation?.owner_email || 'unassigned')}</small></span>
       <span>${escapeHtml(summaryAction)}</span>
     </summary>
     <div class="remediation-body">
       <p><strong>What can happen</strong><br>${escapeHtml(impact)}</p>
-      <p><strong>Why it matters</strong><br>${escapeHtml(impact)}</p>
+      <p><strong>Why it matters</strong><br>${escapeHtml(whyItMatters)}</p>
       <p><strong>Observed evidence</strong><br>${escapeHtml(evidenceText)}</p>
       ${scanMeta}
       <p><strong>Fix</strong><br>${escapeHtml(finding?.remediation || remediation?.title || 'Remediate the observed weakness.')}</p>
       <p><strong>Owner</strong><br>${escapeHtml(remediation?.owner_email || 'Unassigned')}</p>
       <p><strong>Exact retest</strong><br>${escapeHtml(exactRetest(finding))}</p>
       <div class="notice"><strong>Verification rule</strong><br>${escapeHtml(verification)}</div>
+      ${closureAction}
     </div>
   </details>`;
 }
@@ -63,6 +80,42 @@ function remediationForFinding(remediations, finding) {
 function ruleWasResolved(delta, ruleId) {
   if (!ruleId) return false;
   return (delta?.resolvedFindings || []).some((key) => String(key || '').startsWith(`${ruleId}:`));
+}
+
+function bindObservedClosureActions(container, projectId) {
+  container.querySelectorAll('[data-accept-observed-retest]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      const remediationId = button.dataset.remediationId || '';
+      const inspectionId = button.dataset.inspectionId || '';
+      const ruleId = button.dataset.ruleId || '';
+      const errorBox = button.parentElement?.querySelector('[data-observed-closure-error]');
+      button.disabled = true;
+      button.textContent = 'Recording closure…';
+      if (errorBox) {
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+      }
+      try {
+        await api(`/api/projects/${encodeURIComponent(projectId)}/remediations/${encodeURIComponent(remediationId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'verified_closed',
+            verification: { observedInspectionClosure: { inspectionId, ruleId } },
+          }),
+        });
+        location.reload();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Accept retest evidence and close finding';
+        if (errorBox) {
+          errorBox.hidden = false;
+          errorBox.classList.add('show');
+          errorBox.textContent = error?.message || 'Could not record the closure review.';
+        }
+      }
+    });
+  });
 }
 
 async function renderObservedRemediations() {
@@ -107,7 +160,7 @@ async function renderObservedRemediations() {
     const pairs = [...currentPairs, ...resolvedPairs];
     if (!pairs.length) return;
 
-    const signature = `${latest.id}:${pairs.map((item) => `${item.remediation.id}:${item.noLongerReproduced ? 'resolved' : 'active'}`).join(',')}`;
+    const signature = `${latest.id}:${pairs.map((item) => `${item.remediation.id}:${item.noLongerReproduced ? 'resolved' : 'active'}:${item.remediation.status}`).join(',')}`;
     if (list.dataset.observedRemediationCards === signature) return;
     list.dataset.observedRemediationCards = signature;
 
@@ -122,6 +175,7 @@ async function renderObservedRemediations() {
       { noLongerReproduced, latestInspection: latest },
     )).join('');
     list.appendChild(container);
+    bindObservedClosureActions(container, projectId);
   } catch {
     // The core Findings page remains usable if evidence detail cannot be loaded.
   } finally {
