@@ -14,9 +14,13 @@ test('resolved Inspector findings remain visible as retest evidence instead of d
   assert.match(source, /not automatic closure/);
 });
 
-test('observed retest handoff keeps verification evidence-first', () => {
+test('observed retest handoff keeps closure an explicit accountable action', () => {
   assert.match(source, /Keep the remediation open until an accountable review accepts the bounded retest evidence and records closure/);
   assert.match(source, /ruleWasResolved/);
   assert.match(source, /remediationForFinding/);
-  assert.doesNotMatch(source, /status\s*=\s*['"]verified_closed['"]/);
+  assert.match(source, /Accountable closure review/);
+  assert.match(source, /Accept retest evidence and close finding/);
+  assert.match(source, /observedInspectionClosure/);
+  assert.match(source, /status: 'verified_closed'/);
+  assert.match(source, /does not prove runtime behaviour or unrelated controls/);
 });
