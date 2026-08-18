@@ -11,10 +11,11 @@ let isOwner = false;
 let revisionSource = null;
 
 async function init() {
-  if (!id || !token) return fail('The assessment link is incomplete.');
+  if (!id) return fail('The assessment link is incomplete.');
   try {
+    const assessmentQuery = token ? `?token=${encodeURIComponent(token)}` : '';
     const [assessmentPayload, userPayload, questionnairePayload] = await Promise.all([
-      api(`/api/assessments/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`),
+      api(`/api/assessments/${encodeURIComponent(id)}${assessmentQuery}`),
       api('/api/auth/me'),
       api('/api/questionnaire').catch(() => ({ questionnaire: [] })),
     ]);
@@ -172,7 +173,7 @@ function render() {
       </section>
 
       <aside class="workspace-section result-side-panel"><span class="eyebrow">Assessment scope</span><h3>${escapeHtml(assessment.name)}</h3><p class="muted">${escapeHtml(assessment.agentType)}</p>${full.systemDescription ? `<p>${escapeHtml(full.systemDescription)}</p>` : ''}<div class="result-side-risk">${scoreAvailable ? `<span class="risk-pill ${riskClass(assessment.riskBand)}">${escapeHtml(assessment.riskBand)} declared band</span><strong>${assessment.score}<small>/100 aggregate</small></strong>` : '<span class="risk-pill">Security information incomplete</span><strong>—</strong>'}</div><p class="microcopy">The aggregate score summarises breadth and uncertainty. It is not a probability of breach and does not downgrade a more severe individual finding.</p>
-        ${paid ? `<a class="button primary" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf?token=${encodeURIComponent(token)}">Download PDF report</a>` : `<button class="button primary" id="buyPro">Get Security Assessment · £99</button><p class="microcopy">The £99 assessment unlocks the full report, remediation and retest workflows. It does not claim inspection, testing or human review unless corresponding evidence exists.</p>`}
+        ${paid ? `<a class="button primary" href="/api/reports/${encodeURIComponent(assessment.id)}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}">Download PDF report</a>` : `<button class="button primary" id="buyPro">Get Security Assessment · £99</button><p class="microcopy">The £99 assessment unlocks the full report, remediation and retest workflows. It does not claim inspection, testing or human review unless corresponding evidence exists.</p>`}
         ${isOwner ? `<a class="button ghost" href="/inspector.html?assessment=${encodeURIComponent(assessment.id)}">${full.inspection ? 'Review / rerun inspection' : 'Add observed evidence'}</a><a class="button ghost" href="/redteam.html?assessment=${encodeURIComponent(assessment.id)}">${full.redTeam ? 'Review / rerun attack test' : 'Add controlled attack-test evidence'}</a>` : ''}${sharingHtml()}<div class="result-limit-note"><strong>Trust boundary</strong><p>This result reflects the answers and linked evidence within this assessment scope. Unknown answers are information gaps, not findings. Untested production behaviour remains a limitation.</p></div>
       </aside>
     </div>`;
