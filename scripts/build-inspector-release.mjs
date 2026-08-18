@@ -10,10 +10,12 @@ const sourceText = fs.readFileSync(source, 'utf8').replace(/\r\n/g, '\n');
 
 const versionMarker = "export const INSPECTOR_VERSION = '4.1.0';";
 const schemaMarker = String.raw`    if(/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i.test(text))hasSchema=true;`;
+const resourceMarker = String.raw`    if(/(?:max_tokens|max_output_tokens|AbortSignal\.timeout|tool_call_limit|max_iterations|(?:retry|recursion|budget|spend)[A-Za-z_]*\s*[:=])/i.test(text))hasLimits=true;`;
 const sourceCheckMarker = 'function runSourceChecks(ctx){';
 
 if (!sourceText.includes(versionMarker)) throw new Error('Inspector release build: version marker changed; review the release transform.');
 if (!sourceText.includes(schemaMarker)) throw new Error('Inspector release build: structured-output detector marker changed; review the release transform.');
+if (!sourceText.includes(resourceMarker)) throw new Error('Inspector release build: resource-limit detector marker changed; review the release transform.');
 if (!sourceText.includes(sourceCheckMarker)) throw new Error('Inspector release build: source-check marker changed; review the release transform.');
 
 const manualValidationDetector = String.raw`
@@ -37,11 +39,33 @@ function hasStructuredOutputValidation(text){
   const constraint=/(?:\.length\s*[<>]=?\s*\d+|[<>]=?\s*[A-Z_$][A-Z0-9_$]*|\.test\s*\(|allowedKeys|allowlist|minimum\s*:|maximum\s*:)/i.test(executable);
   return boundary&&validator&&shape&&typeCheck&&rejection&&constraint;
 }
+
+function hasAgentResourceLimits(text){
+  // Resource-control claims in comments are not evidence. Only executable/configuration
+  // signals in the same source file as the AI integration can satisfy this detector.
+  const executable=text
+    .replace(/\/\*[\s\S]*?\*\//g,' ')
+    .replace(/^\s*\/\/.*$/gm,' ');
+
+  const signals=[
+    /(?:\btimeout\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|AbortSignal\.timeout\s*\()/i,
+    /(?:\bmaxRetries\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_retries\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bretry[A-Za-z_]*\s*[:=]\s*\d[\d_]*)/i,
+    /(?:\bmax_completion_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_output_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+    /(?:\btool_call_limit\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmaxToolCalls\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\btoolCalls\.length\s*(?:>|>=)\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+    /(?:\bmax_iterations\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmaxIterations\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\brecursion[A-Za-z_]*\s*[:=]\s*\d[\d_]*)/i,
+    /(?:\b(?:budget|spend|concurrency)[A-Za-z_]*\s*[:=]\s*(?:\d[\d_.]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+  ];
+
+  // Require more than a single incidental setting. This keeps ARL-AI-005 conservative
+  // while recognising a real bounded execution policy such as timeout + retry/token/tool caps.
+  return signals.reduce((count,pattern)=>count+(pattern.test(executable)?1:0),0)>=2;
+}
 `;
 
 const text = sourceText
-  .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.1';")
+  .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.2';")
   .replace(sourceCheckMarker, `${manualValidationDetector}\n${sourceCheckMarker}`)
+  .replace(resourceMarker, '    if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;')
   .replace(schemaMarker, '    if(hasStructuredOutputValidation(text))hasSchema=true;');
 
 fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -50,8 +74,8 @@ const digest = crypto.createHash('sha256').update(text).digest('hex');
 fs.writeFileSync(`${destination}.sha256`, `${digest}  agent-risk-inspector.mjs\n`);
 fs.writeFileSync(path.join(root, 'public', 'inspector-policy.json'), JSON.stringify({ policyVersion: POLICY_VERSION, rules: POLICY_CATALOG }, null, 2) + '\n');
 fs.writeFileSync(path.join(root, 'public', 'downloads', 'inspector-release.json'), JSON.stringify({
-  name: 'AgentRisk Inspector', version: '4.1.1', policyVersion: POLICY_VERSION,
+  name: 'AgentRisk Inspector', version: '4.1.2', policyVersion: POLICY_VERSION,
   bundleSchema: BUNDLE_SCHEMA, sha256: digest,
   privacyContract: ['No source code uploaded','No matched secret values uploaded','Read-only static inspection','No exploitation or network probing'],
 }, null, 2) + '\n');
-console.log(JSON.stringify({ version: '4.1.1', policyVersion: POLICY_VERSION, sha256: digest }, null, 2));
+console.log(JSON.stringify({ version: '4.1.2', policyVersion: POLICY_VERSION, sha256: digest }, null, 2));
