@@ -9,6 +9,14 @@ function actionableFindings(assessment) {
     item?.status !== 'information-required' && item?.kind !== 'information-required');
 }
 
+async function latestObservedFindings() {
+  const { inspections = [] } = await api(`/api/assessments/${encodeURIComponent(assessmentId)}/inspections`);
+  const latest = inspections[0];
+  if (!latest?.id || Number(latest.summary?.activeFindingsTotal || latest.summary?.findingsTotal || 0) <= 0) return [];
+  const { inspection } = await api(`/api/inspections/${encodeURIComponent(latest.id)}`);
+  return (inspection?.findings || []).filter((item) => item?.review?.status !== 'false-positive');
+}
+
 async function startControlPlane() {
   if (!assessmentId) {
     await import('./control-plane.js?v=20260814.6');
@@ -27,14 +35,18 @@ async function startControlPlane() {
       return;
     }
 
-    // Assessment answers are concerns, not confirmed findings. Do not enter
-    // remediation from this handoff until observed or reproducible evidence
-    // has established a real failure. The evidence workspace is the next step.
+    // Assessment answers are concerns, not confirmed findings. Before observed
+    // evidence exists, Findings correctly sends the customer to Evidence.
+    // Once the assessment has active observed findings, the gate is lifted and
+    // the remediation workspace is allowed to render those evidence-backed items.
     if (assessment && actionableFindings(assessment).length > 0) {
-      const evidenceParams = new URLSearchParams({ assessment: assessmentId });
-      if (token) evidenceParams.set('token', token);
-      location.replace(`/inspector.html?${evidenceParams.toString()}`);
-      return;
+      const observed = await latestObservedFindings();
+      if (!observed.length) {
+        const evidenceParams = new URLSearchParams({ assessment: assessmentId });
+        if (token) evidenceParams.set('token', token);
+        location.replace(`/inspector.html?${evidenceParams.toString()}`);
+        return;
+      }
     }
   } catch {
     // Let the existing control-plane flow handle authentication, access and errors.
