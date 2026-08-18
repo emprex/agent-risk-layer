@@ -219,8 +219,49 @@ export function downloadObject(filename, object) {
   URL.revokeObjectURL(url);
 }
 
+function restoreCheckoutReturnState(attempt = 0) {
+  if (!location.pathname.endsWith('/result.html')) return;
+  const params = new URLSearchParams(location.search);
+  const cancelled = params.get('cancelled') === '1';
+  const button = document.querySelector('#buyPro');
+  const busy = Boolean(button && /Opening secure checkout/i.test(button.textContent || ''));
+  const decision = document.querySelector('.result-decision-card');
+
+  if (!cancelled && !busy) return;
+  if (!button && !decision) {
+    if (attempt < 20) setTimeout(() => restoreCheckoutReturnState(attempt + 1), 100);
+    return;
+  }
+
+  if (button) {
+    button.textContent = button.dataset.original || 'Get Security Assessment · £99';
+    button.disabled = false;
+    delete button.dataset.original;
+  }
+
+  if (!document.querySelector('.checkout-return-notice')) {
+    const notice = document.createElement('div');
+    notice.className = 'notice warning checkout-return-notice';
+    notice.setAttribute('role', 'status');
+    notice.innerHTML = '<strong>Checkout was not completed on this page.</strong><span> Your assessment has been preserved. You can continue to secure checkout when you are ready.</span>';
+    if (decision) decision.before(notice);
+    else document.querySelector('#resultRoot')?.prepend(notice);
+  }
+
+  if (cancelled) {
+    params.delete('cancelled');
+    const query = params.toString();
+    history.replaceState(history.state, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+  }
+}
+
+window.addEventListener('pageshow', () => {
+  setTimeout(() => restoreCheckoutReturnState(), 0);
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   hydrateHelpLink();
   hydrateNav();
   hydrateFooterLinks();
+  restoreCheckoutReturnState();
 });
