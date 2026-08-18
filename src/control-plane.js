@@ -174,4 +174,12 @@ A server-derived passed retest is required.
 input.assessmentId && !validEmail(suppliedOwnerEmail)
 A valid owner email is required for assessment remediation.
 patch.ownerEmail != null && !validEmail(ownerEmail)
+Verification sanitizer limits remain implemented in control-plane-core.js:
+rootCause: 2000
+correctiveAction: 4000
+targetEnvironment: 500
+rollbackPlan: 2000
+validationPlan: 3000
+changeReference: 500
+limitations: 3000
 */
