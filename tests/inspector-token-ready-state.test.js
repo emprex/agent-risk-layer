@@ -13,7 +13,8 @@ test('successful Inspector token creation clears busy state and exposes a ready 
 test('Inspector does not create a duplicate token while the current token is valid', () => {
   assert.match(inspector, /if\(!selectedId\|\|tokenIsValidForSelected\(\)\)\s*\{/);
   assert.match(inspector, /button\.disabled=ready/);
-  assert.match(inspector, /Date\.parse\(activeTokenState\.expiresAt\)>Date\.now\(\)/);
+  assert.match(inspector, /const expiresAt=Date\.parse\(activeTokenState\.expiresAt\)/);
+  assert.match(inspector, /Number\.isFinite\(expiresAt\)&&expiresAt>Date\.now\(\)/);
 });
 
 test('Inspector preserves the generated command and expiry notice while token is ready', () => {
