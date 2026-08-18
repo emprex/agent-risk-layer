@@ -18,14 +18,17 @@ if (!sourceText.includes(sourceCheckMarker)) throw new Error('Inspector release 
 
 const manualValidationDetector = String.raw`
 function hasStructuredOutputValidation(text){
-  const knownValidator=/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i;
-  if(knownValidator.test(text))return true;
-
-  // Comments and documentation are not proof. Manual validation is only treated as
-  // evident when several executable enforcement signals occur around an AI/tool boundary.
+  // Comments and documentation are not proof. Remove them before both known-framework
+  // detection and manual enforcement detection so words such as "structuredOutput"
+  // cannot suppress a real finding from documentation alone.
   const executable=text
     .replace(/\/\*[\s\S]*?\*\//g,' ')
     .replace(/^\s*\/\/.*$/gm,' ');
+  const knownValidator=/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i;
+  if(knownValidator.test(executable))return true;
+
+  // Manual validation is only treated as evident when several executable enforcement
+  // signals occur around an AI/tool boundary. One keyword or one type check is not proof.
   const boundary=/(?:tool_calls|toolCalls|function\.arguments|JSON\.parse\s*\(|response_format|structuredOutput)/i.test(executable);
   const validator=/(?:function\s+(?:validate|assert|check|guard|parse|saniti[sz]e|normali[sz]e)[A-Za-z0-9_$]*\s*\(|(?:const|let|var)\s+(?:validate|assert|check|guard|parse|saniti[sz]e|normali[sz]e)[A-Za-z0-9_$]*\s*=)/i.test(executable);
   const shape=/(?:additionalProperties\s*:\s*false|Object\.keys\s*\(|Array\.isArray\s*\()/i.test(executable);
