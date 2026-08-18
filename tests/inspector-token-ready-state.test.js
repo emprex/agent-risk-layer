@@ -6,7 +6,7 @@ const inspector = fs.readFileSync(new URL('../public/inspector.js', import.meta.
 
 test('successful Inspector token creation clears busy state and exposes a ready state', () => {
   assert.match(inspector, /finally\s*\{[\s\S]*setBusy\(button,false\);[\s\S]*syncTokenButton\(\);/);
-  assert.match(inspector, /ready\?'Token ready'/);
+  assert.match(inspector, /Token active until/);
   assert.match(inspector, /'Create new token'/);
 });
 
@@ -15,6 +15,12 @@ test('Inspector does not create a duplicate token while the current token is val
   assert.match(inspector, /button\.disabled=ready/);
   assert.match(inspector, /const expiresAt=Date\.parse\(activeTokenState\.expiresAt\)/);
   assert.match(inspector, /Number\.isFinite\(expiresAt\)&&expiresAt>Date\.now\(\)/);
+});
+
+test('Inspector presents a valid token as completed rather than still working', () => {
+  assert.match(inspector, /button\.style\.cursor=ready\?'default':''/);
+  assert.match(inspector, /button\.title=ready\?'The one-time token is ready\. Run the command below before it expires\.':''/);
+  assert.match(inspector, /button\.classList\.toggle\('token-ready',ready\)/);
 });
 
 test('Inspector preserves the generated command and expiry notice while token is ready', () => {
