@@ -1,6 +1,7 @@
 import { api, escapeHtml, hideError, qs, setBusy, showError } from './shared.js';
 import { buildRevisionQuestionFlow } from './assessment-revision.js';
 import { answerQualification, guidanceFor } from './assessment-guidance.js';
+import { buildAdaptiveQuestionFlow } from './assessment-flow.js';
 
 const form = document.querySelector('#assessmentForm');
 const profileStep = document.querySelector('#profileStep');
@@ -25,6 +26,7 @@ const guidanceChecks = document.querySelector('#guidanceChecks');
 const guidanceExample = document.querySelector('#guidanceExample');
 const answerQualificationBox = document.querySelector('#answerQualification');
 const revisionNotice = document.querySelector('#revisionNotice');
+const adaptiveNotice = document.querySelector('#adaptiveNotice');
 const revisionReviewField = document.querySelector('#revisionReviewField');
 const reviewPreviousAnswers = document.querySelector('#reviewPreviousAnswers');
 const revisionQuestionNav = document.querySelector('#revisionQuestionNav');
@@ -47,6 +49,7 @@ let stepIndex = 0;
 let sourceAssessmentId = '';
 let revisionSourceName = '';
 const answers = new Map();
+const derivedAnswerIds = new Set();
 
 async function init() {
   try {
@@ -72,6 +75,7 @@ async function init() {
     } else {
       const preset = qs('type');
       if (preset) agentType.value = preset;
+      refreshAdaptiveFlow();
     }
     updateDescriptionRequirement();
     renderStep();
@@ -91,6 +95,28 @@ function normaliseSourceAnswer(question, raw) {
     ? 'none'
     : allowedEvidence.has(candidate.evidence) ? candidate.evidence : 'customer_assertion';
   return { value: candidate.value, evidence };
+}
+
+function refreshAdaptiveFlow() {
+  if (sourceAssessmentId) return;
+  for (const questionId of derivedAnswerIds) answers.delete(questionId);
+  derivedAnswerIds.clear();
+  const adaptive = buildAdaptiveQuestionFlow(questionnaire, answers);
+  for (const item of adaptive.derived) {
+    answers.set(item.questionId, item.answer);
+    derivedAnswerIds.add(item.questionId);
+  }
+  flowQuestions = adaptive.questions;
+  if (stepIndex > flowQuestions.length) stepIndex = flowQuestions.length;
+  if (adaptiveNotice) {
+    if (adaptive.derived.length) {
+      adaptiveNotice.textContent = `${adaptive.derived.length} follow-up question${adaptive.derived.length === 1 ? '' : 's'} skipped because your earlier answers make ${adaptive.derived.length === 1 ? 'it' : 'them'} not applicable. You can go back and change those answers at any time.`;
+      adaptiveNotice.hidden = false;
+    } else {
+      adaptiveNotice.hidden = true;
+      adaptiveNotice.textContent = '';
+    }
+  }
 }
 
 function refreshRevisionFlow() {
@@ -315,6 +341,7 @@ nextButton.addEventListener('click', () => {
   hideError(errorBox);
   if (stepIndex === 0 && !validateProfile()) return;
   if (stepIndex > 0 && !saveCurrentQuestion()) return;
+  if (!sourceAssessmentId) refreshAdaptiveFlow();
   if (stepIndex < flowQuestions.length) {
     stepIndex += 1;
     renderStep();
@@ -329,6 +356,7 @@ backButton.addEventListener('click', () => {
       const selected = form.querySelector('input[name="currentQuestion"]:checked');
       if (selected) saveCurrentQuestion();
     }
+    if (!sourceAssessmentId) refreshAdaptiveFlow();
     stepIndex -= 1;
     renderStep();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -339,6 +367,7 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   hideError(errorBox);
   if (stepIndex > 0 && !saveCurrentQuestion()) return;
+  if (!sourceAssessmentId) refreshAdaptiveFlow();
   if (!sourceAssessmentId && stepIndex !== flowQuestions.length) return;
   if (!validateProfile()) {
     stepIndex = 0;
