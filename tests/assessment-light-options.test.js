@@ -23,6 +23,20 @@ test('assessment help and evidence disclosures remain light and readable', () =>
   assert.match(css, /\.question-guidance > summary,[\s\S]*?\.evidence-details > summary[\s\S]*?color:\s*#475569\s*!important/);
 });
 
+test('revision answer navigator is secondary, readable and does not create a trapped scroll column', () => {
+  const css = read('public/assessment-light-fix.css');
+  assert.match(css, /\.assessment-review-layout:has\(\.revision-question-nav:not\(\[hidden\]\)\)[\s\S]*?grid-template-columns:\s*minmax\(220px,\s*268px\)\s+minmax\(0,\s*1fr\)\s*!important/);
+  assert.match(css, /\.revision-question-nav\s*\{[\s\S]*?position:\s*static\s*!important[\s\S]*?max-height:\s*none\s*!important[\s\S]*?overflow:\s*visible\s*!important/);
+  assert.match(css, /\.revision-question-nav\s*\{[\s\S]*?background:\s*#f8fafc\s*!important[\s\S]*?color:\s*#0f172a\s*!important/);
+  assert.match(css, /\.revision-question-link\.active[\s\S]*?background:\s*#eff6ff\s*!important/);
+});
+
+test('revision navigator stacks above the editor on narrower screens', () => {
+  const css = read('public/assessment-light-fix.css');
+  assert.match(css, /@media \(max-width:\s*960px\)[\s\S]*?\.assessment-review-layout:has\(\.revision-question-nav:not\(\[hidden\]\)\)[\s\S]*?flex-direction:\s*column\s*!important/);
+  assert.match(css, /@media \(max-width:\s*640px\)[\s\S]*?\.revision-question-list[\s\S]*?grid-template-columns:\s*1fr\s*!important/);
+});
+
 test('selected final answer presents the questionnaire as 100 percent complete before submit', () => {
   const css = read('public/assessment-light-fix.css');
   assert.match(css, /#assessmentForm:has\(#submitAssessment:not\(\[hidden\]\)\):has\(input\[name="currentQuestion"\]:checked\) \.progress-bar[\s\S]*?width:\s*100%\s*!important/);
