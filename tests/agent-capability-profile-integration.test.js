@@ -32,7 +32,7 @@ function configuration(profile, manualArchitectureFacts = ['tool:read']) {
   };
 }
 
-test('material capability changes create a new immutable snapshot and stale prior decisions', async () => {
+test('material capability and instruction-authority changes create a new immutable snapshot and stale prior decisions', async () => {
   const f = await fixture();
   const firstProfile = normaliseCapabilityProfile({
     autonomy: 'bounded',
@@ -41,12 +41,16 @@ test('material capability changes create a new immutable snapshot and stale prio
     delegation: 'none',
     triggerMode: 'user',
     inputChannels: ['text'],
+    instructionAuthority: 'fixed_local',
+    instructionActivation: 'project_saved',
+    instructionProvenance: 'project_controlled',
+    instructionSources: ['system_prompt', 'project_skill'],
   });
   const first = await createSystemSnapshot({
     projectId: f.project.id,
     userId: f.userId,
     input: {
-      architecture: { summary: 'Bounded support agent', components: [] },
+      architecture: { summary: 'Bounded support agent with project-controlled procedures', components: [] },
       autonomyLevel: firstProfile.autonomy,
       assessmentConfiguration: configuration(firstProfile),
       source: 'test',
@@ -71,12 +75,17 @@ test('material capability changes create a new immutable snapshot and stale prio
     toolDiscovery: 'mcp',
     delegation: 'multi_agent',
     triggerMode: 'event',
+    instructionAuthority: 'remote_followed',
+    instructionActivation: 'auto_triggered',
+    instructionProvenance: 'mutable_remote',
+    instructionSources: ['system_prompt', 'remote_skill', 'tool_instruction'],
+    externalTrust: ['instruction_provider'],
   });
   const second = await createSystemSnapshot({
     projectId: f.project.id,
     userId: f.userId,
     input: {
-      architecture: { summary: 'Support agent with persistent memory and event-driven autonomy', components: [] },
+      architecture: { summary: 'Support agent with persistent memory, event-driven autonomy and remotely followed procedural instructions', components: [] },
       autonomyLevel: changedProfile.autonomy,
       assessmentConfiguration: configuration(changedProfile),
       source: 'capability_profile_update',
@@ -88,8 +97,13 @@ test('material capability changes create a new immutable snapshot and stale prio
   assert.notEqual(second.snapshot.id, first.snapshot.id);
   assert.notEqual(second.snapshot.contentDigest, first.snapshot.contentDigest);
   assert.deepEqual(second.snapshot.assessmentConfiguration.capabilityProfile, changedProfile);
+  assert.equal(second.snapshot.assessmentConfiguration.capabilityProfile.instructionAuthority, 'remote_followed');
+  assert.equal(second.snapshot.assessmentConfiguration.capabilityProfile.instructionActivation, 'auto_triggered');
+  assert.equal(second.snapshot.assessmentConfiguration.capabilityProfile.instructionProvenance, 'mutable_remote');
+  assert.deepEqual(second.snapshot.assessmentConfiguration.capabilityProfile.instructionSources, ['remote_skill', 'system_prompt', 'tool_instruction']);
   assert.ok(second.snapshot.assessmentConfiguration.architectureFacts.includes('authority:autonomous'));
   assert.ok(second.snapshot.assessmentConfiguration.architectureFacts.includes('input:memory'));
+  assert.equal(second.snapshot.assessmentConfiguration.architectureFacts.some((fact) => fact.includes('remote_skill')), false);
   assert.equal((await db.prepare('SELECT status FROM system_snapshots WHERE id=?').get(first.snapshot.id)).status, 'superseded');
   assert.equal((await db.prepare('SELECT status FROM control_deployment_decisions WHERE id=?').get(decision.id)).status, 'stale');
   assert.equal((await db.prepare('SELECT COUNT(*) count FROM control_snapshot_evaluations WHERE system_snapshot_id=? AND stale_at IS NOT NULL').get(first.snapshot.id)).count, 108);
@@ -97,12 +111,12 @@ test('material capability changes create a new immutable snapshot and stale prio
 
 test('capability profile remains declaration context and nested secret-like fields are rejected', async () => {
   const f = await fixture();
-  const profile = normaliseCapabilityProfile({ memory: 'unknown', autonomy: 'unknown' });
+  const profile = normaliseCapabilityProfile({ memory: 'unknown', autonomy: 'unknown', instructionAuthority: 'unknown' });
   const { snapshot } = await createSystemSnapshot({
     projectId: f.project.id,
     userId: f.userId,
     input: {
-      architecture: { summary: 'Agent with unresolved capability context', components: [] },
+      architecture: { summary: 'Agent with unresolved capability and instruction-authority context', components: [] },
       autonomyLevel: profile.autonomy,
       assessmentConfiguration: configuration(profile, []),
       source: 'test',
@@ -110,6 +124,7 @@ test('capability profile remains declaration context and nested secret-like fiel
   });
   assert.equal(snapshot.assessmentConfiguration.capabilityProfile.evidenceState, 'declared');
   assert.equal(snapshot.assessmentConfiguration.capabilityProfile.memory, 'unknown');
+  assert.equal(snapshot.assessmentConfiguration.capabilityProfile.instructionAuthority, 'unknown');
   assert.deepEqual(snapshot.assessmentConfiguration.architectureFacts, []);
   await assert.rejects(() => createSystemSnapshot({
     projectId: f.project.id,
