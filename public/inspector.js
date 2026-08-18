@@ -27,6 +27,8 @@ function syncTokenButton(){
   button.disabled=ready;
   button.classList.toggle('token-ready',ready);
   button.setAttribute('aria-disabled',ready?'true':'false');
+  button.style.cursor=ready?'default':'';
+  button.title=ready?'The one-time token is ready. Run the command below before it expires.':'';
 }
 
 function scheduleTokenExpiry(){
