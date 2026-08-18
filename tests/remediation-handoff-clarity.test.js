@@ -47,3 +47,11 @@ test('exact existing project reuse removes only the misleading slot blocker', ()
   assert.match(layer, /if \(!exact\) return/);
   assert.match(layer, /select\.value = exact\.id/);
 });
+
+test('handoff DOM observer disconnects before clarification mutates the same subtree', () => {
+  const layer = read('public/remediation-handoff-clarity.js');
+  assert.match(layer, /observer\.disconnect\(\);\s*\n\s*decorate\(\);/);
+  assert.match(layer, /let decorated = false/);
+  assert.match(layer, /if \(decorated\) return/);
+  assert.doesNotMatch(layer, /new MutationObserver\(\(\) => decorate\(\)\)/);
+});

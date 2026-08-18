@@ -63,28 +63,41 @@ async function context() {
   return contextPromise;
 }
 
-let decorating = false;
+let decorated = false;
 async function decorate() {
-  if (decorating) return;
+  if (decorated) return;
   const root = document.querySelector('#controlPlaneRoot');
-  if (!root) return;
-  decorating = true;
+  const handoff = root?.querySelector('.assessment-handoff');
+  if (!root || !handoff) return;
+
+  decorated = true;
   try {
     clarifyConcernLanguage(root);
-    const handoff = root.querySelector('.assessment-handoff');
-    if (!handoff) return;
     const state = await context();
     if (!state) return;
     clarifyExactMatch(root, exactAssessmentProject(state.overview, state.assessment));
   } catch {
     // This layer only clarifies handoff copy. The primary remediation workflow remains usable if it cannot load.
-  } finally {
-    decorating = false;
   }
 }
 
+function startWhenHandoffExists() {
+  const root = document.querySelector('#controlPlaneRoot');
+  if (!root) return;
+
+  if (root.querySelector('.assessment-handoff')) {
+    decorate();
+    return;
+  }
+
+  const observer = new MutationObserver(() => {
+    if (!root.querySelector('.assessment-handoff')) return;
+    observer.disconnect();
+    decorate();
+  });
+  observer.observe(root, { childList: true, subtree: true });
+}
+
 if (typeof document !== 'undefined' && typeof location !== 'undefined') {
-  const target = document.querySelector('#controlPlaneRoot') || document.body;
-  new MutationObserver(() => decorate()).observe(target, { childList: true, subtree: true });
-  decorate();
+  startWhenHandoffExists();
 }
