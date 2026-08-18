@@ -1,4 +1,4 @@
-export const CAPABILITY_PROFILE_VERSION = 'ARL-CAP-1.0.0';
+export const CAPABILITY_PROFILE_VERSION = 'ARL-CAP-1.1.0';
 
 export const CAPABILITY_DIMENSIONS = Object.freeze([
   Object.freeze({ key: 'autonomy', label: 'Autonomy', options: Object.freeze([
@@ -28,6 +28,15 @@ export const CAPABILITY_DIMENSIONS = Object.freeze([
   Object.freeze({ key: 'aggregateResourceControl', label: 'Aggregate resource control', options: Object.freeze([
     ['unknown','Unknown / not yet confirmed'],['none','No cumulative limit'],['per_action_only','Per-action limits only'],['authoritative_downstream','Cumulative limit enforced atomically by the authoritative downstream system'],['separate_budget_service','Cumulative limit enforced by a separately reviewed budget or quota service'],
   ]) }),
+  Object.freeze({ key: 'instructionAuthority', label: 'Instruction authority', options: Object.freeze([
+    ['unknown','Unknown / not yet confirmed'],['fixed_local','Only fixed project-controlled prompts or procedures influence behaviour'],['retrieved','Procedural instructions can be retrieved at run time'],['remote_followed','Remote/provider-maintained instructions can influence behaviour'],['agent_selected','The agent can select procedural instructions or skills itself'],['mixed','More than one instruction-authority mode applies'],
+  ]) }),
+  Object.freeze({ key: 'instructionActivation', label: 'Instruction activation', options: Object.freeze([
+    ['unknown','Unknown / not yet confirmed'],['none','No additional procedural instruction packages'],['explicit','Loaded only after an explicit user or workflow reference'],['project_saved','Project-saved instructions loaded deliberately'],['auto_triggered','Instructions can activate without an explicit per-use request'],['agent_selected','The agent can choose instructions during execution'],['mixed','More than one activation mode applies'],
+  ]) }),
+  Object.freeze({ key: 'instructionProvenance', label: 'Instruction provenance', options: Object.freeze([
+    ['unknown','Unknown / not yet confirmed'],['project_controlled','Project-controlled and reviewable with the system version'],['versioned_source','External source and revision/version are recorded'],['digest_bound','Exact instruction content is bound to a recorded digest'],['mutable_remote','Remote instructions can change without a local reviewed copy'],['mixed','More than one provenance state applies'],
+  ]) }),
 ]);
 
 export const CAPABILITY_MULTI_DIMENSIONS = Object.freeze([
@@ -35,10 +44,13 @@ export const CAPABILITY_MULTI_DIMENSIONS = Object.freeze([
     ['policy','Policy'],['model','Model'],['memory','Memory'],['tooling','Tooling'],['workflow','Workflow / orchestration'],['data','Changed data or records'],
   ]) }),
   Object.freeze({ key: 'externalTrust', label: 'External trust dependencies', options: Object.freeze([
-    ['mcp_provider','MCP provider or server'],['external_agent','External agent'],['marketplace','Agent / tool marketplace'],['external_api','External API or hosted service'],
+    ['mcp_provider','MCP provider or server'],['external_agent','External agent'],['marketplace','Agent / tool marketplace'],['external_api','External API or hosted service'],['instruction_provider','Remote skill / procedural-instruction provider'],
   ]) }),
   Object.freeze({ key: 'inputChannels', label: 'Untrusted or user-controlled input channels', options: Object.freeze([
     ['text','Text / chat'],['email','Email / messages'],['file','Files / documents'],['web','Web / browser content'],['voice','Voice / audio'],['image','Images / visual input'],['sensor','Sensor / physical-world input'],['tool_output','Tool responses'],['memory','Stored memory / context'],
+  ]) }),
+  Object.freeze({ key: 'instructionSources', label: 'Procedural instruction sources', options: Object.freeze([
+    ['system_prompt','System / developer prompt'],['project_skill','Project-controlled skill or procedure'],['saved_skill','Saved / vendored external skill'],['remote_skill','Remote or provider-followed skill'],['retrieved_procedure','Retrieved runbook / procedure'],['memory_instruction','Instruction recovered from memory or persistent context'],['tool_instruction','Instruction supplied through tool or MCP output'],
   ]) }),
 ]);
 
@@ -83,6 +95,9 @@ export function deriveCapabilityFacts(input = {}) {
   };
   for (const channel of profile.inputChannels) if (channelFacts[channel]) facts.add(channelFacts[channel]);
 
+  // Instruction-authority fields are intentionally not converted into findings or
+  // new control-suggestion facts in ARL-SUGGEST-1.0.0. They are version-bound
+  // declared context until a deliberately versioned server-owned mapping exists.
   return [...facts].sort();
 }
 
