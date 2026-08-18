@@ -169,8 +169,7 @@ function phaseIndexForQuestion(question) {
 function updatePhaseTracker(question = null) {
   const activePhase = question ? phaseIndexForQuestion(question) : 0;
   const label = ASSESSMENT_PHASES[activePhase];
-  const flowIndex = question ? flowQuestions.findIndex((item) => item.id === question.id) : -1;
-  const currentQuestionLabel = question ? `Question ${Math.max(0, flowIndex) + 1} of ${flowQuestions.length}` : 'About the agent';
+  const currentQuestionLabel = question ? `Question ${questionnaireNumber(question)}` : 'About the agent';
   if (phaseLabel) phaseLabel.textContent = label;
   if (questionLabel) questionLabel.textContent = currentQuestionLabel;
   phaseTrack?.querySelectorAll('[data-phase]').forEach((node) => {
