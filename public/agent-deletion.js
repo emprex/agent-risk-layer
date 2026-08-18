@@ -53,6 +53,41 @@ function workspaceSuccess(message) {
   root.prepend(box);
 }
 
+function selectedAssessmentId() {
+  return new URLSearchParams(location.search).get('assessment') || sessionStorage.getItem('arl_selected_assessment') || '';
+}
+
+async function deleteLatestAssessment(event) {
+  const button = event.currentTarget;
+  const index = Number(button.dataset.assessmentIndex);
+  const group = groups[index];
+  const latest = group?.assessments?.[0];
+  if (!latest) return workspaceError('Reload the workspace before deleting this assessment.');
+
+  const checkedAt = new Date(latest.created_at).toLocaleDateString('en-GB');
+  const confirmed = window.confirm(`Delete the ${group.name} assessment from ${checkedAt}?\n\nThis permanently deletes this assessment and evidence attached specifically to it. It does not delete the agent project, other assessments, runtime history or billing records.`);
+  if (!confirmed) return;
+
+  setBusy(button, true, 'Deleting…');
+  try {
+    await api(`/api/assessments/${encodeURIComponent(latest.id)}`, { method: 'DELETE' });
+    const wasSelected = selectedAssessmentId() === latest.id;
+    const fallback = group.assessments[1] || null;
+    if (wasSelected) {
+      sessionStorage.removeItem('arl_selected_assessment');
+      if (fallback?.id) {
+        sessionStorage.setItem('arl_selected_assessment', fallback.id);
+        location.href = `/dashboard.html?assessment=${encodeURIComponent(fallback.id)}`;
+        return;
+      }
+    }
+    location.href = '/dashboard.html';
+  } catch (error) {
+    workspaceError(error.message);
+    setBusy(button, false);
+  }
+}
+
 async function deleteAgent(event) {
   const button = event.currentTarget;
   const index = Number(button.dataset.agentIndex);
@@ -91,9 +126,24 @@ function decorateRows() {
   decorating = true;
   rows.forEach((row, index) => {
     const actions = row.querySelector('.workspace-agent-row-actions');
-    if (!actions || actions.querySelector('[data-delete-agent]')) return;
+    if (!actions) return;
     const group = groups[index];
-    const project = matchingProject(group.assessments[0]);
+    const latest = group.assessments[0];
+
+    if (!actions.querySelector('[data-delete-latest-assessment]')) {
+      const assessmentButton = document.createElement('button');
+      assessmentButton.type = 'button';
+      assessmentButton.className = 'button ghost small';
+      assessmentButton.textContent = 'Delete assessment';
+      assessmentButton.dataset.deleteLatestAssessment = 'true';
+      assessmentButton.dataset.assessmentIndex = String(index);
+      assessmentButton.setAttribute('aria-label', `Delete latest ${group.name} assessment only`);
+      assessmentButton.addEventListener('click', deleteLatestAssessment);
+      actions.append(assessmentButton);
+    }
+
+    if (actions.querySelector('[data-delete-agent]')) return;
+    const project = matchingProject(latest);
     if (!project?.id) return;
     const button = document.createElement('button');
     button.type = 'button';
@@ -125,7 +175,7 @@ async function initialise() {
     decorateRows();
     if (root) new MutationObserver(decorateRows).observe(root, { childList: true, subtree: true });
   } catch {
-    // The primary dashboard remains usable if this secondary destructive action cannot load.
+    // The primary dashboard remains usable if these secondary destructive actions cannot load.
   }
 }
 
