@@ -1,0 +1,47 @@
+/* Revision navigator scroll-length correction.
+ * Keeps the revision header visible while only the answer list scrolls.
+ * Presentation only: no assessment, evidence, scoring, billing or persistence semantics change.
+ */
+body.workspace-assessment-page[data-shell="app"] .revision-question-nav {
+  position: sticky !important;
+  top: 88px !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+  max-height: calc(100vh - 270px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (max-width: 960px) {
+  body.workspace-assessment-page[data-shell="app"] .revision-question-nav {
+    position: static !important;
+  }
+
+  body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+    max-height: 260px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+    max-height: 220px !important;
+  }
+}
