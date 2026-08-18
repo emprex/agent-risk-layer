@@ -1,0 +1,98 @@
+name: One-off checkout return fix
+
+on:
+  push:
+    branches:
+      - fix-checkout-return-continuity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-checkout-return-continuity
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply bounded payment-return continuity patch
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+
+          function replaceOnce(source, from, to, label) {
+            const first = source.indexOf(from);
+            if (first < 0) throw new Error(`${label}: expected source not found`);
+            if (source.indexOf(from, first + from.length) >= 0) throw new Error(`${label}: expected source was not unique`);
+            return source.replace(from, to);
+          }
+
+          const resultPath = 'public/result.js';
+          let result = fs.readFileSync(resultPath, 'utf8');
+
+          result = replaceOnce(
+            result,
+            "let revisionSource = null;\n",
+            "let revisionSource = null;\nlet checkoutReturnPending = sessionStorage.getItem('arl_checkout_pending_assessment') === id;\nlet checkoutCancelled = qs('cancelled') === '1';\n",
+            'checkout state declarations',
+          );
+
+          result = replaceOnce(
+            result,
+            "function render() {\n",
+            "function checkoutReturnNotice(paid) {\n  if (paid || (!checkoutCancelled && !checkoutReturnPending)) return '';\n  return `<div class=\"notice warning checkout-return-notice\" role=\"status\"><strong>Payment was not completed.</strong><span> Nothing was charged. Your assessment has been preserved and you can continue whenever you are ready.</span></div>`;\n}\n\nfunction render() {\n",
+            'checkout return notice helper',
+          );
+
+          result = replaceOnce(
+            result,
+            "    </header>\n\n    <section class=\"result-decision-card\"",
+            "    </header>\n\n    ${checkoutReturnNotice(paid)}\n\n    <section class=\"result-decision-card\"",
+            'checkout return notice placement',
+          );
+
+          result = replaceOnce(
+            result,
+            "  wire();\n}\n",
+            "  wire();\n  if (checkoutCancelled || checkoutReturnPending) {\n    sessionStorage.removeItem('arl_checkout_pending_assessment');\n    if (checkoutCancelled) {\n      const cleanUrl = new URL(location.href);\n      cleanUrl.searchParams.delete('cancelled');\n      history.replaceState(history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);\n    }\n    checkoutCancelled = false;\n    checkoutReturnPending = false;\n  }\n}\n",
+            'checkout return cleanup',
+          );
+
+          result = replaceOnce(
+            result,
+            "    const { url } = await api('/api/checkout', { method: 'POST', body: JSON.stringify({ productKey, assessmentId: id }) });\n    location.href = url;\n",
+            "    const { url } = await api('/api/checkout', { method: 'POST', body: JSON.stringify({ productKey, assessmentId: id }) });\n    sessionStorage.setItem('arl_checkout_pending_assessment', id);\n    location.href = url;\n",
+            'checkout pending marker',
+          );
+
+          result = replaceOnce(
+            result,
+            "init();\n",
+            "window.addEventListener('pageshow', () => {\n  if (sessionStorage.getItem('arl_checkout_pending_assessment') !== id) return;\n  checkoutReturnPending = true;\n  if (assessment) render();\n});\n\ninit();\n",
+            'browser back restoration',
+          );
+
+          fs.writeFileSync(resultPath, result);
+
+          const successPath = 'public/success.js';
+          let success = fs.readFileSync(successPath, 'utf8');
+          success = replaceOnce(
+            success,
+            "    if (!item) throw new Error('Payment is still being confirmed. Refresh this page in a moment.');\n    const next = continuationFor(data);\n",
+            "    if (!item) throw new Error('Payment is still being confirmed. Refresh this page in a moment.');\n    sessionStorage.removeItem('arl_checkout_pending_assessment');\n    const next = continuationFor(data);\n",
+            'successful checkout marker cleanup',
+          );
+          fs.writeFileSync(successPath, success);
+          NODE
+
+          node --test tests/checkout-return-continuity.test.js
+          git diff --check
+          git rm .github/workflows/one-off-checkout-return-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/result.js public/success.js tests/checkout-return-continuity.test.js
+          git commit -m "Fix checkout return continuity"
+          git push origin HEAD:fix-checkout-return-continuity
