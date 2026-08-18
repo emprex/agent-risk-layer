@@ -1,7 +1,7 @@
 import { api, escapeHtml } from './shared.js';
 import { remediationFindingKey } from './assessment-remediation.js';
 
-const params = new URLSearchParams(location.search);
+const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 const assessmentId = params.get('assessment') || '';
 const token = params.get('token') || '';
 let observedPromise = null;
@@ -219,7 +219,7 @@ async function applyGate(root) {
   applyInFlight = true;
   try {
     const observed = await loadObservedContext();
-    if (observed.findings.length) return renderObservedPlan(root, planning, observed);
+    if (observed.findings.length) return await renderObservedPlan(root, planning, observed);
     return renderVerificationGate(root, planning);
   } finally {
     applyInFlight = false;
