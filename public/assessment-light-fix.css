@@ -72,6 +72,109 @@ body.workspace-assessment-page[data-shell="app"] .question-domain {
   color: #2563eb !important;
 }
 
+/* Revision mode is a guided edit, not an admin console. Keep the current question
+ * visually dominant and previous answers as calm, secondary navigation. */
+body.workspace-assessment-page[data-shell="app"] .assessment-review-layout:has(.revision-question-nav:not([hidden])) {
+  grid-template-columns: minmax(220px, 268px) minmax(0, 1fr) !important;
+  gap: 24px !important;
+  align-items: start !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-nav {
+  position: static !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 18px !important;
+  border: 1px solid #dbe5f0 !important;
+  border-radius: 14px !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-nav .eyebrow {
+  color: #64748b !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-nav h2 {
+  margin: 6px 0 5px !important;
+  color: #0f172a !important;
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-nav > p {
+  margin: 0 0 12px !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+  gap: 5px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link {
+  min-height: 0 !important;
+  padding: 9px 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link:hover {
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link.active {
+  border-color: #93c5fd !important;
+  background: #eff6ff !important;
+  box-shadow: inset 3px 0 0 #2563eb !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link span,
+body.workspace-assessment-page[data-shell="app"] .revision-question-link small {
+  color: #64748b !important;
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link strong {
+  margin: 2px 0 !important;
+  color: #1e293b !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .revision-question-link.active strong {
+  color: #1d4ed8 !important;
+}
+
+@media (max-width: 960px) {
+  body.workspace-assessment-page[data-shell="app"] .assessment-review-layout:has(.revision-question-nav:not([hidden])) {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  body.workspace-assessment-page[data-shell="app"] .revision-question-nav {
+    width: 100% !important;
+  }
+
+  body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body.workspace-assessment-page[data-shell="app"] .revision-question-list {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* The last answer is not persisted into the assessment map until submit. Once the
  * user has actually selected that final answer, the visible completion indicator
  * should nevertheless reflect the completed questionnaire rather than stopping at 96%. */
