@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { exactAssessmentProject, assessmentConcernCopy } from '../public/remediation-handoff-clarity.js';
+import { exactAssessmentProject, assessmentConcernCopy } from '../public/remediation-handoff-model.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -12,14 +12,15 @@ test('remediation handoff keeps assessment declarations separate from verified f
   assert.equal(copy.label, 'Assessment concern to verify');
   assert.match(copy.explanation, /declared context, not a verified finding/i);
 
+  const model = read('public/remediation-handoff-model.js');
   const layer = read('public/remediation-handoff-clarity.js');
-  assert.match(layer, /Assessment concern to verify/);
-  assert.match(layer, /not a verified finding/);
-  assert.doesNotMatch(layer, /create.*finding|verified.*true/i);
+  assert.match(model, /Assessment concern to verify/);
+  assert.match(model, /not a verified finding/);
+  assert.doesNotMatch(`${model}\n${layer}`, /create.*finding|verified.*true/i);
 
   const html = read('public/control-plane.html');
   assert.match(html, /remediation-handoff-clarity\.js/);
-  assert.match(html, /verify assessment concerns, fix confirmed weaknesses/i);
+  assert.match(html, /fix confirmed weaknesses and retest the exact control/i);
 });
 
 test('exact assessment project match requires both exact name and environment', () => {
