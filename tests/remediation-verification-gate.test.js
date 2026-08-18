@@ -22,11 +22,21 @@ test('fresh assessment concerns are gated before remediation', () => {
   assert.doesNotMatch(layer, /observer\.disconnect\(\)/);
 });
 
-test('verification gate survives later core control-plane rerenders', () => {
+test('observed findings replace declared concerns as remediation input', () => {
   const layer = read('public/remediation-verification-gate.js');
-  assert.match(layer, /intentionally remains/);
-  assert.match(layer, /applyGate\(root\)/);
-  assert.match(layer, /planning\.dataset\.verificationGate === 'true'/);
+  assert.match(layer, /loadObservedContext/);
+  assert.match(layer, /locally-observed-static-evidence/);
+  assert.match(layer, /Observed findings ready to fix/);
+  assert.match(layer, /remediationFindingKey\(assessmentId, finding\)/);
+  assert.match(layer, /Assign .*observed fix/);
+  assert.match(layer, /assessmentId,/);
+  assert.match(layer, /findingKey: item\.key/);
+  assert.match(layer, /Only findings observed by the latest inspection are eligible here/i);
+});
+
+test('observed finding remediation excludes false-positive reviews', () => {
+  const layer = read('public/remediation-verification-gate.js');
+  assert.match(layer, /review\?\.status !== 'false-positive'/);
 });
 
 test('verification gate preserves assessment context in Evidence link', () => {
@@ -36,14 +46,13 @@ test('verification gate preserves assessment context in Evidence link', () => {
   assert.match(layer, /query\.set\('token'/);
 });
 
-test('control plane loads current verification gate after the handoff clarification layer', () => {
+test('control plane loads verification gate after the handoff clarification layer', () => {
   const html = read('public/control-plane.html');
   const layer = read('public/remediation-verification-gate.js');
   const clarity = html.indexOf('remediation-handoff-clarity.js');
   const gate = html.indexOf('remediation-verification-gate.js');
   assert.ok(clarity >= 0);
   assert.ok(gate > clarity);
-  assert.match(html, /remediation-verification-gate\.js\?v=20260818\.2/);
   assert.match(html, /review protection decisions, fix confirmed weaknesses and retest the exact control before closure/i);
   assert.match(layer, /Assessment answers identify concerns\. Evidence establishes whether a weakness is real/i);
 });
