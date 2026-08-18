@@ -19,21 +19,25 @@ export function verificationGateCopy(count) {
 }
 
 function concernCount(root) {
-  const scope = root.querySelector('.assessment-scope-banner');
+  const scope = root?.querySelector('.assessment-scope-banner');
   const match = scope?.textContent?.match(/\b0\s+of\s+(\d+)\b/i);
   return match ? Number(match[1]) : 0;
 }
 
 function applyGate(root) {
+  if (!root) return false;
   const planning = root.querySelector('.remediation-plan-card');
   if (!planning || planning.dataset.verificationGate === 'true') return false;
 
-  // This gate is deliberately conservative. It only intercepts a fresh
-  // assessment handoff before any remediation item has been assigned.
+  // Conservative production gate: only intercept a fresh assessment handoff
+  // before any remediation item has been assigned. Core control-plane renders
+  // can replace this subtree, so the observer below intentionally remains
+  // active and reapplies the gate to newly rendered markup.
   const scope = root.querySelector('.assessment-scope-banner');
   if (!scope || !/\b0\s+of\s+\d+\b/i.test(scope.textContent || '')) return false;
 
   const count = concernCount(root);
+  if (!count) return false;
   const copy = verificationGateCopy(count);
   planning.dataset.verificationGate = 'true';
   planning.innerHTML = `
@@ -51,8 +55,7 @@ function applyGate(root) {
   if (headingTitle) headingTitle.textContent = 'Establish the finding before remediation.';
   if (headingText) headingText.textContent = 'Assessment answers identify concerns. Evidence establishes whether a weakness is real; only confirmed findings should become fixes.';
 
-  const banner = root.querySelector('.assessment-scope-banner');
-  const labels = banner ? [...banner.querySelectorAll('span, small')] : [];
+  const labels = [...scope.querySelectorAll('span, small')];
   for (const node of labels) {
     if (/fixes assigned/i.test(node.textContent || '')) node.textContent = 'confirmed fixes assigned';
     if (/remaining/i.test(node.textContent || '')) node.textContent = count === 1 ? '1 concern to verify' : `${count} concerns to verify`;
@@ -72,10 +75,16 @@ if (typeof document !== 'undefined' && typeof location !== 'undefined') {
   const params = new URLSearchParams(location.search);
   if (params.get('assessment')) {
     const root = document.querySelector('#controlPlaneRoot');
-    const tryApply = () => applyGate(root);
-    if (!tryApply()) {
+    if (root) {
+      applyGate(root);
+      let queued = false;
       const observer = new MutationObserver(() => {
-        if (tryApply()) observer.disconnect();
+        if (queued) return;
+        queued = true;
+        queueMicrotask(() => {
+          queued = false;
+          applyGate(root);
+        });
       });
       observer.observe(root, { childList: true, subtree: true });
     }
