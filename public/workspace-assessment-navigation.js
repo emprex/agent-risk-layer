@@ -11,6 +11,11 @@ function currentAssessmentContext() {
   };
 }
 
+function setLinkState(link, text, href) {
+  if (link.textContent !== text) link.textContent = text;
+  if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+}
+
 function applyAssessmentNavigation() {
   if (!navigation || document.body?.dataset.shell !== 'app') return;
   const context = currentAssessmentContext();
@@ -18,15 +23,13 @@ function applyAssessmentNavigation() {
   if (!link) return;
 
   if (!context.assessmentId) {
-    link.textContent = 'New assessment';
-    link.href = '/assessment.html';
+    setLinkState(link, 'New assessment', '/assessment.html');
     return;
   }
 
   const params = new URLSearchParams({ id: context.assessmentId });
   if (context.token) params.set('token', context.token);
-  link.textContent = 'Assessment';
-  link.href = `/result.html?${params.toString()}`;
+  setLinkState(link, 'Assessment', `/result.html?${params.toString()}`);
 }
 
 applyAssessmentNavigation();
