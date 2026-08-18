@@ -14,11 +14,12 @@ test('assessment bootstrap routes declared concerns to Evidence before remediati
   assert.match(source, /location\.replace\(`\/inspector\.html\?\$\{evidenceParams\.toString\(\)\}`\)/);
 });
 
-test('assessment bootstrap lifts Evidence redirect once active observed findings exist', () => {
+test('assessment bootstrap keeps Findings available for active or resolved observed evidence', () => {
   const source = read('public/control-plane-bootstrap.js');
-  assert.match(source, /latestObservedFindings/);
+  assert.match(source, /latestObservedState/);
   assert.match(source, /\/api\/assessments\/\$\{encodeURIComponent\(assessmentId\)\}\/inspections/);
   assert.match(source, /\/api\/inspections\/\$\{encodeURIComponent\(latest\.id\)\}/);
-  assert.match(source, /if \(!observed\.length\)/);
-  assert.match(source, /remediation workspace is allowed to render those evidence-backed items/i);
+  assert.match(source, /hasResolvedRetest/);
+  assert.match(source, /if \(!observed\.activeFindings\.length && !observed\.hasResolvedRetest\)/);
+  assert.match(source, /review and record closure instead of being bounced back/i);
 });
