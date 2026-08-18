@@ -12,12 +12,23 @@ function tokenIsValidForSelected(){
   return Number.isFinite(expiresAt)&&expiresAt>Date.now();
 }
 
+function tokenReadyLabel(){
+  if(!tokenIsValidForSelected())return '';
+  const expiresAt=new Date(activeTokenState.expiresAt);
+  const time=Number.isNaN(expiresAt.getTime())?'':expiresAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  return time?`Token active until ${time}`:'Token ready';
+}
+
 function syncTokenButton(){
   const button=document.querySelector('#createToken');
   if(!button)return;
   const ready=tokenIsValidForSelected();
-  button.textContent=ready?'Token ready':activeTokenState?.assessmentId===selectedId?'Create new token':'Create inspection command';
+  button.textContent=ready?tokenReadyLabel():activeTokenState?.assessmentId===selectedId?'Create new token':'Create inspection command';
   button.disabled=ready;
+  button.classList.toggle('token-ready',ready);
+  button.setAttribute('aria-disabled',ready?'true':'false');
+  button.style.cursor=ready?'default':'';
+  button.title=ready?'The one-time token is ready. Run the command below before it expires.':'';
 }
 
 function scheduleTokenExpiry(){
