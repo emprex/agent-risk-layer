@@ -29,9 +29,11 @@ test('verification gate preserves assessment context in Evidence link', () => {
 
 test('control plane loads verification gate after the handoff clarification layer', () => {
   const html = read('public/control-plane.html');
+  const layer = read('public/remediation-verification-gate.js');
   const clarity = html.indexOf('remediation-handoff-clarity.js');
   const gate = html.indexOf('remediation-verification-gate.js');
   assert.ok(clarity >= 0);
   assert.ok(gate > clarity);
-  assert.match(html, /verify assessment concerns, fix confirmed weaknesses/i);
+  assert.match(html, /review protection decisions, fix confirmed weaknesses and retest the exact control before closure/i);
+  assert.match(layer, /Assessment answers identify concerns\. Evidence establishes whether a weakness is real/i);
 });
