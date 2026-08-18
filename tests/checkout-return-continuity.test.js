@@ -7,19 +7,22 @@ const root = path.resolve(import.meta.dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 
 test('cancelled or browser-back checkout return restores the assessment purchase state', () => {
+  const shared = read('public/shared.js');
   const result = read('public/result.js');
-  assert.match(result, /arl_checkout_pending_assessment/);
-  assert.match(result, /Payment was not completed/i);
-  assert.match(result, /Nothing was charged/i);
-  assert.match(result, /pageshow/);
-  assert.match(result, /searchParams\.delete\('cancelled'\)/);
-  assert.match(result, /Get Security Assessment · £99/);
+  assert.match(shared, /restoreCheckoutReturnState/);
+  assert.match(shared, /Checkout was not completed/i);
+  assert.match(shared, /assessment has been preserved/i);
+  assert.match(shared, /pageshow/);
+  assert.match(shared, /searchParams\.delete\('cancelled'\)/);
+  assert.match(shared, /#buyPro/);
+  assert.match(shared, /Get Security Assessment · £99/);
+  assert.match(result, /Opening secure checkout…/);
 });
 
-test('successful checkout clears the pending-return marker', () => {
-  const success = read('public/success.js');
-  assert.match(success, /arl_checkout_pending_assessment/);
-  assert.match(success, /removeItem/);
+test('checkout return handling does not claim that a payment definitely failed or succeeded', () => {
+  const shared = read('public/shared.js');
+  assert.doesNotMatch(shared, /Nothing was charged/i);
+  assert.doesNotMatch(shared, /Payment completed/i);
 });
 
 test('one-off assessment checkout is account-bound with no email or admin bypass', () => {
