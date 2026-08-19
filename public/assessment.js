@@ -17,9 +17,11 @@ const backButton = document.querySelector('#backButton');
 const nextButton = document.querySelector('#nextButton');
 const submitButton = document.querySelector('#submitAssessment');
 const evidenceSelect = document.querySelector('#questionEvidence');
+const evidenceDetails = document.querySelector('.evidence-details');
 const agentName = document.querySelector('#agentName');
 const agentType = document.querySelector('#agentType');
 const agentDescription = document.querySelector('#agentDescription');
+const questionTitle = document.querySelector('#questionTitle');
 const questionGuidance = document.querySelector('#questionGuidance');
 const guidanceMeaning = document.querySelector('#guidanceMeaning');
 const guidanceChecks = document.querySelector('#guidanceChecks');
@@ -257,7 +259,7 @@ function renderStep() {
   document.querySelector('#questionKind').textContent = question.kind === 'exposure' ? 'What could happen?' : 'What protection is in place?';
   document.querySelector('#stepCount').textContent = phase.currentQuestionLabel;
   document.querySelector('#questionDomain').textContent = question.domain;
-  document.querySelector('#questionTitle').textContent = question.title;
+  questionTitle.textContent = question.title;
   document.querySelector('#questionHelp').textContent = question.help;
   renderQuestionGuidance(question, saved);
   document.querySelector('#questionOptions').innerHTML = question.options.map((option) => `
@@ -266,6 +268,7 @@ function renderStep() {
       <span>${escapeHtml(option.label)}</span>
     </label>`).join('');
 
+  if (evidenceDetails) evidenceDetails.open = false;
   evidenceSelect.innerHTML = evidenceOptions.map((option) => `<option value="${escapeHtml(option.value)}">${escapeHtml(plainEvidenceLabel(option))}</option>`).join('');
   evidenceSelect.value = saved?.evidence || 'customer_assertion';
   progressLabel.textContent = `${phase.label} · ${phase.currentQuestionLabel}`;
@@ -273,7 +276,21 @@ function renderStep() {
   nextButton.hidden = last;
   submitButton.hidden = !last && !sourceAssessmentId;
   submitButton.textContent = sourceAssessmentId ? 'Save updated result' : 'Show my result';
-  questionStage.focus?.();
+}
+
+function positionCurrentStage({ focusHeading = true } = {}) {
+  const target = stepIndex === 0 ? profileStep : questionStage;
+  if (!target) return;
+  requestAnimationFrame(() => {
+    const compactNewAssessment = stepIndex > 0 && !sourceAssessmentId;
+    const mobile = window.matchMedia('(max-width: 720px)').matches;
+    const topOffset = compactNewAssessment ? (mobile ? 126 : 136) : 88;
+    const targetTop = Math.max(0, window.scrollY + target.getBoundingClientRect().top - topOffset);
+    if (Math.abs(window.scrollY - targetTop) > 2) {
+      window.scrollTo({ top: targetTop, behavior: 'auto' });
+    }
+    if (stepIndex > 0 && focusHeading) questionTitle?.focus({ preventScroll: true });
+  });
 }
 
 function validateProfile() {
@@ -334,7 +351,7 @@ revisionQuestionList?.addEventListener('click', (event) => {
   if (!Number.isInteger(targetIndex) || targetIndex < 1 || targetIndex > flowQuestions.length) return;
   stepIndex = targetIndex;
   renderStep();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  positionCurrentStage();
 });
 
 nextButton.addEventListener('click', () => {
@@ -345,7 +362,7 @@ nextButton.addEventListener('click', () => {
   if (stepIndex < flowQuestions.length) {
     stepIndex += 1;
     renderStep();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    positionCurrentStage();
   }
 });
 
@@ -359,7 +376,7 @@ backButton.addEventListener('click', () => {
     if (!sourceAssessmentId) refreshAdaptiveFlow();
     stepIndex -= 1;
     renderStep();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    positionCurrentStage({ focusHeading: stepIndex > 0 });
   }
 });
 
@@ -372,6 +389,7 @@ form.addEventListener('submit', async (event) => {
   if (!validateProfile()) {
     stepIndex = 0;
     renderStep();
+    positionCurrentStage({ focusHeading: false });
     return;
   }
   const payloadAnswers = Object.fromEntries(questionnaire.map((question) => [question.id, answers.get(question.id)]));
