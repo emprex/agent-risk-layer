@@ -1,0 +1,265 @@
+/* Dashboard-only light visual repair.
+ * Presentation only: no assessment, finding, evidence, deployment, billing,
+ * authorisation or persistence semantics are changed here.
+ */
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary {
+  overflow: hidden;
+  border: 1px solid #e2e8f0 !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03) !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary > summary {
+  min-height: 52px;
+  padding: 14px 16px !important;
+  background: #fff !important;
+  color: #0f172a !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary > summary span {
+  color: #0f172a !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary > summary small {
+  color: #64748b !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary[open] > summary {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary-body {
+  padding: 16px !important;
+  border-top: 0 !important;
+  background: #f8fafc !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary-body > .panel {
+  margin-top: 0 !important;
+  padding: 22px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .workspace-secondary-body > .panel + .panel {
+  margin-top: 14px !important;
+}
+
+/* The evidence journey inherited the old dark task-list treatment. Keep the
+ * same workflow and links, but render them as calm light workspace rows. */
+body.workspace-overview-page[data-shell="app"] .v10-task-list {
+  display: grid !important;
+  gap: 9px !important;
+  margin: 18px 0 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  list-style: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li::before,
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li::after,
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a::before,
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a::after {
+  display: none !important;
+  content: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a {
+  display: grid !important;
+  grid-template-columns: 38px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 13px !important;
+  min-height: 66px !important;
+  padding: 12px 14px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a:hover,
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a:focus-visible {
+  border-color: #bfdbfe !important;
+  background: #f8fbff !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a > span {
+  display: inline-grid !important;
+  place-items: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  padding: 0 !important;
+  border: 1px solid #bfdbfe !important;
+  border-radius: 9px !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li.complete > a > span {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a > div {
+  min-width: 0;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a strong {
+  display: block !important;
+  margin: 0 0 3px !important;
+  color: #0f172a !important;
+  font-size: 14px !important;
+  line-height: 1.3 !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a small {
+  display: block !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a b {
+  justify-self: end !important;
+  padding: 4px 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 999px !important;
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+  line-height: 1.2 !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .v10-task-list > li.complete > a b {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+}
+
+/* Specialist links should look like supporting tools, not dark product tiles. */
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid > a {
+  min-height: 0 !important;
+  padding: 14px 15px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid > a:hover,
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid > a:focus-visible {
+  border-color: #bfdbfe !important;
+  background: #f8fbff !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid > a strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #0f172a !important;
+  font-size: 13px !important;
+}
+
+body.workspace-overview-page[data-shell="app"] .technical-tool-grid > a span {
+  color: #64748b !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+
+/* Settings remain fully functional; this only removes the awkward stretching
+ * and unused desktop space visible in the recorded page. */
+body.workspace-overview-page[data-shell="app"] #settings .dashboard-grid {
+  align-items: start !important;
+  gap: 16px !important;
+}
+
+body.workspace-overview-page[data-shell="app"] #settings .dashboard-grid > .panel {
+  align-self: start !important;
+  height: auto !important;
+}
+
+body.workspace-overview-page[data-shell="app"] #settings .settings-grid {
+  align-items: start !important;
+  gap: 16px !important;
+}
+
+body.workspace-overview-page[data-shell="app"] #settings .settings-card {
+  height: auto !important;
+  min-height: 0 !important;
+  background: #fff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+body.workspace-overview-page[data-shell="app"] #settings .assessment-row {
+  padding-block: 12px !important;
+  border-color: #e2e8f0 !important;
+}
+
+body.workspace-overview-page[data-shell="app"] #settings .danger-zone {
+  border-color: #fecaca !important;
+  background: #fff !important;
+}
+
+@media (min-width: 1180px) {
+  body.workspace-overview-page[data-shell="app"] #settings .settings-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 960px) {
+  body.workspace-overview-page[data-shell="app"] .technical-tool-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  body.workspace-overview-page[data-shell="app"] .workspace-secondary > summary {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+
+  body.workspace-overview-page[data-shell="app"] .workspace-secondary-body {
+    padding: 10px !important;
+  }
+
+  body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a {
+    grid-template-columns: 34px minmax(0, 1fr) !important;
+  }
+
+  body.workspace-overview-page[data-shell="app"] .v10-task-list > li > a b {
+    grid-column: 2;
+    justify-self: start !important;
+  }
+
+  body.workspace-overview-page[data-shell="app"] .technical-tool-grid,
+  body.workspace-overview-page[data-shell="app"] #settings .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
