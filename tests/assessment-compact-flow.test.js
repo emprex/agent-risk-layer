@@ -28,7 +28,8 @@ test('normal question mode removes repeated page chrome and uses desktop width e
 test('evidence remains optional and collapsed when moving to a new question', () => {
   const html = read('public/assessment.html');
   const js = read('public/assessment.js');
-  assert.match(html, /<summary>Evidence \(optional\)<\/summary>/);
+  assert.match(html, /<summary>Evidence for this answer \(optional\)<\/summary>/);
+  assert.match(html, /answer remains unverified unless linked to reviewed evidence or a repeatable test later/i);
   assert.match(js, /if \(evidenceDetails\) evidenceDetails\.open = false;/);
 });
 
