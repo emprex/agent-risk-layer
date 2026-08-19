@@ -22,7 +22,8 @@ test('missing highest severity is derived only after the result root has rendere
   assert.match(js, /function resultHasRendered\(\)/);
   assert.match(js, /root\.classList\.contains\('result-workspace'\)/);
   assert.match(js, /root\.querySelector\('\.result-reason-grid'\)/);
-  assert.match(js, /#priorityRisks \.finding-work-item > summary \.severity/);
+  assert.match(js, /querySelectorAll\('#priorityRisks \.finding-work-item'\)/);
+  assert.match(js, /querySelector\(':scope > summary \.severity'\)/);
   assert.match(js, /if \(!findingCount\) return true/);
   assert.match(js, /\^\(\?:none\|—\|-\)\?\$/i);
   assert.doesNotMatch(js, /root\.querySelector\('\.result-workspace'\)/);
