@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { BILLABLE_PLANS } from './commercial-catalogue.js';
+import './questionnaire-applicability.js';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 export const defaultBindHost = '0.0.0.0';
