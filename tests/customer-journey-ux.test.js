@@ -8,6 +8,7 @@ const assessment = read('public/assessment.html');
 const demo = read('public/demo.html');
 const trust = read('public/trust.html');
 const help = read('public/help.html');
+const resultSummaryIntegrity = read('public/result-summary-integrity.js');
 
 test('assessment restores semantic hidden controls despite component display rules', () => {
   assert.match(assessment, /customer-journey-ux\.css/);
@@ -40,4 +41,19 @@ test('Help Centre uses the current assessment evidence vocabulary and verificati
   assert.match(help, /“I have supporting evidence to attach \(not verified yet\)”/);
   assert.match(help, /Selecting an option in the assessment never creates verified evidence/);
   assert.match(help, /merely selecting an evidence option does not verify it/);
+});
+
+test('result prioritizes high or critical findings over unresolved information gaps', () => {
+  assert.match(resultSummaryIntegrity, /severity === 'critical' \|\| severity === 'high'/);
+  assert.match(resultSummaryIntegrity, /insertBefore\(prioritySection, informationSection\)/);
+  assert.match(resultSummaryIntegrity, /Information gaps remain separate and should still be confirmed, but they do not outrank a known deployment blocker/);
+  assert.match(resultSummaryIntegrity, /Open highest-priority finding/);
+  assert.match(resultSummaryIntegrity, /Start remediation/);
+});
+
+test('result priority repair preserves unknowns as information gaps rather than findings', () => {
+  assert.match(resultSummaryIntegrity, /const informationSection = root\.querySelector\('#informationNeeded'\)/);
+  assert.match(resultSummaryIntegrity, /if \(!informationSection \|\| !finding\) return true/);
+  assert.doesNotMatch(resultSummaryIntegrity, /informationSection\.remove\(/);
+  assert.doesNotMatch(resultSummaryIntegrity, /informationSection\.hidden\s*=\s*true/);
 });
