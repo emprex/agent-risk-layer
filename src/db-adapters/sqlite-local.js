@@ -866,12 +866,24 @@ for (const migrationName of [
   '015_control_intelligence_graph.sql',
   '016_control_intelligence_journey.sql',
   '019_owner_assessment_cases.sql',
-  '021_paid_assessment_remediation_scope.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
   rawDb.exec(fs.readFileSync(migrationPath, 'utf8'));
 }
+
+ensureColumn('owner_assessment_cases', 'assessment_id', 'TEXT REFERENCES assessments(id) ON DELETE CASCADE');
+ensureColumn('owner_assessment_cases', 'purchase_id', 'TEXT REFERENCES purchases(id) ON DELETE RESTRICT');
+
+rawDb.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_assessment_cases_assessment
+  ON owner_assessment_cases(assessment_id)
+  WHERE assessment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_owner_assessment_cases_purchase
+  ON owner_assessment_cases(purchase_id)
+  WHERE purchase_id IS NOT NULL;
+`);
+
 ensureColumn('control_test_executions', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
 ensureColumn('control_evidence_items', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
 

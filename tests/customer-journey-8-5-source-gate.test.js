@@ -33,10 +33,10 @@ test('PAY public trust copy cannot statically overclaim current billing state', 
 test('PAY -> FIX preserves the purchased assessment instead of dropping into a generic dashboard', () => {
   const success = read('public/success.js');
   assert.match(success, /purchase\?\.assessment_id/);
-  assert.match(success, /dashboard\.html\?assessment=/);
-  assert.match(success, /Continue this assessment/);
+  assert.match(success, /control-plane\.html\?assessment=.*#remediation/);
+  assert.match(success, /Continue to fixes/);
   assert.match(success, /assign the first fix/i);
-  assert.match(success, /retest the exact risk/i);
+  assert.match(success, /run the exact retest/i);
 });
 
 test('FIX keeps normal customers on findings, owners and exact proof instead of the full catalogue', () => {

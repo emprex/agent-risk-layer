@@ -27,11 +27,11 @@ test('public pricing never presents a simulated purchase path', () => {
 test('paid assessment checkout returns to the same assessment context instead of a generic dashboard', () => {
   const success = read('public/success.js');
   assert.match(success, /purchase\?\.assessment_id/);
-  assert.match(success, /dashboard\.html\?assessment=/);
-  assert.match(success, /Continue this assessment/);
+  assert.match(success, /control-plane\.html\?assessment=.*#remediation/);
+  assert.match(success, /Continue to fixes/);
   assert.match(success, /assign the first fix/i);
-  assert.match(success, /retest the exact risk/i);
-  assert.match(success, /A finding is not closed until remediation evidence and a bounded retest support closure/i);
+  assert.match(success, /run the exact retest/i);
+  assert.match(success, /A declaration is not proof, and a finding is not closed until linked implementation evidence and a bounded retest support accountable closure/i);
 });
 
 test('free result makes the paid outcome explicit and paid result leads into remediation', () => {
