@@ -31,6 +31,44 @@ function forbidden(message) {
   return error;
 }
 
+async function canonicalAssessmentCaseProject(project) {
+  if (project?.projectKind !== 'assessment_case' || !project?.assessmentId) return project;
+  const assessment = await db.prepare('SELECT name FROM assessments WHERE id=?').get(project.assessmentId);
+  const canonicalName = clean(assessment?.name, 100);
+  if (!canonicalName || canonicalName === project.name) return project;
+  return { ...project, name: canonicalName };
+}
+
+async function canonicalAssessmentCaseProjects(projects) {
+  return Promise.all((projects || []).map((project) => canonicalAssessmentCaseProject(project)));
+}
+
+export async function getSecurityProject(input) {
+  return canonicalAssessmentCaseProject(await core.getSecurityProject(input));
+}
+
+export async function listSecurityProjects(userId) {
+  return canonicalAssessmentCaseProjects(await core.listSecurityProjects(userId));
+}
+
+export async function createSecurityProject(input) {
+  return canonicalAssessmentCaseProject(await core.createSecurityProject(input));
+}
+
+export async function controlPlaneOverview(userId) {
+  const overview = await core.controlPlaneOverview(userId);
+  const projects = await canonicalAssessmentCaseProjects(overview.projects);
+  const assessmentCases = await canonicalAssessmentCaseProjects(overview.assessmentCases?.projects);
+  return {
+    ...overview,
+    projects,
+    assessmentCases: {
+      ...overview.assessmentCases,
+      projects: assessmentCases,
+    },
+  };
+}
+
 function inspectionFindingActive(findings, ruleId) {
   return (Array.isArray(findings) ? findings : []).some((finding) =>
     clean(finding?.ruleId, 40) === ruleId && finding?.review?.status !== 'false-positive');
