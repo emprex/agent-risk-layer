@@ -37,5 +37,5 @@ test('platform owner capability uses the auth API isSuperuser field', () => {
 });
 
 test('handoff clarification asset is cache-busted', () => {
-  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.4/);
+  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.5/);
 });
