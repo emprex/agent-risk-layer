@@ -32,7 +32,7 @@ async function latestObservedState() {
 
 async function startControlPlane() {
   if (!assessmentId) {
-    await import('./control-plane.js?v=20260814.6');
+    await import('./control-plane.js?v=20260820.1');
     return;
   }
 
@@ -67,7 +67,7 @@ async function startControlPlane() {
     // Let the existing control-plane flow handle authentication, access and errors.
   }
 
-  await import('./control-plane.js?v=20260814.6');
+  await import('./control-plane.js?v=20260820.1');
 }
 
 startControlPlane();
