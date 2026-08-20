@@ -45,7 +45,7 @@ export async function entitlementForUser(userId) {
   return { key, ...PLAN_ENTITLEMENTS[key], subscription: subscription || null };
 }
 
-export async function createSecurityProject({ userId, workspaceId, name, environment = 'development', projectKind = PROJECT_KINDS.RUNTIME, assessmentId = null }) {
+export async function createSecurityProject({ userId, workspaceId, name, environment = 'development', projectKind = PROJECT_KINDS.RUNTIME }) {
   const membership = await workspaceMembership(workspaceId, userId);
   if (!membership || !MANAGE_ROLES.has(membership.role)) throw forbidden('Workspace developer, admin or owner access is required.');
   const cleanName = clean(name, 100);
@@ -54,38 +54,9 @@ export async function createSecurityProject({ userId, workspaceId, name, environ
   const normalizedProjectKind = clean(projectKind, 40).toLowerCase() || PROJECT_KINDS.RUNTIME;
   if (!Object.values(PROJECT_KINDS).includes(normalizedProjectKind)) throw badRequest('Unknown project kind.');
   const assessmentCase = normalizedProjectKind === PROJECT_KINDS.ASSESSMENT_CASE;
-  const boundAssessmentId = assessmentCase ? clean(assessmentId, 100) : '';
-  let paidAssessmentPurchase = null;
-
-  if (assessmentCase && boundAssessmentId) {
-    paidAssessmentPurchase = await db.prepare(`
-      SELECT a.id assessment_id,p.id purchase_id
-      FROM assessments a
-      JOIN purchases p ON p.assessment_id=a.id AND p.user_id=a.user_id
-      WHERE a.id=? AND a.user_id=?
-        AND a.paid_tier!='free'
-        AND p.status='paid'
-        AND p.fulfilment_state='fulfilled'
-        AND p.binding_state='verified'
-      ORDER BY COALESCE(p.fulfilled_at,p.updated_at) DESC
-      LIMIT 1
-    `).get(boundAssessmentId, userId);
-
-    if (!paidAssessmentPurchase) {
-      throw paymentRequired('A fulfilled Security Assessment purchase for this exact assessment is required before creating its remediation scope.');
-    }
-
-    const existingCase = await db.prepare(
-      'SELECT project_id FROM owner_assessment_cases WHERE assessment_id=?'
-    ).get(boundAssessmentId);
-
-    if (existingCase?.project_id) {
-      return getSecurityProject({ projectId: existingCase.project_id, userId });
-    }
-  } else if (assessmentCase && (membership.role !== 'owner' || !await isPlatformSuperuser(userId))) {
+  if (assessmentCase && (membership.role !== 'owner' || !await isPlatformSuperuser(userId))) {
     throw forbidden('Only the AgentRiskLayer owner may create assessment cases.');
   }
-
   const billingUserId = await workspaceBillingUser(workspaceId);
   const entitlement = await entitlementForUser(billingUserId);
   if (!assessmentCase) {
@@ -106,17 +77,8 @@ export async function createSecurityProject({ userId, workspaceId, name, environ
       .run(projectId, workspaceId, billingUserId, userId, cleanName, slug, cleanEnvironment, JSON.stringify(policy), policy.version, policyDigest, timestamp,
         Math.min(entitlement.retentionDays, cleanEnvironment === 'production' ? 90 : entitlement.retentionDays), timestamp, timestamp);
     if (assessmentCase) {
-      await db.prepare(`INSERT INTO owner_assessment_cases
-        (project_id,workspace_id,created_by,assessment_id,purchase_id,created_at)
-        VALUES (?,?,?,?,?,?)`)
-        .run(
-          projectId,
-          workspaceId,
-          userId,
-          boundAssessmentId || null,
-          paidAssessmentPurchase?.purchase_id || null,
-          timestamp,
-        );
+      await db.prepare(`INSERT INTO owner_assessment_cases (project_id,workspace_id,created_by,created_at) VALUES (?,?,?,?)`)
+        .run(projectId, workspaceId, userId, timestamp);
     }
     await audit({ workspaceId, projectId, actorType: 'user', actorId: userId, action: 'project.created', targetType: 'project', targetId: projectId,
       metadata: { environment: cleanEnvironment, projectKind: normalizedProjectKind } });
@@ -126,7 +88,6 @@ export async function createSecurityProject({ userId, workspaceId, name, environ
 
 export async function listSecurityProjects(userId) {
   const rows = await db.prepare(`SELECT p.*,m.role,
-      ac.assessment_id,
       CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind,
       (SELECT COUNT(*) FROM project_api_keys k WHERE k.project_id=p.id AND k.revoked_at IS NULL) api_key_count,
       (SELECT COUNT(*) FROM runtime_events e WHERE e.project_id=p.id AND e.created_at>=?) runtime_requests_month,
@@ -140,12 +101,8 @@ export async function listSecurityProjects(userId) {
     JOIN users actor ON actor.id=m.user_id
     LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
     WHERE m.user_id=? AND m.status='active'
-      AND (
-        ac.project_id IS NULL
-        OR actor.role='superuser'
-        OR (ac.assessment_id IS NOT NULL AND ac.created_by=?)
-      )
-    ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId, userId);
+      AND (ac.project_id IS NULL OR actor.role='superuser')
+    ORDER BY p.created_at DESC`).all(monthStart(), monthStart(), userId);
   return Promise.all(rows.map(async (row) => {
     const keys = await db.prepare('SELECT expires_at,revoked_at FROM project_api_keys WHERE project_id=?').all(row.id);
     return publicProject({ ...row, api_key_count: keys.filter((key) => apiKeyStatus(key) === 'active').length });
@@ -1111,35 +1068,25 @@ async function audit({ workspaceId = null, projectId = null, actorType, actorId 
 
 async function projectAccess(projectId, userId) {
   const row = await db.prepare(`SELECT p.*,m.role,
-    ac.assessment_id,
-      CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
+    CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
     FROM security_projects p
     JOIN workspace_members m ON m.workspace_id=p.workspace_id
     JOIN users actor ON actor.id=m.user_id
     LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
     WHERE p.id=? AND m.user_id=? AND m.status='active'
-      AND (
-        ac.project_id IS NULL
-        OR actor.role='superuser'
-        OR (ac.assessment_id IS NOT NULL AND ac.created_by=?)
-      )`).get(projectId, userId, userId);
+      AND (ac.project_id IS NULL OR actor.role='superuser')`).get(projectId, userId);
   return row ? { project: row, role: row.role } : null;
 }
 
 async function requireProjectRole(projectId, userId, roles, lock=false) {
   const access = lock && db.kind==='postgres' ? (()=>db.prepare(`SELECT p.*,m.role,
-    ac.assessment_id,
-      CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
+    CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
     FROM security_projects p
     JOIN workspace_members m ON m.workspace_id=p.workspace_id
     JOIN users actor ON actor.id=m.user_id
     LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
     WHERE p.id=? AND m.user_id=? AND m.status='active'
-      AND (
-        ac.project_id IS NULL
-        OR actor.role='superuser'
-        OR (ac.assessment_id IS NOT NULL AND ac.created_by=?)
-      ) FOR UPDATE OF p`).get(projectId,userId,userId).then(row=>row?{project:row,role:row.role}:null))() : projectAccess(projectId, userId);
+      AND (ac.project_id IS NULL OR actor.role='superuser') FOR UPDATE OF p`).get(projectId,userId).then(row=>row?{project:row,role:row.role}:null))() : projectAccess(projectId, userId);
   const resolved=await access;
   if (!resolved || !roles.has(resolved.role)) throw forbidden('Project not found or permission denied.');
   return resolved;
@@ -1195,9 +1142,7 @@ function publicProject(row) {
   const projectKind = row.project_kind === PROJECT_KINDS.ASSESSMENT_CASE ? PROJECT_KINDS.ASSESSMENT_CASE : PROJECT_KINDS.RUNTIME;
   return {
     id: row.id, workspaceId: row.workspace_id, billingUserId: row.billing_user_id, name: row.name, slug: row.slug,
-    projectKind,
-    assessmentId: row.assessment_id || null,
-    runtimeEnabled: projectKind === PROJECT_KINDS.RUNTIME,
+    projectKind, runtimeEnabled: projectKind === PROJECT_KINDS.RUNTIME,
     environment: row.environment, status: row.status, role: row.role, policy, policyVersion: row.policy_version,
     policyDigest: row.policy_digest || null, policyPublishedAt: row.policy_published_at || null,
     retentionDays: Number(row.retention_days || 30), createdAt: row.created_at, updatedAt: row.updated_at,

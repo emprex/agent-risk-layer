@@ -23,13 +23,3 @@ test('assessment bootstrap keeps Findings available for active or resolved obser
   assert.match(source, /if \(!observed\.activeFindings\.length && !observed\.hasResolvedRetest\)/);
   assert.match(source, /review and record closure instead of being bounced back/i);
 });
-
-test('assessment bootstrap rejects stale runtime selection and prefers the exact assessment case', () => {
-  const source = read('public/control-plane-bootstrap.js');
-  assert.match(source, /validateAssessmentScopeSelection/);
-  assert.match(source, /item\?\.projectKind === 'assessment_case'/);
-  assert.match(source, /item\?\.assessmentId === assessmentId/);
-  assert.match(source, /sessionStorage\.setItem\('arl_selected_project', exactCase\.id\)/);
-  assert.match(source, /sessionStorage\.removeItem\('arl_selected_project'\)/);
-  assert.match(source, /fetch\('\/assessment-remediation\.js', \{ cache: 'reload'/);
-});

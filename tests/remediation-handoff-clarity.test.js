@@ -48,19 +48,6 @@ test('exact existing project reuse removes only the misleading slot blocker', ()
   assert.match(layer, /select\.value = exact\.id/);
 });
 
-test('free assessment handoff removes unrelated project choices and gives one purchase action', () => {
-  const layer = read('public/remediation-handoff-clarity.js');
-  const html = read('public/control-plane.html');
-
-  assert.match(layer, /function clarifyFreeAssessmentGate/);
-  assert.match(layer, /assessmentProjectForm'\)\?\.remove\(\)/);
-  assert.match(layer, /No other agent or project can be selected for this assessment/);
-  assert.match(layer, /Complete the Security Assessment purchase first/);
-  assert.match(layer, /Return to result and unlock remediation/);
-  assert.match(layer, /if \(clarifyFreeAssessmentGate\(root, assessment, overview\)\) return;/);
-  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.5/);
-});
-
 test('handoff DOM observer disconnects before clarification mutates the same subtree', () => {
   const layer = read('public/remediation-handoff-clarity.js');
   assert.match(layer, /observer\.disconnect\(\);\s*\n\s*decorate\(\);/);

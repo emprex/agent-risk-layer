@@ -1,5 +1,4 @@
 import { db, id, nowIso } from './db.js';
-import { config } from './config.js';
 import * as core from './control-plane-core.js';
 
 export * from './control-plane-core.js';
@@ -32,104 +31,19 @@ function forbidden(message) {
   return error;
 }
 
-async function reconcileConfiguredSuperuser(userId) {
-  const row = await db.prepare('SELECT id,email,role FROM users WHERE id=?').get(userId);
-  const configuredAdmin = String(config.adminEmail || '').trim().toLowerCase();
-  const isConfiguredAdmin = Boolean(row && configuredAdmin && String(row.email || '').trim().toLowerCase() === configuredAdmin);
-  if (!isConfiguredAdmin) return row?.role === 'superuser';
-  if (row.role !== 'superuser') await db.prepare("UPDATE users SET role='superuser' WHERE id=? AND role!='superuser'").run(userId);
-  return true;
-}
-
-async function canonicalAssessmentCaseProject(project) {
-  if (project?.projectKind !== 'assessment_case' || !project?.assessmentId) return project;
-  const assessment = await db.prepare('SELECT name FROM assessments WHERE id=?').get(project.assessmentId);
-  const canonicalName = clean(assessment?.name, 100);
-  if (!canonicalName || canonicalName === project.name) return project;
-  return { ...project, name: canonicalName };
-}
-
-async function canonicalAssessmentCaseProjects(projects) {
-  return Promise.all((projects || []).map((project) => canonicalAssessmentCaseProject(project)));
-}
-
-export async function getSecurityProject(input) {
-  await reconcileConfiguredSuperuser(input?.userId);
-  return canonicalAssessmentCaseProject(await core.getSecurityProject(input));
-}
-
-export async function listSecurityProjects(userId) {
-  await reconcileConfiguredSuperuser(userId);
-  return canonicalAssessmentCaseProjects(await core.listSecurityProjects(userId));
-}
-
-export async function createSecurityProject(input) {
-  const isConfiguredSuperuser = await reconcileConfiguredSuperuser(input?.userId);
-  try {
-    return canonicalAssessmentCaseProject(await core.createSecurityProject(input));
-  } catch (error) {
-    const ownerPreview = isConfiguredSuperuser
-      && input?.projectKind === core.PROJECT_KINDS.ASSESSMENT_CASE
-      && Boolean(input?.assessmentId)
-      && Number(error?.statusCode) === 402;
-    if (!ownerPreview) throw error;
-
-    const assessment = await db.prepare('SELECT id,user_id,paid_tier,name FROM assessments WHERE id=?').get(input.assessmentId);
-    if (!assessment || assessment.user_id !== input.userId || assessment.paid_tier !== 'free') throw error;
-
-    const existing = await db.prepare('SELECT project_id FROM owner_assessment_cases WHERE assessment_id=?').get(input.assessmentId);
-    if (existing?.project_id) return canonicalAssessmentCaseProject(await core.getSecurityProject({ projectId: existing.project_id, userId: input.userId }));
-
-    const previewProject = await core.createSecurityProject({ ...input, assessmentId: null });
-    const bound = await db.prepare(`UPDATE owner_assessment_cases SET assessment_id=?
-      WHERE project_id=? AND created_by=? AND assessment_id IS NULL`).run(input.assessmentId, previewProject.id, input.userId);
-    if (Number(bound.changes || 0) !== 1) throw badRequest('Could not bind the owner preview scope to this assessment.');
-
-    await db.prepare(`INSERT INTO security_audit_log
-      (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
-      id('aud_'), previewProject.workspaceId, previewProject.id, 'user', input.userId,
-      'assessment.owner_preview_scope_created', 'assessment', input.assessmentId,
-      JSON.stringify({ assessmentId: input.assessmentId, paidEntitlementGranted: false, runtimeEnabled: false }), nowIso(),
-    );
-
-    return canonicalAssessmentCaseProject(await core.getSecurityProject({ projectId: previewProject.id, userId: input.userId }));
-  }
-}
-
-export async function controlPlaneOverview(userId) {
-  await reconcileConfiguredSuperuser(userId);
-  const overview = await core.controlPlaneOverview(userId);
-  const projects = await canonicalAssessmentCaseProjects(overview.projects);
-  const assessmentCases = await canonicalAssessmentCaseProjects(overview.assessmentCases?.projects);
-  return {
-    ...overview,
-    projects,
-    assessmentCases: {
-      ...overview.assessmentCases,
-      projects: assessmentCases,
-    },
-  };
-}
-
 function inspectionFindingActive(findings, ruleId) {
   return (Array.isArray(findings) ? findings : []).some((finding) =>
     clean(finding?.ruleId, 40) === ruleId && finding?.review?.status !== 'false-positive');
 }
 
 async function observedClosureAccess(projectId, userId) {
-  const row = await db.prepare(`SELECT p.workspace_id,m.role,ac.assessment_id,
-      CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
+  const row = await db.prepare(`SELECT p.workspace_id,m.role
     FROM security_projects p
     JOIN workspace_members m ON m.workspace_id=p.workspace_id
     JOIN users actor ON actor.id=m.user_id
     LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
     WHERE p.id=? AND m.user_id=? AND m.status='active'
-      AND (
-        ac.project_id IS NULL
-        OR actor.role='superuser'
-        OR (ac.assessment_id IS NOT NULL AND ac.created_by=?)
-      )`).get(projectId, userId, userId);
+      AND (ac.project_id IS NULL OR actor.role='superuser')`).get(projectId, userId);
   if (!row || !REVIEW_ROLES.has(row.role)) throw forbidden('Project not found or permission denied.');
   return row;
 }
@@ -158,8 +72,6 @@ async function closeObservedInspectionRemediation({ projectId, itemId, userId, p
       throw badRequest('Observed Inspector closure is only available for an open observed remediation.');
     if (!current.assessment_id)
       throw badRequest('Observed Inspector closure requires an assessment-bound remediation.');
-    if (access.project_kind !== 'assessment_case' || access.assessment_id !== current.assessment_id)
-      throw badRequest('Observed Inspector closure requires the exact assessment-bound remediation scope.');
     if (patch.title != null || patch.severity != null || patch.ownerEmail != null || patch.dueAt != null)
       throw badRequest('Close the observed finding separately from editing remediation details.');
 
