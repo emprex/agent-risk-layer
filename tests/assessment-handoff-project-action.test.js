@@ -32,5 +32,5 @@ test('eligible assessment can choose its exact dedicated remediation scope from 
 });
 
 test('handoff clarification asset is cache-busted', () => {
-  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.2/);
+  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.3/);
 });
