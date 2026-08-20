@@ -31,6 +31,11 @@ test('eligible assessment can choose its exact dedicated remediation scope from 
   assert.match(script, /stopImmediatePropagation/);
 });
 
+test('platform owner capability uses the auth API isSuperuser field', () => {
+  assert.match(script, /auth\?\.user\?\.isSuperuser === true/);
+  assert.match(script, /overview\.assessmentCases = \{ \.\.\.\(overview\.assessmentCases \|\| \{\}\), canCreate: true \}/);
+});
+
 test('handoff clarification asset is cache-busted', () => {
-  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.3/);
+  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.4/);
 });
