@@ -26,26 +26,40 @@ function clarifyConcernLanguage(root) {
   }
 }
 
-function clarifyExactMatch(root, exact) {
-  if (!exact) return;
+function clarifyProjectAction(root, exact, assessment) {
+  const form = root.querySelector('#assessmentProjectForm');
   const select = root.querySelector('#assessmentProjectSelect');
-  if (!select) return;
-  const option = [...select.options].find((item) => item.value === exact.id);
-  if (!option) return;
+  const button = form?.querySelector('button[type="submit"]');
+  if (!form || !select || !button) return;
 
-  select.value = exact.id;
-  option.textContent = option.textContent
-    .replace(/\s*·\s*possible name match\s*$/i, '')
-    .replace(/\s*·\s*exact name and environment match\s*$/i, '') + ' · exact name and environment match';
+  if (exact) {
+    const option = [...select.options].find((item) => item.value === exact.id);
+    if (!option) return;
+    select.value = exact.id;
+    option.textContent = option.textContent
+      .replace(/\s*·\s*possible name match\s*$/i, '')
+      .replace(/\s*·\s*exact name and environment match\s*$/i, '') + ' · exact name and environment match';
+    button.disabled = false;
+    button.textContent = 'Use matching project';
+    return;
+  }
 
-  const button = root.querySelector('#assessmentProjectForm button[type="submit"]');
-  if (button) button.textContent = 'Use matching project';
+  select.value = '';
+  for (const option of [...select.options]) {
+    if (option.value) option.disabled = true;
+  }
+  button.disabled = true;
+  button.textContent = 'No matching project';
 
-  const warning = [...root.querySelectorAll('.notice.warning')].find((node) => /no unused project slot/i.test(node.textContent || ''));
-  if (warning) {
-    warning.classList.remove('warning');
-    warning.dataset.exactProjectReuse = 'true';
-    warning.textContent = 'Matching existing project found. Reusing it does not consume a new project slot.';
+  const help = select.closest('.field')?.querySelector('small');
+  if (help) help.textContent = 'Only an existing project that represents this exact assessed agent and version can be linked.';
+
+  if (!form.querySelector('[data-no-matching-project]')) {
+    const notice = document.createElement('div');
+    notice.className = 'notice warning';
+    notice.dataset.noMatchingProject = 'true';
+    notice.innerHTML = `<strong>No matching project found</strong><span>${String(assessment?.name || 'This assessment')} cannot be linked to a different agent. Use the dedicated remediation scope when the paid assessment entitlement is available.</span>`;
+    form.append(notice);
   }
 }
 
@@ -75,7 +89,7 @@ async function decorate() {
     clarifyConcernLanguage(root);
     const state = await context();
     if (!state) return;
-    clarifyExactMatch(root, exactAssessmentProject(state.overview, state.assessment));
+    clarifyProjectAction(root, exactAssessmentProject(state.overview, state.assessment), state.assessment);
   } catch {
     // This layer only clarifies handoff copy. The primary remediation workflow remains usable if it cannot load.
   }
