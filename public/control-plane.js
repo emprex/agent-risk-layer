@@ -120,8 +120,8 @@ function assessmentReturnHref() {
 function assessmentHandoffPanel() {
   const candidates = assessmentProjects(overview);
   const suggested = matchingAssessmentProject(overview, assessmentContext);
-  const paidAssessment = assessmentContext?.paidTier !== 'free';
-  const canCreateCase = Boolean(overview.assessmentCases?.canCreate || paidAssessment);
+  const canCreateCase = Boolean(overview.assessmentCases?.canCreate);
+  const canCreateRuntime = runtimeProjects().length < Number(overview.entitlement?.projects || 0);
   const first = assessmentFindings()[0];
   return `<section class="panel assessment-handoff">
     <span class="eyebrow">Assessment → remediation</span>
@@ -129,7 +129,7 @@ function assessmentHandoffPanel() {
     <p>This assessment is not linked to a remediation project yet. Nothing will be added to another agent unless you explicitly choose it.</p>
     ${first ? `<div class="assessment-handoff-finding"><small>First declared weakness</small><strong>${escapeHtml(first.title)}</strong><span>${escapeHtml(first.recommendation)}</span></div>` : ''}
     ${candidates.length ? `<form id="assessmentProjectForm" class="auth-form"><div class="field"><label for="assessmentProjectSelect">Existing project or assessment case</label><select id="assessmentProjectSelect" required><option value="">Choose the matching agent</option>${candidates.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === suggested?.id ? 'selected' : ''}>${escapeHtml(item.name)} · ${escapeHtml(item.projectKind === 'assessment_case' ? 'evidence-only case' : item.environment || 'project')}${item.id === suggested?.id ? ' · possible name match' : ''}</option>`).join('')}</select><small>Only choose an existing project when it represents this exact agent deployment and version.</small></div><button class="button ghost" type="submit">Use selected project</button></form>` : ''}
-    ${canCreateCase ? `<div class="assessment-create-scope"><span>Recommended</span><p>Create a dedicated evidence-only scope for this exact assessment so its fixes, evidence and retests cannot mix with another agent.</p><button class="button primary" id="createAssessmentRemediationCase" type="button">Create dedicated remediation scope</button></div>` : '<div class="notice warning">This free assessment does not include the remediation and exact-retest workspace. Complete the Security Assessment purchase from the result page to continue with this exact assessment.</div>'}
+    ${canCreateCase || canCreateRuntime ? `<div class="assessment-create-scope"><span>Recommended</span><p>Create a dedicated scope for this exact assessment so its fixes and evidence cannot mix with another agent.</p><button class="button primary" id="createAssessmentRemediationCase" type="button">Create dedicated remediation scope</button></div>` : '<div class="notice warning">Your current plan has no unused project slot. Choose a genuinely matching project above or change plan before tracking these fixes.</div>'}
     <a class="button ghost small" href="${assessmentReturnHref()}">Back to assessment result</a>
   </section>`;
 }
@@ -804,12 +804,12 @@ async function createAssessmentRemediationProject(event) {
   const button = event.currentTarget;
   setBusy(button, true, 'Creating safe scope…');
   try {
+    const canCreateCase = Boolean(overview.assessmentCases?.canCreate);
     const result = await api('/api/projects', { method: 'POST', body: JSON.stringify({
       workspaceId: project?.workspaceId || undefined,
       name: assessmentContext.name,
       environment: assessmentEnvironment(assessmentContext),
-      projectKind: 'assessment_case',
-      assessmentId,
+      projectKind: canCreateCase ? 'assessment_case' : 'runtime',
     }) });
     await loadOverview();
     await loadProject(result.project.id);

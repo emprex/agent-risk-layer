@@ -25,19 +25,6 @@ test('checkout return handling does not claim that a payment definitely failed o
   assert.doesNotMatch(shared, /Payment completed/i);
 });
 
-test('successful one-off assessment checkout returns to the same assessment remediation context', () => {
-  const success = read('public/success.js');
-  assert.match(success, /purchase\?\.assessment_id/);
-  assert.match(success, /control-plane\.html\?assessment=\$\{assessmentId\}#remediation/);
-  assert.match(success, /Continue to fixes/);
-  assert.match(success, /assessment and existing evidence are preserved/i);
-  assert.match(success, /attach implementation evidence/i);
-  assert.match(success, /exact retest/i);
-  assert.match(success, /accountable closure/i);
-  assert.match(success, /result\.html\?id=\$\{assessmentId\}/);
-  assert.doesNotMatch(success, /href: `\/dashboard\.html\?assessment=\$\{assessmentId\}`/);
-});
-
 test('one-off assessment checkout is account-bound with no privileged billing bypass', () => {
   const server = read('server.js');
   const start = server.indexOf('async function createCheckout');

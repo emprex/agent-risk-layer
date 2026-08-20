@@ -32,11 +32,5 @@ export function remediationFindingKey(assessmentId, finding = {}) {
 }
 
 export function linkedAssessmentRemediations(project, assessmentId) {
-  // An assessment-bound remediation chain must not silently resume inside a
-  // runtime project. Legacy runtime remediation rows stay historical, but the
-  // customer journey must create/use the dedicated assessment case before any
-  // new fix, retest or accountable closure is recorded.
-  if (project?.projectKind === 'runtime') return [];
-  if (project?.projectKind === 'assessment_case' && project?.assessmentId && project.assessmentId !== assessmentId) return [];
   return (project?.remediations || []).filter((item) => item.assessment_id === assessmentId);
 }

@@ -31,32 +31,3 @@ test('assessment remediation identity and environment remain bound to the assess
     { id: 'one', assessment_id: 'asm_1' }, { id: 'two', assessment_id: 'asm_2' },
   ] }, 'asm_1').map((item) => item.id), ['one']);
 });
-
-test('assessment remediation cannot silently resume inside a runtime project', () => {
-  const runtimeProject = {
-    id: 'prj_runtime',
-    projectKind: 'runtime',
-    assessmentId: null,
-    remediations: [{ id: 'legacy', assessment_id: 'asm_1' }],
-  };
-
-  assert.deepEqual(linkedAssessmentRemediations(runtimeProject, 'asm_1'), []);
-});
-
-test('assessment remediation only resumes inside the case bound to that exact assessment', () => {
-  const exactCase = {
-    id: 'prj_case_exact',
-    projectKind: 'assessment_case',
-    assessmentId: 'asm_1',
-    remediations: [{ id: 'exact', assessment_id: 'asm_1' }],
-  };
-  const otherCase = {
-    id: 'prj_case_other',
-    projectKind: 'assessment_case',
-    assessmentId: 'asm_2',
-    remediations: [{ id: 'wrong', assessment_id: 'asm_1' }],
-  };
-
-  assert.deepEqual(linkedAssessmentRemediations(exactCase, 'asm_1').map((item) => item.id), ['exact']);
-  assert.deepEqual(linkedAssessmentRemediations(otherCase, 'asm_1'), []);
-});

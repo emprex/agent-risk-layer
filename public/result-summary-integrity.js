@@ -1,11 +1,9 @@
 /*
- * Keep the customer-visible result summary internally consistent without changing
- * assessment semantics. Unknown answers remain information gaps; this module only
- * repairs presentation/next-action priority when a known material finding exists.
- *
  * Free assessment responses intentionally expose only the customer-visible finding set.
  * Older/free projections may omit highestFindingSeverity even when those rendered findings
- * already carry severity. Derive only from findings actually rendered to the customer.
+ * already carry severity. Keep the summary internally consistent by deriving only from the
+ * findings that are actually visible to the customer. Never invent a severity when no
+ * rendered finding supports it, and never overwrite an explicit severity from the server.
  */
 
 const root = document.querySelector('#resultRoot');
@@ -20,23 +18,12 @@ function severityLabel(value) {
   return value ? `${value[0].toUpperCase()}${value.slice(1)}` : '';
 }
 
-function visibleFindingRows() {
-  if (!root) return [];
-  return [...root.querySelectorAll('#priorityRisks .finding-work-item')];
-}
-
 function highestVisibleFindingSeverity() {
-  return visibleFindingRows()
-    .map((row) => severityFromText(row.querySelector(':scope > summary .severity')?.textContent))
+  if (!root) return '';
+  return [...root.querySelectorAll('#priorityRisks .finding-work-item > summary .severity')]
+    .map((node) => severityFromText(node.textContent))
     .filter(Boolean)
     .reduce((highest, current) => severityRank[current] > (severityRank[highest] || 0) ? current : highest, '');
-}
-
-function priorityMaterialFinding() {
-  return visibleFindingRows().find((row) => {
-    const severity = severityFromText(row.querySelector(':scope > summary .severity')?.textContent);
-    return severity === 'critical' || severity === 'high';
-  }) || null;
 }
 
 function metricValueByLabel(container, labelPattern) {
@@ -75,52 +62,10 @@ function correctMissingHighestSeverity() {
   return true;
 }
 
-function prioritizeMaterialFinding() {
-  if (!resultHasRendered()) return false;
-
-  const informationSection = root.querySelector('#informationNeeded');
-  const finding = priorityMaterialFinding();
-  if (!informationSection || !finding) return true;
-
-  const prioritySection = root.querySelector('#priorityRisks');
-  if (prioritySection && informationSection.parentElement === prioritySection.parentElement) {
-    informationSection.parentElement.insertBefore(prioritySection, informationSection);
-  }
-
-  const action = root.querySelector('.result-next-action');
-  const actionTitle = action?.querySelector('strong');
-  const actionDetail = action?.querySelector('p');
-  const actionLink = action?.querySelector('a');
-  const findingTitle = finding.querySelector(':scope > summary strong')?.textContent?.trim() || 'Address the highest-priority security finding';
-  const paidRemediationLink = root.querySelector('#actionPlan a[href]');
-
-  if (actionTitle) actionTitle.textContent = findingTitle;
-  if (actionDetail) {
-    actionDetail.textContent = 'Address this declared material weakness first. Information gaps remain separate and should still be confirmed, but they do not outrank a known deployment blocker.';
-  }
-  if (actionLink) {
-    if (paidRemediationLink) {
-      actionLink.href = paidRemediationLink.href;
-      actionLink.textContent = 'Start remediation';
-    } else {
-      actionLink.href = '#priorityRisks';
-      actionLink.textContent = 'Open highest-priority finding';
-    }
-  }
-
-  return true;
-}
-
-function reconcileResultSummary() {
-  const severityReady = correctMissingHighestSeverity();
-  const priorityReady = prioritizeMaterialFinding();
-  return severityReady && priorityReady;
-}
-
 if (root) {
   const observer = new MutationObserver(() => {
-    if (reconcileResultSummary()) observer.disconnect();
+    if (correctMissingHighestSeverity()) observer.disconnect();
   });
   observer.observe(root, { childList: true, subtree: true });
-  reconcileResultSummary();
+  correctMissingHighestSeverity();
 }

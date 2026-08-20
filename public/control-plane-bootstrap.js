@@ -30,78 +30,13 @@ async function latestObservedState() {
   return { activeFindings, hasResolvedRetest };
 }
 
-async function validateAssessmentScopeSelection() {
-  if (!assessmentId) return null;
-  const overview = await api('/api/control-plane/overview');
-  const exactCase = (overview?.assessmentCases?.projects || []).find((item) =>
-    item?.projectKind === 'assessment_case' && item?.assessmentId === assessmentId) || null;
-  const selectedProjectId = sessionStorage.getItem('arl_selected_project') || '';
-
-  if (exactCase?.id) {
-    sessionStorage.setItem('arl_selected_project', exactCase.id);
-    return exactCase;
-  }
-
-  if (selectedProjectId) sessionStorage.removeItem('arl_selected_project');
-  return null;
-}
-
-function resumeExactAssessmentScope(exactCase) {
-  if (!exactCase?.id) return;
-  const root = document.querySelector('#controlPlaneRoot');
-  if (!root) return;
-
-  let resumed = false;
-  const tryResume = () => {
-    if (resumed) return true;
-    if (root.querySelector('.assessment-remediation-workspace')) {
-      resumed = true;
-      return true;
-    }
-
-    const form = root.querySelector('#assessmentProjectForm');
-    const select = root.querySelector('#assessmentProjectSelect');
-    if (!form || !select) return false;
-
-    let option = [...select.options].find((item) => item.value === exactCase.id);
-    if (!option) {
-      option = document.createElement('option');
-      option.value = exactCase.id;
-      option.textContent = `${String(exactCase.name || 'Assessment scope')} · evidence-only case`;
-      select.append(option);
-    }
-    option.disabled = false;
-    select.value = exactCase.id;
-    resumed = true;
-
-    if (typeof form.requestSubmit === 'function') form.requestSubmit();
-    else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    return true;
-  };
-
-  if (tryResume()) return;
-  const observer = new MutationObserver(() => {
-    if (!tryResume()) return;
-    observer.disconnect();
-  });
-  observer.observe(root, { childList: true, subtree: true });
-  setTimeout(() => observer.disconnect(), 10000);
-}
-
 async function startControlPlane() {
   if (!assessmentId) {
-    await import('./control-plane.js?v=20260820.1');
+    await import('./control-plane.js?v=20260814.6');
     return;
   }
 
-  let exactCase = null;
   try {
-    exactCase = await validateAssessmentScopeSelection();
-    // Force the current assessment-remediation helper into the browser cache before
-    // loading the application. Older helper code could otherwise reselect a legacy
-    // runtime project for an assessment-bound remediation journey.
-    await fetch('/assessment-remediation.js', { cache: 'reload', credentials: 'same-origin' });
-
     const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
     const payload = await api(`/api/assessments/${encodeURIComponent(assessmentId)}${tokenQuery}`);
     const assessment = payload?.assessment;
@@ -132,8 +67,7 @@ async function startControlPlane() {
     // Let the existing control-plane flow handle authentication, access and errors.
   }
 
-  await import('./control-plane.js?v=20260820.1');
-  resumeExactAssessmentScope(exactCase);
+  await import('./control-plane.js?v=20260814.6');
 }
 
 startControlPlane();

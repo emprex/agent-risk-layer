@@ -24,8 +24,3 @@ test('observed retest handoff keeps closure an explicit accountable action', () 
   assert.match(source, /status: 'verified_closed'/);
   assert.match(source, /does not prove runtime behaviour or unrelated controls/);
 });
-
-test('observed remediation cards never bind closure to a runtime or different assessment project', () => {
-  assert.match(source, /project\?\.projectKind !== 'assessment_case'/);
-  assert.match(source, /project\?\.assessmentId !== assessmentId/);
-});

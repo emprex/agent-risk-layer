@@ -4,14 +4,13 @@ const root = document.querySelector('#successRoot');
 function continuationFor(data) {
   const purchase = data.purchase;
   if (purchase?.assessment_id) {
-    const assessmentId = encodeURIComponent(purchase.assessment_id);
     return {
-      href: `/control-plane.html?assessment=${assessmentId}#remediation`,
-      label: 'Continue to fixes',
-      title: 'Payment complete. Continue securing this agent.',
-      detail: 'Your assessment and existing evidence are preserved. Continue with the same agent to assign the first fix, attach implementation evidence, run the exact retest and record accountable closure.',
-      secondaryHref: `/result.html?id=${assessmentId}`,
-      secondaryLabel: 'Review assessment result',
+      href: `/dashboard.html?assessment=${encodeURIComponent(purchase.assessment_id)}`,
+      label: 'Continue this assessment',
+      title: 'Payment complete. Continue with this agent.',
+      detail: 'Your £99 assessment access is ready. Continue with the same agent to review the current findings, assign the first fix, attach implementation evidence and retest the exact risk.',
+      secondaryHref: `/dashboard.html?assessment=${encodeURIComponent(purchase.assessment_id)}#agentHistory`,
+      secondaryLabel: 'View assessment history',
     };
   }
   return {
@@ -30,7 +29,7 @@ async function init() {
     const item = data.purchase || data.subscription;
     if (!item) throw new Error('Payment is still being confirmed. Refresh this page in a moment.');
     const next = continuationFor(data);
-    root.innerHTML = `<div class="success-box">Payment and fulfilment completed.</div><span class="eyebrow">What happens next</span><h1 class="page-title-medium">${escapeHtml(next.title)}</h1><p class="muted">${escapeHtml(next.detail)}</p><div class="button-row"><a class="button primary" href="${next.href}">${escapeHtml(next.label)}</a><a class="button ghost" href="${next.secondaryHref}">${escapeHtml(next.secondaryLabel)}</a></div><p class="microcopy">Payment unlocks the remediation workflow. A declaration is not proof, and a finding is not closed until linked implementation evidence and a bounded retest support accountable closure.</p>`;
+    root.innerHTML = `<div class="success-box">Payment and fulfilment completed.</div><span class="eyebrow">What happens next</span><h1 class="page-title-medium">${escapeHtml(next.title)}</h1><p class="muted">${escapeHtml(next.detail)}</p><div class="button-row"><a class="button primary" href="${next.href}">${escapeHtml(next.label)}</a><a class="button ghost" href="${next.secondaryHref}">${escapeHtml(next.secondaryLabel)}</a></div><p class="microcopy">Payment unlocks the assessment workflow. A finding is not closed until remediation evidence and a bounded retest support closure.</p>`;
   } catch (error) {
     root.innerHTML = `<div class="error-box show">${escapeHtml(error.message)}</div><p class="muted">If payment completed, your access remains bound to your account even if this confirmation page is delayed.</p><div class="button-row"><a class="button primary" href="/dashboard.html">Check my workspace</a></div>`;
   }
