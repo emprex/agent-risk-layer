@@ -45,7 +45,7 @@ function clarifyProjectAction(root, exact, assessment) {
 
     const limit = handoff?.querySelector('.project-limit');
     if (limit) {
-      limit.innerHTML = `<strong>Exact project match found</strong><span>${String(assessment?.name || exact.name || 'This assessment')} · ${String(exact.environment || 'project')}. Reusing it does not consume a new project slot.</span>`;
+      limit.innerHTML = `<strong>Exact project match found</strong><span>${String(assessment?.name || exact.name || 'This assessment')} · ${String(exact.environment || 'project')}. Reusing it does not consume a new project slot, so no unused project slot is required.</span>`;
     }
     return;
   }
