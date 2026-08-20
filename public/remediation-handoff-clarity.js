@@ -120,10 +120,21 @@ async function context() {
   const assessmentId = params.get('assessment') || '';
   const token = params.get('token') || '';
   if (!assessmentId) return null;
-  contextPromise = Promise.all([
-    api('/api/control-plane/overview'),
-    api(`/api/assessments/${encodeURIComponent(assessmentId)}${token ? `?token=${encodeURIComponent(token)}` : ''}`),
-  ]).then(([overview, payload]) => ({ overview, assessment: payload.assessment }));
+  contextPromise = (async () => {
+    // Load the overview first. The server reconciles the configured ADMIN_EMAIL
+    // account to the platform-superuser role during this request. Read /auth/me
+    // afterwards so the UI capability reflects that authoritative identity,
+    // rather than racing a stale session role against the overview request.
+    const overview = await api('/api/control-plane/overview');
+    const [payload, auth] = await Promise.all([
+      api(`/api/assessments/${encodeURIComponent(assessmentId)}${token ? `?token=${encodeURIComponent(token)}` : ''}`),
+      api('/api/auth/me'),
+    ]);
+    if (auth?.user?.role === 'superuser') {
+      overview.assessmentCases = { ...(overview.assessmentCases || {}), canCreate: true };
+    }
+    return { overview, assessment: payload.assessment };
+  })();
   return contextPromise;
 }
 
