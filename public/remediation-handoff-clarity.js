@@ -85,7 +85,37 @@ function offerDedicatedAssessmentScope(root, assessment, overview, select, butto
   return true;
 }
 
+function clarifyFreeAssessmentGate(root, assessment, overview) {
+  const canCreate = Boolean(overview?.assessmentCases?.canCreate || assessment?.paidTier !== 'free');
+  if (canCreate) return false;
+
+  const handoff = root.querySelector('.assessment-handoff');
+  if (!handoff) return false;
+
+  handoff.querySelector('#assessmentProjectForm')?.remove();
+  handoff.querySelector('[data-no-matching-project]')?.remove();
+
+  const heading = handoff.querySelector('h2');
+  if (heading) heading.textContent = `Unlock remediation for ${String(assessment?.name || 'this assessment')}`;
+
+  const intro = heading?.nextElementSibling;
+  if (intro?.tagName === 'P') {
+    intro.textContent = 'This assessment has not completed the paid Security Assessment purchase, so remediation is not available yet. No other agent or project can be selected for this assessment.';
+  }
+
+  const warning = handoff.querySelector('.notice.warning');
+  if (warning) {
+    warning.innerHTML = '<strong>Complete the Security Assessment purchase first</strong><span>Return to this assessment result and complete the £99 purchase. After fulfilment, AgentRiskLayer will keep the same assessment context and create or reopen its dedicated evidence-only remediation scope.</span>';
+  }
+
+  const back = handoff.querySelector('a[href^="/result.html"]');
+  if (back) back.textContent = 'Return to result and unlock remediation';
+  return true;
+}
+
 function clarifyProjectAction(root, exact, assessment, overview) {
+  if (clarifyFreeAssessmentGate(root, assessment, overview)) return;
+
   const form = root.querySelector('#assessmentProjectForm');
   const select = root.querySelector('#assessmentProjectSelect');
   const button = form?.querySelector('button[type="submit"]');
