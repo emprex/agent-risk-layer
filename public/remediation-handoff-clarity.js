@@ -26,28 +26,33 @@ function clarifyConcernLanguage(root) {
   }
 }
 
+function clarifyExactProjectReuse(root, exact, assessment, select, button) {
+  if (!exact) return false;
+  const option = [...select.options].find((item) => item.value === exact.id);
+  if (!option) return false;
+
+  select.value = exact.id;
+  option.textContent = option.textContent
+    .replace(/\s*·\s*possible name match\s*$/i, '')
+    .replace(/\s*·\s*exact name and environment match\s*$/i, '') + ' · exact name and environment match';
+  button.disabled = false;
+  button.textContent = 'Use matching project';
+
+  const limit = root.querySelector('.assessment-handoff')?.querySelector('.project-limit');
+  if (limit) {
+    limit.innerHTML = `<strong>Exact project match found</strong><span>${String(assessment?.name || exact.name || 'This assessment')} · ${String(exact.environment || 'project')}. Reusing it does not consume a new project slot, so no unused project slot is required.</span>`;
+  }
+  return true;
+}
+
 function clarifyProjectAction(root, exact, assessment) {
-  const handoff = root.querySelector('.assessment-handoff');
   const form = root.querySelector('#assessmentProjectForm');
   const select = root.querySelector('#assessmentProjectSelect');
   const button = form?.querySelector('button[type="submit"]');
   if (!form || !select || !button) return;
 
   if (exact) {
-    const option = [...select.options].find((item) => item.value === exact.id);
-    if (!option) return;
-    select.value = exact.id;
-    option.textContent = option.textContent
-      .replace(/\s*·\s*possible name match\s*$/i, '')
-      .replace(/\s*·\s*exact name and environment match\s*$/i, '') + ' · exact name and environment match';
-    button.disabled = false;
-    button.textContent = 'Use matching project';
-
-    const limit = handoff?.querySelector('.project-limit');
-    if (limit) {
-      limit.innerHTML = `<strong>Exact project match found</strong><span>${String(assessment?.name || exact.name || 'This assessment')} · ${String(exact.environment || 'project')}. Reusing it does not consume a new project slot, so no unused project slot is required.</span>`;
-    }
-    return;
+    if (clarifyExactProjectReuse(root, exact, assessment, select, button)) return;
   }
 
   select.value = '';
