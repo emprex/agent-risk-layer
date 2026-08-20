@@ -27,6 +27,7 @@ function clarifyConcernLanguage(root) {
 }
 
 function clarifyProjectAction(root, exact, assessment) {
+  const handoff = root.querySelector('.assessment-handoff');
   const form = root.querySelector('#assessmentProjectForm');
   const select = root.querySelector('#assessmentProjectSelect');
   const button = form?.querySelector('button[type="submit"]');
@@ -41,6 +42,11 @@ function clarifyProjectAction(root, exact, assessment) {
       .replace(/\s*·\s*exact name and environment match\s*$/i, '') + ' · exact name and environment match';
     button.disabled = false;
     button.textContent = 'Use matching project';
+
+    const limit = handoff?.querySelector('.project-limit');
+    if (limit) {
+      limit.innerHTML = `<strong>Exact project match found</strong><span>${String(assessment?.name || exact.name || 'This assessment')} · ${String(exact.environment || 'project')}. Reusing it does not consume a new project slot.</span>`;
+    }
     return;
   }
 
