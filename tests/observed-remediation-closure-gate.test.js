@@ -27,6 +27,13 @@ test('observed Inspector closure is server-gated by latest before-after evidence
   ]) assert.ok(backend.includes(marker), marker);
 });
 
+test('observed Inspector closure requires the exact assessment-bound case', () => {
+  assert.match(backend, /CASE WHEN ac\.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind/);
+  assert.match(backend, /access\.project_kind !== 'assessment_case'/);
+  assert.match(backend, /access\.assessment_id !== current\.assessment_id/);
+  assert.match(backend, /requires the exact assessment-bound remediation scope/);
+});
+
 test('client closure requires explicit accountable action and preserves bounded claims', () => {
   assert.match(client, /Accountable closure review/);
   assert.match(client, /Accept retest evidence and close finding/);

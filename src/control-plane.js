@@ -37,13 +37,18 @@ function inspectionFindingActive(findings, ruleId) {
 }
 
 async function observedClosureAccess(projectId, userId) {
-  const row = await db.prepare(`SELECT p.workspace_id,m.role
+  const row = await db.prepare(`SELECT p.workspace_id,m.role,ac.assessment_id,
+      CASE WHEN ac.project_id IS NULL THEN 'runtime' ELSE 'assessment_case' END project_kind
     FROM security_projects p
     JOIN workspace_members m ON m.workspace_id=p.workspace_id
     JOIN users actor ON actor.id=m.user_id
     LEFT JOIN owner_assessment_cases ac ON ac.project_id=p.id AND ac.workspace_id=p.workspace_id
     WHERE p.id=? AND m.user_id=? AND m.status='active'
-      AND (ac.project_id IS NULL OR actor.role='superuser')`).get(projectId, userId);
+      AND (
+        ac.project_id IS NULL
+        OR actor.role='superuser'
+        OR (ac.assessment_id IS NOT NULL AND ac.created_by=?)
+      )`).get(projectId, userId, userId);
   if (!row || !REVIEW_ROLES.has(row.role)) throw forbidden('Project not found or permission denied.');
   return row;
 }
@@ -72,6 +77,8 @@ async function closeObservedInspectionRemediation({ projectId, itemId, userId, p
       throw badRequest('Observed Inspector closure is only available for an open observed remediation.');
     if (!current.assessment_id)
       throw badRequest('Observed Inspector closure requires an assessment-bound remediation.');
+    if (access.project_kind !== 'assessment_case' || access.assessment_id !== current.assessment_id)
+      throw badRequest('Observed Inspector closure requires the exact assessment-bound remediation scope.');
     if (patch.title != null || patch.severity != null || patch.ownerEmail != null || patch.dueAt != null)
       throw badRequest('Close the observed finding separately from editing remediation details.');
 

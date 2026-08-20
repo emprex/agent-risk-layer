@@ -30,6 +30,21 @@ async function latestObservedState() {
   return { activeFindings, hasResolvedRetest };
 }
 
+async function validateAssessmentScopeSelection() {
+  if (!assessmentId) return;
+  const overview = await api('/api/control-plane/overview');
+  const exactCase = (overview?.assessmentCases?.projects || []).find((item) =>
+    item?.projectKind === 'assessment_case' && item?.assessmentId === assessmentId);
+  const selectedProjectId = sessionStorage.getItem('arl_selected_project') || '';
+
+  if (exactCase?.id) {
+    sessionStorage.setItem('arl_selected_project', exactCase.id);
+    return;
+  }
+
+  if (selectedProjectId) sessionStorage.removeItem('arl_selected_project');
+}
+
 async function startControlPlane() {
   if (!assessmentId) {
     await import('./control-plane.js?v=20260820.1');
@@ -37,6 +52,12 @@ async function startControlPlane() {
   }
 
   try {
+    await validateAssessmentScopeSelection();
+    // Force the current assessment-remediation helper into the browser cache before
+    // loading the application. Older helper code could otherwise reselect a legacy
+    // runtime project for an assessment-bound remediation journey.
+    await fetch('/assessment-remediation.js', { cache: 'reload', credentials: 'same-origin' });
+
     const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
     const payload = await api(`/api/assessments/${encodeURIComponent(assessmentId)}${tokenQuery}`);
     const assessment = payload?.assessment;
