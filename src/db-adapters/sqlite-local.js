@@ -866,6 +866,7 @@ for (const migrationName of [
   '015_control_intelligence_graph.sql',
   '016_control_intelligence_journey.sql',
   '019_owner_assessment_cases.sql',
+  '021_paid_assessment_remediation_scope.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
