@@ -85,6 +85,6 @@ test('checkout status and success continuation stay account- and assessment-boun
   assert.match(status, /stripe_session_id = \? AND user_id = \?/);
   assert.match(status, /session\.metadata\?\.user_id !== req\.user\.id/);
   assert.match(success, /purchase\?\.assessment_id/);
-  assert.match(success, /dashboard\.html\?assessment=/);
-  assert.match(success, /Continue this assessment/);
+  assert.match(success, /control-plane\.html\?assessment=.*#remediation/);
+  assert.match(success, /Continue to fixes/);
 });
