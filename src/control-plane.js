@@ -1,4 +1,5 @@
 import { db, id, nowIso } from './db.js';
+import { config } from './config.js';
 import * as core from './control-plane-core.js';
 
 export * from './control-plane-core.js';
@@ -31,6 +32,15 @@ function forbidden(message) {
   return error;
 }
 
+async function reconcileConfiguredSuperuser(userId) {
+  const row = await db.prepare('SELECT id,email,role FROM users WHERE id=?').get(userId);
+  const configuredAdmin = String(config.adminEmail || '').trim().toLowerCase();
+  const isConfiguredAdmin = Boolean(row && configuredAdmin && String(row.email || '').trim().toLowerCase() === configuredAdmin);
+  if (!isConfiguredAdmin) return row?.role === 'superuser';
+  if (row.role !== 'superuser') await db.prepare("UPDATE users SET role='superuser' WHERE id=? AND role!='superuser'").run(userId);
+  return true;
+}
+
 async function canonicalAssessmentCaseProject(project) {
   if (project?.projectKind !== 'assessment_case' || !project?.assessmentId) return project;
   const assessment = await db.prepare('SELECT name FROM assessments WHERE id=?').get(project.assessmentId);
@@ -44,18 +54,51 @@ async function canonicalAssessmentCaseProjects(projects) {
 }
 
 export async function getSecurityProject(input) {
+  await reconcileConfiguredSuperuser(input?.userId);
   return canonicalAssessmentCaseProject(await core.getSecurityProject(input));
 }
 
 export async function listSecurityProjects(userId) {
+  await reconcileConfiguredSuperuser(userId);
   return canonicalAssessmentCaseProjects(await core.listSecurityProjects(userId));
 }
 
 export async function createSecurityProject(input) {
-  return canonicalAssessmentCaseProject(await core.createSecurityProject(input));
+  const isConfiguredSuperuser = await reconcileConfiguredSuperuser(input?.userId);
+  try {
+    return canonicalAssessmentCaseProject(await core.createSecurityProject(input));
+  } catch (error) {
+    const ownerPreview = isConfiguredSuperuser
+      && input?.projectKind === core.PROJECT_KINDS.ASSESSMENT_CASE
+      && Boolean(input?.assessmentId)
+      && Number(error?.statusCode) === 402;
+    if (!ownerPreview) throw error;
+
+    const assessment = await db.prepare('SELECT id,user_id,paid_tier,name FROM assessments WHERE id=?').get(input.assessmentId);
+    if (!assessment || assessment.user_id !== input.userId || assessment.paid_tier !== 'free') throw error;
+
+    const existing = await db.prepare('SELECT project_id FROM owner_assessment_cases WHERE assessment_id=?').get(input.assessmentId);
+    if (existing?.project_id) return canonicalAssessmentCaseProject(await core.getSecurityProject({ projectId: existing.project_id, userId: input.userId }));
+
+    const previewProject = await core.createSecurityProject({ ...input, assessmentId: null });
+    const bound = await db.prepare(`UPDATE owner_assessment_cases SET assessment_id=?
+      WHERE project_id=? AND created_by=? AND assessment_id IS NULL`).run(input.assessmentId, previewProject.id, input.userId);
+    if (Number(bound.changes || 0) !== 1) throw badRequest('Could not bind the owner preview scope to this assessment.');
+
+    await db.prepare(`INSERT INTO security_audit_log
+      (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      id('aud_'), previewProject.workspaceId, previewProject.id, 'user', input.userId,
+      'assessment.owner_preview_scope_created', 'assessment', input.assessmentId,
+      JSON.stringify({ assessmentId: input.assessmentId, paidEntitlementGranted: false, runtimeEnabled: false }), nowIso(),
+    );
+
+    return canonicalAssessmentCaseProject(await core.getSecurityProject({ projectId: previewProject.id, userId: input.userId }));
+  }
 }
 
 export async function controlPlaneOverview(userId) {
+  await reconcileConfiguredSuperuser(userId);
   const overview = await core.controlPlaneOverview(userId);
   const projects = await canonicalAssessmentCaseProjects(overview.projects);
   const assessmentCases = await canonicalAssessmentCaseProjects(overview.assessmentCases?.projects);
