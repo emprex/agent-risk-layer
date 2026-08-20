@@ -130,6 +130,7 @@ async function renderObservedRemediations() {
       api(`/api/assessments/${encodeURIComponent(assessmentId)}/inspections`),
       api(`/api/projects/${encodeURIComponent(projectId)}`),
     ]);
+    if (project?.projectKind !== 'assessment_case' || project?.assessmentId !== assessmentId) return;
     const latest = inspections[0];
     if (!latest?.id) return;
     const { inspection } = await api(`/api/inspections/${encodeURIComponent(latest.id)}`);
