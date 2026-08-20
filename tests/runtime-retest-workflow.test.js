@@ -53,5 +53,5 @@ test('bound retest helper loads before the runtime application bootstrap', () =>
   assert.ok(helperIndex >= 0, 'bound retest helper must be loaded');
   assert.ok(bootstrapIndex >= 0, 'runtime bootstrap must be loaded');
   assert.ok(helperIndex < bootstrapIndex, 'bound retest helper must recover or intercept project state before the runtime bootstrap starts');
-  assert.match(bootstrap, /import\(['"]\.\/control-plane\.js\?v=20260814\.6['"]\)/, 'runtime bootstrap must load the existing runtime application');
+  assert.match(bootstrap, /import\(['"]\.\/control-plane\.js\?v=20260820\.1['"]\)/, 'runtime bootstrap must load the current cache-busted runtime application');
 });
