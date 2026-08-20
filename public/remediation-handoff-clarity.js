@@ -121,16 +121,15 @@ async function context() {
   const token = params.get('token') || '';
   if (!assessmentId) return null;
   contextPromise = (async () => {
-    // Load the overview first. The server reconciles the configured ADMIN_EMAIL
-    // account to the platform-superuser role during this request. Read /auth/me
-    // afterwards so the UI capability reflects that authoritative identity,
-    // rather than racing a stale session role against the overview request.
+    // Load the overview first so the server can reconcile the configured platform owner.
+    // /api/auth/me exposes owner capability as user.isSuperuser; keep the role check only
+    // as a compatibility fallback for older responses.
     const overview = await api('/api/control-plane/overview');
     const [payload, auth] = await Promise.all([
       api(`/api/assessments/${encodeURIComponent(assessmentId)}${token ? `?token=${encodeURIComponent(token)}` : ''}`),
       api('/api/auth/me'),
     ]);
-    if (auth?.user?.role === 'superuser') {
+    if (auth?.user?.isSuperuser === true || auth?.user?.role === 'superuser') {
       overview.assessmentCases = { ...(overview.assessmentCases || {}), canCreate: true };
     }
     return { overview, assessment: payload.assessment };
