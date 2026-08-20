@@ -16,12 +16,21 @@ test('assessment handoff disables unrelated projects instead of presenting a dea
 });
 
 test('exact matching assessment project remains actionable', () => {
-  assert.match(script, /if \(exact\)/);
+  assert.match(script, /if \(exact && clarifyExactProjectReuse/);
   assert.match(script, /select\.value = exact\.id/);
   assert.match(script, /button\.disabled = false/);
   assert.match(script, /Use matching project/);
 });
 
+test('eligible assessment can choose its exact dedicated remediation scope from the same menu', () => {
+  assert.match(script, /overview\?\.assessmentCases\?\.canCreate \|\| assessment\?\.paidTier !== 'free'/);
+  assert.match(script, /__create_assessment_scope__/);
+  assert.match(script, /create dedicated remediation scope/);
+  assert.match(script, /Create matching Atlas scope/);
+  assert.match(script, /createAssessmentRemediationCase/);
+  assert.match(script, /stopImmediatePropagation/);
+});
+
 test('handoff clarification asset is cache-busted', () => {
-  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.1/);
+  assert.match(html, /remediation-handoff-clarity\.js\?v=20260820\.2/);
 });

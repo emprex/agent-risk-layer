@@ -45,15 +45,54 @@ function clarifyExactProjectReuse(root, exact, assessment, select, button) {
   return true;
 }
 
-function clarifyProjectAction(root, exact, assessment) {
+function offerDedicatedAssessmentScope(root, assessment, overview, select, button) {
+  const canCreate = Boolean(overview?.assessmentCases?.canCreate || assessment?.paidTier !== 'free');
+  if (!canCreate) return false;
+
+  for (const option of [...select.options]) {
+    if (option.value) option.disabled = true;
+  }
+
+  const value = '__create_assessment_scope__';
+  let option = [...select.options].find((item) => item.value === value);
+  if (!option) {
+    option = document.createElement('option');
+    option.value = value;
+    select.append(option);
+  }
+  option.disabled = false;
+  option.textContent = `${String(assessment?.name || 'This assessment')} · create dedicated remediation scope`;
+  select.value = value;
+  button.disabled = false;
+  button.textContent = 'Create matching Atlas scope';
+
+  const help = select.closest('.field')?.querySelector('small');
+  if (help) help.textContent = 'No existing project matches this assessment. Create the dedicated scope for this exact assessed agent instead.';
+
+  const oldNotice = root.querySelector('[data-no-matching-project]');
+  if (oldNotice) oldNotice.remove();
+
+  if (!select.dataset.assessmentScopeSubmitBound) {
+    select.dataset.assessmentScopeSubmitBound = 'true';
+    const form = select.closest('form');
+    form?.addEventListener('submit', (event) => {
+      if (select.value !== value) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      root.querySelector('#createAssessmentRemediationCase')?.click();
+    }, true);
+  }
+  return true;
+}
+
+function clarifyProjectAction(root, exact, assessment, overview) {
   const form = root.querySelector('#assessmentProjectForm');
   const select = root.querySelector('#assessmentProjectSelect');
   const button = form?.querySelector('button[type="submit"]');
   if (!form || !select || !button) return;
 
-  if (exact) {
-    if (clarifyExactProjectReuse(root, exact, assessment, select, button)) return;
-  }
+  if (exact && clarifyExactProjectReuse(root, exact, assessment, select, button)) return;
+  if (offerDedicatedAssessmentScope(root, assessment, overview, select, button)) return;
 
   select.value = '';
   for (const option of [...select.options]) {
@@ -100,7 +139,7 @@ async function decorate() {
     clarifyConcernLanguage(root);
     const state = await context();
     if (!state) return;
-    clarifyProjectAction(root, exactAssessmentProject(state.overview, state.assessment), state.assessment);
+    clarifyProjectAction(root, exactAssessmentProject(state.overview, state.assessment), state.assessment, state.overview);
   } catch {
     // This layer only clarifies handoff copy. The primary remediation workflow remains usable if it cannot load.
   }
