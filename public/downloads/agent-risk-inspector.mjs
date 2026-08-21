@@ -544,13 +544,16 @@ function runInstructionChecks(ctx){
 }
 
 
-function hasStructuredOutputValidation(text){
+function hasStructuredOutputValidation(text,aiInFile){
   // Comments and documentation are not proof. Remove them before both known-framework
   // detection and manual enforcement detection so words such as "structuredOutput"
   // cannot suppress a real finding from documentation alone.
   const executable=text
     .replace(/\/\*[\s\S]*?\*\//g,' ')
     .replace(/^\s*\/\/.*$/gm,' ');
+  // Validation elsewhere in the repository is not evidence that this agent boundary
+  // validates model or tool output. Keep the conclusion local to an AI integration.
+  if(!aiInFile)return false;
   const knownValidator=/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i;
   if(knownValidator.test(executable))return true;
 
@@ -602,7 +605,7 @@ function runSourceChecks(ctx){
       || (importsChildProcess && /\b(?:exec|execSync|spawn|spawnSync)\s*\(/.test(text));
     if(aiInFile&&executionInFile){const item=ev(ctx,file,null,'AI integration and an operating-system execution primitive occur in the same source file');executionEvidence.push(item);ctx.add('ARL-AI-001',[item],{confidence:'medium'});}
     if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;
-    if(hasStructuredOutputValidation(text))hasSchema=true;
+    if(hasStructuredOutputValidation(text,aiInFile))hasSchema=true;
     if(/(?:human.?in.?the.?loop|requiresApproval|authori[sz]eAction|pending_confirmation|transaction.?bound.?approval)/i.test(text))hasApproval=true;
     if(/(?:vectorstore|vector_store|conversation_history|chat_history|pinecone|weaviate|qdrant|chroma|persistent.?memory)/i.test(text)){hasMemory=true;memoryEvidence.push(ev(ctx,file,null,'Persistent memory/vector-store signal detected'));}
     if(/(?:tenant_id|tenantId|user_id|userId|session_id|sessionId|namespace)/i.test(text))hasTenantScope=true;
