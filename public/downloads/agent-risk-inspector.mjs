@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '4.1.0';
+export const INSPECTOR_VERSION = '4.1.2';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
@@ -379,7 +379,13 @@ function runMcpChecks(ctx){
   ctx.checked('ARL-MCP-001');ctx.checked('ARL-MCP-002');ctx.checked('ARL-MCP-003');
   for(const file of ctx.inventory.files){
     const rel=ctx.relative(file); const base=path.basename(file).toLowerCase();
-    if(!/(^|\/)(\.mcp\.json|mcp\.json|claude_desktop_config\.json|mcp[^/]*\.ya?ml)$/i.test(rel) && !/mcp/.test(base))continue;
+    // MCP documentation, SEO pages and tests can legitimately contain server URLs and
+    // protocol names. Treat only recognised configuration files as executable supply-chain
+    // evidence; source/package integrations are covered by the dedicated source and
+    // dependency checks instead.
+    const isMcpConfig=/(^|\/)(\.mcp\.json|mcp\.json|claude_desktop_config\.json|mcp[^/]*\.ya?ml)$/i.test(rel)
+      || /^(?:mcp[._-]?config|mcp[._-]?servers?)\.(?:json|jsonc|ya?ml)$/i.test(base);
+    if(!isMcpConfig)continue;
     const text=ctx.read(file);if(text===null)continue;
     if(!/mcpServers|mcp_servers|modelcontextprotocol|@modelcontextprotocol/i.test(text))continue;
     ctx.technologies.add('MCP');
@@ -537,6 +543,49 @@ function runInstructionChecks(ctx){
   }
 }
 
+
+function hasStructuredOutputValidation(text){
+  // Comments and documentation are not proof. Remove them before both known-framework
+  // detection and manual enforcement detection so words such as "structuredOutput"
+  // cannot suppress a real finding from documentation alone.
+  const executable=text
+    .replace(/\/\*[\s\S]*?\*\//g,' ')
+    .replace(/^\s*\/\/.*$/gm,' ');
+  const knownValidator=/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i;
+  if(knownValidator.test(executable))return true;
+
+  // Manual validation is only treated as evident when several executable enforcement
+  // signals occur around an AI/tool boundary. One keyword or one type check is not proof.
+  const boundary=/(?:tool_calls|toolCalls|function\.arguments|JSON\.parse\s*\(|response_format|structuredOutput)/i.test(executable);
+  const validator=/(?:function\s+(?:validate|assert|check|guard|parse|saniti[sz]e|normali[sz]e)[A-Za-z0-9_$]*\s*\(|(?:const|let|var)\s+(?:validate|assert|check|guard|parse|saniti[sz]e|normali[sz]e)[A-Za-z0-9_$]*\s*=)/i.test(executable);
+  const shape=/(?:additionalProperties\s*:\s*false|Object\.keys\s*\(|Array\.isArray\s*\()/i.test(executable);
+  const typeCheck=/(?:typeof\s+[^;\n]{1,120}\s*!==?\s*['"](?:string|number|boolean|object)['"]|Number\.isFinite\s*\(|instanceof\s+[A-Za-z_$])/i.test(executable);
+  const rejection=/(?:throw\s+new\s+(?:TypeError|Error)\s*\(|Promise\.reject\s*\(|return\s+false\b)/i.test(executable);
+  const constraint=/(?:\.length\s*[<>]=?\s*\d+|[<>]=?\s*[A-Z_$][A-Z0-9_$]*|\.test\s*\(|allowedKeys|allowlist|minimum\s*:|maximum\s*:)/i.test(executable);
+  return boundary&&validator&&shape&&typeCheck&&rejection&&constraint;
+}
+
+function hasAgentResourceLimits(text){
+  // Resource-control claims in comments are not evidence. Only executable/configuration
+  // signals in the same source file as the AI integration can satisfy this detector.
+  const executable=text
+    .replace(/\/\*[\s\S]*?\*\//g,' ')
+    .replace(/^\s*\/\/.*$/gm,' ');
+
+  const signals=[
+    /(?:\btimeout\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|AbortSignal\.timeout\s*\()/i,
+    /(?:\bmaxRetries\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_retries\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bretry[A-Za-z_]*\s*[:=]\s*\d[\d_]*)/i,
+    /(?:\bmax_completion_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmax_output_tokens\s*:\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+    /(?:\btool_call_limit\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmaxToolCalls\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\btoolCalls\.length\s*(?:>|>=)\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+    /(?:\bmax_iterations\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\bmaxIterations\s*[:=]\s*(?:\d[\d_]*|[A-Z_$][A-Z0-9_$]*)\b|\brecursion[A-Za-z_]*\s*[:=]\s*\d[\d_]*)/i,
+    /(?:\b(?:budget|spend|concurrency)[A-Za-z_]*\s*[:=]\s*(?:\d[\d_.]*|[A-Z_$][A-Z0-9_$]*)\b)/i,
+  ];
+
+  // Require more than a single incidental setting. This keeps ARL-AI-005 conservative
+  // while recognising a real bounded execution policy such as timeout + retry/token/tool caps.
+  return signals.reduce((count,pattern)=>count+(pattern.test(executable)?1:0),0)>=2;
+}
+
 function runSourceChecks(ctx){
   ctx.checked('ARL-AI-001');ctx.checked('ARL-AI-002');ctx.checked('ARL-AI-003');ctx.checked('ARL-AI-004');ctx.checked('ARL-AI-005');ctx.checked('ARL-AI-006');ctx.checked('ARL-AI-007');ctx.checked('ARL-AI-008');
   let hasAi=false,hasLimits=false,hasSchema=false,hasApproval=false,hasMemory=false,hasTenantScope=false;
@@ -552,8 +601,8 @@ function runSourceChecks(ctx){
     const executionInFile=/\beval\s*\(|new\s+Function\s*\(|(?:child_process|subprocess)\.(?:exec|execSync|spawn|spawnSync|run|Popen|call)\s*\(|\bos\.system\s*\(/i.test(text)
       || (importsChildProcess && /\b(?:exec|execSync|spawn|spawnSync)\s*\(/.test(text));
     if(aiInFile&&executionInFile){const item=ev(ctx,file,null,'AI integration and an operating-system execution primitive occur in the same source file');executionEvidence.push(item);ctx.add('ARL-AI-001',[item],{confidence:'medium'});}
-    if(/(?:max_tokens|max_output_tokens|AbortSignal\.timeout|tool_call_limit|max_iterations|(?:retry|recursion|budget|spend)[A-Za-z_]*\s*[:=])/i.test(text))hasLimits=true;
-    if(/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i.test(text))hasSchema=true;
+    if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;
+    if(hasStructuredOutputValidation(text))hasSchema=true;
     if(/(?:human.?in.?the.?loop|requiresApproval|authori[sz]eAction|pending_confirmation|transaction.?bound.?approval)/i.test(text))hasApproval=true;
     if(/(?:vectorstore|vector_store|conversation_history|chat_history|pinecone|weaviate|qdrant|chroma|persistent.?memory)/i.test(text)){hasMemory=true;memoryEvidence.push(ev(ctx,file,null,'Persistent memory/vector-store signal detected'));}
     if(/(?:tenant_id|tenantId|user_id|userId|session_id|sessionId|namespace)/i.test(text))hasTenantScope=true;
