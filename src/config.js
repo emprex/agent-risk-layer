@@ -1,4 +1,5 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { isIP } from 'node:net';
 import { BILLABLE_PLANS } from './commercial-catalogue.js';
 const root = process.cwd();
@@ -62,7 +63,7 @@ export const config = {
     databaseIdleTimeoutMs: Math.max(5000, Number(process.env.DATABASE_IDLE_TIMEOUT_MS || 30000)),
     databaseStatementTimeoutMs: Math.max(1000, Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS || 15000)),
     databaseLockTimeoutMs: Math.max(1000, Number(process.env.DATABASE_LOCK_TIMEOUT_MS || 5000)),
-    databasePath: path.resolve(root, process.env.DATABASE_PATH || `./data/test-${process.pid}.sqlite`),
+    databasePath: path.resolve(root, process.env.DATABASE_PATH || `./data/test-${process.pid}-${crypto.randomUUID()}.sqlite`),
     stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
     stripeApiVersion: process.env.STRIPE_API_VERSION || '2026-06-24.dahlia',
     stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',

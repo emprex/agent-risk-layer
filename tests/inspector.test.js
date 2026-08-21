@@ -150,6 +150,29 @@ test('public image badge CORS is not reported as an application wildcard CORS we
   assert.equal(bundle.findings.some((item) => item.ruleId === 'ARL-WEB-001'), false);
 });
 
+test('MCP documentation URLs are not treated as executable server configuration', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-mcp-docs-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+  fs.writeFileSync(path.join(root, 'mcp-seo-page.js'), `export const copy = 'Review modelcontextprotocol MCP servers at https://example.invalid/mcp';`);
+  fs.writeFileSync(path.join(root, 'seo-mcp-server-risk-assessment.test.js'), `assert.match(page, /mcpServers|https:\/\//);`);
+
+  const bundle = await scanRepository(root, { authorised:true });
+
+  assert.equal(bundle.findings.some((item) => item.ruleId === 'ARL-MCP-003'), false);
+});
+
+test('mutable MCP server URLs in recognised configuration remain findings', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-mcp-config-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+  fs.writeFileSync(path.join(root, '.mcp.json'), JSON.stringify({
+    mcpServers: { remote: { url: 'https://example.invalid/mcp' } },
+  }));
+
+  const bundle = await scanRepository(root, { authorised:true });
+
+  assert.ok(bundle.findings.some((item) => item.ruleId === 'ARL-MCP-003'));
+});
+
 
 test('instruction surfaces detect policy bypass, exfiltration, dangerous execution, approval bypass and mutable installation', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-instructions-'));

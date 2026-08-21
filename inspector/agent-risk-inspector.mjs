@@ -379,7 +379,13 @@ function runMcpChecks(ctx){
   ctx.checked('ARL-MCP-001');ctx.checked('ARL-MCP-002');ctx.checked('ARL-MCP-003');
   for(const file of ctx.inventory.files){
     const rel=ctx.relative(file); const base=path.basename(file).toLowerCase();
-    if(!/(^|\/)(\.mcp\.json|mcp\.json|claude_desktop_config\.json|mcp[^/]*\.ya?ml)$/i.test(rel) && !/mcp/.test(base))continue;
+    // MCP documentation, SEO pages and tests can legitimately contain server URLs and
+    // protocol names. Treat only recognised configuration files as executable supply-chain
+    // evidence; source/package integrations are covered by the dedicated source and
+    // dependency checks instead.
+    const isMcpConfig=/(^|\/)(\.mcp\.json|mcp\.json|claude_desktop_config\.json|mcp[^/]*\.ya?ml)$/i.test(rel)
+      || /^(?:mcp[._-]?config|mcp[._-]?servers?)\.(?:json|jsonc|ya?ml)$/i.test(base);
+    if(!isMcpConfig)continue;
     const text=ctx.read(file);if(text===null)continue;
     if(!/mcpServers|mcp_servers|modelcontextprotocol|@modelcontextprotocol/i.test(text))continue;
     ctx.technologies.add('MCP');

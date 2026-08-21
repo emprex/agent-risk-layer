@@ -19,13 +19,16 @@ if (!sourceText.includes(resourceMarker)) throw new Error('Inspector release bui
 if (!sourceText.includes(sourceCheckMarker)) throw new Error('Inspector release build: source-check marker changed; review the release transform.');
 
 const manualValidationDetector = String.raw`
-function hasStructuredOutputValidation(text){
+function hasStructuredOutputValidation(text,aiInFile){
   // Comments and documentation are not proof. Remove them before both known-framework
   // detection and manual enforcement detection so words such as "structuredOutput"
   // cannot suppress a real finding from documentation alone.
   const executable=text
     .replace(/\/\*[\s\S]*?\*\//g,' ')
     .replace(/^\s*\/\/.*$/gm,' ');
+  // Validation elsewhere in the repository is not evidence that this agent boundary
+  // validates model or tool output. Keep the conclusion local to an AI integration.
+  if(!aiInFile)return false;
   const knownValidator=/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i;
   if(knownValidator.test(executable))return true;
 
@@ -66,7 +69,7 @@ const text = sourceText
   .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.2';")
   .replace(sourceCheckMarker, `${manualValidationDetector}\n${sourceCheckMarker}`)
   .replace(resourceMarker, '    if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;')
-  .replace(schemaMarker, '    if(hasStructuredOutputValidation(text))hasSchema=true;');
+  .replace(schemaMarker, '    if(hasStructuredOutputValidation(text,aiInFile))hasSchema=true;');
 
 fs.mkdirSync(path.dirname(destination), { recursive: true });
 fs.writeFileSync(destination, text);

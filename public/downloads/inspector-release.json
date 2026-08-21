@@ -1,9 +1,9 @@
 {
   "name": "AgentRisk Inspector",
-  "version": "4.1.0",
+  "version": "4.1.2",
   "policyVersion": "arl-inspector-policy-2026.10",
   "bundleSchema": "arl.inspection.bundle.v1",
-  "sha256": "2973cc9a435b59d7fc08aed78c915da12c5ea42dea58550f3e88e29f94a71b9a",
+  "sha256": "0b1cc1de1b4598ed00140553f7362deefc4b5220500cc68ed155e26ee91418cb",
   "privacyContract": [
     "No source code uploaded",
     "No matched secret values uploaded",
