@@ -118,7 +118,7 @@ test('current-only findings are first-class NEW FINDING lifecycle entries', () =
   assert.equal(packet.PROVE.findingComparison[0].lifecycleStatus, FIX_PROVE_STATUSES.NEW_FINDING);
 });
 
-test('100/100 remains explicitly scoped and never turns into secure or certified language', () => {
+test('100/100 remains explicitly scoped and never becomes an affirmative security claim', () => {
   const packet = buildFixProveEvidencePacket({
     posture: {
       postureScore: 100,
@@ -130,7 +130,11 @@ test('100/100 remains explicitly scoped and never turns into secure or certified
 
   assert.match(markdown, /100\/100/);
   assert.match(markdown, /Runtime and cloud controls may remain outside scope/i);
-  assert.doesNotMatch(markdown, /\bfully secure\b|\brisk[- ]free\b|\bcertified\b|\bproduction[- ]safe\b/i);
+  assert.match(markdown, /not an accredited certification or a guarantee that the assessed system is risk-free/i);
+  assert.doesNotMatch(markdown, /\b(?:is|remains|proved|proven)\s+(?:fully\s+)?secure\b/i);
+  assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+risk[- ]free\b/i);
+  assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+certified\b/i);
+  assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+production[- ]safe\b/i);
 });
 
 test('unsupported assurance wording is rejected rather than normalized into a stronger claim', () => {
