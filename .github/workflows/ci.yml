@@ -32,6 +32,14 @@ jobs:
       - name: Syntax check
         run: npm run check
 
+      - name: Focused Fix → Prove regressions
+        run: >-
+          node --test
+          tests/fix-prove-evidence.test.js
+          tests/repository-scope-consistency.test.js
+          tests/dependency-count-semantics.test.js
+          tests/dependency-vulnerability-evidence.test.js
+
       - name: Unit and integration tests
         id: unit-tests
         shell: bash
