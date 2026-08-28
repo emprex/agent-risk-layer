@@ -15,7 +15,253 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '4.1.3';
+
+const assessLockedDependencies = (() => {
+
+const ASSESSMENT_SCHEMA = 'arl.dependency-vulnerability-assessment.v1';
+const DATABASE_SCHEMA = 'arl.vulnerability-database.v1';
+const MAX_DATABASE_BYTES = 2_000_000;
+const MAX_ADVISORIES = 20_000;
+const DEFAULT_MAX_AGE_DAYS = 30;
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function cleanText(value, max = 200) {
+  return String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
+}
+
+function parseVersion(version) {
+  const match = String(version ?? '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) return null;
+  return match.slice(1).map(Number);
+}
+
+function compareVersion(a, b) {
+  const left = parseVersion(a);
+  const right = parseVersion(b);
+  if (!left || !right) return null;
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+function isAffected(version, advisory) {
+  const lower = advisory.affected?.introduced ?? null;
+  const upper = advisory.affected?.fixed ?? null;
+  if (lower) {
+    const cmp = compareVersion(version, lower);
+    if (cmp === null || cmp < 0) return false;
+  }
+  if (upper) {
+    const cmp = compareVersion(version, upper);
+    if (cmp === null || cmp >= 0) return false;
+  }
+  return Boolean(lower || upper);
+}
+
+function readJson(file, maxBytes = MAX_DATABASE_BYTES) {
+  const stat = fs.statSync(file);
+  if (!stat.isFile() || stat.size > maxBytes) throw new Error(`JSON input exceeds ${maxBytes} bytes`);
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function lockedNpmDependencies(root) {
+  const lockPath = path.join(root, 'package-lock.json');
+  if (!fs.existsSync(lockPath)) return { status: 'not-present', ecosystem: 'npm', dependencies: [] };
+  const lock = readJson(lockPath);
+  const dependencies = [];
+
+  if (lock.packages && typeof lock.packages === 'object') {
+    for (const [packagePath, record] of Object.entries(lock.packages)) {
+      if (!packagePath.startsWith('node_modules/')) continue;
+      const name = packagePath.slice('node_modules/'.length);
+      if (!name || !record?.version) continue;
+      dependencies.push({ name, version: String(record.version) });
+    }
+  } else if (lock.dependencies && typeof lock.dependencies === 'object') {
+    for (const [name, record] of Object.entries(lock.dependencies)) {
+      if (!record?.version) continue;
+      dependencies.push({ name, version: String(record.version) });
+    }
+  }
+
+  dependencies.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+  return { status: 'completed', ecosystem: 'npm', dependencies };
+}
+
+function validateDatabase(database, now, maxAgeDays) {
+  if (!database || database.schema !== DATABASE_SCHEMA || !Array.isArray(database.advisories)) {
+    throw new Error(`Vulnerability database must use schema ${DATABASE_SCHEMA}`);
+  }
+  if (database.advisories.length > MAX_ADVISORIES) throw new Error(`Vulnerability database exceeds ${MAX_ADVISORIES} advisories`);
+
+  const generatedAtMs = Date.parse(database.generatedAt);
+  if (!Number.isFinite(generatedAtMs)) throw new Error('Vulnerability database generatedAt is invalid');
+  const ageDays = Math.max(0, (now.getTime() - generatedAtMs) / 86_400_000);
+  const stale = ageDays > maxAgeDays;
+
+  for (const advisory of database.advisories) {
+    if (!advisory?.id || !advisory?.ecosystem || !advisory?.package || !advisory?.affected) {
+      throw new Error('Vulnerability database contains a malformed advisory');
+    }
+  }
+
+  return {
+    generatedAt: new Date(generatedAtMs).toISOString(),
+    ageDays: Math.floor(ageDays),
+    stale,
+    digest: sha256(canonicalJson(database)),
+    source: cleanText(database.source || 'operator-provided', 120),
+    sourceVersion: cleanText(database.sourceVersion || '', 80) || null,
+  };
+}
+
+function assessLockedDependencies(rootInput = '.', options = {}) {
+  const root = fs.realpathSync(path.resolve(rootInput));
+  const now = options.now instanceof Date ? options.now : new Date();
+  const maxAgeDays = Number.isFinite(options.maxAgeDays) ? Math.max(1, Math.floor(options.maxAgeDays)) : DEFAULT_MAX_AGE_DAYS;
+  const locked = lockedNpmDependencies(root);
+
+  if (!options.advisoryDatabase) {
+    return {
+      schema: ASSESSMENT_SCHEMA,
+      status: 'intelligence-not-provided',
+      ecosystem: locked.ecosystem,
+      lockedDependenciesExamined: locked.dependencies.length,
+      findings: [],
+      intelligence: null,
+      limitation: 'No vulnerability intelligence was provided. Dependency vulnerability status is unknown and no vulnerability finding was created.',
+    };
+  }
+
+  const database = typeof options.advisoryDatabase === 'string'
+    ? readJson(path.resolve(options.advisoryDatabase))
+    : options.advisoryDatabase;
+  const intelligence = validateDatabase(database, now, maxAgeDays);
+
+  const matches = [];
+  for (const dependency of locked.dependencies) {
+    for (const advisory of database.advisories) {
+      if (advisory.ecosystem !== 'npm' || advisory.package !== dependency.name) continue;
+      if (!isAffected(dependency.version, advisory)) continue;
+      matches.push({
+        ruleId: 'ARL-DEP-004',
+        advisoryId: cleanText(advisory.id, 120),
+        package: dependency.name,
+        installedVersion: dependency.version,
+        severity: cleanText(advisory.severity || 'unknown', 20).toLowerCase(),
+        fixedVersion: advisory.affected?.fixed ? cleanText(advisory.affected.fixed, 40) : null,
+      });
+    }
+  }
+
+  matches.sort((a, b) => a.package.localeCompare(b.package) || a.advisoryId.localeCompare(b.advisoryId));
+
+  return {
+    schema: ASSESSMENT_SCHEMA,
+    status: intelligence.stale ? 'intelligence-stale' : 'completed',
+    ecosystem: locked.ecosystem,
+    lockedDependenciesExamined: locked.dependencies.length,
+    findings: matches,
+    intelligence,
+    limitation: intelligence.stale
+      ? `Vulnerability intelligence is older than the configured ${maxAgeDays}-day freshness window; matches are retained but freshness is explicitly constrained.`
+      : null,
+  };
+}
+
+const DEPENDENCY_VULNERABILITY_ASSESSMENT_SCHEMA = ASSESSMENT_SCHEMA;
+const VULNERABILITY_DATABASE_SCHEMA = DATABASE_SCHEMA;
+
+  return assessLockedDependencies;
+})();
+
+const dependencyAssessmentToInspectorEvidence = (() => {
+const ALLOWED_SEVERITIES = new Set(['critical','high','medium','low','info']);
+
+function clean(value, max = 160) {
+  return String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
+}
+
+function normalizeSeverity(value) {
+  const severity = clean(value, 20).toLowerCase();
+  return ALLOWED_SEVERITIES.has(severity) ? severity : null;
+}
+
+function dependencyAssessmentToInspectorEvidence(assessment) {
+  if (!assessment || typeof assessment !== 'object') {
+    throw new Error('Dependency vulnerability assessment is required');
+  }
+
+  const status = clean(assessment.status, 40) || 'unknown';
+  const intelligence = assessment.intelligence
+    ? {
+        source: clean(assessment.intelligence.source, 120) || 'operator-provided',
+        sourceVersion: assessment.intelligence.sourceVersion ? clean(assessment.intelligence.sourceVersion, 80) : null,
+        generatedAt: clean(assessment.intelligence.generatedAt, 40) || null,
+        ageDays: Number.isFinite(assessment.intelligence.ageDays) ? assessment.intelligence.ageDays : null,
+        stale: assessment.intelligence.stale === true,
+        digest: /^[a-f0-9]{64}$/i.test(String(assessment.intelligence.digest || ''))
+          ? String(assessment.intelligence.digest).toLowerCase()
+          : null,
+      }
+    : null;
+
+  const findings = Array.isArray(assessment.findings)
+    ? assessment.findings.slice(0, 500).map((finding) => {
+        const ecosystem = clean(assessment.ecosystem, 40) || 'unknown';
+        const packageName = clean(finding.package, 160);
+        const installedVersion = clean(finding.installedVersion, 80);
+        const advisoryId = clean(finding.advisoryId, 120);
+        const fixedVersion = finding.fixedVersion ? clean(finding.fixedVersion, 80) : null;
+        return {
+          ruleId: 'ARL-DEP-004',
+          severity: normalizeSeverity(finding.severity),
+          confidence: status === 'completed' ? 'high' : 'medium',
+          evidence: {
+            source: 'dependency-vulnerability-intelligence',
+            basename: 'package-lock.json',
+            relativePath: null,
+            pathHash: null,
+            line: null,
+            fact: clean(`${ecosystem} package ${packageName}@${installedVersion} matched advisory ${advisoryId}${fixedVersion ? `; fixed in ${fixedVersion}` : ''}`, 220),
+            ecosystem,
+            package: packageName,
+            installedVersion,
+            advisoryId,
+            fixedVersion,
+          },
+        };
+      })
+    : [];
+
+  return {
+    status,
+    ecosystem: clean(assessment.ecosystem, 40) || 'unknown',
+    lockedDependenciesExamined: Number.isFinite(assessment.lockedDependenciesExamined)
+      ? Math.max(0, Math.floor(assessment.lockedDependenciesExamined))
+      : 0,
+    intelligence,
+    limitation: assessment.limitation ? clean(assessment.limitation, 500) : null,
+    findings,
+  };
+}
+
+  return dependencyAssessmentToInspectorEvidence;
+})();
+
+export const INSPECTOR_VERSION = '4.1.4';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
@@ -86,6 +332,7 @@ export const POLICY_CATALOG = Object.freeze([
   rule('ARL-DEP-001','Dependency lockfile is missing','medium','Supply chain','A package manifest exists without its ecosystem lockfile.','Commit and enforce a lockfile, use reproducible installs, and review automated dependency updates.',['SLSA Build','OWASP LLM03 Supply Chain']),
   rule('ARL-DEP-002','Dependency version is unbounded or mutable','medium','Supply chain','A direct dependency uses wildcard, latest, URL, branch, or another mutable version reference.','Pin direct dependencies to controlled versions and use a lockfile with integrity metadata.',['OWASP LLM03 Supply Chain','SLSA Source']),
   rule('ARL-DEP-003','Install script executes shell or remote content','high','Supply chain','A package lifecycle script executes a shell command or retrieves remote executable content.','Remove unnecessary lifecycle scripts; verify and pin unavoidable tooling and run installs in a restricted environment.',['OWASP LLM03 Supply Chain','SLSA Build']),
+  rule('ARL-DEP-004','Known vulnerable locked dependency','info','Supply chain','A locked dependency version matched vulnerability intelligence explicitly supplied to the Inspector.','Update the dependency outside the affected range, regenerate the lockfile, run compatibility tests, then rerun the Inspector with the same or fresher vulnerability intelligence and confirm the advisory no longer matches.',['OWASP LLM03 Supply Chain','NIST SSDF']),
   rule('ARL-REPO-001','Security policy is missing','low','Governance','No SECURITY.md or equivalent vulnerability-reporting policy was found.','Publish a security policy with supported versions, a private reporting channel, response expectations and safe-harbour language.',['NIST AI RMF GOVERN 2','NIST SSDF']),
   rule('ARL-REPO-002','Automated tests are not evident','medium','Assurance','No test directory, test script, or common test configuration was detected.','Add repeatable unit, integration, security and adversarial tests and enforce them as a release gate.',['NIST AI RMF MEASURE 2.1','OWASP Secure Agent Testing']),
 ]);
@@ -151,6 +398,7 @@ export async function scanRepository(rootInput='.', options={}) {
       declaredFalsePositiveReviews: scannerConfig.falsePositives.length,
       sourceCoverage,
       gitHistorySecretScan: context.gitHistorySecretScan,
+      dependencyVulnerabilityAssessment: context.dependencyVulnerabilityAssessment,
     },
     summary,
     findings,
@@ -164,6 +412,7 @@ export async function scanRepository(rootInput='.', options={}) {
       noSecretValuesUploaded: true,
       noExploitExecution: true,
       noNetworkProbing: true,
+      noDependencyIntelligenceNetworkAccess: true,
     },
     trust: {
       evidenceClass: 'locally-observed-static-evidence',
@@ -218,6 +467,15 @@ function createContext(root, inventory, limits, options) {
       maxCommits: limits.maxGitHistoryCommits,
       bytesExamined: 0,
       truncated: false,
+    },
+    dependencyVulnerabilityAssessment: {
+      status: 'not-run',
+      ecosystem: 'unknown',
+      lockedDependenciesExamined: 0,
+      intelligence: null,
+      limitation: null,
+      findingsObserved: 0,
+      matchesNeedingSeverityReview: [],
     },
     textCache: new Map(), relative(file){return path.relative(root,file).replaceAll(path.sep,'/');},
     read(file){
@@ -468,7 +726,7 @@ function runGitHistorySecretChecks(ctx){
 }
 
 function runDependencyChecks(ctx){
-  ctx.checked('ARL-DEP-001'); ctx.checked('ARL-DEP-002'); ctx.checked('ARL-DEP-003');
+  ctx.checked('ARL-DEP-001'); ctx.checked('ARL-DEP-002'); ctx.checked('ARL-DEP-003'); ctx.checked('ARL-DEP-004');
   const packageFiles=ctx.inventory.files.filter((f)=>path.basename(f)==='package.json');
   for(const file of packageFiles){
     ctx.technologies.add('Node.js'); const pkg=readJsonSafe(file); if(!pkg)continue;
@@ -502,6 +760,60 @@ function runDependencyChecks(ctx){
   if(ctx.inventory.files.some((f)=>/\.dart$/i.test(f)))ctx.technologies.add('Dart');
   if(ctx.inventory.files.some((f)=>/\.sql$/i.test(f)))ctx.technologies.add('SQL');
   if(ctx.inventory.files.some((f)=>/\.swift$/i.test(f)))ctx.technologies.add('Swift');
+
+  let rawAssessment;
+  try{
+    rawAssessment=assessLockedDependencies(ctx.root,{
+      advisoryDatabase:ctx.options.advisoryDatabase||null,
+      maxAgeDays:ctx.options.vulnerabilityMaxAgeDays,
+    });
+  }catch(error){
+    ctx.dependencyVulnerabilityAssessment={
+      status:'inconclusive-intelligence-error',
+      ecosystem:'unknown',
+      lockedDependenciesExamined:0,
+      intelligence:null,
+      limitation:cleanMetadata(`Dependency vulnerability assessment could not complete: ${error.message}`,500),
+      findingsObserved:0,
+      matchesNeedingSeverityReview:[],
+    };
+    return;
+  }
+
+  const assessment=dependencyAssessmentToInspectorEvidence(rawAssessment);
+  const severityReview=[];
+
+  for(const match of assessment.findings){
+    if(!match.severity){
+      severityReview.push({
+        advisoryId:match.evidence.advisoryId,
+        ecosystem:match.evidence.ecosystem,
+        package:match.evidence.package,
+        installedVersion:match.evidence.installedVersion,
+        fixedVersion:match.evidence.fixedVersion,
+        fact:match.evidence.fact,
+      });
+      continue;
+    }
+
+    ctx.add('ARL-DEP-004',[match.evidence],{
+      severity:match.severity,
+      confidence:match.confidence,
+      remediation:match.evidence.fixedVersion
+        ? `Update ${match.evidence.package} from ${match.evidence.installedVersion} to ${match.evidence.fixedVersion} or another reviewed non-affected version, regenerate the lockfile, run compatibility tests, then rerun the Inspector with the same or fresher vulnerability intelligence and confirm ${match.evidence.advisoryId} no longer matches.`
+        : undefined,
+    });
+  }
+
+  ctx.dependencyVulnerabilityAssessment={
+    status:assessment.status,
+    ecosystem:assessment.ecosystem,
+    lockedDependenciesExamined:assessment.lockedDependenciesExamined,
+    intelligence:assessment.intelligence,
+    limitation:assessment.limitation,
+    findingsObserved:assessment.findings.filter((item)=>Boolean(item.severity)).length,
+    matchesNeedingSeverityReview:severityReview.slice(0,100),
+  };
 }
 
 function runDockerChecks(ctx){
@@ -997,7 +1309,7 @@ function parseArgs(argv){
   const args={command:argv[0]||'help',positionals:[],includePaths:false,authorised:false};
   for(let i=1;i<argv.length;i++){
     const item=argv[i];
-    if(item==='--out')args.out=argv[++i]; else if(item==='--upload')args.upload=argv[++i]; else if(item==='--token')args.token=argv[++i]; else if(item==='--key')args.key=argv[++i]; else if(item==='--include-paths')args.includePaths=true; else if(item==='--authorised')args.authorised=true; else if(item==='--environment')args.environment=argv[++i]; else if(item==='--sarif')args.sarif=argv[++i]; else if(item==='--fail-on')args.failOn=argv[++i]; else args.positionals.push(item);
+    if(item==='--out')args.out=argv[++i]; else if(item==='--upload')args.upload=argv[++i]; else if(item==='--token')args.token=argv[++i]; else if(item==='--key')args.key=argv[++i]; else if(item==='--include-paths')args.includePaths=true; else if(item==='--authorised')args.authorised=true; else if(item==='--environment')args.environment=argv[++i]; else if(item==='--sarif')args.sarif=argv[++i]; else if(item==='--fail-on')args.failOn=argv[++i]; else if(item==='--vuln-db')args.vulnDb=argv[++i]; else args.positionals.push(item);
   }return args;
 }
 
@@ -1025,7 +1337,7 @@ async function main(){
   }
   if(!args.authorised)throw new Error('Inspection requires explicit authorisation. Re-run with --authorised after confirming you own or are authorised to inspect the target.');
   const root=args.positionals[0]||'.';const privateKeyPem=args.key?fs.readFileSync(path.resolve(args.key),'utf8'):null;
-  const bundle=await scanRepository(root,{includePaths:args.includePaths,authorised:true,environment:args.environment,privateKeyPem});
+  const bundle=await scanRepository(root,{includePaths:args.includePaths,authorised:true,environment:args.environment,privateKeyPem,advisoryDatabase:args.vulnDb?path.resolve(args.vulnDb):null});
   const out=path.resolve(args.out||`agentrisk-inspection-${Date.now()}.json`);fs.writeFileSync(out,JSON.stringify(bundle,null,2),{mode:0o600});
   if(args.sarif){const sarifPath=path.resolve(args.sarif);fs.writeFileSync(sarifPath,JSON.stringify(toSarif(bundle),null,2));console.log(`SARIF output: ${sarifPath}`);}
   printSummary(bundle);console.log(`\nEvidence bundle: ${out}`);
