@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { compareBundles, frameworkCoverage, scanRepository, toSarif, verifyBundle } from '../inspector/agent-risk-inspector.mjs';
 
 function fixture() {
@@ -416,4 +417,63 @@ test('unsupported material source type constrains assurance conclusion without c
     bundle.findings.some((item)=>item.category==='Coverage'),
     false,
   );
+});
+
+test('historical Git secret scan detects removed credentials without exposing their value', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-history-secret-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+
+  const runGit = (...args) => execFileSync(
+    'git',
+    ['-C', root, ...args],
+    { encoding:'utf8', stdio:['ignore','pipe','pipe'] },
+  );
+
+  runGit('init');
+  runGit('config', 'user.email', 'scanner-test@example.invalid');
+  runGit('config', 'user.name', 'Scanner Test');
+
+  const historicalSecret = 'sk_live_1234567890abcdefghijklmnop';
+
+  fs.writeFileSync(
+    path.join(root, 'config.txt'),
+    `STRIPE_SECRET_KEY=${historicalSecret}\n`,
+  );
+  runGit('add', 'config.txt');
+  runGit('commit', '-m', 'add configuration');
+
+  fs.writeFileSync(path.join(root, 'config.txt'), 'SAFE_CONFIG=true\n');
+  runGit('add', 'config.txt');
+  runGit('commit', '-m', 'remove credential');
+
+  const bundle = await scanRepository(root, {
+    authorised:true,
+    includePaths:true,
+  });
+
+  assert.equal(
+    bundle.findings.some((item)=>item.ruleId==='ARL-SEC-001'),
+    false,
+  );
+
+  const historical = bundle.findings.find(
+    (item)=>item.ruleId==='ARL-SEC-004',
+  );
+
+  assert.ok(historical);
+  assert.equal(historical.confidence, 'medium');
+  assert.ok(
+    historical.evidence.some(
+      (item)=>item.source==='git-history-observation',
+    ),
+  );
+
+  assert.equal(
+    JSON.stringify(bundle).includes(historicalSecret),
+    false,
+  );
+
+  assert.equal(bundle.scope.gitHistorySecretScan.status, 'completed');
+  assert.ok(bundle.scope.gitHistorySecretScan.commitsInspected >= 2);
+  assert.equal(bundle.scope.gitHistorySecretScan.truncated, false);
 });

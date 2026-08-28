@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '4.1.2';
+export const INSPECTOR_VERSION = '4.1.3';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
@@ -24,6 +24,8 @@ const DEFAULT_LIMITS = Object.freeze({
   maxReadableFileBytes: 2_000_000,
   maxTotalReadBytes: 40_000_000,
   maxFindings: 500,
+  maxGitHistoryCommits: 500,
+  maxGitHistoryBytes: 6_000_000,
 });
 
 const IGNORED_FILE_PATTERNS = [/^agent-risk-inspector\.mjs$/i,/^agentrisk-inspection-?.*\.json$/i];
@@ -56,6 +58,7 @@ export const POLICY_CATALOG = Object.freeze([
   rule('ARL-SEC-001','Potential secret committed to repository','critical','Secrets management','Secret-like material was detected in a tracked text file. The matched value is never included in the evidence bundle.','Revoke and rotate the credential, remove it from current and historical source control, and use a managed secret store.',['OWASP Agent Security - Data Protection & Privacy','NIST AI RMF GOVERN 1.7']),
   rule('ARL-SEC-002','Private key material present in repository','critical','Secrets management','A private-key file or private-key marker was detected.','Remove the key from the repository, rotate it, protect replacement keys in a managed KMS or secret store, and review access logs.',['OWASP Agent Security - Tool Security','NIST AI RMF MANAGE 2.4']),
   rule('ARL-SEC-003','Environment file is tracked','high','Secrets management','An environment file is tracked by Git and may expose credentials or production configuration.','Remove environment files from source control, rotate exposed values, add a safe template, and enforce secret scanning in CI.',['OWASP LLM03 Supply Chain','NIST AI RMF GOVERN 1.7']),
+  rule('ARL-SEC-004','Secret-like material present in Git history','high','Secrets management','Credential-shaped material was observed in reachable Git history. Historical presence is evidence of exposure, but the Inspector does not infer whether the credential remains active.','Revoke or rotate the affected credential if validity cannot be disproved, remove sensitive material from reachable history where appropriate, and add historical secret scanning to the release process.',['OWASP Agent Security - Data Protection & Privacy','NIST SSDF']),
   rule('ARL-CICD-001','GitHub Actions uses broad write permissions','high','CI/CD','A workflow grants write-all or broad write permissions to the workflow token.','Set default permissions to read-only and grant narrowly scoped write permissions only to the job that requires them.',['OWASP LLM03 Supply Chain','NIST AI RMF GOVERN 1.7']),
   rule('ARL-CICD-002','Third-party GitHub Action is not pinned to a commit','medium','CI/CD','A workflow action reference is pinned to a mutable tag or branch rather than a full commit SHA.','Pin third-party actions to reviewed immutable commit SHAs and automate controlled updates.',['SLSA Build L2','OWASP LLM03 Supply Chain']),
   rule('ARL-CICD-003','pull_request_target workflow handles untrusted pull requests','high','CI/CD','pull_request_target can expose privileged tokens or secrets to code influenced by an untrusted pull request.','Avoid checking out or executing untrusted pull-request code in pull_request_target; separate privileged metadata operations.',['OWASP LLM03 Supply Chain','SLSA Build L2']),
@@ -103,6 +106,7 @@ export async function scanRepository(rootInput='.', options={}) {
 
   runRepositoryChecks(context);
   runSecretChecks(context);
+  runGitHistorySecretChecks(context);
   runDependencyChecks(context);
   runDockerChecks(context);
   runWorkflowChecks(context);
@@ -146,6 +150,7 @@ export async function scanRepository(rootInput='.', options={}) {
       userExclusions: scannerConfig.exclude,
       declaredFalsePositiveReviews: scannerConfig.falsePositives.length,
       sourceCoverage,
+      gitHistorySecretScan: context.gitHistorySecretScan,
     },
     summary,
     findings,
@@ -206,6 +211,14 @@ function createContext(root, inventory, limits, options) {
   return {
     root, inventory, limits, options, findings: [], checksRun: new Set(),
     technologies: new Set(), bytesRead: 0, filesInspected: 0, secretFingerprintKey: crypto.randomBytes(32),
+    gitHistorySecretScan: {
+      status: 'not-run',
+      commitsInspected: 0,
+      totalCommits: null,
+      maxCommits: limits.maxGitHistoryCommits,
+      bytesExamined: 0,
+      truncated: false,
+    },
     textCache: new Map(), relative(file){return path.relative(root,file).replaceAll(path.sep,'/');},
     read(file){
       if (this.textCache.has(file)) return this.textCache.get(file);
@@ -325,6 +338,135 @@ function runSecretChecks(ctx){
     }
   }
 }
+function runGitHistorySecretChecks(ctx){
+  ctx.checked('ARL-SEC-004');
+
+  const inside=safeExec('git',['-C',ctx.root,'rev-parse','--is-inside-work-tree']);
+  if(inside!=='true'){
+    ctx.gitHistorySecretScan={
+      ...ctx.gitHistorySecretScan,
+      status:'not-available',
+    };
+    return;
+  }
+
+  const totalRaw=safeExec('git',['-C',ctx.root,'rev-list','--all','--count']);
+  const totalCommits=/^\d+$/.test(String(totalRaw||''))?Number(totalRaw):null;
+
+  let output;
+  try{
+    output=execFileSync('git',[
+      '-C',ctx.root,
+      'log',
+      '--all',
+      '--no-ext-diff',
+      '--no-color',
+      '--unified=0',
+      `--max-count=${ctx.limits.maxGitHistoryCommits}`,
+      '--format=commit:%H',
+      '-p',
+    ],{
+      encoding:'utf8',
+      stdio:['ignore','pipe','ignore'],
+      timeout:5000,
+      maxBuffer:ctx.limits.maxGitHistoryBytes,
+    });
+  }catch{
+    ctx.gitHistorySecretScan={
+      ...ctx.gitHistorySecretScan,
+      status:'inconclusive-limit-or-git-error',
+      totalCommits,
+    };
+    return;
+  }
+
+  const patterns=[
+    ['Private key marker',/-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g],
+    ['Stripe secret key',/\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/g],
+    ['OpenAI API key',/\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g],
+    ['Anthropic API key',/\bsk-ant-[A-Za-z0-9_-]{20,}\b/g],
+    ['GitHub token',/\bgh(?:p|o|u|s|r)_[A-Za-z0-9]{20,}\b/g],
+    ['AWS access key',/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g],
+  ];
+
+  let commit=null;
+  let relative=null;
+  const commits=new Set();
+  const matches=new Map();
+
+  for(const line of output.split(/\r?\n/)){
+    const commitMatch=line.match(/^commit:([a-f0-9]{40})$/i);
+    if(commitMatch){
+      commit=commitMatch[1].toLowerCase();
+      commits.add(commit);
+      continue;
+    }
+
+    const diffMatch=line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+    if(diffMatch){
+      relative=diffMatch[2];
+      continue;
+    }
+
+    if(!commit || !relative)continue;
+    if(isUserExcluded(relative,ctx.options.scannerConfig?.exclude||[]))continue;
+    if(line.startsWith('+++')||line.startsWith('---'))continue;
+    if(!(line.startsWith('+')||line.startsWith('-')))continue;
+
+    const candidate=line.slice(1);
+
+    for(const [name,pattern] of patterns){
+      pattern.lastIndex=0;
+      let match;
+      while((match=pattern.exec(candidate))){
+        const fingerprint=secretFingerprint(ctx,match[0]);
+        const key=`${name}:${fingerprint}`;
+
+        if(!matches.has(key)){
+          matches.set(key,{
+            name,
+            fingerprint,
+            evidence:[],
+          });
+        }
+
+        const item=matches.get(key);
+        if(item.evidence.length<5){
+          item.evidence.push({
+            source:'git-history-observation',
+            basename:path.basename(relative).slice(0,120),
+            relativePath:ctx.options.includePaths===true?cleanMetadata(relative,240):null,
+            pathHash:sha256(relative).slice(0,24),
+            line:null,
+            fact:cleanMetadata(`${name}; fingerprint ${fingerprint}; historical commit ${commit.slice(0,12)}`,220),
+          });
+        }
+
+        if(pattern.lastIndex===match.index)pattern.lastIndex++;
+      }
+    }
+  }
+
+  for(const item of matches.values()){
+    ctx.add('ARL-SEC-004',item.evidence,{
+      confidence:'medium',
+    });
+  }
+
+  const truncated=Number.isInteger(totalCommits)
+    ? totalCommits>ctx.limits.maxGitHistoryCommits
+    : false;
+
+  ctx.gitHistorySecretScan={
+    status:truncated?'bounded-partial':'completed',
+    commitsInspected:commits.size,
+    totalCommits,
+    maxCommits:ctx.limits.maxGitHistoryCommits,
+    bytesExamined:Buffer.byteLength(output,'utf8'),
+    truncated,
+  };
+}
+
 function runDependencyChecks(ctx){
   ctx.checked('ARL-DEP-001'); ctx.checked('ARL-DEP-002'); ctx.checked('ARL-DEP-003');
   const packageFiles=ctx.inventory.files.filter((f)=>path.basename(f)==='package.json');

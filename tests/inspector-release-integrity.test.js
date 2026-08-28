@@ -18,26 +18,26 @@ const metadataFile = path.join(root, 'public', 'downloads', 'inspector-release.j
 
 function temporaryRepository(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-inspector-release-'));
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(directory, { recursive:true, force:true }));
   return directory;
 }
 
-test('public Inspector 4.1.2 does not treat unrelated schema validation as agent output evidence', async (t) => {
+test('public Inspector 4.1.3 does not treat unrelated schema validation as agent output evidence', async (t) => {
   const directory = temporaryRepository(t);
   fs.writeFileSync(path.join(directory, 'agent.js'), `import OpenAI from 'openai';\nexport async function run(prompt) { return new OpenAI().responses.create({ input: prompt }); }\n`);
   fs.writeFileSync(path.join(directory, 'unrelated-api.js'), `import { z } from 'zod';\nexport const profile = z.object({ name: z.string() });\n`);
 
-  const bundle = await scanRepository(directory, { authorised: true });
+  const bundle = await scanRepository(directory, { authorised:true });
 
-  assert.equal(INSPECTOR_VERSION, '4.1.2');
+  assert.equal(INSPECTOR_VERSION, '4.1.3');
   assert.ok(bundle.findings.some((finding) => finding.ruleId === 'ARL-AI-006'));
 });
 
-test('public Inspector 4.1.2 recognises validation at the AI integration boundary', async (t) => {
+test('public Inspector 4.1.3 recognises validation at the AI integration boundary', async (t) => {
   const directory = temporaryRepository(t);
   fs.writeFileSync(path.join(directory, 'validated-agent.js'), `import OpenAI from 'openai';\nimport { z } from 'zod';\nconst output = z.object({ answer: z.string() });\nexport async function run(prompt) { const result = await new OpenAI().responses.create({ input: prompt }); return output.parse(result); }\n`);
 
-  const bundle = await scanRepository(directory, { authorised: true });
+  const bundle = await scanRepository(directory, { authorised:true });
 
   assert.equal(bundle.findings.some((finding) => finding.ruleId === 'ARL-AI-006'), false);
 });
@@ -50,8 +50,8 @@ test('Inspector release generation is deterministic and published integrity meta
   };
 
   execFileSync(process.execPath, ['scripts/build-inspector-release.mjs'], {
-    cwd: root,
-    stdio: 'pipe',
+    cwd:root,
+    stdio:'pipe',
   });
 
   const after = {
