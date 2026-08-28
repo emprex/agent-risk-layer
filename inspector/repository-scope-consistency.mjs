@@ -8,11 +8,9 @@ export const REPOSITORY_SCOPE_CLASSIFICATION = 'repository-deployment-hardening'
 const MAX_FILES = 5000;
 const MAX_FILE_BYTES = 1_000_000;
 const MAX_SIGNALS = 50;
-
 const ACTIVE_WORDS = /\b(?:current|production|active|supported)\b/i;
 const RETIRED_WORDS = /\b(?:retired|superseded|former|legacy|obsolete|deprecated)\b/i;
 const TOOLCHAINS = ['Flutter', 'Expo', 'React Native'];
-
 const OPERATIONAL_DOC = /^(?:README|SECURITY|DEPLOYMENT|OPERATIONS|RUNBOOK|QUICKSTART|SETUP|INSTALL)(?:[-_.][^/]*)?\.md$/i;
 const OPERATIONAL_PATH = /(?:^|\/)(?:scripts\/|\.github\/workflows\/|render\.ya?ml$|Dockerfile(?:\.[^/]*)?$|package\.json$|package-lock\.json$)/i;
 const HISTORICAL_PATH = /(?:^|\/)(?:archive|archives|history|historical|legacy-docs|memos?)(?:\/|$)/i;
@@ -27,27 +25,32 @@ function normalizeRepoPath(value) {
   return text;
 }
 
-function lineNumber(text, index) {
-  return text.slice(0, index).split('\n').length;
-}
-
 function isOperationalFile(relative) {
   if (HISTORICAL_PATH.test(relative)) return false;
   const base = path.basename(relative);
-  return OPERATIONAL_DOC.test(base) || OPERATIONAL_PATH.test(relative) || /^docs\/(?:.*(?:deploy|runbook|quickstart|setup|install).*)\.md$/i.test(relative);
+  return OPERATIONAL_DOC.test(base)
+    || OPERATIONAL_PATH.test(relative)
+    || /^docs\/(?:.*(?:deploy|runbook|quickstart|setup|install).*)\.md$/i.test(relative);
 }
 
-function knownToolchains(line) {
-  return TOOLCHAINS.filter((name) => new RegExp(`\\b${name.replace(' ', '[ -]?')}\\b`, 'i').test(line));
+function knownToolchains(text) {
+  return TOOLCHAINS.filter((name) => new RegExp(`\\b${name.replace(' ', '[ -]?')}\\b`, 'i').test(text));
 }
 
-function extractBacktickPaths(line) {
+function extractBacktickPaths(text) {
   const values = [];
-  for (const match of line.matchAll(/`([^`]+)`/g)) {
+  for (const match of text.matchAll(/`([^`]+)`/g)) {
     const candidate = normalizeRepoPath(match[1]);
     if (candidate && (candidate.includes('/') || /^[A-Za-z0-9_.-]+\.(?:js|mjs|json|ya?ml|md)$/i.test(candidate))) values.push(candidate);
   }
   return values;
+}
+
+function declarationClauses(line) {
+  return String(line)
+    .split(/(?<=[.!?;])\s+(?=[A-Z0-9`])/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
 }
 
 function declarationEvidence(files) {
@@ -55,39 +58,35 @@ function declarationEvidence(files) {
   const retiredPaths = new Map();
   const activeToolchains = new Map();
   const retiredToolchains = new Map();
-
-  const record = (map, key, value) => {
-    if (!map.has(key)) map.set(key, value);
-  };
+  const record = (map, key, value) => { if (!map.has(key)) map.set(key, value); };
 
   for (const file of files) {
     if (!isOperationalFile(file.path) || !/\.md$/i.test(file.path)) continue;
-    const lines = file.content.split(/\r?\n/);
-    lines.forEach((line, offset) => {
-      const hasActive = ACTIVE_WORDS.test(line);
-      const hasRetired = RETIRED_WORDS.test(line);
-      if (!hasActive && !hasRetired) return;
+    file.content.split(/\r?\n/).forEach((line, offset) => {
+      for (const clause of declarationClauses(line)) {
+        const hasActive = ACTIVE_WORDS.test(clause);
+        const hasRetired = RETIRED_WORDS.test(clause);
+        if (!hasActive && !hasRetired) continue;
+        const evidence = { file: file.path, line: offset + 1, fact: clean(clause, 220) };
 
-      for (const declaredPath of extractBacktickPaths(line)) {
-        const evidence = { file: file.path, line: offset + 1, fact: clean(line, 220) };
-        if (hasActive) record(activePaths, declaredPath, evidence);
-        if (hasRetired) record(retiredPaths, declaredPath, evidence);
-      }
-
-      for (const toolchain of knownToolchains(line)) {
-        const evidence = { file: file.path, line: offset + 1, fact: clean(line, 220) };
-        if (hasActive) record(activeToolchains, toolchain, evidence);
-        if (hasRetired) record(retiredToolchains, toolchain, evidence);
+        for (const declaredPath of extractBacktickPaths(clause)) {
+          if (hasActive) record(activePaths, declaredPath, evidence);
+          if (hasRetired) record(retiredPaths, declaredPath, evidence);
+        }
+        for (const toolchain of knownToolchains(clause)) {
+          if (hasActive) record(activeToolchains, toolchain, evidence);
+          if (hasRetired) record(retiredToolchains, toolchain, evidence);
+        }
       }
     });
   }
-
   return { activePaths, retiredPaths, activeToolchains, retiredToolchains };
 }
 
 function configEvidence(files) {
   const file = files.find((item) => item.path === '.agentrisk.json');
-  if (!file) return { activePaths: [], retiredPaths: [], activeToolchains: [], retiredToolchains: [] };
+  const empty = { activePaths: [], retiredPaths: [], activeToolchains: [], retiredToolchains: [] };
+  if (!file) return empty;
   try {
     const parsed = JSON.parse(file.content);
     const scope = parsed.repositoryScope && typeof parsed.repositoryScope === 'object' ? parsed.repositoryScope : {};
@@ -99,28 +98,26 @@ function configEvidence(files) {
       retiredToolchains: list(scope.retiredToolchains).map((item) => clean(item, 80)).filter(Boolean),
     };
   } catch {
-    return { activePaths: [], retiredPaths: [], activeToolchains: [], retiredToolchains: [] };
+    return empty;
   }
 }
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function operationalReference(line, retiredPath) {
-  if (!line.includes(retiredPath)) return false;
-  if (RETIRED_WORDS.test(line)) return false;
-  return new RegExp(`(?:\\bcd\\s+|--prefix\\s+|working-directory\\s*:\\s*|cwd\\s*[:=]\\s*|\\b(?:run|build|start|test|deploy)\\b[^\\n]{0,120})${retiredPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(line)
-    || /(?:npm|pnpm|yarn|node|flutter|docker|bash|sh)\b/i.test(line);
+  if (!line.includes(retiredPath) || RETIRED_WORDS.test(line)) return false;
+  const pathPattern = escapeRegex(retiredPath);
+  return new RegExp(`(?:\\bcd\\s+|--prefix\\s+|working-directory\\s*:\\s*|cwd\\s*[:=]\\s*|\\b(?:run|build|start|test|deploy)\\b[^\\n]{0,120})${pathPattern}`, 'i').test(line)
+    || (/(?:npm|pnpm|yarn|node|flutter|docker|bash|sh)\b/i.test(line) && line.includes(retiredPath));
 }
 
 function retiredToolchainReference(line, toolchain) {
   if (RETIRED_WORDS.test(line)) return false;
-  if (toolchain === 'Expo') {
-    return /\bEXPO_PUBLIC_[A-Z0-9_]+\b|\bnpx\s+expo\b|\beas\s+(?:build|submit|update)\b|\bexpo\s+(?:start|run:android|run:ios)\b/i.test(line);
-  }
-  if (toolchain === 'React Native') {
-    return /\bnpx\s+react-native\b|\breact-native\s+(?:run-android|run-ios|start)\b/i.test(line);
-  }
-  if (toolchain === 'Flutter') {
-    return /\bflutter\s+(?:run|build|pub|get|test)\b/i.test(line);
-  }
+  if (toolchain === 'Expo') return /\bEXPO_PUBLIC_[A-Z0-9_]+\b|\bnpx\s+expo\b|\beas\s+(?:build|submit|update)\b|\bexpo\s+(?:start|run:android|run:ios)\b/i.test(line);
+  if (toolchain === 'React Native') return /\bnpx\s+react-native\b|\breact-native\s+(?:run-android|run-ios|start)\b/i.test(line);
+  if (toolchain === 'Flutter') return /\bflutter\s+(?:run|build|pub|get|test)\b/i.test(line);
   return false;
 }
 
@@ -130,18 +127,19 @@ function addSignal(signals, item) {
   signals.push({ ...item, _key: key });
 }
 
-export function detectRepositoryScopeConsistency(inputFiles) {
-  const files = Array.isArray(inputFiles)
-    ? inputFiles.map((item) => ({ path: clean(item.path, 240).replaceAll('\\', '/'), content: String(item.content ?? '') }))
-    : Object.entries(inputFiles || {}).map(([filePath, content]) => ({ path: clean(filePath, 240).replaceAll('\\', '/'), content: String(content ?? '') }));
-
-  const declarations = declarationEvidence(files);
-  const config = configEvidence(files);
-
+function applyConfigDeclarations(declarations, config) {
   for (const value of config.activePaths) if (!declarations.activePaths.has(value)) declarations.activePaths.set(value, { file: '.agentrisk.json', line: null, fact: `Declared active component ${value}` });
   for (const value of config.retiredPaths) if (!declarations.retiredPaths.has(value)) declarations.retiredPaths.set(value, { file: '.agentrisk.json', line: null, fact: `Declared retired component ${value}` });
   for (const value of config.activeToolchains) if (!declarations.activeToolchains.has(value)) declarations.activeToolchains.set(value, { file: '.agentrisk.json', line: null, fact: `Declared active toolchain ${value}` });
   for (const value of config.retiredToolchains) if (!declarations.retiredToolchains.has(value)) declarations.retiredToolchains.set(value, { file: '.agentrisk.json', line: null, fact: `Declared retired toolchain ${value}` });
+}
+
+export function detectRepositoryScopeConsistency(inputFiles) {
+  const files = Array.isArray(inputFiles)
+    ? inputFiles.map((item) => ({ path: clean(item.path, 240).replaceAll('\\', '/'), content: String(item.content ?? '') }))
+    : Object.entries(inputFiles || {}).map(([filePath, content]) => ({ path: clean(filePath, 240).replaceAll('\\', '/'), content: String(content ?? '') }));
+  const declarations = declarationEvidence(files);
+  applyConfigDeclarations(declarations, configEvidence(files));
 
   const hasActiveDeclaration = declarations.activePaths.size > 0 || declarations.activeToolchains.size > 0;
   const hasRetiredDeclaration = declarations.retiredPaths.size > 0 || declarations.retiredToolchains.size > 0;
@@ -156,8 +154,7 @@ export function detectRepositoryScopeConsistency(inputFiles) {
     const retiredStillPresent = [...presentPaths].some((candidate) => candidate === retiredPath || candidate.startsWith(`${retiredPath}/`));
     for (const file of files) {
       if (!isOperationalFile(file.path)) continue;
-      const lines = file.content.split(/\r?\n/);
-      lines.forEach((line, offset) => {
+      file.content.split(/\r?\n/).forEach((line, offset) => {
         if (!operationalReference(line, retiredPath)) return;
         const active = declarations.activePaths.entries().next().value;
         addSignal(signals, {
@@ -169,10 +166,7 @@ export function detectRepositoryScopeConsistency(inputFiles) {
           file: file.path,
           line: offset + 1,
           retiredStillPresent,
-          evidenceBasis: {
-            activeDeclaration: active ? active[1] : declarations.activeToolchains.values().next().value || null,
-            retiredDeclaration: retiredEvidence,
-          },
+          evidenceBasis: { activeDeclaration: active ? active[1] : declarations.activeToolchains.values().next().value || null, retiredDeclaration: retiredEvidence },
         });
       });
     }
@@ -181,8 +175,7 @@ export function detectRepositoryScopeConsistency(inputFiles) {
   for (const [retiredToolchain, retiredEvidence] of declarations.retiredToolchains) {
     for (const file of files) {
       if (!isOperationalFile(file.path)) continue;
-      const lines = file.content.split(/\r?\n/);
-      lines.forEach((line, offset) => {
+      file.content.split(/\r?\n/).forEach((line, offset) => {
         if (!retiredToolchainReference(line, retiredToolchain)) return;
         const activePath = declarations.activePaths.entries().next().value;
         const activeToolchain = [...declarations.activeToolchains.keys()].find((value) => value !== retiredToolchain) || null;
@@ -195,10 +188,7 @@ export function detectRepositoryScopeConsistency(inputFiles) {
           file: file.path,
           line: offset + 1,
           retiredStillPresent: null,
-          evidenceBasis: {
-            activeDeclaration: activePath ? activePath[1] : (activeToolchain ? declarations.activeToolchains.get(activeToolchain) : null),
-            retiredDeclaration: retiredEvidence,
-          },
+          evidenceBasis: { activeDeclaration: activePath ? activePath[1] : (activeToolchain ? declarations.activeToolchains.get(activeToolchain) : null), retiredDeclaration: retiredEvidence },
         });
       });
     }
@@ -248,9 +238,7 @@ function filesystemFiles(root) {
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         if (!ignored.has(entry.name)) walk(absolute);
-      } else if (entry.isFile()) {
-        found.push(path.relative(root, absolute).replaceAll(path.sep, '/'));
-      }
+      } else if (entry.isFile()) found.push(path.relative(root, absolute).replaceAll(path.sep, '/'));
     }
   };
   walk(root);
@@ -269,7 +257,7 @@ export function scanRepositoryScopeConsistency(rootInput = '.') {
       if (!stat.isFile() || stat.size > MAX_FILE_BYTES) continue;
       files.push({ path: relative, content: fs.readFileSync(absolute, 'utf8') });
     } catch {
-      // A disappearing or unreadable file is not converted into a finding.
+      // Unreadable or disappearing evidence constrains the check; it is not a finding.
     }
   }
   return detectRepositoryScopeConsistency(files);
