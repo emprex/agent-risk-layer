@@ -35,6 +35,7 @@ function currentEvidenceSummary(finding) {
     ruleId: clean(finding.ruleId, 60) || null,
     title: clean(finding.title, 180) || null,
     severity: clean(finding.severity, 30) || null,
+    classification: clean(finding.classification || finding.evidence?.classification, 80) || null,
     evidence: finding.evidence || null,
   };
 }
@@ -288,7 +289,13 @@ export function renderFixProveMarkdown(packet) {
   lines.push('');
   if (!packet.PROVE.findingComparison.length) lines.push('No finding lifecycle changes were recorded.');
   for (const item of packet.PROVE.findingComparison) {
-    lines.push(`- **${item.lifecycleStatus}** — ${item.ruleId || 'Finding'} ${item.title || ''}`.trim());
+    const isRepositoryHardening =
+      item.currentEvidence?.classification === 'repository-deployment-hardening';
+    const displayStatus =
+      isRepositoryHardening && item.lifecycleStatus === FIX_PROVE_STATUSES.NEW_FINDING
+        ? 'NEW HARDENING SIGNAL — NON-SCORED'
+        : item.lifecycleStatus;
+    lines.push(`- **${displayStatus}** — ${item.ruleId || 'Finding'} ${item.title || ''}`.trim());
     lines.push(`  - ${item.rationale}`);
   }
   lines.push('');

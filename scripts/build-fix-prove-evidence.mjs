@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { scanRepositoryScopeConsistency } from '../inspector/repository-scope-consistency.mjs';
 import { buildFixProveEvidencePacket, renderFixProveMarkdown } from '../src/fix-prove-evidence.js';
 
@@ -30,8 +31,20 @@ function withRepositoryScopeEvidence(input, inputPath) {
   if (!input.repositoryRoot) return input;
   const root = path.resolve(path.dirname(inputPath), input.repositoryRoot);
   const scope = scanRepositoryScopeConsistency(root);
-  const scopeFindings = scope.findings.map((finding, index) => ({
-    findingId: `${finding.ruleId}:${index + 1}`,
+  const scopeFindings = scope.findings.map((finding) => {
+    const identityMaterial = JSON.stringify({
+      ruleId: finding.ruleId,
+      retiredComponent: finding.evidence?.retiredComponent || null,
+      retiredToolchain: finding.evidence?.retiredToolchain || null,
+      activeComponent: finding.evidence?.activeComponent || null,
+      activeToolchain: finding.evidence?.activeToolchain || null,
+      file: finding.evidence?.file || null,
+      staleReference: finding.evidence?.staleReference || null,
+    });
+    const evidenceDigest = createHash('sha256').update(identityMaterial).digest('hex').slice(0, 16);
+
+    return {
+    findingId: `${finding.ruleId}:${evidenceDigest}`,
     ruleId: finding.ruleId,
     title: finding.title,
     severity: finding.severity,
@@ -41,7 +54,8 @@ function withRepositoryScopeEvidence(input, inputPath) {
       confidence: finding.confidence,
       ...finding.evidence,
     },
-  }));
+    };
+  });
 
   return {
     ...input,
