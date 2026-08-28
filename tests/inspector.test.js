@@ -302,3 +302,118 @@ test('security documentation describing attack patterns is not treated as an att
 
   assert.deepEqual(instructionFindings, []);
 });
+
+test('Flutter Dart and SQL application surfaces are inspected and detected', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-flutter-sql-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+
+  fs.mkdirSync(path.join(root, 'lib'), { recursive:true });
+  fs.mkdirSync(path.join(root, 'db', 'migrations'), { recursive:true });
+  fs.mkdirSync(path.join(root, 'ios', 'Runner'), { recursive:true });
+
+  fs.writeFileSync(
+    path.join(root, 'pubspec.yaml'),
+    [
+      'name: flutter_security_fixture',
+      'environment:',
+      '  sdk: ">=3.0.0 <4.0.0"',
+      'dependencies:',
+      '  flutter:',
+      '    sdk: flutter',
+    ].join('\n'),
+  );
+
+  fs.writeFileSync(
+    path.join(root, 'lib', 'main.dart'),
+    "void main() { print('fixture'); }\n",
+  );
+
+  fs.writeFileSync(
+    path.join(root, 'db', 'migrations', '001_core.sql'),
+    'CREATE TABLE accounts (id text PRIMARY KEY);\n',
+  );
+
+  fs.writeFileSync(
+    path.join(root, 'ios', 'Runner', 'AppDelegate.swift'),
+    'import UIKit\nfinal class AppDelegate {}\n',
+  );
+
+  fs.writeFileSync(
+    path.join(root, 'ios', 'Runner', 'Runner-Bridging-Header.h'),
+    '#include <stdint.h>\n',
+  );
+
+  const bundle = await scanRepository(root, {
+    authorised:true,
+    includePaths:true,
+  });
+
+  assert.ok(bundle.observedTechnologies.includes('Dart'));
+  assert.ok(bundle.observedTechnologies.includes('Flutter'));
+  assert.ok(bundle.observedTechnologies.includes('SQL'));
+  assert.ok(bundle.observedTechnologies.includes('Swift'));
+
+  assert.equal(bundle.scope.filesDiscovered, 5);
+  assert.equal(bundle.scope.filesInspected, 5);
+});
+
+test('coverage evidence reports recognized Dart and SQL material sources as covered', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-source-coverage-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+
+  fs.mkdirSync(path.join(root, 'lib'), { recursive:true });
+  fs.mkdirSync(path.join(root, 'db'), { recursive:true });
+
+  fs.writeFileSync(path.join(root, 'lib', 'app.dart'), 'void main() {}\n');
+  fs.writeFileSync(path.join(root, 'db', 'schema.sql'), 'CREATE TABLE example(id text);\n');
+
+  const bundle = await scanRepository(root, { authorised:true });
+
+  assert.equal(bundle.scope.sourceCoverage.materialFilesDiscovered, 2);
+  assert.equal(bundle.scope.sourceCoverage.materialFilesInspectable, 2);
+  assert.equal(bundle.scope.sourceCoverage.materialFilesInspected, 2);
+  assert.deepEqual(bundle.scope.sourceCoverage.unsupportedMaterialExtensions, []);
+  assert.equal(
+    bundle.scope.sourceCoverage.status,
+    'recognized-material-source-types-covered',
+  );
+});
+
+test('unsupported material source type constrains assurance conclusion without creating a finding', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-source-gap-'));
+  t.after(() => fs.rmSync(root, { recursive:true, force:true }));
+
+  fs.writeFileSync(
+    path.join(root, 'App.scala'),
+    'object Fixture extends App { println("fixture") }\n',
+  );
+
+  fs.mkdirSync(path.join(root, 'tests'), { recursive:true });
+  fs.writeFileSync(
+    path.join(root, 'tests', 'smoke.test.js'),
+    'export const fixture = true;\n',
+  );
+
+  const bundle = await scanRepository(root, { authorised:true });
+
+  assert.deepEqual(
+    bundle.scope.sourceCoverage.unsupportedMaterialExtensions,
+    ['.scala'],
+  );
+  assert.equal(
+    bundle.scope.sourceCoverage.status,
+    'incomplete-material-source-coverage',
+  );
+
+  assert.match(
+    bundle.summary.conclusion,
+    /Material source coverage is incomplete/,
+  );
+
+  // Unknown coverage is evidence uncertainty, not an observed vulnerability.
+  assert.equal(bundle.summary.technicalRisk, 2);
+  assert.equal(
+    bundle.findings.some((item)=>item.category==='Coverage'),
+    false,
+  );
+});

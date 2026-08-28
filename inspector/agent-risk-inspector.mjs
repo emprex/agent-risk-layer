@@ -38,6 +38,15 @@ const TEXT_EXTENSIONS = new Set([
   '.js','.mjs','.cjs','.ts','.tsx','.jsx','.py','.rb','.go','.rs','.java','.kt','.kts',
   '.cs','.php','.sh','.bash','.zsh','.ps1','.json','.jsonc','.yaml','.yml','.toml','.ini',
   '.conf','.cfg','.properties','.xml','.md','.txt','.env','.dockerfile','.tf','.hcl',
+  '.dart','.sql','.swift','.h',
+]);
+
+const MATERIAL_SOURCE_EXTENSIONS = new Set([
+  '.js','.mjs','.cjs','.ts','.tsx','.jsx','.py','.rb','.go','.rs','.java','.kt','.kts',
+  '.cs','.php','.sh','.bash','.zsh','.ps1','.dart','.sql',
+  // Recognised material source types that are not yet inspected by this release.
+  '.swift','.scala','.c','.h','.cc','.cpp','.cxx','.hpp','.hh',
+  '.vue','.svelte','.ex','.exs','.erl','.hrl','.lua','.r','.pl','.pm','.groovy',
 ]);
 
 const SEVERITY_WEIGHT = { critical: 25, high: 12, medium: 5, low: 2, info: 0 };
@@ -107,7 +116,8 @@ export async function scanRepository(rootInput='.', options={}) {
     deduplicateFindings(context.findings).sort(compareFindings),
     scannerConfig,
   ).slice(0, limits.maxFindings);
-  const summary = summarise(findings, context.checksRun, inventory);
+  const sourceCoverage = buildSourceCoverage(context);
+  const summary = summarise(findings, context.checksRun, inventory, sourceCoverage);
   const payload = {
     schema: BUNDLE_SCHEMA,
     bundleId: `ins_${crypto.randomUUID().replaceAll('-','')}`,
@@ -135,6 +145,7 @@ export async function scanRepository(rootInput='.', options={}) {
       includeRelativePaths: options.includePaths === true,
       userExclusions: scannerConfig.exclude,
       declaredFalsePositiveReviews: scannerConfig.falsePositives.length,
+      sourceCoverage,
     },
     summary,
     findings,
@@ -338,6 +349,17 @@ function runDependencyChecks(ctx){
     const unpinned=text.split(/\r?\n/).map((x)=>x.trim()).filter((x)=>x&&!x.startsWith('#')&&!/[<>=!~]=/.test(x)&&!/^-[ercf]/.test(x));
     if(unpinned.length)ctx.add('ARL-DEP-002',[ev(ctx,file,null,`${unpinned.length} Python requirements are not pinned`)],{confidence:'high'});
   }
+
+  const pubspecFiles=ctx.inventory.files.filter((f)=>path.basename(f)==='pubspec.yaml');
+  for(const file of pubspecFiles){
+    ctx.technologies.add('Dart');
+    const text=ctx.read(file); if(text===null)continue;
+    if(/^\s*flutter\s*:|sdk\s*:\s*flutter\b/im.test(text))ctx.technologies.add('Flutter');
+  }
+
+  if(ctx.inventory.files.some((f)=>/\.dart$/i.test(f)))ctx.technologies.add('Dart');
+  if(ctx.inventory.files.some((f)=>/\.sql$/i.test(f)))ctx.technologies.add('SQL');
+  if(ctx.inventory.files.some((f)=>/\.swift$/i.test(f)))ctx.technologies.add('Swift');
 }
 
 function runDockerChecks(ctx){
@@ -621,7 +643,7 @@ function compareFindings(a,b){
   return order[a.severity]-order[b.severity]||a.ruleId.localeCompare(b.ruleId);
 }
 
-function summarise(findings,checksRun,inventory){
+function summarise(findings,checksRun,inventory,sourceCoverage){
   const counts={critical:0,high:0,medium:0,low:0,info:0};
   let risk=0;
   const active=findings.filter((item)=>item.review?.status!=='false-positive');
@@ -638,7 +660,16 @@ function summarise(findings,checksRun,inventory){
     acceptedRiskTotal:findings.filter((item)=>item.review?.status==='accepted-risk').length,
     highestSeverity:counts.critical?'critical':counts.high?'high':counts.medium?'medium':counts.low?'low':'none',
     repositoryTracking:inventory.tracked?'git-tracked-files':'filesystem-walk',
-    conclusion:counts.critical?'Critical observed weaknesses require immediate remediation before relying on the inspected system.':counts.high?'Material observed weaknesses should be remediated before broader deployment.':counts.medium?'No critical issue was observed, but important hardening and assurance work remains.':'No material issue was observed by this static inspection. Runtime and cloud controls remain outside scope.',
+    sourceCoverageStatus:sourceCoverage.status,
+    conclusion:counts.critical
+      ?'Critical observed weaknesses require immediate remediation before relying on the inspected system.'
+      :counts.high
+        ?'Material observed weaknesses should be remediated before broader deployment.'
+        :counts.medium
+          ?'No critical issue was observed, but important hardening and assurance work remains.'
+          :sourceCoverage.status==='incomplete-material-source-coverage'
+            ?'No material issue was observed in the inspected scope. Material source coverage is incomplete; review the reported coverage gaps before relying on this assessment.'
+            :'No material issue was observed in the inspected scope. Runtime and cloud controls remain outside scope.',
   };
 }
 
@@ -682,7 +713,31 @@ function isAgentInstructionCandidate(file,ctx){
   if(relative==='.github/copilot-instructions.md')return true;
   return false;
 }
-function isSourceCandidate(file){return /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|php|sh)$/i.test(file);}
+function isSourceCandidate(file){return /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|dart|cs|php|sh)$/i.test(file);}
+function isMaterialSourceCandidate(file){
+  return MATERIAL_SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase());
+}
+function buildSourceCoverage(ctx){
+  const material=ctx.inventory.files.filter(isMaterialSourceCandidate);
+  const inspectable=material.filter(isTextCandidate);
+  const inspected=inspectable.filter((file)=>ctx.textCache.has(file));
+  const unsupportedExtensions=[...new Set(
+    material
+      .filter((file)=>!isTextCandidate(file))
+      .map((file)=>path.extname(file).toLowerCase())
+      .filter(Boolean),
+  )].sort();
+
+  return {
+    materialFilesDiscovered: material.length,
+    materialFilesInspectable: inspectable.length,
+    materialFilesInspected: inspected.length,
+    unsupportedMaterialExtensions: unsupportedExtensions,
+    status: unsupportedExtensions.length
+      ? 'incomplete-material-source-coverage'
+      : 'recognized-material-source-types-covered',
+  };
+}
 
 export async function uploadBundle(bundle,{baseUrl,token}){
   if(!baseUrl||!token)throw new Error('Upload requires --upload URL and --token TOKEN.');
@@ -700,6 +755,9 @@ function printSummary(bundle){
   console.log(`Posture: ${s.postureScore}/100 (grade ${s.grade}) | Technical risk ${s.technicalRisk}/100`);
   console.log(`Findings: ${s.findingsTotal} — critical ${s.counts.critical}, high ${s.counts.high}, medium ${s.counts.medium}, low ${s.counts.low}`);
   console.log(`Files inspected: ${bundle.scope.filesInspected}/${bundle.scope.filesDiscovered} | Bytes read: ${bundle.scope.bytesRead}`);
+  const coverage=bundle.scope.sourceCoverage;
+  console.log(`Material source coverage: ${coverage.materialFilesInspected}/${coverage.materialFilesDiscovered} | ${coverage.status}`);
+  if(coverage.unsupportedMaterialExtensions.length)console.log(`Unsupported material source extensions: ${coverage.unsupportedMaterialExtensions.join(', ')}`);
   console.log(`Integrity digest: ${bundle.integrity.digest}`);
   for(const finding of bundle.findings.slice(0,20))console.log(`- [${finding.severity.toUpperCase()}] ${finding.ruleId} ${finding.title}`);
   if(bundle.findings.length>20)console.log(`- … ${bundle.findings.length-20} additional findings in the JSON bundle`);
