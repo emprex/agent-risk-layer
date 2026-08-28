@@ -26,7 +26,7 @@ async function ruleIds(files) {
 }
 
 test('release scanner recognises bounded OpenAI execution controls used by Northstar', async () => {
-  assert.equal(INSPECTOR_VERSION, '4.1.4');
+  assert.equal(INSPECTOR_VERSION, '4.1.5');
   const ids = await ruleIds({
     'src/agent.js': `
       import OpenAI from 'openai';

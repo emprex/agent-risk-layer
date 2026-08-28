@@ -105,7 +105,7 @@ function hasAgentResourceLimits(text){
 `;
 
 const text = sourceText
-  .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.4';")
+  .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.5';")
   .replace(sourceCheckMarker, `${manualValidationDetector}\n${sourceCheckMarker}`)
   .replace(resourceMarker, '    if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;')
   .replace(schemaMarker, '    if(hasStructuredOutputValidation(text,aiInFile))hasSchema=true;');
@@ -116,8 +116,8 @@ const digest = crypto.createHash('sha256').update(text).digest('hex');
 fs.writeFileSync(`${destination}.sha256`, `${digest}  agent-risk-inspector.mjs\n`);
 fs.writeFileSync(path.join(root, 'public', 'inspector-policy.json'), JSON.stringify({ policyVersion:POLICY_VERSION, rules:POLICY_CATALOG }, null, 2) + '\n');
 fs.writeFileSync(path.join(root, 'public', 'downloads', 'inspector-release.json'), JSON.stringify({
-  name:'AgentRisk Inspector', version:'4.1.4', policyVersion:POLICY_VERSION,
+  name:'AgentRisk Inspector', version:'4.1.5', policyVersion:POLICY_VERSION,
   bundleSchema:BUNDLE_SCHEMA, sha256:digest,
   privacyContract:['No source code uploaded','No matched secret values uploaded','Read-only static inspection','No exploitation or network probing'],
 }, null, 2) + '\n');
-console.log(JSON.stringify({ version:'4.1.4', policyVersion:POLICY_VERSION, sha256:digest }, null, 2));
+console.log(JSON.stringify({ version:'4.1.5', policyVersion:POLICY_VERSION, sha256:digest }, null, 2));

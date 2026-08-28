@@ -21,8 +21,13 @@ const assessLockedDependencies = (() => {
 const ASSESSMENT_SCHEMA = 'arl.dependency-vulnerability-assessment.v1';
 const DATABASE_SCHEMA = 'arl.vulnerability-database.v1';
 const MAX_DATABASE_BYTES = 2_000_000;
+const MAX_LOCKFILE_BYTES = 2_000_000;
 const MAX_ADVISORIES = 20_000;
+const MAX_LOCKFILES = 50;
+const MAX_LOCKED_DEPENDENCIES = 5_000;
+const MAX_MATCHES = 500;
 const DEFAULT_MAX_AGE_DAYS = 30;
+const IGNORED_DIRECTORIES = new Set(['.git','node_modules','build','.dart_tool','coverage','.next','dist']);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -70,34 +75,153 @@ function isAffected(version, advisory) {
   return Boolean(lower || upper);
 }
 
-function readJson(file, maxBytes = MAX_DATABASE_BYTES) {
+function readText(file, maxBytes = MAX_LOCKFILE_BYTES) {
   const stat = fs.statSync(file);
-  if (!stat.isFile() || stat.size > maxBytes) throw new Error(`JSON input exceeds ${maxBytes} bytes`);
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!stat.isFile() || stat.size > maxBytes) throw new Error(`Input exceeds ${maxBytes} bytes`);
+  return fs.readFileSync(file, 'utf8');
+}
+
+function readJson(file, maxBytes = MAX_DATABASE_BYTES) {
+  return JSON.parse(readText(file, maxBytes));
+}
+
+function findLockfiles(root, basename) {
+  const found = [];
+  const stack = [root];
+  while (stack.length && found.length < MAX_LOCKFILES) {
+    const directory = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (found.length >= MAX_LOCKFILES) break;
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRECTORIES.has(entry.name)) stack.push(absolute);
+      } else if (entry.isFile() && entry.name === basename) {
+        found.push(absolute);
+      }
+    }
+  }
+  found.sort();
+  return found;
+}
+
+function npmPackageNameFromPath(packagePath) {
+  const match = String(packagePath).match(/(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)$/);
+  return match ? match[1] : null;
 }
 
 function lockedNpmDependencies(root) {
-  const lockPath = path.join(root, 'package-lock.json');
-  if (!fs.existsSync(lockPath)) return { status: 'not-present', ecosystem: 'npm', dependencies: [] };
-  const lock = readJson(lockPath);
   const dependencies = [];
+  const lockfiles = findLockfiles(root, 'package-lock.json');
 
-  if (lock.packages && typeof lock.packages === 'object') {
-    for (const [packagePath, record] of Object.entries(lock.packages)) {
-      if (!packagePath.startsWith('node_modules/')) continue;
-      const name = packagePath.slice('node_modules/'.length);
-      if (!name || !record?.version) continue;
-      dependencies.push({ name, version: String(record.version) });
+  for (const lockPath of lockfiles) {
+    const lock = readJson(lockPath, MAX_LOCKFILE_BYTES);
+    if (lock.packages && typeof lock.packages === 'object') {
+      for (const [packagePath, record] of Object.entries(lock.packages)) {
+        const name = npmPackageNameFromPath(packagePath);
+        if (!name || !record?.version) continue;
+        dependencies.push({ ecosystem: 'npm', name, version: String(record.version), lockfile: 'package-lock.json' });
+        if (dependencies.length >= MAX_LOCKED_DEPENDENCIES) break;
+      }
+    } else if (lock.dependencies && typeof lock.dependencies === 'object') {
+      for (const [name, record] of Object.entries(lock.dependencies)) {
+        if (!record?.version) continue;
+        dependencies.push({ ecosystem: 'npm', name, version: String(record.version), lockfile: 'package-lock.json' });
+        if (dependencies.length >= MAX_LOCKED_DEPENDENCIES) break;
+      }
     }
-  } else if (lock.dependencies && typeof lock.dependencies === 'object') {
-    for (const [name, record] of Object.entries(lock.dependencies)) {
-      if (!record?.version) continue;
-      dependencies.push({ name, version: String(record.version) });
-    }
+    if (dependencies.length >= MAX_LOCKED_DEPENDENCIES) break;
   }
 
-  dependencies.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
-  return { status: 'completed', ecosystem: 'npm', dependencies };
+  return { ecosystem: 'npm', lockfilesExamined: lockfiles.length, dependencies };
+}
+
+function yamlScalar(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    try { return JSON.parse(raw); } catch { return raw.slice(1, -1); }
+  }
+  if (raw.startsWith("'") && raw.endsWith("'")) return raw.slice(1, -1).replace(/''/g, "'");
+  return raw;
+}
+
+function parsePubLock(text) {
+  const dependencies = [];
+  let inPackages = false;
+  let current = null;
+
+  const flush = () => {
+    if (current?.name && current.source === 'hosted' && current.version) {
+      dependencies.push({ ecosystem: 'Pub', name: current.name, version: current.version, lockfile: 'pubspec.lock' });
+    }
+    current = null;
+  };
+
+  for (const line of String(text).split(/\r?\n/)) {
+    if (line === 'packages:') {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+    if (/^[A-Za-z0-9_-]+:\s*$/.test(line)) {
+      flush();
+      break;
+    }
+
+    const packageMatch = line.match(/^  ([A-Za-z0-9_.+-]+):\s*$/);
+    if (packageMatch) {
+      flush();
+      current = { name: packageMatch[1], source: null, version: null };
+      continue;
+    }
+    if (!current) continue;
+
+    const sourceMatch = line.match(/^    source:\s*(.+?)\s*$/);
+    if (sourceMatch) {
+      current.source = yamlScalar(sourceMatch[1]);
+      continue;
+    }
+    const versionMatch = line.match(/^    version:\s*(.+?)\s*$/);
+    if (versionMatch) current.version = yamlScalar(versionMatch[1]);
+  }
+  flush();
+  return dependencies;
+}
+
+function lockedPubDependencies(root) {
+  const dependencies = [];
+  const lockfiles = findLockfiles(root, 'pubspec.lock');
+  for (const lockPath of lockfiles) {
+    for (const dependency of parsePubLock(readText(lockPath))) {
+      dependencies.push(dependency);
+      if (dependencies.length >= MAX_LOCKED_DEPENDENCIES) break;
+    }
+    if (dependencies.length >= MAX_LOCKED_DEPENDENCIES) break;
+  }
+  return { ecosystem: 'Pub', lockfilesExamined: lockfiles.length, dependencies };
+}
+
+function lockedDependencyInventory(root) {
+  const npm = lockedNpmDependencies(root);
+  const pub = lockedPubDependencies(root);
+  const combined = [...npm.dependencies, ...pub.dependencies]
+    .sort((a, b) => a.ecosystem.localeCompare(b.ecosystem) || a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+  const dependencies = combined.slice(0, MAX_LOCKED_DEPENDENCIES);
+  const ecosystems = [...new Set(dependencies.map((item) => item.ecosystem))].sort();
+  return {
+    dependencies,
+    ecosystems,
+    ecosystem: ecosystems.length === 1 ? ecosystems[0] : ecosystems.length > 1 ? 'multiple' : 'none',
+    lockfilesExamined: npm.lockfilesExamined + pub.lockfilesExamined,
+    truncated: combined.length > dependencies.length,
+  };
 }
 
 function validateDatabase(database, now, maxAgeDays) {
@@ -131,14 +255,17 @@ function assessLockedDependencies(rootInput = '.', options = {}) {
   const root = fs.realpathSync(path.resolve(rootInput));
   const now = options.now instanceof Date ? options.now : new Date();
   const maxAgeDays = Number.isFinite(options.maxAgeDays) ? Math.max(1, Math.floor(options.maxAgeDays)) : DEFAULT_MAX_AGE_DAYS;
-  const locked = lockedNpmDependencies(root);
+  const locked = lockedDependencyInventory(root);
 
   if (!options.advisoryDatabase) {
     return {
       schema: ASSESSMENT_SCHEMA,
       status: 'intelligence-not-provided',
       ecosystem: locked.ecosystem,
+      ecosystems: locked.ecosystems,
+      lockfilesExamined: locked.lockfilesExamined,
       lockedDependenciesExamined: locked.dependencies.length,
+      inventoryTruncated: locked.truncated,
       findings: [],
       intelligence: null,
       limitation: 'No vulnerability intelligence was provided. Dependency vulnerability status is unknown and no vulnerability finding was created.',
@@ -153,31 +280,41 @@ function assessLockedDependencies(rootInput = '.', options = {}) {
   const matches = [];
   for (const dependency of locked.dependencies) {
     for (const advisory of database.advisories) {
-      if (advisory.ecosystem !== 'npm' || advisory.package !== dependency.name) continue;
+      if (advisory.ecosystem !== dependency.ecosystem || advisory.package !== dependency.name) continue;
       if (!isAffected(dependency.version, advisory)) continue;
       matches.push({
         ruleId: 'ARL-DEP-004',
         advisoryId: cleanText(advisory.id, 120),
+        ecosystem: dependency.ecosystem,
+        lockfile: dependency.lockfile,
         package: dependency.name,
         installedVersion: dependency.version,
         severity: cleanText(advisory.severity || 'unknown', 20).toLowerCase(),
         fixedVersion: advisory.affected?.fixed ? cleanText(advisory.affected.fixed, 40) : null,
       });
+      if (matches.length >= MAX_MATCHES) break;
     }
+    if (matches.length >= MAX_MATCHES) break;
   }
 
-  matches.sort((a, b) => a.package.localeCompare(b.package) || a.advisoryId.localeCompare(b.advisoryId));
+  matches.sort((a, b) => a.ecosystem.localeCompare(b.ecosystem) || a.package.localeCompare(b.package) || a.advisoryId.localeCompare(b.advisoryId));
+
+  const limitations = [];
+  if (intelligence.stale) limitations.push(`Vulnerability intelligence is older than the configured ${maxAgeDays}-day freshness window; matches are retained but freshness is explicitly constrained.`);
+  if (locked.truncated) limitations.push(`Dependency inventory exceeded the bounded ${MAX_LOCKED_DEPENDENCIES}-package limit; absence of additional matches is not evidence of safety.`);
+  if (matches.length >= MAX_MATCHES) limitations.push(`Vulnerability matches reached the bounded ${MAX_MATCHES}-match limit; additional matches may exist.`);
 
   return {
     schema: ASSESSMENT_SCHEMA,
     status: intelligence.stale ? 'intelligence-stale' : 'completed',
     ecosystem: locked.ecosystem,
+    ecosystems: locked.ecosystems,
+    lockfilesExamined: locked.lockfilesExamined,
     lockedDependenciesExamined: locked.dependencies.length,
+    inventoryTruncated: locked.truncated,
     findings: matches,
     intelligence,
-    limitation: intelligence.stale
-      ? `Vulnerability intelligence is older than the configured ${maxAgeDays}-day freshness window; matches are retained but freshness is explicitly constrained.`
-      : null,
+    limitation: limitations.length ? limitations.join(' ') : null,
   };
 }
 
@@ -220,7 +357,8 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
 
   const findings = Array.isArray(assessment.findings)
     ? assessment.findings.slice(0, 500).map((finding) => {
-        const ecosystem = clean(assessment.ecosystem, 40) || 'unknown';
+        const ecosystem = clean(finding.ecosystem || assessment.ecosystem, 40) || 'unknown';
+        const lockfile = clean(finding.lockfile, 80) || (ecosystem === 'Pub' ? 'pubspec.lock' : 'package-lock.json');
         const packageName = clean(finding.package, 160);
         const installedVersion = clean(finding.installedVersion, 80);
         const advisoryId = clean(finding.advisoryId, 120);
@@ -231,7 +369,7 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
           confidence: status === 'completed' ? 'high' : 'medium',
           evidence: {
             source: 'dependency-vulnerability-intelligence',
-            basename: 'package-lock.json',
+            basename: lockfile,
             relativePath: null,
             pathHash: null,
             line: null,
@@ -246,12 +384,21 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
       })
     : [];
 
+  const ecosystems = Array.isArray(assessment.ecosystems)
+    ? assessment.ecosystems.map((value) => clean(value, 40)).filter(Boolean).slice(0, 20)
+    : [];
+
   return {
     status,
     ecosystem: clean(assessment.ecosystem, 40) || 'unknown',
+    ecosystems,
+    lockfilesExamined: Number.isFinite(assessment.lockfilesExamined)
+      ? Math.max(0, Math.floor(assessment.lockfilesExamined))
+      : 0,
     lockedDependenciesExamined: Number.isFinite(assessment.lockedDependenciesExamined)
       ? Math.max(0, Math.floor(assessment.lockedDependenciesExamined))
       : 0,
+    inventoryTruncated: assessment.inventoryTruncated === true,
     intelligence,
     limitation: assessment.limitation ? clean(assessment.limitation, 500) : null,
     findings,
@@ -261,7 +408,7 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
   return dependencyAssessmentToInspectorEvidence;
 })();
 
-export const INSPECTOR_VERSION = '4.1.4';
+export const INSPECTOR_VERSION = '4.1.5';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
@@ -471,7 +618,10 @@ function createContext(root, inventory, limits, options) {
     dependencyVulnerabilityAssessment: {
       status: 'not-run',
       ecosystem: 'unknown',
+      ecosystems: [],
+      lockfilesExamined: 0,
       lockedDependenciesExamined: 0,
+      inventoryTruncated: false,
       intelligence: null,
       limitation: null,
       findingsObserved: 0,
@@ -771,7 +921,10 @@ function runDependencyChecks(ctx){
     ctx.dependencyVulnerabilityAssessment={
       status:'inconclusive-intelligence-error',
       ecosystem:'unknown',
+      ecosystems:[],
+      lockfilesExamined:0,
       lockedDependenciesExamined:0,
+      inventoryTruncated:false,
       intelligence:null,
       limitation:cleanMetadata(`Dependency vulnerability assessment could not complete: ${error.message}`,500),
       findingsObserved:0,
@@ -808,7 +961,10 @@ function runDependencyChecks(ctx){
   ctx.dependencyVulnerabilityAssessment={
     status:assessment.status,
     ecosystem:assessment.ecosystem,
+    ecosystems:Array.isArray(assessment.ecosystems)?assessment.ecosystems.slice(0,10):[],
+    lockfilesExamined:Number.isFinite(assessment.lockfilesExamined)?assessment.lockfilesExamined:0,
     lockedDependenciesExamined:assessment.lockedDependenciesExamined,
+    inventoryTruncated:assessment.inventoryTruncated===true,
     intelligence:assessment.intelligence,
     limitation:assessment.limitation,
     findingsObserved:assessment.findings.filter((item)=>Boolean(item.severity)).length,
