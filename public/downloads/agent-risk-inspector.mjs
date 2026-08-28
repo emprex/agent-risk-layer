@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const INSPECTOR_VERSION = '4.1.2';
+export const INSPECTOR_VERSION = '4.1.3';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.inspection.bundle.v1';
 
