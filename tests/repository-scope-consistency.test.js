@@ -38,6 +38,37 @@ test('detects stale Expo operational configuration only when active Flutter and 
   assert.match(result.findings[0].evidence.staleReference, /EXPO_PUBLIC_API_URL/);
 });
 
+test('mixed active and retired declarations on one physical line remain clause-local', () => {
+  const result = detectRepositoryScopeConsistency({
+    'README.md': [
+      'The production mobile client is Flutter and lives in `apps/mobile_flutter`. The former Expo / React Native implementation is retired.',
+      'cd apps/mobile_flutter',
+      'flutter pub get',
+      'flutter run',
+    ].join('\n'),
+  });
+
+  assert.deepEqual(result.declarations.activeComponents, ['apps/mobile_flutter']);
+  assert.deepEqual(result.declarations.activeToolchains, ['Flutter']);
+  assert.deepEqual(result.declarations.retiredToolchains.sort(), ['Expo', 'React Native']);
+  assert.equal(result.declarations.retiredToolchains.includes('Flutter'), false);
+  assert.equal(result.findings.length, 0);
+});
+
+test('mixed same-line declarations still expose stale retired toolchain commands', () => {
+  const result = detectRepositoryScopeConsistency({
+    'README.md': [
+      'The production mobile client is Flutter and lives in `apps/mobile_flutter`. The former Expo / React Native implementation is retired.',
+      'cd apps/mobile_flutter',
+      'EXPO_PUBLIC_API_URL=http://127.0.0.1:3000',
+    ].join('\n'),
+  });
+
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0].evidence.retiredToolchain, 'Expo');
+  assert.equal(result.findings[0].evidence.activeToolchain, 'Flutter');
+});
+
 test('retirement declarations by themselves do not create a noisy finding', () => {
   const result = detectRepositoryScopeConsistency({
     'README.md': [
