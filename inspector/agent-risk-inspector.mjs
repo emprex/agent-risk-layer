@@ -227,7 +227,10 @@ function createContext(root, inventory, limits, options) {
     dependencyVulnerabilityAssessment: {
       status: 'not-run',
       ecosystem: 'unknown',
+      ecosystems: [],
+      lockfilesExamined: 0,
       lockedDependenciesExamined: 0,
+      inventoryTruncated: false,
       intelligence: null,
       limitation: null,
       findingsObserved: 0,
@@ -527,7 +530,10 @@ function runDependencyChecks(ctx){
     ctx.dependencyVulnerabilityAssessment={
       status:'inconclusive-intelligence-error',
       ecosystem:'unknown',
+      ecosystems:[],
+      lockfilesExamined:0,
       lockedDependenciesExamined:0,
+      inventoryTruncated:false,
       intelligence:null,
       limitation:cleanMetadata(`Dependency vulnerability assessment could not complete: ${error.message}`,500),
       findingsObserved:0,
@@ -564,7 +570,10 @@ function runDependencyChecks(ctx){
   ctx.dependencyVulnerabilityAssessment={
     status:assessment.status,
     ecosystem:assessment.ecosystem,
+    ecosystems:Array.isArray(assessment.ecosystems)?assessment.ecosystems.slice(0,10):[],
+    lockfilesExamined:Number.isFinite(assessment.lockfilesExamined)?assessment.lockfilesExamined:0,
     lockedDependenciesExamined:assessment.lockedDependenciesExamined,
+    inventoryTruncated:assessment.inventoryTruncated===true,
     intelligence:assessment.intelligence,
     limitation:assessment.limitation,
     findingsObserved:assessment.findings.filter((item)=>Boolean(item.severity)).length,
