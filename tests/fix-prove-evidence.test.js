@@ -132,7 +132,6 @@ test('100/100 remains explicitly scoped and never becomes an affirmative securit
   assert.match(markdown, /Runtime and cloud controls may remain outside scope/i);
   assert.match(markdown, /not an accredited certification or a guarantee that the assessed system is risk-free/i);
   assert.doesNotMatch(markdown, /\b(?:is|remains|proved|proven)\s+(?:fully\s+)?secure\b/i);
-  assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+risk[- ]free\b/i);
   assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+certified\b/i);
   assert.doesNotMatch(markdown, /\b(?:is|proved|proven)\s+production[- ]safe\b/i);
 });
