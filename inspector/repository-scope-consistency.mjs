@@ -122,9 +122,24 @@ function retiredToolchainReference(line, toolchain) {
 }
 
 function addSignal(signals, item) {
-  const key = `${item.retiredComponent || item.retiredToolchain}:${item.file}:${item.line}:${item.staleReference}`;
-  if (signals.some((signal) => signal._key === key) || signals.length >= MAX_SIGNALS) return;
-  signals.push({ ...item, _key: key });
+  // One stale operational line is one repository/deployment hardening signal even when
+  // more than one retired declaration corroborates it. This prevents overlapping
+  // component/toolchain declarations from manufacturing duplicate findings.
+  const key = `${item.file}:${item.line}:${item.staleReference}`;
+  const existing = signals.find((signal) => signal._key === key);
+  if (existing) {
+    const values = (field) => [...new Set([existing[field], item[field]].filter(Boolean))];
+    existing.corroboratingRetiredComponents = values('retiredComponent');
+    existing.corroboratingRetiredToolchains = values('retiredToolchain');
+    return;
+  }
+  if (signals.length >= MAX_SIGNALS) return;
+  signals.push({
+    ...item,
+    corroboratingRetiredComponents: item.retiredComponent ? [item.retiredComponent] : [],
+    corroboratingRetiredToolchains: item.retiredToolchain ? [item.retiredToolchain] : [],
+    _key: key,
+  });
 }
 
 function applyConfigDeclarations(declarations, config) {
