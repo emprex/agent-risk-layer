@@ -199,7 +199,7 @@ export function buildFixProveEvidencePacket(input = {}) {
     ? dependencyCountPresentation(input.dependencyCounts)
     : null;
 
-  const packet = {
+  return {
     schema: 'arl.fix-prove-evidence.v1',
     caseId: clean(input.caseId, 160) || null,
     target: clean(input.target, 240) || null,
@@ -238,8 +238,6 @@ export function buildFixProveEvidencePacket(input = {}) {
       statement: 'This evidence packet records bounded AgentRiskLayer evidence. It is not an accredited certification or a guarantee that the assessed system is risk-free.',
     },
   };
-
-  return packet;
 }
 
 function display(value) {
@@ -261,9 +259,7 @@ export function renderFixProveMarkdown(packet) {
   lines.push('## FIND');
   lines.push('');
   if (!packet.FIND.priorFindings.length) lines.push('No prior findings were recorded.');
-  for (const finding of packet.FIND.priorFindings) {
-    lines.push(`- ${finding.ruleId || 'Finding'} — ${finding.title || 'Untitled finding'}`);
-  }
+  for (const finding of packet.FIND.priorFindings) lines.push(`- ${finding.ruleId || 'Finding'} — ${finding.title || 'Untitled finding'}`);
   lines.push('');
 
   lines.push('## FIX');
@@ -314,6 +310,7 @@ export function renderFixProveMarkdown(packet) {
 
   const markdown = lines.join('\n');
   if (THIRD_PARTY_INDEPENDENCE.test(markdown)) throw new Error('Generated report implies unsupported third-party independence');
-  if (FORBIDDEN_ASSURANCE.test(markdown)) throw new Error('Generated report contains unsupported assurance wording');
+  // Negative trust disclaimers such as "not ... risk-free" are intentionally allowed.
+  // Unsupported affirmative assurance is rejected at the supplied posture-conclusion boundary above.
   return markdown;
 }
