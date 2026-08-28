@@ -3,7 +3,7 @@
   "version": "4.1.2",
   "policyVersion": "arl-inspector-policy-2026.10",
   "bundleSchema": "arl.inspection.bundle.v1",
-  "sha256": "48071d05f9ee191bd1cb04c102b57549bf05c8f71a9d0afdf5c4172d94ca16e9",
+  "sha256": "4be1c083a21304f65f87f829c59b0dc231a41936eeb79d80f1e022ffc9ac18f9",
   "privacyContract": [
     "No source code uploaded",
     "No matched secret values uploaded",

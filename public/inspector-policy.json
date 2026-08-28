@@ -38,6 +38,18 @@
       ]
     },
     {
+      "id": "ARL-SEC-004",
+      "title": "Secret-like material present in Git history",
+      "severity": "high",
+      "category": "Secrets management",
+      "summary": "Credential-shaped material was observed in reachable Git history. Historical presence is evidence of exposure, but the Inspector does not infer whether the credential remains active.",
+      "remediation": "Revoke or rotate the affected credential if validity cannot be disproved, remove sensitive material from reachable history where appropriate, and add historical secret scanning to the release process.",
+      "frameworks": [
+        "OWASP Agent Security - Data Protection & Privacy",
+        "NIST SSDF"
+      ]
+    },
+    {
       "id": "ARL-CICD-001",
       "title": "GitHub Actions uses broad write permissions",
       "severity": "high",
