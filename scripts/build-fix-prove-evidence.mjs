@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { scanRepositoryScopeConsistency } from '../inspector/repository-scope-consistency.mjs';
 import { buildFixProveEvidencePacket, renderFixProveMarkdown } from '../src/fix-prove-evidence.js';
 
 function usage() {
@@ -25,13 +26,41 @@ function writePrivate(file, content) {
   return resolved;
 }
 
+function withRepositoryScopeEvidence(input, inputPath) {
+  if (!input.repositoryRoot) return input;
+  const root = path.resolve(path.dirname(inputPath), input.repositoryRoot);
+  const scope = scanRepositoryScopeConsistency(root);
+  const scopeFindings = scope.findings.map((finding, index) => ({
+    findingId: `${finding.ruleId}:${index + 1}`,
+    ruleId: finding.ruleId,
+    title: finding.title,
+    severity: finding.severity,
+    component: finding.evidence?.retiredComponent || finding.evidence?.retiredToolchain || 'repository-scope',
+    evidence: {
+      classification: finding.classification,
+      confidence: finding.confidence,
+      ...finding.evidence,
+    },
+  }));
+
+  return {
+    ...input,
+    currentFindings: [...(Array.isArray(input.currentFindings) ? input.currentFindings : []), ...scopeFindings],
+    currentEvidence: {
+      ...(input.currentEvidence && typeof input.currentEvidence === 'object' ? input.currentEvidence : {}),
+      repositoryScopeConsistency: scope,
+    },
+  };
+}
+
 const args = parseArgs(process.argv.slice(2));
 if (!args.input) {
   usage();
   process.exitCode = 1;
 } else {
   const inputPath = path.resolve(args.input);
-  const input = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+  const rawInput = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+  const input = withRepositoryScopeEvidence(rawInput, inputPath);
   const packet = buildFixProveEvidencePacket(input);
   const json = JSON.stringify(packet, null, 2) + '\n';
   const markdown = renderFixProveMarkdown(packet);
