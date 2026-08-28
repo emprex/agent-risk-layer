@@ -14,6 +14,8 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { assessLockedDependencies } from './dependency-vulnerability-assessment.mjs';
+import { dependencyAssessmentToInspectorEvidence } from './dependency-vulnerability-evidence.mjs';
 
 export const INSPECTOR_VERSION = '4.1.0';
 export const POLICY_VERSION = 'arl-inspector-policy-2026.10';
@@ -86,6 +88,7 @@ export const POLICY_CATALOG = Object.freeze([
   rule('ARL-DEP-001','Dependency lockfile is missing','medium','Supply chain','A package manifest exists without its ecosystem lockfile.','Commit and enforce a lockfile, use reproducible installs, and review automated dependency updates.',['SLSA Build','OWASP LLM03 Supply Chain']),
   rule('ARL-DEP-002','Dependency version is unbounded or mutable','medium','Supply chain','A direct dependency uses wildcard, latest, URL, branch, or another mutable version reference.','Pin direct dependencies to controlled versions and use a lockfile with integrity metadata.',['OWASP LLM03 Supply Chain','SLSA Source']),
   rule('ARL-DEP-003','Install script executes shell or remote content','high','Supply chain','A package lifecycle script executes a shell command or retrieves remote executable content.','Remove unnecessary lifecycle scripts; verify and pin unavoidable tooling and run installs in a restricted environment.',['OWASP LLM03 Supply Chain','SLSA Build']),
+  rule('ARL-DEP-004','Known vulnerable locked dependency','info','Supply chain','A locked dependency version matched vulnerability intelligence explicitly supplied to the Inspector.','Update the dependency outside the affected range, regenerate the lockfile, run compatibility tests, then rerun the Inspector with the same or fresher vulnerability intelligence and confirm the advisory no longer matches.',['OWASP LLM03 Supply Chain','NIST SSDF']),
   rule('ARL-REPO-001','Security policy is missing','low','Governance','No SECURITY.md or equivalent vulnerability-reporting policy was found.','Publish a security policy with supported versions, a private reporting channel, response expectations and safe-harbour language.',['NIST AI RMF GOVERN 2','NIST SSDF']),
   rule('ARL-REPO-002','Automated tests are not evident','medium','Assurance','No test directory, test script, or common test configuration was detected.','Add repeatable unit, integration, security and adversarial tests and enforce them as a release gate.',['NIST AI RMF MEASURE 2.1','OWASP Secure Agent Testing']),
 ]);
@@ -151,6 +154,7 @@ export async function scanRepository(rootInput='.', options={}) {
       declaredFalsePositiveReviews: scannerConfig.falsePositives.length,
       sourceCoverage,
       gitHistorySecretScan: context.gitHistorySecretScan,
+      dependencyVulnerabilityAssessment: context.dependencyVulnerabilityAssessment,
     },
     summary,
     findings,
@@ -164,6 +168,7 @@ export async function scanRepository(rootInput='.', options={}) {
       noSecretValuesUploaded: true,
       noExploitExecution: true,
       noNetworkProbing: true,
+      noDependencyIntelligenceNetworkAccess: true,
     },
     trust: {
       evidenceClass: 'locally-observed-static-evidence',
@@ -218,6 +223,15 @@ function createContext(root, inventory, limits, options) {
       maxCommits: limits.maxGitHistoryCommits,
       bytesExamined: 0,
       truncated: false,
+    },
+    dependencyVulnerabilityAssessment: {
+      status: 'not-run',
+      ecosystem: 'unknown',
+      lockedDependenciesExamined: 0,
+      intelligence: null,
+      limitation: null,
+      findingsObserved: 0,
+      matchesNeedingSeverityReview: [],
     },
     textCache: new Map(), relative(file){return path.relative(root,file).replaceAll(path.sep,'/');},
     read(file){
@@ -468,7 +482,7 @@ function runGitHistorySecretChecks(ctx){
 }
 
 function runDependencyChecks(ctx){
-  ctx.checked('ARL-DEP-001'); ctx.checked('ARL-DEP-002'); ctx.checked('ARL-DEP-003');
+  ctx.checked('ARL-DEP-001'); ctx.checked('ARL-DEP-002'); ctx.checked('ARL-DEP-003'); ctx.checked('ARL-DEP-004');
   const packageFiles=ctx.inventory.files.filter((f)=>path.basename(f)==='package.json');
   for(const file of packageFiles){
     ctx.technologies.add('Node.js'); const pkg=readJsonSafe(file); if(!pkg)continue;
@@ -502,6 +516,60 @@ function runDependencyChecks(ctx){
   if(ctx.inventory.files.some((f)=>/\.dart$/i.test(f)))ctx.technologies.add('Dart');
   if(ctx.inventory.files.some((f)=>/\.sql$/i.test(f)))ctx.technologies.add('SQL');
   if(ctx.inventory.files.some((f)=>/\.swift$/i.test(f)))ctx.technologies.add('Swift');
+
+  let rawAssessment;
+  try{
+    rawAssessment=assessLockedDependencies(ctx.root,{
+      advisoryDatabase:ctx.options.advisoryDatabase||null,
+      maxAgeDays:ctx.options.vulnerabilityMaxAgeDays,
+    });
+  }catch(error){
+    ctx.dependencyVulnerabilityAssessment={
+      status:'inconclusive-intelligence-error',
+      ecosystem:'unknown',
+      lockedDependenciesExamined:0,
+      intelligence:null,
+      limitation:cleanMetadata(`Dependency vulnerability assessment could not complete: ${error.message}`,500),
+      findingsObserved:0,
+      matchesNeedingSeverityReview:[],
+    };
+    return;
+  }
+
+  const assessment=dependencyAssessmentToInspectorEvidence(rawAssessment);
+  const severityReview=[];
+
+  for(const match of assessment.findings){
+    if(!match.severity){
+      severityReview.push({
+        advisoryId:match.evidence.advisoryId,
+        ecosystem:match.evidence.ecosystem,
+        package:match.evidence.package,
+        installedVersion:match.evidence.installedVersion,
+        fixedVersion:match.evidence.fixedVersion,
+        fact:match.evidence.fact,
+      });
+      continue;
+    }
+
+    ctx.add('ARL-DEP-004',[match.evidence],{
+      severity:match.severity,
+      confidence:match.confidence,
+      remediation:match.evidence.fixedVersion
+        ? `Update ${match.evidence.package} from ${match.evidence.installedVersion} to ${match.evidence.fixedVersion} or another reviewed non-affected version, regenerate the lockfile, run compatibility tests, then rerun the Inspector with the same or fresher vulnerability intelligence and confirm ${match.evidence.advisoryId} no longer matches.`
+        : undefined,
+    });
+  }
+
+  ctx.dependencyVulnerabilityAssessment={
+    status:assessment.status,
+    ecosystem:assessment.ecosystem,
+    lockedDependenciesExamined:assessment.lockedDependenciesExamined,
+    intelligence:assessment.intelligence,
+    limitation:assessment.limitation,
+    findingsObserved:assessment.findings.filter((item)=>Boolean(item.severity)).length,
+    matchesNeedingSeverityReview:severityReview.slice(0,100),
+  };
 }
 
 function runDockerChecks(ctx){
@@ -951,7 +1019,7 @@ function parseArgs(argv){
   const args={command:argv[0]||'help',positionals:[],includePaths:false,authorised:false};
   for(let i=1;i<argv.length;i++){
     const item=argv[i];
-    if(item==='--out')args.out=argv[++i]; else if(item==='--upload')args.upload=argv[++i]; else if(item==='--token')args.token=argv[++i]; else if(item==='--key')args.key=argv[++i]; else if(item==='--include-paths')args.includePaths=true; else if(item==='--authorised')args.authorised=true; else if(item==='--environment')args.environment=argv[++i]; else if(item==='--sarif')args.sarif=argv[++i]; else if(item==='--fail-on')args.failOn=argv[++i]; else args.positionals.push(item);
+    if(item==='--out')args.out=argv[++i]; else if(item==='--upload')args.upload=argv[++i]; else if(item==='--token')args.token=argv[++i]; else if(item==='--key')args.key=argv[++i]; else if(item==='--include-paths')args.includePaths=true; else if(item==='--authorised')args.authorised=true; else if(item==='--environment')args.environment=argv[++i]; else if(item==='--sarif')args.sarif=argv[++i]; else if(item==='--fail-on')args.failOn=argv[++i]; else if(item==='--vuln-db')args.vulnDb=argv[++i]; else args.positionals.push(item);
   }return args;
 }
 
@@ -979,7 +1047,7 @@ async function main(){
   }
   if(!args.authorised)throw new Error('Inspection requires explicit authorisation. Re-run with --authorised after confirming you own or are authorised to inspect the target.');
   const root=args.positionals[0]||'.';const privateKeyPem=args.key?fs.readFileSync(path.resolve(args.key),'utf8'):null;
-  const bundle=await scanRepository(root,{includePaths:args.includePaths,authorised:true,environment:args.environment,privateKeyPem});
+  const bundle=await scanRepository(root,{includePaths:args.includePaths,authorised:true,environment:args.environment,privateKeyPem,advisoryDatabase:args.vulnDb?path.resolve(args.vulnDb):null});
   const out=path.resolve(args.out||`agentrisk-inspection-${Date.now()}.json`);fs.writeFileSync(out,JSON.stringify(bundle,null,2),{mode:0o600});
   if(args.sarif){const sarifPath=path.resolve(args.sarif);fs.writeFileSync(sarifPath,JSON.stringify(toSarif(bundle),null,2));console.log(`SARIF output: ${sarifPath}`);}
   printSummary(bundle);console.log(`\nEvidence bundle: ${out}`);

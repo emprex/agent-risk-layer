@@ -374,6 +374,18 @@
       ]
     },
     {
+      "id": "ARL-DEP-004",
+      "title": "Known vulnerable locked dependency",
+      "severity": "info",
+      "category": "Supply chain",
+      "summary": "A locked dependency version matched vulnerability intelligence explicitly supplied to the Inspector.",
+      "remediation": "Update the dependency outside the affected range, regenerate the lockfile, run compatibility tests, then rerun the Inspector with the same or fresher vulnerability intelligence and confirm the advisory no longer matches.",
+      "frameworks": [
+        "OWASP LLM03 Supply Chain",
+        "NIST SSDF"
+      ]
+    },
+    {
       "id": "ARL-REPO-001",
       "title": "Security policy is missing",
       "severity": "low",
