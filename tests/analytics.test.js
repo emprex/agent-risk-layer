@@ -27,3 +27,15 @@ test('analytics parameters are bounded to primitive non-sensitive metadata', () 
   assert.match(source, /slice\(0, 100\)/);
   assert.match(source, /\['string', 'number', 'boolean'\]/);
 });
+
+test('ARL17K attribution is allowlisted and follows the consent-gated funnel', () => {
+  assert.match(source, /ALLOWED_JOURNEY_SOURCES = new Set\(\['arl17k'\]\)/);
+  assert.match(source, /JOURNEY_SOURCE_KEY = 'arl_journey_source'/);
+  assert.match(source, /params\.get\('from'\)/);
+  assert.match(source, /referrerPath\(\) === '\/arl17k\.html'/);
+  assert.match(source, /assessment_start', \{ entry_source: entrySource \}/);
+  assert.match(source, /assessment_complete', \{ entry_source: entrySource \}/);
+  assert.match(source, /begin_checkout', \{ plan: planFromElement\(target\), entry_source: entrySource \}/);
+  assert.match(source, /purchase', \{ source: 'stripe_checkout', entry_source: captureJourneySource\(\) \}/);
+  assert.doesNotMatch(source, /sessionStorage\.setItem\([^\n]*location\.search/);
+});
