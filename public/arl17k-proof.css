@@ -13,7 +13,7 @@
   align-items: center;
   width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
-  padding: clamp(42px, 6vw, 72px) 0 clamp(34px, 5vw, 58px);
+  padding: clamp(48px, 6vw, 76px) 0 clamp(34px, 5vw, 58px);
 }
 
 .arl17k-hero-copy {
@@ -227,7 +227,7 @@
     grid-template-columns: 1fr;
     width: min(720px, calc(100% - 36px));
     gap: 32px;
-    padding-top: 36px;
+    padding-top: 38px;
   }
 
   .arl17k-hero h1 {
@@ -267,7 +267,7 @@
 @media (max-width: 560px) {
   .arl17k-hero {
     width: min(100% - 28px, 720px);
-    padding: 28px 0 34px;
+    padding: 30px 0 34px;
   }
 
   .arl17k-hero h1 {
