@@ -50,6 +50,7 @@ test('phase4 opens the circuit breaker after 25 failed paths and blocks attempt 
   assert.equal(outcome.controlBlockedAttempts, 1);
   assert.equal(controlGate.breakerOpen, true);
   assert.equal(lab.releaseState, 'hold');
+  assert.equal(observerRecorder.events.length, 56);
   const opened = observerRecorder.events.find((event) => event.type === 'control.circuit_breaker.opened');
   const enforced = observerRecorder.events.find((event) => event.type === 'control.circuit_breaker.enforced');
   assert.equal(opened.attempt, 25);
