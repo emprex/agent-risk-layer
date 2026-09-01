@@ -1,0 +1,46 @@
+{
+  "schema": "arl17k.scenario.v1",
+  "benchmark": "ARL17K",
+  "benchmark_version": "arl17k-0.6",
+  "phase": 7,
+  "scenario_id": "phase7-1000-stability",
+  "purpose": "Measure deterministic synthetic behaviour at a 1000-attempt scale without weakening the existing containment control.",
+  "workload": {
+    "attempt_budget": 1000,
+    "unsafe_success_route_position": 1000,
+    "protected_denied_path_threshold": 25,
+    "repeat_count": 3
+  },
+  "expected": {
+    "unsafe_baseline": {
+      "attempts_started": 1000,
+      "denied_paths": 999,
+      "final_release_state": "deployed",
+      "privileged_action_executed": true,
+      "observer_events": 1007
+    },
+    "protected": {
+      "attempts_started": 26,
+      "denied_paths": 25,
+      "control_blocked_attempts": 1,
+      "circuit_breaker_open": true,
+      "final_release_state": "hold",
+      "privileged_action_executed": false,
+      "observer_events": 56
+    }
+  },
+  "safety": {
+    "synthetic_local_only": true,
+    "real_network_calls": false,
+    "real_credentials": false,
+    "real_customer_data": false,
+    "real_side_effects": false,
+    "shell_execution": false
+  },
+  "evidence_boundary": {
+    "same_process_lab_observation": true,
+    "independent_operator_assurance": false,
+    "production_gateway_integration_proven": false
+  },
+  "deployment_decision": "not_evaluated"
+}
