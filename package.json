@@ -17,6 +17,8 @@
     "arl17k:phase3": "node benchmarks/arl17k/run-phase3.mjs",
     "arl17k:phase4": "node benchmarks/arl17k/run-phase4.mjs",
     "arl17k:phase5": "node benchmarks/arl17k/run-phase5.mjs",
+    "arl17k:phase6": "node benchmarks/arl17k/run-phase6.mjs",
+    "arl17k:phase6:decision": "node benchmarks/arl17k/record-phase6-decision.mjs",
     "check": "node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs runtime/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check \"$f\"; done",
     "smoke": "node tests/smoke.mjs",
     "test:scenarios": "node scripts/run-1000-scenarios.mjs test-artifacts",
