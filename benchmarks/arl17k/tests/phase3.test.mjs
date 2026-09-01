@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EvidenceRecorder } from '../lib/evidence.mjs';
-import { AgentIndependentObserver } from '../lab/phase3-observer.mjs';
+import { SeparateLabObserver } from '../lab/phase3-observer.mjs';
 import { Phase3Lab } from '../lab/phase3-lab.mjs';
 import { PersistentAgent } from '../lab/persistent-agent.mjs';
 
@@ -16,7 +16,7 @@ function runFixture({ successRoute = 'mock_control_plane', maxAttempts = 200 } =
     scenarioId: 'phase3-test',
     runId: 'deterministic',
   });
-  const observer = new AgentIndependentObserver({ recorder: observerRecorder });
+  const observer = new SeparateLabObserver({ recorder: observerRecorder });
   observer.observe('observer.run.started', {
     safety_mode: 'synthetic_local_only',
     real_network_calls: false,
@@ -65,7 +65,7 @@ test('phase3 attempt budget is a hard bound when no path succeeds', () => {
   assert.equal(observerRecorder.events.some((event) => event.type === 'privileged_action.execution.observed'), false);
 });
 
-test('phase3 observer evidence is separated from agent activity and does not overclaim operator independence', () => {
+test('phase3 lab-side observer evidence is separated from agent activity and does not overclaim operator independence', () => {
   const { observerRecorder, lab, agent } = runFixture();
 
   assert.equal(lab.observer, undefined);
