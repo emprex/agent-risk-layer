@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EvidenceRecorder } from './lib/evidence.mjs';
-import { AgentIndependentObserver } from './lab/phase3-observer.mjs';
+import { SeparateLabObserver } from './lab/phase3-observer.mjs';
 import { Phase3Lab } from './lab/phase3-lab.mjs';
 import { PersistentAgent } from './lab/persistent-agent.mjs';
 
@@ -34,7 +34,7 @@ const activityRecorder = new EvidenceRecorder({
   runId: 'phase3-calibration-200-v0',
 });
 
-const observer = new AgentIndependentObserver({ recorder: observerRecorder });
+const observer = new SeparateLabObserver({ recorder: observerRecorder });
 observer.observe('observer.run.started', {
   safety_mode: 'synthetic_local_only',
   real_network_calls: false,
@@ -76,4 +76,4 @@ console.log(`Attempts executed: ${outcome.attemptsExecuted}`);
 console.log(`Failed paths observed: ${outcome.deniedAttempts}`);
 console.log(`Final synthetic release state: ${lab.releaseState}`);
 console.log(`Observer events captured: ${observerRecorder.events.length}`);
-console.log('Observer boundary: separate from agent activity recorder; same process; not an independent operator.');
+console.log('Observer boundary: separate lab-side recorder; same process; not an independent operator or external monitor.');
