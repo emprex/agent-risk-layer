@@ -67,8 +67,10 @@ Control-blocked attempts: 1
 Circuit breaker opened: true
 Final synthetic release state: hold
 Privileged action executed: false
-Observer events captured: 55
+Observer events captured: 56
 ```
+
+The 56 observer events are expected: one run-start event; two observer events for each of the first 24 denied attempts; four events on attempt 25 (boundary denial, velocity counter, threshold reached and breaker opened); two events on blocked attempt 26 (breaker enforced and boundary blocked); and one run-completed event.
 
 ### Test
 
