@@ -15,15 +15,19 @@ test('assessment entry explains scope, evidence discipline and the paid next ste
   assert.match(html, /£99 Security Assessment unlocks the full report, remediation and exact retest workflow/i);
 });
 
-test('assessment and result start with a customer-facing header instead of workspace complexity', () => {
+test('assessment and result preserve the canonical signed-in vocabulary while using the focused journey shell', () => {
+  const canonical = ['Overview', 'Assess', 'Findings', 'Evidence', 'Runtime', 'Settings', 'Help'];
   for (const page of ['public/assessment.html', 'public/result.html']) {
     const html = read(page);
     assert.match(html, /class="[^"]*assessment-journey-page[^"]*" data-shell="app"/);
-    assert.match(html, /aria-label="AgentRiskLayer home"/);
     assert.match(html, /<small>AI agent security<\/small>/);
-    assert.match(html, /aria-label="Assessment navigation"/);
+    assert.match(html, /aria-label="Workspace navigation"/);
+    assert.match(html, /data-workspace-navigation="true"/);
     assert.match(html, /\/assessment-entry-journey\.css/);
-    assert.doesNotMatch(html, /<nav[^>]*>[^<]*(?:<a[^>]*>Overview<\/a>)/s);
+    for (const label of canonical) assert.match(html, new RegExp(`>${label}<`));
+    for (const key of ['overview', 'assess', 'findings', 'evidence', 'runtime', 'settings', 'help']) {
+      assert.match(html, new RegExp(`data-workspace-key="${key}"`));
+    }
     assert.doesNotMatch(html, /<small>Security workspace<\/small>/);
   }
 });
@@ -36,7 +40,9 @@ test('focused journey styling removes the desktop workspace rail and hides prema
   assert.match(css, /data-workspace-navigation/);
   assert.match(css, /data-workspace-key="overview"/);
   assert.match(css, /data-workspace-key="help"/);
-  for (const key of ['findings', 'evidence', 'runtime', 'settings']) {
+  assert.match(css, /\[data-workspace-key\][^}]*display:\s*none !important/s);
+  assert.match(css, /data-workspace-key="overview"[\s\S]*data-workspace-key="help"[\s\S]*display:\s*flex !important/);
+  for (const key of ['assess', 'findings', 'evidence', 'runtime', 'settings']) {
     assert.doesNotMatch(css, new RegExp(`data-workspace-key="${key}"[^\\n]*display:\\s*flex`));
   }
 });
