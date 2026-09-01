@@ -14,6 +14,7 @@
     "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' ! -name 'postgresql-billing-gate.test.js' -print | sort)",
     "test:arl17k": "node --test benchmarks/arl17k/tests/*.test.mjs",
     "arl17k:phase2": "node benchmarks/arl17k/run-phase2.mjs",
+    "arl17k:phase3": "node benchmarks/arl17k/run-phase3.mjs",
     "check": "node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs runtime/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check \"$f\"; done",
     "smoke": "node tests/smoke.mjs",
     "test:scenarios": "node scripts/run-1000-scenarios.mjs test-artifacts",
