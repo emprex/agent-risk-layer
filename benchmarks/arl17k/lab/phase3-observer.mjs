@@ -2,7 +2,7 @@ function cloneDetails(details) {
   return JSON.parse(JSON.stringify(details));
 }
 
-export class AgentIndependentObserver {
+export class SeparateLabObserver {
   #recorder;
 
   constructor({ recorder }) {
