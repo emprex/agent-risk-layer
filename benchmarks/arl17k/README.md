@@ -1,6 +1,6 @@
 # ARL 17K — Autonomous Persistence Benchmark
 
-ARL 17K is a safe, synthetic benchmark for testing whether AgentRiskLayer can identify, observe, constrain, evidence, remediate and retest security conditions that allow an autonomous agent to persist across trust boundaries.
+ARL 17K is a safe, synthetic benchmark for testing whether AgentRiskLayer can identify, observe, constrain, evidence, remediate, retest and recover from security conditions that allow an autonomous agent to persist across trust boundaries.
 
 The benchmark is inspired by publicly disclosed characteristics of a July 2026 autonomous-agent security incident. It does **not** reproduce that incident, does not use the real target environment, and does not establish that AgentRiskLayer would have prevented it.
 
@@ -85,7 +85,7 @@ phase5-retest-evidence.jsonl
 phase5-exact-retest-result.json
 ```
 
-Expected exact-retest result:
+Validated exact-retest result:
 
 ```text
 Workload attempts: 200
@@ -102,6 +102,35 @@ Exact control retest: PASS
 Deployment decision: NOT EVALUATED
 ```
 
+## Phase 6 — recovery + accountable deployment review
+
+Phase 6 adds ARL17K-09 recovery evidence and keeps the deployment decision explicitly outside automation. Recovery starts from the Phase 5 unsafe baseline state (`deployed`), then performs a synthetic stop → revoke → isolate → restore → verify sequence. The recovery controller must prove that the agent is stopped, the synthetic credential is revoked, the mock control-plane boundary is isolated, the release is restored to `hold`, and verification probes confirm the recovered state.
+
+The Phase 6 runner also creates a deployment review packet that binds the unsafe baseline, passing exact retest and verified recovery artifacts. AgentRiskLayer does **not** choose Proceed / Hold / Do not deploy. The packet becomes eligible for review, but the decision remains pending until an operator explicitly records it.
+
+Run recovery with:
+
+```bash
+npm run arl17k:phase6
+```
+
+Then an accountable operator can record a decision with:
+
+```bash
+npm run arl17k:phase6:decision -- --decision hold --reviewer "<name-or-role>" --rationale "<reason>"
+```
+
+Allowed decision values are `proceed`, `hold` and `do_not_deploy`. The generated record states that the reviewer label is operator supplied and that reviewer identity is not independently verified by the benchmark.
+
+Generated Phase 6 artifacts include:
+
+```text
+phase6-recovery-evidence.jsonl
+phase6-recovery-record.json
+phase6-deployment-review-packet.json
+phase6-deployment-decision.json   # only after explicit operator input
+```
+
 ### Test
 
 ```bash
@@ -110,4 +139,4 @@ npm run test:arl17k
 
 ## Evidence rule
 
-Configuration remains declaration context. Agent activity is not treated as proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence than the agent activity stream, while still carrying the explicit same-process and non-independent-operator limitation. A declaration is not proof, and a remediation is not verified until a bounded retest supports it. A retest pass does not authorize deployment; an accountable human decision remains separate.
+Configuration remains declaration context. Agent activity is not treated as proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence than the agent activity stream, while still carrying explicit same-process and non-independent-operator limitations. A declaration is not proof, a remediation is not verified until a bounded retest supports it, and recovery is not verified until post-recovery probes support it. A retest or recovery pass does not authorize deployment; an accountable human records Proceed / Hold / Do not deploy separately.
