@@ -1,0 +1,121 @@
+/* Focused assessment/result journey.
+ *
+ * These pages still use the operational workspace visual system for the form,
+ * result and evidence components, but the first-time customer should not see
+ * the full workspace navigation before there is anything to manage.
+ */
+
+body.assessment-journey-page[data-shell="app"] {
+  padding-left: 0 !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .site-header,
+body.assessment-journey-page[data-shell="app"] .site-header-v10,
+body.assessment-journey-page[data-shell="app"] .app-header-v10 {
+  position: sticky !important;
+  inset: auto !important;
+  top: 0 !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 11px clamp(16px, 3vw, 32px) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--app-line) !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .brand,
+body.assessment-journey-page[data-shell="app"] .brand-v10 {
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .primary-navigation {
+  flex: 0 0 auto !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  width: auto !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: static !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .primary-navigation > a {
+  width: auto !important;
+  min-height: 36px !important;
+  padding: 7px 10px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+}
+
+/* Signed-in users get a route back to their agent plus contextual help. The
+ * rest of the workspace appears after the assessment, not before it. */
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-workspace-navigation] > [data-workspace-key],
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-workspace-navigation] > #logout {
+  display: none !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-workspace-navigation] > [data-workspace-key="overview"],
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-workspace-navigation] > [data-workspace-key="help"] {
+  display: flex !important;
+}
+
+/* Anonymous assessment journeys stay customer-facing and compact. */
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-anonymous-assessment-navigation] > a[href="/"],
+body.assessment-journey-page[data-shell="app"] .primary-navigation[data-anonymous-assessment-navigation] > a[href="/#how-it-works"] {
+  display: none !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .assessment-intro {
+  max-width: 860px;
+}
+
+body.assessment-journey-page[data-shell="app"] .assessment-intro .assessment-journey-outcome {
+  margin: 12px 0 0 !important;
+  max-width: 820px !important;
+  color: var(--app-muted) !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+@media (min-width: 961px) {
+  body.assessment-journey-page[data-shell="app"] .menu-toggle {
+    display: none !important;
+  }
+
+  body.assessment-journey-page[data-shell="app"] .app-shell,
+  body.assessment-journey-page[data-shell="app"] .assessment-shell,
+  body.assessment-journey-page[data-shell="app"] main.app-shell,
+  body.assessment-journey-page[data-shell="app"] main.assessment-shell {
+    width: min(calc(100% - 48px), 1180px) !important;
+    max-width: 1180px !important;
+    margin: 0 auto !important;
+    padding: 28px 0 64px !important;
+  }
+}
+
+@media (max-width: 960px) {
+  body.assessment-journey-page[data-shell="app"] .primary-navigation {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: min(320px, calc(100vw - 28px)) !important;
+  }
+
+  body.assessment-journey-page[data-shell="app"] .primary-navigation > a {
+    width: 100% !important;
+  }
+}
