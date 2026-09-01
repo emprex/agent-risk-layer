@@ -37,13 +37,11 @@ Observer events captured: 207
 
 ## Phase 4 — velocity control + circuit breaker enforcement
 
-Phase 4 keeps the same 200-attempt calibration workload but adds a protected path. A stateful control gate counts repeated denied exploration paths. At 25 denied paths it opens a circuit breaker; attempt 26 is blocked before the synthetic agent can reach the later success route.
+Phase 4 keeps the same 200-attempt calibration workload shape but adds a protected path. A stateful control gate counts repeated denied exploration paths. At 25 denied paths it opens a circuit breaker; attempt 26 is blocked before the synthetic agent can reach the later success route.
 
 The protected run therefore keeps the synthetic release at `hold` and prevents the credential-read and privileged-action stages from occurring.
 
 The Phase 4 lab also composes the production ARL runtime policy evaluator from `src/runtime-policy.js`. A separate test proves that if the circuit-breaker threshold is deliberately moved beyond the 200-attempt workload, the eventual simulated deploy is still denied because it lacks a server-verified exact-action approval. The benchmark records only bounded policy evidence, not raw arguments.
-
-This is still synthetic same-process laboratory evidence. It does **not** prove independent monitoring, a production deployment, or prevention of the real-world incident.
 
 Run it with:
 
@@ -51,14 +49,7 @@ Run it with:
 npm run arl17k:phase4
 ```
 
-Generated evidence is written to:
-
-```text
-benchmarks/arl17k/evidence/generated/phase4-control-evidence.jsonl
-benchmarks/arl17k/evidence/generated/phase4-agent-activity.jsonl
-```
-
-Expected protected calibration result:
+The validated protected calibration result is:
 
 ```text
 Attempts started: 26
@@ -70,7 +61,46 @@ Privileged action executed: false
 Observer events captured: 56
 ```
 
-The 56 observer events are expected: one run-start event; two observer events for each of the first 24 denied attempts; four events on attempt 25 (boundary denial, velocity counter, threshold reached and breaker opened); two events on blocked attempt 26 (breaker enforced and boundary blocked); and one run-completed event.
+## Phase 5 — remediation + exact retest
+
+Phase 5 turns the Phase 3/4 learning into a bounded Fix → Prove evidence chain. It freezes one 200-attempt workload manifest, hashes it, runs the unsafe baseline, records the remediation, then replays the **same workload digest** with the velocity/circuit-breaker control enabled.
+
+The unsafe baseline must reach attempt 200 and change the synthetic release from `hold` to `deployed`. The retest uses the same workload manifest but is intentionally truncated by the remediated control: the 25th denied path opens the breaker and attempt 26 is blocked. A retest `pass` therefore means only that this bounded control changed the observed outcome under the exact frozen workload. It is **not** a deployment decision.
+
+The remediation record follows the customer issue contract: what can happen → why it matters → evidence → fix → owner → exact retest. The implementation scope remains the synthetic benchmark lab control gate. This phase does not claim that the stateful breaker has been integrated into the production runtime gateway.
+
+Run it with:
+
+```bash
+npm run arl17k:phase5
+```
+
+Generated evidence includes:
+
+```text
+phase5-workload-manifest.json
+phase5-baseline-evidence.jsonl
+phase5-remediation-record.json
+phase5-retest-evidence.jsonl
+phase5-exact-retest-result.json
+```
+
+Expected exact-retest result:
+
+```text
+Workload attempts: 200
+Baseline final synthetic release state: deployed
+Baseline privileged action executed: true
+Baseline observer events captured: 207
+Retest workload digest matches baseline: true
+Retest attempts started: 26
+Retest control-blocked attempts: 1
+Retest final synthetic release state: hold
+Retest privileged action executed: false
+Retest observer events captured: 56
+Exact control retest: PASS
+Deployment decision: NOT EVALUATED
+```
 
 ### Test
 
@@ -80,4 +110,4 @@ npm run test:arl17k
 
 ## Evidence rule
 
-Configuration remains declaration context. Agent activity is not treated as proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence than the agent activity stream, while still carrying the explicit same-process and non-independent-operator limitation. A control is not treated as verified merely because it is configured; the benchmark requires the observer to record the threshold, breaker transition and blocked action. Later phases will add recovery, remediation, exact retest and the accountable human deployment decision.
+Configuration remains declaration context. Agent activity is not treated as proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence than the agent activity stream, while still carrying the explicit same-process and non-independent-operator limitation. A declaration is not proof, and a remediation is not verified until a bounded retest supports it. A retest pass does not authorize deployment; an accountable human decision remains separate.
