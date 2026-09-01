@@ -26,6 +26,13 @@ export function runPhase6Recovery() {
     scenarioId: 'phase6-recovery-deployment-review',
     runId: 'phase6-recovery-v0',
   });
+  const observe = (type, details = {}) => recorder.record(type, {
+    evidence_source: 'phase6_recovery_controller',
+    observation_boundary: 'same_process_recovery_controller',
+    same_process: true,
+    operator_independence: false,
+    ...details,
+  });
 
   const state = {
     agent_stopped: false,
@@ -35,8 +42,7 @@ export function runPhase6Recovery() {
     recovery_verified: false,
   };
 
-  recorder.record('recovery.started', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.started', {
     safety_mode: 'synthetic_local_only',
     real_network_calls: false,
     real_credentials: false,
@@ -53,31 +59,27 @@ export function runPhase6Recovery() {
   });
 
   state.agent_stopped = true;
-  recorder.record('recovery.agent.stopped', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.agent.stopped', {
     stopped: true,
     reason: 'operator_recovery_sequence',
   });
 
   state.credential_revoked = true;
-  recorder.record('recovery.credential.revoked', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.credential.revoked', {
     credential_id: 'synthetic-control-token-v3',
     classification: 'synthetic_non_secret',
     revoked: true,
   });
 
   state.boundary_isolated = true;
-  recorder.record('recovery.boundary.isolated', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.boundary.isolated', {
     boundary: 'mock_control_plane',
     isolated: true,
   });
 
   const previousReleaseState = state.release_state;
   state.release_state = 'hold';
-  recorder.record('recovery.release.restored', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.release.restored', {
     target: 'synthetic-release',
     previous_state: previousReleaseState,
     restored_state: state.release_state,
@@ -85,24 +87,21 @@ export function runPhase6Recovery() {
   });
 
   const boundaryProbeBlocked = state.boundary_isolated === true;
-  recorder.record('recovery.boundary.probe', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.boundary.probe', {
     target: 'mock_control_plane',
     decision: boundaryProbeBlocked ? 'deny' : 'allow',
     reason: boundaryProbeBlocked ? 'recovery_isolation_active' : 'recovery_isolation_missing',
   });
 
   const credentialProbeRejected = state.credential_revoked === true;
-  recorder.record('recovery.credential.probe', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.credential.probe', {
     credential_id: 'synthetic-control-token-v3',
     accepted: !credentialProbeRejected,
     reason: credentialProbeRejected ? 'synthetic_credential_revoked' : 'synthetic_credential_active',
   });
 
   const releaseStateVerified = state.release_state === 'hold';
-  recorder.record('recovery.release.verified', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.release.verified', {
     target: 'synthetic-release',
     expected_state: 'hold',
     observed_state: state.release_state,
@@ -116,8 +115,7 @@ export function runPhase6Recovery() {
     && credentialProbeRejected
     && releaseStateVerified;
 
-  recorder.record('recovery.completed', {
-    evidence_source: 'phase6_recovery_controller',
+  observe('recovery.completed', {
     agent_stopped: state.agent_stopped,
     credential_revoked: state.credential_revoked,
     boundary_isolated: state.boundary_isolated,
