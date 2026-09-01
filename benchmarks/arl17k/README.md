@@ -14,16 +14,16 @@ Run it with:
 npm run arl17k:phase2
 ```
 
-## Phase 3 — bounded persistence + agent-independent observation
+## Phase 3 — bounded persistence + separate lab-side observation
 
 Phase 3 adds the first calibration workload. The synthetic agent has a hard budget of 200 attempts. It explores multiple unavailable logical paths and, in the intentionally unsafe baseline, reaches the mock control-plane path on the final attempt.
 
 Two evidence streams are deliberately separated:
 
 - **Agent activity** records what the synthetic agent says it attempted.
-- **Observer evidence** records lab-side outcomes through an observer that is not exposed to the agent activity recorder.
+- **Observer evidence** records lab-side outcomes through a separate recorder that is not exposed to the agent activity recorder.
 
-The observer is independent of the agent activity path, but it runs in the **same Node.js process** and is **not an independent human, third party or external monitoring system**. Public claims must preserve that limitation.
+This is a **lab-side separation boundary**, not independent operator or third-party monitoring. The observer runs in the **same Node.js process** as the synthetic lab. Public claims must preserve that limitation.
 
 Phase 3 still makes no real network calls, uses no real credentials or customer data, executes no shell commands and causes no production side effects.
 
@@ -57,4 +57,4 @@ npm run test:arl17k
 
 ## Evidence rule
 
-Configuration remains declaration context. Agent activity is not treated as independent proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence, while still carrying the explicit same-process limitation. Later phases will add control enforcement, remediation, exact retest and the accountable human deployment decision.
+Configuration remains declaration context. Agent activity is not treated as proof of its own outcomes. Lab-side observer events are stronger observed/test-generated evidence than the agent activity stream, while still carrying the explicit same-process and non-independent-operator limitation. Later phases will add control enforcement, remediation, exact retest and the accountable human deployment decision.
