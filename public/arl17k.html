@@ -7,10 +7,10 @@
   <meta property="og:title" content="The 17,600-Action Agent Security Benchmark | AgentRiskLayer">
   <meta property="og:description" content="A safe synthetic benchmark showing how persistent autonomous behaviour can connect ordinary weaknesses—and how a bounded control changed the tested outcome.">
   <meta property="og:type" content="website">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/customer-journey-ux.css"><link rel="stylesheet" href="/analytics.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/customer-journey-ux.css"><link rel="stylesheet" href="/arl17k-proof.css"><link rel="stylesheet" href="/analytics.css">
   <script type="module" src="/shared.js"></script><script type="module" src="/site-shell.js"></script>
 </head>
-<body class="trust-editorial" data-shell="public">
+<body class="trust-editorial arl17k-proof-page" data-shell="public">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="site-header site-header-v10" data-site-header>
     <a class="brand brand-v10" href="/" aria-label="AgentRiskLayer home"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a><button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
@@ -18,19 +18,37 @@
   </header>
 
   <main id="main-content">
-    <section class="v10-page-hero trust-hero-v10">
-      <div>
-        <span class="eyebrow">ARL17K · public benchmark proof</span>
+    <section class="arl17k-hero">
+      <div class="arl17k-hero-copy">
+        <span class="eyebrow">ARL17K · validated public benchmark</span>
         <h1>Could your AI agent keep trying until an ordinary weakness becomes a consequential action?</h1>
         <p>We built a safe synthetic 17,600-attempt workload to test that question. The intentionally unsafe baseline kept exploring until the final route executed a simulated privileged action. The protected run used the same workload but was contained at attempt 26.</p>
         <div class="button-row"><a class="button primary button-xl" href="/assessment.html">Assess one agent free <span aria-hidden="true">→</span></a><a class="button ghost button-xl" href="#evidence">See the evidence</a></div>
       </div>
-      <aside class="trust-summary-card">
+      <aside class="arl17k-outcome-card" aria-label="Validated ARL17K benchmark outcome">
         <span>Validated benchmark outcome</span>
-        <strong>17,600 → contained at 26</strong>
-        <ul><li>Unsafe baseline: simulated privileged action executed</li><li>Protected run: circuit breaker opened after 25 denied paths</li><li>Attempt 26 blocked before credential access</li><li>Protected release state remained <code>hold</code></li><li>41 / 41 ARL17K tests passed</li></ul>
-        <small>Synthetic same-process benchmark evidence. Not independent or production assurance.</small>
+        <div class="arl17k-outcome-flow">
+          <div class="arl17k-outcome-metric"><small>Unsafe baseline</small><strong>17,600</strong><span>attempts started</span></div>
+          <span class="arl17k-outcome-arrow" aria-hidden="true">→</span>
+          <div class="arl17k-outcome-metric"><small>Protected replay</small><strong>26</strong><span>contained</span></div>
+        </div>
+        <ul class="arl17k-outcome-list">
+          <li>Unsafe baseline executed one simulated privileged action.</li>
+          <li>Circuit breaker opened after 25 denied paths.</li>
+          <li>Attempt 26 was blocked before credential access.</li>
+          <li>Protected release state remained <code>hold</code>.</li>
+        </ul>
+        <div class="arl17k-outcome-footer"><strong>41 / 41 ARL17K tests passed</strong><small>Synthetic same-process benchmark evidence. Not independent or production assurance.</small></div>
       </aside>
+    </section>
+
+    <section class="arl17k-scope-strip" aria-label="ARL17K benchmark scope">
+      <div class="arl17k-scope-strip-inner">
+        <div><small>Workload</small><strong>Frozen at 17,600 attempts</strong></div>
+        <div><small>Replay</small><strong>Same workload digest</strong></div>
+        <div><small>Control</small><strong>Breaker threshold kept at 25</strong></div>
+        <div><small>Boundary</small><strong>Synthetic local-only evidence</strong></div>
+      </div>
     </section>
 
     <section class="content-section">
