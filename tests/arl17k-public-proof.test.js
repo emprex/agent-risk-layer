@@ -35,6 +35,20 @@ test('ARL17K public proof preserves the evidence boundary and avoids prevention 
   assert.doesNotMatch(html, /ARL stopped 17,600 attacks/i);
 });
 
+test('ARL17K proof uses a compact responsive evidence hierarchy instead of the generic oversized hero', () => {
+  const html = read('public/arl17k.html');
+  const css = read('public/arl17k-proof.css');
+  assert.match(html, /href="\/arl17k-proof\.css"/);
+  assert.match(html, /class="arl17k-hero"/);
+  assert.match(html, /class="arl17k-outcome-flow"/);
+  assert.match(html, /class="arl17k-scope-strip"/);
+  assert.doesNotMatch(html, /class="v10-page-hero trust-hero-v10"/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1\.35fr\) minmax\(330px, \.65fr\)/);
+  assert.match(css, /font-size: clamp\(2\.7rem, 5\.1vw, 4\.85rem\)/);
+  assert.match(css, /@media \(max-width: 900px\)/);
+  assert.match(css, /@media \(max-width: 560px\)/);
+});
+
 test('ARL17K public proof keeps customer-facing script boundaries', () => {
   const html = read('public/arl17k.html');
   assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)[^>]*>/i);
