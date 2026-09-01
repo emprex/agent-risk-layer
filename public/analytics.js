@@ -1,6 +1,8 @@
 const MEASUREMENT_ID = 'G-T1V035EGTB';
 const CONSENT_KEY = 'agentrisklayer_analytics_consent';
 const ONCE_PREFIX = 'arl_analytics_once:';
+const JOURNEY_SOURCE_KEY = 'arl_journey_source';
+const ALLOWED_JOURNEY_SOURCES = new Set(['arl17k']);
 let loaded = false;
 
 window.dataLayer = window.dataLayer || [];
@@ -141,13 +143,27 @@ function referrerPath() {
   }
 }
 
+function captureJourneySource(params = new URLSearchParams(location.search)) {
+  const explicit = String(params.get('from') || '').toLowerCase();
+  if (ALLOWED_JOURNEY_SOURCES.has(explicit)) {
+    storageSet(sessionStorage, JOURNEY_SOURCE_KEY, explicit);
+    return explicit;
+  }
+  if (referrerPath() === '/arl17k.html') {
+    storageSet(sessionStorage, JOURNEY_SOURCE_KEY, 'arl17k');
+    return 'arl17k';
+  }
+  const stored = storageGet(sessionStorage, JOURNEY_SOURCE_KEY);
+  return ALLOWED_JOURNEY_SOURCES.has(stored) ? stored : 'direct_or_other';
+}
+
 function observeConfirmedPurchase() {
   if (currentPath() !== '/success.html') return;
   const root = document.querySelector('#successRoot');
   if (!root) return;
   const check = () => {
     if (!/Payment and fulfilment completed\./i.test(root.textContent || '')) return false;
-    trackOnce('purchase-confirmed', 'purchase', { source: 'stripe_checkout' });
+    trackOnce('purchase-confirmed', 'purchase', { source: 'stripe_checkout', entry_source: captureJourneySource() });
     return true;
   };
   if (check()) return;
@@ -161,23 +177,24 @@ function trackJourneyState() {
   if (consentState() !== 'granted') return;
   const path = currentPath();
   const params = new URLSearchParams(location.search);
+  const entrySource = captureJourneySource(params);
 
   if (path === '/assessment.html') {
-    trackOnce('assessment-start', 'assessment_start');
+    trackOnce('assessment-start', 'assessment_start', { entry_source: entrySource });
   }
 
   if (path === '/result.html' && storageGet(sessionStorage, 'arl_last_assessment')) {
-    trackOnce('assessment-complete', 'assessment_complete');
+    trackOnce('assessment-complete', 'assessment_complete', { entry_source: entrySource });
   }
 
   if (path === '/dashboard.html' && params.get('welcome') === '1') {
-    trackOnce('sign-up-complete', 'sign_up', { method: 'email_password' });
+    trackOnce('sign-up-complete', 'sign_up', { method: 'email_password', entry_source: entrySource });
   } else if (path === '/dashboard.html' && referrerPath() === '/auth.html') {
-    trackOnce('login-complete', 'login', { method: 'email_password' });
+    trackOnce('login-complete', 'login', { method: 'email_password', entry_source: entrySource });
   }
 
   if (path === '/pricing.html') {
-    trackOnce('pricing-view', 'view_pricing');
+    trackOnce('pricing-view', 'view_pricing', { entry_source: entrySource });
   }
 
   observeConfirmedPurchase();
@@ -188,19 +205,20 @@ document.addEventListener('click', event => {
   if (!target) return;
   const text = target.textContent.trim().toLowerCase();
   const href = target.getAttribute('href') || '';
+  const entrySource = currentPath() === '/arl17k.html' ? 'arl17k' : captureJourneySource();
 
   if (target.matches('[data-plan], [data-checkout], #buyPro') ||
       /checkout|subscribe|upgrade|buy|choose plan|get reviewed assessment/.test(text)) {
-    track('begin_checkout', { plan: planFromElement(target) });
+    track('begin_checkout', { plan: planFromElement(target), entry_source: entrySource });
   } else if (/create (free )?account|sign up|register/.test(text) ||
              /auth\.html.*register/.test(href)) {
-    track('sign_up_start');
+    track('sign_up_start', { entry_source: entrySource });
   } else if (/contact|request.*assessment|request.*quote|talk to/.test(text)) {
-    track('generate_lead_start');
+    track('generate_lead_start', { entry_source: entrySource });
   } else if (/sample.*report|download.*report/.test(text + ' ' + href)) {
-    track('sample_report_view');
+    track('sample_report_view', { entry_source: entrySource });
   } else if (/assessment\.html/.test(href)) {
-    track('assessment_cta_click');
+    track('assessment_cta_click', { entry_source: entrySource });
   }
 });
 
@@ -208,12 +226,13 @@ document.addEventListener('submit', event => {
   const form = event.target;
   const id = String(form.id || '').toLowerCase();
   const action = (form.getAttribute('action') || location.pathname).toLowerCase();
+  const entrySource = captureJourneySource();
   if (id === 'registerform' || /register|signup/.test(action)) {
-    track('sign_up_submit');
+    track('sign_up_submit', { entry_source: entrySource });
   } else if (id === 'loginform') {
-    track('login_submit');
+    track('login_submit', { entry_source: entrySource });
   } else if (/contact|lead|quote/.test(action)) {
-    track('generate_lead_submit');
+    track('generate_lead_submit', { entry_source: entrySource });
   }
 });
 
