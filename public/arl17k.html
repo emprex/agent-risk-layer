@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>17,600-Action AI Agent Security Benchmark | AgentRiskLayer</title>
+  <meta name="description" content="See how AgentRiskLayer tested a safe synthetic 17,600-attempt autonomous-agent workload, what the protected run contained, the evidence produced and the limits of the result.">
+  <meta property="og:title" content="The 17,600-Action Agent Security Benchmark | AgentRiskLayer">
+  <meta property="og:description" content="A safe synthetic benchmark showing how persistent autonomous behaviour can connect ordinary weaknesses—and how a bounded control changed the tested outcome.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/customer-journey-ux.css"><link rel="stylesheet" href="/analytics.css">
+  <script type="module" src="/shared.js"></script><script type="module" src="/site-shell.js"></script>
+</head>
+<body class="trust-editorial" data-shell="public">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="site-header site-header-v10" data-site-header>
+    <a class="brand brand-v10" href="/" aria-label="AgentRiskLayer home"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a><button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Primary navigation"><a href="/#product">Product</a><a href="/demo.html">See it work</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a><a href="/help.html">Help</a><a class="nav-signin" data-auth-link href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Check an agent free</a></nav>
+  </header>
+
+  <main id="main-content">
+    <section class="v10-page-hero trust-hero-v10">
+      <div>
+        <span class="eyebrow">ARL17K · public benchmark proof</span>
+        <h1>Could your AI agent keep trying until an ordinary weakness becomes a consequential action?</h1>
+        <p>We built a safe synthetic 17,600-attempt workload to test that question. The intentionally unsafe baseline kept exploring until the final route executed a simulated privileged action. The protected run used the same workload but was contained at attempt 26.</p>
+        <div class="button-row"><a class="button primary button-xl" href="/assessment.html">Assess one agent free <span aria-hidden="true">→</span></a><a class="button ghost button-xl" href="#evidence">See the evidence</a></div>
+      </div>
+      <aside class="trust-summary-card">
+        <span>Validated benchmark outcome</span>
+        <strong>17,600 → contained at 26</strong>
+        <ul><li>Unsafe baseline: simulated privileged action executed</li><li>Protected run: circuit breaker opened after 25 denied paths</li><li>Attempt 26 blocked before credential access</li><li>Protected release state remained <code>hold</code></li><li>41 / 41 ARL17K tests passed</li></ul>
+        <small>Synthetic same-process benchmark evidence. Not independent or production assurance.</small>
+      </aside>
+    </section>
+
+    <section class="content-section">
+      <div class="section-heading v10-split-heading"><div><span class="eyebrow">Why this matters</span><h2>Autonomy changes the risk of ordinary weaknesses.</h2></div><p>A single failed path may be harmless. A persistent agent can keep searching, retrying and crossing reachable trust boundaries until several ordinary weaknesses connect. The benchmark tests whether controls can bound that persistence before a consequential action.</p></div>
+      <div class="v10-question-grid">
+        <article><span>01</span><h3>Unsafe baseline</h3><p>The frozen synthetic workload traversed 17,599 unavailable routes, reached the mock control plane on attempt 17,600 and changed the simulated release from <code>hold</code> to <code>deployed</code>.</p></article>
+        <article><span>02</span><h3>Protected replay</h3><p>The identical workload kept the established denied-path threshold at 25. The breaker opened and attempt 26 was blocked. No synthetic credential was exposed and no privileged action executed.</p></article>
+        <article><span>03</span><h3>What changed</h3><p>The workload did not become easier. The tested control changed the observed outcome. We did not weaken the control merely to force the protected run to reach 17,600 attempts.</p></article>
+        <article><span>04</span><h3>What this proves</h3><p>It proves the bounded synthetic behaviour, evidence lineage and deterministic protected outcome under this frozen benchmark—not production protection or prevention of a real-world incident.</p></article>
+      </div>
+    </section>
+
+    <section class="v10-trust-control-band" id="evidence"><div class="content-section">
+      <div class="section-heading v10-split-heading"><div><span class="eyebrow">Observed evidence</span><h2>The result is tied to a frozen workload and inspectable artifacts.</h2></div><p>Claims below come from the validated Phase 8 run and its SHA-256-bound evidence manifest.</p></div>
+      <div class="data-boundary-table" role="table" aria-label="ARL17K observed benchmark evidence">
+        <div role="row" class="table-head"><span role="columnheader">Measure</span><span role="columnheader">Unsafe baseline</span><span role="columnheader">Protected run</span></div>
+        <div role="row"><strong role="cell">Workload</strong><span role="cell">17,600 attempts</span><span role="cell">Same 17,600-attempt workload digest</span></div>
+        <div role="row"><strong role="cell">Attempts started</strong><span role="cell">17,600</span><span role="cell">26</span></div>
+        <div role="row"><strong role="cell">Denied paths</strong><span role="cell">17,599</span><span role="cell">25</span></div>
+        <div role="row"><strong role="cell">Privileged action</strong><span role="cell">Executed in memory</span><span role="cell">Not executed</span></div>
+        <div role="row"><strong role="cell">Final release state</strong><span role="cell"><code>deployed</code></span><span role="cell"><code>hold</code></span></div>
+        <div role="row"><strong role="cell">Observer events</strong><span role="cell">17,607</span><span role="cell">56</span></div>
+        <div role="row"><strong role="cell">Repeat stability</strong><span role="cell">Deterministic across 2 runs</span><span role="cell">Deterministic across 2 runs</span></div>
+      </div>
+    </div></section>
+
+    <section class="content-section">
+      <div class="section-heading vertical"><span class="eyebrow">Evidence chain</span><h2>We did not jump from a demo to a security claim.</h2><p>ARL17K was built as a staged evidence chain: observe the unsafe condition, add containment, record remediation, replay the exact workload, verify recovery, preserve a human deployment decision and then scale the workload.</p></div>
+      <ol class="evidence-chain-v10">
+        <li><span>1</span><div><strong>Observe</strong><p>Establish the unsafe synthetic route and separate agent activity from lab-side observation.</p></div></li>
+        <li><span>2</span><div><strong>Contain</strong><p>Apply velocity counting, a circuit breaker and exact-action policy fallback.</p></div></li>
+        <li><span>3</span><div><strong>Fix</strong><p>Record the confirmed condition, remediation owner and exact retest.</p></div></li>
+        <li><span>4</span><div><strong>Retest</strong><p>Replay the frozen workload digest and verify the changed outcome.</p></div></li>
+        <li><span>5</span><div><strong>Recover</strong><p>Stop, revoke, isolate, restore and probe the recovered state.</p></div></li>
+        <li><span>6</span><div><strong>Decide</strong><p>An operator separately recorded <code>hold</code>; AgentRiskLayer did not make the deployment decision.</p></div></li>
+        <li><span>7</span><div><strong>Scale</strong><p>Repeat at 1,000 attempts before the final 17,600-attempt workload.</p></div></li>
+        <li><span>8</span><div><strong>Bind</strong><p>Hash the final workload, evidence streams and result into an evidence manifest.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="content-section">
+      <div class="section-heading v10-split-heading"><div><span class="eyebrow">Integrity details</span><h2>Exact artifacts, exact hashes.</h2></div><p>The canonical workload digest hashes compact JSON. The saved workload artifact is pretty-printed, so its file hash is intentionally different.</p></div>
+      <div class="trust-control-grid">
+        <article><span>Canonical workload</span><h3>f0323357…f90f7847</h3><p>SHA-256 of the frozen 17,600-attempt workload in canonical compact form.</p></article>
+        <article><span>Saved workload artifact</span><h3>9ac237db…ddcc929</h3><p>SHA-256 of the pretty-printed workload manifest file.</p></article>
+        <article><span>Unsafe evidence</span><h3>50de5151…e6bf3f9</h3><p>SHA-256 of the 17,607-line baseline observer evidence stream.</p></article>
+        <article><span>Protected evidence</span><h3>6ac7040e…693d19</h3><p>SHA-256 of the 56-line protected observer evidence stream.</p></article>
+        <article><span>Benchmark result</span><h3>30147656…a804c3</h3><p>SHA-256 of the final benchmark result artifact.</p></article>
+        <article><span>Evidence manifest</span><h3>ab480c8e…a5dc2</h3><p>SHA-256 of the final artifact manifest that records the evidence boundary.</p></article>
+      </div>
+      <div class="button-row"><a class="button ghost" href="https://github.com/emprex/agent-risk-layer/tree/main/benchmarks/arl17k">Inspect the benchmark source</a><a class="button ghost" href="/trust.html">Review the evidence model</a></div>
+    </section>
+
+    <section class="v10-limitations-band"><div class="content-section v10-limitations-layout">
+      <div><span class="eyebrow">What we do not claim</span><h2>Evidence before claims.</h2><p>The benchmark is deliberately bounded so a buyer can see what the result means—and where it stops.</p></div>
+      <ul class="plain-check-list warning-list">
+        <li>This is a safe synthetic benchmark inspired by publicly disclosed characteristics of a July 2026 autonomous-agent security incident. It does not reproduce that incident.</li>
+        <li>It does not establish that AgentRiskLayer would have prevented the real-world incident.</li>
+        <li>It does not prove production integration of the stateful circuit breaker or production recovery.</li>
+        <li>The lab-side observer runs in the same process. It is not independent monitoring, third-party assurance or an accredited certification.</li>
+        <li>No real network target, credential, customer data, shell execution or production side effect was used.</li>
+        <li>The Phase 8 PASS is benchmark evidence, not a deployment decision. The earlier operator decision remains <code>hold</code>.</li>
+      </ul>
+    </div></section>
+
+    <section class="content-section v10-final-cta">
+      <div><span class="eyebrow">Now test the agent that actually matters</span><h2>Could your agent keep trying until an ordinary weakness becomes a real action?</h2><p>Start with one agent. Map its access, data, tools, approval and recovery state. Unknowns remain evidence gaps; findings require support.</p></div>
+      <a class="button primary button-xl" href="/assessment.html">Assess one agent free <span aria-hidden="true">→</span></a>
+    </section>
+  </main>
+
+  <footer class="site-footer-v10"><div class="footer-grid"><div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div><div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div><div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/arl17k.html">17,600-action benchmark</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/risk-library.html">Risk library</a><a href="/status.html">System status</a></div><div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div></div><div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div></footer>
+  <script type="module" src="/analytics.js"></script>
+</body>
+</html>
