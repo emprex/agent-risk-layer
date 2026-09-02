@@ -47,6 +47,13 @@ test('focused journey styling removes the desktop workspace rail and hides prema
   }
 });
 
+test('wide desktop keeps the page header and assessment on a coherent visual axis', () => {
+  const css = read('public/assessment-entry-journey.css');
+  assert.match(css, /\.assessment-intro\s*\{[^}]*max-width:\s*940px !important;[^}]*margin-inline:\s*auto !important;[^}]*text-align:\s*left !important;/s);
+  assert.match(css, /\.assessment-assurance\s*\{[^}]*justify-content:\s*flex-start !important;/s);
+  assert.match(css, /@media \(min-width:\s*961px\)[\s\S]*width:\s*min\(calc\(100% - 48px\), 1180px\) !important;[\s\S]*max-width:\s*1180px !important;[\s\S]*margin:\s*0 auto !important;/s);
+});
+
 test('focused journey keeps the existing assessment and result logic intact', () => {
   const assessment = read('public/assessment.html');
   const result = read('public/result.html');
