@@ -80,21 +80,50 @@ body.assessment-journey-page[data-shell="app"] .primary-navigation[data-anonymou
   display: none !important;
 }
 
+/* Keep the explanation and the interactive assessment on one visual axis.
+ * The earlier centred intro floated above a left-aligned form and felt detached. */
 body.assessment-journey-page[data-shell="app"] .assessment-intro {
-  max-width: 860px;
+  width: 100% !important;
+  max-width: 940px !important;
+  margin-inline: auto !important;
+  text-align: left !important;
+}
+
+body.assessment-journey-page[data-shell="app"] .assessment-intro h1,
+body.assessment-journey-page[data-shell="app"] .assessment-intro > p,
+body.assessment-journey-page[data-shell="app"] .assessment-intro .assessment-journey-outcome {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  text-align: left !important;
 }
 
 body.assessment-journey-page[data-shell="app"] .assessment-intro .assessment-journey-outcome {
-  margin: 12px 0 0 !important;
+  margin-top: 12px !important;
   max-width: 820px !important;
   color: var(--app-muted) !important;
   font-size: 13px !important;
   line-height: 1.55 !important;
 }
 
+body.assessment-journey-page[data-shell="app"] .assessment-assurance {
+  justify-content: flex-start !important;
+}
+
 @media (min-width: 961px) {
   body.assessment-journey-page[data-shell="app"] .menu-toggle {
     display: none !important;
+  }
+
+  /* Match the same 1180px desktop frame used by the main journey shell instead
+   * of stretching the brand and navigation to opposite edges on wide screens. */
+  body.assessment-journey-page[data-shell="app"] .site-header,
+  body.assessment-journey-page[data-shell="app"] .site-header-v10,
+  body.assessment-journey-page[data-shell="app"] .app-header-v10 {
+    width: min(calc(100% - 48px), 1180px) !important;
+    max-width: 1180px !important;
+    margin: 0 auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 
   body.assessment-journey-page[data-shell="app"] .app-shell,
@@ -117,5 +146,9 @@ body.assessment-journey-page[data-shell="app"] .assessment-intro .assessment-jou
 
   body.assessment-journey-page[data-shell="app"] .primary-navigation > a {
     width: 100% !important;
+  }
+
+  body.assessment-journey-page[data-shell="app"] .assessment-intro {
+    max-width: none !important;
   }
 }
