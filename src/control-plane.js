@@ -154,10 +154,191 @@ async function closeObservedInspectionRemediation({ projectId, itemId, userId, p
   });
 }
 
+function redTeamClosureRequest(patch) {
+  if (clean(patch?.status, 40).toLowerCase() !== 'verified_closed') return null;
+  const value = patch?.verification?.redTeamClosure;
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function redTeamTarget(row) {
+  const campaign = parseJson(row?.campaign_json, {});
+  const target = campaign?.target || {};
+  return {
+    mode: clean(target.mode, 40),
+    environment: clean(campaign.environment, 40),
+    endpointOrigin: clean(target.endpointOrigin, 300),
+    endpointPathHash: clean(target.endpointPathHash, 64),
+    profile: target.profile == null ? '' : clean(target.profile, 120),
+    completedAt: clean(campaign.completedAt, 80),
+  };
+}
+
+function sameRedTeamTarget(left, right) {
+  const a = redTeamTarget(left);
+  const b = redTeamTarget(right);
+  return a.mode === b.mode
+    && a.environment === b.environment
+    && a.endpointOrigin === b.endpointOrigin
+    && a.endpointPathHash === b.endpointPathHash
+    && a.profile === b.profile;
+}
+
+function redTeamCaseResults(row, caseId) {
+  const results = parseJson(row?.results_json, []);
+  return Array.isArray(results) ? results.filter((item) => clean(item?.caseId, 40) === caseId) : [];
+}
+
+function singleCaseOutcome(results) {
+  if (!results.length) return 'missing';
+  const values = new Set(results.map((item) => clean(item?.outcome, 30)));
+  if (values.has('failed')) return 'failed';
+  if (values.has('error') || values.has('inconclusive')) return 'inconclusive';
+  return values.size === 1 && values.has('passed') ? 'passed' : 'inconclusive';
+}
+
+function oneFingerprint(results) {
+  const values = new Set(results.map((item) => clean(item?.requestFingerprint, 64)).filter(Boolean));
+  if (values.size !== 1) return '';
+  const value = [...values][0];
+  return /^[a-f0-9]{64}$/i.test(value) ? value : '';
+}
+
+function assertUsableRedTeamRun(row, label) {
+  if (!row || Number(row.signature_valid) !== 1 || !/^[a-f0-9]{64}$/i.test(String(row.bundle_digest || '')))
+    throw badRequest(`${label} Red Team run is missing or is not integrity-verified.`);
+  const trust = parseJson(row.trust_json, {});
+  if (trust.evidenceClass !== 'customer-operated-controlled-adversarial-test')
+    throw badRequest(`${label} Red Team run is not customer-operated controlled adversarial evidence.`);
+  const target = redTeamTarget(row);
+  if (target.mode !== 'staging-adapter' || !['local','test','staging'].includes(target.environment) || !row.authorisation_id)
+    throw badRequest(`${label} Red Team run must be an authorised non-production adapter run.`);
+  if (row.retention_expires_at && Date.parse(row.retention_expires_at) <= Date.now())
+    throw badRequest(`${label} Red Team evidence is outside its retained evidence window.`);
+  if (!Number.isFinite(Date.parse(target.completedAt)))
+    throw badRequest(`${label} Red Team run has no valid signed completion time.`);
+  return target;
+}
+
+async function closeRedTeamRemediation({ projectId, itemId, userId, patch, request }) {
+  return db.transaction(async () => {
+    const access = await observedClosureAccess(projectId, userId);
+    if (db.kind === 'postgres') await db.prepare('SELECT pg_advisory_xact_lock(hashtext(?))').get(`${projectId}:${itemId}:redteam`);
+    const current = await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
+    if (!current) throw badRequest('Remediation item not found.');
+    if (!current.assessment_id) throw badRequest('Red Team closure requires an assessment-bound remediation.');
+    if (patch.title != null || patch.severity != null || patch.ownerEmail != null || patch.dueAt != null)
+      throw badRequest('Close the Red Team finding separately from editing remediation details.');
+
+    const baselineRunId = clean(request.baselineRunId, 100);
+    const retestRunId = clean(request.retestRunId, 100);
+    const caseId = clean(request.caseId, 40).toUpperCase();
+    const previous = parseJson(current.verification_json, {});
+    if (current.status === 'verified_closed'
+      && previous.retestSourceType === 'redteam'
+      && previous.retestArtifactId === retestRunId
+      && previous.retestBaselineRunId === baselineRunId
+      && previous.retestCaseId === caseId) return current;
+    if (current.status !== 'open') throw badRequest('Red Team closure is only available for an open remediation.');
+    if (!baselineRunId || !retestRunId || !caseId) throw badRequest('Red Team closure requires the failed baseline, passed retest and exact case.');
+
+    const expectedFindingSuffix = `redteam-${caseId}`.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 70);
+    if (!String(current.finding_key || '').endsWith(`:${expectedFindingSuffix}`))
+      throw badRequest('The Red Team case does not match this remediation finding.');
+
+    const baseline = await db.prepare('SELECT * FROM redteam_runs WHERE id=? AND assessment_id=?').get(baselineRunId, current.assessment_id);
+    const retest = await db.prepare('SELECT * FROM redteam_runs WHERE id=? AND assessment_id=?').get(retestRunId, current.assessment_id);
+    const baselineTarget = assertUsableRedTeamRun(baseline, 'Baseline');
+    const retestTarget = assertUsableRedTeamRun(retest, 'Retest');
+    if (baseline.authorisation_id !== retest.authorisation_id)
+      throw badRequest('Baseline and retest must use the same Rules of Engagement.');
+    if (!sameRedTeamTarget(baseline, retest))
+      throw badRequest('Baseline and retest must describe the same authorised adapter target.');
+    if (baseline.policy_version !== retest.policy_version)
+      throw badRequest('Baseline and retest must use the same Red Team policy version.');
+    if (Date.parse(retestTarget.completedAt) <= Date.parse(baselineTarget.completedAt))
+      throw badRequest('The retest must complete after the failed baseline.');
+    if (Date.parse(retestTarget.completedAt) <= Date.parse(current.created_at || ''))
+      throw badRequest('The exact Red Team retest must be newer than the remediation record.');
+
+    const baselineResults = redTeamCaseResults(baseline, caseId);
+    const retestResults = redTeamCaseResults(retest, caseId);
+    if (singleCaseOutcome(baselineResults) !== 'failed')
+      throw badRequest('The selected Red Team baseline does not reproduce a failed case.');
+    if (singleCaseOutcome(retestResults) !== 'passed')
+      throw badRequest('Every retained trial for the exact Red Team retest case must pass.');
+    const baselineFingerprint = oneFingerprint(baselineResults);
+    const retestFingerprint = oneFingerprint(retestResults);
+    if (!baselineFingerprint || baselineFingerprint !== retestFingerprint)
+      throw badRequest('Baseline and retest must have the same valid request fingerprint.');
+    if (clean(baselineResults[0]?.title, 180) !== clean(retestResults[0]?.title, 180))
+      throw badRequest('Baseline and retest case titles do not match.');
+
+    const newerRows = await db.prepare(`SELECT id,results_json FROM redteam_runs
+      WHERE assessment_id=? AND created_at>? ORDER BY created_at DESC`).all(current.assessment_id, retest.created_at);
+    if (newerRows.some((row) => redTeamCaseResults(row, caseId).length))
+      throw badRequest('A newer Red Team result exists for this exact case. Review the latest evidence before closure.');
+
+    const verifiedAt = nowIso();
+    const history = Array.isArray(previous.history) ? [...previous.history] : [];
+    history.push({
+      action: 'redteam_exact_retest_accepted',
+      actorId: userId,
+      at: verifiedAt,
+      caseId,
+      baselineRunId,
+      retestRunId,
+      authorisationId: retest.authorisation_id,
+      requestFingerprint: retestFingerprint,
+    });
+    const verification = {
+      ...previous,
+      retestResult: 'passed',
+      retestReference: `Red Team exact retest ${retestRunId}`,
+      retestArtifactId: retestRunId,
+      retestArtifactDigest: retest.bundle_digest,
+      retestArtifactVerifiedAt: verifiedAt,
+      retestArtifactEvidenceType: 'verified_artifact',
+      retestSourceType: 'redteam',
+      retestEvidenceClass: 'bounded_customer_operated_exact_retest',
+      retestCaseId: caseId,
+      retestBaselineRunId: baselineRunId,
+      retestBaselineArtifactDigest: baseline.bundle_digest,
+      retestPolicyVersion: retest.policy_version,
+      retestAuthorisationId: retest.authorisation_id,
+      retestRequestFingerprint: retestFingerprint,
+      retestedAt: retestTarget.completedAt,
+      verifiedAt,
+      limitations: 'Closure applies only to this exact bounded Red Team case, authorised target and retained evidence lineage. It does not prove unrelated invariant cases, production equivalence or a deployment decision.',
+      history,
+    };
+    const updated = await db.prepare(`UPDATE remediation_items SET status='verified_closed',verification_json=?,updated_at=?
+      WHERE id=? AND project_id=? AND status='open'`).run(JSON.stringify(verification), verifiedAt, itemId, projectId);
+    if (Number(updated.changes) !== 1) throw badRequest('The remediation changed while closure was being reviewed. Refresh and try again.');
+
+    await db.prepare(`INSERT INTO security_audit_log
+      (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      id('aud_'), access.workspace_id, projectId, 'user', userId, 'remediation.redteam_exact_retest_accepted', 'remediation', itemId,
+      JSON.stringify({
+        assessmentId: current.assessment_id,
+        caseId,
+        baselineRunId,
+        retestRunId,
+        authorisationId: retest.authorisation_id,
+        requestFingerprint: retestFingerprint,
+        evidenceClass: 'bounded_customer_operated_exact_retest',
+      }), verifiedAt,
+    );
+    return db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=?').get(itemId, projectId);
+  });
+}
+
 export async function updateRemediationItem({ projectId, itemId, userId, patch = {} }) {
-  const request = observedInspectionClosureRequest(patch);
-  if (!request) return core.updateRemediationItem({ projectId, itemId, userId, patch });
-  return closeObservedInspectionRemediation({ projectId, itemId, userId, patch, request });
+  const observedRequest = observedInspectionClosureRequest(patch);
+  if (observedRequest) return closeObservedInspectionRemediation({ projectId, itemId, userId, patch, request: observedRequest });
+  const redTeamRequest = redTeamClosureRequest(patch);
+  if (redTeamRequest) return closeRedTeamRemediation({ projectId, itemId, userId, patch, request: redTeamRequest });
+  return core.updateRemediationItem({ projectId, itemId, userId, patch });
 }
 
 /*
