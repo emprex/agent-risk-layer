@@ -13,6 +13,7 @@ import { buildAssessmentReport } from './src/report-service.js';
 import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail } from './src/email.js';
 import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
+import { runFrozenGithubSourceInspection } from './src/github-source-inspection.js';
 import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
 import { bindPendingCheckoutSession, createPendingCheckout, failPendingCheckoutCreation, fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
 import { claimStripeEvent, completeStripeEvent, failStripeEvent, recoverAbandonedStripeEvent } from './src/stripe-events.js';
@@ -467,6 +468,23 @@ const server = http.createServer(async (req, res) => {
         match = url.pathname.match(/^\/badge\/([^/]+)\.svg$/);
         if (req.method === 'GET' && match)
             return await serveBadge(res, decodeURIComponent(match[1]));
+        if (req.method === 'POST' && url.pathname === '/api/inspector/github') {
+            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
+                return;
+            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 4, bucket: 'github-source-inspection', identity: req.user.id }))
+                return json(res, 429, { error: 'Too many hosted source-inspection requests. Wait a minute and try again.' });
+            const body = await readBody(req);
+            try {
+                const result = await runFrozenGithubSourceInspection({
+                    userId: req.user.id,
+                    assessmentId: cleanText(body.assessmentId, 80),
+                });
+                return json(res, 201, result);
+            }
+            catch (error) {
+                return json(res, error.statusCode || 400, { error: error.message });
+            }
+        }
         if (req.method === 'POST' && url.pathname === '/api/inspector/tokens') {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
                 return;
