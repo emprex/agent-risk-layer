@@ -125,7 +125,11 @@ async function loadScans(){
   }catch(error){list.className='error-box show';list.textContent=error.message}
 }
 
-function scanHtml(x){const s=x.summary;return `<article class="scan-row"><div><div class="scan-title"><strong>Posture ${s.postureScore}/100 · Grade ${escapeHtml(s.grade)}</strong><span class="severity ${s.counts.critical?'critical':s.counts.high?'high':s.counts.medium?'medium':'low'}">${s.counts.critical?'critical':s.counts.high?'high':s.counts.medium?'medium':'clear'}</span></div><div class="assessment-meta"><span>${new Date(x.createdAt).toLocaleString('en-GB')}</span><span>Scanner ${escapeHtml(x.scannerVersion)}</span><span>${s.findingsTotal} findings</span><span>${s.counts.critical} critical · ${s.counts.high} high</span>${x.delta?.status&&x.delta.status!=='first-scan'?`<span>${x.delta.postureChange>=0?'+':''}${x.delta.postureChange} posture change</span>`:''}</div></div><button class="button ghost small" data-inspection="${escapeHtml(x.id)}">View evidence</button></article>`}
+function scanHtml(x){
+  const s=x.summary;
+  const priority=s.counts.critical?'critical':s.counts.high?'high':s.counts.medium?'medium':'clear';
+  return `<article class="scan-row"><div><div class="scan-title"><strong>Observed static source evidence</strong><span class="severity ${priority}">${priority==='clear'?'no elevated source observations':`${priority} source observations`}</span></div><div class="assessment-meta"><span>${new Date(x.createdAt).toLocaleString('en-GB')}</span><span>Scanner ${escapeHtml(x.scannerVersion)}</span><span>${s.findingsTotal} source observations</span><span>${s.counts.critical} critical · ${s.counts.high} high</span></div><p class="microcopy">Inspector severity is a source-review triage signal. These observations are not automatically confirmed vulnerabilities, a whole-system grade, or a deployment decision.</p></div><button class="button ghost small" data-inspection="${escapeHtml(x.id)}">View evidence</button></article>`;
+}
 function openInspection(event){const id=event.currentTarget.dataset.inspection;if(id)location.href=`/inspection-detail.html?id=${encodeURIComponent(id)}`}
 function fail(message){root.className='panel';root.innerHTML=`<div class="error-box show">${escapeHtml(message)}</div>`}
 
