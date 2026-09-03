@@ -86,6 +86,20 @@ function insert(html) {
   if (target) target.insertAdjacentHTML('afterend', html);
 }
 
+async function hydrateRuns(summaries, requestSerial, assessmentId) {
+  const full = await Promise.all((summaries || []).map(async (summary) => {
+    if (!summary?.id) return null;
+    try {
+      const payload = await api(`/api/redteam/runs/${encodeURIComponent(summary.id)}`);
+      return payload.run || null;
+    } catch {
+      return null;
+    }
+  }));
+  if (requestSerial !== serial || activeAssessmentId !== assessmentId) return null;
+  return full.filter(Boolean);
+}
+
 async function load(assessmentId) {
   const requestSerial = ++serial;
   activeAssessmentId = assessmentId;
@@ -98,7 +112,9 @@ async function load(assessmentId) {
     if (requestSerial !== serial || activeAssessmentId !== assessmentId) return;
     const inspections = [...(inspectionPayload.inspections || [])].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
     const plan = buildEvidencePlan({ assessment: assessmentPayload.assessment || {}, inspections });
-    const outcome = classifyEvidencePlan(plan, redteamPayload.runs || []);
+    const fullRuns = await hydrateRuns(redteamPayload.runs || [], requestSerial, assessmentId);
+    if (!fullRuns) return;
+    const outcome = classifyEvidencePlan(plan, fullRuns);
     insert(outcomeHtml(outcome, assessmentId));
   } catch (error) {
     if (requestSerial !== serial || activeAssessmentId !== assessmentId) return;
