@@ -65,10 +65,16 @@ function gapText(gap = {}) {
 
 function materialGaps(assessment = {}) {
   const result = assessment.result || assessment;
-  const exact = result.blockingEvidenceGaps;
-  if (Array.isArray(exact) && exact.length) return exact;
+  const exactSets = [
+    result.blockingEvidenceGaps,
+    result.unresolvedItems,
+    result.blockingInformationGaps,
+  ];
+  for (const exact of exactSets) {
+    if (Array.isArray(exact) && exact.length) return exact;
+  }
   const controls = assessment.controls || result.controls || [];
-  return controls.filter((control) => ['evidence-required', 'not-applicable-declared'].includes(control.status));
+  return controls.filter((control) => ['unresolved', 'evidence-required', 'not-applicable-declared'].includes(control.status));
 }
 
 export function boundedCheckForGap(gap) {
@@ -108,7 +114,7 @@ export function buildEvidencePlan({ assessment = {}, inspections = [] } = {}) {
     return {
       state: 'bounded-check-required',
       title: checks[0].title,
-      explanation: 'Source evidence is present. Run only the bounded runtime checks needed for material questions that source review cannot prove.',
+      explanation: 'Source evidence is present. Unresolved assessment questions remain open unless the evidence chain proves them. Run only the bounded runtime checks mapped to those material questions; keep all other unknowns as evidence gaps.',
       checks,
       manual,
     };
