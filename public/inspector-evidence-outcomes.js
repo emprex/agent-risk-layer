@@ -40,9 +40,9 @@ function stateCopy(item) {
 function outcomeHtml(outcome, assessmentId) {
   if (!outcome.checks.length) {
     return `<section class="workspace-section section-gap" data-evidence-outcomes>
-      <span class="eyebrow">Bounded evidence outcome</span>
-      <h2>No mapped bounded run is required yet</h2>
-      <p>The current Evidence Plan does not contain an automatically mapped runtime check. Any remaining evidence question stays open until appropriate evidence is supplied.</p>
+      <span class="eyebrow">After source evidence</span>
+      <h2>No automatic bounded runtime check is mapped from the remaining questions</h2>
+      <p>Source inspection is complete. Any unresolved evidence question stays open until appropriate evidence or a reviewer-defined bounded test is available.</p>
     </section>`;
   }
 
@@ -84,6 +84,7 @@ function outcomeHtml(outcome, assessmentId) {
 
 function insert(html) {
   document.querySelector('[data-evidence-outcomes]')?.remove();
+  if (!html) return;
   const plan = document.querySelector('[data-evidence-plan]');
   const target = plan || document.querySelector('[data-inspector-target-panel]') || document.querySelector('.workspace-agent-command');
   if (target) target.insertAdjacentHTML('afterend', html);
@@ -114,6 +115,10 @@ async function load(assessmentId) {
     ]);
     if (requestSerial !== serial || activeAssessmentId !== assessmentId) return;
     const inspections = [...(inspectionPayload.inspections || [])].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+    if (!inspections.length) {
+      insert('');
+      return;
+    }
     const plan = buildEvidencePlan({ assessment: assessmentPayload.assessment || {}, inspections });
     const fullRuns = await hydrateRuns(redteamPayload.runs || [], requestSerial, assessmentId);
     if (!fullRuns) return;
@@ -148,6 +153,10 @@ document.addEventListener('change', (event) => {
 document.addEventListener('click', (event) => {
   if (event.target?.id !== 'refreshScans') return;
   setTimeout(() => sync(true), 350);
+});
+
+document.addEventListener('arl:source-evidence-recorded', () => {
+  setTimeout(() => sync(true), 100);
 });
 
 sync(true);
