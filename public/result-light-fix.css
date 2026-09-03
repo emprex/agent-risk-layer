@@ -41,3 +41,21 @@ body.workspace-result-page[data-shell="app"] .result-side-risk .risk-pill.critic
   background: #fef2f2 !important;
   color: #991b1b !important;
 }
+
+/* Recommendation cards inherit dark-surface styles from the legacy result theme.
+ * In the light workspace they must remain readable and clearly secondary to evidence work.
+ */
+body.workspace-result-page[data-shell="app"] .simple-remediation-list article {
+  border: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+body.workspace-result-page[data-shell="app"] .simple-remediation-list article strong {
+  color: #0f172a !important;
+}
+
+body.workspace-result-page[data-shell="app"] .simple-remediation-list article p {
+  color: #475569 !important;
+}
