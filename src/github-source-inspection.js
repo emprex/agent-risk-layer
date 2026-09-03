@@ -4,7 +4,7 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { db, insertEvent, nowIso } from './db.js';
 import { createInspectionToken, consumeInspectionUpload, getInspection } from './inspector.js';
-import { scanRepository } from '../inspector/agent-risk-inspector.mjs';
+import { scanRepository } from '../public/downloads/agent-risk-inspector.mjs';
 
 const TARGET_MARKER = '[ARL_TARGET]';
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
