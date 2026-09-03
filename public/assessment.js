@@ -20,6 +20,9 @@ const evidenceSelect = document.querySelector('#questionEvidence');
 const agentName = document.querySelector('#agentName');
 const agentType = document.querySelector('#agentType');
 const agentDescription = document.querySelector('#agentDescription');
+const targetRepository = document.querySelector('#targetRepository');
+const targetRevision = document.querySelector('#targetRevision');
+const targetFreezeStatus = document.querySelector('#targetFreezeStatus');
 const questionGuidance = document.querySelector('#questionGuidance');
 const guidanceMeaning = document.querySelector('#guidanceMeaning');
 const guidanceChecks = document.querySelector('#guidanceChecks');
@@ -41,6 +44,7 @@ const ASSESSMENT_PHASES = Object.freeze([
   'Controls & approval',
   'Recovery & evidence',
 ]);
+const TARGET_MARKER = '\n\n[ARL_TARGET]\n';
 
 let questionnaire = [];
 let flowQuestions = [];
@@ -50,6 +54,51 @@ let sourceAssessmentId = '';
 let revisionSourceName = '';
 const answers = new Map();
 const derivedAnswerIds = new Set();
+
+function normaliseRepository(value = '') {
+  const text = String(value).trim().replace(/\.git$/i, '').replace(/\/$/, '');
+  if (!text) return '';
+  const match = text.match(/^(?:https:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/i);
+  return match ? match[1] : '';
+}
+
+function parseTargetScope(value = '') {
+  const text = String(value || '');
+  const markerIndex = text.indexOf(TARGET_MARKER);
+  if (markerIndex < 0) return { description: text.trim(), repository: '', revision: '' };
+  const description = text.slice(0, markerIndex).trim();
+  const targetText = text.slice(markerIndex + TARGET_MARKER.length);
+  const repository = targetText.match(/^Repository:\s*(.+)$/mi)?.[1]?.trim() || '';
+  const revision = targetText.match(/^Revision:\s*([a-f0-9]{40})$/mi)?.[1]?.toLowerCase() || '';
+  return { description, repository, revision };
+}
+
+function targetScopeText(description = '') {
+  const repository = normaliseRepository(targetRepository?.value);
+  const revision = String(targetRevision?.value || '').trim().toLowerCase();
+  const cleanDescription = String(description || '').trim().slice(0, repository && revision ? 600 : 800);
+  if (!repository || !revision) return cleanDescription;
+  return `${cleanDescription}${TARGET_MARKER}Repository: ${repository}\nRevision: ${revision}`.slice(0, 800);
+}
+
+function updateTargetFreezeStatus() {
+  if (!targetFreezeStatus) return;
+  const rawRepository = String(targetRepository?.value || '').trim();
+  const repository = normaliseRepository(rawRepository);
+  const revision = String(targetRevision?.value || '').trim().toLowerCase();
+  if (!rawRepository && !revision) {
+    targetFreezeStatus.hidden = true;
+    targetFreezeStatus.textContent = '';
+    return;
+  }
+  if (!repository || !/^[a-f0-9]{40}$/.test(revision)) {
+    targetFreezeStatus.hidden = false;
+    targetFreezeStatus.textContent = 'To freeze source evidence, provide a GitHub owner/repository and the full 40-character commit SHA.';
+    return;
+  }
+  targetFreezeStatus.hidden = false;
+  targetFreezeStatus.textContent = `Assessment target ready to freeze: ${repository} @ ${revision}. Evidence and retests should use this exact revision.`;
+}
 
 async function init() {
   try {
@@ -78,6 +127,7 @@ async function init() {
       refreshAdaptiveFlow();
     }
     updateDescriptionRequirement();
+    updateTargetFreezeStatus();
     renderStep();
   } catch (error) {
     showError(errorBox, error.message);
@@ -137,7 +187,10 @@ function applyRevisionSource(source) {
   agentName.value = source.name || '';
   agentType.value = source.agentType || '';
   const sourceAnswers = source.answers && typeof source.answers === 'object' ? source.answers : {};
-  agentDescription.value = String(sourceAnswers.__system_description || '').slice(0, 800);
+  const target = parseTargetScope(sourceAnswers.__system_description || '');
+  agentDescription.value = target.description.slice(0, 800);
+  if (targetRepository) targetRepository.value = target.repository;
+  if (targetRevision) targetRevision.value = target.revision;
   answers.clear();
   for (const question of questionnaire) {
     const answer = normaliseSourceAnswer(question, sourceAnswers[question.id]);
@@ -146,6 +199,7 @@ function applyRevisionSource(source) {
   if (revisionReviewField) revisionReviewField.hidden = false;
   if (reviewPreviousAnswers) reviewPreviousAnswers.checked = false;
   refreshRevisionFlow();
+  updateTargetFreezeStatus();
   revisionNotice.hidden = false;
 }
 
@@ -246,6 +300,7 @@ function renderStep() {
     nextButton.hidden = false;
     submitButton.hidden = true;
     updateDescriptionRequirement();
+    updateTargetFreezeStatus();
     return;
   }
 
@@ -280,6 +335,9 @@ function validateProfile() {
   const name = document.querySelector('#agentName').value.trim();
   const type = agentType.value;
   const description = agentDescription.value.trim();
+  const rawRepository = String(targetRepository?.value || '').trim();
+  const repository = normaliseRepository(rawRepository);
+  const revision = String(targetRevision?.value || '').trim().toLowerCase();
   if (!name) {
     showError(errorBox, 'Give the agent a name so you can recognise this result later.');
     document.querySelector('#agentName').focus();
@@ -293,6 +351,11 @@ function validateProfile() {
   if (type === 'Other' && description.length < 10) {
     showError(errorBox, 'Describe what this agent does so the assessment does not lose important context.');
     agentDescription.focus();
+    return false;
+  }
+  if ((rawRepository || revision) && (!repository || !/^[a-f0-9]{40}$/.test(revision))) {
+    showError(errorBox, 'To freeze the assessment target, provide a GitHub owner/repository and the full 40-character commit SHA. Leave both blank if you are only running the questionnaire.');
+    (!repository ? targetRepository : targetRevision)?.focus();
     return false;
   }
   return true;
@@ -311,6 +374,8 @@ function saveCurrentQuestion() {
 }
 
 agentType.addEventListener('change', updateDescriptionRequirement);
+targetRepository?.addEventListener('input', updateTargetFreezeStatus);
+targetRevision?.addEventListener('input', updateTargetFreezeStatus);
 form.addEventListener('change', (event) => {
   if (event.target?.name !== 'currentQuestion' || stepIndex === 0) return;
   updateAnswerQualification(flowQuestions[stepIndex - 1], event.target.value);
@@ -375,8 +440,8 @@ form.addEventListener('submit', async (event) => {
     return;
   }
   const payloadAnswers = Object.fromEntries(questionnaire.map((question) => [question.id, answers.get(question.id)]));
-  const description = agentDescription.value.trim();
-  if (description) payloadAnswers.__system_description = description.slice(0, 800);
+  const description = targetScopeText(agentDescription.value.trim());
+  if (description) payloadAnswers.__system_description = description;
   setBusy(submitButton, true, 'Building your result…');
   try {
     const payload = await api('/api/assessments', {
