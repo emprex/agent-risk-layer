@@ -1,0 +1,45 @@
+name: Fix evidence trust-boundary wording
+
+on:
+  push:
+    branches:
+      - fix/evidence-trust-boundary-copy
+    paths:
+      - .github/workflows/fix-evidence-trust-boundary-copy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/evidence-trust-boundary-copy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Update evidence trust-boundary copy
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'public/inspector.js';
+          let text = fs.readFileSync(path, 'utf8');
+          const before = '<small>Trust boundary</small><strong>Read-only local scan</strong><p>Source code and secret values are excluded from the uploaded evidence bundle.</p>';
+          const after = '<small>Trust boundary</small><strong>Read-only source inspection</strong><p>GitHub source is inspected server-side at the frozen commit. Local inspection remains available when source must stay on your machine.</p>';
+          if (!text.includes(before)) throw new Error('Expected trust-boundary copy not found');
+          text = text.replace(before, after);
+          fs.writeFileSync(path, text);
+          NODE
+          node --check public/inspector.js
+          grep -q 'Read-only source inspection' public/inspector.js
+          grep -q 'GitHub source is inspected server-side at the frozen commit' public/inspector.js
+      - name: Commit fix and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-evidence-trust-boundary-copy.yml
+          git add public/inspector.js
+          git commit -m "Make Evidence trust boundary source-method neutral"
+          git push origin HEAD:fix/evidence-trust-boundary-copy
