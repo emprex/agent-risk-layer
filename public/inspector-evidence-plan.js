@@ -53,6 +53,7 @@ function planHtml(plan, assessmentId) {
   if (plan.state === 'bounded-check-required') {
     return `<section class="workspace-section section-gap" data-evidence-plan>
       <div class="workspace-section-heading"><div><span class="eyebrow">Evidence plan</span><h2>${escapeHtml(plan.checks.length === 1 ? '1 bounded runtime check selected' : `${plan.checks.length} bounded runtime checks selected`)}</h2><p>${escapeHtml(plan.explanation)}</p></div></div>
+      <div class="success-box"><strong>Source evidence complete.</strong><p>Inspector observations are technical evidence for review, not automatically confirmed vulnerabilities. Run only the bounded checks needed for material questions source review cannot prove.</p></div>
       <div class="notice"><strong>Run only what is needed.</strong> These checks are derived from material evidence gaps. AgentRiskLayer does not automatically turn unmapped questions into findings or generic attack tests.</div>
       <div class="plain-finding-list">${plan.checks.map((check, index) => checkHtml(check, index, assessmentId)).join('')}</div>
       ${plan.manual.length ? `<details class="workspace-technical section-gap"><summary><span>${plan.manual.length} other evidence question${plan.manual.length === 1 ? '' : 's'}</span><small>No safe automatic bounded test selected</small></summary><div class="workspace-technical-body"><ul class="check-list">${plan.manual.map((gap) => `<li>${escapeHtml(gapLabel(gap))}</li>`).join('')}</ul><p class="microcopy">These remain material evidence gaps until appropriate evidence or a reviewer-defined bounded test is available.</p></div></details>` : ''}
@@ -63,16 +64,21 @@ function planHtml(plan, assessmentId) {
     <span class="eyebrow">Evidence plan</span>
     <h2>${escapeHtml(plan.title)}</h2>
     <p>${escapeHtml(plan.explanation)}</p>
+    <div class="success-box"><strong>Source evidence complete.</strong><p>Inspector observations remain observed static evidence. They become confirmed findings only when the evidence chain supports that conclusion; unresolved questions remain open.</p></div>
     ${plan.manual.length ? `<ul class="check-list">${plan.manual.map((gap) => `<li>${escapeHtml(gapLabel(gap))}</li>`).join('')}</ul>` : ''}
   </section>`;
 }
 
-function insertPlan(html) {
-  document.querySelector('[data-evidence-plan]')?.remove();
+function insertPlan(html, attempt = 0) {
   const targetPanel = document.querySelector('[data-inspector-target-panel]');
   const command = document.querySelector('.workspace-agent-command');
   const anchor = targetPanel || command;
-  if (anchor) anchor.insertAdjacentHTML('afterend', html);
+  if (!anchor) {
+    if (attempt < 20) setTimeout(() => insertPlan(html, attempt + 1), 100);
+    return;
+  }
+  document.querySelector('[data-evidence-plan]')?.remove();
+  anchor.insertAdjacentHTML('afterend', html);
 }
 
 async function loadPlan(assessmentId) {
@@ -96,13 +102,15 @@ async function loadPlan(assessmentId) {
 
 function sync() {
   const assessmentId = selectedAssessmentId();
-  if (!assessmentId || assessmentId === activeAssessmentId) return;
+  if (!assessmentId) return;
+  if (assessmentId === activeAssessmentId && document.querySelector('[data-evidence-plan]')) return;
   loadPlan(assessmentId);
 }
 
 const observer = new MutationObserver(() => {
   const assessmentId = selectedAssessmentId();
-  if (assessmentId && assessmentId !== activeAssessmentId) loadPlan(assessmentId);
+  if (!assessmentId) return;
+  if (assessmentId !== activeAssessmentId || !document.querySelector('[data-evidence-plan]')) loadPlan(assessmentId);
 });
 observer.observe(document.documentElement, { childList: true, subtree: true });
 
@@ -119,6 +127,14 @@ document.addEventListener('click', (event) => {
   if (!assessmentId) return;
   activeAssessmentId = '';
   setTimeout(() => loadPlan(assessmentId), 300);
+});
+
+document.addEventListener('arl:source-evidence-recorded', (event) => {
+  const assessmentId = event.detail?.assessmentId || selectedAssessmentId();
+  if (!assessmentId) return;
+  activeAssessmentId = '';
+  serial += 1;
+  setTimeout(() => loadPlan(assessmentId), 100);
 });
 
 sync();
