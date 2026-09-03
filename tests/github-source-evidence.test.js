@@ -46,5 +46,5 @@ test('hosted GitHub inspection records exact source binding separately from runt
   assert.match(source, /revision:\s*target\.revision/);
   assert.match(source, /not runtime evidence/i);
   assert.match(source, /repo\.private/);
-  assert.match(source, /temporary source archive/i);
+  assert.match(source, /source archive was temporary and deleted after scanning/i);
 });
