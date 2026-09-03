@@ -13,7 +13,8 @@ test('assessment can freeze one exact GitHub repository revision without changin
   assert.match(html, /Freeze the exact repository version/);
   assert.match(html, /targetRepository/);
   assert.match(html, /targetRevision/);
-  assert.match(html, /full 40-character commit SHA/i);
+  assert.match(html, /Full commit SHA/);
+  assert.match(html, /40-character commit SHA/);
   assert.match(html, /A later commit must be assessed as a new revision/i);
 
   assert.match(js, /normaliseRepository/);
