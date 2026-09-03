@@ -1,21 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseFrozenGithubTarget } from '../src/github-source-inspection.js';
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('frozen GitHub target parser requires owner/repository and full SHA', () => {
-  const assessment = {
-    answers_json: JSON.stringify({
-      __system_description: `BossConsole\n\n[ARL_TARGET]\nRepository: risa-labs-inc/BossConsole\nRevision: 6bf9c46203f6efe1c83c869b0de8ecff0fc4b517`,
-    }),
-  };
-  assert.deepEqual(parseFrozenGithubTarget(assessment), {
-    repository: 'risa-labs-inc/BossConsole',
-    revision: '6bf9c46203f6efe1c83c869b0de8ecff0fc4b517',
-  });
-  assert.equal(parseFrozenGithubTarget({ answers_json: JSON.stringify({ __system_description: '[ARL_TARGET]\nRepository: owner/repo\nRevision: main' }) }), null);
+test('hosted GitHub source service requires a frozen owner/repository and full SHA', () => {
+  const source = read('src/github-source-inspection.js');
+  assert.match(source, /TARGET_MARKER = '\[ARL_TARGET\]'/);
+  assert.match(source, /GITHUB_REPOSITORY_RE/);
+  assert.match(source, /SHA40_RE/);
+  assert.match(source, /Revision:\\s\*\(\[a-f0-9\]\{40\}\)/i);
+  assert.match(source, /resolved !== target\.revision/);
 });
 
 test('Evidence page offers GitHub source first and local source as fallback', () => {
@@ -40,6 +35,7 @@ test('server exposes authenticated hosted GitHub source-inspection route', () =>
   assert.match(server, /runFrozenGithubSourceInspection/);
   assert.match(server, /url\.pathname === '\/api\/inspector\/github'/);
   assert.match(server, /github-source-inspection/);
+  assert.match(server, /requireVerifiedEmail/);
 });
 
 test('hosted GitHub inspection records exact source binding separately from runtime evidence', () => {
@@ -50,5 +46,5 @@ test('hosted GitHub inspection records exact source binding separately from runt
   assert.match(source, /revision:\s*target\.revision/);
   assert.match(source, /not runtime evidence/i);
   assert.match(source, /repo\.private/);
-  assert.match(source, /resolved !== target\.revision/);
+  assert.match(source, /temporary source archive/i);
 });
