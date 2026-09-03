@@ -27,11 +27,13 @@ test('controlled runner loads evidence context and validates case against the se
 
 test('planned bounded evidence locks the case but allows pipeline simulation for plumbing checks', () => {
   const js = read('public/redteam-evidence-context.js');
+  const lockStart = js.indexOf('caseInput.value = plan.caseId;');
+  const retestGate = js.indexOf('if (retestRequested) {', lockStart);
+  const preRetest = js.slice(lockStart, retestGate);
 
   assert.match(js, /caseInput\.readOnly = true/);
-  assert.match(js, /if \(retestRequested\) \{\s*adapterMode\.checked = true/);
-  assert.doesNotMatch(js, /caseInput\.title[^]*adapterMode\.checked = true;\s*simulationMode\.checked = false;\s*adapterFields\.hidden = false;\s*adapterMode\.dispatchEvent[^]*const trials/);
-  assert.match(js, /Pipeline simulation may be used to debug runner\/upload handling/);
+  assert.doesNotMatch(preRetest, /adapterMode\.checked = true|simulationMode\.checked = false|adapterFields\.hidden = false/);
+  assert.match(js, /Pipeline simulation to debug the ARL runner\/upload path/);
   assert.match(js, /Simulation is never target evidence/);
   assert.match(js, /Create bounded evidence command/);
 });

@@ -10,6 +10,10 @@ export const REDTEAM_TOKEN_TTL_MS = 15 * 60000;
 export const MAX_REDTEAM_AGE_MS = 24 * 60 * 60000;
 export const MAX_REDTEAM_RESULTS = 200;
 export const ROE_CONFIRMATION = 'I AUTHORISE CONTROLLED TESTING';
+const SIMULATION_EVIDENCE_CLASS = 'pipeline-simulation';
+const SIMULATION_TRUST_BOUNDARY = 'Synthetic pipeline simulation used to verify runner, signing, and upload handling. This is not evidence about the assessed target.';
+const ADAPTER_EVIDENCE_CLASS = 'customer-operated-controlled-adversarial-test';
+const ADAPTER_TRUST_BOUNDARY = 'Integrity-verified redacted outcomes from a customer-operated local/test/staging run. AgentRiskLayer did not independently operate the target or retain raw transcripts.';
 export async function createRedTeamAuthorisation({ userId, assessmentId, input = {} }) {
     const assessment = await db.prepare('SELECT id, name FROM assessments WHERE id = ? AND user_id = ?').get(assessmentId, userId);
     if (!assessment)
@@ -201,17 +205,13 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
     const createdAt = nowIso();
     const retentionExpiresAt = authorisation ? new Date(Date.parse(bundle.campaign.completedAt) + Number(authorisation.retention_days || 30) * 86400000).toISOString() : null;
     const runId = id('rtr_');
-    const trust = {
-        signatureValid: true,
-        digest: validation.digest,
-        evidenceClass: 'customer-operated-controlled-adversarial-test',
-        runnerVersion: clean(bundle.runner?.version, 30),
-        policyVersion: clean(bundle.runner?.policyVersion, 80),
-        runnerBuildDigest: clean(bundle.runner?.buildDigest, 64),
-        receivedAt: createdAt,
-        boundary: 'Integrity-verified redacted outcomes from a customer-operated local/test/staging run. AgentRiskLayer did not independently operate the target or retain raw transcripts.',
-        ...(authorisation ? { executionWithinAuthorisedWindow: true, ingestedAfterAuthorisationWindow: Date.now() > Date.parse(authorisation.window_end) } : {}),
-    };
+    const trust = redTeamTrustForMode({
+        targetMode,
+        validation,
+        bundle,
+        createdAt,
+        authorisation,
+    });
     await db.transaction(async () => {
         const claimed = await db.prepare(`UPDATE redteam_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?`).run(createdAt, tokenRow.id, createdAt);
         if (claimed.changes !== 1)
@@ -223,7 +223,7 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
        campaign_json, scope_json, summary_json, results_json, trust_json, delta_json, retention_expires_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run(runId, tokenRow.user_id, tokenRow.assessment_id, authorisation?.id || null, bundle.schema, trust.runnerVersion, trust.policyVersion, validation.digest, JSON.stringify(campaign), JSON.stringify(scope), JSON.stringify(summary), JSON.stringify(results), JSON.stringify(trust), JSON.stringify(delta), retentionExpiresAt, createdAt);
         await db.prepare('UPDATE assessments SET updated_at = ? WHERE id = ?').run(createdAt, tokenRow.assessment_id);
-        await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_uploaded', ?, ?)`).run(id('evt_'), tokenRow.user_id, JSON.stringify({ runId, assessmentId: tokenRow.assessment_id, riskScore: summary.riskScore, assuranceScore: summary.assuranceScore, failed: summary.counts.failed, critical: summary.counts.critical }), createdAt);
+        await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_uploaded', ?, ?)`).run(id('evt_'), tokenRow.user_id, JSON.stringify({ runId, assessmentId: tokenRow.assessment_id, riskScore: summary.riskScore, assuranceScore: summary.assuranceScore, failed: summary.counts.failed, critical: summary.counts.critical, targetMode }), createdAt);
     });
     return { runId, assessmentId: tokenRow.assessment_id, summary, trust, delta };
 }
@@ -406,9 +406,36 @@ function containsForbiddenContent(value) {
     };
     return visit(value);
 }
+function redTeamTrustForMode({ targetMode, validation, bundle, createdAt, authorisation }) {
+    const simulation = targetMode === 'simulation';
+    return {
+        signatureValid: true,
+        digest: validation.digest,
+        evidenceClass: simulation ? SIMULATION_EVIDENCE_CLASS : ADAPTER_EVIDENCE_CLASS,
+        runnerVersion: clean(bundle.runner?.version, 30),
+        policyVersion: clean(bundle.runner?.policyVersion, 80),
+        runnerBuildDigest: clean(bundle.runner?.buildDigest, 64),
+        receivedAt: createdAt,
+        boundary: simulation ? SIMULATION_TRUST_BOUNDARY : ADAPTER_TRUST_BOUNDARY,
+        targetEvidence: !simulation,
+        ...(authorisation ? { executionWithinAuthorisedWindow: true, ingestedAfterAuthorisationWindow: Date.now() > Date.parse(authorisation.window_end) } : {}),
+    };
+}
+function normaliseStoredTrust(campaign, trust) {
+    if (campaign?.target?.mode !== 'simulation')
+        return trust;
+    return {
+        ...trust,
+        evidenceClass: SIMULATION_EVIDENCE_CLASS,
+        boundary: SIMULATION_TRUST_BOUNDARY,
+        targetEvidence: false,
+    };
+}
 async function publicRun(row, includeResults) {
     const authorisationRow = row.authorisation_id ? await db.prepare('SELECT * FROM redteam_authorisations WHERE id = ?').get(row.authorisation_id) : null;
-    return { id: row.id, assessmentId: row.assessment_id, authorisationId: row.authorisation_id || null, authorisation: authorisationRow ? publicAuthorisation(authorisationRow) : null, schemaVersion: row.schema_version, runnerVersion: row.runner_version, policyVersion: row.policy_version, digest: row.bundle_digest, signatureValid: Boolean(row.signature_valid), campaign: parse(row.campaign_json, {}), scope: parse(row.scope_json, {}), summary: parse(row.summary_json, {}), results: includeResults ? parse(row.results_json, []) : undefined, trust: parse(row.trust_json, {}), delta: parse(row.delta_json, {}), retentionExpiresAt: row.retention_expires_at || null, createdAt: row.created_at };
+    const campaign = parse(row.campaign_json, {});
+    const trust = normaliseStoredTrust(campaign, parse(row.trust_json, {}));
+    return { id: row.id, assessmentId: row.assessment_id, authorisationId: row.authorisation_id || null, authorisation: authorisationRow ? publicAuthorisation(authorisationRow) : null, schemaVersion: row.schema_version, runnerVersion: row.runner_version, policyVersion: row.policy_version, digest: row.bundle_digest, signatureValid: Boolean(row.signature_valid), campaign, scope: parse(row.scope_json, {}), summary: parse(row.summary_json, {}), results: includeResults ? parse(row.results_json, []) : undefined, trust, delta: parse(row.delta_json, {}), retentionExpiresAt: row.retention_expires_at || null, createdAt: row.created_at };
 }
 async function publicRunSummary(row) { return await publicRun(row, false); }
 function normaliseObject(input, maxKeys) {
