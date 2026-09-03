@@ -36,3 +36,5 @@ jobs:
           git add server.js
           git commit -m "Wire hosted GitHub source evidence into Inspector"
           git push origin HEAD:fix/github-source-evidence
+
+# One-shot workflow. It removes itself after the validated server patch is committed.
