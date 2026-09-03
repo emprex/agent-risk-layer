@@ -32,7 +32,7 @@ function stateCopy(item) {
   const state = item.evidence.state;
   if (state === 'confirmed-failure') return { state: 'hold', next: 'Fix this confirmed failure, preserve implementation evidence, then rerun the same bounded case.' };
   if (state === 'inconclusive') return { state: 'unresolved', next: 'Correct the test condition and rerun the same bounded case. Do not create a finding from an inconclusive result.' };
-  if (state === 'exact-retest-supported') return { state: 'proceed', next: 'Retest lineage supports this starting probe. Review the remaining invariant cases and evidence gaps before any deployment decision.' };
+  if (state === 'exact-retest-supported') return { state: 'supported', next: 'Retest lineage supports this starting probe. Review the remaining invariant cases and evidence gaps before any deployment decision.' };
   if (state === 'supporting-pass') return { state: 'unresolved', next: 'Keep this as supporting evidence. A passing probe without a failed baseline is not verified remediation.' };
   return { state: 'unresolved', next: item.check.caseId ? 'Run the selected bounded case under written Rules of Engagement.' : 'Define a safe bounded test before collecting runtime evidence.' };
 }
