@@ -106,7 +106,7 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
             authorisation = await db.prepare(`SELECT * FROM redteam_authorisations WHERE id = ? AND assessment_id = ? AND user_id = ?`).get(authorisationId, assessmentId, userId);
             if (!authorisation)
                 throw new Error('The Rules of Engagement for this recovery bundle were not found.');
-            assertBundleWithinAuthorisation(bundle, authorisation);
+            assertBundleWithinAuthorisation(recoveryBundle, authorisation);
             if (await db.prepare('SELECT 1 AS ok FROM redteam_runs WHERE bundle_digest = ?').get(recoveryValidation.digest))
                 throw new Error('This red-team bundle has already been uploaded.');
         }
@@ -123,6 +123,9 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     const expiresAt = new Date(Date.now() + REDTEAM_TOKEN_TTL_MS).toISOString();
     let entitlement = null;
     await db.transaction(async () => {
+        // PostgreSQL needs an explicit per-account row lock so concurrent token
+        // requests cannot both observe the same allowance. The SQLite test
+        // adapter serialises writes with its immediate transaction mode.
         if (db.kind === 'postgres') {
             const lockedUser = await db.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(userId);
             if (!lockedUser)
