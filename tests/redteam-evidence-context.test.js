@@ -22,16 +22,22 @@ test('controlled runner loads evidence context and validates case against the se
   assert.match(js, /plan\.caseId === requestedCase/);
   assert.match(js, /data-bounded-evidence-context/);
   assert.match(js, /Security invariant/);
-  assert.match(js, /Passing it does not close the evidence question/);
+  assert.match(js, /Passing it does not close the evidence question|simulation is never target evidence/i);
 });
 
-test('bounded evidence context locks the selected case and switches to authorised adapter testing', () => {
+test('planned bounded evidence locks the case but allows pipeline simulation for plumbing checks', () => {
   const js = read('public/redteam-evidence-context.js');
 
   assert.match(js, /caseInput\.readOnly = true/);
-  assert.match(js, /adapterMode\.checked = true/);
-  assert.match(js, /simulationMode\.checked = false/);
-  assert.match(js, /adapterFields\.hidden = false/);
+  assert.match(js, /if \(retestRequested\) \{\s*adapterMode\.checked = true/);
+  assert.doesNotMatch(js, /caseInput\.title[^]*adapterMode\.checked = true;\s*simulationMode\.checked = false;\s*adapterFields\.hidden = false;\s*adapterMode\.dispatchEvent[^]*const trials/);
+  assert.match(js, /Pipeline simulation may be used to debug runner\/upload handling/);
+  assert.match(js, /Simulation is never target evidence/);
   assert.match(js, /Create bounded evidence command/);
-  assert.match(js, /cannot silently broaden into the full catalogue/);
+});
+
+test('exact retest still forces adapter mode to preserve target lineage', () => {
+  const js = read('public/redteam-evidence-context.js');
+  assert.match(js, /if \(retestRequested\) \{\s*adapterMode\.checked = true;\s*simulationMode\.checked = false;\s*adapterFields\.hidden = false/);
+  assert.match(js, /select\.disabled = true/);
 });

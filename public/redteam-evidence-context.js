@@ -66,7 +66,7 @@ function contextBanner(plan) {
       <div><small>Bounded cases to prove</small><p>${plan.cases.map((item) => escapeHtml(item)).join(' · ')}</p></div>
       ${retestRequested && baselineRunId ? `<div><small>Failed baseline</small><p><code>${escapeHtml(baselineRunId)}</code></p></div>` : ''}
     </div>
-    <div class="notice"><strong>${retestRequested ? 'Preserve the baseline conditions.' : 'This is a bounded evidence run.'}</strong> ${retestRequested ? 'The same case, active Rules of Engagement, authorised target, policy version and request fingerprint are required for exact comparison.' : 'The selected Red Team case is a starting probe. Passing it does not close the evidence question unless the required invariant cases are supported by retest evidence.'}</div>
+    <div class="notice"><strong>${retestRequested ? 'Preserve the baseline conditions.' : 'This is a bounded evidence run.'}</strong> ${retestRequested ? 'The same case, active Rules of Engagement, authorised target, policy version and request fingerprint are required for exact comparison.' : 'The selected Red Team case is a starting probe. Pipeline simulation may be used to debug runner/upload handling, but simulation is never target evidence and cannot close this evidence question. Use an authorised adapter test when collecting target evidence.'}</div>
     <a class="button ghost small" href="/inspector.html?assessment=${encodeURIComponent(assessmentId)}">Back to evidence plan</a>`;
   setup.insertAdjacentElement('afterbegin', section);
   return section;
@@ -119,10 +119,12 @@ async function applyContext() {
   caseInput.setAttribute('aria-readonly', 'true');
   caseInput.title = 'Selected by the AgentRiskLayer evidence plan. Return to the evidence plan to choose a different justified check.';
 
-  adapterMode.checked = true;
-  simulationMode.checked = false;
-  adapterFields.hidden = false;
-  adapterMode.dispatchEvent(new Event('change', { bubbles: true }));
+  if (retestRequested) {
+    adapterMode.checked = true;
+    simulationMode.checked = false;
+    adapterFields.hidden = false;
+    adapterMode.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 
   const trials = document.querySelector('#trials');
   if (trials && [...trials.options].some((option) => option.value === '3')) trials.value = '3';
@@ -135,7 +137,7 @@ async function applyContext() {
     const help = field.querySelector('.microcopy');
     if (help) help.textContent = retestRequested
       ? 'Locked to the exact case used by the failed baseline. Do not broaden the catalogue during an exact retest.'
-      : 'Selected from the material evidence plan. This case is locked here so the controlled run cannot silently broaden into the full catalogue.';
+      : 'Selected from the material evidence plan. The case stays locked, but you may use Pipeline simulation to debug the ARL runner/upload path. Simulation is never target evidence.';
   }
 
   contextBanner(plan);
