@@ -25,7 +25,7 @@ test('assessment can freeze one exact GitHub repository revision without changin
   assert.match(js, /payloadAnswers\.__system_description/);
 });
 
-test('assessment result turns the frozen target into a source-evidence next action', () => {
+test('assessment result turns the frozen target into an evidence-first next action', () => {
   const html = read('public/result.html');
   const js = read('public/result-target.js');
 
@@ -35,4 +35,19 @@ test('assessment result turns the frozen target into a source-evidence next acti
   assert.match(js, /inspector\.html\?assessment=/);
   assert.match(js, /Evidence from a later revision must not silently replace it/);
   assert.match(js, /run only the bounded checks needed for unresolved evidence questions/i);
+  assert.match(js, /declared concern/);
+  assert.match(js, /declarations are not confirmed findings/i);
+  assert.match(js, /Concerns to verify/);
+  assert.match(js, /Possible actions if confirmed/);
+  assert.match(js, /Verify with evidence first/);
+  assert.match(js, /questionnaire-only band/);
+  assert.match(js, /\/100 provisional/);
+  assert.doesNotMatch(js, /Update missing information/);
+});
+
+test('light result theme keeps conditional action cards readable', () => {
+  const css = read('public/result-light-fix.css');
+  assert.match(css, /\.simple-remediation-list article[\s\S]*?background:\s*#f8fafc\s*!important/);
+  assert.match(css, /\.simple-remediation-list article strong[\s\S]*?color:\s*#0f172a\s*!important/);
+  assert.match(css, /\.simple-remediation-list article p[\s\S]*?color:\s*#475569\s*!important/);
 });
