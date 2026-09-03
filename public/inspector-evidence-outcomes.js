@@ -32,7 +32,7 @@ function stateCopy(item) {
   const state = item.evidence.state;
   if (state === 'confirmed-failure') return { state: 'hold', next: 'Fix this confirmed failure, preserve implementation evidence, then rerun the same bounded case.' };
   if (state === 'inconclusive') return { state: 'unresolved', next: 'Correct the test condition and rerun the same bounded case. Do not create a finding from an inconclusive result.' };
-  if (state === 'exact-retest-supported') return { state: 'supported', next: 'Retest lineage supports this starting probe. Review the remaining invariant cases and evidence gaps before any deployment decision.' };
+  if (state === 'exact-retest-supported') return { state: 'supported', next: 'Retest lineage supports this starting probe. Send the bounded evidence and remaining limitations to accountable deployment review.' };
   if (state === 'supporting-pass') return { state: 'unresolved', next: 'Keep this as supporting evidence. A passing probe without a failed baseline is not verified remediation.' };
   return { state: 'unresolved', next: item.check.caseId ? 'Run the selected bounded case under written Rules of Engagement.' : 'Define a safe bounded test before collecting runtime evidence.' };
 }
@@ -50,11 +50,14 @@ function outcomeHtml(outcome, assessmentId) {
     const copy = stateCopy(item);
     const run = item.evidence.latestRun;
     const meta = run ? `<p class="microcopy">Latest evidence: <code>${escapeHtml(run.id || 'run')}</code>${run.createdAt ? ` · ${escapeHtml(new Date(run.createdAt).toLocaleString('en-GB'))}` : ''}${run.authorisationId ? ` · ROE <code>${escapeHtml(run.authorisationId)}</code>` : ''}</p>` : '';
-    const action = item.evidence.state === 'confirmed-failure'
-      ? `<a class="button primary small" href="${remediationHref(assessmentId, item)}">Fix confirmed failure</a>`
-      : item.check.caseId && ['open','inconclusive','supporting-pass','exact-retest-supported'].includes(item.evidence.state)
-        ? `<a class="button ${item.evidence.state === 'inconclusive' ? 'primary' : 'ghost'} small" href="${rerunHref(assessmentId, item)}">${item.evidence.state === 'inconclusive' ? 'Rerun bounded check' : 'Open exact check'}</a>`
-        : '';
+    let action = '';
+    if (item.evidence.state === 'confirmed-failure') {
+      action = `<a class="button primary small" href="${remediationHref(assessmentId, item)}">Fix confirmed failure</a>`;
+    } else if (item.evidence.state === 'exact-retest-supported') {
+      action = `<a class="button primary small" href="/result.html?id=${encodeURIComponent(assessmentId)}">Review deployment handoff</a>`;
+    } else if (item.check.caseId && ['open','inconclusive','supporting-pass'].includes(item.evidence.state)) {
+      action = `<a class="button ${item.evidence.state === 'inconclusive' ? 'primary' : 'ghost'} small" href="${rerunHref(assessmentId, item)}">${item.evidence.state === 'inconclusive' ? 'Rerun bounded check' : 'Open exact check'}</a>`;
+    }
     return `<article class="workspace-status-card" data-state="${copy.state}" data-evidence-outcome="${escapeHtml(item.check.id)}">
       <small>${escapeHtml(item.check.title)}</small>
       <strong>${escapeHtml(item.evidence.label)}</strong>

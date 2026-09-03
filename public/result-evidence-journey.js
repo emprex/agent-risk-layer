@@ -15,6 +15,11 @@ async function fullRuns(assessmentId) {
   return hydrated.filter(Boolean);
 }
 
+function boundedCheckHref(assessmentId, item) {
+  const query = new URLSearchParams({ assessment: assessmentId, case: item.check.caseId, plan: item.check.id });
+  return `/redteam.html?${query.toString()}`;
+}
+
 function nextAction({ assessment, inspections, plan, outcome }) {
   if (!inspections.length) {
     return {
@@ -39,47 +44,51 @@ function nextAction({ assessment, inspections, plan, outcome }) {
   }
   const uncertain = outcome.inconclusive[0];
   if (uncertain) {
-    const query = new URLSearchParams({ assessment: assessment.id, case: uncertain.check.caseId, plan: uncertain.check.id });
     return {
       stage: 'PROVE',
       title: 'Rerun the inconclusive bounded check',
       body: 'The last run did not establish pass or failure. Correct the test condition without turning it into a finding.',
-      href: `/redteam.html?${query.toString()}`,
+      href: boundedCheckHref(assessment.id, uncertain),
       action: 'Rerun bounded check',
     };
   }
-  const openCheck = outcome.checks.find((item) => ['open','supporting-pass','exact-retest-supported'].includes(item.evidence.state));
-  if (openCheck) {
-    const query = new URLSearchParams({ assessment: assessment.id, case: openCheck.check.caseId, plan: openCheck.check.id });
-    const baseline = openCheck.evidence.baselineRun || openCheck.evidence.latestRun;
-    if (baseline?.id && openCheck.evidence.state !== 'open') {
-      query.set('retest', '1'); query.set('baseline', baseline.id);
-      if (baseline.authorisationId) query.set('roe', baseline.authorisationId);
-    }
-    const supported = openCheck.evidence.state === 'exact-retest-supported';
+  const neverRun = outcome.checks.find((item) => item.evidence.state === 'open');
+  if (neverRun) {
     return {
       stage: 'PROVE',
-      title: supported ? 'Review the remaining evidence gap' : 'Continue the bounded evidence check',
-      body: supported
-        ? 'The exact starting probe has supporting retest lineage, but that does not verify every case in the wider invariant.'
-        : 'A material evidence question remains open. Run only the selected bounded check rather than a generic attack suite.',
-      href: `/redteam.html?${query.toString()}`,
-      action: supported ? 'Review exact check' : 'Continue evidence',
+      title: 'Run the remaining bounded evidence check',
+      body: 'A material evidence question has no authorised target result yet. Run only the selected bounded check rather than a generic attack suite.',
+      href: boundedCheckHref(assessment.id, neverRun),
+      action: 'Run bounded check',
+    };
+  }
+  const supportingOnly = outcome.checks.find((item) => item.evidence.state === 'supporting-pass');
+  if (supportingOnly) {
+    return {
+      stage: 'PROVE',
+      title: 'Strengthen the supporting pass evidence',
+      body: 'The starting probe passed, but there is no reproduced failed baseline and exact retest lineage. Keep this as supporting evidence until the remaining evidence question is reviewed.',
+      href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}`,
+      action: 'Review evidence plan',
     };
   }
   if (plan.manual?.length) {
     return {
       stage: 'PROVE',
       title: 'Review the remaining evidence gap',
-      body: 'No safe automatic bounded test is mapped to the remaining material question. Keep it open until appropriate evidence is defined.',
+      body: 'No safe automatic bounded test is mapped to the remaining material question. Keep it open and expose that limitation to the deployment reviewer.',
       href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}`,
       action: 'Review evidence plan',
     };
   }
+
+  const exactSupported = outcome.checks.filter((item) => item.evidence.state === 'exact-retest-supported');
   return {
     stage: 'DEPLOY',
     title: 'Open deployment review',
-    body: 'No mapped bounded-test failure is open. An accountable human must still review the full evidence chain and record the deployment decision.',
+    body: exactSupported.length
+      ? `${exactSupported.length} mapped bounded check${exactSupported.length === 1 ? '' : 's'} now ${exactSupported.length === 1 ? 'has' : 'have'} exact before/after support for the selected probe. That evidence remains bounded; an accountable human must review the full chain and any stated limitations before recording Proceed, Hold or Do not deploy.`
+      : 'No mapped bounded-test failure is open. An accountable human must still review the full evidence chain and record Proceed, Hold or Do not deploy.',
     href: `/control-plane.html?assessment=${encodeURIComponent(assessment.id)}`,
     action: 'Open deployment review',
   };
