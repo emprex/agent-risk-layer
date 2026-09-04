@@ -4,13 +4,11 @@
   "private": true,
   "type": "module",
   "description": "Production AI-agent security platform with public onboarding, PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, payments, signed evidence, and operational recovery.",
-  "engines": {
-    "node": ">=22.5.0"
-  },
+  "engines": { "node": ">=22.5.0" },
   "scripts": {
     "prices:update": "node scripts/update-stripe-render-prices.mjs",
-    "dev": "node --env-file-if-exists=.env --watch server.js",
-    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js --watch server.js",
+    "start": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js server.js",
     "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' ! -name 'postgresql-billing-gate.test.js' -print | sort)",
     "test:arl17k": "node --test benchmarks/arl17k/tests/*.test.mjs",
     "arl17k:phase2": "node benchmarks/arl17k/run-phase2.mjs",
@@ -44,7 +42,5 @@
     "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs",
     "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs"
   },
-  "dependencies": {
-    "pg": "8.22.0"
-  }
+  "dependencies": { "pg": "8.22.0" }
 }
