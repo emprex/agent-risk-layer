@@ -28,20 +28,21 @@ test('red-team token flow prepares before token creation and supports immediate 
   assert.match(campaign, /finally\{setBusy/);
 });
 
-test('evidence page shows one current bounded check and does not render blank evidence questions', () => {
+test('evidence page shows one current bounded check and keeps evidence-gap disposition directly available', () => {
   const html = read('public/inspector.html');
   const fix = read('public/inspector-journey-fix.js');
 
   assert.match(html, /inspector-journey-fix\.js/);
   assert.match(fix, /Current step · Evidence/);
   assert.match(fix, /additional bounded runtime check/);
-  assert.match(fix, /Other evidence dispositions/);
+  assert.match(fix, /restorePrimaryActions/);
+  assert.match(fix, /data-evidence-gap/);
   assert.match(fix, /evidence questions remain open for reviewer-specific evidence/i);
   assert.match(fix, /text !== '-'/);
   assert.match(read('public/inspector-evidence-plan.js'), /Evidence question details unavailable/);
 });
 
-test('result page separates declarations from confirmed findings and uses Evidence language', () => {
+test('result page separates declarations from confirmed findings and fixes post-review copy', () => {
   const html = read('public/result.html');
   const fix = read('public/result-journey-fix.js');
 
@@ -51,4 +52,10 @@ test('result page separates declarations from confirmed findings and uses Eviden
   assert.match(fix, /not confirmed findings/i);
   assert.match(fix, /Review declared concerns/);
   assert.match(fix, /nav\.textContent = 'Declarations'/);
+  assert.match(fix, /additional concerns/);
+  assert.match(fix, /Do not expand deployment while material evidence gaps remain unresolved/);
+  assert.match(fix, /evidence limitation.*total/i);
+  assert.match(fix, /Deployment decision recorded:/);
+  assert.match(fix, /Close the remaining information and evidence gaps before reassessment/);
+  assert.match(fix, /Review decision/);
 });
