@@ -25,24 +25,28 @@ test('assessment can freeze one exact GitHub repository revision without changin
   assert.match(js, /payloadAnswers\.__system_description/);
 });
 
-test('assessment result turns the frozen target into an evidence-first next action', () => {
+test('frozen target stays scoped while live evidence journey owns the next action', () => {
   const html = read('public/result.html');
-  const js = read('public/result-target.js');
+  const target = read('public/result-target.js');
+  const journey = read('public/result-evidence-journey.js');
 
   assert.match(html, /result-target\.js/);
-  assert.match(js, /Frozen assessment target/);
-  assert.match(js, /Run source evidence/);
-  assert.match(js, /inspector\.html\?assessment=/);
-  assert.match(js, /Evidence from a later revision must not silently replace it/);
-  assert.match(js, /run only the bounded checks needed for unresolved evidence questions/i);
-  assert.match(js, /declared concern/);
-  assert.match(js, /declarations are not confirmed findings/i);
-  assert.match(js, /Concerns to verify/);
-  assert.match(js, /Possible actions if confirmed/);
-  assert.match(js, /Verify with evidence first/);
-  assert.match(js, /questionnaire-only band/);
-  assert.match(js, /\/100 provisional/);
-  assert.doesNotMatch(js, /Update missing information/);
+  assert.match(html, /result-evidence-journey\.js/);
+  assert.match(target, /Frozen assessment target/);
+  assert.match(target, /Review evidence/);
+  assert.match(target, /inspector\.html\?assessment=/);
+  assert.match(target, /Evidence from a later revision must not silently replace it/);
+  assert.match(target, /source evidence, bounded checks and recorded limitations/i);
+  assert.match(target, /declared concern/);
+  assert.match(target, /Concerns to verify/);
+  assert.match(target, /Possible actions if confirmed/);
+  assert.match(target, /Verify with evidence first/);
+  assert.match(target, /questionnaire-only band/);
+  assert.match(target, /\/100 provisional/);
+  assert.doesNotMatch(target, /Inspect the frozen revision/);
+  assert.doesNotMatch(target, /Run source evidence/);
+  assert.match(journey, /title: 'Run source evidence'/);
+  assert.match(journey, /No confirmed findings; evidence gaps remain/);
 });
 
 test('light result theme keeps conditional action cards readable', () => {
