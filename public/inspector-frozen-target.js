@@ -158,7 +158,9 @@ async function loadTarget(assessmentId) {
 
 function syncSelection() {
   const id = selectedAssessmentId();
-  if (!id || id === activeAssessmentId) {
+  if (!id) return;
+  if (id === activeAssessmentId) {
+    if (!document.querySelector('[data-inspector-target-panel]')) renderTargetPanel();
     enhanceCommand();
     return;
   }
