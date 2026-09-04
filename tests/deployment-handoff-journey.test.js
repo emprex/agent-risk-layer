@@ -28,7 +28,11 @@ test('exact bounded retest support hands off to review instead of rerunning fore
 });
 
 test('deployment handoff keeps evidence limitations and never auto-decides Proceed', () => {
-  assert.match(resultJourney, /does not automatically record Proceed/);
-  assert.match(resultJourney, /recording Proceed, Hold or Do not deploy/);
+  assert.match(resultJourney, /human review required/i);
+  assert.match(resultJourney, /it is never inferred from a scan or test result/i);
+  assert.match(resultJourney, /data-deployment-decision="proceed"/);
+  assert.match(resultJourney, /data-deployment-decision="hold"/);
+  assert.match(resultJourney, /data-deployment-decision="do_not_deploy"/);
+  assert.match(resultJourney, /Proceed is unavailable while material information gaps, evidence gaps or confirmed failures remain/i);
   assert.doesNotMatch(resultJourney, /decision\s*[:=]\s*['"]Proceed['"]/);
 });
