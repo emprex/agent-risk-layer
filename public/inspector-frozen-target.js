@@ -31,7 +31,7 @@ function targetPanelHtml(target) {
       <span class="eyebrow">Assessment target</span>
       <h2>No frozen repository revision is recorded for this assessment</h2>
       <p>Source evidence can still be collected locally, but AgentRiskLayer cannot prove that the scan came from the same source revision used when this assessment was created.</p>
-      <p class="microcopy">Create an updated assessment with a GitHub repository and full commit SHA before relying on exact source-to-retest continuity.</p>
+      <p class="microcopy">The revision identity remains a limitation. Create an updated assessment with a GitHub repository and full commit SHA before relying on exact source-to-retest continuity.</p>
     </section>`;
   }
   return `<section class="workspace-section section-gap" data-inspector-target-panel>
@@ -43,14 +43,14 @@ function targetPanelHtml(target) {
         <strong>GitHub source</strong>
         <p>AgentRiskLayer fetches this public repository at the exact frozen commit, runs the read-only Inspector server-side, records only evidence metadata, then deletes the temporary source archive.</p>
         <button class="button primary small" id="runGithubSource">Inspect frozen GitHub revision</button>
-        <p class="microcopy">No terminal command is required. This is static source evidence, not runtime proof.</p>
+        <p class="microcopy">Run source evidence for this exact revision. No terminal command is required. This is static source evidence, not runtime proof.</p>
       </article>
       <article class="workspace-status-card" data-state="unresolved">
         <small>Fallback</small>
         <strong>Local source</strong>
         <p>Use the local Inspector when the repository is private, offline, or source custody must remain on your machine. The same assessment and frozen SHA are preserved.</p>
         <button class="button ghost small" id="useLocalSource">Use local Inspector</button>
-        <p class="microcopy">The local command verifies <code>git rev-parse HEAD</code> before scanning.</p>
+        <p class="microcopy">The local command verifies <code>git rev-parse HEAD</code> before scanning. A different commit fails closed.</p>
       </article>
     </div>
     <div class="notice" id="githubSourceStatus" hidden></div>
