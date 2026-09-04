@@ -42,5 +42,5 @@
     "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs",
     "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs"
   },
-  "dependencies": { "pg": "8.22.0" }
+  "dependencies": { "pg": "8.23.0" }
 }
