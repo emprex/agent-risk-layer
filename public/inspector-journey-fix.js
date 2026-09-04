@@ -35,22 +35,21 @@ function collapseSecondaryChecks(plan) {
   items[0].insertAdjacentElement('afterend', wrapper);
 }
 
-function simplifyPrimaryActions(plan) {
+function restorePrimaryActions(plan) {
   const primary = plan.querySelector('[data-primary-evidence-check="true"]');
   const row = primary?.querySelector('.button-row');
-  if (!row || primary.querySelector('[data-secondary-evidence-actions]')) return;
-  const secondary = [...row.querySelectorAll('button.secondary')];
-  if (!secondary.length) return;
-  const details = document.createElement('details');
-  details.className = 'workspace-technical';
-  details.dataset.secondaryEvidenceActions = 'true';
-  const summary = document.createElement('summary');
-  summary.innerHTML = '<span>Other evidence dispositions</span><small>Use only when the bounded check cannot or should not run</small>';
-  const body = document.createElement('div');
-  body.className = 'workspace-technical-body button-row compact';
-  secondary.forEach((button) => body.appendChild(button));
-  details.append(summary, body);
-  row.insertAdjacentElement('afterend', details);
+  if (!primary || !row) return;
+
+  const hiddenActions = primary.querySelector('[data-secondary-evidence-actions]');
+  if (hiddenActions) {
+    hiddenActions.querySelectorAll('button').forEach((button) => row.appendChild(button));
+    hiddenActions.remove();
+  }
+
+  const gap = row.querySelector('[data-evidence-gap]');
+  const notApplicable = row.querySelector('[data-evidence-not-applicable]');
+  if (gap) gap.hidden = false;
+  if (notApplicable) notApplicable.hidden = false;
 }
 
 function addCurrentStep(plan) {
@@ -58,16 +57,10 @@ function addCurrentStep(plan) {
   const first = plan.querySelector('[data-primary-evidence-check="true"]');
   if (!first) return;
   const title = first.querySelector('h3')?.textContent?.trim() || 'Run the selected bounded check';
-  const action = first.querySelector('a.button.primary, button.button.primary');
   const box = document.createElement('div');
   box.className = 'workspace-next-action';
   box.dataset.currentEvidenceStep = 'true';
-  box.innerHTML = `<small>Current step · Evidence</small><strong>${title}</strong><p>Complete this bounded check before moving to the next evidence question. An error or inconclusive result remains evidence needed, not a finding.</p>`;
-  if (action) {
-    const clone = action.cloneNode(true);
-    clone.classList.add('small');
-    box.appendChild(clone);
-  }
+  box.innerHTML = `<small>Current step · Evidence</small><strong>${title}</strong><p>Complete this bounded check, or record an evidence gap when runtime verification cannot complete safely. An error or inconclusive result is not a finding.</p>`;
   first.insertAdjacentElement('beforebegin', box);
 }
 
@@ -77,7 +70,7 @@ function apply() {
   plan.dataset.journeyFixApplied = 'true';
   fixManualQuestions(plan);
   collapseSecondaryChecks(plan);
-  simplifyPrimaryActions(plan);
+  restorePrimaryActions(plan);
   addCurrentStep(plan);
   return true;
 }
