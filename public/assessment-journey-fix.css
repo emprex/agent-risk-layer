@@ -1,0 +1,213 @@
+/* Assessment journey corrections discovered during a real one-agent walkthrough.
+ * Presentation and guidance only: scoring, evidence trust and finding semantics stay unchanged.
+ */
+body.workspace-assessment-page[data-shell="app"] .assessment-intro {
+  padding-block: 14px 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-intro h1 {
+  margin: 4px 0 5px !important;
+  font-size: clamp(28px, 3.5vw, 36px) !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-intro > p {
+  margin: 0 !important;
+  line-height: 1.45 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-assurance {
+  gap: 6px !important;
+  margin-top: 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep.assessment-stage.panel,
+body.workspace-assessment-page[data-shell="app"] #questionStage.assessment-stage.panel {
+  padding: 16px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep .form-grid {
+  gap: 10px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep .field {
+  gap: 5px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep textarea {
+  min-height: 72px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep .workspace-section {
+  margin-top: 12px !important;
+  padding: 14px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #profileStep .workspace-section h3 {
+  margin-bottom: 5px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-answering-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 14px;
+  align-items: center;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #dbe5f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-answering-context label {
+  display: block;
+  margin: 3px 0 2px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-answering-context p {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-answering-context select {
+  width: 100%;
+  min-height: 38px;
+}
+
+/* Once the questionnaire starts, the large marketing-style intro no longer helps.
+ * The phase/question header and compact answering-context note keep orientation visible.
+ */
+body.workspace-assessment-page[data-shell="app"]:has(#questionStage:not([hidden])) .assessment-intro {
+  display: none !important;
+}
+
+body.workspace-assessment-page[data-shell="app"]:has(#questionStage:not([hidden])) .assessment-review-layout {
+  margin-top: 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .question-meta {
+  margin-bottom: 2px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .question-domain {
+  margin-top: 2px !important;
+  font-size: 11px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage h2 {
+  margin: 4px 0 5px !important;
+  font-size: clamp(21px, 2.5vw, 27px) !important;
+  line-height: 1.16 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .question-help {
+  margin: 0 0 8px !important;
+  line-height: 1.4 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .question-basis-note {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #60a5fa;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .question-guidance {
+  margin: 0 0 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .question-guidance > summary {
+  padding: 7px 9px !important;
+  font-size: 11px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .guided-option-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .guided-option {
+  min-height: 0 !important;
+  padding: 9px 10px !important;
+  border-radius: 9px !important;
+  line-height: 1.3 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .guided-option.not-sure {
+  grid-column: 1 / -1;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .answer-qualification {
+  margin: 7px 0 0 !important;
+  padding: 8px 10px !important;
+  font-size: 11px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details {
+  margin-top: 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details > summary {
+  padding: 7px 9px !important;
+  font-size: 11px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details[open] > p {
+  margin: 7px 10px 2px !important;
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details[open] .field {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 0 !important;
+  padding: 6px 10px 9px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details label {
+  margin: 0 !important;
+  font-size: 11px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details select {
+  min-height: 34px !important;
+  padding-block: 5px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-progress {
+  margin-top: 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"] .assessment-actions {
+  margin-top: 8px !important;
+}
+
+body.workspace-assessment-page[data-shell="app"]:has(#questionStage:not([hidden])) .assessment-security-note {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  body.workspace-assessment-page[data-shell="app"] .assessment-answering-context,
+  body.workspace-assessment-page[data-shell="app"] #questionStage .evidence-details[open] .field {
+    grid-template-columns: 1fr;
+  }
+
+  body.workspace-assessment-page[data-shell="app"] #questionStage .guided-option-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.workspace-assessment-page[data-shell="app"] #questionStage .guided-option.not-sure {
+    grid-column: auto;
+  }
+}
