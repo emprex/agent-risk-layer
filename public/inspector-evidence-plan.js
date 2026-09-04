@@ -9,11 +9,16 @@ function gapLabel(gap = {}) { return gap.title || gap.name || gap.id || 'Materia
 function checkAction(check, assessmentId) { const params = new URLSearchParams({ assessment: assessmentId }); if (check.caseId) params.set('case', check.caseId); params.set('plan', check.id); return `/redteam.html?${params.toString()}`; }
 
 function checkHtml(check, index, assessmentId) {
+  const automatedAction = check.caseId
+    ? `<a class="button primary small" href="${checkAction(check, assessmentId)}">Open bounded check</a>`
+    : `<button class="button primary small" type="button" data-review-bounded="${escapeHtml(check.id)}">Review bounded check</button>`;
+  const reviewerPanel = check.caseId ? '' : `<div class="success-box section-gap" id="review-${escapeHtml(check.id)}" data-review-panel hidden><strong>Reviewer-defined bounded check</strong><p>No automated Red Team case is mapped to this invariant yet. Review the target-specific evidence against the bounded cases above. If a safe bounded runtime test cannot be executed, record an evidence gap. Do not substitute source declarations or a generic attack suite for target runtime proof.</p></div>`;
   return `<article class="finding-work-item" ${index === 0 ? 'data-primary-evidence-check="true"' : ''}><div class="finding-work-body">
     <div class="question-meta"><span>Bounded runtime check</span><span>${escapeHtml(check.environment)}</span></div><h3>${escapeHtml(check.title)}</h3><p>${escapeHtml(check.why)}</p>
     <div class="plain-finding-sections"><div><small>Security invariant</small><p>${escapeHtml(check.invariant)}</p></div><div><small>Bounded cases</small><p>${check.cases.map(escapeHtml).join(' · ')}</p></div><div><small>Evidence question</small><p>${escapeHtml(gapLabel(check.gap))}</p></div></div>
-    ${check.caseId ? `<p class="microcopy">Existing controlled-test case: <code>${escapeHtml(check.caseId)}</code>. The case is a starting probe for this question; it does not by itself prove every invariant case above.</p>` : '<p class="microcopy">No existing automated case fully covers this invariant yet.</p>'}
-    <div class="button-row compact">${check.caseId ? `<a class="button primary small" href="${checkAction(check, assessmentId)}">Open bounded check</a>` : ''}<button class="button secondary small" type="button" data-evidence-gap="${escapeHtml(check.id)}">Record evidence gap</button><button class="button secondary small" type="button" data-evidence-not-applicable="${escapeHtml(check.id)}">Mark not applicable</button></div>
+    ${check.caseId ? `<p class="microcopy">Existing controlled-test case: <code>${escapeHtml(check.caseId)}</code>. The case is a starting probe for this question; it does not by itself prove every invariant case above.</p>` : '<p class="microcopy">No existing automated case fully covers this invariant yet. Use the reviewer path below; do not run the full catalogue as a substitute.</p>'}
+    <div class="button-row compact">${automatedAction}<button class="button secondary small" type="button" data-evidence-gap="${escapeHtml(check.id)}">Record evidence gap</button><button class="button secondary small" type="button" data-evidence-not-applicable="${escapeHtml(check.id)}">Mark not applicable</button></div>
+    ${reviewerPanel}
     <p class="microcopy">Record an evidence gap when the boundary is material but bounded runtime verification cannot be completed. This is not a PASS, finding or verified control. Use Not applicable only when reviewed evidence shows the boundary is not materially present.</p>
   </div></article>`;
 }
@@ -35,6 +40,8 @@ const observer=new MutationObserver(()=>{const id=selectedAssessmentId();if(id&&
 document.addEventListener('change',e=>{if(e.target?.id==='assessmentSelect'){activeAssessmentId='';serial+=1;queueMicrotask(sync);}});
 document.addEventListener('click',async e=>{
   if(e.target?.id==='refreshScans'){const id=selectedAssessmentId();if(id){activeAssessmentId='';setTimeout(()=>loadPlan(id),300);}return;}
+  const reviewButton=e.target?.closest?.('[data-review-bounded]');
+  if(reviewButton){const panel=document.querySelector(`#review-${CSS.escape(reviewButton.dataset.reviewBounded)}`);if(panel){panel.hidden=!panel.hidden;reviewButton.textContent=panel.hidden?'Review bounded check':'Hide reviewer guidance';if(!panel.hidden)panel.scrollIntoView({block:'nearest',behavior:'smooth'});}return;}
   const gapButton=e.target?.closest?.('[data-evidence-gap]');
   const naButton=e.target?.closest?.('[data-evidence-not-applicable]');
   const button=gapButton||naButton; if(!button)return;
