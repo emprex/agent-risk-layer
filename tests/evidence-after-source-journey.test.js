@@ -9,7 +9,7 @@ test('Evidence Plan refreshes after hosted source evidence is recorded', () => {
   assert.match(planUi, /arl:source-evidence-recorded/);
   assert.match(planUi, /Source evidence complete\./);
   assert.match(planUi, /not automatically confirmed vulnerabilities/i);
-  assert.match(planUi, /attempt < 20/);
+  assert.match(planUi, /attempt\s*<\s*20/);
 });
 
 test('Evidence history does not present static inspection as a whole-system grade or confirmed findings', () => {
