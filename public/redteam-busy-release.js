@@ -90,10 +90,13 @@ function releaseCreateAction(force = false) {
   const creating = button.textContent.trim() === 'Creating…' || button.getAttribute('aria-busy') === 'true';
   if (!creating && !force) return false;
   if (!command && !force) return false;
+  const label = readyLabel();
+  const needsChange = button.disabled || button.hasAttribute('aria-busy') || button.textContent.trim() !== label;
+  if (!needsChange) return true;
   button.disabled = false;
   button.removeAttribute('aria-busy');
   delete button.dataset.original;
-  button.textContent = readyLabel();
+  if (button.textContent.trim() !== label) button.textContent = label;
   return true;
 }
 
@@ -102,13 +105,11 @@ function enhanceGeneratedCommand() {
   if (!pre) return false;
   const command = normaliseGeneratedCommand(pre.textContent);
   if (pre.textContent !== command) pre.textContent = command;
-  pre.dataset.runtimeReady = 'true';
+  if (pre.dataset.runtimeReady !== 'true') pre.dataset.runtimeReady = 'true';
   rememberAuthorisation(command);
   updateTokenNotice();
   selectRememberedAuthorisation();
   releaseCreateAction(true);
-  const button = document.querySelector('#createCampaign');
-  if (button) button.textContent = 'Create new one-time token';
   return true;
 }
 
