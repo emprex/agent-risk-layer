@@ -27,7 +27,6 @@ function normalizeEvidenceFirstJourney(root) {
   const summary = root.querySelector('.result-decision-card');
   const reasonCells = [...(summary?.querySelectorAll('.result-reason-grid > div') || [])];
   const concernCount = Number(reasonCells[0]?.querySelector('strong')?.textContent || 0);
-  const unresolvedCount = Number(reasonCells[1]?.querySelector('strong')?.textContent || 0);
 
   if (reasonCells[0]?.querySelector('span')) {
     reasonCells[0].querySelector('span').textContent = `declared concern${concernCount === 1 ? '' : 's'}`;
@@ -35,27 +34,8 @@ function normalizeEvidenceFirstJourney(root) {
   if (reasonCells[2]?.querySelector('span')) {
     reasonCells[2].querySelector('span').textContent = 'highest declared concern';
   }
-
-  if (summary && unresolvedCount > 0) {
-    const heading = summary.querySelector('h2');
-    const explanation = heading?.nextElementSibling;
-    if (heading) heading.textContent = concernCount
-      ? 'Resolve missing information and verify declared concerns before deployment.'
-      : 'Resolve the missing information before a deployment review.';
-    if (explanation) explanation.textContent = concernCount
-      ? `${unresolvedCount} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain and ${concernCount} declared control concern${concernCount === 1 ? '' : 's'} need evidence. Unknowns are not vulnerabilities, and declarations are not confirmed findings.`
-      : `${unresolvedCount} unanswered security question${unresolvedCount === 1 ? '' : 's'} remain. Unknowns are information gaps, not vulnerabilities.`;
-
-    const nextAction = summary.querySelector('.result-next-action');
-    const nextTitle = nextAction?.querySelector('strong');
-    const nextDetail = nextAction?.querySelector('p');
-    const nextButton = nextAction?.querySelector('a.button');
-    if (nextTitle) nextTitle.textContent = 'Inspect the frozen revision';
-    if (nextDetail) nextDetail.textContent = 'Use source evidence to resolve what AgentRiskLayer can observe from this exact commit. Run bounded tests only for questions source review cannot resolve.';
-    if (nextButton) {
-      nextButton.href = inspectorHref;
-      nextButton.textContent = 'Run source evidence';
-    }
+  if (reasonCells[3]?.querySelector('span')) {
+    reasonCells[3].querySelector('span').textContent = 'questionnaire evidence confidence';
   }
 
   const navLinks = [...root.querySelectorAll('.workspace-local-nav a')];
@@ -141,8 +121,8 @@ function enhanceTarget() {
     <h3>${escapeHtml(target.repository)}</h3>
     <p class="microcopy"><strong>Revision</strong><br><code>${escapeHtml(target.revision)}</code></p>
     <p>This assessment is scoped to this exact commit. Evidence from a later revision must not silently replace it.</p>
-    ${assessmentId ? `<a class="button primary" href="${evidenceHref()}">Run source evidence</a>` : ''}
-    <p class="microcopy">Next: inspect this revision, then run only the bounded checks needed for unresolved evidence questions.</p>`;
+    ${assessmentId ? `<a class="button primary" href="${evidenceHref()}">Review evidence</a>` : ''}
+    <p class="microcopy">Review the source evidence, bounded checks and recorded limitations for this exact revision.</p>`;
 
   const riskBlock = sidePanel.querySelector('.result-side-risk');
   sidePanel.insertBefore(targetCard, riskBlock || null);
