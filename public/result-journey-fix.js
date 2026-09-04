@@ -86,7 +86,7 @@ function normaliseRecordedDecision(root) {
   const decision = match[1].trim();
 
   const reviewCopy = review.querySelector('.workspace-section-heading p');
-  const recordedCopy = `This accountable human decision is recorded for the assessed revision. Review the remaining limitations before changing it.`;
+  const recordedCopy = 'This accountable human decision is recorded for the assessed revision. Review the remaining limitations before changing it.';
   if (reviewCopy && reviewCopy.textContent !== recordedCopy) reviewCopy.textContent = recordedCopy;
 
   const titleText = `Deployment decision recorded: ${decision}`;
@@ -100,7 +100,7 @@ function normaliseRecordedDecision(root) {
   if (summaryBody && summaryBody.textContent !== bodyText) summaryBody.textContent = bodyText;
   if (summaryButton) {
     summaryButton.href = '#deploymentReview';
-    summaryButton.textContent = 'Review decision';
+    if (summaryButton.textContent !== 'Review decision') summaryButton.textContent = 'Review decision';
   }
 
   const journeyNext = root.querySelector('[data-result-evidence-journey] .workspace-next-action');
@@ -108,12 +108,12 @@ function normaliseRecordedDecision(root) {
   const journeyTitle = journeyNext?.querySelector('strong');
   const journeyBody = journeyNext?.querySelector('p');
   const journeyButton = journeyNext?.querySelector('a.button');
-  if (journeyStep) journeyStep.textContent = 'Current step · DEPLOY';
+  if (journeyStep && journeyStep.textContent !== 'Current step · DEPLOY') journeyStep.textContent = 'Current step · DEPLOY';
   if (journeyTitle && journeyTitle.textContent !== titleText) journeyTitle.textContent = titleText;
   if (journeyBody && journeyBody.textContent !== bodyText) journeyBody.textContent = bodyText;
   if (journeyButton) {
     journeyButton.href = '#deploymentReview';
-    journeyButton.textContent = 'Review decision';
+    if (journeyButton.textContent !== 'Review decision') journeyButton.textContent = 'Review decision';
   }
 }
 
