@@ -59,3 +59,26 @@ body.workspace-result-page[data-shell="app"] .simple-remediation-list article st
 body.workspace-result-page[data-shell="app"] .simple-remediation-list article p {
   color: #475569 !important;
 }
+
+/* A blocked Proceed decision must look inert, not busy or clickable.
+ * The backend remains authoritative; this only removes misleading hover/progress affordance.
+ */
+body.workspace-result-page[data-shell="app"] #deploymentReview button[data-deployment-decision="proceed"]:disabled {
+  cursor: default !important;
+  opacity: .48 !important;
+  border-color: #334155 !important;
+  background: #1e293b !important;
+  background-image: none !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+body.workspace-result-page[data-shell="app"] #deploymentReview button[data-deployment-decision="proceed"]:disabled:hover,
+body.workspace-result-page[data-shell="app"] #deploymentReview button[data-deployment-decision="proceed"]:disabled:focus-visible {
+  cursor: default !important;
+  border-color: #334155 !important;
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+}
