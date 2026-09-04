@@ -17,17 +17,16 @@ test('zero actionable findings never enter remediation project selection', () =>
   assert.doesNotMatch(html, /src="\/control-plane\.js\?v=/);
 });
 
-test('current assessment navigation is distinct from starting a new assessment', () => {
+test('current assessment navigation keeps Findings on the selected assessment', () => {
   const nav = read('public/workspace-assessment-navigation.js');
-  assert.match(nav, /setLinkState\(link, 'Assessment', `\/result\.html\?\$\{params\.toString\(\)\}`\)/);
-  assert.match(nav, /setLinkState\(link, 'New assessment', '\/assessment\.html'\)/);
+  assert.match(nav, /location\.pathname\.endsWith\('\/result\.html'\) \? params\.get\('id'\)/);
+  assert.match(nav, /setLinkState\(assessmentLink, 'Assessment', assessmentResultHref\(context\)\)/);
+  assert.match(nav, /setLinkState\(findingsLink, 'Findings', assessmentResultHref\(context, '#confirmedFindings'\)\)/);
   assert.match(nav, /sessionStorage\.setItem\('arl_selected_assessment'/);
-  assert.match(nav, /if \(link\.textContent !== text\) link\.textContent = text/);
-  assert.match(nav, /if \(link\.getAttribute\('href'\) !== href\) link\.setAttribute\('href', href\)/);
+  assert.match(nav, /setLinkState\(assessmentLink, 'New assessment', '\/assessment\.html'\)/);
 
-  const dashboard = read('public/dashboard.html');
-  const result = read('public/result.html');
-  assert.match(dashboard, /workspace-assessment-navigation\.js/);
-  assert.match(result, /workspace-assessment-navigation\.js/);
-  assert.match(dashboard, />Assess another agent</);
+  for (const page of ['public/dashboard.html', 'public/result.html', 'public/control-plane.html', 'public/inspector.html', 'public/redteam.html', 'public/inspection-detail.html']) {
+    assert.match(read(page), /workspace-assessment-navigation\.js/, `${page} must preserve assessment navigation context`);
+  }
+  assert.match(read('public/dashboard.html'), />Assess another agent</);
 });
