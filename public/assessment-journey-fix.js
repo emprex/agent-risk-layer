@@ -93,9 +93,10 @@ function updateTargetCopy() {
   const targetSection = profileStep?.querySelector('.workspace-section');
   const help = targetSection?.querySelector('.question-help');
   if (!help) return;
-  help.textContent = answeringContextValue() === 'source'
+  const text = answeringContextValue() === 'source'
     ? 'Required for a source-code assessment. Add the GitHub repository and full commit SHA so evidence, findings and retests stay tied to one exact version.'
     : 'Add the repository and exact version whenever source evidence, findings or retests should be tied to this assessment.';
+  if (help.textContent !== text) help.textContent = text;
 }
 
 function installBasisNote() {
@@ -110,31 +111,33 @@ function installBasisNote() {
 function updateBasisNote() {
   const note = document.querySelector('#questionBasisNote');
   if (!note) return;
-  note.textContent = answeringContextCopy(answeringContextValue());
+  const text = answeringContextCopy(answeringContextValue());
+  if (note.textContent !== text) note.textContent = text;
+}
+
+function setText(node, text) {
+  if (node && node.textContent !== text) node.textContent = text;
 }
 
 function relabelEvidence() {
   const details = questionStage?.querySelector('.evidence-details');
   if (!details || !evidenceSelect) return;
-  const summary = details.querySelector('summary');
-  const explanation = details.querySelector('p');
-  const label = details.querySelector('label[for="questionEvidence"]');
-  if (summary) summary.textContent = 'How do you know this?';
-  if (explanation) explanation.textContent = 'This answer is still unverified. Evidence can be reviewed or tested later.';
-  if (label) label.textContent = 'Proof available now';
+  setText(details.querySelector('summary'), 'How do you know this?');
+  setText(details.querySelector('p'), 'This answer is still unverified. Evidence can be reviewed or tested later.');
+  setText(details.querySelector('label[for="questionEvidence"]'), 'Proof available now');
   const labels = {
     none: "I don't have proof yet",
     customer_assertion: 'My answer only — not verified',
     evidence_ready: 'I have supporting evidence to verify later',
   };
   for (const option of evidenceSelect.options) {
-    if (labels[option.value]) option.textContent = labels[option.value];
+    if (labels[option.value] && option.textContent !== labels[option.value]) option.textContent = labels[option.value];
   }
   details.open = true;
 
   const selected = questionStage.querySelector('input[name="currentQuestion"]:checked');
   const unknown = selected?.value === 'unknown';
-  if (unknown) evidenceSelect.value = 'none';
+  if (unknown && evidenceSelect.value !== 'none') evidenceSelect.value = 'none';
   evidenceSelect.disabled = Boolean(unknown);
 }
 
@@ -143,16 +146,14 @@ function refineCurrentQuestion() {
   const originalTitle = questionTitle.dataset.arlOriginalTitle || questionTitle.textContent.trim();
   if (!questionTitle.dataset.arlOriginalTitle) questionTitle.dataset.arlOriginalTitle = originalTitle;
   const copy = QUESTION_COPY.get(originalTitle);
-  if (copy?.title && questionTitle.textContent !== copy.title) questionTitle.textContent = copy.title;
-  if (copy?.help && questionHelp.textContent !== copy.help) questionHelp.textContent = copy.help;
+  if (copy?.title) setText(questionTitle, copy.title);
+  if (copy?.help) setText(questionHelp, copy.help);
 
   if (originalTitle === 'What can connected tools or MCP servers do?') {
-    const label = questionOptions?.querySelector('input[value="privileged"]')?.closest('label')?.querySelector('span');
-    if (label) label.textContent = 'Shell/code execution, admin access or dynamic tool discovery';
+    setText(questionOptions?.querySelector('input[value="privileged"]')?.closest('label')?.querySelector('span'), 'Shell/code execution, admin access or dynamic tool discovery');
   }
   if (originalTitle === 'Can this agent delegate to or receive instructions from other agents?') {
-    const label = questionOptions?.querySelector('input[value="dynamic"]')?.closest('label')?.querySelector('span');
-    if (label) label.textContent = 'Dynamic delegation or discovery of agents that are not pre-approved';
+    setText(questionOptions?.querySelector('input[value="dynamic"]')?.closest('label')?.querySelector('span'), 'Dynamic delegation or discovery of agents that are not pre-approved');
   }
 
   updateBasisNote();
@@ -210,8 +211,27 @@ questionStage?.addEventListener('change', (event) => {
   if (event.target?.name === 'currentQuestion') relabelEvidence();
 });
 
-const observer = new MutationObserver(() => queueMicrotask(enhance));
-if (profileStep) observer.observe(profileStep, { childList: true, subtree: true });
-if (questionStage) observer.observe(questionStage, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+let observer;
+let enhanceQueued = false;
+function observe() {
+  if (!observer) return;
+  if (profileStep) observer.observe(profileStep, { childList: true, subtree: true });
+  if (questionStage) observer.observe(questionStage, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+}
+function scheduleEnhance() {
+  if (enhanceQueued) return;
+  enhanceQueued = true;
+  queueMicrotask(() => {
+    enhanceQueued = false;
+    observer?.disconnect();
+    try {
+      enhance();
+    } finally {
+      observe();
+    }
+  });
+}
 
+observer = new MutationObserver(scheduleEnhance);
+observe();
 enhance();
