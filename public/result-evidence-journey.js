@@ -58,7 +58,7 @@ function reviewState({ assessment, plan, outcome }) {
 function nextAction({ assessment, inspections, plan, outcome, review }) {
   if (!inspections.length) {
     return {
-      stage: 'PROVE',
+      stage: 'Evidence',
       title: 'Run source evidence',
       body: 'Freeze the source evidence for this assessment before choosing runtime checks.',
       href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}`,
@@ -80,7 +80,7 @@ function nextAction({ assessment, inspections, plan, outcome, review }) {
   const uncertain = outcome.inconclusive[0];
   if (uncertain) {
     return {
-      stage: 'PROVE',
+      stage: 'Evidence',
       title: 'Rerun the inconclusive bounded check',
       body: 'The last run did not establish pass or failure. Correct the test condition without turning it into a finding.',
       href: boundedCheckHref(assessment.id, uncertain),
@@ -90,7 +90,7 @@ function nextAction({ assessment, inspections, plan, outcome, review }) {
   const neverRun = outcome.checks.find((item) => item.evidence.state === 'open');
   if (neverRun) {
     return {
-      stage: 'PROVE',
+      stage: 'Evidence',
       title: 'Run the remaining bounded evidence check',
       body: 'A material evidence question has no authorised target result yet. Run only the selected bounded check rather than a generic attack suite.',
       href: boundedCheckHref(assessment.id, neverRun),
@@ -100,7 +100,7 @@ function nextAction({ assessment, inspections, plan, outcome, review }) {
   const supportingOnly = outcome.checks.find((item) => item.evidence.state === 'supporting-pass');
   if (supportingOnly) {
     return {
-      stage: 'PROVE',
+      stage: 'Evidence',
       title: 'Strengthen the supporting pass evidence',
       body: 'The starting probe passed, but there is no reproduced failed baseline and exact retest lineage. Keep this as supporting evidence until the remaining evidence question is reviewed.',
       href: `/inspector.html?assessment=${encodeURIComponent(assessment.id)}`,

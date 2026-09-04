@@ -29,7 +29,7 @@ function ensurePreparationCard() {
     card = document.createElement('div');
     card.className = 'command-card';
     card.dataset.redteamPreparation = 'true';
-    card.innerHTML = `<span class="eyebrow">Prepare once</span><h3>Prepare the runner before issuing a one-time token</h3><p class="microcopy">Do this before creating the token. The token is single-use and should be spent only on the actual target run.</p><pre>${preparationCommand()}</pre>`;
+    card.innerHTML = `<span class="eyebrow">Prepare first</span><h3>Prepare the target before issuing a one-time token</h3><p class="microcopy">Download and verify the runner, start the adapter, and export its real token before continuing.</p><pre>${preparationCommand()}</pre><div class="field"><label for="adapterTimeout">Adapter response timeout</label><select id="adapterTimeout"><option value="15000">15 seconds — fast adapters</option><option value="30000" selected>30 seconds — slower local models</option></select><p class="microcopy">30 seconds is the runner safety maximum. If the target still cannot answer in time, record an evidence gap; do not treat the timeout as a finding.</p></div><label class="consent-row"><input id="targetPrepared" type="checkbox"> The runner is verified, the adapter is running, and its token is already exported.</label><p class="microcopy"><strong>Before issuance:</strong> the upload token lasts 15 minutes and is single-use. Uploading a completed error or inconclusive result consumes it too.</p>`;
     button.insertAdjacentElement('beforebegin', card);
   }
   card.hidden = !adapterModeSelected();
@@ -45,9 +45,9 @@ function normaliseGeneratedCommand(value) {
       && trimmed !== 'sha256sum -c agent-risk-redteam.mjs.sha256';
   });
   command = lines.join('\n').trim();
-  command = command.replace(/^([A-Z0-9_]+)=YOUR_ADAPTER_TOKEN\s+/, '');
   if (adapterModeSelected() && !/(?:^|\s)--timeout\s+\d+\b/.test(command)) {
-    command = command.replace(/\s--trials\s+/, ' --timeout 30000 --trials ');
+    const timeout = document.querySelector('#adapterTimeout')?.value === '15000' ? '15000' : '30000';
+    command = command.replace(/\s--trials\s+/, ` --timeout ${timeout} --trials `);
   }
   return command;
 }
@@ -144,7 +144,21 @@ document.addEventListener('change', (event) => {
 
 document.addEventListener('click', (event) => {
   const button = event.target?.closest?.('#createCampaign');
-  if (button) armWatchdog();
+  if (!button) return;
+  const authEnv = document.querySelector('#authEnv')?.value?.trim() || '';
+  if (adapterModeSelected() && !/^[A-Z_][A-Z0-9_]*$/.test(authEnv)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.alert('Enter a valid existing environment-variable name, such as ARL_TARGET_TOKEN.');
+    return;
+  }
+  if (adapterModeSelected() && !document.querySelector('#targetPrepared')?.checked) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.alert('Prepare the runner and target, export the adapter token, then confirm readiness before issuing the one-time token.');
+    return;
+  }
+  armWatchdog();
 }, true);
 
 document.addEventListener('click', (event) => {

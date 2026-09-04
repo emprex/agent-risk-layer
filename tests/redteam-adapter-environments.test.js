@@ -55,6 +55,26 @@ test('reused Rules of Engagement fail closed on expiry and known endpoint-origin
   assert.match(source, /parsedEndpoint\.origin!==authorisation\.endpointOrigin/);
 });
 
+test('campaign commands preserve an existing adapter secret and expose the bounded timeout', () => {
+  const source = read('public/redteam.js');
+  const hardening = read('public/redteam-busy-release.js');
+
+  assert.doesNotMatch(source, /=YOUR_ADAPTER_TOKEN/);
+  assert.match(source, /test -n/);
+  assert.match(source, /--timeout \$\{timeout\}/);
+  assert.match(hardening, /30 seconds is the runner safety maximum/);
+  assert.match(hardening, /#targetPrepared/);
+});
+
+test('server binds every adapter authorisation to its origin and reuses an identical active record', () => {
+  const source = read('src/redteam.js');
+
+  assert.match(source, /const authorisedEndpointOrigin = endpoint\.origin/);
+  assert.match(source, /environment === 'local' && !localhost/);
+  assert.match(source, /const reusable = active\.find/);
+  assert.match(source, /if \(reusable\)\s*return publicAuthorisation\(reusable\)/);
+});
+
 test('authorisation and campaign history expose provenance IDs needed by the evidence-binding workflow', () => {
   const source = read('public/redteam.js');
 

@@ -11,15 +11,21 @@ test('red-team token flow prepares before token creation and supports immediate 
   const fix = read('public/redteam-busy-release.js');
 
   assert.match(html, /redteam-busy-release\.js/);
-  assert.match(fix, /Prepare the runner before issuing a one-time token/);
+  assert.match(fix, /Prepare the target before issuing a one-time token/);
   assert.match(fix, /first upload attempt consumes this token/i);
   assert.match(fix, /Create new one-time token/);
-  assert.match(fix, /--timeout 30000/);
-  assert.match(fix, /YOUR_ADAPTER_TOKEN/);
-  assert.match(fix, /replace\(\/\^\(\[A-Z0-9_\]\+\)=YOUR_ADAPTER_TOKEN/);
+  assert.match(fix, /id=\"adapterTimeout\"/);
+  assert.match(fix, /id=\"targetPrepared\"/);
+  assert.match(fix, /completed error or inconclusive result consumes it too/i);
   assert.match(fix, /sessionStorage\.setItem\(roeStorageKey/);
   assert.match(fix, /MutationObserver/);
   assert.doesNotMatch(fix, /observer\.disconnect\(\)/);
+
+  const campaign = read('public/redteam.js');
+  assert.doesNotMatch(campaign, /=YOUR_ADAPTER_TOKEN/);
+  assert.match(campaign, /test -n/);
+  assert.match(campaign, /--timeout \$\{timeout\}/);
+  assert.match(campaign, /finally\{setBusy/);
 });
 
 test('evidence page shows one current bounded check and does not render blank evidence questions', () => {
@@ -32,6 +38,7 @@ test('evidence page shows one current bounded check and does not render blank ev
   assert.match(fix, /Other evidence dispositions/);
   assert.match(fix, /evidence questions remain open for reviewer-specific evidence/i);
   assert.match(fix, /text !== '-'/);
+  assert.match(read('public/inspector-evidence-plan.js'), /Evidence question details unavailable/);
 });
 
 test('result page separates declarations from confirmed findings and uses Evidence language', () => {

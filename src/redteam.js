@@ -25,17 +25,19 @@ export async function createRedTeamAuthorisation({ userId, assessmentId, input =
     const endpointOrigin = clean(input.endpointOrigin, 300);
     if (targetName.length < 3)
         throw new Error('Enter a clear target name.');
-    if (environment === 'staging') {
-        let endpoint;
-        try {
-            endpoint = new URL(endpointOrigin);
-        }
-        catch {
-            throw new Error('Enter the HTTPS origin of the authorised staging target.');
-        }
-        if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password)
-            throw new Error('Staging targets must use an HTTPS origin without embedded credentials.');
+    let endpoint;
+    try {
+        endpoint = new URL(endpointOrigin);
     }
+    catch {
+        throw new Error('Enter the origin of the authorised adapter target.');
+    }
+    const localhost = ['localhost', '127.0.0.1', '::1'].includes(endpoint.hostname);
+    if (endpoint.username || endpoint.password || (endpoint.protocol !== 'https:' && !(localhost && endpoint.protocol === 'http:')))
+        throw new Error('Adapter targets must use HTTPS; HTTP is allowed only for localhost. Embedded credentials are not allowed.');
+    if (environment === 'local' && !localhost)
+        throw new Error('Local Rules of Engagement may target localhost only.');
+    const authorisedEndpointOrigin = endpoint.origin;
     const authorityBasis = clean(input.authorityBasis, 50);
     if (!['owner', 'employee-authorised', 'written-client-authority', 'contractual-authority'].includes(authorityBasis))
         throw new Error('Choose the legal basis for testing authority.');
@@ -62,12 +64,29 @@ export async function createRedTeamAuthorisation({ userId, assessmentId, input =
     const dataClassification = clean(input.dataClassification || 'synthetic-only', 80);
     const retentionDays = clampInt(input.retentionDays || 30, 1, 90);
     const createdAt = nowIso();
+    const active = await db.prepare(`SELECT * FROM redteam_authorisations
+      WHERE user_id=? AND assessment_id=? AND status='active' AND window_end>? ORDER BY created_at DESC`).all(userId, assessmentId, createdAt);
+    const reusable = active.find((row) => row.target_name === targetName
+        && row.endpoint_origin === authorisedEndpointOrigin
+        && row.environment === environment
+        && row.authority_basis === authorityBasis
+        && row.authorised_by === authorisedBy
+        && row.authorised_role === authorisedRole
+        && row.emergency_contact === emergencyContact
+        && row.window_start === new Date(start).toISOString()
+        && row.window_end === new Date(end).toISOString()
+        && row.permitted_actions_json === JSON.stringify(permitted)
+        && row.prohibited_actions_json === JSON.stringify(prohibited)
+        && row.data_classification === dataClassification
+        && Number(row.retention_days) === retentionDays);
+    if (reusable)
+        return publicAuthorisation(reusable);
     const authorisationId = id('roe_');
     await db.prepare(`INSERT INTO redteam_authorisations
     (id, user_id, assessment_id, target_name, endpoint_origin, environment, authority_basis, authorised_by, authorised_role,
      emergency_contact, window_start, window_end, permitted_actions_json, prohibited_actions_json, data_classification,
      retention_days, synthetic_data_only, dry_run_tools_only, status, attestation_text, accepted_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?, ?, ?)`).run(authorisationId, userId, assessmentId, targetName, environment === 'staging' ? new URL(endpointOrigin).origin : null, environment, authorityBasis, authorisedBy, authorisedRole, emergencyContact, new Date(start).toISOString(), new Date(end).toISOString(), JSON.stringify(permitted), JSON.stringify(prohibited), dataClassification, retentionDays, confirmation, createdAt, createdAt);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?, ?, ?)`).run(authorisationId, userId, assessmentId, targetName, authorisedEndpointOrigin, environment, authorityBasis, authorisedBy, authorisedRole, emergencyContact, new Date(start).toISOString(), new Date(end).toISOString(), JSON.stringify(permitted), JSON.stringify(prohibited), dataClassification, retentionDays, confirmation, createdAt, createdAt);
     await db.prepare(`INSERT INTO events (id, user_id, name, properties_json, created_at) VALUES (?, ?, 'redteam_authorisation_created', ?, ?)`).run(id('evt_'), userId, JSON.stringify({ authorisationId, assessmentId, environment, windowEnd: new Date(end).toISOString() }), createdAt);
     return publicAuthorisation(await db.prepare('SELECT * FROM redteam_authorisations WHERE id = ?').get(authorisationId));
 }

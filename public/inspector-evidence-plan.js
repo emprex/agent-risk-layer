@@ -5,7 +5,10 @@ let activeAssessmentId = '';
 let serial = 0;
 
 function selectedAssessmentId() { return document.querySelector('#assessmentSelect')?.value || new URLSearchParams(location.search).get('assessment') || sessionStorage.getItem('arl_selected_assessment') || ''; }
-function gapLabel(gap = {}) { return gap.title || gap.name || gap.id || 'Material evidence question'; }
+function gapLabel(gap = {}) {
+  const value = String(gap.title || gap.name || gap.id || '').replace(/\s+/g, ' ').trim();
+  return value && value !== '-' ? value : 'Evidence question details unavailable';
+}
 function checkAction(check, assessmentId) { const params = new URLSearchParams({ assessment: assessmentId }); const caseId=check.caseId; if (caseId) params.set('case', caseId); params.set('plan', check.id); return `/redteam.html?${params.toString()}`; }
 
 function checkHtml(check, index, assessmentId) {

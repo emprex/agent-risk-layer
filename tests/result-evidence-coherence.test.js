@@ -32,3 +32,9 @@ test('stale frozen-target copy cannot override the live evidence state', () => {
   assert.match(target, /Review evidence/);
   assert.match(target, /questionnaire evidence confidence/);
 });
+
+test('normal customer stage language says Evidence rather than internal PROVE terminology', () => {
+  const journey = read('public/result-evidence-journey.js');
+  assert.doesNotMatch(journey, /stage: 'PROVE'/);
+  assert.match(journey, /stage: 'Evidence'/);
+});
