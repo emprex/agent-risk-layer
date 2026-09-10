@@ -369,8 +369,14 @@ export async function completeHostedAgentBoundedTest({
   operator,
   body = {}
 } = {}) {
-  const current = await resolveHostedWorkflow({ operator, body });
-  const reservationToken = String(body.reservationToken || '').trim();
+  const current = await resolveHostedWorkflow({
+    operator,
+    body
+  });
+
+  const reservationToken =
+    String(body.reservationToken || '').trim();
+
   if (!reservationToken || !body.bundle) {
     throw apiConflict(
       'HOSTED_BOUNDED_TEST_RESULT_REQUIRED',
@@ -378,10 +384,12 @@ export async function completeHostedAgentBoundedTest({
     );
   }
 
-  const persisted = await persistBoundedRedTeamReservation({
-    reservationToken,
-    bundle: body.bundle
-  });
+  const persisted =
+    await persistBoundedRedTeamReservation({
+      reservationToken,
+      bundle: body.bundle
+    });
+
   if (persisted.available !== true) {
     throw apiConflict(
       'HOSTED_BOUNDED_TEST_PERSISTENCE_BLOCKED',
@@ -389,36 +397,65 @@ export async function completeHostedAgentBoundedTest({
     );
   }
 
-  const reloadedPreparation = await resolveHostedAssessmentPreparation({
-    operatorContextInternal: current.operatorResolution.internal,
-    body: {
-      frozenInspection: body.frozenInspection
-    }
-  });
-  const conversation = await buildHostedPreparationConversation({
-    operatorContextInternal: current.operatorResolution.internal,
-    preparation: reloadedPreparation.internal,
-    command: 'continue'
-  });
+  /*
+   * Persistence satisfies only the user-operated bounded-test gate.
+   * From here ARL may execute only its existing automatic authoritative
+   * actions. The gated executor stops again at the next user/human gate.
+   * No deployment decision can be written here.
+   */
+  const continued =
+    await continueHostedAgentAssessment({
+      operator,
+      body
+    });
 
   return {
     statusCode: 200,
+
     body: {
-      operatorContext: current.operatorResolution.body.operatorContext,
-      declaredContext: current.declaredContext,
-      boundedTestResult: persisted,
-      preparation: reloadedPreparation.body.preparation,
-      conversationResponse: conversation.conversationResponse,
-      securityStateChanged: persisted.securityStateChanged === true,
+      operatorContext:
+        continued.body.operatorContext,
+
+      declaredContext:
+        continued.body.declaredContext ||
+        current.declaredContext,
+
+      boundedTestResult:
+        persisted,
+
+      preparation:
+        continued.body.preparation,
+
+      conversationResponse:
+        continued.body.conversationResponse,
+
+      workflowExecution:
+        continued.body.workflowExecution,
+
+      securityStateChanged:
+        persisted.securityStateChanged === true ||
+        continued.body.securityStateChanged === true,
+
       securityDecisionCreated: false,
       deploymentDecisionWritten: false,
       humanReviewRequired: true
     },
+
     internal: {
-      operatorContext: current.operatorResolution.internal,
-      boundedTestResult: persisted,
-      preparation: reloadedPreparation.internal,
-      workflowState: conversation.internal.workflowState
+      operatorContext:
+        continued.internal.operatorContext,
+
+      boundedTestResult:
+        persisted,
+
+      preparation:
+        continued.internal.preparation,
+
+      workflowExecution:
+        continued.internal.workflowExecution,
+
+      workflowState:
+        continued.internal.workflowState
     }
   };
 }

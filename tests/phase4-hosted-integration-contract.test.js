@@ -108,3 +108,45 @@ test('deployment readiness is bound to Control Intelligence core, never inferred
     'The agent must not bind derived readiness through the wrong facade'
   );
 });
+
+test('hosted bounded completion immediately continues through gated ARL authority', () => {
+  const source = fs.readFileSync(
+    path.join(agentRoot, 'hosted-agent-api.mjs'),
+    'utf8'
+  );
+
+  const start = source.indexOf(
+    'export async function completeHostedAgentBoundedTest'
+  );
+
+  const end = source.indexOf(
+    'export async function prepareHostedAgentRemediation',
+    start
+  );
+
+  assert.ok(start >= 0);
+  assert.ok(end > start);
+
+  const boundedCompletion =
+    source.slice(start, end);
+
+  assert.match(
+    boundedCompletion,
+    /persistBoundedRedTeamReservation/
+  );
+
+  assert.match(
+    boundedCompletion,
+    /continueHostedAgentAssessment\s*\(\s*\{/
+  );
+
+  assert.match(
+    boundedCompletion,
+    /workflowExecution:\s*continued\.body\.workflowExecution/
+  );
+
+  assert.doesNotMatch(
+    boundedCompletion,
+    /recordDeploymentDecision/
+  );
+});
