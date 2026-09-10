@@ -33,6 +33,77 @@
 .analytics-consent-actions { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
 .analytics-consent-actions .button { min-height: 2.4rem; padding: .6rem .8rem; font-size: .68rem; }
 .analytics-consent-actions a { color: #84dfd2; font-size: .68rem; white-space: nowrap; }
+
+/*
+ * Compatibility styling for the server-rendered legacy /terms.html and
+ * /privacy.html routes. The canonical legal pages now live under /legal and
+ * use marketing.css directly. Keeping this fallback light prevents a jarring
+ * dark-theme page for old bookmarks while those routes remain supported.
+ */
+body:has(.legal-copy) {
+  margin: 0;
+  background: #f6f8fb;
+  color: #101828;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.6;
+}
+body:has(.legal-copy) .site-header {
+  width: min(1180px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 22px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: transparent;
+  border: 0;
+}
+body:has(.legal-copy) .site-header .brand {
+  color: #101828;
+  text-decoration: none;
+  font-size: 1.18rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
+}
+body:has(.legal-copy) .site-header .brand-mark { display: none; }
+body:has(.legal-copy) .site-header nav { display: flex; gap: 18px; }
+body:has(.legal-copy) .site-header nav a { color: #475467; text-decoration: none; }
+body:has(.legal-copy) .app-shell {
+  width: min(900px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 68px 0 78px;
+}
+body:has(.legal-copy) .legal-copy {
+  margin: 0;
+  padding: 34px;
+  color: #101828;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 18px;
+  box-shadow: 0 14px 38px rgba(16,24,40,.05);
+}
+body:has(.legal-copy) .legal-copy h1,
+body:has(.legal-copy) .legal-copy h2,
+body:has(.legal-copy) .legal-copy h3 { color: #101828; }
+body:has(.legal-copy) .legal-copy p,
+body:has(.legal-copy) .legal-copy li,
+body:has(.legal-copy) .legal-copy .muted { color: #475467; }
+body:has(.legal-copy) .legal-title {
+  font-size: clamp(2.7rem, 5vw, 4.8rem);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+}
+body:has(.legal-copy) > footer {
+  width: min(1180px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 36px 0 48px;
+  color: #475467;
+  border-top: 1px solid #d0d5dd;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
 @media (max-width: 760px) {
   .analytics-consent {
     right: .75rem;
@@ -47,4 +118,10 @@
   .analytics-consent-actions { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; gap: .5rem; }
   .analytics-consent-actions .button { width: 100%; }
   .analytics-consent-actions a { grid-column: 1 / -1; padding-top: .1rem; text-align: center; }
+  body:has(.legal-copy) .site-header,
+  body:has(.legal-copy) .app-shell,
+  body:has(.legal-copy) > footer { width: min(100% - 40px, 1180px); }
+  body:has(.legal-copy) .site-header,
+  body:has(.legal-copy) > footer { align-items: flex-start; flex-direction: column; }
+  body:has(.legal-copy) .legal-copy { padding: 24px; }
 }
