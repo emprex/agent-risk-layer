@@ -31,6 +31,14 @@ export async function sendEmailVerification({ userId, to, token }) {
   `);
     return await sendEmail({ userId, to, subject, html });
 }
+export async function sendAssessmentRequestEmail({ to, subject, message }) {
+    const html = emailShell(`
+    <h1>New assessment request</h1>
+    <p>A prospective client submitted the public AgentRiskLayer assessment form.</p>
+    <div style="white-space:pre-wrap;font-family:Arial,sans-serif;background:#f7f8fa;border:1px solid #e5e7eb;border-radius:8px;padding:16px">${escapeHtml(message)}</div>
+  `);
+    return await sendEmail({ userId: null, to, subject, html });
+}
 export async function sendOperationalAlert({ to, subject, message }) {
     const html = emailShell(`<h1>AgentRiskLayer operational alert</h1><p>${escapeHtml(message)}</p><p><a href="${escapeHtml(config.baseUrl)}/admin.html">Open owner operations</a></p>`);
     return await sendEmail({ userId: null, to, subject, html });
