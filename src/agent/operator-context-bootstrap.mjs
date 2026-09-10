@@ -1,7 +1,7 @@
 import { authenticateUser } from '../auth.js';
 import { config } from '../config.js';
 import { db, id, initialiseDatabase, insertEvent, nowIso } from '../db.js';
-import { createSecurityProject } from '../control-plane-core.js';
+import { createSecurityProject, PROJECT_KINDS } from '../control-plane-core.js';
 import { evaluateAssessment, questionnaire } from '../risk-engine.js';
 import { createWorkspace, listWorkspaces } from '../workspaces.js';
 import {
@@ -276,7 +276,8 @@ export async function bootstrapAuthenticatedOperatorContext({
       userId: authenticatedOperator.id,
       workspaceId: workspace.id,
       name: identity.projectName,
-      environment
+      environment,
+      projectKind: PROJECT_KINDS.ASSESSMENT_CASE
     });
     await db.prepare(`
       UPDATE security_projects
