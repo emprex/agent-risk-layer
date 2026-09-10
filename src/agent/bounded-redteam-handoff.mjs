@@ -79,7 +79,7 @@ function unavailable(reason) {
   };
 }
 
-function exactPlanMapping(workflowState) {
+export function selectBoundedEvidencePlanMapping(workflowState) {
   const action = workflowState?.nextAllowedAction || null;
   const mappings =
     workflowState?.authoritativeArtifacts
@@ -124,9 +124,43 @@ function exactPlanMapping(workflowState) {
       )
   );
 
-  return matches.length === 1
-    ? matches[0]
-    : null;
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  /*
+   * When the paginated overview cannot supply a scoped control, the exact
+   * Control Intelligence guard may legitimately project several mapped
+   * controls that are all at the test stage. Choosing which equivalent
+   * bounded check runs first is orchestration order, not a security decision.
+   * Mirror the authoritative workflow's stable control ordering and remain
+   * fail-closed if a single control itself maps to more than one case.
+   */
+  if (action?.controlId || action?.caseId) {
+    return null;
+  }
+
+  const byControl = new Map();
+  for (const item of matches) {
+    const list = byControl.get(item.controlId) || [];
+    list.push(item);
+    byControl.set(item.controlId, list);
+  }
+
+  if ([...byControl.values()].some((items) => items.length !== 1)) {
+    return null;
+  }
+
+  return [...matches].sort((left, right) => {
+    const controlOrder = String(left.controlId)
+      .localeCompare(String(right.controlId));
+    if (controlOrder !== 0) return controlOrder;
+    return String(left.caseId).localeCompare(String(right.caseId));
+  })[0] || null;
 }
 
 function activeSafeAuthorisations(authorisations, nowMs) {
@@ -183,7 +217,7 @@ export async function prepareBoundedRedTeamReservation({
     );
   }
 
-  const mapping = exactPlanMapping(workflowState);
+  const mapping = selectBoundedEvidencePlanMapping(workflowState);
 
   if (!mapping) {
     return unavailable(
