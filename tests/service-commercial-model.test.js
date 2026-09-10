@@ -2,50 +2,54 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(import.meta.dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const exists = (relativePath) => fs.existsSync(path.join(root, relativePath));
 
-test('production configuration cannot enable legacy Stripe checkout', () => {
-  const env = {
-    ...process.env,
-    NODE_ENV: 'production',
-    PRODUCT_STAGE: 'production',
-    STRIPE_SECRET_KEY: 'sk_live_should_be_ignored',
-    STRIPE_WEBHOOK_SECRET: 'whsec_should_be_ignored',
-    STRIPE_PRICE_PRO_REPORT: 'price_should_be_ignored',
-  };
-  delete env.HOST;
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
-    import('./src/config.js').then(({config}) => console.log(JSON.stringify({
-      secret: config.stripeSecretKey,
-      webhook: config.stripeWebhookSecret,
-      mode: config.billingWebhookMode,
-      prices: config.stripePrices
-    })))
-  `], { cwd: root, env, encoding: 'utf8', timeout: 5000 });
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout.trim()), {
-    secret: '',
-    webhook: '',
-    mode: 'disabled',
-    prices: {},
-  });
+test('retired Stripe and checkout runtime is absent from the server', () => {
+  const server = read('server.js');
+  for (const pattern of [
+    /\/api\/stripe\/webhook/,
+    /\/api\/checkout/,
+    /\/api\/billing\/portal/,
+    /\/api\/subscriptions\/demo-cancel/,
+    /publicCommercialCatalogue/,
+    /handleStripeWebhook/,
+    /createCheckout\(/,
+    /stripeRequest\(/,
+    /startFulfilmentWorker/,
+  ]) assert.doesNotMatch(server, pattern);
 });
 
-test('deployment configuration no longer provisions Stripe', () => {
+test('retired billing implementation modules are removed', () => {
+  for (const file of [
+    'src/commercial-catalogue.js',
+    'src/fulfilment.js',
+    'src/stripe-events.js',
+    'src/stripe-webhook.js',
+    'src/subscription-access.js',
+    'scripts/update-stripe-render-prices.mjs',
+    'public/pricing.js',
+    'public/pricing-mode.js',
+    'public/success.js',
+  ]) assert.equal(exists(file), false, `${file} should be removed`);
+});
+
+test('production and deployment configuration contain no Stripe surface', () => {
+  assert.doesNotMatch(read('src/config.js'), /STRIPE_|stripeSecret|stripePrices|BILLABLE_PLANS|commercial-catalogue/);
   assert.doesNotMatch(read('render.yaml'), /STRIPE_/);
   assert.doesNotMatch(read('.env.example'), /STRIPE_/);
   assert.doesNotMatch(read('package.json'), /prices:update|update-stripe-render-prices/);
 });
 
-test('canonical legal pages use the service visual system and current commercial model', () => {
+test('canonical legal pages use the current service visual system and no personal street address', () => {
   for (const page of ['public/legal/terms.html', 'public/legal/privacy.html']) {
     const html = read(page);
     assert.match(html, /marketing\.css/);
     assert.match(html, /London, United Kingdom/);
-    assert.doesNotMatch(html, /Stripe|billing portal|recurring online subscription[^<]*continues/i);
+    assert.doesNotMatch(html, /Stripe|billing portal/i);
+    assert.doesNotMatch(html, /270 metro central heights|se1 6bx/i);
   }
 });
 
