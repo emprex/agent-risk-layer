@@ -7,6 +7,7 @@ const defaultSessionSecret = 'development-only-change-this-secret-before-deploym
 export const defaultBindHost = '0.0.0.0';
 const resolvedNodeEnv = process.env.NODE_ENV || 'development';
 const resolvedProductStage = process.env.PRODUCT_STAGE || (resolvedNodeEnv === 'production' ? 'production' : 'development');
+const legacyStripeTestMode = resolvedNodeEnv === 'test';
 
 function looksLikeNumericAddress(value) {
     const numericComponent = /^(?:[0-9]+|0[xX][0-9A-Fa-f]+)$/;
@@ -65,14 +66,19 @@ export const config = {
     databaseLockTimeoutMs: Math.max(1000, Number(process.env.DATABASE_LOCK_TIMEOUT_MS || 5000)),
     databasePath: path.resolve(root, process.env.DATABASE_PATH || `./data/test-${process.pid}-${crypto.randomUUID()}.sqlite`),
 
-    // Legacy billing compatibility is intentionally inert. The current commercial
-    // model is a human-led scoped service with invoicing, not browser checkout.
-    // Stripe cannot be re-enabled through environment variables.
-    stripeSecretKey: '',
-    stripeApiVersion: '',
-    stripeWebhookSecret: '',
-    billingWebhookMode: 'disabled',
-    stripePrices: Object.freeze({}),
+    // Stripe is retired from the live commercial model. These values are only
+    // available under NODE_ENV=test so historical billing integrity fixtures
+    // can continue to prove their old invariants without enabling live checkout.
+    stripeSecretKey: legacyStripeTestMode ? (process.env.STRIPE_SECRET_KEY || '') : '',
+    stripeApiVersion: legacyStripeTestMode ? (process.env.STRIPE_API_VERSION || '2026-06-24.dahlia') : '',
+    stripeWebhookSecret: legacyStripeTestMode ? (process.env.STRIPE_WEBHOOK_SECRET || '') : '',
+    billingWebhookMode: legacyStripeTestMode ? String(process.env.BILLING_WEBHOOK_MODE || 'enabled').trim().toLowerCase() : 'disabled',
+    stripePrices: legacyStripeTestMode ? {
+        pro_report: (process.env.STRIPE_PRICE_PRO_REPORT || '').trim(),
+        developer_monthly: (process.env.STRIPE_PRICE_DEVELOPER_MONTHLY || '').trim(),
+        team_monthly: (process.env.STRIPE_PRICE_TEAM_MONTHLY || '').trim(),
+        agency_monthly: (process.env.STRIPE_PRICE_AGENCY_MONTHLY || '').trim(),
+    } : Object.freeze({}),
 
     resendApiKey: process.env.RESEND_API_KEY || '',
     emailFrom: process.env.EMAIL_FROM || 'AgentRiskLayer <reports@example.com>',
@@ -89,7 +95,6 @@ export const config = {
 };
 
 // Retained only so historic purchase/entitlement records remain interpretable.
-// New checkout cannot proceed because the active Stripe configuration is empty.
 export const plans = BILLABLE_PLANS;
 
 function isManagedPostgresUrl(value) {
