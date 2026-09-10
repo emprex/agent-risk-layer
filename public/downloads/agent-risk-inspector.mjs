@@ -327,6 +327,9 @@ const VULNERABILITY_DATABASE_SCHEMA = DATABASE_SCHEMA;
 const dependencyAssessmentToInspectorEvidence = (() => {
 const ALLOWED_SEVERITIES = new Set(['critical','high','medium','low','info']);
 
+const INSPECTOR_DEPENDENCY_COUNTING_SEMANTICS =
+  'Inspector counts supported locked dependency records from npm package-lock.json and hosted Pub packages from pubspec.lock. Pub SDK packages are excluded, inventory is bounded, and external advisory scanners may use different extraction and normalization rules.';
+
 function clean(value, max = 160) {
   return String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
 }
@@ -388,6 +391,10 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
     ? assessment.ecosystems.map((value) => clean(value, 40)).filter(Boolean).slice(0, 20)
     : [];
 
+  const lockedDependenciesExamined = Number.isFinite(assessment.lockedDependenciesExamined)
+    ? Math.max(0, Math.floor(assessment.lockedDependenciesExamined))
+    : 0;
+
   return {
     status,
     ecosystem: clean(assessment.ecosystem, 40) || 'unknown',
@@ -395,9 +402,9 @@ function dependencyAssessmentToInspectorEvidence(assessment) {
     lockfilesExamined: Number.isFinite(assessment.lockfilesExamined)
       ? Math.max(0, Math.floor(assessment.lockfilesExamined))
       : 0,
-    lockedDependenciesExamined: Number.isFinite(assessment.lockedDependenciesExamined)
-      ? Math.max(0, Math.floor(assessment.lockedDependenciesExamined))
-      : 0,
+    lockedDependenciesExamined,
+    inventoryCount: lockedDependenciesExamined,
+    countingSemantics: INSPECTOR_DEPENDENCY_COUNTING_SEMANTICS,
     inventoryTruncated: assessment.inventoryTruncated === true,
     intelligence,
     limitation: assessment.limitation ? clean(assessment.limitation, 500) : null,
