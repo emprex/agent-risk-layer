@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { config } from './config.js';
-import { sendOperationalAlert } from './email.js';
+import { sendAssessmentRequestEmail } from './email.js';
 
 const originalCreateServer = http.createServer;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -57,7 +57,7 @@ http.createServer = function patchedCreateServer(...args) {
                     'Submitted from the public AgentRiskLayer assessment request form.'
                 ].join('\n');
 
-                const delivery = await sendOperationalAlert({
+                const delivery = await sendAssessmentRequestEmail({
                     to: config.supportEmail || 'support@agentrisklayer.com',
                     subject: `New AI Agent Security Assessment request — ${request.company || request.systemName}`,
                     message,
