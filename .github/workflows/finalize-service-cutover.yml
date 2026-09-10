@@ -20,7 +20,10 @@ jobs:
         with:
           node-version: '22'
       - name: Apply deterministic cutover
-        run: node scripts/finalize-service-cutover.mjs
+        run: |
+          sed -i '221,222d' scripts/finalize-service-cutover.mjs
+          node --check scripts/finalize-service-cutover.mjs
+          node scripts/finalize-service-cutover.mjs
       - name: Validate syntax
         run: npm run check
       - name: Commit cutover
