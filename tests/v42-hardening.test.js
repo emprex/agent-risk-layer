@@ -17,7 +17,6 @@ process.env.ADMIN_EMAIL = 'owner@example.com';
 const { db, id, nowIso } = await import('../src/db.js');
 const { registerUser, verifyPassword, beginMfaSetup, enableMfa, authenticateUser, createMfaLoginChallenge, completeMfaLogin, publicUser } = await import('../src/auth.js');
 const { questionnaire, evaluateAssessment } = await import('../src/risk-engine.js');
-const { bindPendingCheckoutSession, createPendingCheckout, fulfilCheckout, processFulfilmentJob } = await import('../src/fulfilment.js');
 const { enforceRetention } = await import('../src/retention.js');
 const { createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, consumeRedTeamUpload } = await import('../src/redteam.js');
 const { runCampaign } = await import('../redteam/agent-risk-redteam.mjs');
@@ -33,7 +32,7 @@ test.before(async () => {
     assessmentId = id('asm_');
     const now = nowIso();
     await db.prepare(`INSERT INTO assessments (id,user_id,name,agent_type,answers_json,score,risk_band,result_json,paid_tier,access_token,share_token,public_enabled,scoring_version,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,'free',?,?,0,?,?,?)`).run(assessmentId, userId, 'Payment resilience agent', 'Finance agent', JSON.stringify(answers), result.score, result.riskBand, JSON.stringify(result), id('access_'), id('share_'), 'arl-risk-v3.2', now, now);
+    VALUES (?,?,?,?,?,?,?,?,'pro',?,?,0,?,?,?)`).run(assessmentId, userId, 'Payment resilience agent', 'Finance agent', JSON.stringify(answers), result.score, result.riskBand, JSON.stringify(result), id('access_'), id('share_'), 'arl-risk-v3.2', now, now);
     await db.prepare(`INSERT INTO redteam_runs (id,user_id,assessment_id,authorisation_id,schema_version,runner_version,policy_version,bundle_digest,signature_valid,campaign_json,scope_json,summary_json,results_json,trust_json,delta_json,retention_expires_at,created_at)
     VALUES (?,?,?,NULL,'arl.redteam.bundle.v1','4.2.0','arl-redteam-policy-2026.08',?,1,?,?,?,?,?,?,NULL,?)`)
         .run(id('rtr_'), userId, assessmentId, 'a'.repeat(64), JSON.stringify({ target: { mode: 'staging-adapter' }, name: 'Existing controlled campaign' }), JSON.stringify({ environment: 'test' }), JSON.stringify({ riskScore: 80, assuranceScore: 20, counts: { failed: 1, critical: 1, high: 0, medium: 0, passed: 0 } }), JSON.stringify([{ caseId: 'RT-PI-001', title: 'Direct injection', outcome: 'failed', severity: 'critical', evidence: ['Unsafe instruction followed'], remediation: 'Enforce instruction hierarchy.' }]), JSON.stringify({ signatureValid: true }), JSON.stringify({ status: 'first-run' }), now);
@@ -50,33 +49,6 @@ test('public user representations never expose internal session token hashes', (
     const user = publicUser({ id: 'usr_test', email: 'test@example.com', session_token_hash: 'internal-hash', email_verified_at: nowIso(), created_at: nowIso() });
     assert.equal(Object.hasOwn(user, 'sessionTokenHash'), false);
     assert.doesNotMatch(JSON.stringify(user), /internal-hash/);
-});
-test('paid checkout grants access transactionally and retries report delivery with complete evidence', async () => {
-    const pending = await createPendingCheckout({ userId, assessmentId, productKey: 'pro_report', stripePriceId: 'demo_price_pro_report',
-        expectedAmountPence: 9900, expectedCurrency: 'gbp', checkoutMode: 'payment', expectedCustomerEmail: 'owner@example.com' });
-    const session = { id: 'cs_v42_resilience', mode: 'payment', payment_status: 'paid', amount_total: 9900, currency: 'gbp',
-        customer: 'cus_v42', customer_details: { email: 'owner@example.com' }, client_reference_id: userId,
-        metadata: { purchase_id: pending.id, user_id: userId, assessment_id: assessmentId, project_id: '', product_key: 'pro_report', price_id: 'demo_price_pro_report' } };
-    await bindPendingCheckoutSession(pending.id, session);
-    const purchase = await fulfilCheckout(session, { processEmailNow: false });
-    assert.equal(purchase.fulfilment_state, 'fulfilled');
-    assert.equal((await db.prepare('SELECT paid_tier FROM assessments WHERE id=?').get(assessmentId)).paid_tier, 'pro');
-    const job = await db.prepare('SELECT * FROM fulfilment_jobs WHERE purchase_id=?').get(purchase.id);
-    assert.equal(job.status, 'queued');
-    const failed = await processFulfilmentJob(job.id, { renderPdf: async () => Buffer.from('%PDF-1.4 test'), sendReport: async () => { throw new Error('provider unavailable'); } });
-    assert.equal(failed, false);
-    let after = await db.prepare('SELECT * FROM fulfilment_jobs WHERE id=?').get(job.id);
-    assert.equal(after.status, 'failed');
-    await db.prepare('UPDATE fulfilment_jobs SET next_attempt_at=? WHERE id=?').run(nowIso(), job.id);
-    const recovered = await processFulfilmentJob(job.id, { renderPdf: async () => Buffer.from('%PDF-1.4 test'), sendReport: async () => ({ id: 'email_ok' }) });
-    assert.equal(recovered, true);
-    after = await db.prepare('SELECT * FROM fulfilment_jobs WHERE id=?').get(job.id);
-    assert.equal(after.status, 'completed');
-    const completePurchase = await db.prepare('SELECT * FROM purchases WHERE id=?').get(purchase.id);
-    assert.equal(completePurchase.email_state, 'sent');
-    assert.match(completePurchase.report_snapshot_json, /Existing controlled campaign/);
-    const digest = (await import('node:crypto')).createHash('sha256').update(completePurchase.report_snapshot_json).digest('hex');
-    assert.equal(completePurchase.report_digest, digest);
 });
 test('password verification uses asynchronous scrypt without monopolising the event loop', async () => {
     const hash = (await db.prepare('SELECT password_hash FROM users WHERE id=?').get(userId)).password_hash;

@@ -6,16 +6,13 @@ import { compileRuntimePolicy, evaluateRuntimeAction, runtimeActionRequiresAppro
 import { inspectContent } from './content-security.js';
 import { discoverAiAssets } from './asset-discovery.js';
 import { deliverSecurityEventSystem } from './workspaces.js';
-import { subscriptionAccessDecision } from './subscription-access.js';
 import { prepareRiskKnowledgeRuntimeEvidencePurge, prepareRiskKnowledgeSubjectPurge } from './risk-knowledge.js';
 import { prepareControlIntelligenceSourcePurge } from './control-intelligence.js';
-import { PLAN_ENTITLEMENTS } from './commercial-catalogue.js';
 
 export const GUARD_REQUEST_SCHEMA = 'arl.guard.request.v1';
 export const GUARD_RESPONSE_SCHEMA = 'arl.guard.response.v1';
 export const GUIDED_PROTECTION_CHECK_SCHEMA = 'arl.guided-protection-check.v1';
-
-export { PLAN_ENTITLEMENTS };
+export const SERVICE_ENTITLEMENT = Object.freeze({ key: 'service', name: 'AgentRiskLayer Service', projects: 1, runtimeRequestsPerMonth: 10_000, runtimeRequestsPerMinute: 60, retentionDays: 7, apiKeysPerProject: 2, redTeamRuns: 0 });
 
 export const PROJECT_KINDS = Object.freeze({ RUNTIME: 'runtime', ASSESSMENT_CASE: 'assessment_case' });
 
@@ -37,12 +34,8 @@ const REVIEW_ROLES = new Set(['analyst', 'developer', 'admin', 'owner']);
 const APPROVER_ROLES = new Set(['admin', 'owner']);
 
 export async function entitlementForUser(userId) {
-  const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,authoritative_state,reconciliation_required,updated_at
-    FROM subscriptions WHERE user_id=? ORDER BY updated_at DESC`).all(userId);
-  const subscription = subscriptions.find((candidate) => subscriptionAccessDecision(candidate).allowed) || null;
-  const requested = subscription?.plan_key || 'community';
-  const key = PLAN_ENTITLEMENTS[requested] ? requested : 'community';
-  return { key, ...PLAN_ENTITLEMENTS[key], subscription: subscription || null };
+  void userId;
+  return { ...SERVICE_ENTITLEMENT, subscription: null };
 }
 
 export async function createSecurityProject({ userId, workspaceId, name, environment = 'development', projectKind = PROJECT_KINDS.RUNTIME }) {
@@ -63,7 +56,7 @@ export async function createSecurityProject({ userId, workspaceId, name, environ
     const projectCount = Number((await db.prepare(`SELECT COUNT(*) count FROM security_projects p
       WHERE p.billing_user_id=? AND p.status!='archived'
         AND NOT EXISTS (SELECT 1 FROM owner_assessment_cases c WHERE c.project_id=p.id)`).get(billingUserId)).count || 0);
-    if (projectCount >= entitlement.projects) throw paymentRequired(`${entitlement.name} supports ${entitlement.projects} active project${entitlement.projects === 1 ? '' : 's'}. Upgrade to add another.`);
+    if (projectCount >= entitlement.projects) throw forbidden(`${entitlement.name} supports ${entitlement.projects} active project${entitlement.projects === 1 ? '' : 's'} in the current service context.`);
   }
   const projectId = id('prj_');
   const timestamp = nowIso();

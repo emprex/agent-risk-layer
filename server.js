@@ -3,8 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { assertSafeProductionConfig, config, launchReadiness, plans } from './src/config.js';
-import { publicCommercialCatalogue } from './src/commercial-catalogue.js';
+import { assertSafeProductionConfig, config, launchReadiness } from './src/config.js';
 import { db, id, initialiseDatabase, insertEvent, nowIso } from './src/db.js';
 import { authenticateUser, beginMfaSetup, changePassword, clearSession, completeMfaLogin, createEmailVerification, createMfaLoginChallenge, createPasswordReset, createSession, disableMfa, enableMfa, getUserFromRequest, reauthenticateSession, registerUser, resetPassword, verifyEmailToken } from './src/auth.js';
 import { evaluateAssessment, questionnaire, evidenceOptions } from './src/risk-engine.js';
@@ -15,10 +14,6 @@ import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primar
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
 import { runFrozenGithubSourceInspection } from './src/github-source-inspection.js';
 import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
-import { bindPendingCheckoutSession, createPendingCheckout, failPendingCheckoutCreation, fulfilCheckout, fulfilmentOperations, processDueFulfilmentJobs, processPurchaseJobs, reconcileIncompletePurchases, resolveOperationalAlert, startFulfilmentWorker } from './src/fulfilment.js';
-import { claimStripeEvent, completeStripeEvent, failStripeEvent, recoverAbandonedStripeEvent } from './src/stripe-events.js';
-import { subscriptionAccessDecision, subscriptionBlocksAccountDeletion, subscriptionBlocksCheckout } from './src/subscription-access.js';
-import { processStripeEvent } from './src/stripe-webhook.js';
 import { enforceRetention, retentionOverview, startRetentionWorker } from './src/retention.js';
 import { authenticateScim, configureIntegration, createScimToken, createWorkspace, deliverSecurityEvent, getWorkspace, listWorkspaces, provisionScimUser, upsertMember } from './src/workspaces.js';
 import { discoverAiAssets } from './src/asset-discovery.js';
@@ -103,8 +98,6 @@ const server = http.createServer(async (req, res) => {
         return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
     req.user = await getUserFromRequest(req);
     try {
-        if (req.method === 'POST' && url.pathname === '/api/stripe/webhook')
-            return await handleStripeWebhook(req, res);
         if (req.method === 'POST' && url.pathname === '/api/inspector/upload')
             return await handleInspectionUpload(req, res);
         if (req.method === 'POST' && url.pathname === '/api/redteam/upload')
@@ -127,8 +120,6 @@ const server = http.createServer(async (req, res) => {
                 termsVersion: config.termsVersion,
                 supportEmail: config.supportEmail,
                 user: req.user,
-                catalogue: publicCommercialCatalogue(),
-                prices: Object.fromEntries(Object.values(plans).map((plan) => [plan.key, { name: plan.name, amountPence: plan.amountPence, currency: plan.currency, recurrence: plan.recurrence, recurring: plan.recurring }])),
             });
         }
         if (req.method === 'GET' && url.pathname === '/api/questionnaire')
@@ -410,9 +401,8 @@ const server = http.createServer(async (req, res) => {
             const isOwner = Boolean(req.user && row.user_id === req.user.id);
             if (!hasToken && !isOwner)
                 return json(res, 403, { error: 'This assessment is private.' });
-            const subscribed = Boolean(isOwner && await hasActiveSubscription(req.user.id));
             const superuserAccess = Boolean(isOwner && req.user?.isSuperuser);
-            const effectiveTier = subscribed || superuserAccess ? 'pro' : row.paid_tier;
+            const effectiveTier = superuserAccess ? 'pro' : row.paid_tier;
             const inspection = isOwner ? await latestInspection(row.id) : null;
             const redTeamRun = isOwner ? await latestRedTeamRun(row.id) : null;
             const canRevise = Boolean(isOwner || (!row.user_id && hasToken));
@@ -424,7 +414,7 @@ const server = http.createServer(async (req, res) => {
                 scoringVersion: row.scoring_version,
                 createdAt: row.created_at,
             } : null;
-            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, subscriptionAccess: subscribed, superuserAccess, revisionSource, inspection, redTeamRun });
+            return json(res, 200, { assessment: accessibleAssessment(row, effectiveTier, inspection, redTeamRun), canDownload: effectiveTier !== 'free', isOwner, superuserAccess, revisionSource, inspection, redTeamRun });
         }
         match = url.pathname.match(/^\/api\/assessments\/([^/]+)\/claim$/);
         if (req.method === 'POST' && match) {
@@ -595,33 +585,6 @@ const server = http.createServer(async (req, res) => {
                 return;
             const run = await getRedTeamRun({ runId: decodeURIComponent(match[1]), userId: req.user.id });
             return run ? json(res, 200, { run }) : json(res, 404, { error: 'Red-team run not found.' });
-        }
-        if (req.method === 'POST' && url.pathname === '/api/checkout') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 20, bucket: 'checkout', identity: req.user.id }))
-                return json(res, 429, { error: 'Too many checkout attempts.' });
-            const body = await readBody(req);
-            return await createCheckout(req, res, body);
-        }
-        if (req.method === 'GET' && url.pathname === '/api/checkout/status') {
-            if (!requireUser(req, res))
-                return;
-            return await checkoutStatus(req, res, url.searchParams.get('session_id'));
-        }
-        if (req.method === 'POST' && url.pathname === '/api/billing/portal') {
-            if (!requireUser(req, res))
-                return;
-            return await createBillingPortal(req, res);
-        }
-        if (req.method === 'POST' && url.pathname === '/api/subscriptions/demo-cancel') {
-            if (!requireUser(req, res))
-                return;
-            if (!config.demoMode)
-                return json(res, 400, { error: 'Use the Stripe billing portal.' });
-            await db.prepare(`UPDATE subscriptions SET status = 'cancelled', updated_at = ? WHERE user_id = ?`).run(nowIso(), req.user.id);
-            await insertEvent('subscription_cancelled', req.user.id, { mode: 'demo' });
-            return json(res, 200, { ok: true });
         }
         match = url.pathname.match(/^\/api\/reports\/([^/]+)\/pdf$/);
         if (req.method === 'GET' && match)
@@ -1146,51 +1109,6 @@ const server = http.createServer(async (req, res) => {
                 return;
             return await adminAnalytics(req, res);
         }
-        if (req.method === 'GET' && url.pathname === '/api/admin/operations') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, {
-                fulfilment: await fulfilmentOperations(),
-                retention: await retentionOverview(),
-                rateLimits: await rateLimitSnapshot({ limit: 100 }),
-            });
-        }
-        if (req.method === 'POST' && url.pathname === '/api/admin/operations/reconcile') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            const fulfilment = await reconcileIncompletePurchases({ limit: 100 });
-            const jobs = await processDueFulfilmentJobs({ limit: 100 });
-            const retention = await enforceRetention();
-            await insertEvent('admin_reconciliation_run', req.user.id, { fulfilment, jobs, retention });
-            return json(res, 200, { fulfilment, jobs, retention });
-        }
-        match = url.pathname.match(/^\/api\/admin\/stripe-events\/([^/]+)\/recover$/);
-        if (req.method === 'POST' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            const body = await readBody(req);
-            try {
-                const event = await recoverAbandonedStripeEvent({
-                    eventId: decodeURIComponent(match[1]),
-                    actorId: req.user.id,
-                    reason: body.reason,
-                    workerStoppedConfirmed: body.workerStoppedConfirmed,
-                });
-                return json(res, 200, { recovered: true, event: {
-                    id: event.id, status: event.status, attemptCount: Number(event.attempt_count || 0),
-                    recoveredAt: event.recovered_at,
-                } });
-            }
-            catch (error) {
-                return json(res, error.statusCode || 400, { error: error.message });
-            }
-        }
-        match = url.pathname.match(/^\/api\/admin\/alerts\/([^/]+)\/resolve$/);
-        if (req.method === 'POST' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, await resolveOperationalAlert(decodeURIComponent(match[1])) ? 200 : 404, { ok: true });
-        }
         if (req.method === 'GET' && url.pathname === '/api/admin/readiness') {
             if (!requireAdmin(req, res, { requireMfa: true }))
                 return;
@@ -1252,10 +1170,6 @@ const server = http.createServer(async (req, res) => {
                 return;
             return json(res, 200, { brief: buildDemoBrief(await getProspect(decodeURIComponent(match[1]))) });
         }
-        if (req.method === 'GET' && ['/privacy', '/privacy.html'].includes(url.pathname))
-            return html(res, 200, renderPrivacyPage());
-        if (req.method === 'GET' && ['/terms', '/terms.html'].includes(url.pathname))
-            return html(res, 200, renderTermsPage());
         if (req.method === 'GET' && url.pathname === '/robots.txt')
             return text(res, 200, renderRobots());
         if (req.method === 'GET' && url.pathname === '/sitemap.xml')
@@ -1402,55 +1316,6 @@ function scimUser(member) {
         userName: member.email, displayName: member.display_name || member.email, active: member.status === 'active', roles: [{ value: member.role, primary: true }] };
 }
 function scimError(detail, status) { return { schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'], detail, status: String(status) }; }
-async function handleStripeWebhook(req, res) {
-    if (config.billingWebhookMode !== 'enabled')
-        return text(res, 503, 'Billing webhook processing is in maintenance mode.');
-    if (!config.stripeSecretKey || !config.stripeWebhookSecret)
-        return text(res, 503, 'Stripe is not configured.');
-    const raw = await readRawBody(req, 1000000);
-    if (!verifyStripeSignature(raw, req.headers['stripe-signature']))
-        return text(res, 400, 'Webhook signature error.');
-    let event;
-    try {
-        event = JSON.parse(raw.toString('utf8'));
-    }
-    catch {
-        return text(res, 400, 'Invalid webhook JSON.');
-    }
-    if (!event?.id || !event?.type)
-        return text(res, 400, 'Stripe event identity is missing.');
-    const stripeEventId = String(event.id);
-    const stripeEventType = String(event.type);
-    if (stripeEventId.length > 200 || stripeEventType.length > 120
-        || !/^[A-Za-z0-9_.-]+$/.test(stripeEventId) || !/^[a-z0-9_.-]+$/.test(stripeEventType))
-        return text(res, 400, 'Stripe event identity is malformed.');
-    event.id = stripeEventId;
-    event.type = stripeEventType;
-    let claim;
-    try {
-        claim = await claimStripeEvent(String(event.id), String(event.type));
-        if (claim.state === 'completed')
-            return json(res, 200, { received: true, duplicate: true });
-        if (claim.state === 'busy')
-            return text(res, 409, 'Stripe event is already being processed.');
-        const result = await processStripeEvent(event);
-        await completeStripeEvent(event.id, result);
-        return json(res, 200, { received: true, outcome: result.outcome,
-            reconciled: Number(claim.event.attempt_count || 0) > 1 });
-    }
-    catch (error) {
-        if (claim?.state === 'claimed')
-            await failStripeEvent(event.id, error);
-        console.error(JSON.stringify({
-            event: 'stripe_webhook_failure',
-            stripeEventId: String(event?.id || '').slice(0, 120),
-            stripeEventType: String(event?.type || '').slice(0, 120),
-            error: cleanText(error?.message || 'Unknown webhook failure', 500),
-            timestamp: nowIso(),
-        }));
-        return text(res, 500, 'Webhook fulfilment failed.');
-    }
-}
 async function handleInspectionUpload(req, res) {
     if (!await rateLimitAllowed(req, { windowMs: 60000, max: 12, bucket: 'inspection-upload' }))
         return json(res, 429, { error: 'Too many inspection uploads.' });
@@ -1489,159 +1354,15 @@ async function handleRedTeamUpload(req, res) {
         return json(res, status, { error: error.code === 'BODY_TOO_LARGE' ? 'Red-team evidence exceeds 2 MB.' : error.message });
     }
 }
-async function createCheckout(req, res, body) {
-    let pending = null;
-    try {
-        const productKey = cleanText(body.productKey, 40);
-        const plan = plans[productKey];
-        if (!plan)
-            throw new Error('Unknown product.');
-        let assessment = null;
-        if (!plan.recurring) {
-            assessment = await db.prepare('SELECT * FROM assessments WHERE id = ? AND user_id = ?').get(body.assessmentId, req.user.id);
-            if (!assessment)
-                throw new Error('Choose an assessment saved to your account.');
-            if (await hasOpenSubscription(req.user.id))
-                throw new Error('Your subscription already provides report access or requires billing attention.');
-            if (assessment.paid_tier === 'pro')
-                throw new Error('This assessment already has a Professional report.');
-        }
-        else if (await hasOpenSubscription(req.user.id)) {
-            throw new Error('A subscription already exists or requires billing attention. Manage it from the dashboard.');
-        }
-        const price = config.demoMode ? `demo_price_${productKey}` : config.stripePrices[productKey];
-        if (!price)
-            throw new Error(`Stripe is not fully configured for ${productKey}.`);
-        pending = await createPendingCheckout({
-            userId: req.user.id,
-            assessmentId: assessment?.id || null,
-            projectId: body.projectId || null,
-            productKey,
-            stripePriceId: price,
-            expectedAmountPence: plan.amountPence,
-            expectedCurrency: 'gbp',
-            checkoutMode: plan.recurring ? 'subscription' : 'payment',
-            expectedCustomerEmail: req.user.email,
-        });
-        if (config.demoMode) {
-            const sessionId = id('demo_cs_');
-            const session = {
-                id: sessionId,
-                mode: plan.recurring ? 'subscription' : 'payment',
-                payment_status: 'paid',
-                amount_total: plan.amountPence,
-                currency: 'gbp',
-                customer: `demo_customer_${req.user.id}`,
-                customer_details: { email: req.user.email },
-                client_reference_id: req.user.id,
-                subscription: plan.recurring ? id('demo_sub_') : null,
-                metadata: { purchase_id: pending.id, user_id: req.user.id, assessment_id: assessment?.id || '',
-                    project_id: body.projectId || '', product_key: productKey, price_id: price },
-            };
-            await bindPendingCheckoutSession(pending.id, session);
-            await fulfilCheckout(session);
-            if (plan.recurring) {
-                const createdSeconds = Math.floor(Date.now() / 1000);
-                await processStripeEvent({
-                    id: id('demo_evt_'), created: createdSeconds, type: 'customer.subscription.created',
-                    data: { object: {
-                        id: session.subscription, customer: session.customer, status: 'active',
-                        metadata: { user_id: req.user.id, product_key: productKey },
-                        current_period_start: createdSeconds,
-                        current_period_end: createdSeconds + 30 * 86400,
-                        cancel_at_period_end: false,
-                    } },
-                });
-            }
-            return json(res, 200, { url: `/success.html?session_id=${encodeURIComponent(sessionId)}`, demo: true });
-        }
-        const params = new URLSearchParams();
-        params.set('mode', plan.recurring ? 'subscription' : 'payment');
-        params.set('line_items[0][price]', price);
-        params.set('line_items[0][quantity]', '1');
-        params.set('managed_payments[enabled]', 'true');
-        params.set('customer_email', req.user.email);
-        params.set('client_reference_id', req.user.id);
-        params.set('billing_address_collection', 'auto');
-        if (!plan.recurring) params.set('customer_creation', 'always');
-        params.set('success_url', `${config.baseUrl}/success.html?session_id={CHECKOUT_SESSION_ID}`);
-        params.set('cancel_url', assessment ? `${config.baseUrl}/result.html?id=${assessment.id}&token=${assessment.access_token}&cancelled=1` : `${config.baseUrl}/pricing.html?cancelled=1`);
-        params.set('metadata[purchase_id]', pending.id);
-        params.set('metadata[user_id]', req.user.id);
-        params.set('metadata[assessment_id]', assessment?.id || '');
-        params.set('metadata[project_id]', body.projectId || '');
-        params.set('metadata[product_key]', productKey);
-        params.set('metadata[price_id]', price);
-        if (plan.recurring) {
-            params.set('subscription_data[metadata][user_id]', req.user.id);
-            params.set('subscription_data[metadata][product_key]', productKey);
-        }
-        const session = await stripeRequest('POST', '/v1/checkout/sessions', params);
-        await bindPendingCheckoutSession(pending.id, session);
-        return json(res, 200, { url: session.url, demo: false });
-    }
-    catch (error) {
-        if (pending?.id) await failPendingCheckoutCreation(pending.id, error);
-        return json(res, 400, { error: error.message });
-    }
-}
-async function checkoutStatus(req, res, sessionIdValue) {
-    try {
-        const sessionId = cleanText(sessionIdValue, 200);
-        let purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
-        if (purchase && purchase.fulfilment_state !== 'fulfilled') {
-            const session = config.demoMode
-                ? JSON.parse(purchase.session_json || '{}')
-                : await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
-            if (session?.id && session.payment_status === 'paid')
-                await fulfilCheckout(session);
-            purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
-        }
-        if (!purchase && !config.demoMode && sessionId.startsWith('cs_')) {
-            const session = await stripeRequest('GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
-            if (session.metadata?.user_id !== req.user.id)
-                throw new Error('Checkout session does not belong to this account.');
-            await fulfilCheckout(session);
-            purchase = await db.prepare('SELECT * FROM purchases WHERE stripe_session_id = ? AND user_id = ?').get(sessionId, req.user.id);
-        }
-        if (purchase && !['sent', 'simulated'].includes(purchase.email_state)) {
-            await processPurchaseJobs(purchase.id).catch(() => null);
-            purchase = await db.prepare('SELECT * FROM purchases WHERE id=?').get(purchase.id);
-        }
-        const subscription = await db.prepare(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`).get(req.user.id);
-        return json(res, 200, { purchase: purchase || null, subscription: subscription || null });
-    }
-    catch (error) {
-        return json(res, 400, { error: error.message });
-    }
-}
-async function createBillingPortal(req, res) {
-    try {
-        const subscription = await db.prepare(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`).get(req.user.id);
-        if (!subscription)
-            throw new Error('No subscription found.');
-        if (config.demoMode)
-            return json(res, 200, { url: '/dashboard.html?billing=demo' });
-        if (!subscription.stripe_customer_id)
-            throw new Error('Stripe billing is not available.');
-        const params = new URLSearchParams({ customer: subscription.stripe_customer_id, return_url: `${config.baseUrl}/dashboard.html` });
-        const portal = await stripeRequest('POST', '/v1/billing_portal/sessions', params);
-        return json(res, 200, { url: portal.url });
-    }
-    catch (error) {
-        return json(res, 400, { error: error.message });
-    }
-}
 async function downloadReport(req, res, assessmentId, token) {
     const row = await db.prepare('SELECT * FROM assessments WHERE id = ?').get(assessmentId);
     if (!row)
         return json(res, 404, { error: 'Assessment not found.' });
     const hasToken = token === row.access_token;
     const isOwner = Boolean(req.user && row.user_id === req.user.id);
-    const subscribed = Boolean(isOwner && await hasActiveSubscription(req.user.id));
-    const effectiveTier = subscribed || (isOwner && req.user?.isSuperuser) ? 'pro' : row.paid_tier;
+    const effectiveTier = (isOwner && req.user?.isSuperuser) ? 'pro' : row.paid_tier;
     if ((!hasToken && !isOwner) || effectiveTier === 'free')
-        return json(res, 403, { error: 'A paid report or active subscription is required.' });
+        return json(res, 403, { error: 'Report access has not been granted for this assessment.' });
     try {
         const { report } = await buildAssessmentReport(row.id, effectiveTier);
         const pdf = await renderReportPdf(report);
@@ -1711,8 +1432,6 @@ async function deleteAccount(req, res, body) {
     catch (error) {
         return json(res, 401, { error: error.message });
     }
-    if (await hasSubscriptionBlockingAccountDeletion(req.user.id))
-        return json(res, 409, { error: 'Cancel or resolve the subscription from billing before deleting the account.' });
     const userId = req.user.id;
     try {
         await db.transaction(async () => {
@@ -1801,19 +1520,14 @@ async function dashboard(req, res) {
       (SELECT r.created_at FROM redteam_runs r WHERE r.assessment_id=a.id ORDER BY r.created_at DESC LIMIT 1) latest_redteam_at
     FROM assessments a WHERE a.user_id=? ORDER BY a.created_at DESC`).all(req.user.id)).map((row) => ({ ...row, latest_inspection_summary: parseJson(row.latest_inspection_summary, null),
         latest_redteam_summary: parseJson(row.latest_redteam_summary, null) }));
-    const purchases = await db.prepare(`SELECT id,assessment_id,product_key,amount_pence,currency,status,fulfilment_state,
-    fulfilment_attempts,fulfilment_error,email_state,email_attempts,email_error,email_sent_at,created_at
-    FROM purchases WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
-    const subscription = await db.prepare(`SELECT * FROM subscriptions WHERE user_id=? ORDER BY created_at DESC LIMIT 1`).get(req.user.id) || null;
     const stats = {
         assessments: assessments.length,
         averageScore: assessments.length ? Math.round(assessments.reduce((sum, item) => sum + item.score, 0) / assessments.length) : 0,
         critical: assessments.filter((item) => item.risk_band === 'Critical').length,
-        paidReports: assessments.filter((item) => item.paid_tier !== 'free').length,
         inspections: (await db.prepare('SELECT COUNT(*) count FROM inspections WHERE user_id=?').get(req.user.id)).count,
         redTeamRuns: (await db.prepare('SELECT COUNT(*) count FROM redteam_runs WHERE user_id=?').get(req.user.id)).count,
     };
-    return json(res, 200, { user: req.user, assessments, purchases, subscription, stats,
+    return json(res, 200, { user: req.user, assessments, stats,
         retention: await retentionOverview(req.user.id), controlPlane: await controlPlaneOverview(req.user.id) });
 }
 async function adminAnalytics(req, res) {
@@ -1822,50 +1536,13 @@ async function adminAnalytics(req, res) {
         verifiedUsers: (await db.prepare('SELECT COUNT(*) count FROM users WHERE email_verified_at IS NOT NULL').get()).count,
         mfaUsers: (await db.prepare('SELECT COUNT(*) count FROM users WHERE mfa_enabled_at IS NOT NULL').get()).count,
         assessments: (await db.prepare('SELECT COUNT(*) count FROM assessments').get()).count,
-        purchases: (await db.prepare(`SELECT COUNT(*) count FROM purchases WHERE status='paid'`).get()).count,
-        fulfilledPurchases: (await db.prepare(`SELECT COUNT(*) count FROM purchases WHERE status='paid' AND fulfilment_state='fulfilled'`).get()).count,
-        revenuePence: (await db.prepare(`SELECT COALESCE(SUM(amount_pence),0) total FROM purchases WHERE status='paid'`).get()).total,
-        activeSubscriptions: (await db.prepare(`SELECT COUNT(*) count FROM subscriptions WHERE status IN ('active','trialing')`).get()).count,
         inspections: (await db.prepare('SELECT COUNT(*) count FROM inspections').get()).count,
         redTeamRuns: (await db.prepare('SELECT COUNT(*) count FROM redteam_runs').get()).count,
-        openAlerts: (await db.prepare(`SELECT COUNT(*) count FROM operational_alerts WHERE status='open'`).get()).count,
     };
     const funnel = await db.prepare(`SELECT name,COUNT(*) count FROM events GROUP BY name ORDER BY count DESC`).all();
     const recentFailures = await db.prepare(`SELECT to_email,subject,error,created_at FROM email_log WHERE status='failed' ORDER BY created_at DESC LIMIT 10`).all();
     const riskBands = await db.prepare(`SELECT risk_band band,COUNT(*) count FROM assessments GROUP BY risk_band ORDER BY count DESC`).all();
-    return json(res, 200, { totals, funnel, recentFailures, riskBands, readiness: launchReadiness(),
-        fulfilment: await fulfilmentOperations(), retention: await retentionOverview() });
-}
-async function stripeRequest(method, endpoint, params = null) {
-    if (!config.stripeSecretKey)
-        throw new Error('Stripe secret key is missing.');
-    const response = await fetch(`https://api.stripe.com${endpoint}`, {
-        method,
-        headers: { Authorization: `Bearer ${config.stripeSecretKey}`, 'Stripe-Version': config.stripeApiVersion, ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
-        body: params ? params.toString() : undefined,
-    });
-    const payload = await response.json();
-    if (!response.ok)
-        throw new Error(payload.error?.message || 'Stripe request failed.');
-    return payload;
-}
-function verifyStripeSignature(raw, headerValue) {
-    if (!headerValue)
-        return false;
-    const parts = String(headerValue).split(',').map((part) => part.split('='));
-    const timestamp = parts.find(([key]) => key === 't')?.[1];
-    const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
-    if (!timestamp || !signatures.length || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300)
-        return false;
-    const expected = crypto.createHmac('sha256', config.stripeWebhookSecret).update(`${timestamp}.${raw.toString('utf8')}`).digest('hex');
-    return signatures.some((signature) => {
-        try {
-            return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-        }
-        catch {
-            return false;
-        }
-    });
+    return json(res, 200, { totals, funnel, recentFailures, riskBands, readiness: launchReadiness(), retention: await retentionOverview() });
 }
 async function serveBadge(res, shareToken) {
     const row = await db.prepare('SELECT name, score, risk_band FROM assessments WHERE share_token = ? AND public_enabled = 1').get(shareToken);
@@ -1889,24 +1566,6 @@ async function claimAssessmentForUser(assessmentId, token, userId) {
       WHERE id = ? AND access_token = ? AND (user_id IS NULL OR user_id = ?)`)
         .run(userId, nowIso(), String(assessmentId), String(token), userId);
     return Number(result?.changes || 0) === 1;
-}
-async function hasActiveSubscription(userId) {
-    if (!userId)
-        return false;
-    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
-    return rows.some((subscription) => subscriptionAccessDecision(subscription).allowed);
-}
-async function hasOpenSubscription(userId) {
-    if (!userId)
-        return false;
-    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
-    return rows.some((subscription) => subscriptionBlocksCheckout(subscription));
-}
-async function hasSubscriptionBlockingAccountDeletion(userId) {
-    if (!userId)
-        return false;
-    const rows = await db.prepare('SELECT status,current_period_end,authoritative_state,reconciliation_required FROM subscriptions WHERE user_id=?').all(userId);
-    return rows.some((subscription) => subscriptionBlocksAccountDeletion(subscription));
 }
 function parseResult(row) { return typeof row.result_json === 'string' ? JSON.parse(row.result_json) : row.result_json; }
 function publicAssessment(row) {
@@ -2039,35 +1698,16 @@ function serveStatic(pathname, req, res) {
 }
 function safeFilename(value) { return cleanText(value, 80).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'assessment'; }
 function escapeXml(value) { return String(value).replace(/[<>&'\"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char]); }
-function legalOperator() {
-    return {
-        name: config.companyLegalName || `${config.companyName} operator (not configured)`,
-        address: config.companyAddress || 'Business address not configured',
-        email: config.supportEmail || 'Support email not configured',
-        jurisdiction: config.legalJurisdiction || 'Jurisdiction not configured',
-    };
-}
-function legalShell(title, content) {
-    return `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${escapeXml(title)} | AgentRiskLayer</title><meta name=\"robots\" content=\"index,follow\"><link rel=\"stylesheet\" href=\"/styles.css\"><link rel=\"stylesheet\" href=\"/analytics.css\"></head><body><header class=\"site-header\"><a class=\"brand\" href=\"/\"><span class=\"brand-mark\">AR</span>AgentRiskLayer</a><nav><a href=\"/privacy.html\">Privacy</a><a href=\"/terms.html\">Terms</a></nav></header><main class=\"app-shell\"><article class=\"panel legal-copy\">${content}</article></main><footer><span>© 2026 AgentRiskLayer</span><span>Version ${escapeXml(config.termsVersion)}</span></footer><script type=\"module\" src=\"/analytics.js\"></script></body></html>`;
-}
-function renderPrivacyPage() {
-    const operator = legalOperator();
-    return legalShell('Privacy Notice', `<h1 class=\"legal-title\">Privacy notice</h1><p class=\"muted\">Effective ${escapeXml(config.termsVersion)}</p><h2>Who operates the service</h2><p>${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Privacy contact: ${escapeXml(operator.email)}.</p><h2>Information we process</h2><ul><li>Account email address, password hash, consent record and session records.</li><li>Assessment answers, scores, reports, sharing settings and timestamps.</li><li>Saved project risk profiles, architecture applicability outcomes, evidence-state links and versioned knowledge digests. Public profiler answers are not retained unless an authenticated user explicitly saves them to a project.</li><li>Customer-authorised inspection and red-team summaries, redacted finding metadata, cryptographic integrity data and declared scope. The official tools are designed not to upload source code, raw prompts, target responses, credentials or matched secret values.</li><li>Purchase, subscription and transactional-email references.</li><li>Security and product events used to prevent abuse and operate the service.</li></ul><h2>Why we process it</h2><p>We process this information to provide requested assessments and reports, perform the contract, secure accounts, fulfil payments, maintain records and improve service reliability.</p><h2>Processors and optional analytics</h2><p>Stripe processes live payments, subscriptions and billing. Resend delivers transactional email. The selected hosting provider stores and serves application data. Card details are not stored by AgentRiskLayer.</p><p>Google Analytics is optional and does not load until you accept analytics. If accepted, it processes usage events, page paths, device and approximate location information to help us understand and improve the service. We disable advertising signals and do not send form contents, credentials, assessment answers, prompts, source code or payment details. You can withdraw consent at any time by clearing the site preference in your browser and selecting “Reject optional analytics” on your next visit.</p><h2>Sharing and public results</h2><p>Assessments are private by default. A public summary and badge are exposed only after the account owner enables public sharing. Sharing can be disabled from the result page.</p><h2>Retention and your controls</h2><p>Account holders can download a structured data export and permanently delete their account from the dashboard. Billing records may need to be retained by payment providers or the operator where law requires it.</p><h2>Your rights</h2><p>Depending on applicable law, you may request access, correction, deletion, restriction, portability or objection. Contact ${escapeXml(operator.email)}. You may also complain to the relevant supervisory authority.</p><h2>International processing and security</h2><p>Processors may operate internationally under their own data-protection terms. We use salted password hashing, HTTP-only sessions, CSRF controls, access checks and encrypted HTTPS transport in production.</p><h2>Changes</h2><p>Material changes to this notice will be published with a revised effective date. Where required, account holders will also be notified directly.</p>`);
-}
-function renderTermsPage() {
-    const operator = legalOperator();
-    return legalShell('Terms of Service', `<h1 class=\"legal-title\">Terms of service</h1><p class=\"muted\">Effective ${escapeXml(config.termsVersion)}</p><h2>Operator</h2><p>The service is operated by ${escapeXml(operator.name)}, ${escapeXml(operator.address)}. Contact: ${escapeXml(operator.email)}.</p><h2>Service scope</h2><p>AgentRiskLayer provides automated security decision support based on user-supplied information and hosted runtime policy decisions, optional customer-operated static inspection evidence, and controlled non-destructive adversarial testing in local, test, or staging environments. The hosted Guard API evaluates supplied content and tool-call metadata against customer policies; it does not execute customer tools. The inspector does not exploit systems, and the red-team runner refuses production targets and destructive actions. The service is not a penetration test, independent audit, certification, guarantee, insurance product or legal opinion.</p><h2>Accounts and acceptable use</h2><p>You must provide accurate account details, protect credentials and use the service lawfully. You may not probe, disrupt, reverse engineer, abuse rate limits or submit information or inspect systems you do not own or have explicit permission to assess.</p><h2>User responsibility</h2><p>You are responsible for input accuracy, professional review, control implementation, system testing and compliance with law, regulation and contracts. A score does not establish that a system is safe.</p><h2>Payments, cancellations and refunds</h2><p>One-off assessments are fulfilled after confirmed payment. If work has not started, you may request cancellation by contacting the operator. Once assessment work or digital fulfilment has started, refunds are provided only where required by law or where the service was not supplied as described. Recurring plans continue until cancelled through the billing portal; cancellation stops future renewal and access continues until the end of the paid billing period. Prices, taxes, renewal terms and the amount due are shown before payment. Nothing in these terms limits mandatory statutory rights.</p><h2>Intellectual property</h2><p>You retain rights in submitted information. The operator retains rights in the software, scoring methodology, report design and service branding. You may use purchased reports internally and share them with advisers and stakeholders.</p><h2>Availability and changes</h2><p>The service may change, be suspended for maintenance or be withdrawn. We do not promise uninterrupted availability. Material scoring-model changes are identified by a scoring-version reference.</p><h2>Liability</h2><p>Nothing in these terms excludes or limits liability where doing so would be unlawful, including liability for fraud, fraudulent misrepresentation, or death or personal injury caused by negligence. Subject to that exception, the service is provided as security decision support and the operator is not liable for indirect or consequential loss, loss of profit, revenue, business, anticipated savings, goodwill or data. For paid services, the operator’s total aggregate liability arising from the service is limited to the fees paid by you for the affected service during the 12 months before the event giving rise to the claim. For free services, total aggregate liability is limited to £100. Mandatory consumer rights remain unaffected.</p><h2>Termination and deletion</h2><p>You may stop using the service and delete your account after cancelling an active subscription. We may suspend access for security, non-payment or material breach.</p><h2>Governing law</h2><p>These terms and any non-contractual dispute are governed by the laws of ${escapeXml(operator.jurisdiction)}. The courts of ${escapeXml(operator.jurisdiction)} have jurisdiction, except that a consumer may rely on any mandatory protections and bring proceedings in any court available under applicable consumer law.</p>`);
-}
 function renderRobots() {
-    return `User-agent: *\nAllow: /\nDisallow: /dashboard.html\nDisallow: /admin.html\nDisallow: /auth.html\nDisallow: /reset.html\nDisallow: /result.html\nSitemap: ${config.baseUrl}/sitemap.xml\n`;
+    return `User-agent: *\nAllow: /\nDisallow: /dashboard.html\nDisallow: /admin.html\nDisallow: /auth.html\nDisallow: /reset.html\nDisallow: /result.html\nDisallow: /assessment.html\nDisallow: /control-plane.html\nDisallow: /control-intelligence.html\nDisallow: /inspector.html\nSitemap: ${config.baseUrl}/sitemap.xml\n`;
 }
 function renderSitemap() {
-    const paths = ['/', '/start.html', '/demo.html', '/quickstart.html', '/runtime.html', '/standards.html', '/assessment.html', '/ai-agent-security-assessment.html', '/pricing.html', '/methodology.html', '/help.html', '/sample-report.html', '/trust.html', '/security-center.html', '/risk-library.html', '/risk-profiler.html', '/company.html', '/status.html', '/redteam.html', '/privacy.html', '/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
-    return `<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
+    const paths = ['/', '/ai-agent-security-assessment.html', '/pricing.html', '/request-assessment.html', '/sample-report.html', '/trust.html', '/security-center.html', '/methodology.html', '/standards.html', '/help.html', '/company.html', '/status.html', '/legal/privacy.html', '/legal/terms.html', ...Object.keys(seoPages).map((slug) => `/checks/${slug}`)];
+    return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((item) => `<url><loc>${escapeXml(config.baseUrl + item)}</loc></url>`).join('')}</urlset>`;
 }
 function renderSecurityTxt() {
     const contact = config.supportEmail ? `mailto:${config.supportEmail}` : config.baseUrl;
-    return `Contact: ${contact}\nCanonical: ${config.baseUrl}/.well-known/security.txt\nPolicy: ${config.baseUrl}/terms.html\nExpires: ${new Date(Date.now() + 365 * 86400000).toISOString()}\n`;
+    return `Contact: ${contact}\nCanonical: ${config.baseUrl}/.well-known/security.txt\nPolicy: ${config.baseUrl}/legal/terms.html\nExpires: ${new Date(Date.now() + 365 * 86400000).toISOString()}\n`;
 }
 const seoPages = {
     'email-agent-risk-assessment': { title: 'Email Agent Risk Assessment', type: 'Email agent', description: 'Check inbox access, prompt injection, impersonation, credential scope and autonomous sending risk.' },
@@ -2077,14 +1717,13 @@ const seoPages = {
     'ai-assistant-permissions-checker': { title: 'AI Assistant Permissions Checker', type: 'AI assistant', description: 'Identify excessive permissions, shared identities, missing action limits and weak emergency controls.' },
 };
 function renderSeoPage(page) {
-    return `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${page.title} | AgentRiskLayer</title><meta name=\"description\" content=\"${page.description}\"><link rel=\"stylesheet\" href=\"/styles.css\"><link rel=\"stylesheet\" href=\"/analytics.css\"></head><body><header class=\"site-header\"><a class=\"brand\" href=\"/\"><span class=\"brand-mark\">AR</span>AgentRiskLayer</a><nav><a href=\"/start.html\">Start</a><a href=\"/assessment.html\">Check an agent</a><a href=\"/pricing.html\">Pricing</a><a href=\"/auth.html\">Sign in</a></nav></header><main><section class=\"hero compact\"><div><span class=\"eyebrow\">Plain-English AI security check</span><h1>${page.title}</h1><p class=\"hero-copy\">${page.description}</p><div class=\"button-row\"><a class=\"button primary\" href=\"/assessment.html?type=${encodeURIComponent(page.type)}\">Start the free assessment</a><a class=\"button ghost\" href=\"/pricing.html\">View reports</a></div></div><div class=\"score-card\"><span>Example aggregate declared score</span><strong>46<small>/100</small></strong><div class=\"risk-pill moderate\">Moderate overall declared band</div></div></section><section class=\"content-section narrow\"><h2>What the assessment covers</h2><div class=\"feature-grid\"><article><h3>Permissions</h3><p>Checks whether the agent has more access than its task requires.</p></article><article><h3>Untrusted input</h3><p>Reviews how external content can influence tools and actions.</p></article><article><h3>Autonomy</h3><p>Measures approval gates, limits and potential blast radius.</p></article><article><h3>Evidence</h3><p>Evaluates logging, testing and incident containment.</p></article></div></section></main><footer><span>© 2026 AgentRiskLayer</span><span>Automated decision support, not a certification.</span></footer></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${page.title} | AgentRiskLayer</title><meta name="description" content="${page.description}"><link rel="stylesheet" href="/marketing.css"></head><body><header class="marketing-header"><a class="brand" href="/">AgentRiskLayer</a><nav class="marketing-nav"><a href="/ai-agent-security-assessment.html">Assessment</a><a href="/pricing.html">Pricing</a><a class="nav-cta" href="/request-assessment.html">Request an Assessment</a></nav></header><main><section class="page-hero narrow"><p class="eyebrow">AI agent security assessment</p><h1>${page.title}</h1><p class="lede">${page.description}</p><div class="actions"><a class="button primary" href="/request-assessment.html">Request an Assessment</a><a class="button secondary" href="/sample-report.html">See an example report</a></div></section></main><footer class="marketing-footer"><div><strong>AgentRiskLayer</strong><span>AI agent security assessment before production.</span></div><nav><a href="/legal/privacy.html">Privacy</a><a href="/legal/terms.html">Terms</a></nav></footer></body></html>`;
 }
 assertSafeProductionConfig();
 const databaseInitialisation = await initialiseDatabase();
 await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(nowIso());
 await db.prepare('DELETE FROM password_reset_tokens WHERE expires_at <= ? OR used_at IS NOT NULL').run(nowIso());
 await enforceRetention();
-await startFulfilmentWorker();
 await startRetentionWorker();
 server.listen(config.port, config.host, () => {
     const listenerAddress = server.address();
