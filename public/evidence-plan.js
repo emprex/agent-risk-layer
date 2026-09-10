@@ -6,15 +6,30 @@ const BOUNDED_CHECKS = Object.freeze([
   { id:'containment-recovery', match:/kill switch|contain|recovery|incident response|revocation/i, title:'Verify containment and recovery', why:'A documented stop procedure is not proof that execution, credentials and tools can actually be contained when the agent is active.', invariant:'Containment must stop the agent, revoke relevant authority and leave the system in the declared safe state.', cases:['Stop execution','Revoke credential','Block tool access','Preserve evidence','Safe-state restart'], environment:'non-production' },
   { id:'audit-reconstruction', match:/logging|observability|audit|reconstruct/i, title:'Verify audit reconstruction', why:'Logging declarations need a bounded event to confirm that identity, action, approval and outcome can be reconstructed from retained evidence.', invariant:'A bounded action must produce enough correlated evidence to reconstruct who acted, what was attempted, what authorised it and what happened.', cases:['Identity recorded','Action recorded','Approval / policy recorded','Outcome recorded','Correlation retained'], environment:'non-production' },
 ]);
+const CHECK_ID_BY_QUESTION_ID=Object.freeze({
+ tool_authorization:'mcp-authority',
+ human_approval:'approval-binding',
+ memory_security:'memory-isolation',
+ egress_control:'egress-boundary',
+ kill_switch:'containment-recovery',
+ logging:'audit-reconstruction'
+});
 function gapText(gap={}) { return [gap.id,gap.name,gap.title,gap.domain,gap.category,gap.help,gap.evidence,gap.status].filter(Boolean).join(' '); }
 function materialGaps(assessment={}) { const result=assessment.result||assessment; const exactSets=[result.blockingEvidenceGaps,result.unresolvedItems,result.blockingInformationGaps]; for(const exact of exactSets) if(Array.isArray(exact)&&exact.length)return exact; const controls=assessment.controls||result.controls||[]; return controls.filter(c=>['unresolved','evidence-required','not-applicable-declared'].includes(c.status)); }
 function resolutions(assessment={}) { const result=assessment.result||assessment; const value=result.evidencePlanResolutions||assessment.evidencePlanResolutions||{}; return value&&typeof value==='object'&&!Array.isArray(value)?value:{}; }
-export function boundedCheckForGap(gap){const check=BOUNDED_CHECKS.find(c=>c.match.test(gapText(gap)));return check?{...check,gap}:null;}
+export function boundedCheckForGap(gap){
+ const questionId=String(gap?.questionId||'').trim();
+ const exactId=CHECK_ID_BY_QUESTION_ID[questionId]||null;
+ const check=exactId
+  ? BOUNDED_CHECKS.find(c=>c.id===exactId)
+  : BOUNDED_CHECKS.find(c=>c.match.test(gapText(gap)));
+ return check?{...check,gap}:null;
+}
 export function buildEvidencePlan({assessment={},inspections=[]}={}){
  const gaps=materialGaps(assessment), resolved=resolutions(assessment), latestInspection=Array.isArray(inspections)&&inspections.length?inspections[0]:null;
  if(!latestInspection)return{state:'source-required',title:'Run source evidence first',explanation:'AgentRiskLayer needs observed source evidence before it selects runtime checks. A declaration is not proof, and runtime tests should be limited to questions source review cannot resolve.',checks:[],manual:gaps,resolved:[]};
  const checks=[],manual=[],resolvedItems=[],seen=new Set();
- for(const gap of gaps){const planned=boundedCheckForGap(gap);if(!planned){manual.push(gap);continue;}const resolution=resolved[planned.id];if(['not-applicable','evidence-gap'].includes(resolution?.state)){resolvedItems.push({...planned,resolution});continue;}if(seen.has(planned.id))continue;seen.add(planned.id);checks.push(planned);}
+ for(const gap of gaps){const planned=boundedCheckForGap(gap);if(!planned){manual.push(gap);continue;}const resolution=resolved[planned.id];if(['not-applicable','evidence-gap'].includes(resolution?.state)){resolvedItems.push({...planned,resolution});continue;}if(!planned.caseId){manual.push(gap);continue;}if(seen.has(planned.id))continue;seen.add(planned.id);checks.push(planned);}
  if(checks.length)return{state:'bounded-check-required',title:checks[0].title,explanation:'Source evidence is present. Unresolved assessment questions remain open unless the evidence chain proves them. Run only the bounded runtime checks mapped to those material questions; keep all other unknowns as evidence gaps.',checks,manual,resolved:resolvedItems};
  return{state:manual.length?'manual-evidence-required':'no-runtime-check-selected',title:manual.length?'No bounded runtime check is justified automatically':'No further bounded runtime check is selected',explanation:manual.length?'The remaining evidence questions are not mapped to a safe bounded runtime invariant. Keep them as evidence gaps until a reviewer defines an appropriate test; do not invent a finding or run a generic attack suite.':'All selected bounded questions have a recorded evidence disposition. Evidence gaps remain evidence gaps; this is not a deployment approval.',checks:[],manual,resolved:resolvedItems};
 }

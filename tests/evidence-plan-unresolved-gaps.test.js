@@ -24,11 +24,12 @@ test('unresolvedItems remain material after source evidence and map to bounded c
     'approval-binding',
     'egress-boundary',
     'memory-isolation',
-    'containment-recovery',
-    'audit-reconstruction',
-  ]);
-  assert.equal(plan.manual.length, 1);
-  assert.equal(plan.manual[0].id, 'U-06');
+]);
+  assert.equal(plan.manual.length, 3);
+  assert.deepEqual(
+    plan.manual.map((item) => item.id),
+    ['U-04', 'U-05', 'U-06']
+  );
 });
 
 test('blockingInformationGaps do not disappear after source evidence', () => {
@@ -52,6 +53,7 @@ test('unresolved controls remain evidence gaps when no exact unresolved list is 
     ],
   };
   const plan = buildEvidencePlan({ assessment, inspections: [inspection] });
-  assert.equal(plan.state, 'bounded-check-required');
-  assert.equal(plan.checks[0].id, 'audit-reconstruction');
+  assert.equal(plan.state, 'manual-evidence-required');
+  assert.equal(plan.checks.length, 0);
+  assert.equal(plan.manual.length, 1);
 });
