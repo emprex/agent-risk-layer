@@ -272,6 +272,87 @@ function conflictState({
   };
 }
 
+
+export function selectExactBoundedTestCandidate(exact = []) {
+  return exact
+    .filter(
+      (item) =>
+        item?.projected?.currentStage === 'test' &&
+        Boolean(item?.projected?.controlId) &&
+        item?.mapping?.controlId === item.projected.controlId &&
+        Boolean(item?.mapping?.caseId)
+    )
+    .sort((left, right) => {
+      const controlOrder = String(left.projected.controlId)
+        .localeCompare(String(right.projected.controlId));
+
+      if (controlOrder !== 0) {
+        return controlOrder;
+      }
+
+      return String(left.mapping.caseId)
+        .localeCompare(String(right.mapping.caseId));
+    })[0] || null;
+}
+
+export function scopeExactBoundedTestState({
+  workflowState,
+  selected,
+  exactControls = []
+} = {}) {
+  const controlId =
+    selected?.projected?.controlId || null;
+  const caseId =
+    selected?.mapping?.caseId || null;
+
+  if (!controlId || !caseId) {
+    return null;
+  }
+
+  const next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  return {
+    ...next,
+    stage: 'bounded_test_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'authorised_bounded_test_required',
+        source: 'control_intelligence_detail',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: {
+      controlId,
+      currentStage: 'test',
+      chainStatus:
+        selected.projected.chainStatus || null,
+      nextAction:
+        selected.projected.nextAction || null,
+      deploymentImpact:
+        selected.projected.deploymentImpact || null
+    },
+    nextAllowedAction: {
+      name: 'authorise_and_run_bounded_test',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        selected.projected.nextAction ||
+        'The exact authoritative control state requires this bounded test.',
+      controlId,
+      caseId
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactBoundedTestScope: true
+      })
+  };
+}
+
 export async function applyMappedControlAuthorityGuard({
   workflowState,
   projectId,
@@ -415,21 +496,31 @@ export async function applyMappedControlAuthorityGuard({
    * says that at least one mapped control is at the test stage.
    */
   if (workflowState.stage === 'bounded_test_required') {
+    const selected =
+      selectExactBoundedTestCandidate(exact);
+
+    if (selected) {
+      return scopeExactBoundedTestState({
+        workflowState,
+        selected,
+        exactControls
+      });
+    }
+
     const testCandidates =
       exact.filter(
         (item) => item.projected.currentStage === 'test'
       );
 
-    if (testCandidates.length > 0) {
-      return projected;
-    }
-
     return conflictState({
       workflowState,
       exactControls,
       reason:
-        'mapped_control_stage_conflicts_with_bounded_fallback',
-      candidateCount: exact.length
+        testCandidates.length > 0
+          ? 'mapped_control_test_case_unavailable'
+          : 'mapped_control_stage_conflicts_with_bounded_fallback',
+      candidateCount:
+        testCandidates.length || exact.length
     });
   }
 
