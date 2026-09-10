@@ -45,7 +45,7 @@ test('Phase 4 hosted API loads against the canonical AgentRiskLayer authority', 
     '/api/agent/assessment/continue',
     '/api/agent/assessment/remediation/prepare',
     '/api/agent/assessment/remediation/complete',
-    '/api/agent/assessment/remediation/changed-snapshot',
+    '/api/agent/assessment/changed-snapshot',
     '/api/agent/assessment/remediation/applicability',
     '/api/agent/assessment/exact-retest/prepare',
     '/api/agent/assessment/exact-retest/complete'
