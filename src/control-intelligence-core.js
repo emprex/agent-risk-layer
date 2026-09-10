@@ -345,6 +345,43 @@ async function deriveDeploymentDecision(access, snapshot) {
   return { ...common,decision: 'proceed', rationale: 'Applicable controls have current verified evidence, valid required approvals and no open blockers; human review remains required.' };
 }
 
+export async function getDerivedDeploymentReadiness({ projectId, userId } = {}) {
+  if (!projectId || !userId) {
+    return {
+      available: false,
+      reason: 'authoritative_project_context_required',
+      decision: null,
+      projectId: projectId || null,
+      humanReviewRequired: true
+    };
+  }
+
+  const access = await requireAccess(projectId, userId, VIEW_ROLES);
+  const snapshot = await db.prepare("SELECT * FROM system_snapshots WHERE workspace_id=? AND project_id=? AND status='current' ORDER BY created_at DESC LIMIT 1")
+    .get(access.project.workspace_id, projectId);
+
+  if (!snapshot) {
+    return {
+      available: false,
+      reason: 'current_system_snapshot_required',
+      decision: null,
+      projectId,
+      systemSnapshotId: null,
+      humanReviewRequired: true
+    };
+  }
+
+  const derived = await deriveDeploymentDecision(access, snapshot);
+  return {
+    available: true,
+    projectId,
+    systemSnapshotId: snapshot.id,
+    systemSnapshotDigest: snapshot.content_digest,
+    ...derived,
+    humanReviewRequired: true
+  };
+}
+
 export async function getControlIntelligence({ projectId, userId, limit = 25, offset = 0, status = '' }) {
   const access = await requireAccess(projectId, userId, VIEW_ROLES);
   const safeLimit = Math.max(1, Math.min(50, Number(limit) || 25));

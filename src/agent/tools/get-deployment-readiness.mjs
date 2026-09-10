@@ -33,7 +33,7 @@ export async function getDeploymentReadiness({
   }
 
   const { getDerivedDeploymentReadiness } =
-    await import('../../control-intelligence.js');
+    await import('../../control-intelligence-core.js');
 
   const readiness = await getDerivedDeploymentReadiness({
     projectId,
