@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js --watch server.js",
     "start": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js server.js",
-    "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' ! -name 'postgresql-billing-gate.test.js' -print | sort)",
+    "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' -print | sort)",
     "test:arl17k": "node --test benchmarks/arl17k/tests/*.test.mjs",
     "arl17k:phase2": "node benchmarks/arl17k/run-phase2.mjs",
     "arl17k:phase3": "node benchmarks/arl17k/run-phase3.mjs",
