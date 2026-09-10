@@ -6,6 +6,10 @@ import {
   scopeExactBoundedTestState
 } from '../src/agent/mapped-control-authority-guard.mjs';
 
+import {
+  applyPersistedGateState
+} from '../src/agent/persisted-gate-state.mjs';
+
 function projected(controlId, currentStage) {
   return {
     controlId,
@@ -154,4 +158,117 @@ test('a test-stage control without an executable case is not selected', () => {
     ]);
 
   assert.equal(selected, null);
+});
+
+test('persisted bounded result advances after exact scope replaces stale fallback', async () => {
+  const exact = [
+    {
+      mapping: {
+        questionId: 'tool_authorization',
+        controlId: 'ARL-KB-001',
+        caseId: 'RT-AUTH-001'
+      },
+      projected: projected(
+        'ARL-KB-001',
+        'deployment_decision'
+      )
+    },
+    {
+      mapping: {
+        questionId: 'egress_control',
+        controlId: 'ARL-KB-057',
+        caseId: 'RT-TOOL-004'
+      },
+      projected: projected(
+        'ARL-KB-057',
+        'test'
+      )
+    }
+  ];
+
+  const selected =
+    selectExactBoundedTestCandidate(exact);
+
+  const stale = baseState();
+
+  const exactScoped =
+    scopeExactBoundedTestState({
+      workflowState: {
+        ...stale,
+        authoritativeArtifacts: {
+          ...stale.authoritativeArtifacts,
+          evidencePlan: {
+            available: true,
+            state: 'bounded_checks_required',
+            mappedControls:
+              exact.map((item) => item.mapping)
+          }
+        }
+      },
+      selected,
+      exactControls:
+        exact.map((item) => item.projected)
+    });
+
+  let resolverArgs = null;
+
+  const promoted =
+    await applyPersistedGateState({
+      workflowState: exactScoped,
+      projectId: 'prj_test',
+      userId: 'usr_test',
+      assessmentId: 'asm_test',
+
+      resolveBoundedContinuation:
+        async (args) => {
+          resolverArgs = args;
+
+          return {
+            available: true,
+            persisted: false,
+            runId: 'rtr_test',
+            caseId: 'RT-TOOL-004',
+            controlId: 'ARL-KB-057',
+            selectionBasis:
+              'unique_unrecorded_authoritative_run'
+          };
+        },
+
+      resolveExactRetestContinuation:
+        async () => ({
+          available: false,
+          reason:
+            'persisted_exact_retest_not_found'
+        })
+    });
+
+  assert.equal(
+    resolverArgs.controlId,
+    'ARL-KB-057'
+  );
+
+  assert.equal(
+    resolverArgs.caseId,
+    'RT-TOOL-004'
+  );
+
+  assert.equal(
+    promoted.stage,
+    'evidence_recording_required'
+  );
+
+  assert.equal(
+    promoted.nextAllowedAction.name,
+    'record_authoritative_evidence'
+  );
+
+  assert.equal(
+    promoted.nextAllowedAction.actor,
+    'arl'
+  );
+
+  assert.equal(
+    promoted.nextAllowedAction.requiresUserInput,
+    false
+  );
 });

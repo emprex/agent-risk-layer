@@ -162,6 +162,21 @@ export async function buildHostedPreparationConversation({
     userId
   });
 
+  /*
+   * The base workflow may carry a stale paginated bounded-test scope.
+   * The exact mapped-control guard above can replace that fallback with the
+   * authoritative Control Intelligence controlId/caseId. Re-evaluate persisted
+   * gates against that exact scope so a just-persisted bounded run can advance
+   * to authoritative evidence recording instead of requesting the same test
+   * again.
+   */
+  workflowState = await applyPersistedGateState({
+    workflowState,
+    projectId,
+    userId,
+    assessmentId
+  });
+
   const baseResponse = buildConversationResponse({
     command,
     workflowState
