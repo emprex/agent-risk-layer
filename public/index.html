@@ -2,230 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AgentRiskLayer — Security controls and evidence for AI agents</title>
-  <meta name="description" content="Assess one tool-connected AI agent before deployment, stop unsafe actions before they run and keep evidence for an accountable deployment decision.">
-  <meta property="og:title" content="AgentRiskLayer — Keep AI agents under control">
-  <meta property="og:description" content="Assess one real agent, verify controls, stop unsafe actions and keep evidence for the deployment decision.">
-  <meta property="og:type" content="website">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="stylesheet" href="/analytics.css">
-  <script type="module" src="/shared.js"></script>
-  <script type="module" src="/commercial-surfaces.js"></script>
-  <script type="module" src="/visual-story.js"></script>
-  <script type="module" src="/site-shell.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Agent Security Assessment | AgentRiskLayer</title>
+  <meta name="description" content="Human-led AI agent security assessment with evidence, remediation guidance and exact retesting before production.">
+  <meta name="robots" content="index,follow">
+  <link rel="stylesheet" href="/marketing.css">
 </head>
-<body class="enterprise-home" data-shell="public">
-  <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="site-header site-header-v10" data-site-header>
-    <a class="brand brand-v10" href="/" aria-label="AgentRiskLayer home"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>AI agent security</small></span></a>
-    <button class="menu-toggle" type="button" data-menu-toggle aria-expanded="false" aria-controls="primaryNavigation"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
-    <nav id="primaryNavigation" class="primary-navigation" data-primary-navigation aria-label="Primary navigation">
-      <a href="#product">Product</a><a href="#how-it-works">How it works</a><a href="/arl17k.html">Proof</a><a href="/pricing.html">Pricing</a><a href="/trust.html">Trust</a>
-      <a class="nav-signin" data-auth-link href="/auth.html">Sign in</a><a class="button primary small nav-primary-action" href="/assessment.html">Assess one agent free</a>
-    </nav>
-  </header>
-
-  <main id="main-content">
-    <section class="enterprise-hero">
-      <div class="enterprise-hero-copy">
-        <span class="eyebrow">Security evidence for tool-connected AI agents</span>
-        <h1>Before your AI agent reaches production, know what it can do—and prove the controls worked.</h1>
-        <p class="hero-copy">Start with one real agent. Map what it can access and change, verify the controls around it, and keep the evidence behind a proceed, hold or do-not-deploy decision.</p>
-        <div class="button-row">
-          <a class="button primary button-xl" href="/assessment.html">Assess one agent free <span aria-hidden="true">→</span></a>
-          <a class="button ghost button-xl" href="/ai-agent-security-assessment.html">See the assessment</a>
-        </div>
-        <div class="enterprise-proof-line" aria-label="Getting started facts">
-          <span>5–10 minute first risk check</span>
-          <span>No card to start</span>
-          <span>£99 once for the full assessment package</span>
-        </div>
-      </div>
-
-      <aside class="product-preview" data-policy-story aria-label="Illustrative AgentRiskLayer product example">
-        <div class="product-preview-bar">
-          <span class="preview-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <strong>Illustrative product example</strong>
-          <span>Support agent</span>
-        </div>
-        <div class="product-preview-body">
-          <div class="preview-agent-head">
-            <div>
-              <span class="eyebrow">Current agent</span>
-              <h2>Refund support agent</h2>
-              <p>Production candidate · example only</p>
-            </div>
-            <span class="preview-state">Review required</span>
-          </div>
-
-          <div class="preview-metrics" aria-label="Illustrative security state">
-            <div class="preview-metric"><small>Assessment</small><strong>High risk</strong></div>
-            <div class="preview-metric"><small>Runtime policy</small><strong>Active</strong></div>
-            <div class="preview-metric"><small>Deployment</small><strong>Not decided</strong></div>
-          </div>
-
-          <div class="preview-next">
-            <small>Proposed action</small>
-            <strong>Refund £2,500 after an email instruction</strong>
-            <p>High-value refunds require an exact human approval before the tool can run.</p>
-          </div>
-
-          <div class="decision-row">
-            <div data-story-decision><small>Decision</small><strong>Ready to check</strong><p>Verify policy, approval and action context.</p></div>
-            <span class="decision-pill pending">Pending</span>
-          </div>
-          <button class="button primary story-check" type="button" data-story-check>Run security check <span aria-hidden="true">→</span></button>
-          <div class="enterprise-proof-line" data-story-evidence aria-live="polite">
-            <span>Tool call can be stopped before execution</span>
-            <span>Rule and policy version can be recorded</span>
-            <span>Evidence keeps explicit limitations</span>
-          </div>
-        </div>
-      </aside>
-    </section>
-
-    <section class="proof-strip" aria-label="AgentRiskLayer operating principles">
-      <div class="proof-strip-inner">
-        <span>One connected security journey for teams building or using AI agents.</span>
-        <div class="proof-fact"><strong>Evidence before claims</strong><small>Declared and observed facts stay separate.</small></div>
-        <div class="proof-fact"><strong>Human approval where it matters</strong><small>High-impact actions can require exact approval.</small></div>
-        <div class="proof-fact"><strong>Retest before closure</strong><small>Implementation evidence is not treated as a passed test.</small></div>
-      </div>
-    </section>
-
-    <section class="content-section v10-problem-section" id="when-to-assess">
-      <div class="section-heading v10-split-heading">
-        <div><span class="eyebrow">The buying moment</span><h2>Assess when the agent has real authority and the decision matters.</h2></div>
-        <p>AgentRiskLayer is built for agents that can reach business systems, sensitive data or consequential tools—not for a simple chatbot that only drafts text.</p>
-      </div>
-      <div class="v10-question-grid">
-        <article><span>01</span><h3>Before production</h3><p>The agent is about to reach customers, internal systems or real tools and you need a defensible deployment decision.</p></article>
-        <article><span>02</span><h3>After a material change</h3><p>A new model, MCP server, permission, tool, data source or autonomy mode may invalidate earlier evidence.</p></article>
-        <article><span>03</span><h3>When a customer asks for proof</h3><p>A buyer, security reviewer or client wants evidence of what was checked—not another unsupported security claim.</p></article>
-        <article><span>04</span><h3>After a fix</h3><p>A material weakness was remediated and the exact failure needs to be retested before it can be closed.</p></article>
-      </div>
-      <div class="button-row"><a class="button primary" href="/assessment.html">Assess one real agent</a><a class="button ghost" href="/sample-report.html">See the evidence output</a></div>
-    </section>
-
-    <section id="product" class="enterprise-section">
-      <div class="enterprise-section-head">
-        <span class="eyebrow">One product, three jobs</span>
-        <h2>Assess. Control. Prove.</h2>
-        <p>Start with the deployment decision. Reveal deeper security detail only when a developer, security reviewer or auditor needs it.</p>
-      </div>
-      <div class="value-triad">
-        <article class="value-card">
-          <span class="value-number">01</span>
-          <h3>Assess</h3>
-          <p>Understand what the agent can access, what can influence it and what could happen if it fails or is attacked.</p>
-          <ul><li>Guided risk assessment</li><li>Technical inspection</li><li>Controlled red-team evidence</li></ul>
-        </article>
-        <article class="value-card">
-          <span class="value-number">02</span>
-          <h3>Control</h3>
-          <p>Put enforceable boundaries around prompts, outputs and tool calls before an unsafe action reaches a real system.</p>
-          <ul><li>Versioned runtime policy</li><li>Exact-action human approval</li><li>Remediation with ownership</li></ul>
-        </article>
-        <article class="value-card">
-          <span class="value-number">03</span>
-          <h3>Prove</h3>
-          <p>Connect findings, fixes, retests and runtime decisions to the evidence that supports an accountable deployment decision.</p>
-          <ul><li>Evidence-linked retest</li><li>Decision history</li><li>Explicit limitations</li></ul>
-        </article>
-      </div>
-    </section>
-
-    <section class="product-story" aria-labelledby="evidenceTitle">
-      <div class="product-story-inner">
-        <div class="product-story-copy">
-          <span class="eyebrow">Evidence becomes a decision</span>
-          <h2 id="evidenceTitle">See why the agent is blocked—and what changes the decision.</h2>
-          <p>AgentRiskLayer keeps declarations, observations, supported failures, remediation and exact retests distinct. The interface starts with the decision and next action; technical provenance remains available underneath.</p>
-          <div class="button-row"><a class="button primary" href="/sample-report.html">View a sample assessment</a><a class="button ghost" href="/trust.html">Review the evidence model</a></div>
-        </div>
-        <div>
-          <div class="decision-panel" aria-label="Illustrative evidence-linked decision">
-            <div class="decision-panel-head"><strong>Deployment evidence</strong><span>Illustrative example</span></div>
-            <div class="decision-row"><div><small>Supported failure</small><strong>Approval boundary can be bypassed</strong><p>Reproduced under the authorised test scope.</p></div><span class="decision-pill blocked">Finding</span></div>
-            <div class="decision-row"><div><small>Remediation</small><strong>Bind approval to customer, order and amount</strong><p>Implementation evidence attached; retest still required.</p></div><span class="decision-pill pending">Retest</span></div>
-            <div class="decision-row"><div><small>Runtime</small><strong>Unsafe refund attempt stopped</strong><p>Policy and decision evidence recorded for the controlled example.</p></div><span class="decision-pill verified">Blocked</span></div>
-          </div>
-          <ol class="evidence-chain" aria-label="AgentRiskLayer evidence chain">
-            <li><strong>Declared</strong><small>Customer fact</small></li>
-            <li><strong>Observed</strong><small>Technical evidence</small></li>
-            <li><strong>Finding</strong><small>Supported failure</small></li>
-            <li><strong>Remediation</strong><small>Change + proof</small></li>
-            <li><strong>Retest</strong><small>Exact scope</small></li>
-            <li><strong>Decision</strong><small>With limitations</small></li>
-          </ol>
-        </div>
-      </div>
-    </section>
-
-    <section class="content-section" aria-labelledby="arl17kProofTitle">
-      <div class="section-heading v10-split-heading">
-        <div><span class="eyebrow">Public proof · ARL17K</span><h2 id="arl17kProofTitle">17,600 attempts. Same workload. Different outcome.</h2></div>
-        <p>In our safe synthetic benchmark, the intentionally unsafe baseline persisted through 17,600 attempts and executed a simulated privileged action. The protected replay used the same workload and was contained at attempt 26.</p>
-      </div>
-      <div class="value-triad">
-        <article class="value-card"><span class="value-number">17.6K</span><h3>Unsafe baseline</h3><p>17,599 failed paths before the final synthetic route executed the simulated action.</p></article>
-        <article class="value-card"><span class="value-number">26</span><h3>Protected replay</h3><p>The breaker opened after 25 denied paths and blocked attempt 26 before credential access.</p></article>
-        <article class="value-card"><span class="value-number">41/41</span><h3>Evidence boundary</h3><p>All ARL17K tests passed. The result is synthetic benchmark evidence—not production or independent assurance.</p></article>
-      </div>
-      <div class="button-row"><a class="button primary" href="/arl17k.html">See the 17,600-action benchmark</a><a class="button ghost" href="/assessment.html">Assess one agent</a></div>
-    </section>
-
-    <section id="how-it-works" class="enterprise-section">
-      <div class="enterprise-section-head">
-        <span class="eyebrow">How it works</span>
-        <h2>From uncertainty to an evidence-backed decision in four steps.</h2>
-        <p>Complete the first risk check in plain English. Add technical evidence and runtime controls only when they are relevant to the agent you are securing.</p>
-      </div>
-      <div class="enterprise-steps">
-        <article class="enterprise-step"><span>01 · CHECK</span><h3>Describe one agent</h3><p>Record access, data, tools, approval and recovery boundaries.</p></article>
-        <article class="enterprise-step"><span>02 · VERIFY</span><h3>Inspect and test</h3><p>Compare declarations with technical evidence and authorised tests.</p></article>
-        <article class="enterprise-step"><span>03 · CONTROL</span><h3>Fix and protect</h3><p>Remediate supported findings and stop unsafe runtime actions.</p></article>
-        <article class="enterprise-step"><span>04 · PROVE</span><h3>Retest and decide</h3><p>Verify the exact risk again and preserve the evidence behind the decision.</p></article>
-      </div>
-    </section>
-
-    <section class="pricing-preview-light" aria-labelledby="pricingPreviewTitle">
-      <div class="enterprise-section-head">
-        <span class="eyebrow">Primary paid step</span>
-        <h2 id="pricingPreviewTitle">Start free. Pay £99 when one real agent needs the complete assessment package.</h2>
-        <p>The free check qualifies the risk. The one-off assessment unlocks the full evidence, remediation and exact-retest workflow. Ongoing plans matter only when you need recurring runtime protection or more projects.</p>
-      </div>
-      <div class="v10-price-grid commercial-preview-grid" data-commercial-preview><div class="loading"><div class="spinner"></div>Loading current options…</div></div>
-    </section>
-
-    <section class="trust-callout">
-      <div>
-        <span class="eyebrow">Trust through boundaries</span>
-        <h2>Clear evidence. Clear limitations. No security theatre.</h2>
-        <p>AgentRiskLayer Security Assessments are proprietary assessments against the stated AgentRiskLayer Control Profile. They are not accredited certifications or guarantees that a system is risk-free.</p>
-        <div class="button-row"><a class="button primary" href="/assessment.html">Assess one agent free</a><a class="button ghost" href="/trust.html">Open the Trust Centre</a></div>
-      </div>
-      <div class="trust-points">
-        <span><i>✓</i> Declared controls remain distinct from observed controls.</span>
-        <span><i>✓</i> Unknown or inconclusive information is not automatically turned into a vulnerability.</span>
-        <span><i>✓</i> High-impact approvals can be bound to the exact action and parameters.</span>
-        <span><i>✓</i> Findings, remediation and retests retain their evidence lineage.</span>
-        <span><i>✓</i> Reports state scope, method, limitations and the assessed system version.</span>
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer-v10">
-    <div class="footer-grid">
-      <div class="footer-brand"><a class="brand brand-v10" href="/"><span class="brand-mark">AR</span><span><strong>AgentRiskLayer</strong><small>Evidence. Control. Trust.</small></span></a><p>Understand what an AI agent can access, stop unsafe actions and keep evidence for accountable decisions.</p></div>
-      <div><strong>Product</strong><a href="/assessment.html">Check an agent</a><a href="/ai-agent-security-assessment.html">AI agent security assessment</a><a href="/checks/mcp-server-risk-assessment">MCP server risk assessment</a><a href="/demo.html">See the product work</a><a href="/pricing.html">Pricing</a><a href="/quickstart.html">Developer quick start</a></div>
-      <div><strong>Trust</strong><a href="/trust.html">Trust Centre</a><a href="/arl17k.html">17,600-action benchmark</a><a href="/security-center.html">Security controls</a><a href="/methodology.html">Methodology</a><a href="/risk-library.html">Risk library</a><a href="/status.html">System status</a></div>
-      <div><strong>Company</strong><a href="/company.html">About</a><a href="/help.html">Help Centre</a><a href="mailto:support@agentrisklayer.com">Contact support</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
-    </div>
-    <div class="footer-bottom"><span>© 2026 AgentRiskLayer</span><span>Proprietary security decision support—not an accredited certification or guarantee that a system is risk-free.</span></div>
-  </footer>
-  <script type="module" src="/analytics.js"></script>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="marketing-header">
+  <a class="brand" href="/">AgentRiskLayer</a>
+  <nav class="marketing-nav" aria-label="Main navigation">
+    <a href="/ai-agent-security-assessment.html">Assessment</a>
+    <a href="#process">Process</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/sample-report.html">Example report</a>
+    <a class="nav-cta" href="/request-assessment.html">Request an Assessment</a>
+  </nav>
+</header>
+<main id="main-content">
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">AI Agent Security Assessment</p>
+    <h1>We assess your AI agent before it reaches production.</h1>
+    <p class="lede">Security assessment, evidence, remediation guidance and retest — delivered as a clear report.</p>
+    <div class="actions"><a class="button primary" href="/request-assessment.html">Request an Assessment</a><a class="button secondary" href="/sample-report.html">See an example report</a></div>
+    <p class="quiet">Human-led assessment. Scope agreed before any testing. No credentials or secrets are requested through this website.</p>
+  </div>
+  <aside class="hero-panel" aria-label="Assessment summary">
+    <p class="eyebrow">What you get</p>
+    <ul class="check-list"><li>Findings tied to evidence</li><li>Severity and practical impact</li><li>Remediation guidance</li><li>One exact retest for the agreed scope</li><li>Final assessment report</li><li>Review call</li></ul>
+  </aside>
+</section>
+<section class="section" id="process">
+  <div class="section-heading"><p class="eyebrow">How it works</p><h2>A security assessment, not another scanner.</h2></div>
+  <ol class="steps"><li><strong>1. Request</strong><span>Tell us what the agent does, what it can access and where it is in its lifecycle.</span></li><li><strong>2. Scope</strong><span>We review the architecture and agree the authorised test boundary, timing and price.</span></li><li><strong>3. Assess</strong><span>ARL inspects the system and we conduct controlled security tests against the agreed scope.</span></li><li><strong>4. Prove</strong><span>Findings are linked to evidence. Unknown information stays unknown; it is not invented as a vulnerability.</span></li><li><strong>5. Fix &amp; retest</strong><span>You receive remediation guidance, then the exact affected controls are retested.</span></li><li><strong>6. Report</strong><span>You receive the final report and a review call for the accountable human decision.</span></li></ol>
+</section>
+<section class="section split">
+  <div><p class="eyebrow">Built for agentic systems</p><h2>When an AI can act, security has to test authority.</h2><p>We focus on agents that use tools, APIs, MCP servers, repositories, business systems, customer data or autonomous workflows.</p></div>
+  <div class="card-grid"><article class="card"><h3>Founders &amp; AI startups</h3><p>Get a defensible security picture before a launch, pilot or customer review.</p></article><article class="card"><h3>Tool-using agents</h3><p>Test permissions, action boundaries, prompt-injection paths and approval controls.</p></article><article class="card"><h3>Internal AI systems</h3><p>Understand what the agent can reach, change or expose inside your environment.</p></article><article class="card"><h3>MCP-based systems</h3><p>Review tool trust, server permissions, secrets exposure and unsafe action paths.</p></article></div>
+</section>
+<section class="section authority">
+  <div><p class="eyebrow">The decision boundary</p><h2>The LLM is not the security authority.</h2></div>
+  <div class="authority-grid"><p><strong>AI</strong><span>orchestration and explanation</span></p><p><strong>ARL</strong><span>authoritative security controls and findings</span></p><p><strong>Evidence</strong><span>proof of what was observed or tested</span></p><p><strong>Control Intelligence</strong><span>readiness from resolved controls</span></p><p><strong>Human</strong><span>final accountable decision</span></p></div>
+</section>
+<section class="section price-band"><div><p class="eyebrow">Pricing</p><h2>Serious assessment, scoped to the system.</h2><p>Core AI Agent Security Assessments start from <strong>£2,500</strong>. MCP and tool-using systems start from <strong>£5,000</strong>. Complex autonomous or multi-agent systems are scoped individually.</p></div><a class="button primary" href="/request-assessment.html">Request an Assessment</a></section>
+</main>
+<footer class="marketing-footer"><div><strong>AgentRiskLayer</strong><span>AI agent security assessment before production.</span></div><nav aria-label="Footer navigation"><a href="/trust.html">Trust</a><a href="/company.html">Company</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="mailto:support@agentrisklayer.com">support@agentrisklayer.com</a></nav></footer>
 </body>
 </html>
