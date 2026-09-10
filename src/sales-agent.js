@@ -1,8 +1,8 @@
 import { db, id, insertEvent, nowIso } from './db.js';
 
-const stages = ['research', 'qualified', 'contacted', 'replied', 'demo_booked', 'assessment_proposed', 'customer', 'subscription', 'lost'];
+const stages = ['research', 'qualified', 'contacted', 'replied', 'demo_booked', 'assessment_proposed', 'customer', 'lost'];
 const messageStatuses = ['draft', 'approved', 'sent', 'rejected'];
-const activityTypes = ['research', 'outreach', 'reply', 'follow_up', 'demo', 'proposal', 'assessment_sold', 'subscription_sold', 'note'];
+const activityTypes = ['research', 'outreach', 'reply', 'follow_up', 'demo', 'proposal', 'assessment_sold', 'note'];
 
 function text(value, max = 2000) {
   return String(value ?? '').trim().slice(0, max);
@@ -78,7 +78,7 @@ export async function createProspect(userId, input) {
     buyerLinkedin: validateUrl(optional(input.buyerLinkedin, 500)), source: text(input.source, 100) || 'manual',
     triggerSignal: optional(input.triggerSignal, 1000), agentUseCase: optional(input.agentUseCase, 2000),
     toolAccess: optional(input.toolAccess, 2000), evidence: input.evidence || [], stage: 'research',
-    estimatedValuePence: Math.max(0, Number(input.estimatedValuePence || 9900) || 9900),
+    estimatedValuePence: Math.max(0, Number(input.estimatedValuePence || 250000) || 250000),
     nextAction: optional(input.nextAction, 500), nextActionAt: optional(input.nextActionAt, 50),
     notes: optional(input.notes, 4000), ...scored,
   };
@@ -132,7 +132,7 @@ export function draftOutreach(prospect, messageType = 'first_message', channel =
   const bodies = {
     connection: `Hi ${buyer} — I saw that ${company} is working on ${useCase}. I focus on security testing for AI agents with real tools and permissions. I would be interested to follow what you are building.`,
     first_message: `Thanks for connecting, ${buyer}. AgentRiskLayer tests what can happen when an AI agent receives malicious instructions, misuses a tool, or acts beyond its intended authority. We produce an integrity-digested assessment, remediation list, and evidence-bounded deployment decision. I noticed ${signal}. Have you already tested the agent's tool permissions and prompt-injection paths?`,
-    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for our £99 AI Agent Security Assessment. It includes a full evidence-bounded report plus customer-operated inspection, controlled-testing, remediation and retest workflows. The report claims only work actually completed. Would a 15-minute demonstration be useful this week?`,
+    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for an AgentRiskLayer AI Agent Security Assessment. Scope starts from £2,500 and includes evidence, authorised testing, remediation guidance, exact retesting and a final report. The report claims only work actually completed. Would a 15-minute demonstration be useful this week?`,
     follow_up: `Hi ${buyer} — one practical question: if the agent took an unsafe action tomorrow, could ${company} show exactly which controls were tested before deployment? That evidence gap is what AgentRiskLayer is designed to close.`,
   };
   const body = bodies[messageType];
@@ -193,9 +193,9 @@ export async function recordActivity(userId, prospectId, input) {
 
 export async function salesOverview() {
   const [totals, stagesRows, dueRows, messages, activities] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) prospects, COALESCE(SUM(CASE WHEN stage IN ('customer','subscription') THEN 1 ELSE 0 END),0) customers, COALESCE(SUM(CASE WHEN stage NOT IN ('customer','subscription','lost') THEN estimated_value_pence ELSE 0 END),0) pipeline_value_pence FROM sales_prospects`).get(),
+    db.prepare(`SELECT COUNT(*) prospects, COALESCE(SUM(CASE WHEN stage='customer' THEN 1 ELSE 0 END),0) customers, COALESCE(SUM(CASE WHEN stage NOT IN ('customer','lost') THEN estimated_value_pence ELSE 0 END),0) pipeline_value_pence FROM sales_prospects`).get(),
     db.prepare('SELECT stage,COUNT(*) count FROM sales_prospects GROUP BY stage ORDER BY count DESC').all(),
-    db.prepare(`SELECT * FROM sales_prospects WHERE next_action_at IS NOT NULL AND stage NOT IN ('customer','subscription','lost') ORDER BY next_action_at ASC LIMIT 30`).all(),
+    db.prepare(`SELECT * FROM sales_prospects WHERE next_action_at IS NOT NULL AND stage NOT IN ('customer','lost') ORDER BY next_action_at ASC LIMIT 30`).all(),
     db.prepare(`SELECT COUNT(*) drafts, COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) approved, COALESCE(SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END),0) sent FROM sales_messages`).get(),
     db.prepare(`SELECT COALESCE(SUM(CASE WHEN activity_type='assessment_sold' THEN amount_pence ELSE 0 END),0) assessment_revenue_pence, COALESCE(SUM(CASE WHEN activity_type='subscription_sold' THEN amount_pence ELSE 0 END),0) subscription_revenue_pence, COALESCE(SUM(CASE WHEN activity_type='demo' THEN 1 ELSE 0 END),0) demos FROM sales_activities`).get(),
   ]);

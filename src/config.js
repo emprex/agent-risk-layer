@@ -1,7 +1,6 @@
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { isIP } from 'node:net';
-import { BILLABLE_PLANS } from './commercial-catalogue.js';
 const root = process.cwd();
 const defaultSessionSecret = 'development-only-change-this-secret-before-deployment-123456';
 export const defaultBindHost = '0.0.0.0';
@@ -41,7 +40,7 @@ export function parseBindHost(value) {
 export const config = {
     appVersion: '10.1.1',
     scoringVersion: 'arl-risk-v3.4',
-    termsVersion: process.env.TERMS_VERSION || '2026-07-22',
+    termsVersion: process.env.TERMS_VERSION || '2026-09-10',
     productStage: resolvedProductStage,
     companyName: process.env.COMPANY_NAME || 'AgentRiskLayer',
     companyLegalName: (process.env.COMPANY_LEGAL_NAME || '').trim(),
@@ -64,10 +63,6 @@ export const config = {
     databaseStatementTimeoutMs: Math.max(1000, Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS || 15000)),
     databaseLockTimeoutMs: Math.max(1000, Number(process.env.DATABASE_LOCK_TIMEOUT_MS || 5000)),
     databasePath: path.resolve(root, process.env.DATABASE_PATH || `./data/test-${process.pid}-${crypto.randomUUID()}.sqlite`),
-    stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
-    stripeApiVersion: process.env.STRIPE_API_VERSION || '2026-06-24.dahlia',
-    stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
-    billingWebhookMode: String(process.env.BILLING_WEBHOOK_MODE || 'enabled').trim().toLowerCase(),
     resendApiKey: process.env.RESEND_API_KEY || '',
     emailFrom: process.env.EMAIL_FROM || 'AgentRiskLayer <reports@example.com>',
     adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
@@ -76,18 +71,10 @@ export const config = {
     emailVerificationHours: Math.max(1, Number(process.env.EMAIL_VERIFICATION_HOURS || 24)),
     rateLimitStorage: process.env.RATE_LIMIT_STORAGE || 'postgres',
     trustedProxyHops: Math.max(1, Number(process.env.TRUSTED_PROXY_HOPS || 1)),
-    fulfilmentWorkerIntervalMs: Math.max(5000, Number(process.env.FULFILMENT_WORKER_INTERVAL_MS || 30000)),
     retentionWorkerIntervalMs: Math.max(60000, Number(process.env.RETENTION_WORKER_INTERVAL_MS || 60 * 60000)),
     backupRetentionDays: Math.max(1, Number(process.env.BACKUP_RETENTION_DAYS || 30)),
     metricsToken: (process.env.METRICS_TOKEN || '').trim(),
-    stripePrices: {
-        pro_report: (process.env.STRIPE_PRICE_PRO_REPORT || '').trim(),
-        developer_monthly: (process.env.STRIPE_PRICE_DEVELOPER_MONTHLY || '').trim(),
-        team_monthly: (process.env.STRIPE_PRICE_TEAM_MONTHLY || '').trim(),
-        agency_monthly: (process.env.STRIPE_PRICE_AGENCY_MONTHLY || '').trim(),
-    },
 };
-export const plans = BILLABLE_PLANS;
 
 function isManagedPostgresUrl(value) {
     try {
@@ -107,11 +94,6 @@ export function launchReadiness() {
         { key: 'managed_postgres', label: 'Managed PostgreSQL DATABASE_URL configured', ok: isManagedPostgresUrl(config.databaseUrl), required: productionStage },
         { key: 'secure_base_url', label: 'BASE_URL uses HTTPS', ok: config.baseUrl.startsWith('https://'), required: productionStage },
         { key: 'session_secret', label: 'Strong session secret configured', ok: config.sessionSecret.length >= 32 && config.sessionSecret !== defaultSessionSecret, required: productionStage },
-        { key: 'live_payments', label: 'Demo payments disabled', ok: !config.demoMode, required: productionStage && !config.allowDemoInProduction },
-        { key: 'stripe_secret', label: 'Stripe secret configured', ok: Boolean(config.stripeSecretKey), required: !config.demoMode },
-        { key: 'stripe_webhook', label: 'Stripe webhook secret configured', ok: Boolean(config.stripeWebhookSecret), required: !config.demoMode },
-        { key: 'billing_webhook_mode', label: 'Billing webhook mode is explicit', ok: ['enabled','maintenance'].includes(config.billingWebhookMode), required: productionStage },
-        { key: 'stripe_prices', label: 'All Stripe price IDs configured', ok: Object.values(config.stripePrices).every(Boolean), required: !config.demoMode },
         { key: 'email', label: 'Transactional email configured', ok: Boolean(config.resendApiKey) && !config.emailFrom.includes('example.com'), required: productionStage },
         { key: 'admin', label: 'Owner analytics email configured', ok: Boolean(config.adminEmail), required: productionStage },
         { key: 'support', label: 'Support email configured', ok: Boolean(config.supportEmail), required: productionStage },

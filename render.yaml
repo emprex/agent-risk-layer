@@ -60,20 +60,6 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_API_VERSION
-        value: 2026-06-24.dahlia
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: STRIPE_PRICE_PRO_REPORT
-        sync: false
-      - key: STRIPE_PRICE_DEVELOPER_MONTHLY
-        sync: false
-      - key: STRIPE_PRICE_TEAM_MONTHLY
-        sync: false
-      - key: STRIPE_PRICE_AGENCY_MONTHLY
-        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
