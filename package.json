@@ -3,10 +3,9 @@
   "version": "10.1.1",
   "private": true,
   "type": "module",
-  "description": "Production AI-agent security platform with public onboarding, PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, payments, signed evidence, and operational recovery.",
+  "description": "Production AI-agent security platform with PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, signed evidence, and operational recovery.",
   "engines": { "node": ">=22.5.0" },
   "scripts": {
-    "prices:update": "node scripts/update-stripe-render-prices.mjs",
     "dev": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js --watch server.js",
     "start": "node --env-file-if-exists=.env --import ./src/evidence-plan-resolution-preload.js server.js",
     "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' ! -name 'postgresql-billing-gate.test.js' -print | sort)",
