@@ -15,7 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-export const REDTEAM_VERSION = '5.2.0';
+export const REDTEAM_VERSION = '5.2.1';
 export const POLICY_VERSION = 'arl-redteam-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.redteam.bundle.v1';
 export const REQUEST_SCHEMA = 'arl.redteam.request.v1';
@@ -294,7 +294,7 @@ function simulateAdapter(request, profile) {
 
 async function callAdapter(endpoint, request, options) {
   const controller = new AbortController();
-  const timeoutMs = Math.min(30_000, Math.max(1_000, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)));
+  const timeoutMs = Math.min(300_000, Math.max(1_000, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS)));
   const timer = setTimeout(()=>controller.abort(),timeoutMs);
   const auth = options.authToken || (options.authEnv ? process.env[options.authEnv] : '');
   try {
