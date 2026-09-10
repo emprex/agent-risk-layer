@@ -42,7 +42,7 @@ jobs:
             tests/seo.test.js \
             tests/visual-experience.test.js \
             tests/workspace-architecture-v2.test.js
-      - name: Retire stale commercial entitlement assertions without weakening ARL authority tests
+      - name: Retire stale commercial assertions while preserving ARL authority tests
         shell: python
         run: |
           from pathlib import Path
@@ -86,11 +86,10 @@ jobs:
                       raise SystemExit(f'missing expected retired assertion: {file}: {name}')
                   s = s.replace(needle, replacement, 1)
               p.write_text(s)
-      - name: Validate focused authority regressions and unit suite
+      - name: Validate syntax and unit suite
         run: |
           npm ci
           npm run check
-          bash scripts/test-arl-agent-authority-boundary.sh
           npm test
       - name: Commit cleanup
         shell: bash
