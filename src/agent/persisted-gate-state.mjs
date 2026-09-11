@@ -597,7 +597,8 @@ function promotedState({
   actionName,
   reason,
   gate,
-  selectionBasis
+  selectionBasis,
+  selectedRunId = null
 }) {
   return {
     ...workflowState,
@@ -610,7 +611,8 @@ function promotedState({
       name: actionName,
       actor: 'arl',
       requiresUserInput: false,
-      reason
+      reason,
+      selectedRunId
     },
     persistedGate: {
       satisfied: true,
@@ -623,7 +625,8 @@ function promotedState({
 function ambiguousState({
   workflowState,
   reason,
-  gate
+  gate,
+  candidates = []
 }) {
   return {
     ...workflowState,
@@ -652,7 +655,10 @@ function ambiguousState({
       satisfied: false,
       gate,
       ambiguity: true,
-      reason
+      reason,
+      candidates: Array.isArray(candidates)
+        ? candidates
+        : []
     }
   };
 }
@@ -663,6 +669,7 @@ export async function applyPersistedGateState({
   userId,
   assessmentId,
   evidencePlan = null,
+  selectedRunId = null,
   resolveBoundedContinuation =
     resolvePersistedRedTeamContinuation,
   resolveExactRetestContinuation =
@@ -707,7 +714,8 @@ export async function applyPersistedGateState({
         assessmentId,
         evidencePlan: authoritativeEvidencePlan,
         caseId: action.caseId,
-        controlId: action.controlId
+        controlId: action.controlId,
+        selectedRunId
       });
 
     if (continuation.available) {
@@ -719,7 +727,8 @@ export async function applyPersistedGateState({
           'The authorised bounded Red Team run is already persisted and uniquely satisfies the user testing gate. ARL may now bind its authoritative result as control evidence.',
         gate: 'bounded_test',
         selectionBasis:
-          continuation.selectionBasis
+          continuation.selectionBasis,
+        selectedRunId: continuation.runId
       });
     }
 
@@ -727,7 +736,8 @@ export async function applyPersistedGateState({
       return ambiguousState({
         workflowState,
         reason: continuation.reason,
-        gate: 'bounded_test'
+        gate: 'bounded_test',
+        candidates: continuation.candidates || []
       });
     }
 
@@ -766,7 +776,8 @@ export async function applyPersistedGateState({
       return ambiguousState({
         workflowState,
         reason: continuation.reason,
-        gate: 'exact_retest'
+        gate: 'exact_retest',
+        candidates: continuation.candidates || []
       });
     }
   }

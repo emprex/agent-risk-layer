@@ -39,8 +39,35 @@ function candidateProjection(candidate) {
 }
 
 export function selectPersistedRedTeamContinuation(
-  candidates = []
+  candidates = [],
+  selectedRunId = null
 ) {
+  const selected = String(selectedRunId || '').trim();
+
+  if (selected) {
+    const candidate = candidates.find(
+      (item) => item.runId === selected
+    );
+
+    if (!candidate) {
+      return unavailable(
+        'persisted_redteam_selection_invalid',
+        {
+          selectedRunId: selected,
+          candidateCount: candidates.length,
+          candidates: candidates.map(candidateProjection)
+        }
+      );
+    }
+
+    return {
+      type: 'persisted_redteam_continuation',
+      available: true,
+      selectionBasis: 'human_selected_authoritative_run',
+      ...candidateProjection(candidate)
+    };
+  }
+
   const unresolved =
     candidates.filter(
       (candidate) => candidate.persisted === false
@@ -104,7 +131,8 @@ export async function resolvePersistedRedTeamContinuation({
   assessmentId,
   evidencePlan,
   caseId,
-  controlId = null
+  controlId = null,
+  selectedRunId = null
 } = {}) {
   if (!projectId || !userId || !assessmentId) {
     return unavailable(
@@ -214,6 +242,7 @@ export async function resolvePersistedRedTeamContinuation({
   }
 
   return selectPersistedRedTeamContinuation(
-    candidates
+    candidates,
+    selectedRunId
   );
 }
