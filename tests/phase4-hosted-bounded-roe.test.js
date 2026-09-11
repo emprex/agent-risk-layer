@@ -71,6 +71,31 @@ function dependencies({
   };
 }
 
+test('hosted bounded RoE probe is read-only and reports when authorisation is required', async () => {
+  let createCount = 0;
+  const result = await authoriseHostedBoundedRoe({
+    operator,
+    body: {
+      repositoryIdentity: body.repositoryIdentity,
+      frozenInspection: body.frozenInspection,
+      probeOnly: true
+    },
+    now: () => Date.parse('2026-09-11T08:00:00.000Z'),
+    ...dependencies({
+      createAuthorisationImpl: async () => {
+        createCount += 1;
+        return {};
+      }
+    })
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.authorisationStatus.required, true);
+  assert.equal(result.body.authorisationStatus.active, null);
+  assert.equal(result.body.securityStateChanged, false);
+  assert.equal(createCount, 0);
+});
+
 test('hosted bounded RoE is created only at the authoritative user gate with fixed local safety limits', async () => {
   let captured = null;
   const result = await authoriseHostedBoundedRoe({
