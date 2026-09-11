@@ -147,6 +147,46 @@ export async function authoriseHostedBoundedRoe({
     );
   }
 
+  const current = await resolveAuthoritativeWorkflow({
+    operator,
+    body,
+    resolveOperatorContextImpl,
+    getDeclaredContextImpl,
+    resolvePreparationImpl,
+    buildConversationImpl
+  });
+  const identity = current.operatorResolution.internal;
+  const existing = activeSafeAuthorisations(
+    await listAuthorisationsImpl({
+      assessmentId: identity.assessmentId,
+      userId: identity.userId
+    }),
+    now()
+  );
+
+  if (existing.length > 1) {
+    throw roeError(
+      'HOSTED_BOUNDED_ROE_AMBIGUOUS',
+      'More than one active local Rules of Engagement record exists for this assessment.'
+    );
+  }
+
+  if (body.probeOnly === true) {
+    return {
+      statusCode: 200,
+      body: {
+        schema: HOSTED_BOUNDED_ROE_SCHEMA,
+        authorisationStatus: {
+          required: existing.length === 0,
+          active: existing[0] || null
+        },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      }
+    };
+  }
+
   const endpointOrigin = normaliseEndpointOrigin(body.endpointOrigin);
   const authorityBasis = String(body.authorityBasis || '').trim();
   const authorisedRole = String(body.authorisedRole || '').trim();
@@ -179,29 +219,6 @@ export async function authoriseHostedBoundedRoe({
     );
   }
 
-  const current = await resolveAuthoritativeWorkflow({
-    operator,
-    body,
-    resolveOperatorContextImpl,
-    getDeclaredContextImpl,
-    resolvePreparationImpl,
-    buildConversationImpl
-  });
-  const identity = current.operatorResolution.internal;
-  const existing = activeSafeAuthorisations(
-    await listAuthorisationsImpl({
-      assessmentId: identity.assessmentId,
-      userId: identity.userId
-    }),
-    now()
-  );
-
-  if (existing.length > 1) {
-    throw roeError(
-      'HOSTED_BOUNDED_ROE_AMBIGUOUS',
-      'More than one active local Rules of Engagement record exists for this assessment.'
-    );
-  }
   if (existing.length === 1) {
     const currentRoe = existing[0];
     if (currentRoe.endpointOrigin !== endpointOrigin) {
@@ -213,6 +230,7 @@ export async function authoriseHostedBoundedRoe({
     return {
       statusCode: 200,
       body: {
+        schema: HOSTED_BOUNDED_ROE_SCHEMA,
         authorisation: currentRoe,
         reused: true,
         securityStateChanged: false,
@@ -261,9 +279,9 @@ export async function authoriseHostedBoundedRoe({
   return {
     statusCode: 201,
     body: {
+      schema: HOSTED_BOUNDED_ROE_SCHEMA,
       authorisation,
       reused: false,
-      schema: HOSTED_BOUNDED_ROE_SCHEMA,
       securityStateChanged: true,
       deploymentDecisionWritten: false,
       humanReviewRequired: true
