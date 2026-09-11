@@ -10,6 +10,10 @@ import {
   applyPersistedGateState
 } from '../src/agent/persisted-gate-state.mjs';
 
+import {
+  selectPersistedRedTeamContinuation
+} from '../src/agent/tools/resolve-persisted-redteam-continuation.mjs';
+
 function projected(controlId, currentStage) {
   return {
     controlId,
@@ -270,5 +274,119 @@ test('persisted bounded result advances after exact scope replaces stale fallbac
   assert.equal(
     promoted.nextAllowedAction.requiresUserInput,
     false
+  );
+});
+
+
+test('persisted lineage ambiguity requires and validates explicit human run selection', async () => {
+  const candidates = [
+    {
+      runId: 'rtr_old',
+      caseId: 'RT-TOOL-004',
+      controlId: 'ARL-KB-057',
+      persisted: true,
+      createdAt: '2026-09-11T09:00:00.000Z'
+    },
+    {
+      runId: 'rtr_current',
+      caseId: 'RT-TOOL-004',
+      controlId: 'ARL-KB-057',
+      persisted: true,
+      createdAt: '2026-09-11T10:00:00.000Z'
+    }
+  ];
+
+  const ambiguous =
+    selectPersistedRedTeamContinuation(candidates);
+
+  assert.equal(ambiguous.available, false);
+  assert.equal(
+    ambiguous.reason,
+    'persisted_redteam_lineage_ambiguous'
+  );
+  assert.equal(ambiguous.candidateCount, 2);
+
+  const selected =
+    selectPersistedRedTeamContinuation(
+      candidates,
+      'rtr_current'
+    );
+
+  assert.equal(selected.available, true);
+  assert.equal(selected.runId, 'rtr_current');
+  assert.equal(
+    selected.selectionBasis,
+    'human_selected_authoritative_run'
+  );
+
+  const invalid =
+    selectPersistedRedTeamContinuation(
+      candidates,
+      'rtr_not_a_candidate'
+    );
+
+  assert.equal(invalid.available, false);
+  assert.equal(
+    invalid.reason,
+    'persisted_redteam_selection_invalid'
+  );
+
+  const state = baseState();
+  state.authoritativeArtifacts.evidencePlan = {
+    available: true,
+    state: 'bounded_checks_required',
+    mappedControls: [
+      {
+        questionId: 'egress_control',
+        controlId: 'ARL-KB-057',
+        caseId: 'RT-TOOL-004'
+      }
+    ]
+  };
+  state.nextAllowedAction.controlId = 'ARL-KB-057';
+  state.nextAllowedAction.caseId = 'RT-TOOL-004';
+
+  let resolverArgs = null;
+
+  const promoted = await applyPersistedGateState({
+    workflowState: state,
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    selectedRunId: 'rtr_current',
+
+    resolveBoundedContinuation: async (args) => {
+      resolverArgs = args;
+
+      return {
+        available: true,
+        persisted: true,
+        runId: 'rtr_current',
+        caseId: 'RT-TOOL-004',
+        controlId: 'ARL-KB-057',
+        selectionBasis:
+          'human_selected_authoritative_run'
+      };
+    },
+
+    resolveExactRetestContinuation: async () => ({
+      available: false,
+      reason: 'persisted_exact_retest_not_found'
+    })
+  });
+
+  assert.equal(
+    resolverArgs.selectedRunId,
+    'rtr_current'
+  );
+
+  assert.equal(
+    promoted.stage,
+    'evidence_recording_required'
+  );
+
+  assert.equal(
+    promoted.nextAllowedAction.selectedRunId,
+    'rtr_current'
   );
 });

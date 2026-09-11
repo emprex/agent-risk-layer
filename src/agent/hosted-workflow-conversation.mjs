@@ -25,6 +25,8 @@ export const HOSTED_WORKFLOW_CONVERSATION_SCHEMA =
   'arl.agent.hosted-workflow-conversation.v1';
 export const HOSTED_APPLICABILITY_REVIEW_SCHEMA =
   'arl.agent.hosted-applicability-review.v1';
+export const HOSTED_PERSISTED_LINEAGE_REVIEW_SCHEMA =
+  'arl.agent.hosted-persisted-lineage-review.v1';
 
 function hostedConversationError(code, message) {
   const error = new Error(message);
@@ -105,10 +107,35 @@ function applicabilityReview(workflowState) {
   };
 }
 
+function persistedLineageReview(workflowState) {
+  if (
+    workflowState?.stage !== 'persisted_lineage_resolution_required' ||
+    workflowState?.persistedGate?.ambiguity !== true
+  ) {
+    return null;
+  }
+
+  const candidates = Array.isArray(workflowState.persistedGate.candidates)
+    ? workflowState.persistedGate.candidates
+    : [];
+
+  if (!candidates.length) return null;
+
+  return {
+    schema: HOSTED_PERSISTED_LINEAGE_REVIEW_SCHEMA,
+    required: true,
+    gate: workflowState.persistedGate.gate || null,
+    reason: workflowState.persistedGate.reason || null,
+    candidates,
+    selectionMade: false
+  };
+}
+
 export async function buildHostedPreparationConversation({
   operatorContextInternal,
   preparation,
-  command = 'assess'
+  command = 'assess',
+  selectedRunId = null
 } = {}) {
   const projectId = String(
     operatorContextInternal?.projectId || ''
@@ -153,7 +180,8 @@ export async function buildHostedPreparationConversation({
     workflowState,
     projectId,
     userId,
-    assessmentId
+    assessmentId,
+    selectedRunId
   });
 
   workflowState = await applyMappedControlAuthorityGuard({
@@ -174,7 +202,8 @@ export async function buildHostedPreparationConversation({
     workflowState,
     projectId,
     userId,
-    assessmentId
+    assessmentId,
+    selectedRunId
   });
 
   const baseResponse = buildConversationResponse({
@@ -187,12 +216,15 @@ export async function buildHostedPreparationConversation({
     workflowExecution: null
   });
   const review = applicabilityReview(workflowState);
-  const conversationResponse = review
-    ? {
-        ...projectedResponse,
-        applicabilityReview: review
-      }
-    : projectedResponse;
+  const lineageReview = persistedLineageReview(workflowState);
+
+  const conversationResponse = {
+    ...projectedResponse,
+    ...(review ? { applicabilityReview: review } : {}),
+    ...(lineageReview
+      ? { persistedLineageReview: lineageReview }
+      : {})
+  };
 
   return {
     schema: HOSTED_WORKFLOW_CONVERSATION_SCHEMA,

@@ -136,7 +136,8 @@ async function resolveHostedWorkflow({ operator, body = {}, command = 'continue'
   const conversation = await buildHostedPreparationConversation({
     operatorContextInternal: operatorResolution.internal,
     preparation: preparationResolution.internal,
-    command
+    command,
+    selectedRunId: body.selectedRunId || null
   });
 
   return {

@@ -103,7 +103,8 @@ async function persistedRedTeamContinuation({
       assessmentId,
       evidencePlan: resolvedPreparation.evidencePlan,
       caseId: action.caseId,
-      controlId: action.controlId
+      controlId: action.controlId,
+      selectedRunId: action.selectedRunId || null
     });
 
   if (!continuation.available) {
