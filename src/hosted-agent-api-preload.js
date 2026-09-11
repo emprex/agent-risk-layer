@@ -11,6 +11,8 @@ import {
 const originalCreateServer = http.createServer;
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const HOSTED_AGENT_PREFIX = '/api/agent/assessment/';
+const HOSTED_BOUNDED_ROE_PATH =
+  '/api/agent/assessment/bounded-test/authorise';
 
 http.createServer = function patchedCreateServer(...args) {
   const listenerIndex =
@@ -81,13 +83,26 @@ http.createServer = function patchedCreateServer(...args) {
         }
 
         const body = await readJson(req);
-        const { handleHostedAgentApi } = await import('./agent/hosted-agent-api.mjs');
-        const result = await handleHostedAgentApi({
-          pathname,
-          method: req.method,
-          operator,
-          body,
-        });
+        let result;
+
+        if (pathname === HOSTED_BOUNDED_ROE_PATH) {
+          const { handleHostedBoundedRoeApi } =
+            await import('./agent/hosted-bounded-roe-api.mjs');
+          result = await handleHostedBoundedRoeApi({
+            pathname,
+            method: req.method,
+            operator,
+            body,
+          });
+        } else {
+          const { handleHostedAgentApi } = await import('./agent/hosted-agent-api.mjs');
+          result = await handleHostedAgentApi({
+            pathname,
+            method: req.method,
+            operator,
+            body,
+          });
+        }
 
         if (result?.handled !== true) {
           return reply(res, 404, {
