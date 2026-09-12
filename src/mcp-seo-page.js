@@ -46,7 +46,7 @@ export function renderMcpServerRiskAssessmentPage(baseUrl) {
         <h2>Evidence before conclusions</h2>
         <p>Declared capability is not treated as proof. A finding requires authoritative ARL evidence, and closure requires verified retest evidence. The final accountable deployment decision remains human.</p>
         <h2>Engagement model</h2>
-        <p>This is a human-led security assessment, not an automated free scan or browser checkout. MCP and tool-using assessments start from £5,000, with scope and price agreed before testing.</p>
+        <p>This is a human-led security assessment, not an automated free scan or browser checkout. Scope, authorised testing boundary, timing and pricing are agreed directly after reviewing the system.</p>
       </div>
     </section>
   </main>
