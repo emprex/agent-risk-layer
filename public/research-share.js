@@ -50,10 +50,8 @@
   });
 
   document.querySelectorAll('[data-native-share]').forEach((button) => {
-    if (!navigator.share) {
-      button.hidden = true;
-      return;
-    }
+    if (!navigator.share) return;
+    button.hidden = false;
     button.addEventListener('click', async () => {
       const root = button.closest('[data-share-block]') || document;
       try {
