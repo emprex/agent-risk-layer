@@ -10,19 +10,26 @@
   <meta name="author" content="AgentRiskLayer Research">
   <meta name="keywords" content="MCP security, AI agent security, runtime security, prompt injection, tool misuse, Model Context Protocol, AI agent assessment">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="MCP Runtime Security: An Agent Action Is Evidence, Not a Verdict">
-  <meta property="og:description" content="A bounded runtime experiment on indirect prompt injection, privileged tool attempts and the security boundary between observation and verdict.">
+  <meta property="og:site_name" content="AgentRiskLayer">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="MCP Runtime Security: Evidence, Not Verdict">
+  <meta property="og:description" content="A bounded runtime experiment showing why an agent tool call is evidence — not an automatic PASS, FAIL or security verdict.">
   <meta property="og:url" content="https://agentrisklayer.com/research/mcp-runtime-security-evidence-not-verdict">
   <meta property="og:image" content="https://agentrisklayer.com/agentrisklayer-social-1200x630.png">
+  <meta property="og:image:secure_url" content="https://agentrisklayer.com/agentrisklayer-social-1200x630.png">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="AgentRiskLayer — evidence-led AI agent security research">
   <meta property="article:published_time" content="2026-09-14T14:00:00+01:00">
   <meta property="article:section" content="AI Agent Security Research">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MCP Runtime Security: An Agent Action Is Evidence, Not a Verdict">
-  <meta name="twitter:description" content="A bounded runtime experiment on indirect prompt injection, privileged tool attempts and the boundary between observation and verdict.">
+  <meta name="twitter:site" content="@AgentRiskLayer">
+  <meta name="twitter:creator" content="@AgentRiskLayer">
+  <meta name="twitter:title" content="MCP Runtime Security: Evidence, Not Verdict">
+  <meta name="twitter:description" content="Why an agent tool call should become evidence first — not an automatic security verdict.">
   <meta name="twitter:image" content="https://agentrisklayer.com/agentrisklayer-social-1200x630.png">
+  <meta name="twitter:image:alt" content="AgentRiskLayer — evidence-led AI agent security research">
   <link rel="stylesheet" href="/marketing.css">
   <link rel="stylesheet" href="/research.css">
   <script src="/research-share.js" defer></script>
@@ -55,11 +62,11 @@
         <div class="share-actions">
           <button class="share-action primary" type="button" data-native-share hidden>Share…</button>
           <a class="share-action" data-share-network="linkedin" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-          <a class="share-action" data-share-network="x" href="https://x.com/intent/post?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict&url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">X</a>
+          <a class="share-action" data-share-network="x" href="https://x.com/intent/post?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict&url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">X</a>
           <a class="share-action" data-share-network="facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Facebook</a>
-          <a class="share-action" data-share-network="whatsapp" href="https://wa.me/?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-          <a class="share-action" data-share-network="bluesky" href="https://bsky.app/intent/compose?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Bluesky</a>
-          <a class="share-action" data-share-network="email" href="mailto:?subject=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict&body=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict">Email</a>
+          <a class="share-action" data-share-network="whatsapp" href="https://wa.me/?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          <a class="share-action" data-share-network="bluesky" href="https://bsky.app/intent/compose?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Bluesky</a>
+          <a class="share-action" data-share-network="email" href="mailto:?subject=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict&body=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict">Email</a>
           <button class="share-action" type="button" data-copy-link>Copy link</button>
         </div>
         <p class="share-status" data-share-status aria-live="polite"></p>
@@ -203,11 +210,11 @@
           <div class="share-actions">
             <button class="share-action primary" type="button" data-native-share hidden>Share…</button>
             <a class="share-action" data-share-network="linkedin" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-            <a class="share-action" data-share-network="x" href="https://x.com/intent/post?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict&url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">X</a>
+            <a class="share-action" data-share-network="x" href="https://x.com/intent/post?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict&url=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">X</a>
             <a class="share-action" data-share-network="facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Facebook</a>
-            <a class="share-action" data-share-network="whatsapp" href="https://wa.me/?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-            <a class="share-action" data-share-network="bluesky" href="https://bsky.app/intent/compose?text=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Bluesky</a>
-            <a class="share-action" data-share-network="email" href="mailto:?subject=MCP%20Runtime%20Security%3A%20An%20Agent%20Action%20Is%20Evidence%2C%20Not%20a%20Verdict&body=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict">Email</a>
+            <a class="share-action" data-share-network="whatsapp" href="https://wa.me/?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+            <a class="share-action" data-share-network="bluesky" href="https://bsky.app/intent/compose?text=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict%0Ahttps%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict" target="_blank" rel="noopener noreferrer">Bluesky</a>
+            <a class="share-action" data-share-network="email" href="mailto:?subject=MCP%20Runtime%20Security%3A%20Evidence%2C%20Not%20Verdict&body=https%3A%2F%2Fagentrisklayer.com%2Fresearch%2Fmcp-runtime-security-evidence-not-verdict">Email</a>
             <button class="share-action" type="button" data-copy-link>Copy link</button>
           </div>
           <p class="share-status" data-share-status aria-live="polite"></p>
