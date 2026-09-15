@@ -18,6 +18,36 @@ function uniqueById(items = []) {
   return [...byId.values()];
 }
 
+
+export function redTeamEvidenceSemanticKey({
+  evidenceItem,
+  execution
+} = {}) {
+  return JSON.stringify({
+    sourceType: evidenceItem?.sourceType || null,
+    sourceReference: evidenceItem?.sourceReference || null,
+    verificationState:
+      evidenceItem?.verificationState || null,
+    retentionStatus:
+      evidenceItem?.retentionStatus || null,
+    systemSnapshotId:
+      execution?.systemSnapshotId || null,
+    result: execution?.result || null,
+    executionKind:
+      execution?.executionKind || null,
+    executionMethod:
+      execution?.executionMethod || null,
+    inputReference:
+      execution?.inputReference || null,
+    expectedResult:
+      execution?.expectedResult || null,
+    observedResult:
+      execution?.observedResult || null,
+    failureReason:
+      execution?.failureReason || null
+  });
+}
+
 export async function getAuthoritativeRedTeamLineage({
   projectId,
   userId,
@@ -103,34 +133,28 @@ export async function getAuthoritativeRedTeamLineage({
     };
   }
 
-  if (evidence.length !== 1) {
-    return {
-      type: 'authoritative_redteam_lineage',
-      available: false,
-      reason: 'redteam_control_evidence_ambiguous',
-      runId: outcome.runId,
-      caseId: outcome.caseId,
-      questionId: outcome.questionId,
-      controlId: binding.controlId,
-      evidenceIds: evidence.map((item) => item.id),
-      outcome
-    };
-  }
-
-  const evidenceItem = evidence[0];
-
   const tests =
     uniqueById([
       ...(detail.tests || []),
       ...(detail.testHistory || [])
     ]);
 
-  const execution =
-    tests.find(
-      (item) => item.id === evidenceItem.testExecutionId
-    ) || null;
+  const evidenceLineages =
+    evidence.map((evidenceItem) => ({
+      evidenceItem,
+      execution:
+        tests.find(
+          (item) =>
+            item.id === evidenceItem.testExecutionId
+        ) || null
+    }));
 
-  if (!execution) {
+  const missingExecution =
+    evidenceLineages.find(
+      (item) => !item.execution
+    );
+
+  if (missingExecution) {
     return {
       type: 'authoritative_redteam_lineage',
       available: false,
@@ -139,25 +163,102 @@ export async function getAuthoritativeRedTeamLineage({
       caseId: outcome.caseId,
       questionId: outcome.questionId,
       controlId: binding.controlId,
-      evidenceId: evidenceItem.id,
+      evidenceId:
+        missingExecution.evidenceItem.id,
+      evidenceIds:
+        evidence.map((item) => item.id),
       outcome
     };
   }
 
-  if (execution.result !== outcome.status) {
+  const mismatchedExecution =
+    evidenceLineages.find(
+      (item) =>
+        item.execution.result !== outcome.status
+    );
+
+  if (mismatchedExecution) {
     return {
       type: 'authoritative_redteam_lineage',
       available: false,
-      reason: 'redteam_test_execution_outcome_mismatch',
+      reason:
+        'redteam_test_execution_outcome_mismatch',
       runId: outcome.runId,
       caseId: outcome.caseId,
       questionId: outcome.questionId,
       controlId: binding.controlId,
-      evidenceId: evidenceItem.id,
-      testExecutionId: execution.id,
+      evidenceId:
+        mismatchedExecution.evidenceItem.id,
+      testExecutionId:
+        mismatchedExecution.execution.id,
+      evidenceIds:
+        evidence.map((item) => item.id),
       outcome
     };
   }
+
+  /*
+   * Repeated workflow continuation may have persisted more than one
+   * row for the exact same authoritative Red Team source lineage.
+   *
+   * Different row IDs alone do not make those records different
+   * security evidence. Collapse them only when their material
+   * semantics are identical. Any semantic difference remains
+   * fail-closed as a real ambiguity.
+   */
+  const semanticKeys =
+    new Set(
+      evidenceLineages.map(
+        ({ evidenceItem, execution }) =>
+          redTeamEvidenceSemanticKey({
+            evidenceItem,
+            execution
+          })
+      )
+    );
+
+  if (semanticKeys.size !== 1) {
+    return {
+      type: 'authoritative_redteam_lineage',
+      available: false,
+      reason: 'redteam_control_evidence_ambiguous',
+      runId: outcome.runId,
+      caseId: outcome.caseId,
+      questionId: outcome.questionId,
+      controlId: binding.controlId,
+      evidenceIds:
+        evidence.map((item) => item.id),
+      outcome
+    };
+  }
+
+  /*
+   * Equivalent duplicate rows represent one semantic lineage.
+   * Pick the first persisted execution deterministically only after
+   * equivalence has been proven.
+   */
+  evidenceLineages.sort((left, right) => {
+    const timeOrder =
+      String(left.execution.completedAt || '')
+        .localeCompare(
+          String(right.execution.completedAt || '')
+        );
+
+    if (timeOrder !== 0) {
+      return timeOrder;
+    }
+
+    return String(left.evidenceItem.id)
+      .localeCompare(
+        String(right.evidenceItem.id)
+      );
+  });
+
+  const evidenceItem =
+    evidenceLineages[0].evidenceItem;
+
+  const execution =
+    evidenceLineages[0].execution;
 
   const findingId =
     execution.findingId || null;
