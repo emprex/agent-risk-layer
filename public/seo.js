@@ -1,5 +1,4 @@
 const CANONICAL_ORIGIN = 'https://agentrisklayer.com';
-const SOCIAL_IMAGE = `${CANONICAL_ORIGIN}/agentrisklayer-social-1200x630.png`;
 const LOGO_IMAGE = `${CANONICAL_ORIGIN}/agentrisklayer-logo-512.png`;
 
 const NOINDEX_PATHS = new Set([
@@ -32,6 +31,7 @@ function canonicalPath(pathname) {
   if (value === '/' || value === '/index.html') return '/';
   value = value.replace(/\/{2,}/g, '/');
   if (value.length > 1) value = value.replace(/\/$/, '');
+  if (value === '/research' || value === '/research.html' || value.startsWith('/research/')) return value.replace(/\.html$/, '');
   if (/^\/checks\/[a-z0-9-]+$/i.test(value)) return value;
   if (value === '/privacy') return '/privacy.html';
   if (value === '/terms') return '/terms.html';
@@ -60,14 +60,6 @@ function ensureLink(selector, attributes) {
   return node;
 }
 
-function pageDescription() {
-  return document.head.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() || '';
-}
-
-function pageTitle() {
-  return document.title.replace(/\s*[|—-]\s*AgentRiskLayer\s*$/i, '').trim() || 'AgentRiskLayer';
-}
-
 function shouldNoindex(pathname) {
   if (NOINDEX_PATHS.has(pathname)) return true;
   return document.body?.dataset.shell === 'app' && !INDEXABLE_APP_PATHS.has(pathname);
@@ -88,27 +80,6 @@ function applyIndexingSignals(pathname) {
   const canonicalUrl = `${CANONICAL_ORIGIN}${pathname}`;
   ensureLink('link[rel="canonical"]', { rel: 'canonical', href: canonicalUrl });
   return canonicalUrl;
-}
-
-function applySocialMetadata(canonicalUrl) {
-  if (!canonicalUrl) return;
-  const title = pageTitle();
-  const description = pageDescription();
-
-  ensureMeta('meta[property="og:site_name"]', { property: 'og:site_name', content: 'AgentRiskLayer' });
-  ensureMeta('meta[property="og:type"]', { property: 'og:type', content: 'website' });
-  ensureMeta('meta[property="og:url"]', { property: 'og:url', content: canonicalUrl });
-  ensureMeta('meta[property="og:title"]', { property: 'og:title', content: title });
-  if (description) ensureMeta('meta[property="og:description"]', { property: 'og:description', content: description });
-  ensureMeta('meta[property="og:image"]', { property: 'og:image', content: SOCIAL_IMAGE });
-  ensureMeta('meta[property="og:image:width"]', { property: 'og:image:width', content: '1200' });
-  ensureMeta('meta[property="og:image:height"]', { property: 'og:image:height', content: '630' });
-  ensureMeta('meta[property="og:image:alt"]', { property: 'og:image:alt', content: 'AgentRiskLayer — AI agent security and evidence' });
-
-  ensureMeta('meta[name="twitter:card"]', { name: 'twitter:card', content: 'summary_large_image' });
-  ensureMeta('meta[name="twitter:title"]', { name: 'twitter:title', content: title });
-  if (description) ensureMeta('meta[name="twitter:description"]', { name: 'twitter:description', content: description });
-  ensureMeta('meta[name="twitter:image"]', { name: 'twitter:image', content: SOCIAL_IMAGE });
 }
 
 function applyHomepageStructuredData(pathname) {
@@ -164,7 +135,6 @@ function applyHomepageStructuredData(pathname) {
 
 export function applyDocumentSeo() {
   const pathname = canonicalPath(location.pathname);
-  const canonicalUrl = applyIndexingSignals(pathname);
-  applySocialMetadata(canonicalUrl);
+  applyIndexingSignals(pathname);
   applyHomepageStructuredData(pathname);
 }

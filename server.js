@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { applySocialMetadata } from './src/social-metadata.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -1183,9 +1184,9 @@ const server = http.createServer(async (req, res) => {
             if (page) {
                 if (slug === 'mcp-server-risk-assessment') {
                     const { renderMcpServerRiskAssessmentPage } = await import('./src/mcp-seo-page.js');
-                    return html(res, 200, renderMcpServerRiskAssessmentPage(config.baseUrl));
+                    return html(res, 200, renderMcpServerRiskAssessmentPage(config.baseUrl), url.pathname);
                 }
-                return html(res, 200, renderSeoPage(page));
+                return html(res, 200, renderSeoPage(page), url.pathname);
             }
         }
         if (req.method === 'GET' || req.method === 'HEAD')
@@ -1658,7 +1659,8 @@ function json(res, status, payload, headers = {}) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store', ...headers });
     res.end(body);
 }
-function html(res, status, body) {
+function html(res, status, body, pathname = '/') {
+    body = applySocialMetadata(body, pathname);
     res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
     res.end(body);
 }
@@ -1689,7 +1691,9 @@ function serveStatic(pathname, req, res) {
     }
     if (!stat.isFile())
         return text(res, 404, 'Not found');
-    const body = fs.readFileSync(candidate);
+    const source = fs.readFileSync(candidate);
+    const body = path.extname(candidate).toLowerCase() === '.html'
+        ? Buffer.from(applySocialMetadata(source.toString('utf8'), pathname)) : source;
     const type = mimeTypes[path.extname(candidate).toLowerCase()] || 'application/octet-stream';
     const extension = path.extname(candidate).toLowerCase();
     const cache = ['.html', '.js', '.mjs', '.css'].includes(extension) ? 'no-cache' : 'public, max-age=3600';
