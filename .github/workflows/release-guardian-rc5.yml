@@ -1,0 +1,146 @@
+name: Build Guardian RC5 website package
+
+on:
+  push:
+    branches:
+      - release/guardian-0.3.0-rc.5-site
+    paths:
+      - .github/workflows/release-guardian-rc5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build RC5 from public RC4 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="public/downloads/agentrisklayer-guardian-0.3.0-rc.4.tgz"
+          OUT="public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz"
+          WORK="$RUNNER_TEMP/guardian-rc5"
+          mkdir -p "$WORK"
+          tar -xzf "$SRC" -C "$WORK"
+          PKG="$WORK/package"
+
+          # The staged file must be byte-for-byte identical to the merged product source.
+          test "$(git hash-object .release/guardian-rc5/mcp-authority-chain.mjs)" = "bfd41156ad54a83985efbba948a525cc9b26a160"
+          cp .release/guardian-rc5/mcp-authority-chain.mjs "$PKG/guardian/mcp-authority-chain.mjs"
+
+          PKG="$PKG" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          pkg = Path(os.environ['PKG'])
+          cli = pkg / 'guardian' / 'arl-guardian.mjs'
+          text = cli.read_text()
+
+          old_import = "} from './capability-surface.mjs';\nimport { buildGuardianReviewHandoff } from './review-handoff.mjs';"
+          new_import = "} from './capability-surface.mjs';\nimport { addMcpAuthorityChainEvidence } from './mcp-authority-chain.mjs';\nimport { buildGuardianReviewHandoff } from './review-handoff.mjs';"
+          if text.count(old_import) != 1:
+              raise SystemExit('RC4 CLI import boundary did not match expected source')
+          text = text.replace(old_import, new_import, 1)
+
+          old_comment = ' * raw observation -> capability surface -> candidate review handoff.'
+          new_comment = ' * raw observation -> correlated authority evidence -> capability surface -> review handoff.'
+          if text.count(old_comment) != 1:
+              raise SystemExit('RC4 CLI authority-chain comment did not match expected source')
+          text = text.replace(old_comment, new_comment, 1)
+
+          old_build = '  const result = enrichGuardianResult(inspectGuardianCapabilities(target));'
+          new_build = "  const inspected = addMcpAuthorityChainEvidence(inspectGuardianCapabilities(target));\n  const result = enrichGuardianResult(inspected);"
+          if text.count(old_build) != 1:
+              raise SystemExit('RC4 CLI build function did not match expected source')
+          text = text.replace(old_build, new_build, 1)
+          cli.write_text(text)
+
+          package_json_path = pkg / 'package.json'
+          package_json = json.loads(package_json_path.read_text())
+          if package_json.get('name') != '@agentrisklayer/guardian' or package_json.get('version') != '0.3.0-rc.4':
+              raise SystemExit('Unexpected RC4 package identity')
+          package_json['version'] = '0.3.0-rc.5'
+          package_json_path.write_text(json.dumps(package_json, indent=2) + '\n')
+
+          notice = pkg / 'NOTICE.txt'
+          notice_text = notice.read_text()
+          if 'ARL Guardian v0.3.0-rc.4' not in notice_text:
+              raise SystemExit('Unexpected RC4 NOTICE version')
+          notice.write_text(notice_text.replace('ARL Guardian v0.3.0-rc.4', 'ARL Guardian v0.3.0-rc.5', 1))
+          PY
+
+          # The patched CLI must exactly match the merged product source.
+          test "$(git hash-object "$PKG/guardian/arl-guardian.mjs")" = "7905982043aee63b801ed9504c144cb8a7057d17"
+
+          rm -f "$OUT" "$OUT.sha256"
+          npm pack "$PKG" --pack-destination public/downloads >/tmp/guardian-pack-name.txt
+          test -f "$OUT"
+          sha256sum "$OUT" | sed 's#  public/downloads/#  #' > "$OUT.sha256"
+
+          tar -tzf "$OUT" | grep -qx 'package/guardian/mcp-authority-chain.mjs'
+          tar -xOf "$OUT" package/package.json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s);if(p.name!=='@agentrisklayer/guardian'||p.version!=='0.3.0-rc.5')process.exit(1)})"
+
+      - name: Install smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz"
+          SMOKE="$RUNNER_TEMP/guardian-smoke"
+          mkdir -p "$SMOKE"
+          cd "$SMOKE"
+          npm init -y >/dev/null 2>&1
+          npm install "$OUT" --ignore-scripts >/dev/null
+          node -e "const p=require('./node_modules/@agentrisklayer/guardian/package.json'); if(p.version!=='0.3.0-rc.5') process.exit(1)"
+          npx --no-install arl-guardian inspect . >/dev/null
+
+      - name: Update Guardian download page
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, re
+          from pathlib import Path
+
+          archive = Path('public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz')
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          page = Path('public/guardian.html')
+          html = page.read_text()
+
+          install_marker = '<p class="eyebrow">RC3</p><h2>Install and run it locally.</h2>'
+          if install_marker not in html:
+              raise SystemExit('Guardian install release marker not found')
+          html = html.replace(install_marker, '<p class="eyebrow">RC5</p><h2>Install and run it locally.</h2>', 1)
+          html = html.replace('agentrisklayer-guardian-0.3.0-rc.4.tgz', 'agentrisklayer-guardian-0.3.0-rc.5.tgz')
+          html = html.replace('Download RC4', 'Download RC5', 1)
+          html, count = re.subn(r'SHA-256: <code>[0-9a-f]{64}</code>', f'SHA-256: <code>{digest}</code>', html, count=1)
+          if count != 1:
+              raise SystemExit('Guardian SHA marker not found')
+          if 'agentrisklayer-guardian-0.3.0-rc.4.tgz' in html:
+              raise SystemExit('Stale RC4 install link remains')
+          page.write_text(html)
+          print(digest)
+          PY
+
+      - name: Commit public RC5 assets and remove release staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .release/guardian-rc5
+          rm -f .github/workflows/release-guardian-rc5.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Publish Guardian 0.3.0-rc.5'
+          git push origin HEAD:release/guardian-0.3.0-rc.5-site
