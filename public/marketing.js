@@ -43,4 +43,32 @@
   window.addEventListener('resize', () => {
     if (window.innerWidth > 820) setOpen(false);
   });
+
+  const darkSurfaces = [...document.querySelectorAll('.hero, .authority, .price-band')];
+  const syncHeaderTheme = () => {
+    const y = header.getBoundingClientRect().top + header.offsetHeight / 2;
+    const dark = darkSurfaces.some((surface) => {
+      const rect = surface.getBoundingClientRect();
+      return rect.top <= y && rect.bottom >= y;
+    });
+    header.classList.toggle('is-dark', dark);
+    header.classList.toggle('is-light', !dark);
+  };
+  syncHeaderTheme();
+  document.addEventListener('scroll', syncHeaderTheme, { passive: true });
+  window.addEventListener('resize', syncHeaderTheme);
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+    const revealItems = document.querySelectorAll('.steps li, .authority-grid p');
+    revealItems.forEach((item) => item.classList.add('reveal'));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    revealItems.forEach((item) => observer.observe(item));
+  }
 })();
