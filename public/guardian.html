@@ -13,23 +13,30 @@
 <header class="marketing-header">
   <a class="brand" href="/">AgentRiskLayer</a>
   <nav class="marketing-nav" aria-label="Main navigation">
-    <a href="/guardian.html">Guardian</a>
+    <a href="/guardian.html" aria-current="page">Guardian</a>
     <a href="/ai-agent-security-assessment.html">Assessment</a>
+    <a href="/index.html#process">Process</a>
     <a href="/research">Research</a>
-    <a href="/pricing.html">Pricing</a>
+    <a href="/sample-report.html">Example report</a>
+    <a href="/trust.html">Trust</a>
     <a class="nav-cta" href="#install">Install Guardian</a>
   </nav>
 </header>
 <main id="main-content">
-<section class="page-hero">
-  <p class="eyebrow">ARL Guardian · Public Preview</p>
-  <h1>See what authority surfaces exist in an AI-agent repository.</h1>
-  <p class="lede">Give Guardian a repository. It scans the source without running the agent and maps evidence for MCP, outbound network access, filesystem mutation, process execution, credential references and approval boundaries.</p>
-  <div class="actions"><a class="button primary" href="#install">Install Guardian — Free</a><a class="button secondary" href="/request-assessment.html">Request ARL review</a></div>
-  <p class="quiet">Runs locally. No source upload. No LLM. No API key. No Guardian account.</p>
+<section class="page-hero guardian-hero">
+  <div>
+    <p class="eyebrow">ARL Guardian · Public Preview</p>
+    <h1>See what authority surfaces exist in an AI-agent repository.</h1>
+    <p class="lede">Give Guardian a repository. It scans the source without running the agent and maps evidence for MCP, outbound network access, filesystem mutation, process execution, credential references and approval boundaries.</p>
+    <div class="actions"><a class="button primary" href="#install">Install Guardian — Free</a><a class="button secondary" href="/request-assessment.html">Request ARL review</a></div>
+    <p class="quiet">Runs locally. No source upload. No LLM. No API key. No Guardian account.</p>
+  </div>
+  <aside class="boundary-visual" aria-label="Guardian capability map">
+    <span>REPOSITORY</span><span>MCP / NETWORK</span><span>FILESYSTEM / EXECUTION</span><span>CREDENTIAL REFERENCES</span><span>APPROVAL BOUNDARIES</span><strong>EVIDENCE FOR HUMAN REVIEW</strong>
+  </aside>
 </section>
 
-<section class="section note" id="install">
+<section class="section note install-panel" id="install">
   <p class="eyebrow">RC3</p>
   <h2>Install and run it locally.</h2>
   <p><strong>Requirement:</strong> Node.js 22.5 or later.</p>
@@ -50,16 +57,16 @@
     <p>Guardian reduces a repository into a review surface so developers and assessors can see where potentially important authority lives.</p>
   </div>
   <div class="card-grid">
-    <article class="card"><h3>Capability discovery</h3><p>MCP, network, process execution, filesystem writes, credentials and approval controls.</p></article>
-    <article class="card"><h3>Context separation</h3><p>Separates agent-linked evidence from backend code, examples, tests, documentation and tooling.</p></article>
-    <article class="card"><h3>Exact evidence</h3><p>Keeps file and line references so a human can verify the source directly.</p></article>
-    <article class="card"><h3>ARL handoff</h3><p>Produces review questions and conservative candidate facts for human confirmation.</p></article>
+    <article class="card"><span class="card-index">01</span><h3>Capability discovery</h3><p>MCP, network, process execution, filesystem writes, credentials and approval controls.</p></article>
+    <article class="card"><span class="card-index">02</span><h3>Context separation</h3><p>Separates agent-linked evidence from backend code, examples, tests, documentation and tooling.</p></article>
+    <article class="card"><span class="card-index">03</span><h3>Exact evidence</h3><p>Keeps file and line references so a human can verify the source directly.</p></article>
+    <article class="card"><span class="card-index">04</span><h3>ARL handoff</h3><p>Produces review questions and conservative candidate facts for human confirmation.</p></article>
   </div>
 </section>
 
 <section class="section">
   <div class="section-heading"><p class="eyebrow">Real-world validation</p><h2>Tested against a real public agent repository.</h2></div>
-  <div class="report-demo">
+  <div class="report-demo guardian-validation">
     <p class="report-label">Browser Use · RC3 validation</p>
     <div class="report-grid">
       <article><strong>434 files</strong><p>Scanned without truncation.</p></article>
@@ -85,6 +92,6 @@
   <a class="button primary" href="/request-assessment.html">Request an Assessment</a>
 </section>
 </main>
-<footer class="marketing-footer"><div><strong>AgentRiskLayer</strong><span>AI agent security assessment before production.</span><span>Follow us: <a href="https://x.com/AgentRiskLayer" target="_blank" rel="noopener noreferrer">X</a> · <a href="https://www.linkedin.com/company/agentrisklayer/" target="_blank" rel="noopener noreferrer">LinkedIn</a></span></div><nav aria-label="Footer navigation"><a href="/guardian.html">Guardian</a><a href="/research">Research</a><a href="/trust.html">Trust</a><a href="/company.html">Company</a><a href="/legal/privacy.html">Privacy</a><a href="/legal/terms.html">Terms</a></nav></footer>
+<footer class="marketing-footer"><div><strong>AgentRiskLayer</strong><span>AI agent security assessment before production.</span><span>Follow us: <a href="https://x.com/AgentRiskLayer" target="_blank" rel="noopener noreferrer">X</a> · <a href="https://www.linkedin.com/company/agentrisklayer/" target="_blank" rel="noopener noreferrer">LinkedIn</a></span></div><nav aria-label="Footer navigation"><a href="/guardian.html">Guardian</a><a href="/ai-agent-security-assessment.html">Assessment</a><a href="/research">Research</a><a href="/sample-report.html">Example report</a><a href="/trust.html">Trust</a><a href="/company.html">Company</a><a href="/legal/privacy.html">Privacy</a><a href="/legal/terms.html">Terms</a></nav></footer>
 </body>
 </html>
