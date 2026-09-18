@@ -17,8 +17,6 @@ import { runFrozenGithubSourceInspection } from './src/github-source-inspection.
 import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
 import { enforceRetention, retentionOverview, startRetentionWorker } from './src/retention.js';
 import { authenticateScim, configureIntegration, createScimToken, createWorkspace, deliverSecurityEvent, getWorkspace, listWorkspaces, provisionScimUser, upsertMember } from './src/workspaces.js';
-import { discoverAiAssets } from './src/asset-discovery.js';
-import { analyseModelArtifact } from './src/model-artifact-analysis.js';
 import {
     authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createRuntimeApproval, createSecurityProject, entitlementForUser, getSecurityProject,
     listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeApprovals, listRuntimeEvents, recordAssetSnapshot,
@@ -188,31 +186,6 @@ const server = http.createServer(async (req, res) => {
         }
         if (req.method === 'GET' && url.pathname === '/api/auth/me')
             return json(res, 200, { user: req.user });
-        if (req.method === 'POST' && url.pathname === '/api/discovery/analyse') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            const body = await readBody(req);
-            try {
-                return json(res, 200, discoverAiAssets(body.documents || body));
-            }
-            catch (error) {
-                return json(res, 400, { error: error.message });
-            }
-        }
-        if (req.method === 'POST' && url.pathname === '/api/models/analyse') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            const body = await readBody(req);
-            try {
-                const bytes = Buffer.from(String(body.base64 || ''), 'base64');
-                if (!bytes.length || bytes.length > 10 * 1024 * 1024)
-                    throw new Error('Model sample must contain 1 byte to 10 MiB.');
-                return json(res, 200, analyseModelArtifact({ name: body.name, bytes, expectedSha256: body.expectedSha256 }));
-            }
-            catch (error) {
-                return json(res, 400, { error: error.message });
-            }
-        }
         if (req.method === 'POST' && url.pathname === '/api/auth/register') {
             const body = await readBody(req);
             const emailIdentity = cleanText(body.email, 254).toLowerCase();
