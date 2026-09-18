@@ -14,20 +14,14 @@ import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail
 import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
 import { runFrozenGithubSourceInspection } from './src/github-source-inspection.js';
-import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamRecoveryToken, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
+import { attachRedTeamToResult, consumeRedTeamUpload, createRedTeamAuthorisation, createRedTeamToken, getRedTeamRun, latestRedTeamRun, listRedTeamAuthorisations, listRedTeamRunsForAssessment, revokeRedTeamAuthorisation } from './src/redteam.js';
 import { enforceRetention, retentionOverview, startRetentionWorker } from './src/retention.js';
 import { authenticateScim, configureIntegration, createScimToken, createWorkspace, deliverSecurityEvent, getWorkspace, listWorkspaces, provisionScimUser, upsertMember } from './src/workspaces.js';
-import { discoverAiAssets } from './src/asset-discovery.js';
-import { analyseModelArtifact } from './src/model-artifact-analysis.js';
 import {
     authenticateProjectApiKey, beginLegacyRemediationUpgrade, controlPlaneOverview, createProjectApiKey, createRemediationItem, createRuntimeApproval, createSecurityProject, entitlementForUser, getSecurityProject,
     listAssetSnapshots, listProjectApiKeys, listRemediationItems, listRuntimeApprovals, listRuntimeEvents, recordAssetSnapshot,
     registerRemediationEvidenceArtifact, revokeProjectApiKey, revokeRuntimeApproval, runGuidedProtectionCheck, screenGuardRequest, updateRemediationItem, updateSecurityProject,
 } from './src/control-plane.js';
-import {
-    buildDemoBrief, createMessage, createProspect, getProspect, listMessages, listProspects,
-    recordActivity, salesOverview, updateMessage, updateProspect,
-} from './src/sales-agent.js';
 import {
     applyProjectRiskKnowledgeProfile, exportRiskKnowledgeEntry, getProjectEvidenceReadiness,
     getPublicRiskKnowledgeEntry, getRiskKnowledgeEntry, linkRiskKnowledge, listRiskKnowledge,
@@ -188,31 +182,6 @@ const server = http.createServer(async (req, res) => {
         }
         if (req.method === 'GET' && url.pathname === '/api/auth/me')
             return json(res, 200, { user: req.user });
-        if (req.method === 'POST' && url.pathname === '/api/discovery/analyse') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            const body = await readBody(req);
-            try {
-                return json(res, 200, discoverAiAssets(body.documents || body));
-            }
-            catch (error) {
-                return json(res, 400, { error: error.message });
-            }
-        }
-        if (req.method === 'POST' && url.pathname === '/api/models/analyse') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            const body = await readBody(req);
-            try {
-                const bytes = Buffer.from(String(body.base64 || ''), 'base64');
-                if (!bytes.length || bytes.length > 10 * 1024 * 1024)
-                    throw new Error('Model sample must contain 1 byte to 10 MiB.');
-                return json(res, 200, analyseModelArtifact({ name: body.name, bytes, expectedSha256: body.expectedSha256 }));
-            }
-            catch (error) {
-                return json(res, 400, { error: error.message });
-            }
-        }
         if (req.method === 'POST' && url.pathname === '/api/auth/register') {
             const body = await readBody(req);
             const emailIdentity = cleanText(body.email, 254).toLowerCase();
@@ -542,20 +511,6 @@ const server = http.createServer(async (req, res) => {
                 return json(res, 400, { error: error.message });
             }
         }
-        if (req.method === 'POST' && url.pathname === '/api/redteam/recovery-tokens') {
-            if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
-                return;
-            if (!await rateLimitAllowed(req, { windowMs: 60000, max: 6, bucket: 'redteam-recovery-token', identity: req.user.id }))
-                return json(res, 429, { error: 'Too many red-team recovery requests.' });
-            try {
-                const body = await readBody(req, 2 * 1024 * 1024);
-                return json(res, 201, await createRedTeamRecoveryToken({ userId: req.user.id, assessmentId: cleanText(body.assessmentId, 80), bundle: body.bundle }));
-            }
-            catch (error) {
-                const status = error.code === 'BODY_TOO_LARGE' ? 413 : 400;
-                return json(res, status, { error: error.code === 'BODY_TOO_LARGE' ? 'Evidence bundle exceeds 2 MB.' : error.message });
-            }
-        }
         if (req.method === 'POST' && url.pathname === '/api/redteam/tokens') {
             if (!requireUser(req, res) || !requireVerifiedEmail(req, res))
                 return;
@@ -652,11 +607,6 @@ const server = http.createServer(async (req, res) => {
                 return;
             const body = await readBody(req);
             return await deleteAccount(req, res, body);
-        }
-        if (req.method === 'GET' && url.pathname === '/api/dashboard') {
-            if (!requireUser(req, res))
-                return;
-            return await dashboard(req, res);
         }
         if (req.method === 'GET' && url.pathname === '/api/workspaces') {
             if (!requireUser(req, res))
@@ -1114,62 +1064,6 @@ const server = http.createServer(async (req, res) => {
             if (!requireAdmin(req, res, { requireMfa: true }))
                 return;
             return json(res, 200, launchReadiness());
-        }
-        if (req.method === 'GET' && url.pathname === '/api/admin/sales/overview') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { overview: await salesOverview() });
-        }
-        if (req.method === 'GET' && url.pathname === '/api/admin/sales/prospects') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { prospects: await listProspects({ stage: url.searchParams.get('stage') || undefined, limit: url.searchParams.get('limit') }) });
-        }
-        if (req.method === 'POST' && url.pathname === '/api/admin/sales/prospects') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 201, { prospect: await createProspect(req.user.id, await readBody(req)) });
-        }
-        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)$/);
-        if (req.method === 'GET' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            const prospect = await getProspect(decodeURIComponent(match[1]));
-            return prospect ? json(res, 200, { prospect }) : json(res, 404, { error: 'Prospect not found.' });
-        }
-        if (req.method === 'PATCH' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { prospect: await updateProspect(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
-        }
-        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/messages$/);
-        if (req.method === 'POST' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 201, { message: await createMessage(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
-        }
-        if (req.method === 'GET' && url.pathname === '/api/admin/sales/messages') {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { messages: await listMessages(url.searchParams.get('prospectId') || null) });
-        }
-        match = url.pathname.match(/^\/api\/admin\/sales\/messages\/([^/]+)$/);
-        if (req.method === 'PATCH' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { message: await updateMessage(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
-        }
-        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/activities$/);
-        if (req.method === 'POST' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 201, { activity: await recordActivity(req.user.id, decodeURIComponent(match[1]), await readBody(req)) });
-        }
-        match = url.pathname.match(/^\/api\/admin\/sales\/prospects\/([^/]+)\/demo-brief$/);
-        if (req.method === 'GET' && match) {
-            if (!requireAdmin(req, res, { requireMfa: true }))
-                return;
-            return json(res, 200, { brief: buildDemoBrief(await getProspect(decodeURIComponent(match[1]))) });
         }
         if (req.method === 'GET' && url.pathname === '/robots.txt')
             return text(res, 200, renderRobots());
