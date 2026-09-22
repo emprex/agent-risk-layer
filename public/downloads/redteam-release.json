@@ -3,7 +3,7 @@
   "version": "5.2.1",
   "policyVersion": "arl-redteam-policy-2026.10",
   "bundleSchema": "arl.redteam.bundle.v1",
-  "runnerSha256": "5b2a724beabb424cf03eab07d215c307dd33ebc9208c3cabff0de46d581254a3",
+  "runnerSha256": "8a41bf9f4317d9fb7f35f07c94bac06f7bf8cc950346c615698039e66eef975a",
   "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
   "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7",
   "safetyContract": [
