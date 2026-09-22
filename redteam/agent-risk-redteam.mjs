@@ -28,6 +28,12 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT_CHARS = 100_000;
 const ATTACK_STRATEGIES = Object.freeze(['original','authority-pressure','delimiter-smuggling','context-switch','multilingual']);
 
+import {
+  APPROVAL_BINDING_PROBES,
+  buildApprovalBindingProbe,
+  evaluateApprovalBindingMatrix
+} from './approval-binding-matrix.mjs';
+
 function caseDef(id, title, category, severity, objective, payload, detector, frameworks = []) {
   return Object.freeze({ id, title, category, severity, objective, payload, detector, frameworks });
 }
@@ -211,8 +217,84 @@ export async function runCampaign(options = {}) {
       const request = buildRequest({ campaignId, testCase, canaries, environment, trial, strategy });
       const started = Date.now();
       try {
-        const execution = await executeAdaptiveCase({ endpoint, request, options, profile, testCase, adaptiveRounds });
-        results.push({ ...evaluateCase(testCase, request, execution.responses, Date.now() - started), trial, strategy, adaptiveRounds:execution.responses.length });
+        if (testCase.id === 'RT-PI-008' && endpoint) {
+          const responses = [];
+          for (const probe of APPROVAL_BINDING_PROBES) {
+            responses.push(
+              await callAdapter(
+                endpoint,
+                buildApprovalBindingProbe(request, probe.id),
+                options
+              )
+            );
+          }
+          const matrix =
+            evaluateApprovalBindingMatrix(responses);
+          results.push({
+            caseId: testCase.id,
+            title: testCase.title,
+            category: testCase.category,
+            severity: testCase.severity,
+            outcome: matrix.outcome,
+            riskPoints:
+              matrix.outcome === 'failed'
+                ? SEVERITY_WEIGHT[testCase.severity]
+                : 0,
+            confidence:
+              matrix.outcome === 'inconclusive'
+                ? 'low'
+                : 'high',
+            durationMs: Date.now() - started,
+            trial,
+            strategy: 'approval-binding-matrix',
+            adaptiveRounds: 1,
+            evidence: matrix.checks.map((item) => ({
+              type: `approval-binding-${item.id}`,
+              fact: item.fact
+            })),
+            approvalBindingMatrix: matrix,
+            requestFingerprint:
+              sha256(
+                canonical({
+                  caseId: testCase.id,
+                  probes: APPROVAL_BINDING_PROBES
+                })
+              ),
+            responseFingerprint:
+              sha256(
+                canonical(
+                  responses.map(
+                    redactedResponseShape
+                  )
+                )
+              ),
+            remediation:
+              remediationFor(testCase),
+            frameworks: testCase.frameworks
+          });
+        } else {
+          const execution =
+            await executeAdaptiveCase({
+              endpoint,
+              request,
+              options,
+              profile,
+              testCase,
+              adaptiveRounds
+            });
+          results.push({
+            ...evaluateCase(
+              testCase,
+              request,
+              execution.responses,
+              Date.now() - started
+            ),
+            trial,
+            strategy,
+            adaptiveRounds:
+              execution.responses.length
+          });
+        }
       } catch (error) {
         results.push({ caseId:testCase.id,title:testCase.title,category:testCase.category,severity:testCase.severity,outcome:'error',riskPoints:0,confidence:'low',durationMs:Date.now()-started,trial,strategy,adaptiveRounds:0,evidence:[{type:'execution-error',fact:clean(error.message,240)}],remediation:'Confirm the staging adapter implements the documented protocol and rerun the case.',frameworks:testCase.frameworks });
       }
