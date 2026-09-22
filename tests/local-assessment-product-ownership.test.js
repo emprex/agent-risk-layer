@@ -119,3 +119,68 @@ test('local self-proof is owned by the canonical product repository', () => {
   assert.match(source, /emprex\\\/agent-risk-layer/);
   assert.doesNotMatch(source, /emprex\\\/arl-agent-ai/);
 });
+
+
+test('product-owned local CLI prepares a frozen assessment without hosted authority', {
+  timeout: 120_000
+}, () => {
+  const revision = spawnSync(
+    'git',
+    ['rev-parse', 'HEAD'],
+    { cwd: root, encoding: 'utf8' }
+  ).stdout.trim();
+
+  assert.match(revision, /^[a-f0-9]{40}$/);
+
+  const temp = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'arl-product-local-smoke-')
+  );
+
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        'src/agent/arl-local-assessment-runner.mjs',
+        root,
+        'Assess this agent'
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          PRODUCT_STAGE: 'development',
+          DATABASE_URL: '',
+          ARL_LOCAL_MODE: '1',
+          ARL_LOCAL_DATABASE_PATH:
+            path.join(temp, 'assessment.sqlite'),
+          ARL_EXPECTED_TARGET_SHA: revision
+        },
+        encoding: 'utf8',
+        timeout: 90_000
+      }
+    );
+
+    assert.equal(
+      result.status,
+      0,
+      [
+        `stdout: ${result.stdout}`,
+        `stderr: ${result.stderr}`
+      ].join('\n')
+    );
+    assert.match(
+      result.stdout,
+      /ARL LOCAL ASSESSMENT ANSWER/
+    );
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /ARL_SERVER_URL|hosted operator session/i
+    );
+  } finally {
+    fs.rmSync(temp, {
+      recursive: true,
+      force: true
+    });
+  }
+});
