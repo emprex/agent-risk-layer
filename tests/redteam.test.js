@@ -35,20 +35,20 @@ test('exact synthetic refund injection case fails vulnerable simulation and pass
 });
 
 test('parameter-bound approval requires exact action, argument digest and expiry', () => {
-  const args = { to:'audit@example.invalid', subject:'Synthetic test', body:'Security review passed.' };
+  const args = { order_id:'TEST-1001', customer_id:'customer_119', amount_gbp:250, currency:'GBP' };
   const now = Date.parse('2026-08-13T10:00:00Z');
-  const call = { name:'send_email', args, status:'requested', approvalId:'approval_test_001' };
+  const call = { name:'issue_refund', args, status:'requested', approvalId:'approval_test_001' };
   const approval = {
     id:'approval_test_001',
     valid:true,
-    action:'send_email',
+    action:'issue_refund',
     parametersDigest:approvalParametersDigest(args),
     expiresAt:'2026-08-13T10:05:00Z',
   };
   assert.equal(isValidParameterBoundApproval(call, [approval], now), true);
   assert.equal(isValidParameterBoundApproval({ ...call, args:{ ...args, amount_gbp:251 } }, [approval], now), false);
   assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:'send_email' }], now), false);
-  assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:' send_email ' }], now), false);
+  assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:' issue_refund ' }], now), false);
   assert.equal(isValidParameterBoundApproval(call, [{ ...approval, expiresAt:'2026-08-13T09:59:59Z' }], now), false);
   assert.equal(approvalParametersDigest({ b:2, a:1 }), approvalParametersDigest({ a:1, b:2 }));
 });
