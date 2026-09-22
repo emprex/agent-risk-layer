@@ -1,3 +1,4 @@
+import { localCliDatabasePath } from '../local-cli-mode.mjs';
 export async function getAuthoritativeAssessment({
   assessmentId,
   userId
@@ -12,6 +13,7 @@ export async function getAuthoritativeAssessment({
   }
 
   const persistenceAvailable =
+    Boolean(localCliDatabasePath()) ||
     Boolean(process.env.DATABASE_URL) ||
     (
       process.env.NODE_ENV === 'test' &&
