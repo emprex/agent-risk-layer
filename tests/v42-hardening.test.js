@@ -177,7 +177,7 @@ test('completed adapter evidence can be recovered after the ROE window expires w
         const reusedAuth = await createRedTeamAuthorisation({ userId, assessmentId, input: authInput });
         assert.equal(reusedAuth.id, auth.id);
         assert.equal(reusedAuth.endpointOrigin, `http://127.0.0.1:${port}`);
-        const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Completed recovery test', authorisationId: auth.id, trials: 1, caseIds: ['RT-PI-008'], mutate: false, adaptiveRounds: 1 });
+        const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Completed recovery test', authorisationId: auth.id, trials: 1, caseIds: ['RT-OUT-001'], mutate: false, adaptiveRounds: 1 });
         assert.equal(bundle.results[0].outcome, 'passed');
         const completedAt = Date.parse(bundle.campaign.completedAt);
         await new Promise(resolve => setTimeout(resolve, 5));
