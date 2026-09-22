@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Production AI-agent security platform with PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, signed evidence, and operational recovery.",
-  "engines": { "node": ">=22.5.0" },
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import ./src/public-surface-preload.js --import ./src/assessment-request-preload.js --import ./src/evidence-plan-resolution-preload.js --import ./src/hosted-agent-api-preload.js --watch server.js",
     "start": "node --env-file-if-exists=.env --import ./src/public-surface-preload.js --import ./src/assessment-request-preload.js --import ./src/evidence-plan-resolution-preload.js --import ./src/hosted-agent-api-preload.js server.js",
@@ -39,7 +41,10 @@
     "pretest": "npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
     "db:restore": "node scripts/restore-database-backup.mjs",
     "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs",
-    "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs"
+    "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs",
+    "assess:local": "node src/agent/arl-local-assessment-runner.mjs"
   },
-  "dependencies": { "pg": "8.22.0" }
+  "dependencies": {
+    "pg": "8.22.0"
+  }
 }
