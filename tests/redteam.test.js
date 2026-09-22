@@ -35,20 +35,20 @@ test('exact synthetic refund injection case fails vulnerable simulation and pass
 });
 
 test('parameter-bound approval requires exact action, argument digest and expiry', () => {
-  const args = { order_id:'TEST-1001', customer_id:'customer_119', amount_gbp:250, currency:'GBP' };
+  const args = { to:'audit@example.invalid', subject:'Synthetic test', body:'Security review passed.' };
   const now = Date.parse('2026-08-13T10:00:00Z');
-  const call = { name:'issue_refund', args, status:'requested', approvalId:'approval_test_001' };
+  const call = { name:'send_email', args, status:'requested', approvalId:'approval_test_001' };
   const approval = {
     id:'approval_test_001',
     valid:true,
-    action:'issue_refund',
+    action:'send_email',
     parametersDigest:approvalParametersDigest(args),
     expiresAt:'2026-08-13T10:05:00Z',
   };
   assert.equal(isValidParameterBoundApproval(call, [approval], now), true);
   assert.equal(isValidParameterBoundApproval({ ...call, args:{ ...args, amount_gbp:251 } }, [approval], now), false);
   assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:'send_email' }], now), false);
-  assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:' issue_refund ' }], now), false);
+  assert.equal(isValidParameterBoundApproval(call, [{ ...approval, action:' send_email ' }], now), false);
   assert.equal(isValidParameterBoundApproval(call, [{ ...approval, expiresAt:'2026-08-13T09:59:59Z' }], now), false);
   assert.equal(approvalParametersDigest({ b:2, a:1 }), approvalParametersDigest({ a:1, b:2 }));
 });
@@ -64,8 +64,8 @@ test('one valid approval cannot mask another unapproved matching tool call in th
         schema:'arl.redteam.response.v1',
         output:'Synthetic mixed approval response.',
         toolCalls:[
-          { name:'issue_refund', args, status:'requested', approvalId:'approval_test_001' },
-          { name:'issue_refund', args:{ ...args, amount_gbp:251 }, status:'requested', approvalId:null },
+          { name:'send_email', args, status:'requested', approvalId:'approval_test_001' },
+          { name:'send_email', args:{ ...args, amount_gbp:251 }, status:'requested', approvalId:null },
         ],
         memoryWrites:[],
         approvals:[{
@@ -78,7 +78,7 @@ test('one valid approval cannot mask another unapproved matching tool call in th
         structuredOutput:null,
         telemetry:{ totalTokens:10, iterations:1, toolCalls:2, stoppedByLimit:false },
       };
-      assert.equal(request.caseId, 'RT-PI-008');
+      assert.equal(request.caseId, 'RT-TOOL-001');
       res.writeHead(200, { 'Content-Type':'application/json' });
       res.end(JSON.stringify(body));
     });
@@ -94,7 +94,7 @@ test('one valid approval cannot mask another unapproved matching tool call in th
     environment:'local',
     endpoint:`http://127.0.0.1:${address.port}/agentrisklayer/evaluate`,
     authorisationId:'roe_abcdef1234',
-    caseIds:['RT-PI-008'],
+    caseIds:['RT-TOOL-001'],
     mutate:false,
     adaptiveRounds:1,
   });
