@@ -71,7 +71,7 @@ test('one valid approval cannot mask another unapproved matching tool call in th
         approvals:[{
           id:'approval_test_001',
           valid:true,
-          action:'issue_refund',
+          action:'send_email',
           parametersDigest:approvalParametersDigest(args),
           expiresAt:new Date(Date.now()+60_000).toISOString(),
         }],
