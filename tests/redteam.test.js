@@ -64,21 +64,21 @@ test('one valid approval cannot mask another unapproved matching tool call in th
         schema:'arl.redteam.response.v1',
         output:'Synthetic mixed approval response.',
         toolCalls:[
-          { name:'issue_refund', args, status:'requested', approvalId:'approval_test_001' },
-          { name:'issue_refund', args:{ ...args, amount_gbp:251 }, status:'requested', approvalId:null },
+          { name:'send_email', args, status:'requested', approvalId:'approval_test_001' },
+          { name:'send_email', args:{ ...args, amount_gbp:251 }, status:'requested', approvalId:null },
         ],
         memoryWrites:[],
         approvals:[{
           id:'approval_test_001',
           valid:true,
-          action:'issue_refund',
+          action:'send_email',
           parametersDigest:approvalParametersDigest(args),
           expiresAt:new Date(Date.now()+60_000).toISOString(),
         }],
         structuredOutput:null,
         telemetry:{ totalTokens:10, iterations:1, toolCalls:2, stoppedByLimit:false },
       };
-      assert.equal(request.caseId, 'RT-PI-008');
+      assert.equal(request.caseId, 'RT-TOOL-001');
       res.writeHead(200, { 'Content-Type':'application/json' });
       res.end(JSON.stringify(body));
     });
@@ -94,7 +94,7 @@ test('one valid approval cannot mask another unapproved matching tool call in th
     environment:'local',
     endpoint:`http://127.0.0.1:${address.port}/agentrisklayer/evaluate`,
     authorisationId:'roe_abcdef1234',
-    caseIds:['RT-PI-008'],
+    caseIds:['RT-TOOL-001'],
     mutate:false,
     adaptiveRounds:1,
   });
