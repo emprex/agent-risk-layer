@@ -124,24 +124,54 @@ test('local self-proof is owned by the canonical product repository', () => {
 test('product-owned local CLI prepares a frozen assessment without hosted authority', {
   timeout: 120_000
 }, () => {
-  const revision = spawnSync(
-    'git',
-    ['rev-parse', 'HEAD'],
-    { cwd: root, encoding: 'utf8' }
-  ).stdout.trim();
-
-  assert.match(revision, /^[a-f0-9]{40}$/);
-
   const temp = fs.mkdtempSync(
     path.join(os.tmpdir(), 'arl-product-local-smoke-')
   );
+  const target = path.join(temp, 'target');
+  fs.mkdirSync(target);
+
+  const git = (args) =>
+    spawnSync('git', args, {
+      cwd: target,
+      encoding: 'utf8'
+    });
 
   try {
+    assert.equal(git(['init', '-q']).status, 0);
+    assert.equal(
+      git(['config', 'user.email', 'arl-smoke@example.test']).status,
+      0
+    );
+    assert.equal(
+      git(['config', 'user.name', 'ARL Smoke Test']).status,
+      0
+    );
+
+    fs.writeFileSync(
+      path.join(target, 'README.md'),
+      '# Synthetic local assessment target\n',
+      'utf8'
+    );
+
+    assert.equal(git(['add', 'README.md']).status, 0);
+    assert.equal(
+      git(['commit', '-q', '-m', 'Synthetic frozen target']).status,
+      0
+    );
+
+    const revision =
+      git(['rev-parse', 'HEAD']).stdout.trim();
+    assert.match(revision, /^[a-f0-9]{40}$/);
+    assert.equal(
+      git(['status', '--porcelain']).stdout.trim(),
+      ''
+    );
+
     const result = spawnSync(
       process.execPath,
       [
         'src/agent/arl-local-assessment-runner.mjs',
-        root,
+        target,
         'Assess this agent'
       ],
       {
