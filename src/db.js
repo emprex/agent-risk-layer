@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { config } from './config.js';
 import { runMigrations } from './migrations.js';
-const useSqliteTestAdapter = config.nodeEnv === 'test' && !config.databaseUrl;
+import { localCliDatabasePath } from './agent/local-cli-mode.mjs';
+const localPath = localCliDatabasePath();
+if (localPath) config.databasePath = localPath;
+const useSqliteLocalAdapter = Boolean(localPath);
+const useSqliteTestAdapter = useSqliteLocalAdapter || (config.nodeEnv === 'test' && !config.databaseUrl);
 if (!useSqliteTestAdapter && !config.databaseUrl) {
     throw new Error('DATABASE_URL is required. AgentRiskLayer no longer supports SQLite persistence.');
 }
@@ -10,13 +14,16 @@ export const db = useSqliteTestAdapter
     ? (await import('./db-adapters/sqlite-local.js')).createSqliteTestDatabase()
     : await (await import('./db-adapters/postgres.js')).createPostgresDatabase(config);
 if (db.kind === 'sqlite-test') {
-    // Production migrations are PostgreSQL-only. The test adapter preloads the
-    // additive evidence schema; load the newest Control Intelligence migration
-    // here as well so the full SQLite-backed suite exercises the same binding
-    // columns and trust-revision table as production without changing release
-    // persistence behavior.
-    const migration = fs.readFileSync(new URL('../migrations/020_control_intelligence_redteam_binding.sql', import.meta.url), 'utf8');
-    await db.exec(migration);
+    if (useSqliteLocalAdapter) {
+        const { ensureSqliteTestSchema } = await import('./db-adapters/sqlite-test-schema.js');
+        await ensureSqliteTestSchema(db);
+    }
+    else {
+        // Preserve the existing product test bootstrap exactly. Production
+        // migrations remain PostgreSQL-only.
+        const migration = fs.readFileSync(new URL('../migrations/020_control_intelligence_redteam_binding.sql', import.meta.url), 'utf8');
+        await db.exec(migration);
+    }
 }
 let initialised = false;
 let initialising;
