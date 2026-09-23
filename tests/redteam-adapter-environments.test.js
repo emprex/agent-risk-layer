@@ -19,6 +19,21 @@ test('Red Team UI supports authorised local, test and staging adapters', () => {
   assert.doesNotMatch(source, /environment:'staging',authorityBasis/);
 });
 
+test('non-entitled adapter users see the service boundary before Rules of Engagement fields', () => {
+  const source = read('public/redteam.js');
+
+  assert.match(source, /id="adapterBoundary"/);
+  assert.match(source, /Controlled testing requires an active ARL assessment context/);
+  assert.match(source, /Rules of Engagement are collected only after this assessment is authorised for controlled testing/);
+  assert.match(source, /Confirm assessment scope/);
+  assert.match(source, /assessment\?\.paidTier==='pro'/);
+  assert.match(source, /dashboardUser\?\.isSuperuser/);
+  assert.match(source, /fields\.hidden=!adapter\|\|!eligible/);
+  assert.match(source, /boundary\.hidden=!adapter\|\|eligible/);
+  assert.match(source, /mode==='adapter'&&!controlledTestingEligible\(\)/);
+  assert.doesNotMatch(source, /Controlled testing requires Security Assessment \(£99\)/);
+});
+
 test('Red Team UI mirrors runner endpoint safety rules', () => {
   const source = read('public/redteam.js');
 
