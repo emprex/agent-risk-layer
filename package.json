@@ -43,7 +43,8 @@
     "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs",
     "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs",
     "controls": "node scripts/control-help.mjs list",
-    "control:help": "node scripts/control-help.mjs"
+    "control:help": "node scripts/control-help.mjs",
+    "assess:local": "node src/agent/arl-local-assessment-runner.mjs"
   },
   "dependencies": {
     "pg": "8.23.0"
