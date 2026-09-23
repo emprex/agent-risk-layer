@@ -354,8 +354,8 @@ test('release infrastructure contains PostgreSQL only and no persistent SQLite d
   assert.doesNotMatch(render, /DATABASE_PATH|\bdisk:/);
   assert.doesNotMatch(docker, /\/var\/data|sqlite/i);
   assert.match(docker, /npm ci --omit=dev/);
-  assert.equal(packageJson.dependencies.pg, '8.22.0');
-  assert.equal(packageLock.packages['node_modules/pg'].version, '8.22.0');
+  assert.equal(packageJson.dependencies.pg, '8.23.0');
+  assert.equal(packageLock.packages['node_modules/pg'].version, '8.23.0');
   for (const dependency of ['pg','pg-cloudflare','pg-connection-string','pg-int8','pg-pool','pg-protocol','pg-types','pgpass','postgres-array','postgres-bytea','postgres-date','postgres-interval','split2','xtend']) {
     const locked = packageLock.packages[`node_modules/${dependency}`];
     assert.ok(locked, `lockfile missing ${dependency}`);
