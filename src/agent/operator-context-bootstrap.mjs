@@ -50,7 +50,7 @@ function unknownAssessmentAnswers() {
   return answers;
 }
 
-async function createUnknownAssessment({ userId, name }) {
+export async function createUnknownAssessment({ userId, name }) {
   const answers = unknownAssessmentAnswers();
   const agentType = 'AI agent';
   const result = evaluateAssessment(answers, { agentType });
