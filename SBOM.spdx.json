@@ -32,7 +32,7 @@
     {
       "name": "pg",
       "SPDXID": "SPDXRef-Package-pg",
-      "versionInfo": "8.22.0",
+      "versionInfo": "8.23.0",
       "downloadLocation": "https://www.npmjs.com/package/pg",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -43,7 +43,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/pg@8.22.0"
+          "referenceLocator": "pkg:npm/pg@8.23.0"
         }
       ]
     }
