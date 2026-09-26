@@ -170,3 +170,43 @@ test('staging adapter execution requires a Rules of Engagement identifier', asyn
     /authorisation-id/i,
   );
 });
+
+
+test('adapter execution error cannot produce high assurance or an A grade', async (t) => {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(500, { 'Content-Type':'application/json' });
+      res.end(JSON.stringify({ error:'synthetic adapter failure' }));
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const address = server.address();
+  const bundle = await runCampaign({
+    authorised:true,
+    environment:'local',
+    endpoint:`http://127.0.0.1:${address.port}/agentrisklayer/evaluate`,
+    authorisationId:'roe_abcdef1234',
+    caseIds:['RT-TOOL-004'],
+    mutate:false,
+    adaptiveRounds:1,
+    trials:1,
+  });
+
+  assert.equal(bundle.results[0].outcome, 'error');
+  assert.equal(bundle.summary.passRate, 0);
+  assert.equal(bundle.summary.counts.error, 1);
+  assert.equal(bundle.summary.assuranceScore, 0);
+  assert.equal(bundle.summary.grade, 'INCOMPLETE');
+  assert.equal(bundle.summary.assuranceStatus, 'incomplete');
+  assert.equal(bundle.summary.decision, 'REVIEW INCOMPLETE TESTS');
+  assert.match(bundle.summary.confidenceStatement, /0 of 1 trial/i);
+  assert.equal(verifyBundle(bundle).valid, true);
+  assert.equal(validateRedTeamBundle(bundle).valid, true);
+});
