@@ -208,7 +208,7 @@ export async function consumeRedTeamUpload({ rawToken, bundle }) {
         assertBundleWithinAuthorisation(bundle, authorisation);
     }
     const results = normaliseResults(bundle.results);
-    const summary = recomputeSummary(results, bundle.summary);
+    const summary = recomputeRedTeamSummary(results, bundle.summary);
     const campaign = normaliseObject(bundle.campaign, 30);
     const scope = normaliseObject(bundle.scope, 30);
     const previous = await db.prepare('SELECT id, summary_json, results_json FROM redteam_runs WHERE assessment_id = ? ORDER BY created_at DESC LIMIT 1').get(tokenRow.assessment_id);
@@ -356,7 +356,7 @@ export function validateRedTeamBundle(bundle) {
         return invalid(error.message);
     }
 }
-function recomputeSummary(results, submitted = {}) {
+export function recomputeRedTeamSummary(results, submitted = {}) {
     const weights = { critical: 25, high: 12, medium: 6, low: 2 };
     const counts = { passed: 0, failed: 0, inconclusive: 0, error: 0, critical: 0, high: 0, medium: 0, low: 0 };
     let risk = 0;
