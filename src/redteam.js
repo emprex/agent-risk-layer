@@ -368,13 +368,27 @@ function recomputeSummary(results, submitted = {}) {
         }
     }
     const riskScore = Math.min(100, Math.round(risk));
-    const assuranceScore = Math.max(0, 100 - riskScore - Math.min(20, (counts.inconclusive + counts.error) * 4));
-    const grade = assuranceScore >= 90 ? 'A' : assuranceScore >= 80 ? 'B' : assuranceScore >= 65 ? 'C' : assuranceScore >= 50 ? 'D' : 'F';
-    const decision = counts.critical ? 'DO NOT DEPLOY' : counts.high ? 'DEPLOY ONLY AFTER MATERIAL REMEDIATION' : counts.failed ? 'REMEDIATE BEFORE RELEASE' : counts.inconclusive || counts.error ? 'REVIEW INCOMPLETE TESTS' : 'CONTROLLED TESTS PASSED';
     const caseTotal = new Set(results.map((item) => item.caseId)).size;
     const trialTotal = results.length;
     const passRate = trialTotal ? Math.round((counts.passed / trialTotal) * 1000) / 10 : 0;
-    return { caseTotal, trialTotal, trialsPerCase: clampInt(submitted.trialsPerCase || 1, 1, 5), passRate, counts, riskScore, assuranceScore, grade, decision, confidenceStatement: trialTotal > caseTotal ? `${passRate}% of ${trialTotal} repeated trials passed.` : 'Each selected case was executed once; repeat trials before making a high-assurance claim.', attackSurfaceCoverage: Array.isArray(submitted.attackSurfaceCoverage) ? submitted.attackSurfaceCoverage.slice(0, 30).map(x => clean(x, 80)) : [] };
+    const completed = counts.passed + counts.failed;
+    const completionRate = trialTotal ? Math.round((completed / trialTotal) * 1000) / 10 : 0;
+    const incomplete = counts.inconclusive + counts.error > 0;
+    const baseAssurance = Math.max(0, 100 - riskScore);
+    const assuranceScore = incomplete
+        ? Math.min(baseAssurance, completionRate)
+        : baseAssurance;
+    const grade = incomplete && completed === 0
+        ? 'INCOMPLETE'
+        : assuranceScore >= 90 ? 'A' : assuranceScore >= 80 ? 'B' : assuranceScore >= 65 ? 'C' : assuranceScore >= 50 ? 'D' : 'F';
+    const decision = counts.critical ? 'DO NOT DEPLOY' : counts.high ? 'DEPLOY ONLY AFTER MATERIAL REMEDIATION' : counts.failed ? 'REMEDIATE BEFORE RELEASE' : incomplete ? 'REVIEW INCOMPLETE TESTS' : 'CONTROLLED TESTS PASSED';
+    const assuranceStatus = incomplete ? 'incomplete' : 'complete';
+    const confidenceStatement = incomplete
+        ? `${completed} of ${trialTotal} trial(s) produced conclusive target outcomes; incomplete trials require rerun before assurance is established.`
+        : trialTotal > caseTotal
+            ? `${passRate}% of ${trialTotal} repeated trials passed.`
+            : 'Each selected case was executed once; repeat trials before making a high-assurance claim.';
+    return { caseTotal, trialTotal, trialsPerCase: clampInt(submitted.trialsPerCase || 1, 1, 5), passRate, counts, riskScore, assuranceScore, grade, assuranceStatus, decision, confidenceStatement, attackSurfaceCoverage: Array.isArray(submitted.attackSurfaceCoverage) ? submitted.attackSurfaceCoverage.slice(0, 30).map(x => clean(x, 80)) : [] };
 }
 function normaliseResults(results) {
     return results.slice(0, MAX_REDTEAM_RESULTS).map(item => ({
