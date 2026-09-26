@@ -285,7 +285,9 @@ export function attachRedTeamToResult(result, run) {
                     ? `${result.headline} Controlled red-team testing reproduced material unsafe behaviour.`
                     : run.summary.counts.failed
                         ? `${result.headline} Controlled red-team testing identified remediable weaknesses.`
-                        : `${result.headline} The selected controlled red-team cases did not reproduce a material failure within the declared scope.`,
+                        : (run.summary.counts.inconclusive || run.summary.counts.error)
+                            ? `${result.headline} Controlled red-team testing was incomplete; unresolved cases require rerun before assurance is established.`
+                            : `${result.headline} The selected controlled red-team cases did not reproduce a material failure within the declared scope.`,
         scoring: { ...(result.scoring || {}), redTeamRisk: run.summary.riskScore, redTeamAssurance: run.summary.assuranceScore, redTeamDoesNotLowerDeclaredRisk: true },
     };
 }
