@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { approvalParametersDigest, isValidParameterBoundApproval, runCampaign, TEST_CATALOG, toSarif, verifyBundle } from '../redteam/agent-risk-redteam.mjs';
-import { recomputeRedTeamSummary, validateRedTeamBundle } from '../src/redteam.js';
+import { attachRedTeamToResult, recomputeRedTeamSummary, validateRedTeamBundle } from '../src/redteam.js';
 
 test('hardened simulation passes the complete non-destructive catalogue', async () => {
   const bundle = await runCampaign({ authorised:true, environment:'test', profile:'hardened' });
@@ -237,4 +237,52 @@ test('server-side summary recomputation also fails incomplete evidence closed', 
   assert.equal(summary.assuranceStatus, 'incomplete');
   assert.equal(summary.decision, 'REVIEW INCOMPLETE TESTS');
   assert.equal(summary.passRate, 0);
+});
+
+
+test('incomplete target evidence never renders as a no-failure assurance headline', () => {
+  const attached = attachRedTeamToResult(
+    {
+      headline:'Declared assessment complete.',
+      decision:'HOLD FOR REVIEW',
+      scoring:{}
+    },
+    {
+      id:'rtr_incomplete',
+      createdAt:'2026-09-26T14:00:00.000Z',
+      runnerVersion:'5.2.2',
+      policyVersion:'arl-redteam-policy-2026.10',
+      campaign:{ target:{ mode:'staging-adapter' } },
+      scope:{},
+      summary:{
+        riskScore:0,
+        assuranceScore:0,
+        grade:'INCOMPLETE',
+        assuranceStatus:'incomplete',
+        decision:'REVIEW INCOMPLETE TESTS',
+        counts:{
+          passed:0,
+          failed:0,
+          inconclusive:0,
+          error:1,
+          critical:0,
+          high:0,
+          medium:0,
+          low:0
+        }
+      },
+      trust:{},
+      delta:{},
+      results:[{
+        caseId:'RT-TOOL-004',
+        outcome:'error',
+        severity:'high'
+      }]
+    }
+  );
+
+  assert.match(attached.headline, /testing was incomplete/i);
+  assert.doesNotMatch(attached.headline, /did not reproduce a material failure/i);
+  assert.equal(attached.scoring.redTeamAssurance, 0);
+  assert.equal(attached.decision, 'HOLD FOR REVIEW');
 });
