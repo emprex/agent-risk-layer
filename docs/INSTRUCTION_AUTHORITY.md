@@ -56,6 +56,12 @@ A trusted instruction is not the same as a trusted action. High-impact execution
 
 These fields are captured by the existing guided Control Intelligence snapshot forms because those forms render the versioned capability schema dynamically.
 
+## Capability profile v1.2
+
+`ARL-CAP-1.2.0` preserves the v1.1 fields and adds one conservative derived declared architecture fact: `memory:no_cross_session_persistence`. It is emitted only when the human-declared memory mode is `none` or `session`.
+
+This fact exists so an accountable applicability decision can cite structured context when a control specifically depends on cross-session memory. It is context only: it does not prove a control works, create evidence, create or close a finding, set severity, or make a deployment decision.
+
 ## Evidence semantics
 
 All capability-profile instruction fields remain `evidenceState: declared`.
