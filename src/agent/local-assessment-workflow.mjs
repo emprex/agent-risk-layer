@@ -8,7 +8,7 @@ import { localCliDatabasePath } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
-import { parseLocalApplicabilityCommand } from './local-applicability-command.mjs';
+import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from './local-applicability-command.mjs';
 
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!localCliDatabasePath()) throw new Error('Local CLI mode is required.');
@@ -131,13 +131,10 @@ function blockedLocalAdapterResult(result, adapterGate) {
 
 async function explainLocalGate(result, { repositoryPath } = {}) {
   const state = result?.canonicalData?.workflowState;
-  const controls = state?.authoritativeArtifacts?.controlIntelligence?.relevantControls || [];
-  if (controls.some(control => control.currentStage === 'applicability')) {
-    const pending = controls
-      .filter(control => control.currentStage === 'applicability')
-      .map(control => control.controlId)
-      .join(', ');
-    result.answer += '\n\nLocal human review required. Controls awaiting an explicit applicability decision: ' + pending +
+  const pending = localApplicabilityCandidateIds(state);
+  if (pending.length) {
+    result.answer += '\n\nLocal human review required. Authoritative applicability control' +
+      (pending.length === 1 ? ': ' : 's: ') + pending.join(', ') +
       '.\nFor Applicable, use: Control ARL-KB-### applies' +
       '\nFor Not applicable or More information required, use: Set control applicability {"controlId":"ARL-KB-###","decision":"not_applicable|context_required","reason":"specific human rationale","architectureFactIds":["confirmed:fact"]}';
   }
