@@ -17,7 +17,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
 test('capability profile is fixed-schema, deterministic and keeps unknown as context', () => {
-  assert.equal(CAPABILITY_PROFILE_VERSION, 'ARL-CAP-1.1.0');
+  assert.equal(CAPABILITY_PROFILE_VERSION, 'ARL-CAP-1.2.0');
   const unknown = normaliseCapabilityProfile({
     autonomy: 'invented',
     memory: 'invented',
@@ -44,6 +44,14 @@ test('capability profile is fixed-schema, deterministic and keeps unknown as con
   for (const dimension of CAPABILITY_MULTI_DIMENSIONS) assert.ok(Array.isArray(unknown[dimension.key]));
   assert.deepEqual(normaliseCapabilityProfile(unknown), unknown);
   assert.deepEqual(deriveCapabilityFacts(normaliseCapabilityProfile({})), []);
+  assert.deepEqual(
+    deriveCapabilityFacts({ memory: 'session' }),
+    ['memory:no_cross_session_persistence']
+  );
+  assert.deepEqual(
+    deriveCapabilityFacts({ memory: 'none' }),
+    ['memory:no_cross_session_persistence']
+  );
 });
 
 test('only conservative capability facts are derived into the existing suggestion vocabulary', () => {
