@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, id, nowIso } from './db.js';
 import { config } from './config.js';
+import { localCliDatabasePath } from './agent/local-cli-mode.mjs';
 export const REDTEAM_SCHEMA = 'arl.redteam.bundle.v1';
 export const REDTEAM_TOKEN_TTL_MS = 15 * 60000;
 export const MAX_REDTEAM_AGE_MS = 24 * 60 * 60000;
@@ -152,19 +153,29 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
         const assessmentRuns = Number((await db.prepare('SELECT COUNT(*) AS count FROM redteam_runs WHERE assessment_id = ?').get(assessmentId)).count || 0);
         const activeAssessmentReservations = Number((await db.prepare(`SELECT COUNT(*) AS count FROM redteam_tokens
           WHERE assessment_id = ? AND used_at IS NULL AND expires_at > ?`).get(assessmentId, createdAt)).count || 0);
-        const limit = superuser ? Number.MAX_SAFE_INTEGER : (assessment.paid_tier === 'pro' ? 2 : 0);
+        const localCliAuthorised =
+            Boolean(localCliDatabasePath()) &&
+            db.kind === 'sqlite-test';
+        const limit = superuser || localCliAuthorised
+            ? Number.MAX_SAFE_INTEGER
+            : (assessment.paid_tier === 'pro' ? 2 : 0);
         if (!limit)
             throw new Error('An authorised assessment context is required for controlled red-team evidence.');
-        if (!superuser && assessmentRuns + activeAssessmentReservations >= limit)
+        if (!superuser && !localCliAuthorised && assessmentRuns + activeAssessmentReservations >= limit)
             throw new Error(`This assessment context includes ${limit} controlled red-team runs. The allowance is used or reserved by an active token.`);
         await db.prepare(`INSERT INTO redteam_tokens (id, token_hash, user_id, assessment_id, authorisation_id, mode, expires_at, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(id('rtk_'), hashToken(raw), userId, assessmentId, authorisation?.id || null, requestedMode, expiresAt, createdAt);
-        const reserved = superuser ? 0 : activeAssessmentReservations + 1;
+        const unmetered = superuser || localCliAuthorised;
+        const reserved = unmetered ? 0 : activeAssessmentReservations + 1;
         entitlement = {
-            source: superuser ? 'superuser' : 'assessment_service',
-            limit: superuser ? null : limit,
-            used: superuser ? 0 : assessmentRuns,
+            source: superuser
+                ? 'superuser'
+                : localCliAuthorised
+                    ? 'local_cli_authorised_assessment'
+                    : 'assessment_service',
+            limit: unmetered ? null : limit,
+            used: unmetered ? 0 : assessmentRuns,
             reserved,
-            remaining: superuser ? null : Math.max(0, limit - assessmentRuns - reserved),
+            remaining: unmetered ? null : Math.max(0, limit - assessmentRuns - reserved),
         };
     });
     return { token: raw, expiresAt, assessmentId, mode: requestedMode, recovery: Boolean(recoveryBundle), authorisation: authorisation ? publicAuthorisation(authorisation) : null, entitlement };
