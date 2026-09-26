@@ -4,7 +4,7 @@ export const SUGGESTION_PROFILE_VERSION = 'ARL-SUGGEST-1.1.0';
 const MATCHING_METHOD = 'ordered title, category, problem-statement and applicability metadata rules with conservative multi-fact scope confidence and manual-review fallback';
 
 export const ARCHITECTURE_FACTS = Object.freeze([
-  'audience:customer_facing','audience:internal','input:user_messages','input:email','input:uploaded_files','input:retrieved_documents','input:web_content','input:tool_output','input:memory',
+  'audience:customer_facing','audience:internal','input:user_messages','input:email','input:uploaded_files','input:retrieved_documents','input:web_content','input:tool_output','input:memory','memory:no_cross_session_persistence',
   'data:personal','data:customer_records','data:financial','data:health','data:secrets','data:confidential_internal','tool:read','tool:write','tool:payment','tool:messaging','tool:database','tool:file','tool:network','tool:admin','tool:code_execution','tool:deployment',
   'authority:recommend','authority:prepare','authority:reversible','authority:financial','authority:irreversible','authority:autonomous','safeguard:human_approval','safeguard:external_policy','safeguard:rate_limiting','safeguard:network_allowlist','safeguard:audit_logs','safeguard:runtime_blocking','safeguard:sandboxing','safeguard:data_minimisation','safeguard:recovery',
   'environment:development','environment:staging','environment:production','identity:user','identity:service','identity:shared','identity:tenant_scope','identity:roles'
