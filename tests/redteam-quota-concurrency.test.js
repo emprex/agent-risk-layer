@@ -23,7 +23,7 @@ test.after(async () => {
   for (const suffix of ['', '-shm', '-wal']) fs.rmSync(dbPath + suffix, { force: true });
 });
 
-async function paidAssessment(label) {
+async function assessmentWithTier(label, paidTier) {
   const userId = key('usr_');
   const assessmentId = key('asm_');
   const createdAt = iso();
@@ -50,7 +50,7 @@ async function paidAssessment(label) {
       0,
       'Low',
       '{}',
-      'pro',
+      paidTier,
       key('access_'),
       key('share_'),
       0,
@@ -60,6 +60,11 @@ async function paidAssessment(label) {
     );
   return { userId, assessmentId };
 }
+
+async function paidAssessment(label) {
+  return assessmentWithTier(label, 'pro');
+}
+
 
 test('parallel token requests cannot oversubscribe a Professional assessment allowance', async () => {
   const { userId, assessmentId } = await paidAssessment('parallel');
@@ -97,4 +102,15 @@ test('expired unused tokens release their reservation', async () => {
   const replacement = await createRedTeamToken({ userId, assessmentId });
   assert.equal(replacement.entitlement.reserved, 1);
   assert.equal(replacement.entitlement.remaining, 1);
+});
+
+
+test('hosted free assessments remain blocked from controlled red-team reservations', async () => {
+  const { userId, assessmentId } =
+    await assessmentWithTier('hosted-free', 'free');
+
+  await assert.rejects(
+    () => createRedTeamToken({ userId, assessmentId }),
+    /authorised assessment context is required/i,
+  );
 });
