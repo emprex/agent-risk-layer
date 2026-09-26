@@ -1,4 +1,4 @@
-export const CAPABILITY_PROFILE_VERSION = 'ARL-CAP-1.1.0';
+export const CAPABILITY_PROFILE_VERSION = 'ARL-CAP-1.2.0';
 
 export const CAPABILITY_DIMENSIONS = Object.freeze([
   Object.freeze({ key: 'autonomy', label: 'Autonomy', options: Object.freeze([
@@ -83,6 +83,7 @@ export function deriveCapabilityFacts(input = {}) {
 
   if (['autonomous','adaptive'].includes(profile.autonomy)) facts.add('authority:autonomous');
   if (['persistent','shared'].includes(profile.memory)) facts.add('input:memory');
+  if (['none','session'].includes(profile.memory)) facts.add('memory:no_cross_session_persistence');
   if (profile.rollbackScope.length) facts.add('safeguard:recovery');
 
   const channelFacts = {
