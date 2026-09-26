@@ -15,7 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-export const REDTEAM_VERSION = '5.2.1';
+export const REDTEAM_VERSION = '5.2.2';
 export const POLICY_VERSION = 'arl-redteam-policy-2026.10';
 export const BUNDLE_SCHEMA = 'arl.redteam.bundle.v1';
 export const REQUEST_SCHEMA = 'arl.redteam.request.v1';
