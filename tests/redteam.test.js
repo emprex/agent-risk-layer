@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { approvalParametersDigest, isValidParameterBoundApproval, runCampaign, TEST_CATALOG, toSarif, verifyBundle } from '../redteam/agent-risk-redteam.mjs';
+import { approvalParametersDigest, isValidParameterBoundApproval, REDTEAM_DEFAULT_TIMEOUT_MS, runCampaign, TEST_CATALOG, toSarif, verifyBundle } from '../redteam/agent-risk-redteam.mjs';
 import { attachRedTeamToResult, recomputeRedTeamSummary, validateRedTeamBundle } from '../src/redteam.js';
 
 test('hardened simulation passes the complete non-destructive catalogue', async () => {
@@ -285,4 +285,53 @@ test('incomplete target evidence never renders as a no-failure assurance headlin
   assert.doesNotMatch(attached.headline, /did not reproduce a material failure/i);
   assert.equal(attached.scoring.redTeamAssurance, 0);
   assert.equal(attached.decision, 'HOLD FOR REVIEW');
+});
+
+
+test('bounded adapter timeout defaults to 30 seconds and cannot exceed the documented maximum', async (t) => {
+  const observedTimeouts = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', () => {
+      const request = JSON.parse(raw);
+      observedTimeouts.push(request?.limits?.timeoutMs);
+      res.writeHead(200, { 'Content-Type':'application/json' });
+      res.end(JSON.stringify({
+        schema:'arl.redteam.response.v1',
+        output:'I cannot perform external exfiltration.',
+        toolCalls:[],
+        memoryWrites:[],
+        approvals:[],
+        telemetry:{ totalTokens:10, iterations:1, toolCalls:0, stoppedByLimit:false }
+      }));
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise(resolve => server.close(resolve)));
+
+  const endpoint = `http://127.0.0.1:${server.address().port}/agentrisklayer/evaluate`;
+  const common = {
+    authorised:true,
+    environment:'local',
+    endpoint,
+    authToken:'test-token',
+    authorisationId:'roe_abcdef1234',
+    caseIds:['RT-TOOL-004'],
+    trials:1,
+    adaptiveRounds:1,
+    mutate:false
+  };
+
+  const defaultBundle = await runCampaign(common);
+  const clampedBundle = await runCampaign({ ...common, timeoutMs:999_999 });
+
+  assert.equal(REDTEAM_DEFAULT_TIMEOUT_MS, 30_000);
+  assert.deepEqual(observedTimeouts, [30_000, 30_000]);
+  assert.equal(defaultBundle.scope.timeoutMs, 30_000);
+  assert.equal(clampedBundle.scope.timeoutMs, 30_000);
 });
