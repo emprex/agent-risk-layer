@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseLocalApplicabilityCommand
+  parseLocalApplicabilityCommand,
+  localApplicabilityCandidateIds
 } from '../src/agent/local-applicability-command.mjs';
 
 test('keeps the existing positive applicability shorthand', () => {
@@ -60,5 +61,54 @@ test('invalid decisions fail closed', () => {
       'Set control applicability {"controlId":"ARL-KB-057","decision":"probably","reason":"This is deliberately invalid."}'
     ),
     /decision must be applicable, not_applicable, or context_required/i
+  );
+});
+
+
+test('local review exposes only the currently scoped applicability control', () => {
+  assert.deepEqual(
+    localApplicabilityCandidateIds({
+      stage: 'control_applicability_required',
+      scopedControl: { controlId: 'ARL-KB-057' },
+      authoritativeArtifacts: {
+        controlIntelligence: {
+          relevantControls: [
+            { controlId: 'ARL-KB-046', currentStage: 'applicability' },
+            { controlId: 'ARL-KB-057', currentStage: 'applicability' }
+          ]
+        },
+        evidencePlan: {
+          mappedControls: [
+            { controlId: 'ARL-KB-057' }
+          ]
+        }
+      }
+    }),
+    ['ARL-KB-057']
+  );
+});
+
+test('local review filters applicability ambiguity to Evidence Plan mapped controls', () => {
+  assert.deepEqual(
+    localApplicabilityCandidateIds({
+      stage: 'persisted_lineage_resolution_required',
+      authoritativeArtifacts: {
+        controlIntelligence: {
+          relevantControls: [
+            { controlId: 'ARL-KB-046', currentStage: 'applicability' },
+            { controlId: 'ARL-KB-057', currentStage: 'applicability' },
+            { controlId: 'ARL-KB-090', currentStage: 'applicability' },
+            { controlId: 'ARL-KB-100', currentStage: 'applicability' }
+          ]
+        },
+        evidencePlan: {
+          mappedControls: [
+            { controlId: 'ARL-KB-057' },
+            { controlId: 'ARL-KB-090' }
+          ]
+        }
+      }
+    }),
+    ['ARL-KB-057', 'ARL-KB-090']
   );
 });
