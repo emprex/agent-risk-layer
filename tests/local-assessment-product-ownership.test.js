@@ -214,3 +214,138 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
     });
   }
 });
+
+
+test('local CLI controlled red-team authority is independent of hosted paid tier', () => {
+  const temp = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'arl-local-redteam-entitlement-')
+  );
+
+  try {
+    const databasePath = path.join(temp, 'assessment.sqlite');
+    const result = runModule(
+      `
+        const { enableLocalCliMode } =
+          await import('./src/agent/local-cli-mode.mjs');
+        enableLocalCliMode(process.env);
+
+        const { db, initialiseDatabase, id, nowIso } =
+          await import('./src/db.js');
+        const {
+          createRedTeamAuthorisation,
+          createRedTeamToken,
+          ROE_CONFIRMATION
+        } = await import('./src/redteam.js');
+
+        await initialiseDatabase();
+
+        const userId = id('usr_');
+        const assessmentId = id('asm_');
+        const now = nowIso();
+
+        await db.prepare(
+          'INSERT INTO users (id,email,password_hash,created_at) VALUES (?,?,?,?)'
+        ).run(
+          userId,
+          'local-redteam@test.invalid',
+          'local-login-disabled',
+          now
+        );
+
+        await db.prepare(
+          \`INSERT INTO assessments
+            (id,user_id,name,agent_type,answers_json,score,risk_band,
+             result_json,paid_tier,access_token,share_token,public_enabled,
+             scoring_version,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,'free',?,?,0,?,?,?)\`
+        ).run(
+          assessmentId,
+          userId,
+          'Local synthetic assessment',
+          'AI agent',
+          '{}',
+          0,
+          'Unknown',
+          '{}',
+          id('access_'),
+          id('share_'),
+          'arl-risk-test',
+          now,
+          now
+        );
+
+        const start = new Date(Date.now() - 1000).toISOString();
+        const end = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+        const roe = await createRedTeamAuthorisation({
+          userId,
+          assessmentId,
+          input: {
+            environment: 'local',
+            targetName: 'Local synthetic target',
+            endpointOrigin: 'http://127.0.0.1:8787',
+            authorityBasis: 'owner',
+            authorisedBy: 'Local Operator',
+            authorisedRole: 'Repository owner',
+            emergencyContact: 'Local terminal operator',
+            windowStart: start,
+            windowEnd: end,
+            permittedActions: [
+              'Bounded synthetic adversarial evaluation'
+            ],
+            prohibitedActions: [
+              'Production effects',
+              'External actions'
+            ],
+            dataClassification: 'synthetic-only',
+            retentionDays: 30,
+            syntheticDataOnly: true,
+            dryRunToolsOnly: true,
+            noProductionEffects: true,
+            confirmation: ROE_CONFIRMATION
+          }
+        });
+
+        const token = await createRedTeamToken({
+          userId,
+          assessmentId,
+          mode: 'staging',
+          authorisationId: roe.id
+        });
+
+        console.log(JSON.stringify({
+          source: token.entitlement?.source,
+          limit: token.entitlement?.limit,
+          paidTier: (
+            await db.prepare(
+              'SELECT paid_tier FROM assessments WHERE id=?'
+            ).get(assessmentId)
+          ).paid_tier
+        }));
+      `,
+      {
+        ARL_LOCAL_MODE: '1',
+        ARL_LOCAL_DATABASE_PATH: databasePath
+      }
+    );
+
+    assert.equal(
+      result.status,
+      0,
+      `stdout: ${result.stdout}\nstderr: ${result.stderr}`
+    );
+    const line = result.stdout
+      .trim()
+      .split('\n')
+      .find((value) => value.startsWith('{'));
+    const payload = JSON.parse(line);
+    assert.equal(payload.source, 'local_cli_authorised_assessment');
+    assert.equal(payload.limit, null);
+    assert.equal(payload.paidTier, 'free');
+  } finally {
+    fs.rmSync(temp, {
+      recursive: true,
+      force: true
+    });
+  }
+});
