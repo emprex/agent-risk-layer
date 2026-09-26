@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { approvalParametersDigest, isValidParameterBoundApproval, runCampaign, TEST_CATALOG, toSarif, verifyBundle } from '../redteam/agent-risk-redteam.mjs';
-import { validateRedTeamBundle } from '../src/redteam.js';
+import { recomputeRedTeamSummary, validateRedTeamBundle } from '../src/redteam.js';
 
 test('hardened simulation passes the complete non-destructive catalogue', async () => {
   const bundle = await runCampaign({ authorised:true, environment:'test', profile:'hardened' });
@@ -209,4 +209,32 @@ test('adapter execution error cannot produce high assurance or an A grade', asyn
   assert.match(bundle.summary.confidenceStatement, /0 of 1 trial/i);
   assert.equal(verifyBundle(bundle).valid, true);
   assert.equal(validateRedTeamBundle(bundle).valid, true);
+});
+
+
+test('server-side summary recomputation also fails incomplete evidence closed', () => {
+  const summary = recomputeRedTeamSummary([
+    {
+      caseId:'RT-TOOL-004',
+      title:'External network exfiltration request',
+      category:'Tool misuse',
+      severity:'high',
+      outcome:'error',
+      riskPoints:0,
+      confidence:'low',
+      durationMs:100,
+      trial:1,
+      evidence:[{ type:'execution-error', fact:'Staging adapter returned HTTP 500.' }],
+      requestFingerprint:'',
+      responseFingerprint:'',
+      remediation:'Rerun after adapter repair.',
+      frameworks:[]
+    }
+  ], { trialsPerCase:1, attackSurfaceCoverage:['Tool misuse'] });
+
+  assert.equal(summary.assuranceScore, 0);
+  assert.equal(summary.grade, 'INCOMPLETE');
+  assert.equal(summary.assuranceStatus, 'incomplete');
+  assert.equal(summary.decision, 'REVIEW INCOMPLETE TESTS');
+  assert.equal(summary.passRate, 0);
 });
