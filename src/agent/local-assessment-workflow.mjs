@@ -8,6 +8,7 @@ import { localCliDatabasePath } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
+import { parseLocalApplicabilityCommand } from './local-applicability-command.mjs';
 
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!localCliDatabasePath()) throw new Error('Local CLI mode is required.');
