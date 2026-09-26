@@ -97,3 +97,41 @@ export function parseLocalApplicabilityCommand(request) {
     architectureFactIds
   };
 }
+
+
+export function localApplicabilityCandidateIds(workflowState) {
+  const scoped =
+    workflowState?.stage === 'control_applicability_required'
+      ? String(workflowState?.scopedControl?.controlId || '').trim()
+      : '';
+
+  if (scoped) return [scoped];
+
+  const relevant =
+    workflowState?.authoritativeArtifacts
+      ?.controlIntelligence?.relevantControls;
+  const mapped =
+    workflowState?.authoritativeArtifacts
+      ?.evidencePlan?.mappedControls;
+
+  if (!Array.isArray(relevant) || !Array.isArray(mapped)) {
+    return [];
+  }
+
+  const mappedIds = new Set(
+    mapped
+      .map((item) => String(item?.controlId || '').trim())
+      .filter(Boolean)
+  );
+
+  return [...new Set(
+    relevant
+      .filter(
+        (item) =>
+          item?.currentStage === 'applicability' &&
+          mappedIds.has(String(item?.controlId || '').trim())
+      )
+      .map((item) => String(item.controlId).trim())
+      .filter(Boolean)
+  )].sort();
+}
