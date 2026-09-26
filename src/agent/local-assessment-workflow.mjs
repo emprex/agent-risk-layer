@@ -45,12 +45,16 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     return runArlAgent(repositoryPath, 'Where are we?', options);
   }
-  const applicability = request.match(/^Control (ARL-KB-\d+) applies$/i);
+  const applicability = parseLocalApplicabilityCommand(request);
   if (applicability) {
     const current = await runArlAgent(repositoryPath, 'Where are we?', options);
     const result = await confirmHostedMappedControlApplicability({
-      ...options, workflowState: current.canonicalData.workflowState,
-      controlId: applicability[1].toUpperCase(), reason: 'Explicit local human applicability review'
+      ...options,
+      workflowState: current.canonicalData.workflowState,
+      controlId: applicability.controlId,
+      decision: applicability.decision,
+      reason: applicability.reason,
+      architectureFactIds: applicability.architectureFactIds
     });
     if (!result.available) throw new Error(result.reason);
     return runArlAgent(repositoryPath, 'Where are we?', options);
@@ -129,8 +133,13 @@ async function explainLocalGate(result, { repositoryPath } = {}) {
   const state = result?.canonicalData?.workflowState;
   const controls = state?.authoritativeArtifacts?.controlIntelligence?.relevantControls || [];
   if (controls.some(control => control.currentStage === 'applicability')) {
-    result.answer += '\n\nLocal human review required. Declare architecture with Set assessment context <JSON> (architectureSummary, capabilityProfile, manualArchitectureFacts), then confirm each applicable control explicitly:\n' +
-      controls.filter(control => control.currentStage === 'applicability').map(control => `Control ${control.controlId} applies`).join('\n');
+    const pending = controls
+      .filter(control => control.currentStage === 'applicability')
+      .map(control => control.controlId)
+      .join(', ');
+    result.answer += '\n\nLocal human review required. Controls awaiting an explicit applicability decision: ' + pending +
+      '.\nFor Applicable, use: Control ARL-KB-### applies' +
+      '\nFor Not applicable or More information required, use: Set control applicability {"controlId":"ARL-KB-###","decision":"not_applicable|context_required","reason":"specific human rationale","architectureFactIds":["confirmed:fact"]}';
   }
 
   if (state?.stage === 'bounded_test_required' && repositoryPath) {
