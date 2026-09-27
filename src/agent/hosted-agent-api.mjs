@@ -55,6 +55,8 @@ export const HOSTED_AGENT_BOUNDED_TEST_COMPLETE_PATH =
   '/api/agent/assessment/bounded-test/complete';
 export const HOSTED_AGENT_CONTINUE_PATH =
   '/api/agent/assessment/continue';
+export const HOSTED_AGENT_CONVERSATION_PATH =
+  '/api/agent/assessment/conversation';
 export const HOSTED_AGENT_REMEDIATION_PREPARE_PATH =
   '/api/agent/assessment/remediation/prepare';
 export const HOSTED_AGENT_REMEDIATION_COMPLETE_PATH =
@@ -902,6 +904,85 @@ export async function completeHostedAgentExactRetest({
   };
 }
 
+const HOSTED_READ_ONLY_CONVERSATION_COMMANDS =
+  new Set([
+    'needs',
+    'findings',
+    'remediation',
+    'fixed',
+    'retest',
+    'readiness',
+    'status'
+  ]);
+
+export function normaliseHostedReadOnlyConversationCommand(
+  value
+) {
+  const command =
+    String(value || '')
+      .trim()
+      .toLowerCase();
+
+  if (
+    !HOSTED_READ_ONLY_CONVERSATION_COMMANDS
+      .has(command)
+  ) {
+    const error = new Error(
+      'Hosted read-only conversation supports needs, findings, remediation, fixed, retest, readiness and status only.'
+    );
+    error.code =
+      'HOSTED_READ_ONLY_CONVERSATION_COMMAND_INVALID';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return command;
+}
+
+export async function readHostedAgentAssessmentConversation({
+  operator,
+  body = {}
+} = {}) {
+  const command =
+    normaliseHostedReadOnlyConversationCommand(
+      body.command
+    );
+
+  const current =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command
+    });
+
+  return {
+    statusCode: 200,
+    body: {
+      operatorContext:
+        current.operatorResolution.body.operatorContext,
+      declaredContext:
+        current.declaredContext,
+      preparation:
+        current.preparationResolution.body.preparation,
+      conversationResponse:
+        current.conversation.conversationResponse,
+      readOnly: true,
+      securityStateChanged: false,
+      securityDecisionCreated: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    },
+    internal: {
+      operatorContext:
+        current.operatorResolution.internal,
+      preparation:
+        current.preparationResolution.internal,
+      workflowState:
+        current.conversation.internal.workflowState
+    }
+  };
+}
+
 export async function continueHostedAgentAssessment({
   operator,
   body = {}
@@ -1019,6 +1100,7 @@ export async function handleHostedAgentApi({
     HOSTED_AGENT_REMEDIATION_APPLICABILITY_PATH,
     HOSTED_AGENT_EXACT_RETEST_PREPARE_PATH,
     HOSTED_AGENT_EXACT_RETEST_COMPLETE_PATH,
+    HOSTED_AGENT_CONVERSATION_PATH,
     HOSTED_AGENT_CONTINUE_PATH
   ]).has(pathname);
   if (!handledPath) {
@@ -1104,6 +1186,14 @@ export async function handleHostedAgentApi({
     ) {
       result =
         await completeHostedAgentExactRetest({
+          operator,
+          body
+        });
+    } else if (
+      pathname === HOSTED_AGENT_CONVERSATION_PATH
+    ) {
+      result =
+        await readHostedAgentAssessmentConversation({
           operator,
           body
         });
