@@ -42,6 +42,11 @@ import {
   prepareExactRetestRedTeamReservation,
   persistExactRetestRedTeamReservation
 } from './exact-retest-redteam-handoff.mjs';
+import {
+  buildHostedCustomerAssessmentReport,
+  completeHostedHumanFindingClosure,
+  recordHostedHumanReadinessDecision
+} from './hosted-human-review.mjs';
 
 export const HOSTED_AGENT_PREPARATION_PATH =
   '/api/agent/assessment/prepare';
@@ -70,6 +75,12 @@ export const HOSTED_AGENT_EXACT_RETEST_PREPARE_PATH =
 
 export const HOSTED_AGENT_EXACT_RETEST_COMPLETE_PATH =
   '/api/agent/assessment/exact-retest/complete';
+export const HOSTED_AGENT_HUMAN_CLOSURE_PATH =
+  '/api/agent/assessment/human-closure';
+export const HOSTED_AGENT_READINESS_RECORD_PATH =
+  '/api/agent/assessment/readiness/record';
+export const HOSTED_AGENT_REPORT_PATH =
+  '/api/agent/assessment/report';
 
 function statusForError(error) {
   if (
@@ -904,6 +915,232 @@ export async function completeHostedAgentExactRetest({
   };
 }
 
+const HOSTED_HUMAN_REVIEW_FORBIDDEN_FIELDS =
+  new Set([
+    'userId',
+    'projectId',
+    'assessmentId',
+    'workspaceId',
+    'systemSnapshotId',
+    'findingId',
+    'controlId',
+    'caseId',
+    'baselineRunId',
+    'retestRunId',
+    'severity',
+    'readiness',
+    'decision',
+    'deploymentDecision'
+  ]);
+
+function assertHostedHumanReviewCallerBoundary(
+  body = {}
+) {
+  for (
+    const field of
+    HOSTED_HUMAN_REVIEW_FORBIDDEN_FIELDS
+  ) {
+    if (Object.hasOwn(body, field)) {
+      throw apiConflict(
+        'HOSTED_HUMAN_REVIEW_AUTHORITY_FIELD_REJECTED',
+        `Caller-supplied ${field} is not accepted for hosted human review.`
+      );
+    }
+  }
+}
+
+export async function completeHostedAgentHumanClosure({
+  operator,
+  body = {}
+} = {}) {
+  assertHostedHumanReviewCallerBoundary(body);
+
+  const current =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'continue'
+    });
+
+  const closure =
+    await completeHostedHumanFindingClosure({
+      workflowState:
+        current.conversation.internal.workflowState,
+      preparation:
+        current.preparationResolution.internal,
+      operatorContext:
+        current.operatorResolution.internal,
+      confirmed:
+        body.confirmFindingClosure === true,
+      limitations:
+        body.limitations
+    });
+
+  if (closure.available !== true) {
+    throw apiConflict(
+      'HOSTED_HUMAN_CLOSURE_BLOCKED',
+      `ARL cannot close this finding: ${closure.reason}.`
+    );
+  }
+
+  const refreshed =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'readiness'
+    });
+
+  return {
+    statusCode: 200,
+    body: {
+      operatorContext:
+        refreshed.operatorResolution.body.operatorContext,
+      closure,
+      preparation:
+        refreshed.preparationResolution.body.preparation,
+      conversationResponse:
+        refreshed.conversation.conversationResponse,
+      securityStateChanged:
+        closure.securityStateChanged === true,
+      securityDecisionCreated: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    },
+    internal: {
+      operatorContext:
+        refreshed.operatorResolution.internal,
+      preparation:
+        refreshed.preparationResolution.internal,
+      workflowState:
+        refreshed.conversation.internal.workflowState
+    }
+  };
+}
+
+export async function recordHostedAgentReadinessDecision({
+  operator,
+  body = {}
+} = {}) {
+  assertHostedHumanReviewCallerBoundary(body);
+
+  const current =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'readiness'
+    });
+
+  const recorded =
+    await recordHostedHumanReadinessDecision({
+      workflowState:
+        current.conversation.internal.workflowState,
+      operatorContext:
+        current.operatorResolution.internal,
+      confirmed:
+        body.confirmRecordCurrentReadiness === true,
+      rationale:
+        body.rationale
+    });
+
+  if (recorded.available !== true) {
+    throw apiConflict(
+      'HOSTED_READINESS_RECORD_BLOCKED',
+      `ARL cannot record the current readiness decision: ${recorded.reason}.`
+    );
+  }
+
+  const refreshed =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'readiness'
+    });
+
+  const report =
+    await buildHostedCustomerAssessmentReport({
+      workflowState:
+        refreshed.conversation.internal.workflowState,
+      operatorContext:
+        refreshed.operatorResolution.internal
+    });
+
+  return {
+    statusCode: 200,
+    body: {
+      operatorContext:
+        refreshed.operatorResolution.body.operatorContext,
+      readinessRecord: recorded,
+      report:
+        report?.available === true
+          ? report
+          : null,
+      conversationResponse:
+        refreshed.conversation.conversationResponse,
+      securityStateChanged:
+        recorded.securityStateChanged === true,
+      securityDecisionCreated: false,
+      deploymentDecisionWritten:
+        recorded.deploymentDecisionWritten === true,
+      humanReviewRequired: true
+    },
+    internal: {
+      operatorContext:
+        refreshed.operatorResolution.internal,
+      workflowState:
+        refreshed.conversation.internal.workflowState
+    }
+  };
+}
+
+export async function getHostedAgentCustomerReport({
+  operator,
+  body = {}
+} = {}) {
+  assertHostedHumanReviewCallerBoundary(body);
+
+  const current =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'status'
+    });
+
+  const report =
+    await buildHostedCustomerAssessmentReport({
+      workflowState:
+        current.conversation.internal.workflowState,
+      operatorContext:
+        current.operatorResolution.internal
+    });
+
+  if (report?.available !== true) {
+    throw apiConflict(
+      'HOSTED_CUSTOMER_REPORT_BLOCKED',
+      `ARL cannot build the customer assessment report: ${report?.reason || 'authoritative_report_unavailable'}.`
+    );
+  }
+
+  return {
+    statusCode: 200,
+    body: {
+      operatorContext:
+        current.operatorResolution.body.operatorContext,
+      report,
+      readOnly: true,
+      securityStateChanged: false,
+      securityDecisionCreated: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    },
+    internal: {
+      operatorContext:
+        current.operatorResolution.internal,
+      workflowState:
+        current.conversation.internal.workflowState
+    }
+  };
+}
+
 const HOSTED_READ_ONLY_CONVERSATION_COMMANDS =
   new Set([
     'needs',
@@ -1100,6 +1337,9 @@ export async function handleHostedAgentApi({
     HOSTED_AGENT_REMEDIATION_APPLICABILITY_PATH,
     HOSTED_AGENT_EXACT_RETEST_PREPARE_PATH,
     HOSTED_AGENT_EXACT_RETEST_COMPLETE_PATH,
+    HOSTED_AGENT_HUMAN_CLOSURE_PATH,
+    HOSTED_AGENT_READINESS_RECORD_PATH,
+    HOSTED_AGENT_REPORT_PATH,
     HOSTED_AGENT_CONVERSATION_PATH,
     HOSTED_AGENT_CONTINUE_PATH
   ]).has(pathname);
@@ -1186,6 +1426,30 @@ export async function handleHostedAgentApi({
     ) {
       result =
         await completeHostedAgentExactRetest({
+          operator,
+          body
+        });
+    } else if (
+      pathname === HOSTED_AGENT_HUMAN_CLOSURE_PATH
+    ) {
+      result =
+        await completeHostedAgentHumanClosure({
+          operator,
+          body
+        });
+    } else if (
+      pathname === HOSTED_AGENT_READINESS_RECORD_PATH
+    ) {
+      result =
+        await recordHostedAgentReadinessDecision({
+          operator,
+          body
+        });
+    } else if (
+      pathname === HOSTED_AGENT_REPORT_PATH
+    ) {
+      result =
+        await getHostedAgentCustomerReport({
           operator,
           body
         });
