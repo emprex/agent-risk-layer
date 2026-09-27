@@ -42,6 +42,7 @@ test('Phase 4 hosted API loads against the canonical AgentRiskLayer authority', 
     '/api/agent/assessment/applicability',
     '/api/agent/assessment/bounded-test/prepare',
     '/api/agent/assessment/bounded-test/complete',
+    '/api/agent/assessment/conversation',
     '/api/agent/assessment/continue',
     '/api/agent/assessment/remediation/prepare',
     '/api/agent/assessment/remediation/complete',
@@ -148,5 +149,86 @@ test('hosted bounded completion immediately continues through gated ARL authorit
   assert.doesNotMatch(
     boundedCompletion,
     /recordDeploymentDecision/
+  );
+});
+
+
+test('hosted read-only conversation cannot invoke workflow execution', async () => {
+  const hostedApi =
+    await import('../src/agent/hosted-agent-api.mjs');
+
+  for (const command of [
+    'needs',
+    'findings',
+    'remediation',
+    'fixed',
+    'retest',
+    'readiness',
+    'status'
+  ]) {
+    assert.equal(
+      hostedApi
+        .normaliseHostedReadOnlyConversationCommand(
+          command
+        ),
+      command
+    );
+  }
+
+  for (const command of [
+    'assess',
+    'continue',
+    'unknown'
+  ]) {
+    assert.throws(
+      () =>
+        hostedApi
+          .normaliseHostedReadOnlyConversationCommand(
+            command
+          ),
+      (error) =>
+        error?.code ===
+        'HOSTED_READ_ONLY_CONVERSATION_COMMAND_INVALID'
+    );
+  }
+
+  const source = fs.readFileSync(
+    path.join(agentRoot, 'hosted-agent-api.mjs'),
+    'utf8'
+  );
+
+  const start = source.indexOf(
+    'export async function readHostedAgentAssessmentConversation'
+  );
+  const end = source.indexOf(
+    'export async function continueHostedAgentAssessment',
+    start
+  );
+
+  assert.ok(start >= 0);
+  assert.ok(end > start);
+
+  const readOnlySurface =
+    source.slice(start, end);
+
+  assert.match(
+    readOnlySurface,
+    /resolveHostedWorkflow/
+  );
+  assert.doesNotMatch(
+    readOnlySurface,
+    /executeGatedWorkflow/
+  );
+  assert.doesNotMatch(
+    readOnlySurface,
+    /executeAuthoritativeArlAction/
+  );
+  assert.match(
+    readOnlySurface,
+    /securityStateChanged:\s*false/
+  );
+  assert.match(
+    readOnlySurface,
+    /deploymentDecisionWritten:\s*false/
   );
 });
