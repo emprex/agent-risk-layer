@@ -2,10 +2,16 @@ import {
   prepareAuthoritativeAssessmentWorkflowFromFrozenInspection
 } from './tools/prepare-authoritative-assessment-workflow.mjs';
 import {
+  getAssessmentContext
+} from './tools/get-assessment-context.mjs';
+import {
   FROZEN_INSPECTION_TRANSPORT_SCHEMA,
   buildFrozenInspectionTransport,
   normaliseFrozenInspectionTransport
 } from './frozen-inspection-transport.mjs';
+import {
+  HOSTED_RESUME_INSPECTION_SCHEMA
+} from './initial-assessment-snapshot.mjs';
 
 export {
   FROZEN_INSPECTION_TRANSPORT_SCHEMA,
@@ -47,10 +53,37 @@ export function normaliseHostedAssessmentPreparationInput(body = {}) {
   }
 
   return {
-    frozenInspection: normaliseFrozenInspectionTransport(
-      body.frozenInspection
-    )
+    frozenInspection:
+      body.frozenInspection == null
+        ? null
+        : normaliseFrozenInspectionTransport(
+            body.frozenInspection
+          )
   };
+}
+
+function persistedResumeInspection(
+  assessmentContext
+) {
+  const marker =
+    assessmentContext?.assessmentConfiguration
+      ?.hostedResumeInspection;
+
+  if (
+    marker?.schema !==
+      HOSTED_RESUME_INSPECTION_SCHEMA ||
+    !marker.transport
+  ) {
+    return null;
+  }
+
+  try {
+    return normaliseFrozenInspectionTransport(
+      marker.transport
+    );
+  } catch {
+    return null;
+  }
 }
 
 function publicPreparation(preparation) {
@@ -104,19 +137,47 @@ export async function resolveHostedAssessmentPreparation({
   }
 
   const input = normaliseHostedAssessmentPreparationInput(body);
-  const preparation = await prepareAuthoritativeAssessmentWorkflowFromFrozenInspection({
-    frozenInspection: input.frozenInspection,
-    projectId,
-    userId,
-    assessmentId
-  });
+  let frozenInspection = input.frozenInspection;
+  let resumeSource = 'caller_transport';
+
+  if (!frozenInspection) {
+    const assessmentContext =
+      await getAssessmentContext({
+        projectId,
+        userId
+      });
+
+    frozenInspection =
+      persistedResumeInspection(
+        assessmentContext
+      );
+    resumeSource = 'authoritative_snapshot';
+
+    if (!frozenInspection) {
+      throw transportError(
+        'HOSTED_ASSESSMENT_RESUME_INSPECTION_REQUIRED',
+        'The current authoritative snapshot does not contain a transport-safe Inspector result. Re-run assessment preparation from the target repository before continuing.'
+      );
+    }
+  }
+
+  const preparation =
+    await prepareAuthoritativeAssessmentWorkflowFromFrozenInspection({
+      frozenInspection,
+      projectId,
+      userId,
+      assessmentId
+    });
 
   return {
     statusCode: 200,
     body: {
       preparation: publicPreparation(preparation)
     },
-    internal: preparation,
+    internal: {
+      ...preparation,
+      hostedResumeSource: resumeSource
+    },
     securityStateChanged: false,
     deploymentDecisionWritten: false,
     humanReviewRequired: true
