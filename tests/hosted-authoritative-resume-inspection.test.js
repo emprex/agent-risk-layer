@@ -31,6 +31,9 @@ function transport() {
     inspection: {
       findings: [],
       observations: [],
+      scope: {
+        gitHistorySecretScan: true
+      },
       trust: {
         sourceCodeUploaded: false,
         matchedSecretValuesUploaded: false
@@ -53,7 +56,7 @@ test(
     );
     assert.equal(
       marker.source,
-      'transport_safe_customer_inspection'
+      'transport_safe_snapshot_projection'
     );
     assert.equal(
       marker.transport.target.revision,
@@ -62,6 +65,31 @@ test(
     assert.equal(
       marker.transport.binding.verified,
       true
+    );
+    assert.equal(
+      marker.transport.inspection.observed,
+      true
+    );
+    assert.match(
+      marker.sourceInspectionDigest,
+      /^[a-f0-9]{64}$/
+    );
+    assert.equal(
+      marker.transport.inspection
+        .sourceInspectionDigest,
+      marker.sourceInspectionDigest
+    );
+    assert.equal(
+      JSON.stringify(marker).includes(
+        'gitHistorySecretScan'
+      ),
+      false
+    );
+    assert.equal(
+      JSON.stringify(marker).includes(
+        '"scope"'
+      ),
+      false
     );
 
     const withoutCallerInspection =
