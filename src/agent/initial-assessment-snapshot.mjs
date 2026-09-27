@@ -11,6 +11,9 @@ import {
 export const INITIAL_ASSESSMENT_SNAPSHOT_SCHEMA =
   'arl.agent.initial-assessment-snapshot.v1';
 
+export const HOSTED_RESUME_INSPECTION_SCHEMA =
+  'arl.agent.hosted-resume-inspection.v1';
+
 function snapshotError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -30,7 +33,26 @@ function requiredInternalContext(operatorContextInternal = {}) {
   return { userId, projectId, assessmentId };
 }
 
-function initialSnapshotInput({ revision, assessmentId }) {
+export function hostedResumeInspectionMarker(
+  frozenInspection
+) {
+  const frozen =
+    normaliseFrozenInspectionTransport(
+      frozenInspection
+    );
+
+  return {
+    schema: HOSTED_RESUME_INSPECTION_SCHEMA,
+    source: 'transport_safe_customer_inspection',
+    transport: frozen
+  };
+}
+
+function initialSnapshotInput({
+  revision,
+  assessmentId,
+  frozenInspection
+}) {
   return {
     architecture: {
       summary:
@@ -58,6 +80,10 @@ function initialSnapshotInput({ revision, assessmentId }) {
         schema: 'arl.assessment-binding.v1',
         assessmentId
       },
+      hostedResumeInspection:
+        hostedResumeInspectionMarker(
+          frozenInspection
+        ),
       initialContext: {
         schema: INITIAL_ASSESSMENT_SNAPSHOT_SCHEMA,
         mode: 'explicit_unknown_only',
@@ -104,7 +130,8 @@ export async function ensureInitialAssessmentSnapshot({
     userId,
     input: initialSnapshotInput({
       revision: frozen.target.revision,
-      assessmentId
+      assessmentId,
+      frozenInspection: frozen
     })
   });
 
