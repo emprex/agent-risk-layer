@@ -5,6 +5,8 @@ import {
 } from '../redteam.js';
 
 import {
+  REDTEAM_DEFAULT_TIMEOUT_MS,
+  REDTEAM_LOCAL_MAX_TIMEOUT_MS,
   runCampaign
 } from '../../redteam/agent-risk-redteam.mjs';
 
@@ -16,6 +18,12 @@ export const BOUNDED_REDTEAM_EXECUTION_SCHEMA =
 
 export const BOUNDED_REDTEAM_RESERVATION_SCHEMA =
   'arl.agent.bounded-redteam-reservation.v1';
+
+export function boundedRedTeamTimeoutMs(environment) {
+  return String(environment || '').toLowerCase() === 'local'
+    ? REDTEAM_LOCAL_MAX_TIMEOUT_MS
+    : REDTEAM_DEFAULT_TIMEOUT_MS;
+}
 
 function normalise(text) {
   return String(text || '')
@@ -288,7 +296,8 @@ export async function prepareBoundedRedTeamReservation({
       caseId: mapping.caseId,
       trials: 1,
       adaptiveRounds: 1,
-      mutate: false
+      mutate: false,
+      timeoutMs: boundedRedTeamTimeoutMs(authorisation.environment)
     },
     securityStateChanged: false,
     deploymentDecisionWritten: false,
@@ -371,6 +380,7 @@ export async function executeBoundedRedTeamHandoff({
       trials: plan.trials,
       adaptiveRounds: plan.adaptiveRounds,
       mutate: plan.mutate,
+      timeoutMs: plan.timeoutMs,
       name: 'ARL Agent bounded evidence campaign'
     });
   } catch (error) {
