@@ -5,6 +5,7 @@ process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET ||= 'phase4-bounded-mapping-selection-test-secret-1234567890';
 
 const {
+  boundedRedTeamTimeoutMs,
   selectBoundedEvidencePlanMapping
 } = await import('../src/agent/bounded-redteam-handoff.mjs');
 
@@ -88,4 +89,11 @@ test('never selects a test mapping without exact authority projection', () => {
   });
 
   assert.equal(selectBoundedEvidencePlanMapping(state), null);
+});
+
+
+test('local bounded handoff gets extended runner budget without widening test or staging', () => {
+  assert.equal(boundedRedTeamTimeoutMs('local'), 60_000);
+  assert.equal(boundedRedTeamTimeoutMs('test'), 30_000);
+  assert.equal(boundedRedTeamTimeoutMs('staging'), 30_000);
 });
