@@ -49,7 +49,10 @@ test('Phase 4 hosted API loads against the canonical AgentRiskLayer authority', 
     '/api/agent/assessment/changed-snapshot',
     '/api/agent/assessment/remediation/applicability',
     '/api/agent/assessment/exact-retest/prepare',
-    '/api/agent/assessment/exact-retest/complete'
+    '/api/agent/assessment/exact-retest/complete',
+    '/api/agent/assessment/human-closure',
+    '/api/agent/assessment/readiness/record',
+    '/api/agent/assessment/report'
   ];
 
   const exportedPaths = Object.entries(hostedApi)
@@ -230,5 +233,166 @@ test('hosted read-only conversation cannot invoke workflow execution', async () 
   assert.match(
     readOnlySurface,
     /deploymentDecisionWritten:\s*false/
+  );
+});
+
+
+test('hosted human review and report paths preserve explicit authority boundaries', () => {
+  const source = fs.readFileSync(
+    path.join(agentRoot, 'hosted-agent-api.mjs'),
+    'utf8'
+  );
+
+  const closureStart = source.indexOf(
+    'export async function completeHostedAgentHumanClosure'
+  );
+  const readinessStart = source.indexOf(
+    'export async function recordHostedAgentReadinessDecision'
+  );
+  const reportStart = source.indexOf(
+    'export async function getHostedAgentCustomerReport'
+  );
+  const readOnlyConversationStart = source.indexOf(
+    'const HOSTED_READ_ONLY_CONVERSATION_COMMANDS',
+    reportStart
+  );
+
+  assert.ok(closureStart >= 0);
+  assert.ok(readinessStart > closureStart);
+  assert.ok(reportStart > readinessStart);
+  assert.ok(readOnlyConversationStart > reportStart);
+
+  const closureSurface =
+    source.slice(
+      closureStart,
+      readinessStart
+    );
+
+  assert.match(
+    closureSurface,
+    /confirmFindingClosure === true/
+  );
+  assert.match(
+    closureSurface,
+    /completeHostedHumanFindingClosure/
+  );
+  assert.match(
+    closureSurface,
+    /deploymentDecisionWritten:\s*false/
+  );
+  assert.doesNotMatch(
+    closureSurface,
+    /recordDeploymentDecision/
+  );
+
+  const readinessSurface =
+    source.slice(
+      readinessStart,
+      reportStart
+    );
+
+  assert.match(
+    readinessSurface,
+    /confirmRecordCurrentReadiness === true/
+  );
+  assert.match(
+    readinessSurface,
+    /recordHostedHumanReadinessDecision/
+  );
+  assert.doesNotMatch(
+    readinessSurface,
+    /body\.decision/
+  );
+  assert.doesNotMatch(
+    readinessSurface,
+    /body\.deploymentDecision/
+  );
+
+  const reportSurface =
+    source.slice(
+      reportStart,
+      readOnlyConversationStart
+    );
+
+  assert.match(
+    reportSurface,
+    /buildHostedCustomerAssessmentReport/
+  );
+  assert.match(
+    reportSurface,
+    /readOnly:\s*true/
+  );
+  assert.match(
+    reportSurface,
+    /securityStateChanged:\s*false/
+  );
+  assert.match(
+    reportSurface,
+    /deploymentDecisionWritten:\s*false/
+  );
+
+  const continueStart = source.indexOf(
+    'export async function continueHostedAgentAssessment'
+  );
+  const handleStart = source.indexOf(
+    'export async function handleHostedAgentApi',
+    continueStart
+  );
+  assert.ok(continueStart >= 0);
+  assert.ok(handleStart > continueStart);
+
+  const continueSurface =
+    source.slice(
+      continueStart,
+      handleStart
+    );
+
+  assert.doesNotMatch(
+    continueSurface,
+    /completeHostedHumanFindingClosure/
+  );
+  assert.doesNotMatch(
+    continueSurface,
+    /recordHostedHumanReadinessDecision/
+  );
+  assert.doesNotMatch(
+    continueSurface,
+    /buildHostedCustomerAssessmentReport/
+  );
+});
+
+test('hosted human review routes reject caller-supplied authority fields', () => {
+  const source = fs.readFileSync(
+    path.join(agentRoot, 'hosted-agent-api.mjs'),
+    'utf8'
+  );
+
+  for (const field of [
+    'userId',
+    'projectId',
+    'assessmentId',
+    'workspaceId',
+    'systemSnapshotId',
+    'findingId',
+    'controlId',
+    'caseId',
+    'baselineRunId',
+    'retestRunId',
+    'severity',
+    'readiness',
+    'decision',
+    'deploymentDecision'
+  ]) {
+    assert.match(
+      source,
+      new RegExp(
+        `['"]${field}['"]`
+      )
+    );
+  }
+
+  assert.match(
+    source,
+    /HOSTED_HUMAN_REVIEW_AUTHORITY_FIELD_REJECTED/
   );
 });
