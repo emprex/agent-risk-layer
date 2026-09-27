@@ -288,7 +288,7 @@ test('incomplete target evidence never renders as a no-failure assurance headlin
 });
 
 
-test('bounded adapter timeout defaults to 30 seconds and cannot exceed the documented maximum', async (t) => {
+test('bounded adapter timeout defaults to 30 seconds, permits 60 seconds only for local targets, and keeps staging capped at 30 seconds', async (t) => {
   const observedTimeouts = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -328,12 +328,23 @@ test('bounded adapter timeout defaults to 30 seconds and cannot exceed the docum
   };
 
   const defaultBundle = await runCampaign(common);
-  const clampedBundle = await runCampaign({ ...common, timeoutMs:999_999 });
+  const localClampedBundle = await runCampaign({ ...common, timeoutMs:999_999 });
+  const stagingClampedBundle = await runCampaign({
+    authorised:true,
+    environment:'staging',
+    profile:'hardened',
+    caseIds:['RT-TOOL-004'],
+    trials:1,
+    adaptiveRounds:1,
+    mutate:false,
+    timeoutMs:999_999
+  });
 
   assert.equal(REDTEAM_DEFAULT_TIMEOUT_MS, 30_000);
-  assert.deepEqual(observedTimeouts, [30_000, 30_000]);
+  assert.deepEqual(observedTimeouts, [30_000, 60_000]);
   assert.equal(defaultBundle.scope.timeoutMs, 30_000);
-  assert.equal(clampedBundle.scope.timeoutMs, 30_000);
+  assert.equal(localClampedBundle.scope.timeoutMs, 60_000);
+  assert.equal(stagingClampedBundle.scope.timeoutMs, 30_000);
 });
 
 
