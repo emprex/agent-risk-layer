@@ -18,6 +18,10 @@ import {
 } from './frozen-inspection-transport.mjs';
 
 import {
+  hostedResumeInspectionMarker
+} from './initial-assessment-snapshot.mjs';
+
+import {
   freezeLocalRepository
 } from './tools/freeze-local-repository.mjs';
 
@@ -554,6 +558,10 @@ export async function captureChangedSystemSnapshotFromFrozenInspection({
             assessmentId:
               authoritativeAssessment.assessmentId
           },
+          hostedResumeInspection:
+            hostedResumeInspectionMarker(
+              frozen
+            ),
           remediationSnapshotConfirmation: {
             schema:
               'arl.remediation-snapshot-confirmation.v1',
@@ -867,6 +875,10 @@ export async function captureChangedSystemSnapshotHandoff({
             assessmentId:
               authoritativeAssessment.assessmentId
           },
+          hostedResumeInspection:
+            hostedResumeInspectionMarker(
+              inspected
+            ),
           remediationSnapshotConfirmation: {
             schema:
               'arl.remediation-snapshot-confirmation.v1',
