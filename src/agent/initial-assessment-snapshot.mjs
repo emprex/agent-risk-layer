@@ -1,4 +1,8 @@
 import {
+  createHash
+} from 'node:crypto';
+
+import {
   createSystemSnapshot
 } from '../control-intelligence.js';
 import {
@@ -41,10 +45,37 @@ export function hostedResumeInspectionMarker(
       frozenInspection
     );
 
+  /*
+   * System snapshots intentionally reject secret/credential-like field names.
+   * The full Inspector transport contains scan-scope metadata such as
+   * gitHistorySecretScan, so it must not be embedded verbatim.
+   *
+   * Current Evidence Plan derivation requires only proof that a verified
+   * source inspection exists; it does not consume Inspector findings or scope
+   * configuration. Persist the exact target binding plus a digest of the
+   * original transport and a minimal non-sensitive inspection projection.
+   */
+  const sourceInspectionDigest =
+    createHash('sha256')
+      .update(JSON.stringify(frozen))
+      .digest('hex');
+
   return {
     schema: HOSTED_RESUME_INSPECTION_SCHEMA,
-    source: 'transport_safe_customer_inspection',
-    transport: frozen
+    source: 'transport_safe_snapshot_projection',
+    sourceInspectionDigest,
+    transport: {
+      schema: frozen.schema,
+      type: frozen.type,
+      target: frozen.target,
+      binding: frozen.binding,
+      inspection: {
+        schema:
+          'arl.agent.hosted-resume-inspection-evidence.v1',
+        observed: true,
+        sourceInspectionDigest
+      }
+    }
   };
 }
 
