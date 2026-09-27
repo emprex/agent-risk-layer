@@ -525,6 +525,9 @@ function runDependencyChecks(ctx){
     rawAssessment=assessLockedDependencies(ctx.root,{
       advisoryDatabase:ctx.options.advisoryDatabase||null,
       maxAgeDays:ctx.options.vulnerabilityMaxAgeDays,
+      now:ctx.options.vulnerabilityNow instanceof Date
+        ? ctx.options.vulnerabilityNow
+        : undefined,
     });
   }catch(error){
     ctx.dependencyVulnerabilityAssessment={
