@@ -26,6 +26,28 @@ function hostedContextError(code, message, details = {}) {
   return error;
 }
 
+function cleanAssessmentReference(value) {
+  const reference = String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+  if (!reference) return null;
+  if (reference.length > 100) {
+    throw hostedContextError(
+      'ASSESSMENT_REFERENCE_INVALID',
+      'Assessment reference must be 100 characters or fewer.'
+    );
+  }
+  if (/[^A-Z0-9 ._:/-]/.test(reference)) {
+    throw hostedContextError(
+      'ASSESSMENT_REFERENCE_INVALID',
+      'Assessment reference contains unsupported characters.'
+    );
+  }
+  return reference;
+}
+
 function cleanEnvironment(value) {
   const environment = String(value || 'test').trim().toLowerCase();
   if (environment === 'local') return 'development';
@@ -60,7 +82,11 @@ export function normaliseHostedOperatorContextInput(body = {}) {
       body.repositoryIdentity || {}
     ),
     workspaceName: String(body.workspaceName || '').trim().slice(0, 100),
-    environment: cleanEnvironment(body.environment)
+    environment: cleanEnvironment(body.environment),
+    assessmentReference:
+      cleanAssessmentReference(
+        body.assessmentReference
+      )
   };
 }
 
@@ -80,7 +106,9 @@ export async function resolveHostedOperatorContext({
     repositoryIdentity: input.repositoryIdentity,
     operator,
     workspaceName: input.workspaceName,
-    environment: input.environment
+    environment: input.environment,
+    assessmentReference:
+      input.assessmentReference
   });
 
   return {
