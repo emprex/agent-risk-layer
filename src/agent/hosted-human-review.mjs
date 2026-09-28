@@ -7,8 +7,13 @@ import {
 } from './authoritative-assessment-workflow.mjs';
 
 import {
-  buildCustomerAssessmentReport
+  buildCustomerAssessmentReport,
+  renderCustomerAssessmentReport
 } from './customer-assessment-report.mjs';
+
+import {
+  buildCustomerAssessmentDeliverable
+} from './customer-assessment-deliverable.mjs';
 
 import {
   resolvePersistedExactRetestContinuation
@@ -433,4 +438,54 @@ export async function buildHostedCustomerAssessmentReport({
     userId,
     workflowState
   });
+}
+
+
+export function renderHostedCustomerAssessmentReport(
+  report
+) {
+  if (report?.available !== true) {
+    return '';
+  }
+
+  return renderCustomerAssessmentReport(report);
+}
+
+export async function buildHostedCustomerAssessmentDeliverable({
+  workflowState,
+  operatorContext
+} = {}) {
+  const report =
+    await buildHostedCustomerAssessmentReport({
+      workflowState,
+      operatorContext
+    });
+
+  if (report?.available !== true) {
+    return {
+      ...blocked(
+        report?.reason ||
+          'authoritative_report_unavailable'
+      ),
+      report: null,
+      renderedReport: ''
+    };
+  }
+
+  const deliverable =
+    buildCustomerAssessmentDeliverable(report);
+
+  return {
+    schema:
+      'arl.agent.hosted-customer-assessment-deliverable.v1',
+    available: true,
+    report,
+    renderedReport:
+      renderHostedCustomerAssessmentReport(report),
+    deliverable,
+    readOnly: true,
+    securityStateChanged: false,
+    deploymentDecisionWritten: false,
+    humanReviewRequired: true
+  };
 }
