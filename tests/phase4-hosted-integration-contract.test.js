@@ -52,7 +52,8 @@ test('Phase 4 hosted API loads against the canonical AgentRiskLayer authority', 
     '/api/agent/assessment/exact-retest/complete',
     '/api/agent/assessment/human-closure',
     '/api/agent/assessment/readiness/record',
-    '/api/agent/assessment/report'
+    '/api/agent/assessment/report',
+    '/api/agent/assessment/report/export'
   ];
 
   const exportedPaths = Object.entries(hostedApi)
@@ -358,6 +359,93 @@ test('hosted human review and report paths preserve explicit authority boundarie
   assert.doesNotMatch(
     continueSurface,
     /buildHostedCustomerAssessmentReport/
+  );
+});
+
+
+test('hosted report rendering and export remain read-only product projections', () => {
+  const apiSource = fs.readFileSync(
+    path.join(agentRoot, 'hosted-agent-api.mjs'),
+    'utf8'
+  );
+  const humanReviewSource = fs.readFileSync(
+    path.join(agentRoot, 'hosted-human-review.mjs'),
+    'utf8'
+  );
+
+  const reportStart = apiSource.indexOf(
+    'export async function getHostedAgentCustomerReport'
+  );
+  const exportStart = apiSource.indexOf(
+    'export async function getHostedAgentCustomerReportDeliverable'
+  );
+  const readOnlyStart = apiSource.indexOf(
+    'const HOSTED_READ_ONLY_CONVERSATION_COMMANDS',
+    exportStart
+  );
+
+  assert.ok(reportStart >= 0);
+  assert.ok(exportStart > reportStart);
+  assert.ok(readOnlyStart > exportStart);
+
+  const reportSurface = apiSource.slice(
+    reportStart,
+    exportStart
+  );
+  const exportSurface = apiSource.slice(
+    exportStart,
+    readOnlyStart
+  );
+
+  assert.match(
+    reportSurface,
+    /renderHostedCustomerAssessmentReport/
+  );
+  assert.match(
+    reportSurface,
+    /readOnly:\s*true/
+  );
+  assert.match(
+    reportSurface,
+    /securityStateChanged:\s*false/
+  );
+  assert.match(
+    reportSurface,
+    /deploymentDecisionWritten:\s*false/
+  );
+
+  assert.match(
+    exportSurface,
+    /buildHostedCustomerAssessmentDeliverable/
+  );
+  assert.match(
+    exportSurface,
+    /deliverable:/
+  );
+  assert.match(
+    exportSurface,
+    /readOnly:\s*true/
+  );
+  assert.match(
+    exportSurface,
+    /securityStateChanged:\s*false/
+  );
+  assert.match(
+    exportSurface,
+    /deploymentDecisionWritten:\s*false/
+  );
+  assert.doesNotMatch(
+    exportSurface,
+    /writeCustomerAssessmentDeliverable/
+  );
+
+  assert.match(
+    humanReviewSource,
+    /buildCustomerAssessmentDeliverable/
+  );
+  assert.match(
+    humanReviewSource,
+    /renderCustomerAssessmentReport/
   );
 });
 
