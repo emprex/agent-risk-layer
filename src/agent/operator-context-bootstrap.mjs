@@ -90,6 +90,29 @@ export async function createUnknownAssessment({ userId, name }) {
   return { id: assessmentId, answers, result };
 }
 
+function normaliseAssessmentReference(value) {
+  const reference = String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+  if (!reference) return null;
+  if (reference.length > 100) {
+    throw bootstrapError(
+      'ASSESSMENT_REFERENCE_INVALID',
+      'Assessment reference must be 100 characters or fewer.'
+    );
+  }
+  if (/[^A-Z0-9 ._:/-]/.test(reference)) {
+    throw bootstrapError(
+      'ASSESSMENT_REFERENCE_INVALID',
+      'Assessment reference contains unsupported characters.'
+    );
+  }
+
+  return reference;
+}
+
 function safeWorkspaceNames(workspaces) {
   return (Array.isArray(workspaces) ? workspaces : [])
     .map((workspace) => String(workspace?.name || '').trim())
@@ -134,21 +157,51 @@ async function selectWorkspace({ userId, requestedName }) {
   return createWorkspace(userId, 'ARL Agent Workspace');
 }
 
-async function findBoundProject({ userId, repositoryIdentityDigest }) {
-  const rows = await db.prepare(`
-    SELECT p.id,p.workspace_id,p.name,p.environment,p.agent_assessment_id
-    FROM security_projects p
-    JOIN workspace_members m ON m.workspace_id=p.workspace_id
-    WHERE m.user_id=? AND m.status='active'
-      AND p.status!='archived'
-      AND p.repository_identity_digest=?
-    ORDER BY p.created_at
-  `).all(userId, repositoryIdentityDigest);
+async function findBoundProject({
+  userId,
+  repositoryIdentityDigest,
+  assessmentReference = null
+}) {
+  const reference =
+    normaliseAssessmentReference(
+      assessmentReference
+    );
+
+  const rows = reference
+    ? await db.prepare(`
+        SELECT p.id,p.workspace_id,p.name,p.environment,p.agent_assessment_id,p.agent_assessment_reference
+        FROM security_projects p
+        JOIN workspace_members m ON m.workspace_id=p.workspace_id
+        WHERE m.user_id=? AND m.status='active'
+          AND p.status!='archived'
+          AND p.repository_identity_digest=?
+          AND p.agent_assessment_reference=?
+        ORDER BY p.created_at
+      `).all(
+        userId,
+        repositoryIdentityDigest,
+        reference
+      )
+    : await db.prepare(`
+        SELECT p.id,p.workspace_id,p.name,p.environment,p.agent_assessment_id,p.agent_assessment_reference
+        FROM security_projects p
+        JOIN workspace_members m ON m.workspace_id=p.workspace_id
+        WHERE m.user_id=? AND m.status='active'
+          AND p.status!='archived'
+          AND p.repository_identity_digest=?
+          AND p.agent_assessment_reference IS NULL
+        ORDER BY p.created_at
+      `).all(
+        userId,
+        repositoryIdentityDigest
+      );
 
   if (rows.length > 1) {
     throw bootstrapError(
       'REPOSITORY_CONTEXT_AMBIGUOUS',
-      'The repository is bound to more than one active ARL project. Resolve the duplicate binding before continuing.'
+      reference
+        ? `Assessment reference ${reference} is bound to more than one active ARL project.`
+        : 'The legacy repository binding is ambiguous. Resolve the duplicate binding before continuing.'
     );
   }
   return rows[0] || null;
@@ -255,15 +308,21 @@ export async function bootstrapAuthenticatedOperatorContext({
   repositoryIdentity,
   operator,
   workspaceName = '',
-  environment = 'test'
+  environment = 'test',
+  assessmentReference = null
 } = {}) {
   await initialiseDatabase();
   const authenticatedOperator = assertAuthenticatedOperator(operator);
   const identity = repositoryIdentityForHostedAuthority(repositoryIdentity);
+  const caseReference =
+    normaliseAssessmentReference(
+      assessmentReference
+    );
 
   let project = await findBoundProject({
     userId: authenticatedOperator.id,
-    repositoryIdentityDigest: identity.digest
+    repositoryIdentityDigest: identity.digest,
+    assessmentReference: caseReference
   });
   let projectCreated = false;
 
@@ -281,12 +340,19 @@ export async function bootstrapAuthenticatedOperatorContext({
     });
     await db.prepare(`
       UPDATE security_projects
-      SET repository_identity_digest=?,repository_identity_source=?,updated_at=?
+      SET repository_identity_digest=?,repository_identity_source=?,agent_assessment_reference=?,updated_at=?
       WHERE id=?
-    `).run(identity.digest, identity.source, nowIso(), created.id);
+    `).run(
+      identity.digest,
+      identity.source,
+      caseReference,
+      nowIso(),
+      created.id
+    );
     project = await findBoundProject({
       userId: authenticatedOperator.id,
-      repositoryIdentityDigest: identity.digest
+      repositoryIdentityDigest: identity.digest,
+      assessmentReference: caseReference
     });
     if (!project) {
       throw bootstrapError(
@@ -298,7 +364,8 @@ export async function bootstrapAuthenticatedOperatorContext({
     await insertEvent('agent_repository_context_bound', authenticatedOperator.id, {
       projectId: project.id,
       repositoryIdentityDigest: identity.digest,
-      repositoryIdentitySource: identity.source
+      repositoryIdentitySource: identity.source,
+      assessmentReference: caseReference
     });
   }
 
@@ -325,6 +392,7 @@ export async function bootstrapAuthenticatedOperatorContext({
       project: projectCreated,
       assessment: assessmentResolution.created
     },
+    assessmentReference: caseReference,
     assessmentInitialisation: assessmentResolution.created
       ? 'explicit_unknown_only'
       : 'existing_authoritative_assessment',
@@ -340,7 +408,8 @@ export async function bootstrapOperatorContext({
   email,
   password,
   workspaceName = '',
-  environment = 'test'
+  environment = 'test',
+  assessmentReference = null
 } = {}) {
   await initialiseDatabase();
   const operator = await resolveOperator({ sessionToken, email, password });
@@ -350,7 +419,8 @@ export async function bootstrapOperatorContext({
     repositoryIdentity: identity,
     operator,
     workspaceName,
-    environment
+    environment,
+    assessmentReference
   });
 }
 
@@ -364,6 +434,8 @@ export function publicOperatorContext(context) {
       display: context.repository.display
     },
     created: context.created,
+    assessmentReference:
+      context.assessmentReference || null,
     assessmentInitialisation: context.assessmentInitialisation,
     securityDecisionCreated: false,
     deploymentDecisionWritten: false,
