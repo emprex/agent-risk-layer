@@ -81,13 +81,27 @@ export async function ensureSqliteTestSchema(db) {
     'agent_assessment_id',
     'TEXT'
   );
+  await ensureSqliteColumn(
+    db,
+    'security_projects',
+    'agent_assessment_reference',
+    'TEXT'
+  );
 
   await db.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_security_projects_repository_identity_active
-      ON security_projects(workspace_id, repository_identity_digest)
+    DROP INDEX IF EXISTS idx_security_projects_repository_identity_active;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_security_projects_repository_identity_case_active
+      ON security_projects(
+        workspace_id,
+        repository_identity_digest,
+        COALESCE(agent_assessment_reference, '')
+      )
       WHERE repository_identity_digest IS NOT NULL AND status != 'archived';
     CREATE INDEX IF NOT EXISTS idx_security_projects_agent_assessment
       ON security_projects(agent_assessment_id)
       WHERE agent_assessment_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_security_projects_agent_assessment_reference
+      ON security_projects(agent_assessment_reference)
+      WHERE agent_assessment_reference IS NOT NULL;
   `);
 }
