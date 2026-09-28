@@ -43,9 +43,11 @@ import {
   persistExactRetestRedTeamReservation
 } from './exact-retest-redteam-handoff.mjs';
 import {
+  buildHostedCustomerAssessmentDeliverable,
   buildHostedCustomerAssessmentReport,
   completeHostedHumanFindingClosure,
-  recordHostedHumanReadinessDecision
+  recordHostedHumanReadinessDecision,
+  renderHostedCustomerAssessmentReport
 } from './hosted-human-review.mjs';
 
 export const HOSTED_AGENT_PREPARATION_PATH =
@@ -81,6 +83,8 @@ export const HOSTED_AGENT_READINESS_RECORD_PATH =
   '/api/agent/assessment/readiness/record';
 export const HOSTED_AGENT_REPORT_PATH =
   '/api/agent/assessment/report';
+export const HOSTED_AGENT_REPORT_EXPORT_PATH =
+  '/api/agent/assessment/report/export';
 
 function statusForError(error) {
   if (
@@ -1126,6 +1130,61 @@ export async function getHostedAgentCustomerReport({
       operatorContext:
         current.operatorResolution.body.operatorContext,
       report,
+      renderedReport:
+        renderHostedCustomerAssessmentReport(report),
+      readOnly: true,
+      securityStateChanged: false,
+      securityDecisionCreated: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    },
+    internal: {
+      operatorContext:
+        current.operatorResolution.internal,
+      workflowState:
+        current.conversation.internal.workflowState
+    }
+  };
+}
+
+export async function getHostedAgentCustomerReportDeliverable({
+  operator,
+  body = {}
+} = {}) {
+  assertHostedHumanReviewCallerBoundary(body);
+
+  const current =
+    await resolveHostedWorkflow({
+      operator,
+      body,
+      command: 'status'
+    });
+
+  const packaged =
+    await buildHostedCustomerAssessmentDeliverable({
+      workflowState:
+        current.conversation.internal.workflowState,
+      operatorContext:
+        current.operatorResolution.internal
+    });
+
+  if (packaged?.available !== true) {
+    throw apiConflict(
+      'HOSTED_CUSTOMER_REPORT_EXPORT_BLOCKED',
+      `ARL cannot build the customer assessment deliverable: ${packaged?.reason || 'authoritative_report_unavailable'}.`
+    );
+  }
+
+  return {
+    statusCode: 200,
+    body: {
+      operatorContext:
+        current.operatorResolution.body.operatorContext,
+      report: packaged.report,
+      renderedReport:
+        packaged.renderedReport,
+      deliverable:
+        packaged.deliverable,
       readOnly: true,
       securityStateChanged: false,
       securityDecisionCreated: false,
@@ -1340,6 +1399,7 @@ export async function handleHostedAgentApi({
     HOSTED_AGENT_HUMAN_CLOSURE_PATH,
     HOSTED_AGENT_READINESS_RECORD_PATH,
     HOSTED_AGENT_REPORT_PATH,
+    HOSTED_AGENT_REPORT_EXPORT_PATH,
     HOSTED_AGENT_CONVERSATION_PATH,
     HOSTED_AGENT_CONTINUE_PATH
   ]).has(pathname);
@@ -1450,6 +1510,14 @@ export async function handleHostedAgentApi({
     ) {
       result =
         await getHostedAgentCustomerReport({
+          operator,
+          body
+        });
+    } else if (
+      pathname === HOSTED_AGENT_REPORT_EXPORT_PATH
+    ) {
+      result =
+        await getHostedAgentCustomerReportDeliverable({
           operator,
           body
         });
