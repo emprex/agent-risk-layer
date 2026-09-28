@@ -174,7 +174,9 @@ export async function prepareHostedAgentAssessment({
     body: {
       repositoryIdentity: body.repositoryIdentity,
       workspaceName: body.workspaceName,
-      environment: body.environment
+      environment: body.environment,
+      assessmentReference:
+        body.assessmentReference
     }
   });
 
