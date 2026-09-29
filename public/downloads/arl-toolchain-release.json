@@ -56,7 +56,7 @@
     "managedAdapterSchema": "arl.agent.managed-commercial-adapter.v1"
   },
   "platform": {
-    "node": ">=22.5.0",
+    "node": "24.21.0",
     "pg": "8.23.0"
   }
 }
