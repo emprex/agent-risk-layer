@@ -32,19 +32,20 @@
     "inspect:ci": "node inspector/agent-risk-inspector.mjs scan . --authorised --environment test --out agentrisk-inspection.json --sarif agentrisk-results.sarif --fail-on high",
     "build:inspector-release": "node scripts/build-inspector-release.mjs",
     "build:sample-report": "node scripts/build-sample-report.mjs",
-    "build:release-assets": "npm run build:inspector-release && npm run build:redteam-release && npm run build:sample-report",
+    "build:release-assets": "npm run build:toolchain-release && npm run build:inspector-release && npm run build:redteam-release && npm run build:sample-report",
     "build:redteam-release": "node scripts/build-redteam-release.mjs",
     "redteam:simulation": "node redteam/agent-risk-redteam.mjs run --authorised --environment test --profile hardened --out data/local-redteam.json",
     "redteam:adaptive": "node redteam/agent-risk-redteam.mjs run --authorised --environment test --profile hardened --trials 5 --adaptive-rounds 3 --out data/adaptive-redteam.json --sarif data/adaptive-redteam.sarif",
     "db:backup": "node scripts/backup-database.mjs",
     "db:verify-backup": "node scripts/verify-database-backup.mjs",
-    "pretest": "npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
+    "pretest": "npm run build:toolchain-release && npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
     "db:restore": "node scripts/restore-database-backup.mjs",
     "prospects:import": "node --env-file-if-exists=.env scripts/import-prospects.mjs",
     "external-intelligence:import": "node --env-file-if-exists=.env scripts/import-clawhub-security-signals.mjs",
     "controls": "node scripts/control-help.mjs list",
     "control:help": "node scripts/control-help.mjs",
-    "assess:local": "node src/agent/arl-local-assessment-runner.mjs"
+    "assess:local": "node src/agent/arl-local-assessment-runner.mjs",
+    "build:toolchain-release": "node scripts/build-toolchain-release.mjs"
   },
   "dependencies": {
     "pg": "8.23.0"
