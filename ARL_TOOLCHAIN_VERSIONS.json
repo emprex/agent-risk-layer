@@ -1,0 +1,52 @@
+{
+  "schema": "arl.toolchain-release.v1",
+  "canonicalRepository": "emprex/agent-risk-layer",
+  "product": {
+    "name": "AgentRiskLayer",
+    "version": "10.1.1"
+  },
+  "operator": {
+    "name": "ARL Operator",
+    "version": "0.1.0"
+  },
+  "inspector": {
+    "name": "AgentRisk Inspector",
+    "version": "4.1.5",
+    "policyVersion": "arl-inspector-policy-2026.10",
+    "bundleSchema": "arl.inspection.bundle.v1"
+  },
+  "redTeam": {
+    "name": "AgentRisk Red Team Runner",
+    "version": "5.2.5",
+    "policyVersion": "arl-redteam-policy-2026.10",
+    "bundleSchema": "arl.redteam.bundle.v1",
+    "approvalBindingVersion": "arl.approval-binding.v1"
+  },
+  "guardian": {
+    "name": "ARL Guardian",
+    "version": "0.3.0",
+    "publicContractVersion": "1.0.0"
+  },
+  "runtime": {
+    "name": "AgentRisk Runtime",
+    "version": "1.0.0",
+    "policySchema": "arl.runtime.policy.v1",
+    "eventSchema": "arl.runtime.event.v1"
+  },
+  "controlIntelligence": {
+    "controlProfile": "ARL-RKA-1.2.0",
+    "capabilityProfile": "ARL-CAP-1.2.0",
+    "suggestionProfile": "ARL-SUGGEST-1.1.0"
+  },
+  "scoring": {
+    "version": "arl-risk-v3.4"
+  },
+  "orchestration": {
+    "commercialSessionSchema": "arl.agent.commercial-assessment-session.v1",
+    "managedAdapterSchema": "arl.agent.managed-commercial-adapter.v1"
+  },
+  "platform": {
+    "node": ">=22.5.0",
+    "pg": "8.23.0"
+  }
+}
