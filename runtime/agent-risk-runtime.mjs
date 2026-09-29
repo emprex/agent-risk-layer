@@ -5,6 +5,8 @@ import crypto from 'node:crypto';
 import { compileRuntimePolicy, evaluateRuntimeAction } from '../src/runtime-policy.js';
 import { inspectContent } from '../src/content-security.js';
 
+export const RUNTIME_VERSION = '1.0.0';
+
 const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.policy || !args.upstream) {
   console.log('Usage: node runtime/agent-risk-runtime.mjs --policy runtime-policy.json --upstream https://agent.internal --port 8787 [--audit runtime-audit.jsonl]');
