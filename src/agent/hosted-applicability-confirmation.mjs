@@ -39,7 +39,7 @@ function mappedApplicabilityCandidates(workflowState) {
     );
 }
 
-function selectedWorkflowState(workflowState, requestedControlId) {
+export function selectHostedApplicabilityWorkflowState(workflowState, requestedControlId) {
   const requested = String(requestedControlId || '').trim();
 
   if (workflowState?.stage === 'control_applicability_required') {
@@ -49,12 +49,20 @@ function selectedWorkflowState(workflowState, requestedControlId) {
     return workflowState;
   }
 
-  const ambiguity =
-    workflowState?.stage === 'persisted_lineage_resolution_required' &&
-    workflowState?.mappedControlAuthorityGuard?.ambiguity === true &&
-    workflowState?.mappedControlAuthorityGuard?.reason ===
-      'mapped_control_applicability_ambiguous';
-  if (!ambiguity || !requested) return null;
+  /*
+   * A multi-control applicability review is projected from the current
+   * authoritative mapped controls. The write path must validate the selected
+   * control against that same authoritative candidate set rather than depend
+   * on transient guard metadata surviving a second workflow reconstruction.
+   * This prevents a displayed control from becoming unselectable between the
+   * review response and the explicit human confirmation request.
+   */
+  if (
+    workflowState?.stage !== 'persisted_lineage_resolution_required' ||
+    !requested
+  ) {
+    return null;
+  }
 
   const candidates = mappedApplicabilityCandidates(workflowState);
   const selected = candidates.find(
@@ -101,7 +109,7 @@ export async function confirmHostedMappedControlApplicability({
     return unavailable('hosted_applicability_authority_required');
   }
 
-  const selectedState = selectedWorkflowState(
+  const selectedState = selectHostedApplicabilityWorkflowState(
     workflowState,
     controlId
   );

@@ -35,6 +35,15 @@ function mappedControls(workflowState) {
 function projectionItem(detail) {
   return {
     controlId: detail.control?.id || null,
+    controlTitle:
+      detail.control?.title || detail.control?.id || null,
+    category: detail.control?.category || null,
+    applicabilityScope:
+      Array.isArray(detail.control?.problem?.applicability)
+        ? detail.control.problem.applicability
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+        : [],
     currentStage: detail.chain?.currentStage || null,
     chainStatus: detail.chain?.chainStatus || null,
     nextAction: detail.chain?.nextAction || null,

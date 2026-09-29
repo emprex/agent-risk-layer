@@ -56,6 +56,12 @@ function applicabilityCandidates(workflowState) {
     )
     .map((item) => ({
       controlId: item.controlId,
+      controlTitle: item.controlTitle || item.controlId,
+      category: item.category || null,
+      applicabilityScope:
+        Array.isArray(item.applicabilityScope)
+          ? item.applicabilityScope
+          : [],
       currentStage: item.currentStage,
       nextAction: item.nextAction || null
     }))
@@ -68,6 +74,8 @@ function applicabilityReview(workflowState) {
   if (workflowState?.stage === 'control_applicability_required') {
     const controlId = workflowState?.scopedControl?.controlId || null;
     if (!controlId) return null;
+    const exactCandidate = applicabilityCandidates(workflowState)
+      .find((item) => item.controlId === controlId);
     return {
       schema: HOSTED_APPLICABILITY_REVIEW_SCHEMA,
       required: true,
@@ -75,9 +83,16 @@ function applicabilityReview(workflowState) {
       candidates: [
         {
           controlId,
+          controlTitle:
+            exactCandidate?.controlTitle || controlId,
+          category: exactCandidate?.category || null,
+          applicabilityScope:
+            exactCandidate?.applicabilityScope || [],
           currentStage: 'applicability',
           nextAction:
-            workflowState?.scopedControl?.nextAction || null
+            workflowState?.scopedControl?.nextAction ||
+            exactCandidate?.nextAction ||
+            null
         }
       ],
       applicabilityDecisionMade: false
