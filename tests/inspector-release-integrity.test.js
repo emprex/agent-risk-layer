@@ -42,28 +42,34 @@ test('public Inspector 4.1.5 recognises validation at the AI integration boundar
   assert.equal(bundle.findings.some((finding) => finding.ruleId === 'ARL-AI-006'), false);
 });
 
-test('Inspector release generation is deterministic and published integrity metadata matches the bundle', () => {
-  const before = {
+test('Inspector release generation is deterministic and published integrity metadata matches the bundle', (t) => {
+  const published = {
     release: fs.readFileSync(releaseFile),
     checksum: fs.readFileSync(checksumFile, 'utf8'),
     metadata: fs.readFileSync(metadataFile, 'utf8'),
   };
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-inspector-build-'));
+  t.after(() => fs.rmSync(outputDirectory, { recursive:true, force:true }));
 
   execFileSync(process.execPath, ['scripts/build-inspector-release.mjs'], {
     cwd:root,
     stdio:'pipe',
+    env: {
+      ...process.env,
+      ARL_RELEASE_OUTPUT_DIR: outputDirectory,
+    },
   });
 
-  const after = {
-    release: fs.readFileSync(releaseFile),
-    checksum: fs.readFileSync(checksumFile, 'utf8'),
-    metadata: fs.readFileSync(metadataFile, 'utf8'),
+  const generated = {
+    release: fs.readFileSync(path.join(outputDirectory, 'agent-risk-inspector.mjs')),
+    checksum: fs.readFileSync(path.join(outputDirectory, 'agent-risk-inspector.mjs.sha256'), 'utf8'),
+    metadata: fs.readFileSync(path.join(outputDirectory, 'inspector-release.json'), 'utf8'),
   };
-  assert.deepEqual(after, before);
+  assert.deepEqual(generated, published);
 
-  const digest = crypto.createHash('sha256').update(after.release).digest('hex');
-  const checksumDigest = after.checksum.trim().split(/\s+/)[0];
-  const metadata = JSON.parse(after.metadata);
+  const digest = crypto.createHash('sha256').update(generated.release).digest('hex');
+  const checksumDigest = generated.checksum.trim().split(/\s+/)[0];
+  const metadata = JSON.parse(generated.metadata);
 
   assert.equal(checksumDigest, digest);
   assert.equal(metadata.sha256, digest);
