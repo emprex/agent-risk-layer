@@ -1,4 +1,4 @@
-FROM node:22.18.0-alpine3.22
+FROM node:24.21.0-alpine3.24
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
