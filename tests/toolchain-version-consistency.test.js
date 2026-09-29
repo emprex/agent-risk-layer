@@ -32,6 +32,23 @@ test('active ARL toolchain has one canonical version set', () => {
   assert.deepEqual(published, versions);
   assert.equal(pkg.version, versions.product.version);
 
+  const riskKnowledge = json(versions.controlCatalog.canonicalJson);
+  const controlIds = riskKnowledge.entries.map((entry) => entry.id);
+  const expectedIds = Array.from(
+    { length: versions.controlCatalog.expectedCount },
+    (_, index) => `ARL-KB-${String(index + 1).padStart(3, '0')}`
+  );
+  assert.equal(versions.controlCatalog.version, versions.controlIntelligence.controlProfile);
+  assert.equal(versions.controlCatalog.firstId, expectedIds[0]);
+  assert.equal(versions.controlCatalog.lastId, expectedIds.at(-1));
+  assert.equal(riskKnowledge.asset.version, versions.controlCatalog.version);
+  assert.deepEqual(controlIds, expectedIds);
+  assert.deepEqual(
+    [...new Set(riskKnowledge.entries.map((entry) => entry.knowledge_version))],
+    [versions.controlCatalog.version],
+    'all 108 active controls must use exactly the canonical control-set version'
+  );
+
   assert.equal(
     exportedVersion('inspector/agent-risk-inspector.mjs', 'INSPECTOR_VERSION'),
     versions.inspector.version
