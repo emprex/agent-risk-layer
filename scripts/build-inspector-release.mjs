@@ -4,6 +4,10 @@ import crypto from 'node:crypto';
 import { BUNDLE_SCHEMA, POLICY_CATALOG, POLICY_VERSION } from '../inspector/agent-risk-inspector.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
+const toolchain = JSON.parse(fs.readFileSync(path.join(root, 'ARL_TOOLCHAIN_VERSIONS.json'), 'utf8'));
+const inspectorVersion = toolchain?.inspector?.version;
+if (!inspectorVersion) throw new Error('Inspector release build: canonical Inspector version is missing.');
+const versionMarker = `export const INSPECTOR_VERSION = '${inspectorVersion}';`;
 const source = path.join(root, 'inspector', 'agent-risk-inspector.mjs');
 const dependencyAssessmentSource = path.join(root, 'inspector', 'dependency-vulnerability-assessment.mjs');
 const dependencyEvidenceSource = path.join(root, 'inspector', 'dependency-vulnerability-evidence.mjs');
@@ -43,11 +47,9 @@ sourceText = sourceText
     '',
   )
   .replace(
-    "export const INSPECTOR_VERSION = '4.1.5';",
-    `${standaloneDependencyHelpers}\nexport const INSPECTOR_VERSION = '4.1.5';`,
+    versionMarker,
+    `${standaloneDependencyHelpers}\n${versionMarker}`,
   );
-
-const versionMarker = "export const INSPECTOR_VERSION = '4.1.5';";
 const schemaMarker = String.raw`    if(/(?:zod|ajv|jsonschema|pydantic|response_format|json_schema|structuredOutput|schema\.parse|safeParse)/i.test(text))hasSchema=true;`;
 const resourceMarker = String.raw`    if(/(?:max_tokens|max_output_tokens|AbortSignal\.timeout|tool_call_limit|max_iterations|(?:retry|recursion|budget|spend)[A-Za-z_]*\s*[:=])/i.test(text))hasLimits=true;`;
 const sourceCheckMarker = 'function runSourceChecks(ctx){';
@@ -105,7 +107,6 @@ function hasAgentResourceLimits(text){
 `;
 
 const text = sourceText
-  .replace(versionMarker, "export const INSPECTOR_VERSION = '4.1.5';")
   .replace(sourceCheckMarker, `${manualValidationDetector}\n${sourceCheckMarker}`)
   .replace(resourceMarker, '    if(aiInFile&&hasAgentResourceLimits(text))hasLimits=true;')
   .replace(schemaMarker, '    if(hasStructuredOutputValidation(text,aiInFile))hasSchema=true;');
@@ -116,8 +117,8 @@ const digest = crypto.createHash('sha256').update(text).digest('hex');
 fs.writeFileSync(`${destination}.sha256`, `${digest}  agent-risk-inspector.mjs\n`);
 fs.writeFileSync(path.join(root, 'public', 'inspector-policy.json'), JSON.stringify({ policyVersion:POLICY_VERSION, rules:POLICY_CATALOG }, null, 2) + '\n');
 fs.writeFileSync(path.join(root, 'public', 'downloads', 'inspector-release.json'), JSON.stringify({
-  name:'AgentRisk Inspector', version:'4.1.5', policyVersion:POLICY_VERSION,
+  name:'AgentRisk Inspector', version:inspectorVersion, policyVersion:POLICY_VERSION,
   bundleSchema:BUNDLE_SCHEMA, sha256:digest,
   privacyContract:['No source code uploaded','No matched secret values uploaded','Read-only static inspection','No exploitation or network probing'],
 }, null, 2) + '\n');
-console.log(JSON.stringify({ version:'4.1.5', policyVersion:POLICY_VERSION, sha256:digest }, null, 2));
+console.log(JSON.stringify({ version:inspectorVersion, policyVersion:POLICY_VERSION, sha256:digest }, null, 2));
