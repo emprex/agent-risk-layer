@@ -97,7 +97,7 @@ export function deriveCapabilityFacts(input = {}) {
   for (const channel of profile.inputChannels) if (channelFacts[channel]) facts.add(channelFacts[channel]);
 
   // Instruction-authority fields are intentionally not converted into findings or
-  // new control-suggestion facts in ARL-SUGGEST-1.0.0. They are version-bound
+  // new control-suggestion facts in ARL-SUGGEST-1.1.0. They are version-bound
   // declared context until a deliberately versioned server-owned mapping exists.
   return [...facts].sort();
 }
