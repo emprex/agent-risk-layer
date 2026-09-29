@@ -432,6 +432,7 @@ test('historical Git secret scan detects removed credentials without exposing th
   runGit('init');
   runGit('config', 'user.email', 'scanner-test@example.invalid');
   runGit('config', 'user.name', 'Scanner Test');
+  runGit('config', 'commit.gpgsign', 'false');
 
   const historicalSecret = 'sk_live_1234567890abcdefghijklmnop';
 
