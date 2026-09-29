@@ -119,7 +119,10 @@ test('active product files contain no retired version markers', () => {
     'public/downloads/redteam-release.json',
     'runtime/agent-risk-runtime.mjs',
     'public/downloads/agent-risk-runtime.mjs',
-    'public/agent-capability-profile.js'
+    'public/agent-capability-profile.js',
+    'scripts/verify-control-intelligence-browser.mjs',
+    'docs/AGENT_CAPABILITY_PROFILE.md',
+    'docs/CONTROL_INTELLIGENCE_GRAPH.md'
   ];
   const active = activeFiles.map(read).join('\n');
 
@@ -127,7 +130,8 @@ test('active product files contain no retired version markers', () => {
     "INSPECTOR_VERSION = '4.1.0'",
     '"version": "10.0.1"',
     "REDTEAM_VERSION = '5.2.1'",
-    "ARL-CAP-1.1.0"
+    "ARL-CAP-1.1.0",
+    "ARL-SUGGEST-1.0.0"
   ]) {
     assert.equal(
       active.includes(retired),
