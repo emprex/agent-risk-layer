@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   selectExactBoundedTestCandidate,
-  scopeExactBoundedTestState
+  scopeExactBoundedTestState,
+  scopeExactManualEvidenceState
 } from '../src/agent/mapped-control-authority-guard.mjs';
 
 import {
@@ -162,6 +163,51 @@ test('a test-stage control without an executable case is not selected', () => {
     ]);
 
   assert.equal(selected, null);
+});
+
+test('a mapped test-stage control without a case routes to manual evidence', () => {
+  const selected = {
+    mapping: {
+      controlId: 'ARL-KB-090',
+      caseId: null
+    },
+    projected: projected(
+      'ARL-KB-090',
+      'test'
+    )
+  };
+
+  const state = scopeExactManualEvidenceState({
+    workflowState: baseState(),
+    selected,
+    exactControls: [selected.projected]
+  });
+
+  assert.equal(
+    state.stage,
+    'manual_evidence_required'
+  );
+  assert.equal(
+    state.blockers[0].code,
+    'manual_evidence_required'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'provide_required_manual_evidence'
+  );
+  assert.equal(
+    state.nextAllowedAction.controlId,
+    'ARL-KB-090'
+  );
+  assert.equal(
+    state.nextAllowedAction.caseId,
+    null
+  );
+  assert.equal(
+    state.mappedControlAuthorityGuard
+      .exactManualEvidenceScope,
+    true
+  );
 });
 
 test('persisted bounded result advances after exact scope replaces stale fallback', async () => {
