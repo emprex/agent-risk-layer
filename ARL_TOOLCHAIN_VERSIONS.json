@@ -38,6 +38,16 @@
     "capabilityProfile": "ARL-CAP-1.2.0",
     "suggestionProfile": "ARL-SUGGEST-1.1.0"
   },
+  "controlCatalog": {
+    "name": "ARL Risk Knowledge Controls",
+    "version": "ARL-RKA-1.2.0",
+    "expectedCount": 108,
+    "firstId": "ARL-KB-001",
+    "lastId": "ARL-KB-108",
+    "canonicalJson": "risk-knowledge/risk-knowledge-v1.json",
+    "canonicalCsv": "risk-knowledge/risk-knowledge-v1.csv",
+    "versionPolicy": "single-active-version"
+  },
   "scoring": {
     "version": "arl-risk-v3.4"
   },
