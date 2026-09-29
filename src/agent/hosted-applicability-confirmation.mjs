@@ -1,6 +1,9 @@
 import {
   recordControlApplicabilityConfirmation
 } from './control-applicability-handoff.mjs';
+import {
+  getAssessmentControlBinding
+} from './assessment-control-bindings.mjs';
 
 export const HOSTED_APPLICABILITY_CONFIRMATION_SCHEMA =
   'arl.agent.hosted-applicability-confirmation.v1';
@@ -51,7 +54,49 @@ function isMappedControl(workflowState, controlId) {
     .some((item) => item?.controlId === requested);
 }
 
-export function selectHostedApplicabilityWorkflowState(workflowState, requestedControlId) {
+function evidencePlanEntries(evidencePlan) {
+  return [
+    ...(Array.isArray(evidencePlan?.checks)
+      ? evidencePlan.checks
+      : []),
+    ...(Array.isArray(evidencePlan?.manual)
+      ? evidencePlan.manual
+      : [])
+  ];
+}
+
+function evidencePlanControlIds(evidencePlan) {
+  const ids = new Set();
+
+  for (const entry of evidencePlanEntries(evidencePlan)) {
+    const questionId =
+      entry?.gap?.questionId ||
+      entry?.questionId ||
+      null;
+
+    if (!questionId) continue;
+
+    const binding = getAssessmentControlBinding(questionId);
+    if (binding?.available === true && binding.controlId) {
+      ids.add(binding.controlId);
+    }
+  }
+
+  return ids;
+}
+
+function isMappedPreparationControl(evidencePlan, controlId) {
+  const requested = String(controlId || '').trim();
+  if (!requested) return false;
+
+  return evidencePlanControlIds(evidencePlan).has(requested);
+}
+
+export function selectHostedApplicabilityWorkflowState(
+  workflowState,
+  requestedControlId,
+  { evidencePlan = null } = {}
+) {
   const requested = String(requestedControlId || '').trim();
 
   if (workflowState?.stage === 'control_applicability_required') {
@@ -69,7 +114,13 @@ export function selectHostedApplicabilityWorkflowState(workflowState, requestedC
    * This prevents a displayed control from becoming unselectable between the
    * review response and the explicit human confirmation request.
    */
-  if (!requested || !isMappedControl(workflowState, requested)) {
+  if (
+    !requested ||
+    (
+      !isMappedControl(workflowState, requested) &&
+      !isMappedPreparationControl(evidencePlan, requested)
+    )
+  ) {
     return null;
   }
 
@@ -125,7 +176,8 @@ export async function confirmHostedMappedControlApplicability({
   controlId,
   decision = 'applicable',
   reason = '',
-  architectureFactIds = null
+  architectureFactIds = null,
+  evidencePlan = null
 } = {}) {
   if (!projectId || !userId) {
     return unavailable('hosted_applicability_authority_required');
@@ -133,7 +185,8 @@ export async function confirmHostedMappedControlApplicability({
 
   const selectedState = selectHostedApplicabilityWorkflowState(
     workflowState,
-    controlId
+    controlId,
+    { evidencePlan }
   );
   if (!selectedState) {
     return unavailable(
