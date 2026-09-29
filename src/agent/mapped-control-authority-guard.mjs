@@ -362,6 +362,60 @@ export function scopeExactBoundedTestState({
   };
 }
 
+export function scopeExactManualEvidenceState({
+  workflowState,
+  selected = null,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    'manual_evidence_required'
+  );
+
+  return {
+    ...next,
+    stage: 'manual_evidence_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'manual_evidence_required',
+        source: 'evidence_plan',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: projected
+      ? {
+          controlId: projected.controlId,
+          currentStage: 'test',
+          chainStatus: projected.chainStatus || null,
+          nextAction: projected.nextAction || null,
+          deploymentImpact: projected.deploymentImpact || null
+        }
+      : null,
+    nextAllowedAction: {
+      name: 'provide_required_manual_evidence',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        'The mapped Evidence Plan item has no executable bounded case and must remain an evidence gap until qualifying manual evidence is provided.',
+      controlId: projected?.controlId || null,
+      caseId: null
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactManualEvidenceScope: true
+      })
+  };
+}
+
 export async function applyMappedControlAuthorityGuard({
   workflowState,
   projectId,
@@ -520,6 +574,25 @@ export async function applyMappedControlAuthorityGuard({
       exact.filter(
         (item) => item.projected.currentStage === 'test'
       );
+
+    const manualCandidates =
+      testCandidates.filter(
+        (item) => !item.mapping?.caseId
+      );
+
+    if (
+      manualCandidates.length > 0 &&
+      manualCandidates.length === testCandidates.length
+    ) {
+      return scopeExactManualEvidenceState({
+        workflowState,
+        selected:
+          manualCandidates.length === 1
+            ? manualCandidates[0]
+            : null,
+        exactControls
+      });
+    }
 
     return conflictState({
       workflowState,
