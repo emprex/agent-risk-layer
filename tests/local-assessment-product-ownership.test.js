@@ -146,6 +146,10 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
       git(['config', 'user.name', 'ARL Smoke Test']).status,
       0
     );
+    assert.equal(
+      git(['config', 'commit.gpgsign', 'false']).status,
+      0
+    );
 
     fs.writeFileSync(
       path.join(target, 'README.md'),
