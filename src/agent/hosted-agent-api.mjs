@@ -295,7 +295,9 @@ export async function confirmHostedAgentApplicability({
     controlId: body.controlId,
     decision: body.decision,
     reason: body.reason,
-    architectureFactIds: body.architectureFactIds
+    architectureFactIds: body.architectureFactIds,
+    evidencePlan:
+      current.preparationResolution.internal?.evidencePlan || null
   });
   if (applicability.available !== true) {
     throw apiConflict(
