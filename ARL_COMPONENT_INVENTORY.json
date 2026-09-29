@@ -1514,10 +1514,10 @@
       "purpose": "JavaScript runtime platform.",
       "canonicalRepository": "external",
       "canonicalPath": "package.json engines.node",
-      "currentVersion": ">=22.5.0",
+      "currentVersion": "24.21.0",
       "classification": "ACTIVE SUPPORTING",
       "kind": "runtime",
-      "upstreamSnapshot": "Node 24.21.0 LTS is latest LTS line checked 2026-09-29; Node 22.23.3 remains LTS. Compatibility upgrade requires CI proof."
+      "upstreamSnapshot": "Node 24.21.0 LTS is the validated ARL runtime baseline as of 2026-09-29; full product CI passed before the production pin update."
     },
     {
       "id": "ARL-COMP-049",
