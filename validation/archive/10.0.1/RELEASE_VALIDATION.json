@@ -1,0 +1,102 @@
+{
+  "schema": "arl.release-validation.v4",
+  "product": "AgentRiskLayer",
+  "version": "10.0.1",
+  "sourceBaselineCommit": "dbbcc13bd2069babb47f0eb9534cc1bbdc9cb574",
+  "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
+  "releaseStatus": "locally-validated-production-deployment-and-device-retest-required",
+  "generatedAt": "2026-07-31T10:42:36.060Z",
+  "experienceChange": {
+    "title": "Mobile navigation and usability polish",
+    "assessedScope": "Shared v10 navigation shell, responsive CSS, homepage small-screen presentation, company support contact and regression coverage.",
+    "observedDefect": "On the owner\u2019s Android production review, the menu icon changed to X but the links remained hidden; the support label and address lacked clear separation.",
+    "rootCause": "Legacy responsive link-hiding selectors were still applying to the v10 primary navigation.",
+    "implementedOutcome": {
+      "mobileNavigationLinksExpected": 7,
+      "legacySelectorsScopedAwayFromV10": true,
+      "escapeToClose": true,
+      "focusContainment": true,
+      "backgroundScrollLock": true,
+      "supportEmailTappable": true,
+      "databaseMigration": null,
+      "dataDeletionOrRewrite": false
+    },
+    "evidenceBoundary": "This patch corrects observed navigation and presentation defects. It does not claim independent accessibility certification, universal device compatibility or improved conversion."
+  },
+  "automatedGate": {
+    "command": "npm run validate",
+    "productionCredentialsExcluded": true,
+    "passed": true,
+    "tests": {
+      "total": 165,
+      "passed": 165,
+      "failed": 0,
+      "skipped": 0
+    },
+    "syntaxAndSourceChecks": true,
+    "endToEndSmoke": {
+      "passed": true,
+      "version": "10.0.1",
+      "productionCredentialsUsed": false
+    },
+    "focusedExperienceAndSecurityGate": {
+      "command": "NODE_ENV=test node --test tests/access-control.test.js tests/runtime-policy.test.js tests/control-plane.test.js tests/customer-journey.test.js tests/experience-design.test.js",
+      "tests": 39,
+      "passed": 39,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browserSourceCheck": {
+      "environment": "Headless Chromium with in-memory exact HTML, CSS and module shell",
+      "viewports": [
+        360,
+        768,
+        1440
+      ],
+      "representativePages": 8,
+      "publicNavigationLinksVisibleAt360": 7,
+      "escapeClosesMenu": true,
+      "focusReturnsToToggle": true,
+      "horizontalOverflowObserved": false,
+      "liveProductionNavigation": false
+    },
+    "detectionBenchmark": {
+      "cases": 20,
+      "passed": 20,
+      "scope": "Small internal synthetic English regression set; not independent or production-representative.",
+      "falsePositives": 0,
+      "falseNegatives": 0
+    },
+    "safetyScenarios": {
+      "total": 1000,
+      "passed": 1000,
+      "failed": 0,
+      "unsafeDecisions": 0,
+      "seed": "0x5a17c0de",
+      "criticalPathScenarios": 387,
+      "averageScore": 72
+    }
+  },
+  "evidenceFiles": [
+    "UX_POLISH_V10_0_1.md",
+    "RELEASE_NOTES_V10_0_1.md",
+    "validation/AgentRiskLayer-v10.0.1-mobile-ux-focused.log",
+    "validation/AgentRiskLayer-v10.0.1-validation-console.log",
+    "test-artifacts/detection-benchmark-v10.0.1.json",
+    "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-results.json",
+    "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-report.md"
+  ],
+  "limitations": [
+    "The automated gate excludes production credentials and does not connect to production PostgreSQL, Stripe, Resend or Render.",
+    "The build-environment browser check uses in-memory page content because direct localhost browser navigation is blocked.",
+    "Physical-device, keyboard, zoom and representative screen-reader retesting remain required after deployment.",
+    "This proprietary assessment is not an accredited certification or a guarantee that the system is risk-free."
+  ],
+  "liveVerificationRequired": [
+    "Verify /api/ready reports version 10.0.1, production stage, healthy PostgreSQL and migration 008 current.",
+    "On Android, open and close the public menu and confirm all navigation links are visible and tappable.",
+    "Confirm the support label and email are separated and the email opens the device mail application.",
+    "Review homepage, pricing, help, sign-in, dashboard and live protection at phone and desktop widths.",
+    "Complete keyboard and representative screen-reader checks before recording the deployment decision."
+  ]
+}
