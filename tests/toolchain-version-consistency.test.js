@@ -31,6 +31,11 @@ test('active ARL toolchain has one canonical version set', () => {
 
   assert.deepEqual(published, versions);
   assert.equal(pkg.version, versions.product.version);
+  assert.equal(pkg.engines.node, versions.platform.node);
+  assert.equal(json('package-lock.json').packages[''].engines.node, versions.platform.node);
+  assert.equal(pkg.dependencies.pg, versions.platform.pg);
+  assert.equal(json('package-lock.json').packages[''].dependencies.pg, versions.platform.pg);
+  assert.match(read('Dockerfile'), new RegExp(`FROM node:${versions.platform.node.replaceAll('.', '\\.')}\\-alpine3\\.24`));
 
   const riskKnowledge = json(versions.controlCatalog.canonicalJson);
   const controlIds = riskKnowledge.entries.map((entry) => entry.id);
