@@ -101,9 +101,21 @@ export function selectHostedApplicabilityWorkflowState(
 
   if (workflowState?.stage === 'control_applicability_required') {
     const selected = workflowState?.scopedControl || null;
-    if (!selected?.controlId) return null;
-    if (requested && requested !== selected.controlId) return null;
-    return workflowState;
+
+    /*
+     * A reconstructed workflow may transiently scope a different mapped
+     * applicability control than the one the authenticated operator selected
+     * from the displayed review. Only reuse the reconstructed gate when it
+     * matches the explicit request. Otherwise fall through and revalidate the
+     * requested control against the authoritative mappings below.
+     */
+    if (
+      selected?.controlId &&
+      requested &&
+      requested === selected.controlId
+    ) {
+      return workflowState;
+    }
   }
 
   /*
