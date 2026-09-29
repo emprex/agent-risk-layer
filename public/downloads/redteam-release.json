@@ -5,7 +5,7 @@
   "bundleSchema": "arl.redteam.bundle.v1",
   "runnerSha256": "1cd0bae6215d23b6d1267e2d068769bef0b4d96b438ab25222ec2633ba154aec",
   "adapterExampleSha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a",
-  "ciExampleSha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7",
+  "ciExampleSha256": "06eb22888246981f324169e94bb48399986534fc10c80207c8b8960a12a279b1",
   "safetyContract": [
     "Explicit authorisation required",
     "Local/test/staging only",

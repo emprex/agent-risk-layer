@@ -11,7 +11,13 @@ const versionMarker = `export const INSPECTOR_VERSION = '${inspectorVersion}';`;
 const source = path.join(root, 'inspector', 'agent-risk-inspector.mjs');
 const dependencyAssessmentSource = path.join(root, 'inspector', 'dependency-vulnerability-assessment.mjs');
 const dependencyEvidenceSource = path.join(root, 'inspector', 'dependency-vulnerability-evidence.mjs');
-const destination = path.join(root, 'public', 'downloads', 'agent-risk-inspector.mjs');
+const releaseOutputDir = process.env.ARL_RELEASE_OUTPUT_DIR
+  ? path.resolve(process.env.ARL_RELEASE_OUTPUT_DIR)
+  : path.join(root, 'public', 'downloads');
+const destination = path.join(releaseOutputDir, 'agent-risk-inspector.mjs');
+const policyDestination = process.env.ARL_RELEASE_OUTPUT_DIR
+  ? path.join(releaseOutputDir, 'inspector-policy.json')
+  : path.join(root, 'public', 'inspector-policy.json');
 
 let sourceText = fs.readFileSync(source, 'utf8').replace(/\r\n/g, '\n');
 
@@ -115,8 +121,8 @@ fs.mkdirSync(path.dirname(destination), { recursive:true });
 fs.writeFileSync(destination, text);
 const digest = crypto.createHash('sha256').update(text).digest('hex');
 fs.writeFileSync(`${destination}.sha256`, `${digest}  agent-risk-inspector.mjs\n`);
-fs.writeFileSync(path.join(root, 'public', 'inspector-policy.json'), JSON.stringify({ policyVersion:POLICY_VERSION, rules:POLICY_CATALOG }, null, 2) + '\n');
-fs.writeFileSync(path.join(root, 'public', 'downloads', 'inspector-release.json'), JSON.stringify({
+fs.writeFileSync(policyDestination, JSON.stringify({ policyVersion:POLICY_VERSION, rules:POLICY_CATALOG }, null, 2) + '\n');
+fs.writeFileSync(path.join(releaseOutputDir, 'inspector-release.json'), JSON.stringify({
   name:'AgentRisk Inspector', version:inspectorVersion, policyVersion:POLICY_VERSION,
   bundleSchema:BUNDLE_SCHEMA, sha256:digest,
   privacyContract:['No source code uploaded','No matched secret values uploaded','Read-only static inspection','No exploitation or network probing'],
