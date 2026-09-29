@@ -53,6 +53,10 @@ test('active ARL toolchain has one canonical version set', () => {
     exportedVersion('inspector/agent-risk-inspector.mjs', 'INSPECTOR_VERSION'),
     versions.inspector.version
   );
+  const inspectorBuilder = read('scripts/build-inspector-release.mjs');
+  assert.match(inspectorBuilder, /toolchain\?\.inspector\?\.version/);
+  assert.doesNotMatch(inspectorBuilder, /version:'4\.1\.5'|INSPECTOR_VERSION = '4\.1\.5'/);
+
   assert.equal(
     exportedVersion('public/downloads/agent-risk-inspector.mjs', 'INSPECTOR_VERSION'),
     versions.inspector.version
