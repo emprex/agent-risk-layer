@@ -81,6 +81,32 @@ test('mapped control remains selectable when reconstructed projection omits appl
   assert.equal(selected?.nextAllowedAction?.name, 'resolve_control_applicability');
 });
 
+test('authoritative preparation mapping survives workflow projection loss', () => {
+  const reconstructed = state();
+  reconstructed.authoritativeArtifacts.evidencePlan.mappedControls = [];
+  reconstructed.authoritativeArtifacts.controlIntelligence.relevantControls = [];
+
+  const selected = selectHostedApplicabilityWorkflowState(
+    reconstructed,
+    'ARL-KB-046',
+    {
+      evidencePlan: {
+        checks: [
+          {
+            id: 'CHECK-MEMORY',
+            questionId: 'memory_security'
+          }
+        ],
+        manual: []
+      }
+    }
+  );
+
+  assert.equal(selected?.stage, 'control_applicability_required');
+  assert.equal(selected?.scopedControl?.controlId, 'ARL-KB-046');
+  assert.equal(selected?.nextAllowedAction?.name, 'resolve_control_applicability');
+});
+
 test('unknown or non-mapped control cannot be selected', () => {
   assert.equal(
     selectHostedApplicabilityWorkflowState(state(), 'ARL-KB-999'),
