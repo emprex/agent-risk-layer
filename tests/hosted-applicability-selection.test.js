@@ -107,6 +107,31 @@ test('authoritative preparation mapping survives workflow projection loss', () =
   assert.equal(selected?.nextAllowedAction?.name, 'resolve_control_applicability');
 });
 
+test('explicit displayed mapped control overrides a different reconstructed scoped control', () => {
+  const reconstructed = state();
+  reconstructed.stage = 'control_applicability_required';
+  reconstructed.scopedControl = {
+    controlId: 'ARL-KB-057',
+    currentStage: 'applicability',
+    chainStatus: 'context_required'
+  };
+  reconstructed.nextAllowedAction = {
+    name: 'resolve_control_applicability',
+    actor: 'user',
+    requiresUserInput: true,
+    controlId: 'ARL-KB-057'
+  };
+
+  const selected = selectHostedApplicabilityWorkflowState(
+    reconstructed,
+    'ARL-KB-046'
+  );
+
+  assert.equal(selected?.stage, 'control_applicability_required');
+  assert.equal(selected?.scopedControl?.controlId, 'ARL-KB-046');
+  assert.equal(selected?.nextAllowedAction?.controlId, 'ARL-KB-046');
+});
+
 test('unknown or non-mapped control cannot be selected', () => {
   assert.equal(
     selectHostedApplicabilityWorkflowState(state(), 'ARL-KB-999'),
