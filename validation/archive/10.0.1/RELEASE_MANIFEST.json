@@ -1,0 +1,1248 @@
+{
+  "schema": "arl.release-manifest.v3",
+  "product": "AgentRiskLayer",
+  "version": "10.0.1",
+  "sourceBaselineCommit": "dbbcc13bd2069babb47f0eb9534cc1bbdc9cb574",
+  "sourceBaselineCommitType": "full-git-sha-verified-by-apply-script",
+  "generatedAt": "2026-07-31T10:42:36.060Z",
+  "algorithm": "SHA-256",
+  "selfExcluded": true,
+  "fileCount": 247,
+  "files": [
+    {
+      "path": ".agentrisk.json",
+      "bytes": 479,
+      "sha256": "11eab3a2e7a699dacbfea24e855326b50bb67e142bf34772ea46d3a4fbbd21a6"
+    },
+    {
+      "path": ".dockerignore",
+      "bytes": 136,
+      "sha256": "6196fef04dc9c483340a77e22fa96f94959dd6b640ddadfabef31455f8c40f1f"
+    },
+    {
+      "path": ".env.example",
+      "bytes": 1246,
+      "sha256": "06618688f4663c56eb183112f1e407b27a21ef5b6e9916e57c19f32cc5b5ff59"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "bytes": 435,
+      "sha256": "27c3410326fd5785029714db065171ee7a5c49ec0c479ec827b25524eadd4140"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "bytes": 604,
+      "sha256": "ce7e11edd5d57b080c66a5087e46c0e79d1e55acb6f8d535c307ede8cb626b50"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 344,
+      "sha256": "a75cc424ae86dfddc51570cdc1e8fa9748dd0cb2ecccac6ec1c49b0f41fd0aec"
+    },
+    {
+      "path": "ACCESSIBILITY_AUDIT.md",
+      "bytes": 1272,
+      "sha256": "321f4825690d16e34f7dd19e02e9b77f3ea3eeb5d3f2f1c9bd93fc9bdf7fb373"
+    },
+    {
+      "path": "ASVS_5_CHECKLIST.md",
+      "bytes": 1976,
+      "sha256": "207e6548ae1235dcd848ca190951f9afb147bc013eee37902862974d16d19be9"
+    },
+    {
+      "path": "CONTROL_PLANE_API.md",
+      "bytes": 5969,
+      "sha256": "255dc1abb2609668f1fa99e3c91ea789e726ec7656e779669e8b5d31cde3f033"
+    },
+    {
+      "path": "CUSTOMER_JOURNEY_V10.md",
+      "bytes": 3139,
+      "sha256": "8d36476000e51e50b000755ad9b51015a5548b0eb58bf9b0f33bb03e5d120345"
+    },
+    {
+      "path": "DEPLOYMENT.md",
+      "bytes": 3186,
+      "sha256": "f2721cb8f44e7a6da0c507011e9c4bda118ba2178f1d368110fac887c9554e09"
+    },
+    {
+      "path": "DEPLOYMENT_OWNER_INPUTS.md",
+      "bytes": 1838,
+      "sha256": "ff3c8c99af12df5896b6593691b331987ee6285f1d37e1f0e00e095f9a9675ce"
+    },
+    {
+      "path": "Dockerfile",
+      "bytes": 458,
+      "sha256": "4293bd2232738a98edb5e8fb4393e9e0c2c07c422ddb2b283636069aa6d0ae63"
+    },
+    {
+      "path": "INSPECTOR_ARCHITECTURE.md",
+      "bytes": 5753,
+      "sha256": "4f12ba0af6a6db2c3e5ab2661a1cead4aa078e547f5eb908a214fbb40275e5c5"
+    },
+    {
+      "path": "INSPECTOR_RULE_AUTHORING.md",
+      "bytes": 908,
+      "sha256": "8a5dca29e5b26d2bb59c718c837297a8a7de18795bb13844f8a0091b6019387b"
+    },
+    {
+      "path": "LAUNCH_CHECKLIST.md",
+      "bytes": 1503,
+      "sha256": "02a305421cddec1844ae855600961aacc0ebbd423deb5beb979caf80e99c1087"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 836,
+      "sha256": "28ad673f691f9ada9b005e453826a63eb3cb17aa98bfac7ede5f06e293333f24"
+    },
+    {
+      "path": "OPERATIONS_RUNBOOK.md",
+      "bytes": 2799,
+      "sha256": "133e49943739c113d41c873b63ed3b9d1983d641eb4f2eeed08089fbc7357921"
+    },
+    {
+      "path": "POSTGRESQL_MIGRATION.md",
+      "bytes": 1600,
+      "sha256": "bf5c01c3c6af09727a4591f10480f563f8750dd47037549ca8d8adf17aeb4c15"
+    },
+    {
+      "path": "PUBLIC_LAUNCH_PATCH.md",
+      "bytes": 416,
+      "sha256": "921a57ab3f0286e4915380066c2488aa97d1060b4fda6968e8fbb6f453ccc416"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6441,
+      "sha256": "2c31413b4fae8cf39827d68163fccb540109590652bef24516760524709681c2"
+    },
+    {
+      "path": "REDTEAM_ADAPTER_PROTOCOL.md",
+      "bytes": 3213,
+      "sha256": "6ab18f0c4784b248481a33f9d42efa6898c00724aa63ba3af34d551a07a8b457"
+    },
+    {
+      "path": "REDTEAM_ARCHITECTURE.md",
+      "bytes": 5018,
+      "sha256": "4c17a9e50367a8797af0107502beee3f6f99a19b5f391546dc00b754e6f2a778"
+    },
+    {
+      "path": "RELEASE_NOTES.md",
+      "bytes": 22269,
+      "sha256": "03abab8d0b09199f9dc382cd574d0055d8333c3289c4fec835cd013020e9bf39"
+    },
+    {
+      "path": "RELEASE_NOTES_V10.md",
+      "bytes": 3700,
+      "sha256": "263838f32473207813846f385c6ee8196ca39fac924b543b863ea5f621a276aa"
+    },
+    {
+      "path": "RELEASE_NOTES_V10_0_1.md",
+      "bytes": 1538,
+      "sha256": "e5b4b7eb1fc54c4d38c5328ac9305b64d9c489507f5fd223434756fa07f5d898"
+    },
+    {
+      "path": "RELEASE_NOTES_V9_1.md",
+      "bytes": 1010,
+      "sha256": "cee7e3e91efaf792f594ccc7e4fcef2f52ba6a1254022cdea5972aeba2abb262"
+    },
+    {
+      "path": "RELEASE_NOTES_V9_2.md",
+      "bytes": 3417,
+      "sha256": "62039be7b3538598ed6a30b7c3c66cd6aaa0e2e902dafc31dd0742e9847cc77b"
+    },
+    {
+      "path": "RELEASE_NOTES_V9_3.md",
+      "bytes": 4057,
+      "sha256": "a15757cbb7b424c8823239d058132a16e0953f50cea45d9a59decdcb3b3bf8e1"
+    },
+    {
+      "path": "RELEASE_VALIDATION.json",
+      "bytes": 4513,
+      "sha256": "ebff3e6299b1c549aad22ac65a20877d1fc4992c4a42a2d8f09a9089eccc7a80"
+    },
+    {
+      "path": "RELEASE_VALIDATION.md",
+      "bytes": 1856,
+      "sha256": "8f65dbe2070bd34ceb47254a92e0cffdc218780e61a610e30b4dc267223328d6"
+    },
+    {
+      "path": "RUNTIME_PROTECTION.md",
+      "bytes": 3169,
+      "sha256": "e5e7cf7dcf8343992e315e9934c19370d5d92f6a37616011b107256fb93012a6"
+    },
+    {
+      "path": "SALES_AGENT.md",
+      "bytes": 2292,
+      "sha256": "b5e64ee13f136590d5dfd3608d1063f9e8f3303d3799916c2f66479fc298a707"
+    },
+    {
+      "path": "SBOM.spdx.json",
+      "bytes": 2095,
+      "sha256": "3f220377fad5fc56d3f3be3987d78667b1dfa032e0779c94b41d198a0fdaca65"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 2173,
+      "sha256": "9b5aad0118c9487094389b414f53e1a3d4a756a890ba42664582759e7a3ca10c"
+    },
+    {
+      "path": "UNIFIED_SECURITY.md",
+      "bytes": 1295,
+      "sha256": "682b80f92166209ec222af2e2645cc7a28529905a9db321e21affd4fabe3da99"
+    },
+    {
+      "path": "UX_AUDIT_V10.md",
+      "bytes": 5771,
+      "sha256": "c2d64324e3b1b601d3734385d7d841dc1b95c8dd1d7fa425679735bf1a53d6bc"
+    },
+    {
+      "path": "UX_POLISH_V10_0_1.md",
+      "bytes": 3030,
+      "sha256": "5ea29cd5b4e37df15dd1f28c3186f51933ebced01643fd2ee49bdd1b067c6a90"
+    },
+    {
+      "path": "data/.gitkeep",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/billing-integrity-migration.md",
+      "bytes": 8274,
+      "sha256": "e084c011d856f7df823cb70d5de01f2d73dc6d7a4a814c666a2d5e33de3fec93"
+    },
+    {
+      "path": "docs/readiness-evidence-migration.md",
+      "bytes": 1878,
+      "sha256": "6450d7a079555e1cfe18f0a3280b8662be998937fe822689b94268ecc2c1db1d"
+    },
+    {
+      "path": "inspector/agent-risk-inspector.mjs",
+      "bytes": 50556,
+      "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
+    },
+    {
+      "path": "inspector/agentrisk.config.example.json",
+      "bytes": 353,
+      "sha256": "59494d769f1781730932b1e635c5710068558e148238567e3eda44414cd73076"
+    },
+    {
+      "path": "migrations/001_initial_schema.sql",
+      "bytes": 9891,
+      "sha256": "1cf4e2b39f98e4d842b74d4e7fdf2068a0a72b2da88955431278bc17f31cdcc7"
+    },
+    {
+      "path": "migrations/002_indexes_and_backfill.sql",
+      "bytes": 2772,
+      "sha256": "74c529894dd922d6477e7f805a62daf9ab3a78716d48a4d67e36d206c4e1d67c"
+    },
+    {
+      "path": "migrations/003_security_control_plane.sql",
+      "bytes": 3959,
+      "sha256": "20f8c42a063ae1bf5c39fbd420544c413aeb25093f7fbda89a318a747905cc64"
+    },
+    {
+      "path": "migrations/004_sales_agent.sql",
+      "bytes": 2190,
+      "sha256": "22563ef9c54fc1f49084e73653fcefe0518a6aa7847dd8494810d5a2d1b2a79d"
+    },
+    {
+      "path": "migrations/005_readiness_evidence.sql",
+      "bytes": 1420,
+      "sha256": "67b67789e30c9dbf870d2b8dbd4d26b406fc788414bc4e65b38c625ff3725529"
+    },
+    {
+      "path": "migrations/006_predeclared_retest_criteria.sql",
+      "bytes": 1479,
+      "sha256": "2de08a4dbc28810abf2afd44c312dca1a643788088e2924380278ba33ad983d5"
+    },
+    {
+      "path": "migrations/007_billing_integrity.sql",
+      "bytes": 12256,
+      "sha256": "cfa6bd58863963ebefa286e2121fcedcd754d34154ccd0f1db630fda72f07ba7"
+    },
+    {
+      "path": "migrations/008_runtime_approval_integrity.sql",
+      "bytes": 1201,
+      "sha256": "e11631d09086df3624917a32262995e2452437286939181353c4effb04dbf5f4"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 5699,
+      "sha256": "3fcfd27c0131825985938cf613abda47799687458997601254e1780bf685095f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2944,
+      "sha256": "1d8ffc3e3c89d03f8fb97528b1ac135a4a325d0f16947ec0967e4358c6d0226a"
+    },
+    {
+      "path": "public/404.html",
+      "bytes": 3020,
+      "sha256": "613f0bd8b951900bd57d8b67ece537939edb10e0528e0881428a5a7c7f875909"
+    },
+    {
+      "path": "public/admin.html",
+      "bytes": 2159,
+      "sha256": "965351c5807b7fe030bbaebd5a7e5d223f83d099fe0dec8d505c28d4cde58d2f"
+    },
+    {
+      "path": "public/admin.js",
+      "bytes": 6231,
+      "sha256": "ea34707b5a640dd3df10df38e2f0cfeb0bb1df045e73a6e2a1887a814cc9b5d7"
+    },
+    {
+      "path": "public/analytics.css",
+      "bytes": 874,
+      "sha256": "8a52870b63477011d78128bab92a17777d3c153942a102ef6a8da4c89d9d4030"
+    },
+    {
+      "path": "public/analytics.js",
+      "bytes": 4789,
+      "sha256": "bedaffc47a2aa56bc2e37e119f15ca126bb7dbd98699c153aad632bc8bc164e5"
+    },
+    {
+      "path": "public/assessment.html",
+      "bytes": 5091,
+      "sha256": "90d92224269c51a0fb04287aa727693496328f1b07158e3d02a16165df7d595b"
+    },
+    {
+      "path": "public/assessment.js",
+      "bytes": 6448,
+      "sha256": "1ee2f931126803b2103cbfc1205d0d9e2e698e369dba63f13044135d09170922"
+    },
+    {
+      "path": "public/auth-page.js",
+      "bytes": 5280,
+      "sha256": "1cb4180b88b06e93466a00f940b677a2e6ebcbad300672bf12bc22879211f040"
+    },
+    {
+      "path": "public/auth.html",
+      "bytes": 7233,
+      "sha256": "e3b372607b07ca658145080ec115653e45b9b55f54344a8570ee9f48883a3713"
+    },
+    {
+      "path": "public/company.html",
+      "bytes": 5407,
+      "sha256": "ed03ab0b046ab5f836672c885d9bd7c1b6b4db56fdb62704019a77a9ebb309d5"
+    },
+    {
+      "path": "public/compare.html",
+      "bytes": 8052,
+      "sha256": "72a3eba51c928f90e8729a4e47355a2977a78254c66c35ec812d6aabcb75abde"
+    },
+    {
+      "path": "public/control-plane.html",
+      "bytes": 2720,
+      "sha256": "9e0c799792673710318a4fe94f44c27fd3d9650ca70e55383bdc561ae3b2fc47"
+    },
+    {
+      "path": "public/control-plane.js",
+      "bytes": 46555,
+      "sha256": "2b8e6184bbd34131585323f34de6ba2ab717e8c77dd133080a1746200646578d"
+    },
+    {
+      "path": "public/dashboard.html",
+      "bytes": 2581,
+      "sha256": "f9b76cdb33abc6eddd7ad94f82747c864f88bd6521f3f923e6b4457967c89817"
+    },
+    {
+      "path": "public/dashboard.js",
+      "bytes": 22960,
+      "sha256": "711cb16503d92296787576de65711837d7c01d0201a97e1e5502bf5aed7e9e8f"
+    },
+    {
+      "path": "public/demo.html",
+      "bytes": 9114,
+      "sha256": "070af54b5e3fa6f6f16ebd505020b1a314cfeb39b19332c1b04ffab9bd17d478"
+    },
+    {
+      "path": "public/demo.js",
+      "bytes": 13868,
+      "sha256": "050a8eedb8a0709725813cbed7f926359d284d605ac98044b6d826715290ba71"
+    },
+    {
+      "path": "public/downloads/agent-risk-inspector.mjs",
+      "bytes": 50556,
+      "sha256": "9d070cc872fe11ee73e62fecc81928a332618476fe4d45e1e8c7db23765d86ca"
+    },
+    {
+      "path": "public/downloads/agent-risk-inspector.mjs.sha256",
+      "bytes": 91,
+      "sha256": "1e86e3f2dc5725285b6dbb7c774b4114bb604230d4caf2d709bb6c66235adab5"
+    },
+    {
+      "path": "public/downloads/agent-risk-redteam-adapter-example.mjs",
+      "bytes": 2154,
+      "sha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a"
+    },
+    {
+      "path": "public/downloads/agent-risk-redteam-adapter-example.mjs.sha256",
+      "bytes": 105,
+      "sha256": "9a375674db628574ad8a164d3d5add3d272431563842d278115659351fed2c94"
+    },
+    {
+      "path": "public/downloads/agent-risk-redteam.mjs",
+      "bytes": 44713,
+      "sha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5"
+    },
+    {
+      "path": "public/downloads/agent-risk-redteam.mjs.sha256",
+      "bytes": 89,
+      "sha256": "b5aae3f95ed2f8bfe73c2eb9b371cf8f5669a2d9b19278350949b7b12f409d75"
+    },
+    {
+      "path": "public/downloads/agent-risk-runtime.mjs",
+      "bytes": 5324,
+      "sha256": "eabe5078725179fbab20f0e4fd7980f8a6afdae890ce10ad1720888f7657f533"
+    },
+    {
+      "path": "public/downloads/agentrisk-redteam-ci.example.yml",
+      "bytes": 1402,
+      "sha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7"
+    },
+    {
+      "path": "public/downloads/agentrisk-redteam-ci.example.yml.sha256",
+      "bytes": 99,
+      "sha256": "cd33195fe45de5e03c2a88539062d12576e71d6439b18bed6b539c6a11806a0f"
+    },
+    {
+      "path": "public/downloads/agentrisk.config.example.json",
+      "bytes": 353,
+      "sha256": "59494d769f1781730932b1e635c5710068558e148238567e3eda44414cd73076"
+    },
+    {
+      "path": "public/downloads/agentrisklayer-ci.yml",
+      "bytes": 938,
+      "sha256": "732eb45429834c403806f55e85c5782d178f0b2efa3a5978b30e1ec1933098ce"
+    },
+    {
+      "path": "public/downloads/agentrisklayer-controlled-support-agent-proof.json",
+      "bytes": 7170,
+      "sha256": "4cbe10ee30aa8d01970d52322682e86afb9dfa2393454d5f48a82672db5c6a1d"
+    },
+    {
+      "path": "public/downloads/agentrisklayer-sample-professional-report.pdf",
+      "bytes": 108513,
+      "sha256": "6ae3a526ba59d19331e41277f4e76db60e306e37c2d4420a13a9f1bae3dd6726"
+    },
+    {
+      "path": "public/downloads/agentrisklayer-scheduled-assurance.yml",
+      "bytes": 1556,
+      "sha256": "b49235f191f708240f8a776f3cd050345580ddd0b3b9b4328cdf0b86ba3c0ea7"
+    },
+    {
+      "path": "public/downloads/inspector-release.json",
+      "bytes": 411,
+      "sha256": "873f968f7d37e8e6a9a0bef94bec6ddb30ea289e8d394b6919bb881e0afbe281"
+    },
+    {
+      "path": "public/downloads/redteam-release.json",
+      "bytes": 643,
+      "sha256": "24f3e4945b5fe5a14e266e5794d423dc5352a5e232c49535ca37c57701cd2759"
+    },
+    {
+      "path": "public/downloads/runtime-policy.example.json",
+      "bytes": 522,
+      "sha256": "2be4ae2ab8eb7824e5260d2b680fd2c55fa47a1cc44a397f75589b16d0ecd341"
+    },
+    {
+      "path": "public/favicon.svg",
+      "bytes": 248,
+      "sha256": "68836f90bcfd1362f3b45e75093df4e3466e7387661db877fe71a555eedd8235"
+    },
+    {
+      "path": "public/help.html",
+      "bytes": 21941,
+      "sha256": "831644aceccbb4f2eebbe858fde97a798e41234aec7691d47f35a1f24bdcf5a9"
+    },
+    {
+      "path": "public/help.js",
+      "bytes": 1315,
+      "sha256": "b117eb397719c42aaacf341552be065955bd6a3388ed1278fb6a57fbf29833c1"
+    },
+    {
+      "path": "public/index.html",
+      "bytes": 14333,
+      "sha256": "e8647b30e14b6a512f9912cab9e4b0b26eee83b963aab0c22942e724753cece2"
+    },
+    {
+      "path": "public/inspection-detail.html",
+      "bytes": 2119,
+      "sha256": "48986fae7fe964400a4e9099b6137070fcf374624a1ec93964bae0a49c3202d6"
+    },
+    {
+      "path": "public/inspection-detail.js",
+      "bytes": 3792,
+      "sha256": "c1410c3990b36b843df8e27d8594990b04c8049e642ba4a4f24e807f3a36aeda"
+    },
+    {
+      "path": "public/inspector-policy.json",
+      "bytes": 14092,
+      "sha256": "cc7bd0e314035189551afeed2e0c70154518ab88f8452cf91b18b8ca3ab0c8fd"
+    },
+    {
+      "path": "public/inspector.html",
+      "bytes": 2629,
+      "sha256": "97a138df170719d937e8c265de9099544ee7f3bfa5ccb9324a229746118127d3"
+    },
+    {
+      "path": "public/inspector.js",
+      "bytes": 6679,
+      "sha256": "77519e41732eac98c0c1857be8ee64d7d7a29c375254621742aa92d4b7c88eff"
+    },
+    {
+      "path": "public/methodology.html",
+      "bytes": 8217,
+      "sha256": "af2d21210f5c29dc15f3e96f753ce843a0691a41380d170cb5780be91f0285a8"
+    },
+    {
+      "path": "public/pricing.html",
+      "bytes": 7086,
+      "sha256": "c6765ed5c30d2da7819c799bc0130d38eb6cb54256eae42208b88120cd42b45b"
+    },
+    {
+      "path": "public/pricing.js",
+      "bytes": 6510,
+      "sha256": "43e32b585bf0e5360d74134c9be2b06a6e00c70d1e0e9b140bb944bfda6e7255"
+    },
+    {
+      "path": "public/privacy.html",
+      "bytes": 3822,
+      "sha256": "37df258caa0ad8d0bba5dc8c0059b372d1406355673da91da73df29433328543"
+    },
+    {
+      "path": "public/public-result.js",
+      "bytes": 1880,
+      "sha256": "ae8ea2d922cbccbdccf10e0f5582208a0803fb99aca3596a9d39e031d27da581"
+    },
+    {
+      "path": "public/quickstart.html",
+      "bytes": 8872,
+      "sha256": "85f61da62432328187bd8521d354e9cf036d0eaebba4b3b1e735a2dbfafac186"
+    },
+    {
+      "path": "public/redteam-policy.json",
+      "bytes": 19656,
+      "sha256": "be5cfc0e89c3261302b3eacd2328ea0b2b0e5898946d203f71131178b27f385a"
+    },
+    {
+      "path": "public/redteam-run.html",
+      "bytes": 2049,
+      "sha256": "94562d09d3cb3243d675f84e3bcdb735715140817c215f0b2705782a9fe1d5c7"
+    },
+    {
+      "path": "public/redteam-run.js",
+      "bytes": 4229,
+      "sha256": "7e9e7438d34da1c032338190f2f9f06449ecb0a797908dc6064e28bfe956b736"
+    },
+    {
+      "path": "public/redteam.html",
+      "bytes": 2596,
+      "sha256": "b62ae79599c6d43e1d32510e42eee54bbe10ee21ae4770f19cb1c84615c32441"
+    },
+    {
+      "path": "public/redteam.js",
+      "bytes": 14870,
+      "sha256": "d06b429190636ede586be34cd1db2b7c92737ade07e7a3e597d6a9dc6c5d9b09"
+    },
+    {
+      "path": "public/reset.html",
+      "bytes": 3985,
+      "sha256": "634bcf42d861dece6039ef6c769ee7f3068486505fea4e312fe131bd64c7a0dd"
+    },
+    {
+      "path": "public/reset.js",
+      "bytes": 2126,
+      "sha256": "6536c6a78fa2d29a42f9b53a3e4917636b7753aec5d6bf378280d5d154b3388c"
+    },
+    {
+      "path": "public/result.html",
+      "bytes": 2050,
+      "sha256": "ab4038b3d5d13340bc7623b28ae9f3f814f40678f64b0beae645ba8adbc2e9ae"
+    },
+    {
+      "path": "public/result.js",
+      "bytes": 18024,
+      "sha256": "529b679085a998434e1bf112d250ef0bfae584ed48cbd495af9a8ae5be492e09"
+    },
+    {
+      "path": "public/runtime.html",
+      "bytes": 8230,
+      "sha256": "f0b70ad8f09cc34bc437a3e5bdc8fd3b1a7acc24c313b2bd367b85a7f0b37198"
+    },
+    {
+      "path": "public/sales-agent.html",
+      "bytes": 2388,
+      "sha256": "1b931cf38554472790e4df4a042cff334f35913dbb582935f497a068763ce543"
+    },
+    {
+      "path": "public/sales-agent.js",
+      "bytes": 12427,
+      "sha256": "78326be5ba2fc71f433ec9953c268e63dabb4f9f10e7c405e43aad413dd477ff"
+    },
+    {
+      "path": "public/sample-report.html",
+      "bytes": 6741,
+      "sha256": "53ebe998ee5660f8663ed6d494e4a0b7f8728b20fe82da4385859049ebc8d9d0"
+    },
+    {
+      "path": "public/security-center.html",
+      "bytes": 7513,
+      "sha256": "b0ee2d068157fc9ae3f7b55ce6337d7663e775950a9a9dbb8704da38b4834f6c"
+    },
+    {
+      "path": "public/shared.html",
+      "bytes": 2986,
+      "sha256": "7dec0a047209aa9aab518fd61b4c4e72626d572eeb6e4c9172f334ca329250a2"
+    },
+    {
+      "path": "public/shared.js",
+      "bytes": 5442,
+      "sha256": "6d6aece62e293c4bf403a52440bc0bb5af6cddc8b40fa3a3921b3df7ca2f2482"
+    },
+    {
+      "path": "public/site-shell.js",
+      "bytes": 4772,
+      "sha256": "79bd03e087fd9110ad38c4aa225d5bf4517581fd9e296d76b8e09cca7528445e"
+    },
+    {
+      "path": "public/standards.html",
+      "bytes": 6051,
+      "sha256": "2eb0ebad6c80e4faf77ffbb00efb97afef1c884724073959da9b12c105d5797a"
+    },
+    {
+      "path": "public/start.html",
+      "bytes": 4781,
+      "sha256": "12cc75597260dcfc7fb4b3888077125b5a0350fa6f2997a2949a12db94c333a7"
+    },
+    {
+      "path": "public/status.html",
+      "bytes": 3664,
+      "sha256": "6b79f84fdd7c5fe7cc33066e3fec8f6b357d1d820f06e5d767e165b69634fe67"
+    },
+    {
+      "path": "public/status.js",
+      "bytes": 1959,
+      "sha256": "9c74e2d2091c054fa5cacd8286f9857e7f2677ab57b5d0ae10d9dabbe572f985"
+    },
+    {
+      "path": "public/styles.css",
+      "bytes": 156370,
+      "sha256": "1e9d6e19cc696020dc8ef398c124f99a12a4892a9929c55c0e03ad36eba9d76d"
+    },
+    {
+      "path": "public/success.html",
+      "bytes": 3010,
+      "sha256": "6d7ee95af099be93318905fede1e371f1793c90a5c3f44a2fde63210bf225fe7"
+    },
+    {
+      "path": "public/success.js",
+      "bytes": 1156,
+      "sha256": "fa6e55b3aaef62b7d42e5a51f603d0e1bf0ee69d99463c7e41a51f2d4a8dd56d"
+    },
+    {
+      "path": "public/terms.html",
+      "bytes": 3658,
+      "sha256": "92809233ea05a4d440da72b9414b446fe0a48f029e170549707e2b5630cd6052"
+    },
+    {
+      "path": "public/trust.html",
+      "bytes": 10362,
+      "sha256": "ab0651cd978ab440a41d804c3e1b1453e27e068db6fa637353d62af856c14400"
+    },
+    {
+      "path": "public/verify.html",
+      "bytes": 3246,
+      "sha256": "aba6656ca3ee8ce996edf6a7961fc33723f96dd444f69968c31f5216812d907a"
+    },
+    {
+      "path": "public/verify.js",
+      "bytes": 666,
+      "sha256": "e1925c9a035f1e1308442acacc2187cfc46847525fb4ccf1cc727bf0fde0fd12"
+    },
+    {
+      "path": "public/workspaces.html",
+      "bytes": 2209,
+      "sha256": "5f1ccf1a771e0af8af905bf806db73660be19ee672a2df54aed644e75dd1e514"
+    },
+    {
+      "path": "public/workspaces.js",
+      "bytes": 3147,
+      "sha256": "d0a337c937bf97a1db34ddae202edf3790788b2fda6952c7eeb912ad6bc9b7c3"
+    },
+    {
+      "path": "redteam/adapter-example.mjs",
+      "bytes": 2154,
+      "sha256": "1a65329af64ae1b7f972f2e968b5efa8f3aee22069675e594859a378345cd11a"
+    },
+    {
+      "path": "redteam/agent-risk-redteam.mjs",
+      "bytes": 44713,
+      "sha256": "3f0588eed639bca5e0c7cf923ae4f2e4836ddeb5b4084e041ad6ba8baedb68f5"
+    },
+    {
+      "path": "redteam/agentrisk-redteam-ci.example.yml",
+      "bytes": 1402,
+      "sha256": "268b20ae27b6c182a1900849f2a817de4340a3e8bdd753360db84da6f799fee7"
+    },
+    {
+      "path": "render.yaml",
+      "bytes": 2402,
+      "sha256": "37cb5c77bbd29c259d58db505aa610c47a3a7747552723c2e6e36ff7661b692b"
+    },
+    {
+      "path": "runtime/agent-risk-runtime.mjs",
+      "bytes": 5324,
+      "sha256": "eabe5078725179fbab20f0e4fd7980f8a6afdae890ce10ad1720888f7657f533"
+    },
+    {
+      "path": "runtime/runtime-policy.example.json",
+      "bytes": 522,
+      "sha256": "2be4ae2ab8eb7824e5260d2b680fd2c55fa47a1cc44a397f75589b16d0ecd341"
+    },
+    {
+      "path": "scripts/backup-database.mjs",
+      "bytes": 5026,
+      "sha256": "2295d303b0310ec322a38a96421cf124fc6741ed16b4fc395fac73250739ba8a"
+    },
+    {
+      "path": "scripts/build-inspector-release.mjs",
+      "bytes": 1437,
+      "sha256": "f1f41e7fad55e0554b097455342bbf344598e55f917c66db5d6dda3009b721f5"
+    },
+    {
+      "path": "scripts/build-redteam-release.mjs",
+      "bytes": 1937,
+      "sha256": "3fb8501988cc6e30c34eca021ec7307423e6220c73064cb814a7f51393b45de7"
+    },
+    {
+      "path": "scripts/build-sample-report.mjs",
+      "bytes": 10711,
+      "sha256": "9135de42d86473029448307aa710ef3a22cc7c9f1a0498f49664b2cbbe636863"
+    },
+    {
+      "path": "scripts/import-prospects.mjs",
+      "bytes": 9668,
+      "sha256": "17df825d32d62f7c181be2f8f8c304e00486e8357c27ffc79cc659054d6412e7"
+    },
+    {
+      "path": "scripts/load-stress.mjs",
+      "bytes": 4381,
+      "sha256": "259354254d0e70380f34c4dbaae70fe805870ec5b1a7a478710c98779fec69a0"
+    },
+    {
+      "path": "scripts/restore-database-backup.mjs",
+      "bytes": 2412,
+      "sha256": "945b42b83e202af9f621ae3e79bacd0b4e704cde3369962cc979763c344f6f81"
+    },
+    {
+      "path": "scripts/run-1000-scenarios.mjs",
+      "bytes": 4568,
+      "sha256": "f2ce64a34e66e2fec8eb4b738dfeb525e9d2d7e1c7f6506a6ba86e547b8b458c"
+    },
+    {
+      "path": "scripts/run-detection-benchmark.mjs",
+      "bytes": 2794,
+      "sha256": "63273ce7bd6be1d054ba28122b4a93f5215884933fa025d043b81713fbae36e2"
+    },
+    {
+      "path": "scripts/update-stripe-render-prices.mjs",
+      "bytes": 5913,
+      "sha256": "a0e41f767f4dfe4fd7366e6d9033a3e0f9a63a85aab3d511a1be36ce358791a2"
+    },
+    {
+      "path": "scripts/validate-release.mjs",
+      "bytes": 2354,
+      "sha256": "d6eef2c5e8f8bcf3f2ec88787205bc1a2853d690c951e5f2233afb67babc4fc3"
+    },
+    {
+      "path": "scripts/verify-database-backup.mjs",
+      "bytes": 388,
+      "sha256": "372cebf3bee264520b0ba31e7712fc0c38426fc13196801d999215de43a839c7"
+    },
+    {
+      "path": "server.js",
+      "bytes": 119891,
+      "sha256": "c512bbd6b6a546cea10ae264cc8653fb3fe2376e014c6b24247c8f8652ecb7e0"
+    },
+    {
+      "path": "src/access-control.js",
+      "bytes": 7295,
+      "sha256": "cd9701b35a80ee465597705170fbfb467758660e1acb8c9fb37604a7c76931f1"
+    },
+    {
+      "path": "src/asset-discovery.js",
+      "bytes": 3955,
+      "sha256": "82f2a5257e227338d921f4528daa870731163f57f736697b1e93323881d6ec58"
+    },
+    {
+      "path": "src/auth.js",
+      "bytes": 20154,
+      "sha256": "704d7f22c5d922a8ef2ffb54ca59afb3217c999e482634931ad9bc9d6e6b3ec2"
+    },
+    {
+      "path": "src/config.js",
+      "bytes": 9047,
+      "sha256": "cd0336f44b24679b5fbb063cb568d5481918cba0d166439a5f2d0012fb842fdf"
+    },
+    {
+      "path": "src/content-security.js",
+      "bytes": 6171,
+      "sha256": "fb77c768a833642868537f16494f39023e6ee23abfc1dc15d852e5fa64faf08b"
+    },
+    {
+      "path": "src/control-plane.js",
+      "bytes": 81953,
+      "sha256": "01cc62fd98cc4d5f66c5220db3a759034517b64b45c41eb9f647823e96e61d9c"
+    },
+    {
+      "path": "src/db-adapters/postgres.js",
+      "bytes": 4654,
+      "sha256": "f99b4ce43c40262b16cebb37a5518c544f828267c30f658e844c80c2951030b1"
+    },
+    {
+      "path": "src/db-adapters/sqlite-local.js",
+      "bytes": 47794,
+      "sha256": "69f624606c62adebdbff382ba14fab692acabe25fc812ebb961e8301920d8086"
+    },
+    {
+      "path": "src/db.js",
+      "bytes": 2132,
+      "sha256": "b990d7c2ffbf41a7ce22a727abd17da4ee6914d98e3f1ffab4692719a20a8685"
+    },
+    {
+      "path": "src/email.js",
+      "bytes": 5352,
+      "sha256": "93b56b592b1863753b9a1ab1cac8060fe1512d506f274f64e9272b3b4cbb0d58"
+    },
+    {
+      "path": "src/enterprise-security.js",
+      "bytes": 5470,
+      "sha256": "c4c789fe253f1698f8e054cff5c4b1e2e52e7f91a922054c5a5e192a5d18f7c9"
+    },
+    {
+      "path": "src/fulfilment.js",
+      "bytes": 24011,
+      "sha256": "b0335ec4d36de556bc2563e3b342a35dbfd69b55743e7f67cb2bbeae34a3d43e"
+    },
+    {
+      "path": "src/inspector.js",
+      "bytes": 21205,
+      "sha256": "440cd690754b107a06b45503a7b4ff6cba0c61b5e71b16321be3ef64c502d3a9"
+    },
+    {
+      "path": "src/migrations.js",
+      "bytes": 1934,
+      "sha256": "79270531bfaa5491e3a835e754ca197d0886220226a7275c0f2b4d34e6077e66"
+    },
+    {
+      "path": "src/model-artifact-analysis.js",
+      "bytes": 4394,
+      "sha256": "a039da54f6506a65e166acd9b75776bce5ade0c494fc2cd2485877bb1772bfe6"
+    },
+    {
+      "path": "src/model-security.js",
+      "bytes": 2549,
+      "sha256": "22addfa3710f6baea3db7fabbb7daae693f1adb412010fb5a03c860deaed1023"
+    },
+    {
+      "path": "src/pdf.js",
+      "bytes": 25105,
+      "sha256": "be15ee844be2f16d44935ec3ddfdc44587b6d62386e88e27f91058a5d23a260f"
+    },
+    {
+      "path": "src/redteam.js",
+      "bytes": 31222,
+      "sha256": "a7e7ee80dfb5619082ea8effbaf2ae178cb649a228fbe828ce19c543843a3387"
+    },
+    {
+      "path": "src/report-service.js",
+      "bytes": 1254,
+      "sha256": "1a9e40f5028238fc3dc517d8dcfec9fc53911f2a1c55e9dfe776ca8ebf631537"
+    },
+    {
+      "path": "src/report.js",
+      "bytes": 9381,
+      "sha256": "051df8f703466a758b6c2320e095f2eb81f78385c6a12821659d290c1e0c3e37"
+    },
+    {
+      "path": "src/retention.js",
+      "bytes": 4992,
+      "sha256": "92ff83871480d0165e0c011632804b0f9613059cf7a7005d91d6bcd2bcf78b73"
+    },
+    {
+      "path": "src/risk-engine.js",
+      "bytes": 28281,
+      "sha256": "b78317081f91bc67abe5b01b54184e7ed91a235c2dd45bc68c4e9da38a6e63c9"
+    },
+    {
+      "path": "src/runtime-policy.js",
+      "bytes": 8981,
+      "sha256": "47c8088894a92829590b93445500fcc0589c09437bc6a93abb38fede16514cd8"
+    },
+    {
+      "path": "src/sales-agent.js",
+      "bytes": 17388,
+      "sha256": "dc2bdb8282e7b41c13beb6503d10547f8f45805d8336521031632e58f704d136"
+    },
+    {
+      "path": "src/security-export.js",
+      "bytes": 1481,
+      "sha256": "703040c987eda0005f3f6c70b0ea9ae963549a468a05691686719931b17c31c5"
+    },
+    {
+      "path": "src/security.js",
+      "bytes": 9181,
+      "sha256": "866520c524b12c5bf121b1c5f0453f9eaaa81f0d46c6fbbe67ac160ecf7fd6c5"
+    },
+    {
+      "path": "src/stripe-events.js",
+      "bytes": 4835,
+      "sha256": "105bc2d5a427eafba61b013bd86c459befab496390af083d3e106e29a14792f7"
+    },
+    {
+      "path": "src/stripe-webhook.js",
+      "bytes": 11631,
+      "sha256": "b8a2bd1310d87847d728ee49d8c75ab3f8406f779e02943e30584c44d560f5ff"
+    },
+    {
+      "path": "src/subscription-access.js",
+      "bytes": 1862,
+      "sha256": "eeba2e87826f46f9785ba5f8e6a9d9f3f0b7e58daf8de73e5368456d981b83d8"
+    },
+    {
+      "path": "src/workspaces.js",
+      "bytes": 11795,
+      "sha256": "c09f8954947df24750ea3f31588211e4acff03852a7d36007cf79f6b6cde3a37"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-report.md",
+      "bytes": 862,
+      "sha256": "f421f036dbbd61a0e4afb914471f9468a1a79fc41d337be5142c45c919a608f9"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v10.0.0-1000-scenario-results.json",
+      "bytes": 517577,
+      "sha256": "4425e7739d6044c6cbc63fff82577936ffc59576ea39c4ba8f0968338a2c540a"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-report.md",
+      "bytes": 862,
+      "sha256": "0ece90b83342517614b709baef932bfab0a180f0124e71bf0ca2e7dec3fb08e2"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v10.0.1-1000-scenario-results.json",
+      "bytes": 517577,
+      "sha256": "be3e04f88d5876369080228fade6bd549e7b4da0dc94fb05fec9613310e1f728"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.1.0-1000-scenario-report.md",
+      "bytes": 861,
+      "sha256": "9baafe23f7c72a7210ab4997e9c8d2e4c6fc833494798262e0310512e1ba4c58"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.1.0-1000-scenario-results.json",
+      "bytes": 515842,
+      "sha256": "8e9169c70f4d9b36f814ac7fdbe924354eb959d7f8d4313c2e1b4f6e53f2f808"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.1.0-load-stress-100x50.json",
+      "bytes": 472,
+      "sha256": "503dbadd41d837ceb0c0c64d3eb98612fdf2be0be1aafe7cb4f743f79a3beefd"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.2.0-1000-scenario-report.md",
+      "bytes": 861,
+      "sha256": "6a37f12369b96a497ad9cf4ed232c9a4f97c08dc2b086dcf7efad61dba956cbb"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.2.0-1000-scenario-results.json",
+      "bytes": 517576,
+      "sha256": "ad0404ef64a51929ec59febb3d315ada6b0be077769d0f587c099e8bdce218c3"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-report.md",
+      "bytes": 861,
+      "sha256": "881a643f32b7208ebe900e1b6d7cf874a8e8f9345c535036cb3211d1aec45ac5"
+    },
+    {
+      "path": "test-artifacts/AgentRiskLayer-v9.3.0-1000-scenario-results.json",
+      "bytes": 517576,
+      "sha256": "7a84b7b52ea3272f2e892c84929826545f26dca0215e5e929fa2afdc340595a6"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v10.0.0.json",
+      "bytes": 3908,
+      "sha256": "6f79bd8db72db4ee8d41e899288dfb53360722f2dcbb858eb2e92dd5d91ade2a"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v10.0.1.json",
+      "bytes": 3908,
+      "sha256": "669eee6b651b003613bb591b885619bbdc416e9a33f333f81af241c55d52baf2"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v9.1.json",
+      "bytes": 3895,
+      "sha256": "be2e3068762f8363a66d8e29b97dbb73357b36ad522276bb709d8f054c5cfc50"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v9.2.0.json",
+      "bytes": 3906,
+      "sha256": "bb648b2d4e9b5767074275c3c6268f2ceac1aa09fed76b7da667d059c7fce76e"
+    },
+    {
+      "path": "test-artifacts/detection-benchmark-v9.3.0.json",
+      "bytes": 3909,
+      "sha256": "fd50eedbf0a2024134e0a8cc22334e081d9dbe613dcbc4cdfac0072875e594d8"
+    },
+    {
+      "path": "tests/access-control.test.js",
+      "bytes": 2473,
+      "sha256": "01456d90b70faf336a40da623c5f2177bef6da5a1d925dca81ca437d0c998f27"
+    },
+    {
+      "path": "tests/asset-discovery.test.js",
+      "bytes": 1060,
+      "sha256": "3aa1563af20c0f512f3cc20bcc01dd2e837ee61415fd2e66c34b210fe7f9b46f"
+    },
+    {
+      "path": "tests/backup.test.js",
+      "bytes": 3511,
+      "sha256": "0ca388d9c7f356154776411090948cac4b60d9438ddc141cd44e61ca911d339f"
+    },
+    {
+      "path": "tests/billing-integrity.test.js",
+      "bytes": 38093,
+      "sha256": "122b8f646186c51caeae3cf0a4235eee9926bff5f058358bde233f78a7e3992b"
+    },
+    {
+      "path": "tests/billing-webhook-http.test.js",
+      "bytes": 8601,
+      "sha256": "ec9285a1ab50170a9ca98822aac79eac583bea82f3833585b66e3bbbf0676197"
+    },
+    {
+      "path": "tests/content-security.test.js",
+      "bytes": 1992,
+      "sha256": "dbc60eae250ce2d072a9356a1720f08d96982d2c789a1e28e8fb85d2c26576d6"
+    },
+    {
+      "path": "tests/control-plane.test.js",
+      "bytes": 23572,
+      "sha256": "264a446aafe5c23ecbfce2981f81895c8242b3f0f1b7efe7f68ff45ea4bcf546"
+    },
+    {
+      "path": "tests/csrf-origin.test.js",
+      "bytes": 2124,
+      "sha256": "1bd988ed5df9e410c4dde28b9771deeca2060758185c9bf83812c67d03165d5a"
+    },
+    {
+      "path": "tests/customer-journey.test.js",
+      "bytes": 10148,
+      "sha256": "129fec2204c4f1b94352cdb70ed298a218a31c9d330ed9ec89dc346b0bd121d9"
+    },
+    {
+      "path": "tests/enterprise-security.test.js",
+      "bytes": 1852,
+      "sha256": "0218b005a6b6babb5bf8af68fdecf20b7712d4c7cd1446213f5b57a1cd4d3fda"
+    },
+    {
+      "path": "tests/experience-design.test.js",
+      "bytes": 6214,
+      "sha256": "4e2d3cb9a5b06fcdaa74b6cd9955f35b7bcb2ccdd927902f4e819bf5f6a9b83e"
+    },
+    {
+      "path": "tests/inspector.test.js",
+      "bytes": 8286,
+      "sha256": "658abbd39008bcff784842f30bb0ce06100e00d2bd0e6ac12c46b5fa6c0af232"
+    },
+    {
+      "path": "tests/listener-binding.test.js",
+      "bytes": 5239,
+      "sha256": "bd6a7bbb87b309d4f07f6825ee030b0849ac7608325dea757fe54246c92fd895"
+    },
+    {
+      "path": "tests/managed-payments.test.js",
+      "bytes": 714,
+      "sha256": "7d5b44370cdc4616cfa1e90bbf6de8753ea668c066475fa2fc2005227b215cec"
+    },
+    {
+      "path": "tests/model-artifact-analysis.test.js",
+      "bytes": 1128,
+      "sha256": "e95e3073c38f22c155329dafa13b6fc32629a112de078ad11a06bb5eb40f8c09"
+    },
+    {
+      "path": "tests/model-security.test.js",
+      "bytes": 946,
+      "sha256": "34a2a98bc44a510335ff0dde097db9dc28fcda22856569c13003fd888fdfb809"
+    },
+    {
+      "path": "tests/pdf.test.js",
+      "bytes": 858,
+      "sha256": "a5fec8e0d0e248f3be6a114953d2ec48c861558675d37449387a4e992f0b4904"
+    },
+    {
+      "path": "tests/postgresql-billing-gate.test.js",
+      "bytes": 10201,
+      "sha256": "6d8f85f4a192ee3ec56b664481f772f2a15749284608d4d00b3aec1e4e5ef1a6"
+    },
+    {
+      "path": "tests/postgresql.test.js",
+      "bytes": 21427,
+      "sha256": "590d40950d01ef709bcdd7d3fe9b054fe243aa5e1579cf4e88de6d87c78917d7"
+    },
+    {
+      "path": "tests/production-config.test.js",
+      "bytes": 4616,
+      "sha256": "f6cdfca12b55bfe96a894a7f018061af1f4433c25c94e5131d159b7055df48a6"
+    },
+    {
+      "path": "tests/public-experience.test.js",
+      "bytes": 1283,
+      "sha256": "39005a9d02b9a3c9b93a4b7e8073f3199652d9472d673c444a5b79ffa2ec16c3"
+    },
+    {
+      "path": "tests/public-proof.test.js",
+      "bytes": 1663,
+      "sha256": "d9dbf644f01bc189f8224350b97592aec5715194a252214f5f6b7ef837323a2c"
+    },
+    {
+      "path": "tests/public-registration.test.js",
+      "bytes": 1209,
+      "sha256": "e7b065d597f576ac5c285f883a6bf23a9cf91823105ae157ebbaae7911ddaec9"
+    },
+    {
+      "path": "tests/readiness-evidence.test.js",
+      "bytes": 27487,
+      "sha256": "865545104d4ae86f946ad424aa06a8d7f38c400c049a0a2f6c25482aaad65400"
+    },
+    {
+      "path": "tests/redteam.test.js",
+      "bytes": 5235,
+      "sha256": "3ef22e7ec41e603750bf94b63d910c117b97d04c6a0994b8184076fbd037f7fc"
+    },
+    {
+      "path": "tests/risk-engine.test.js",
+      "bytes": 3121,
+      "sha256": "1d43a9c5c00b6e182a8adbddf10adba65aeb6c4824e42fc955d04240260f4a71"
+    },
+    {
+      "path": "tests/runtime-gateway.test.js",
+      "bytes": 4217,
+      "sha256": "0b7a01e46caf22198bf309a9f3807c2c22b2e57bd30407287b94fec0ffa6d71a"
+    },
+    {
+      "path": "tests/runtime-policy.test.js",
+      "bytes": 3257,
+      "sha256": "d2dcae3f6ed7549fa221356aa017c13d8afb9b6583d53fb4aedb36e5371793ba"
+    },
+    {
+      "path": "tests/sales-agent.test.js",
+      "bytes": 3936,
+      "sha256": "e0a843bba59928ecea16990d00b794f9fded3263d9df641d1c62121bb046c380"
+    },
+    {
+      "path": "tests/security-export.test.js",
+      "bytes": 511,
+      "sha256": "c1d0c315ee4b8ca8f20a8537b285e1ad5012bf32b0fdf5eeec51edc0f79e818d"
+    },
+    {
+      "path": "tests/smoke.mjs",
+      "bytes": 34464,
+      "sha256": "20643e13e6d280ccd8b35cc655cba089ea23dbbead5be61c9590bf04bfe65363"
+    },
+    {
+      "path": "tests/stripe-webhook-shapes.test.js",
+      "bytes": 1150,
+      "sha256": "aff4c605b68a438ecc96043b64a41cc8a8f93a9dcb4438e5d2e2a1556dc19839"
+    },
+    {
+      "path": "tests/v42-hardening.test.js",
+      "bytes": 17844,
+      "sha256": "44c698fa0ad4cb1300327f8b59e21d167c79392571d72c7f58995f7d89e23f0e"
+    },
+    {
+      "path": "tests/workspaces.test.js",
+      "bytes": 3235,
+      "sha256": "b04ab596b2dc772f17a452f352ad27140c03ff3a95c8add358b6bbcdb1061335"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v10.0.0-human-experience-focused.log",
+      "bytes": 8513,
+      "sha256": "e6a8f013b2c928a54d546e804e27d1088a48dd4c6fbae0a0b04056d91676d8e8"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v10.0.0-validation-console.log",
+      "bytes": 41976,
+      "sha256": "f4a1d38ac88685e195dd3821a9a76bf3717699882f16b0ddb09137e85b923fcf"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v10.0.1-mobile-ux-focused.log",
+      "bytes": 8739,
+      "sha256": "24096624b15252a20ccc5029f61640fe675d5ed30f16b710ddd37861fdc00943"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v10.0.1-validation-console.log",
+      "bytes": 42211,
+      "sha256": "2c9a12a7df37a2ced59b2926766efdc31b0525b2423a1217ebbee53749cb98eb"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-detection-benchmark.log",
+      "bytes": 413,
+      "sha256": "296a6cd9de9bbf9f30efd4114d452e93c5e46ed09b034f06db1566c606a4afd3"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-load-console.log",
+      "bytes": 459,
+      "sha256": "28fc642696b274c6668acb421e725ae8a9279010bf3980607c2d8a5ec147c467"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-redteam-simulation.json",
+      "bytes": 34382,
+      "sha256": "0b85473309aa15d6de98047d52fb8f96c259831b8e6ce4fc445a6ecc702071e5"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-redteam-simulation.log",
+      "bytes": 720,
+      "sha256": "eded0af1c117488a795ffc7a998ddf4d858567d6919c28e29d6164f39e846e6c"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-scenarios-console.log",
+      "bytes": 189,
+      "sha256": "b07888b4637321f31d3b1d04a7bdc578c547dec638f6df953df9ea0458f0f280"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-self-inspection.json",
+      "bytes": 5910,
+      "sha256": "4936caca258c4b58020f9513c2b824a6fcc14d5887346ac6f1439e3c10ff6d6e"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-self-inspection.log",
+      "bytes": 579,
+      "sha256": "cbad403cb8aa699f9045d4b30fd0b20bfca5d04a2bfbae0cac6fc89a7c828b7f"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.1.0-validation-console.log",
+      "bytes": 23400,
+      "sha256": "b4c81923ca8bdfe8d797350770982a96dc80b7c8a99ce98e16223b5370571151"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.2.0-approval-focused.log",
+      "bytes": 6304,
+      "sha256": "5d829035fe5edc5eb68b6ecccb6805f1e9f231e11acac6308cb7ef594dde4bb5"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.2.0-validation-console.log",
+      "bytes": 40121,
+      "sha256": "15463e6771d0ff43b31304815b7bb835328acce357bee415178a98337fdb25fa"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.3.0-guided-ux-focused.log",
+      "bytes": 7326,
+      "sha256": "65a6c0bcf25da29da1c07367f048071d062d14f96fbbda1b883302a04c60fd05"
+    },
+    {
+      "path": "validation/AgentRiskLayer-v9.3.0-validation-console.log",
+      "bytes": 40776,
+      "sha256": "8fb37049f2ecb2a0f3b08a1b31cca5fe4639cbb0633a3ef3e196ea87119c201e"
+    }
+  ]
+}
