@@ -39,6 +39,18 @@ function mappedApplicabilityCandidates(workflowState) {
     );
 }
 
+function isMappedControl(workflowState, controlId) {
+  const requested = String(controlId || '').trim();
+  if (!requested) return false;
+
+  const mapped =
+    workflowState?.authoritativeArtifacts
+      ?.evidencePlan?.mappedControls;
+
+  return (Array.isArray(mapped) ? mapped : [])
+    .some((item) => item?.controlId === requested);
+}
+
 export function selectHostedApplicabilityWorkflowState(workflowState, requestedControlId) {
   const requested = String(requestedControlId || '').trim();
 
@@ -57,18 +69,28 @@ export function selectHostedApplicabilityWorkflowState(workflowState, requestedC
    * This prevents a displayed control from becoming unselectable between the
    * review response and the explicit human confirmation request.
    */
-  if (
-    workflowState?.stage !== 'persisted_lineage_resolution_required' ||
-    !requested
-  ) {
+  if (!requested || !isMappedControl(workflowState, requested)) {
     return null;
   }
 
+  /*
+   * The workflow projection is advisory for navigation; the write authority is
+   * revalidated below by recordControlApplicabilityConfirmation against the
+   * current assessment snapshot and exact Control Intelligence detail. Build
+   * the explicit user gate from the mapped control even if a second workflow
+   * reconstruction no longer reproduces the same transient projection.
+   */
   const candidates = mappedApplicabilityCandidates(workflowState);
   const selected = candidates.find(
     (item) => item.controlId === requested
-  );
-  if (!selected) return null;
+  ) || {
+    controlId: requested,
+    currentStage: 'applicability',
+    chainStatus: 'context_required',
+    nextAction:
+      'Confirm whether this control applies to the current declared agent architecture.',
+    deploymentImpact: 'hold'
+  };
 
   return {
     ...workflowState,
