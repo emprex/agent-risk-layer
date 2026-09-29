@@ -65,6 +65,22 @@ test('selection does not depend on transient ambiguity guard metadata', () => {
   assert.equal(selected?.scopedControl?.controlId, 'ARL-KB-057');
 });
 
+
+test('mapped control remains selectable when reconstructed projection omits applicability candidates', () => {
+  const reconstructed = state();
+  reconstructed.stage = 'target_context_binding_required';
+  reconstructed.authoritativeArtifacts.controlIntelligence.relevantControls = [];
+
+  const selected = selectHostedApplicabilityWorkflowState(
+    reconstructed,
+    'ARL-KB-046'
+  );
+
+  assert.equal(selected?.stage, 'control_applicability_required');
+  assert.equal(selected?.scopedControl?.controlId, 'ARL-KB-046');
+  assert.equal(selected?.nextAllowedAction?.name, 'resolve_control_applicability');
+});
+
 test('unknown or non-mapped control cannot be selected', () => {
   assert.equal(
     selectHostedApplicabilityWorkflowState(state(), 'ARL-KB-999'),
