@@ -67,7 +67,7 @@ The profile records these facts even where the current Risk Knowledge suggestion
 
 ## Conservative control-suggestion integration
 
-The existing Control Intelligence suggestion profile remains `ARL-SUGGEST-1.0.0` in this release. It is not silently changed.
+The existing Control Intelligence suggestion profile remains `ARL-SUGGEST-1.1.0` in this release. It is not silently changed.
 
 Only capability values with an exact existing architecture-fact equivalent are added to the current declared architecture facts:
 
@@ -132,7 +132,7 @@ The capability-profile change is designed against these failure modes:
 - **Concurrent editors overwrite one another:** existing `expectedCurrentSnapshotId` compare-and-swap rejects a stale editor.
 - **Secret material is stored in the profile:** existing recursive snapshot secret filtering still applies to nested assessment configuration.
 - **Client invents verified evidence:** capability data remains snapshot declaration and does not alter evidence verification state.
-- **Suggestion engine overclaims new capability semantics:** only exact mappings to the existing `ARL-SUGGEST-1.0.0` vocabulary are derived in this version.
+- **Suggestion engine overclaims new capability semantics:** only exact mappings to the existing `ARL-SUGGEST-1.1.0` vocabulary are derived in this version.
 - **Remediation loses autonomy/capability context:** the remediated snapshot path explicitly preserves and rebinds the profile and synchronized autonomy level.
 
 ## Acceptance criteria
