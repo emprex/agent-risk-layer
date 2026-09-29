@@ -65,7 +65,7 @@
       "annotationDate": "2026-07-31T10:42:36.060Z",
       "annotationType": "OTHER",
       "annotator": "Tool: AgentRiskLayer release process",
-      "comment": "Production container base is node:22.18.0-alpine3.22. Production persistence uses PostgreSQL through pg 8.22.0."
+      "comment": "Production container base is node:24.21.0-alpine3.24. Production persistence uses PostgreSQL through pg 8.23.0."
     }
   ]
 }
