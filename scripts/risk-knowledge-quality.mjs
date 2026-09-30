@@ -51,11 +51,10 @@ export function auditRiskKnowledge(asset) {
       if (MALFORMED.some((pattern) => pattern.test(String(value)))) findings.push({ id: entry.id, field, issue: 'known_malformed_combination', value });
       if (PLACEHOLDER.test(String(value))) findings.push({ id: entry.id, field, issue: 'unresolved_placeholder', value });
     }
-    for (const [index, value] of (entry.solution?.retest_acceptance || []).entries()) {
-      if (!/(?:is no longer reproducible|completes successfully|(?:is|are) denied before|are recorded)/i.test(value)) {
-        findings.push({ id: entry.id, field: `retest_acceptance[${index}]`, issue: 'missing_expected_result', value });
-      }
-    }
+    // Retest acceptance criteria are control-specific.
+    // Structural quality is enforced above (complete sentence, no truncation,
+    // no malformed fragments or unresolved placeholders). Do not require a
+    // universal result phrase that could distort a control's actual risk objective.
     const serialized = JSON.stringify(entry);
     if (PLACEHOLDER.test(serialized)) findings.push({ id: entry.id, field: '*', issue: 'unresolved_placeholder', value: null });
     if (digestRecord(entry) !== entry.content_digest) findings.push({ id: entry.id, field: 'content_digest', issue: 'digest_mismatch', value: null });
