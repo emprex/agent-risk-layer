@@ -16,3 +16,6 @@ agentrisk-redteam*.json
 agentrisk-redteam*.sarif
 # ARL17K generated benchmark evidence
 benchmarks/arl17k/evidence/generated/
+
+# Local ARL assessment reports
+data/local-reports/

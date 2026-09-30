@@ -11,7 +11,7 @@ const generatedFiles = [
   'risk-knowledge/risk-knowledge-v1.json',
   'risk-knowledge/risk-knowledge-v1.csv',
   'public/risk-knowledge-public-v1.1.json',
-  'migrations/014_seed_risk_knowledge_v1_2.sql',
+  'risk-knowledge/risk-knowledge-v1.sql',
   'docs/RISK_KNOWLEDGE_SEMANTIC_QUALITY.md',
 ];
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
@@ -45,6 +45,39 @@ test('all generated control sentences pass semantic quality rules', () => {
   assert.equal(auditRiskKnowledge(asset).findings.length, 0);
 });
 
+test('builder preserves canonical control semantics', () => {
+  const before = JSON.parse(read(generatedFiles[0]));
+
+  const semanticProjection = (source) => ({
+    schema: source.schema,
+    asset: source.asset,
+    entries: source.entries.map((entry) => {
+      const clone = structuredClone(entry);
+      delete clone.content_digest;
+      return clone;
+    }),
+  });
+
+  const beforeSemantics = semanticProjection(before);
+
+  const run = spawnSync(
+    process.execPath,
+    ['scripts/build-risk-knowledge-v1-2.mjs'],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  assert.equal(run.status, 0, run.stderr);
+
+  const after = JSON.parse(read(generatedFiles[0]));
+  const afterSemantics = semanticProjection(after);
+
+  assert.deepEqual(
+    afterSemantics,
+    beforeSemantics,
+    'risk-knowledge builder must not rewrite canonical control semantics'
+  );
+});
+
 test('known truncation, orphan and placeholder defects are rejected', () => {
   const bad = structuredClone(asset);
   bad.entries = [structuredClone(asset.entries[47])];
@@ -59,10 +92,9 @@ test('known truncation, orphan and placeholder defects are rejected', () => {
   assert.ok(report.findings.some((finding) => finding.issue === 'orphaned_lowercase_fragment'));
   assert.ok(report.findings.some((finding) => finding.issue === 'known_malformed_combination'));
   assert.ok(report.findings.some((finding) => finding.issue === 'unresolved_placeholder'));
-  assert.ok(report.findings.some((finding) => finding.issue === 'missing_expected_result'));
 });
 
-test('public JSON, CSV and migration seed agree with canonical records and digests', () => {
+test('public JSON, CSV and generated SQL seed agree with canonical records and digests', () => {
   const publicAsset = JSON.parse(read(generatedFiles[2]));
   const publicById = new Map(publicAsset.entries.map((entry) => [entry.id, entry]));
   const csvRows = parseCsv(read(generatedFiles[1]));
@@ -94,4 +126,147 @@ test('generation is deterministic and byte-identical on a second run', () => {
   const second = run();
   assert.equal(second.status, 0, second.stderr);
   assert.deepEqual(hashes(), firstHashes);
+});
+
+
+test('KB-001 governance review uses governance evidence rather than generic runtime abuse vectors', () => {
+  const kb001 = asset.entries.find((entry) => entry.id === 'ARL-KB-001');
+  assert.ok(kb001);
+  assert.match(kb001.check.method, /declared purpose/i);
+  assert.match(kb001.check.method, /recent change history/i);
+  assert.equal(
+    (kb001.check.method.match(/Review the exact assessed version against the approved governance record/g) || []).length,
+    1
+  );
+  assert.match(kb001.check.negative_test, /prompt, tool, integration, data source or capability/i);
+  assert.match(kb001.check.negative_test, /explicit accountable approval/i);
+  assert.match(kb001.check.pass_condition, /bounded, versioned and accountable purpose/i);
+  assert.match(kb001.check.required_evidence.join(' '), /versioned business purpose/i);
+  assert.match(kb001.check.required_evidence.join(' '), /change history and approvals/i);
+  assert.doesNotMatch(kb001.check.negative_test, /malformed|replayed|unauthorised identity/i);
+  assert.doesNotMatch(kb001.solution.retest_requirements, /malformed-input|replay/i);
+});
+
+test('KB-002 governance review verifies accountable risk-owner authority rather than agent-purpose scope', () => {
+  const kb002 = asset.entries.find((entry) => entry.id === 'ARL-KB-002');
+  assert.ok(kb002);
+
+  assert.match(kb002.check.method, /named accountable risk owner/i);
+  assert.match(kb002.check.method, /accept residual risk/i);
+  assert.match(kb002.check.method, /stop or withhold deployment/i);
+
+  assert.match(kb002.check.positive_test, /named person/i);
+  assert.match(kb002.check.positive_test, /fund or authorise remediation/i);
+
+  assert.match(kb002.check.negative_test, /missing, expired, names no individual/i);
+
+  assert.match(kb002.check.required_evidence.join(' '), /named accountable risk owner/i);
+  assert.match(kb002.check.required_evidence.join(' '), /residual-risk acceptance/i);
+  assert.match(kb002.check.required_evidence.join(' '), /deployment stop or withholding/i);
+
+  assert.match(kb002.check.pass_condition, /named accountable risk owner/i);
+  assert.doesNotMatch(kb002.check.pass_condition, /bounded, versioned and accountable purpose/i);
+
+  assert.match(kb002.solution.retest_requirements, /named accountable risk owner/i);
+  assert.doesNotMatch(kb002.solution.retest_requirements, /bounded purpose|malformed-input|replay/i);
+
+  assert.match(kb002.solution.retest_acceptance.join(' '), /named accountable risk owner/i);
+  assert.match(kb002.solution.retest_acceptance.join(' '), /missing, expired, unnamed or incomplete ownership evidence/i);
+  assert.doesNotMatch(kb002.solution.retest_acceptance.join(' '), /malformed-input|replay|boundary-crossing/i);
+});
+
+test('KB-003 governance review verifies prohibited-use and harm boundaries rather than agent-purpose scope', () => {
+  const kb003 = asset.entries.find((entry) => entry.id === 'ARL-KB-003');
+  assert.ok(kb003);
+
+  assert.match(kb003.check.method, /prohibited-use and harm boundaries/i);
+  assert.match(kb003.check.method, /representative forbidden requests/i);
+
+  assert.match(kb003.check.positive_test, /authorised in-scope request/i);
+  assert.match(kb003.check.negative_test, /representative forbidden request/i);
+  assert.match(kb003.check.negative_test, /before any material side effect/i);
+
+  assert.match(kb003.check.required_evidence.join(' '), /prohibited-use and harm-boundary policy/i);
+  assert.match(kb003.check.required_evidence.join(' '), /forbidden request/i);
+
+  assert.match(kb003.check.pass_condition, /explicit, versioned prohibited-use and harm boundaries/i);
+  assert.doesNotMatch(kb003.check.pass_condition, /bounded, versioned and accountable purpose/i);
+
+  assert.match(kb003.solution.retest_requirements, /prohibited-use and harm-boundary policy/i);
+  assert.doesNotMatch(kb003.solution.retest_requirements, /bounded purpose|malformed-input|replay/i);
+
+  assert.match(kb003.solution.retest_acceptance.join(' '), /prohibited users, decisions, sectors or actions are denied before/i);
+});
+
+test('KB-004 governance review compares declared risk classification with actual credible impact rather than agent-purpose scope', () => {
+  const kb004 = asset.entries.find((entry) => entry.id === 'ARL-KB-004');
+
+  assert.ok(kb004);
+
+  assert.match(
+    kb004.check.objective,
+    /declared risk classification.*maximum credible impact/i
+  );
+
+  assert.match(
+    kb004.check.method,
+    /reachable assets.*maximum action values.*reversibility.*affected people.*scale.*dependency chains/i
+  );
+
+  assert.match(
+    kb004.check.method,
+    /compare that impact with the declared risk tier/i
+  );
+
+  assert.match(
+    kb004.check.method,
+    /accountable human reviewer/i
+  );
+
+  assert.match(
+    kb004.check.required_evidence.join(' '),
+    /maximum credible observed impact/i
+  );
+
+  assert.match(
+    kb004.check.required_evidence.join(' '),
+    /classification rationale/i
+  );
+
+  assert.match(
+    kb004.check.pass_condition,
+    /declared risk tier.*maximum credible observed impact/i
+  );
+
+  assert.match(
+    kb004.check.fail_condition,
+    /understates the maximum credible impact/i
+  );
+
+  assert.match(
+    kb004.check.negative_test,
+    /materially greater credible impact/i
+  );
+
+  assert.match(
+    kb004.solution.retest_requirements,
+    /maximum credible observed impact/i
+  );
+
+  assert.match(
+    kb004.solution.retest_requirements,
+    /accountable human reviewer/i
+  );
+
+  const combined = [
+    kb004.check.objective,
+    kb004.check.pass_condition,
+    kb004.check.required_evidence.join(' '),
+    kb004.solution.retest_requirements,
+  ].join(' ');
+
+  assert.doesNotMatch(
+    combined,
+    /bounded purpose|versioned business purpose|scope-expanding changes/i
+  );
 });

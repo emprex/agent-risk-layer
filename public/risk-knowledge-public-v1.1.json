@@ -599,7 +599,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "8617a066d49958e3c8dde9e5fcfe215e77d7cf5a7b417423048fe31f305c2db8"
+      "content_digest": "4d21ee39a4364afaba6dfec038b63208be91cec3fcaa31a5a1650c2151aa5716"
     },
     {
       "id": "ARL-KB-002",
@@ -697,7 +697,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "2d5fe33234c247ee7bc3e7bfa7cba09243cc357a034d8d4f7487a79413e7489b"
+      "content_digest": "46d2c836136e363b829547daf676dd7d46b2f0e4d0ceb023c53bb3110d0d17f3"
     },
     {
       "id": "ARL-KB-003",
@@ -795,7 +795,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "729d133ad9e8600eb00196100ef76b834cd9331bc7b7dfa96de6f53892fdba64"
+      "content_digest": "282b745f6a124ef5834dc211debfa45e05acedb0ce388bb2664dc79be27b0a2b"
     },
     {
       "id": "ARL-KB-004",
@@ -906,7 +906,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "dda59ab8d2e372ed6e151993b2c2fda6e8ba3d9e537af4be09ab5caac29e53c5"
+      "content_digest": "41db34aaf6a212dda7cd09dd8aae6df9aae46676de5394b9946f50005eef3f49"
     },
     {
       "id": "ARL-KB-005",

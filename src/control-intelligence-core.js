@@ -15,6 +15,10 @@ const SECRET_KEY = /(?:password|secret|token|api.?key|private.?key|credential)/i
 const APPLICABILITY_DECISIONS = new Set(['applicable','not_applicable','context_required']);
 const BULK_APPLICABILITY_LIMIT = 20;
 
+const SYSTEM_RISK_TIERS = new Set(['low','medium','high','critical']);
+const SYSTEM_RISK_TIER_RANK = { low:1, medium:2, high:3, critical:4 };
+const SYSTEM_RISK_CLASSIFICATION_METHOD = 'ARL-IMPACT-CLASSIFICATION-1.0.0';
+
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
@@ -55,6 +59,323 @@ export async function createSystemSnapshot({ projectId, userId, input = {} }) {
     result = { snapshot: serializeSnapshot(await db.prepare('SELECT * FROM system_snapshots WHERE id=?').get(snapshotId)), created: true };
   });
   return result;
+}
+
+
+function normaliseSystemRiskTier(value, label) {
+  const tier = clean(value, 20).toLowerCase();
+  if (!SYSTEM_RISK_TIERS.has(tier)) {
+    throw badRequest(`${label} must be low, medium, high or critical.`);
+  }
+  return tier;
+}
+
+function normaliseMaximumCredibleImpact(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw badRequest('Maximum credible impact must be an object.');
+  }
+
+  const result = {
+    authority: clean(value.authority, 2000),
+    reachableAssets: Array.isArray(value.reachableAssets)
+      ? value.reachableAssets.map((item) => clean(item, 500)).filter(Boolean)
+      : [],
+    dataExposure: clean(value.dataExposure, 2000),
+    maximumAction: clean(value.maximumAction, 2000),
+    reversibility: clean(value.reversibility, 2000),
+    scale: clean(value.scale, 2000),
+    affectedPeople: clean(value.affectedPeople, 2000),
+    dependencyChains: Array.isArray(value.dependencyChains)
+      ? value.dependencyChains.map((item) => clean(item, 500)).filter(Boolean)
+      : [],
+  };
+
+  for (const field of [
+    'authority',
+    'dataExposure',
+    'maximumAction',
+    'reversibility',
+    'scale',
+    'affectedPeople',
+  ]) {
+    if (!result[field]) {
+      throw badRequest(`Maximum credible impact requires ${field}.`);
+    }
+  }
+
+  if (!result.reachableAssets.length) {
+    throw badRequest('Maximum credible impact requires reachableAssets.');
+  }
+
+  if (!result.dependencyChains.length) {
+    throw badRequest(
+      'Maximum credible impact requires dependencyChains, including an explicit none-observed statement when applicable.'
+    );
+  }
+
+  return result;
+}
+
+export async function recordSystemRiskClassification({
+  projectId,
+  userId,
+  input = {},
+}) {
+  let output;
+
+  await db.transaction(async () => {
+    const access = await requireAccess(projectId, userId, DECISION_ROLES, true);
+    const snapshot = await requireCurrentSnapshot(
+      access,
+      input.systemSnapshotId
+    );
+
+    const declaredRiskTier = normaliseSystemRiskTier(
+      input.declaredRiskTier,
+      'Declared risk tier'
+    );
+
+    const impactRequiredTier = normaliseSystemRiskTier(
+      input.impactRequiredTier,
+      'Impact-required tier'
+    );
+
+    const expectedDecision =
+      SYSTEM_RISK_TIER_RANK[declaredRiskTier]
+        >= SYSTEM_RISK_TIER_RANK[impactRequiredTier]
+        ? 'aligned'
+        : 'underclassified';
+
+    const decision = clean(input.decision, 30).toLowerCase();
+
+    if (!['aligned', 'underclassified'].includes(decision)) {
+      throw badRequest(
+        'Human classification decision must be aligned or underclassified.'
+      );
+    }
+
+    if (decision !== expectedDecision) {
+      throw badRequest(
+        `Classification decision is inconsistent with the human-entered tiers; expected ${expectedDecision}.`
+      );
+    }
+
+    const rationale = clean(input.rationale, 4000);
+
+    if (rationale.length < 20) {
+      throw badRequest(
+        'System risk classification requires a specific human rationale of at least 20 characters.'
+      );
+    }
+
+    const maximumCredibleImpact =
+      normaliseMaximumCredibleImpact(input.maximumCredibleImpact);
+
+    const evidenceReferences = Array.isArray(input.evidenceReferences)
+      ? [...new Set(
+          input.evidenceReferences
+            .map((item) => clean(item, 500))
+            .filter(Boolean)
+        )]
+      : [];
+
+    if (!evidenceReferences.length) {
+      throw badRequest(
+        'System risk classification requires version-bound evidence references.'
+      );
+    }
+
+    const limitations = clean(input.limitations, 4000);
+    const reviewedAt = nowIso();
+
+    const previous = await db.prepare(`
+      SELECT *
+      FROM system_risk_classifications
+      WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?
+        AND status='current'
+      ORDER BY reviewed_at DESC,id DESC
+      LIMIT 1
+    `).get(
+      access.project.workspace_id,
+      projectId,
+      snapshot.id
+    );
+
+    const classificationId = id('src_');
+
+    const descriptor = {
+      schema: 'arl.system-risk-classification.v1',
+      workspaceId: access.project.workspace_id,
+      projectId,
+      systemSnapshotId: snapshot.id,
+      snapshotDigest: snapshot.content_digest,
+      declaredRiskTier,
+      impactRequiredTier,
+      decision,
+      maximumCredibleImpact,
+      evidenceReferences,
+      rationale,
+      limitations,
+      classificationMethod: 'human_impact_review',
+      classificationMethodVersion: SYSTEM_RISK_CLASSIFICATION_METHOD,
+      reviewerId: userId,
+      reviewedAt,
+      supersedesClassificationId: previous?.id || null,
+    };
+
+    rejectSensitive(descriptor);
+
+    const classificationDigest = intelligenceDigest(descriptor);
+
+    if (previous) {
+      await db.prepare(`
+        UPDATE system_risk_classifications
+        SET status='superseded'
+        WHERE id=? AND status='current'
+      `).run(previous.id);
+    }
+
+    await db.prepare(`
+      INSERT INTO system_risk_classifications (
+        id,
+        workspace_id,
+        project_id,
+        system_snapshot_id,
+        snapshot_digest,
+        declared_risk_tier,
+        impact_required_tier,
+        decision,
+        maximum_credible_impact_json,
+        evidence_references_json,
+        rationale,
+        limitations,
+        classification_method,
+        classification_method_version,
+        reviewer_id,
+        reviewed_at,
+        supersedes_classification_id,
+        status,
+        descriptor_json,
+        classification_digest
+      )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'current',?,?)
+    `).run(
+      classificationId,
+      access.project.workspace_id,
+      projectId,
+      snapshot.id,
+      snapshot.content_digest,
+      declaredRiskTier,
+      impactRequiredTier,
+      decision,
+      canonicalJson(maximumCredibleImpact),
+      canonicalJson(evidenceReferences),
+      rationale,
+      limitations,
+      'human_impact_review',
+      SYSTEM_RISK_CLASSIFICATION_METHOD,
+      userId,
+      reviewedAt,
+      previous?.id || null,
+      canonicalJson(descriptor),
+      classificationDigest
+    );
+
+    await audit(
+      access,
+      userId,
+      'control_intelligence.system_risk_classification_recorded',
+      'system_risk_classification',
+      classificationId,
+      {
+        systemSnapshotId: snapshot.id,
+        snapshotDigest: snapshot.content_digest,
+        declaredRiskTier,
+        impactRequiredTier,
+        decision,
+        classificationMethodVersion:
+          SYSTEM_RISK_CLASSIFICATION_METHOD,
+        supersedesClassificationId: previous?.id || null,
+      }
+    );
+
+    output = serializeSystemRiskClassification(
+      await db.prepare(
+        'SELECT * FROM system_risk_classifications WHERE id=?'
+      ).get(classificationId)
+    );
+  });
+
+  return output;
+}
+
+export async function getSystemRiskClassification({
+  projectId,
+  userId,
+  systemSnapshotId = null,
+}) {
+  const access = await requireAccess(projectId, userId, VIEW_ROLES);
+
+  let snapshot;
+
+  if (systemSnapshotId) {
+    snapshot = await db.prepare(`
+      SELECT *
+      FROM system_snapshots
+      WHERE id=? AND workspace_id=? AND project_id=?
+    `).get(
+      clean(systemSnapshotId, 100),
+      access.project.workspace_id,
+      projectId
+    );
+
+    if (!snapshot) throw notFound('System snapshot not found.');
+    await verifySnapshot(snapshot);
+  } else {
+    snapshot = await db.prepare(`
+      SELECT *
+      FROM system_snapshots
+      WHERE workspace_id=? AND project_id=? AND status='current'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(access.project.workspace_id, projectId);
+
+    if (!snapshot) return null;
+    await verifySnapshot(snapshot);
+  }
+
+  const row = await db.prepare(`
+    SELECT *
+    FROM system_risk_classifications
+    WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?
+      AND status='current'
+    ORDER BY reviewed_at DESC,id DESC
+    LIMIT 1
+  `).get(
+    access.project.workspace_id,
+    projectId,
+    snapshot.id
+  );
+
+  if (!row) return null;
+
+  const stored = parseJson(row.descriptor_json, null);
+  const normalised = descriptorFromSystemRiskClassification(row);
+
+  if (
+    !stored
+    || canonicalJson(stored) !== canonicalJson(normalised)
+    || intelligenceDigest(normalised) !== row.classification_digest
+    || row.snapshot_digest !== snapshot.content_digest
+  ) {
+    await integrityFailure(
+      row,
+      'system_risk_classification',
+      'descriptor_or_snapshot_mismatch'
+    );
+  }
+
+  return serializeSystemRiskClassification(row);
 }
 
 export async function assessControlApplicability({projectId,controlId,userId,input={}}) {
@@ -323,8 +644,44 @@ async function deriveDeploymentDecision(access, snapshot) {
   const unboundFindings=Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items r WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk') AND NOT EXISTS (SELECT 1 FROM control_finding_bindings b WHERE b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=?)`).get(access.project.id,access.project.workspace_id,access.project.id,snapshot.id)).count||0);
   const closedSatisfied = await verifiedClosedRemediationControlIds(access,snapshot,evidence);
   const effectiveEvaluations = evaluations.map((row) => closedSatisfied.has(row.entry_id) && row.applicability_status==='unknown' ? { ...row, applicability_status: 'applicable' } : row);
-  const applicable = effectiveEvaluations.filter((row) => row.applicability_status === 'applicable');
-  const unknown = effectiveEvaluations.filter((row) => row.applicability_status === 'unknown');
+
+  /*
+   * Assessment readiness is scoped to controls that received an explicit
+   * applicability review for the current snapshot. The full control profile
+   * remains present and integrity-checked, but controls never brought into the
+   * assessment scope must not be silently treated as unresolved assessment
+   * work.
+   *
+   * Fail closed when no explicit applicability scope exists: in that case the
+   * complete profile remains the readiness scope.
+   */
+  const reviewedApplicabilityRows = await db.prepare(`
+    SELECT DISTINCT entry_id
+    FROM control_applicability_revisions
+    WHERE project_id=?
+      AND system_snapshot_id=?
+  `).all(access.project.id, snapshot.id);
+
+  const reviewedControlIds = new Set(
+    reviewedApplicabilityRows
+      .map((row) => row.entry_id)
+      .filter(Boolean)
+  );
+
+  const scopedEvaluations =
+    reviewedControlIds.size > 0
+      ? effectiveEvaluations.filter((row) =>
+          reviewedControlIds.has(row.entry_id)
+        )
+      : effectiveEvaluations;
+
+  const applicable = scopedEvaluations.filter(
+    (row) => row.applicability_status === 'applicable'
+  );
+
+  const unknown = scopedEvaluations.filter(
+    (row) => row.applicability_status === 'unknown'
+  );
   const tested = new Set(tests.filter((row) => row.result === 'passed' && (row.execution_kind==='initial'||validRetest(row,tests,findings))).map((row) => row.entry_id));
   for (const controlId of closedSatisfied) tested.add(controlId);
   const observed = new Set(evidence.filter((row) => ['verified'].includes(row.verification_state) && row.retention_status === 'active').map((row) => row.entry_id));
@@ -334,7 +691,15 @@ async function deriveDeploymentDecision(access, snapshot) {
   const approvals=await db.prepare(`SELECT b.entry_id,b.descriptor_json binding_descriptor,b.content_digest binding_digest,b.approval_requirement_id,a.*,q.descriptor_json requirement_descriptor,q.requirement_digest,q.action_digest requirement_action_digest,q.reuse_scope FROM control_snapshot_runtime_bindings b JOIN runtime_approvals a ON a.id=b.approval_id JOIN control_approval_requirements q ON q.id=b.approval_requirement_id AND q.workspace_id=b.workspace_id AND q.project_id=b.project_id AND q.system_snapshot_id=b.system_snapshot_id AND q.entry_id=b.entry_id WHERE b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=? AND b.binding_type='exact_action_approval'`).all(access.project.workspace_id,access.project.id,snapshot.id);
   const validApprovals=new Set(approvals.filter(validApproval).map(x=>x.entry_id));
   const missingApprovals=requiredApprovals.filter(x=>!validApprovals.has(x));
-  const summary = { applicableControls: applicable.length, controlsNeedingAssessment: unknown.length,
+  const summary = {
+    profileControls: evaluations.length,
+    assessmentScopeControls: scopedEvaluations.length,
+    excludedUnreviewedControls: Math.max(
+      0,
+      evaluations.length - scopedEvaluations.length
+    ),
+    applicableControls: applicable.length,
+    controlsNeedingAssessment: unknown.length,
     controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, openFindings: findings.length,
     criticalBlockers, failedTests: tests.filter((row) => row.result === 'failed').length,
     completedRetests: new Set([...tests.filter((row) => validRetest(row,tests,findings)).map((row)=>row.entry_id),...closedSatisfied]).size,verifiedClosedRemediationControls:closedSatisfied.size,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
@@ -708,6 +1073,67 @@ function serializeFinding(row, evaluation) { return { id: row.id, findingKey: ro
 function serializeRuntime(row) { return { id: row.id, decision: row.decision, observedDecision: row.observed_decision, severity: row.severity, ruleIds: parseJson(row.rule_ids_json, []), toolName: row.tool_name,
   argumentDigest: row.argument_digest, policyVersion: row.policy_version, policyDigest: row.policy_digest, retestCriteriaId: row.retest_criteria_id, remediationId: row.remediation_id, retestSatisfied: row.retest_satisfied == null ? null : Boolean(row.retest_satisfied), createdAt: row.created_at }; }
 function serializeApproval(row) { return { id: row.id, toolName: row.tool_name, environment: row.environment, actionDigest: row.action_digest, status: row.status, issuedAt: row.issued_at, expiresAt: row.expires_at, consumedAt: row.consumed_at, runtimeEventId: row.runtime_event_id }; }
+
+function descriptorFromSystemRiskClassification(row) {
+  return {
+    schema: 'arl.system-risk-classification.v1',
+    workspaceId: row.workspace_id,
+    projectId: row.project_id,
+    systemSnapshotId: row.system_snapshot_id,
+    snapshotDigest: row.snapshot_digest,
+    declaredRiskTier: row.declared_risk_tier,
+    impactRequiredTier: row.impact_required_tier,
+    decision: row.decision,
+    maximumCredibleImpact: parseJson(
+      row.maximum_credible_impact_json,
+      {}
+    ),
+    evidenceReferences: parseJson(
+      row.evidence_references_json,
+      []
+    ),
+    rationale: row.rationale,
+    limitations: row.limitations,
+    classificationMethod: row.classification_method,
+    classificationMethodVersion:
+      row.classification_method_version,
+    reviewerId: row.reviewer_id,
+    reviewedAt: row.reviewed_at,
+    supersedesClassificationId:
+      row.supersedes_classification_id || null,
+  };
+}
+
+function serializeSystemRiskClassification(row) {
+  return {
+    id: row.id,
+    systemSnapshotId: row.system_snapshot_id,
+    snapshotDigest: row.snapshot_digest,
+    declaredRiskTier: row.declared_risk_tier,
+    impactRequiredTier: row.impact_required_tier,
+    decision: row.decision,
+    maximumCredibleImpact: parseJson(
+      row.maximum_credible_impact_json,
+      {}
+    ),
+    evidenceReferences: parseJson(
+      row.evidence_references_json,
+      []
+    ),
+    rationale: row.rationale,
+    limitations: row.limitations,
+    classificationMethod: row.classification_method,
+    classificationMethodVersion:
+      row.classification_method_version,
+    reviewerId: row.reviewer_id,
+    reviewedAt: row.reviewed_at,
+    supersedesClassificationId:
+      row.supersedes_classification_id || null,
+    status: row.status,
+    classificationDigest: row.classification_digest,
+  };
+}
+
 function serializeDecision(row) { return { id: row.id, systemSnapshotId: row.system_snapshot_id, controlProfileVersion: row.control_profile_version, decision: row.decision, status: row.status, rationale: row.rationale,
   summary: parseJson(row.summary_json, {}), decisionMethod: row.decision_method, decisionDigest: row.decision_digest, decidedAt: row.decided_at, expiresAt: row.expires_at, reassessmentTrigger: row.reassessment_trigger }; }
 function threatScenarios(row) { const problem = parseJson(row.problem_json, {}); return [{ id: `threat:${row.entry_id || 'control'}`, label: problem.credible_failure_or_attack || problem.statement || 'Control-specific failure or attack scenario', affectedAssets: problem.affected_assets || [], trustBoundary: problem.trust_boundary || null }]; }
