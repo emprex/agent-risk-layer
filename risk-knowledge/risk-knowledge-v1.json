@@ -2773,66 +2773,65 @@
       "title": "AI assets and agents are not fully inventoried",
       "problem": {
         "statement": "Unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership.",
-        "customer_symptom": "A user or operator may observe unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot demonstrate that every in-scope agent, model, prompt, tool, data store, service identity, deployment or scheduled AI component is represented in the current inventory with accountable ownership and lifecycle information.",
+        "credible_failure_or_attack": "Configuration drift, shadow AI adoption, undocumented experimentation, deployment changes or incomplete discovery can leave active AI assets outside the authoritative inventory, allowing them to escape assessment, patching, ownership and change control.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "agents and orchestration components",
+          "models, model endpoints and model configurations",
+          "system prompts and material prompt configurations",
+          "tools, MCP servers and external integrations",
+          "memory, vector stores and other AI data stores",
+          "service identities, scheduled jobs and deployments"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
-          "organisations operating multiple AI systems"
+          "all assessed AI systems"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between organisations operating multiple AI systems and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "configuration drift, shadow AI adoption, incomplete discovery, undocumented experimentation or unmanaged deployment change",
+        "trust_boundary": "The control reconciles the declared authoritative inventory with assets actually observable inside the assessed scope and version.",
+        "operational_impact": "Undocumented or stale AI assets can remain unowned, unassessed, unpatched or outside approved lifecycle and change-control processes, preventing a defensible assessment of the deployed system."
       },
       "check": {
         "id": "ARL-CHK-011",
-        "objective": "Determine whether the assessed system prevents or detects: ai assets and agents are not fully inventoried.",
-        "method": "Discover repositories, deployments, model endpoints, MCP configurations, tools, vector stores, service accounts and scheduled jobs; reconcile with the declared register. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether all in-scope AI assets and agentic components are completely, accurately and accountably represented in the current inventory.",
+        "method": "Enumerate observable repositories, deployments, agents, model endpoints, prompt configurations, MCP servers, tools, data stores, service identities and scheduled jobs; reconcile them with the authoritative declared inventory. Verify each required inventory record has an accountable owner, purpose, environment, version or identifier, relevant data or permission scope, dependencies and lifecycle status. Record undeclared observed assets, stale declared assets and unresolved ownership or version gaps.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
-          "negative or abuse test",
+          "inventory reconciliation",
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-011 assessed system, version, environment and scope for AI assets and agents are not fully inventoried",
-          "ARL-KB-011 control configuration or source location showing how reduce the likelihood and impact of ai assets and agents are not fully inventoried and make the remaining risk visible.",
-          "ARL-KB-011 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
-          "ARL-KB-011 policy, authorization, tool or audit events proving whether the tested ai assets and agents are not fully inventoried path executed",
-          "ARL-KB-011 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-011 assessed system, exact version, environment and inventory scope",
+          "The authoritative declared inventory or register used for the assessed version",
+          "Read-only discovery evidence identifying observable agents, models, prompts, tools, data stores, service identities, deployments and scheduled jobs in scope",
+          "A reproducible reconciliation showing matched, undeclared, stale, orphaned or unresolved inventory entries",
+          "Reviewer identity, timestamp and evidence digest binding the reconciliation to the assessed version"
         ],
-        "pass_condition": "ARL-KB-011 passes only when “AI assets and agents are not fully inventoried” is not reproducible through the documented abuse cases, the valid workflow remains bounded to system prompt, retrieved context and persistent memory and source documents, messages and generated outputs, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-011 fails when unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-011 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "ARL-KB-011 passes only when every in-scope asset observed through the documented discovery sources is represented in the current authoritative inventory, required ownership and lifecycle metadata is present, no unresolved undeclared or stale asset remains, and the reconciliation evidence is attributable, reproducible and bound to the assessed version.",
+        "fail_condition": "ARL-KB-011 fails when an in-scope observed AI asset or agentic component is absent from the authoritative inventory, a declared asset cannot be reconciled to the assessed system, required ownership or lifecycle information is missing, or the inventory reconciliation cannot be reproduced from version-bound evidence.",
+        "limitations": "A bounded inventory reconciliation cannot prove the absence of dormant, externally hosted, transient or otherwise undiscoverable assets outside the stated discovery sources and assessment scope.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-011's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Use an owner-authorised assessment scope and exact target version.",
+          "Perform discovery read-only and do not deploy, register or modify target components solely for this test.",
+          "Identify the authoritative inventory and the discovery sources that will be reconciled before assessment."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-011, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-011 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Reconcile the declared inventory against the observable components of the exact assessed version and verify that every in-scope observed asset has the required inventory record and accountable metadata.",
+        "negative_test": "Using a synthetic inventory fixture, historical discrepancy or other non-mutating test case, verify that an observed-but-undeclared, stale or ownerless asset is reported as an inventory gap and is not silently accepted as complete.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "control owner or authorised assessor",
+          "accountable asset owner where ownership evidence is required"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-011 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “AI assets and agents are not fully inventoried” must be denied, quarantined or routed to explicit review before a material side effect."
+          "The authoritative declared inventory plus version-bound discovery evidence must produce a reproducible reconciliation result.",
+          "Any undeclared, stale, orphaned or materially incomplete inventory record must produce an explicit unresolved gap or finding rather than a passing result."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Use read-only discovery against the assessed target wherever possible.",
+          "Use synthetic fixtures or historical evidence for negative cases instead of introducing unmanaged assets into the target.",
+          "Do not probe third-party or production systems outside the explicitly authorised scope."
         ]
       },
       "solution": {
@@ -2842,34 +2841,34 @@
         "default_owner": "Platform security owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-011: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-011: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-011: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-011: maintain one authoritative, versioned inventory for in-scope AI assets and agentic components.",
+          "ARL-KB-011: reconcile inventory records against deterministic discovery sources and investigate every unresolved mismatch.",
+          "ARL-KB-011: require accountable ownership and lifecycle metadata before a new asset is accepted into the approved operating scope."
         ],
-        "monitoring": "For ARL-KB-011, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-011 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor for differences between declared inventory and observable repositories, deployments, model endpoints, MCP/tool configuration and data stores; alert the Platform security owner on undeclared assets, stale records, missing owners and unexpected inventory drift.",
+        "containment": "Restrict or hold an unregistered or materially unresolved AI asset from approved use until its identity, owner, purpose, scope, version, dependencies and lifecycle status are established and reviewed.",
         "retest_acceptance": [
-          "ARL-KB-011: “AI assets and agents are not fully inventoried” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-011: Authorised in-scope use completes successfully, remains within the documented asset scope for ai assets and agents are not fully inventoried, and produces no unintended side effect.",
-          "ARL-KB-011: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-011: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-011: The exact remediated version has been reconciled against the authoritative inventory.",
+          "ARL-KB-011: No unresolved observed-but-undeclared, stale, orphaned or materially incomplete inventory entries remain.",
+          "ARL-KB-011: Required ownership, purpose, environment, version or identifier, dependencies and lifecycle information are recorded for in-scope assets.",
+          "ARL-KB-011: Reviewer identity, timestamp, assessed version, inventory version and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-011 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Maintain a continuously reconciled inventory with owner, purpose, environment, version, data class, permissions, dependencies and lifecycle status. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-011 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Identify the unresolved asset, prevent further uncontrolled expansion of its approved scope where necessary, preserve discovery evidence and require accountable review before treating it as an approved inventoried component.",
+        "root_cause_remediation": "Maintain a continuously reconciled authoritative inventory with owner, purpose, environment, version or immutable identifier, data class, permissions, dependencies and lifecycle status, and integrate inventory updates into deployment and change control.",
+        "preventive_control": "Require new or changed AI assets, agents, models, prompts, tools, stores and integrations to be registered in the authoritative inventory and reviewed through change control before they enter the approved operating scope.",
         "accountable_owner": "Platform security owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative AI asset inventory or register",
+          "documented read-only discovery sources for the assessed environment",
+          "accountable asset and change owners",
+          "versioned evidence storage and change-control process"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-011 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-011 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "rollback_considerations": "Preserve prior inventory versions for traceability, but do not restore an older register if doing so would omit assets present in the current assessed system.",
+        "retest_requirements": "Repeat the same inventory discovery and reconciliation procedure against the exact remediated version and confirm that each previously unresolved asset or record now reconciles before changing the finding or deployment decision.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-011",
-          "Passed retest evidence bound to ARL-KB-011 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Updated authoritative inventory bound to the exact assessed or remediated version",
+          "Passed reconciliation evidence showing resolution of the original inventory gaps",
+          "Named accountable reviewer and residual-risk or deployment decision"
         ]
       },
       "mappings": [
@@ -2906,10 +2905,10 @@
         "last_reviewed": "2026-08-05",
         "next_review_due": "2026-11-03",
         "change_triggers": [
-          "ARL-KB-011 control or enforcement change",
-          "ARL-KB-011 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-011 bypass, incident or new attack evidence",
-          "ARL-KB-011 evidence expiry or material scope change"
+          "ARL-KB-011 inventory schema, discovery source or reconciliation method change",
+          "ARL-KB-011 new agent, model, prompt, tool, data-store, provider or deployment type",
+          "ARL-KB-011 discovery of an undeclared, stale or ownerless asset",
+          "ARL-KB-011 evidence expiry or material assessment-scope change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -2918,11 +2917,11 @@
         "clause_match": "any",
         "clauses": [
           {
-            "source_label": "organisations operating multiple AI systems",
+            "source_label": "all assessed AI systems",
             "match": "all",
             "predicates": [
               {
-                "fact": "has_multiple_ai_systems",
+                "fact": "always",
                 "operator": "eq",
                 "value": true
               }
@@ -2967,7 +2966,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "372f86c01b5b5881ca0c0c54ceddc3cb92432fdf25410902a549586a29e8fe40"
+      "content_digest": "5f32d0bfb97e50ca2d78f9eef7dc05c6e15f724e141ae0f7f9c7edec16e13ec4"
     },
     {
       "id": "ARL-KB-012",

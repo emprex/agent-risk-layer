@@ -1512,24 +1512,24 @@
       "title": "AI assets and agents are not fully inventoried",
       "problem": {
         "statement": "Unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership.",
-        "customer_symptom": "A user or operator may observe unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot demonstrate that every in-scope agent, model, prompt, tool, data store, service identity, deployment or scheduled AI component is represented in the current inventory with accountable ownership and lifecycle information.",
+        "credible_failure_or_attack": "Configuration drift, shadow AI adoption, undocumented experimentation, deployment changes or incomplete discovery can leave active AI assets outside the authoritative inventory, allowing them to escape assessment, patching, ownership and change control.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "agents and orchestration components",
+          "models, model endpoints and model configurations",
+          "system prompts and material prompt configurations",
+          "tools, MCP servers and external integrations",
+          "memory, vector stores and other AI data stores",
+          "service identities, scheduled jobs and deployments"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
-          "organisations operating multiple AI systems"
+          "all assessed AI systems"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between organisations operating multiple AI systems and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If unknown agents, models, prompts, tools or data stores escape assessment, patching and ownership, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "configuration drift, shadow AI adoption, incomplete discovery, undocumented experimentation or unmanaged deployment change",
+        "trust_boundary": "The control reconciles the declared authoritative inventory with assets actually observable inside the assessed scope and version.",
+        "operational_impact": "Undocumented or stale AI assets can remain unowned, unassessed, unpatched or outside approved lifecycle and change-control processes, preventing a defensible assessment of the deployed system."
       },
       "solution_summary": {
         "recommended_remediation": "Maintain a continuously reconciled inventory with owner, purpose, environment, version, data class, permissions, dependencies and lifecycle status.",
@@ -1559,10 +1559,10 @@
         "last_reviewed": "2026-08-05",
         "next_review_due": "2026-11-03",
         "change_triggers": [
-          "ARL-KB-011 control or enforcement change",
-          "ARL-KB-011 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-011 bypass, incident or new attack evidence",
-          "ARL-KB-011 evidence expiry or material scope change"
+          "ARL-KB-011 inventory schema, discovery source or reconciliation method change",
+          "ARL-KB-011 new agent, model, prompt, tool, data-store, provider or deployment type",
+          "ARL-KB-011 discovery of an undeclared, stale or ownerless asset",
+          "ARL-KB-011 evidence expiry or material assessment-scope change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -1579,11 +1579,11 @@
         "clause_match": "any",
         "clauses": [
           {
-            "source_label": "organisations operating multiple AI systems",
+            "source_label": "all assessed AI systems",
             "match": "all",
             "predicates": [
               {
-                "fact": "has_multiple_ai_systems",
+                "fact": "always",
                 "operator": "eq",
                 "value": true
               }
@@ -1599,7 +1599,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "372f86c01b5b5881ca0c0c54ceddc3cb92432fdf25410902a549586a29e8fe40"
+      "content_digest": "5f32d0bfb97e50ca2d78f9eef7dc05c6e15f724e141ae0f7f9c7edec16e13ec4"
     },
     {
       "id": "ARL-KB-012",
