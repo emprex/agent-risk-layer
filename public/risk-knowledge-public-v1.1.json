@@ -1332,7 +1332,7 @@
         "operational_impact": "If prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
-        "recommended_remediation": "Use change classification, code review, signed artefacts, automated negative tests, staged rollout and rollback for all security-relevant changes.",
+        "recommended_remediation": "Classify security-relevant changes; require appropriate review and negative tests; bind approvals and evidence to immutable versions or artefact digests; enforce reviewed deployment provenance; trigger reassessment after material scope or architecture changes; and maintain a known-good rollback version.",
         "default_owner": "Engineering owner",
         "priority": "P1"
       },
@@ -1399,7 +1399,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "5b45cb26e3106e8722b6e0c6373f6f71e0f27dcac4e0a0ca08d243fbf41768a5"
+      "content_digest": "0a5e48687f199e24eca1fb3a8af2fedfc47d825de1c4c44dd2f20f44b590e6ab"
     },
     {
       "id": "ARL-KB-010",

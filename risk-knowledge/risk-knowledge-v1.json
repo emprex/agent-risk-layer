@@ -2308,8 +2308,8 @@
       },
       "check": {
         "id": "ARL-CHK-009",
-        "objective": "Determine whether the assessed system prevents or detects: security-relevant changes bypass review.",
-        "method": "Inspect version history and deployment records for review gates covering prompts, models, tools, permissions, policies, schemas and providers. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether security-relevant changes to a production agent are classified, reviewed, tested and approved before they become the deployed or otherwise authoritative production version.",
+        "method": "Inspect version history, change records, review evidence and deployment provenance for security-relevant changes to prompts, models, tools, permissions, policies, schemas, data sources, dependencies and providers. For a representative material change, trace the exact source version through classification, security review, required tests, accountable approval and deployment. Verify that approval and test evidence are bound to the exact version or immutable artefact that reaches production, and that a changed, unreviewed or stale version cannot inherit approval from an earlier version. Confirm that material architecture or scope changes trigger reassessment or revalidation and that rollback preserves a known reviewed state.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -2317,42 +2317,47 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-009 assessed system, version, environment and scope for Security-relevant changes bypass review",
-          "ARL-KB-009 control configuration or source location showing how reduce the likelihood and impact of security-relevant changes bypass review and make the remaining risk visible.",
-          "ARL-KB-009 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
-          "ARL-KB-009 policy, authorization, tool or audit events proving whether the tested security-relevant changes bypass review path executed",
-          "ARL-KB-009 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-009 exact assessed production version, environment and authoritative deployment identity",
+          "ARL-KB-009 security-relevant change classification and description",
+          "ARL-KB-009 review, threat-model or equivalent risk-analysis evidence required for the material change",
+          "ARL-KB-009 tests and approval attributable to the exact version or immutable artefact",
+          "ARL-KB-009 deployment provenance showing which reviewed version became authoritative in production",
+          "ARL-KB-009 stale-evidence, unreviewed-change or version-substitution test result",
+          "ARL-KB-009 reviewer identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-009 passes only when “Security-relevant changes bypass review” is not reproducible through the documented abuse cases, the valid workflow remains bounded to system prompt, retrieved context and persistent memory and source documents, messages and generated outputs, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-009 fails when prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-009 passes only when security-relevant production changes are identified before deployment, receive the required review and tests, and have accountable approval bound to the exact deployed version or immutable artefact; stale evidence or approval from a different material version cannot authorize the change; material scope or architecture changes trigger reassessment or revalidation; and attributable deployment evidence supports the conclusion.",
+        "fail_condition": "ARL-KB-009 fails when a security-relevant prompt, model, tool, permission, policy, schema, data-source, dependency or provider change can become authoritative in production without the required review, tests or approval; when approval or evidence can be reused across a materially different version; when production provenance cannot identify the reviewed artefact; or when a material scope or architecture change does not trigger required reassessment or revalidation.",
         "limitations": "This bounded ARL-KB-009 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-009's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact production environment and authoritative deployed version or immutable artefact covered by the assessment.",
+          "Obtain owner authorisation before inspecting deployment/change evidence or executing any change-path test.",
+          "Perform destructive, bypass or altered-version tests only in staging, a clone, dry-run workflow or historical/synthetic evidence set; do not deliberately deploy an unreviewed artefact to production.",
+          "Record the expected review, test, approval and deployment requirements before evaluating the representative change."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-009, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-009 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Trace one authorised security-relevant change from its source version through classification, required review, tests, accountable approval and deployment, and verify that every evidence item refers to the exact production artefact.",
+        "negative_test": "Use a synthetic or historical comparison in which the approved artefact is changed after review, its version or digest differs, or material scope changes without reassessment, and verify that the old approval and evidence cannot authorize the changed production version.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "engineering or change owner responsible for the assessed production system",
+          "accountable reviewer or approver for security-relevant changes",
+          "deployment or release identity where deployment provenance is part of the assessed path"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-009 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Security-relevant changes bypass review” must be denied, quarantined or routed to explicit review before a material side effect."
+          "An exact reviewed and approved production artefact with matching evidence may proceed to human closure.",
+          "A materially changed artefact must not inherit review, test or approval evidence from the previous version.",
+          "A material architecture or scope change must trigger reassessment or revalidation before production approval.",
+          "Missing deployment provenance or inability to bind evidence to the exact production version must not produce a pass."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Do not deliberately bypass production change controls or deploy an unreviewed artefact to production.",
+          "Exercise altered-version, stale-approval and scope-change cases only in an authorised non-production, dry-run, synthetic or historical test path.",
+          "Do not modify third-party or customer systems as part of the test.",
+          "Preserve exact version, digest, approval, test and deployment evidence for human review."
         ]
       },
       "solution": {
         "id": "ARL-SOL-009",
-        "control_objective": "Reduce the likelihood and impact of security-relevant changes bypass review and make the remaining risk visible.",
-        "recommended_remediation": "Use change classification, code review, signed artefacts, automated negative tests, staged rollout and rollback for all security-relevant changes.",
+        "control_objective": "Ensure security-relevant production changes cannot bypass classification, review, testing, accountable approval and exact-version deployment controls.",
+        "recommended_remediation": "Classify security-relevant changes; require appropriate review and negative tests; bind approvals and evidence to immutable versions or artefact digests; enforce reviewed deployment provenance; trigger reassessment after material scope or architecture changes; and maintain a known-good rollback version.",
         "default_owner": "Engineering owner",
         "priority": "P1",
         "implementation_principles": [
@@ -2379,7 +2384,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-009 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-009 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the original change-bypass case against the remediated production workflow using an altered version, stale approval or material scope change, and confirm that the changed artefact cannot become authoritative until new review, tests and accountable approval are bound to that exact version.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-009",
           "Passed retest evidence bound to ARL-KB-009 and the current knowledge digest",
@@ -2481,7 +2486,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "5b45cb26e3106e8722b6e0c6373f6f71e0f27dcac4e0a0ca08d243fbf41768a5"
+      "content_digest": "0a5e48687f199e24eca1fb3a8af2fedfc47d825de1c4c44dd2f20f44b590e6ab"
     },
     {
       "id": "ARL-KB-010",
