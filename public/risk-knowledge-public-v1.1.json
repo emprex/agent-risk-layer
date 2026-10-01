@@ -1133,7 +1133,7 @@
         "operational_impact": "If a model, mcp server, plugin, vector service or observability vendor can change behaviour, process data elsewhere or become compromised, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
-        "recommended_remediation": "Maintain a vendor register, approved configurations, data-processing constraints, change alerts, fallback plans and periodic reassessment.",
+        "recommended_remediation": "Maintain an approved provider register tied to system scope and exact configuration; document data and network boundaries; require accountable approval for provider or endpoint changes; define incident, disablement, fallback and exit controls; and reassess after material provider changes.",
         "default_owner": "Vendor risk owner",
         "priority": "P1"
       },
@@ -1200,7 +1200,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "8cc59c3402dee3666a26f5871e0dba2e0fcf316377e428dce347e4ab07b78849"
+      "content_digest": "ac0f9fa807c348a227bf6df6c569185c07df13648ba33a07ea70b671bc422621"
     },
     {
       "id": "ARL-KB-008",

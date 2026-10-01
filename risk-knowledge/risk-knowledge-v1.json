@@ -1891,8 +1891,8 @@
       },
       "check": {
         "id": "ARL-CHK-007",
-        "objective": "Determine whether the assessed system prevents or detects: third-party ai and tool providers are not assessed.",
-        "method": "Review contracts, subprocessors, data locations, security evidence, model-change terms, incident notification and exit controls for every external dependency. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether every external AI, MCP, tool, plugin, vector, observability or other service provider used by the assessed system is identified, approved, bounded and subject to accountable change review.",
+        "method": "Inventory every external provider or remotely operated dependency that can influence agent behaviour, receive data, provide model output, expose tools or affect deployment. Compare the observed provider set and configuration with the approved system scope. For each applicable provider, review the approved purpose, data sent or received, deployment or endpoint configuration, version/change controls, incident or compromise response, disablement or fallback path, and evidence of accountable approval. Treat dormant but activatable external-provider paths as review items when they can be enabled without an approved scope change. Use synthetic/local evidence only and do not exercise real third-party services without explicit authorisation.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -1900,30 +1900,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-007 assessed system, version, environment and scope for Third-party AI and tool providers are not assessed",
-          "ARL-KB-007 control configuration or source location showing how reduce the likelihood and impact of third-party ai and tool providers are not assessed and make the remaining risk visible.",
-          "ARL-KB-007 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
-          "ARL-KB-007 policy, authorization, tool or audit events proving whether the tested third-party ai and tool providers are not assessed path executed",
-          "ARL-KB-007 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-007 assessed system, exact version, environment and approved scope",
+          "ARL-KB-007 observed model, MCP, plugin, API and other provider inventory",
+          "ARL-KB-007 approved provider and configuration record, including data and network boundaries where applicable",
+          "ARL-KB-007 evidence of provider/configuration drift, dormant external-provider paths or confirmation that none are present",
+          "ARL-KB-007 change-control, fallback or disablement evidence for applicable external providers",
+          "ARL-KB-007 reviewer identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-007 passes only when “Third-party AI and tool providers are not assessed” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tool endpoints and downstream systems and financial, administrative or state-changing actions, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-007 fails when a model, mcp server, plugin, vector service or observability vendor can change behaviour, process data elsewhere or become compromised, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-007 passes only when every applicable external provider or remotely operated dependency observed in the exact assessed version is identified and consistent with the approved scope; its relevant data, network and authority boundaries are documented; material provider or configuration changes require accountable review; and version-bound evidence supports the conclusion. A dormant external-provider path does not pass merely because credentials are currently absent if it can be activated outside the approved change process.",
+        "fail_condition": "ARL-KB-007 fails when an external AI, MCP, plugin, vector, observability or other provider can influence behaviour, receive data or become active without being identified and approved; when observed provider/configuration state differs materially from the approved scope without accountable review; when provider change, compromise, fallback or disablement is unmanaged; or when the conclusion is unsupported by version-bound evidence.",
         "limitations": "This bounded ARL-KB-007 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-007's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-007, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-007 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Inspect the exact approved provider and tool configuration and verify that the active provider set matches the documented scope, with expected bounded data, network and authority paths.",
+        "negative_test": "Introduce or identify a synthetic unapproved or dormant external-provider path, provider/configuration drift, or an unapproved provider change and verify that the assessment identifies it for review or failure rather than silently treating it as approved.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-007 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Third-party AI and tool providers are not assessed” must be denied, quarantined or routed to explicit review before a material side effect."
+          "An exact in-scope provider configuration matching the approved scope must produce a bounded documented result.",
+          "An unapproved, drifted or dormant-but-activatable external-provider path must be surfaced as a review or failure condition.",
+          "Missing provider approval or configuration evidence must not be converted into a pass."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -1934,8 +1936,8 @@
       },
       "solution": {
         "id": "ARL-SOL-007",
-        "control_objective": "Reduce the likelihood and impact of third-party ai and tool providers are not assessed and make the remaining risk visible.",
-        "recommended_remediation": "Maintain a vendor register, approved configurations, data-processing constraints, change alerts, fallback plans and periodic reassessment.",
+        "control_objective": "Ensure external AI and tool providers are explicitly identified, approved, bounded and reassessed so provider and supply-chain risk remains visible.",
+        "recommended_remediation": "Maintain an approved provider register tied to system scope and exact configuration; document data and network boundaries; require accountable approval for provider or endpoint changes; define incident, disablement, fallback and exit controls; and reassess after material provider changes.",
         "default_owner": "Vendor risk owner",
         "priority": "P1",
         "implementation_principles": [
@@ -1962,7 +1964,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-007 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-007 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact provider-inventory and configuration comparison against the remediated version, including the original unapproved, drifted or dormant-provider case, and confirm that the discrepancy is removed or explicitly approved before changing the deployment decision.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-007",
           "Passed retest evidence bound to ARL-KB-007 and the current knowledge digest",
@@ -2064,7 +2066,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "8cc59c3402dee3666a26f5871e0dba2e0fcf316377e428dce347e4ab07b78849"
+      "content_digest": "ac0f9fa807c348a227bf6df6c569185c07df13648ba33a07ea70b671bc422621"
     },
     {
       "id": "ARL-KB-008",
