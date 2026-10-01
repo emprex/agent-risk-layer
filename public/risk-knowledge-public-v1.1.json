@@ -1229,7 +1229,7 @@
         "operational_impact": "If the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
-        "recommended_remediation": "Record role-specific legal analysis, transparent notices, rights handling, human review and data-protection impact assessment where required.",
+        "recommended_remediation": "Document the applicable processing purpose and organisation-approved legal-basis analysis; align notices with observed agent and data behaviour; document relevant retention and rights-handling routes; assign accountable privacy ownership; and review the records after material changes to data, purpose, provider or user journey.",
         "default_owner": "Privacy counsel and DPO",
         "priority": "P1"
       },
@@ -1301,7 +1301,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "d186036b4cafff8d46035851608d0b4eb22604cd14cb48d4403d3180972869e5"
+      "content_digest": "60eec8ff9ce6eb730357d77436e2f0db9dc47c95537a1a5806848c3b8068b3e4"
     },
     {
       "id": "ARL-KB-009",
