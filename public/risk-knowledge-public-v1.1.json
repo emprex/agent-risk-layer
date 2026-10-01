@@ -524,7 +524,7 @@
         "operational_impact": "If the agent has no bounded business purpose, so new prompts, tools or integrations silently broaden what it may do, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
-        "recommended_remediation": "Record a versioned purpose, permitted outcomes, prohibited outcomes and accountable owner; require change approval before adding authority or data access.",
+        "recommended_remediation": "Record and approve a versioned agent purpose, permitted outcomes, prohibited outcomes, accountable owner and material scope boundaries. Require an attributable change record and accountable human approval before expanding prompts, tools, integrations, data access, network reach or execution authority.",
         "default_owner": "Product owner",
         "priority": "P1"
       },
@@ -599,7 +599,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4d21ee39a4364afaba6dfec038b63208be91cec3fcaa31a5a1650c2151aa5716"
+      "content_digest": "1614736dbfbf3086d3afef594d122604506c72a244f053d2b9c0aa5dda3c88de"
     },
     {
       "id": "ARL-KB-002",
@@ -610,27 +610,27 @@
       "title": "No accountable risk owner",
       "problem": {
         "statement": "No named person is responsible for accepting residual risk, funding remediation or stopping deployment.",
-        "customer_symptom": "A user or operator may observe no named person is responsible for accepting residual risk, funding remediation or stopping deployment; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in no named person is responsible for accepting residual risk, funding remediation or stopping deployment, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot identify who is accountable for accepting residual risk, authorising remediation or stopping deployment, so material security decisions may remain unresolved, be made informally, or be attributed to someone without the required authority.",
+        "credible_failure_or_attack": "governance failure can leave a material risk, unresolved finding or deployment decision without a named accountable human who has documented authority to accept residual risk, authorise remediation or stop or withhold deployment.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "residual-risk decisions",
+          "remediation funding and authorisation",
+          "deployment and readiness decisions",
+          "security findings and exceptions",
+          "assessment evidence and governance records",
+          "accountability and escalation paths"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If no named person is responsible for accepting residual risk, funding remediation or stopping deployment, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing ownership, ambiguous responsibility, expired appointment, incomplete delegation or unsupported decision authority",
+        "trust_boundary": "The control governs the boundary between technical assessment evidence and the human governance authority responsible for accepting risk, authorising remediation and stopping or withholding deployment.",
+        "operational_impact": "Without an accountable risk owner, critical findings, remediation funding, residual-risk acceptance and deployment holds may have no authorised decision-maker, causing unresolved risk, delayed response or unsupported deployment decisions."
       },
       "solution_summary": {
-        "recommended_remediation": "Assign an accountable risk owner and deputies; require their signed decision for material residual risk and deployment exceptions.",
+        "recommended_remediation": "Appoint a named accountable risk owner for the exact assessed system and scope. Document the owner's role, contact, effective date, expiry where applicable, and explicit authority for residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding. Define deputies or delegation only where their authority and scope are explicitly recorded.",
         "default_owner": "Executive risk owner",
         "priority": "P1"
       },
@@ -697,7 +697,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "46d2c836136e363b829547daf676dd7d46b2f0e4d0ceb023c53bb3110d0d17f3"
+      "content_digest": "11db8602b7874cd5f4b81cb7e07e9f199f2b6f1ca9d4a7e39cc550ea04814e3f"
     },
     {
       "id": "ARL-KB-003",
@@ -708,27 +708,27 @@
       "title": "Prohibited uses and harm boundaries are missing",
       "problem": {
         "statement": "The organisation has not stated which users, decisions, sectors or actions the agent must never support.",
-        "customer_symptom": "A user or operator may observe the organisation has not stated which users, decisions, sectors or actions the agent must never support; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the organisation has not stated which users, decisions, sectors or actions the agent must never support, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot determine which users, decisions, sectors, actions or outcomes the agent must never support, so prohibited or harmful behaviour may be treated as ordinary in-scope use.",
+        "credible_failure_or_attack": "a user, model, tool path or operator can request or trigger an action that falls inside a prohibited-use or harm boundary when those boundaries are absent, ambiguous, incomplete or not enforced before the consequential action.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "people, rights and safety affected by agent actions",
+          "regulated or otherwise prohibited activities",
+          "high-impact decisions and downstream actions",
+          "agent tools and execution authority",
+          "prohibited-use and harm-boundary policy",
+          "assessment and enforcement evidence"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents affecting people, rights, safety or regulated activity"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents affecting people, rights, safety or regulated activity and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the organisation has not stated which users, decisions, sectors or actions the agent must never support, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing or ambiguous prohibited-use rules, incomplete harm analysis, unsafe requests, model behaviour, tool execution or operator error",
+        "trust_boundary": "The control governs the boundary between an agent request or proposed action and the prohibited-use or harm rules that determine whether that activity may proceed, must be refused, or requires explicit human escalation.",
+        "operational_impact": "If prohibited uses and harm boundaries are undefined or unenforced, the agent may support an activity the organisation intended to forbid, potentially requiring immediate containment, investigation, human escalation and a hold on the affected capability."
       },
       "solution_summary": {
-        "recommended_remediation": "Define prohibited-use rules, refusal behaviour, escalation routes and enforcement tests; block prohibited actions at the policy and tool layers.",
+        "recommended_remediation": "Define a versioned prohibited-use and harm-boundary policy covering relevant users, decisions, sectors, actions and outcomes. Map each material boundary to an enforceable control point, define refusal and escalation behaviour, assign an accountable owner, and test representative allowed and prohibited cases.",
         "default_owner": "Risk and compliance owner",
         "priority": "P0"
       },
@@ -795,7 +795,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "282b745f6a124ef5834dc211debfa45e05acedb0ce388bb2664dc79be27b0a2b"
+      "content_digest": "ca5240e23ed7b1b29c2b03a2dbc4bc75650c106863c3031da97ca52914488bc6"
     },
     {
       "id": "ARL-KB-004",
@@ -806,27 +806,27 @@
       "title": "Risk classification does not match real impact",
       "problem": {
         "statement": "The agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure.",
-        "customer_symptom": "A user or operator may observe the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The system is governed as lower risk than its actual reachable capabilities justify, so controls, review depth, evidence requirements or deployment gates may be weaker than the maximum credible impact requires.",
+        "credible_failure_or_attack": "an incomplete or outdated risk classification can omit impact-relevant capabilities such as authority, sensitive-data access, irreversible actions, financial effects, effects on people or rights, infrastructure control, scale or downstream dependency chains, causing the declared risk tier to understate the system's real maximum credible impact.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "risk classification and assurance requirements",
+          "people, rights and safety affected by agent actions",
+          "financial and state-changing actions",
+          "sensitive data and regulated information",
+          "infrastructure and downstream systems",
+          "deployment and residual-risk decisions"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents with tools or consequential outputs"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents with tools or consequential outputs and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "incomplete capability inventory, outdated classification evidence, underestimated impact, configuration drift or human classification error",
+        "trust_boundary": "The control governs the boundary between the agent's actual reachable authority and impact and the governance classification used to determine required controls, testing, evidence and deployment decisions.",
+        "operational_impact": "If the declared risk tier understates real impact, the system may receive weaker controls, testing or review than its capabilities require. The affected classification and deployment decision must remain on hold until impact is reassessed and an accountable human records the resulting tier."
       },
       "solution_summary": {
-        "recommended_remediation": "Use impact-based classification that considers authority, data, reversibility, scale, affected people and dependency chains; raise controls when capability changes.",
+        "recommended_remediation": "Reclassify the system using evidence of actual reachable authority, assets, data exposure, maximum action values, reversibility, scale, affected people and downstream dependency chains. Bind the resulting tier and rationale to the exact assessed version and require accountable human approval of any classification decision.",
         "default_owner": "Security and risk owner",
         "priority": "P0"
       },
@@ -906,7 +906,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "41db34aaf6a212dda7cd09dd8aae6df9aae46676de5394b9946f50005eef3f49"
+      "content_digest": "d747957f1f708f19a3c178023fb076c8783f16fa5410445c35999ad4bebe66a7"
     },
     {
       "id": "ARL-KB-005",
@@ -917,27 +917,28 @@
       "title": "Trust boundaries and data flows are undocumented",
       "problem": {
         "statement": "Reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems.",
-        "customer_symptom": "A user or operator may observe reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Reviewers cannot reliably determine how inputs, model context, memory, tools, data stores, identities, network destinations, human approvals and evidence stores connect, so important trust-boundary crossings or data flows may be missed during assessment.",
+        "credible_failure_or_attack": "an undocumented or stale architecture path can allow untrusted input, model output, sensitive data, authority or tool execution to cross a trust boundary without being visible to reviewers, causing controls to be applied to the wrong component or leaving a material path outside the assessment.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "system and architecture model",
+          "untrusted input and model context",
+          "memory and retrieved context",
+          "tools and downstream systems",
+          "data stores and network destinations",
+          "human approval points and authority boundaries",
+          "audit and assessment evidence paths"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "incomplete architecture documentation, stale data-flow mapping, undocumented integration, hidden execution path, configuration drift or review error",
+        "trust_boundary": "The control governs whether all material crossings between users, agents, models, tools, stores, networks, approval authorities and evidence stores are explicitly identified and traceable for the exact assessed version.",
+        "operational_impact": "If trust boundaries and data flows are incomplete or stale, reviewers may miss where untrusted input enters, where authority changes, where sensitive data moves, or where model output reaches consequential systems, making downstream security conclusions incomplete or unreliable."
       },
       "solution_summary": {
-        "recommended_remediation": "Maintain a versioned architecture model showing actors, inputs, stores, models, agents, tools, networks, approvals and evidence paths.",
+        "recommended_remediation": "Create and maintain a versioned architecture model for the exact assessed system. Document material actors, trust zones, data flows, models, memory, tools, stores, network destinations, authority boundaries, approval points and evidence paths. Bind the model to implementation evidence and update it whenever material architecture or scope changes.",
         "default_owner": "Security architect",
         "priority": "P1"
       },
@@ -1004,7 +1005,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9466b8639b097068a5a546d0f1bc59a8ecda6e80ecf09715325c8300428ff779"
+      "content_digest": "0d58fd0dc790966a8ce033633fe154892ba0e21f427a56fa7059fbc4146f2e49"
     },
     {
       "id": "ARL-KB-006",
@@ -1015,27 +1016,28 @@
       "title": "Data classification is absent or inconsistent",
       "problem": {
         "statement": "Prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules.",
-        "customer_symptom": "A user or operator may observe prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The system handles personal, confidential, regulated or secret data without a consistent classification and handling model, so restricted data may enter model context, logs, tools, storage or exports under rules intended for less sensitive data.",
+        "credible_failure_or_attack": "unclassified or misclassified data can be routed to an incompatible destination, retained too long, exposed in logs or model context, written to an unsafe location, or exported when its handling policy should have required redaction, denial or restriction.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "prompts and model context",
+          "retrieved content and memory",
+          "tool arguments and tool results",
+          "runtime and audit logs",
+          "local and external data destinations",
+          "personal, confidential, regulated and secret data",
+          "retention and export controls"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents processing non-public data"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between agents processing non-public data and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing classification, inconsistent labels, incomplete propagation, misclassification, policy drift or handling rules that do not match the data class",
+        "trust_boundary": "The control governs the boundary between data classification and every destination where that data may be processed, persisted, transmitted, displayed or exported.",
+        "operational_impact": "If data classification is absent or inconsistent, restricted information may be processed under weaker rules than intended, requiring containment, evidence review, correction of handling rules and retest before the affected path can be trusted."
       },
       "solution_summary": {
-        "recommended_remediation": "Classify data at ingestion and propagate labels through retrieval, model calls, tools, memory, logs and exports; deny incompatible destinations.",
+        "recommended_remediation": "Define and maintain a versioned data-classification and handling policy. Classify data before or at entry to material processing paths, propagate or recompute classification where needed, and enforce class-appropriate redaction, denial, retention and export rules at each relevant destination.",
         "default_owner": "Data protection and security owner",
         "priority": "P1"
       },
@@ -1102,7 +1104,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "c446f390316609e3353c47ac1e0fe61e997692c7af068e5e71524ab6391ef6c0"
+      "content_digest": "b6dc24f2cd2b949e58f810b78f95eec37f9052057f10f56a334845a4a4a20b7e"
     },
     {
       "id": "ARL-KB-007",
@@ -1200,7 +1202,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ac0f9fa807c348a227bf6df6c569185c07df13648ba33a07ea70b671bc422621"
+      "content_digest": "23d874f4639df52e790c715f3779fdb46944897ab572400cfca06a41afeb3546"
     },
     {
       "id": "ARL-KB-008",
@@ -1211,22 +1213,24 @@
       "title": "Legal basis, transparency or user notice is unsupported",
       "problem": {
         "statement": "The organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights.",
-        "customer_symptom": "A user or operator may observe the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The organisation cannot trace observed personal-data processing or human-facing agent behaviour to a documented purpose, asserted legal-basis analysis, relevant user information, retention rules or a route for affected people to exercise rights.",
+        "credible_failure_or_attack": "personal-data processing or human-facing agent behaviour can materially differ from the organisation's documented purpose, privacy analysis or user notice, leaving processing unsupported, opaque or without a usable rights-handling route.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "personal data processed by the agent",
+          "user-facing agent interactions",
+          "privacy and transparency records",
+          "retention and deletion rules",
+          "rights-handling and contact routes",
+          "accountable privacy governance evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents processing personal data or interacting with people"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents processing personal data or interacting with people and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing privacy analysis, undocumented purpose, stale or inaccurate notice, unrecorded processing change, incomplete retention governance or missing rights-handling ownership",
+        "trust_boundary": "The control governs the boundary between the system's observed processing and human-facing behaviour and the organisation's documented privacy purpose, asserted legal-basis analysis, transparency, retention and rights-handling evidence.",
+        "operational_impact": "If observed processing is unsupported or materially inconsistent with documented privacy governance, the affected use may require review or hold until the organisation provides current, attributable evidence and an accountable human records the resulting decision."
       },
       "solution_summary": {
         "recommended_remediation": "Document the applicable processing purpose and organisation-approved legal-basis analysis; align notices with observed agent and data behaviour; document relevant retention and rights-handling routes; assign accountable privacy ownership; and review the records after material changes to data, purpose, provider or user journey.",
@@ -1301,7 +1305,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "60eec8ff9ce6eb730357d77436e2f0db9dc47c95537a1a5806848c3b8068b3e4"
+      "content_digest": "dbe0f9f3b3c1aee4021a57bde2d08b1450c288e1ac786972910a96c2e0eb27fb"
     },
     {
       "id": "ARL-KB-009",
@@ -1312,24 +1316,24 @@
       "title": "Security-relevant changes bypass review",
       "problem": {
         "statement": "Prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval.",
-        "customer_symptom": "A user or operator may observe prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A security-relevant production change can become authoritative without the required classification, review, testing, accountable approval or exact-version deployment evidence.",
+        "credible_failure_or_attack": "a prompt, model, tool, permission, policy, schema, data-source, dependency or provider change can bypass the approved production change process, or reuse stale review evidence from a materially different version.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "production prompts, models and tools",
+          "permissions, policies and schemas",
+          "data sources and providers",
+          "dependencies and deployment artefacts",
+          "review and test evidence",
+          "deployment provenance and rollback state"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all production agents"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between all production agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "unreviewed production change, stale approval reuse, version substitution, deployment drift, incomplete change classification or release-process failure",
+        "trust_boundary": "The control governs the transition from a proposed security-relevant change to the authoritative production artefact, including review, testing, approval, version binding, deployment provenance and reassessment.",
+        "operational_impact": "If a security-relevant change bypasses review or inherits stale approval, an unassessed artefact may become authoritative in production. The affected release or deployment decision must remain on hold until the exact version is reviewed, tested and approved."
       },
       "solution_summary": {
         "recommended_remediation": "Classify security-relevant changes; require appropriate review and negative tests; bind approvals and evidence to immutable versions or artefact digests; enforce reviewed deployment provenance; trigger reassessment after material scope or architecture changes; and maintain a known-good rollback version.",
@@ -1399,7 +1403,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "0a5e48687f199e24eca1fb3a8af2fedfc47d825de1c4c44dd2f20f44b590e6ab"
+      "content_digest": "33d640238ab1a9871fe597809703393ede22051c187633d2e5d9a2f5947a0391"
     },
     {
       "id": "ARL-KB-010",
@@ -1411,26 +1415,26 @@
       "problem": {
         "statement": "A high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path.",
         "customer_symptom": "A user or operator may observe a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "a deployment or readiness decision can incorrectly treat an aggregate score as sufficient evidence and overlook a non-negotiable blocker such as an unresolved critical finding, missing accountable approval, unverified recovery path, failed exact retest or unsupported evidence.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "backups, runtime state and recovery infrastructure",
-          "service availability and data integrity"
+          "deployment and readiness decisions",
+          "critical and high-risk findings",
+          "human approvals and residual-risk decisions",
+          "retest and remediation evidence",
+          "recovery and rollback evidence",
+          "assessment evidence and decision records"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "ambiguous acceptance criteria, score aggregation, incomplete evidence, operator error or unsupported readiness logic",
+        "trust_boundary": "The control governs the boundary between assessment evidence and the human decision that authorises readiness, deployment, continued operation or residual-risk acceptance.",
+        "operational_impact": "If acceptance criteria are vague or score-driven, an accountable operator may approve deployment or continued operation while a mandatory blocker, missing approval, failed retest, unsupported recovery path or unresolved critical risk remains open."
       },
       "solution_summary": {
-        "recommended_remediation": "Define explicit pass/fail gates for critical risks, tenant isolation, exact approvals, recovery, monitoring and evidence; prohibit score-only approval.",
+        "recommended_remediation": "Define explicit pass, hold and fail criteria for critical findings, required approvals, exact retests, recovery or rollback readiness, evidence quality and known limitations. Treat mandatory blockers independently from aggregate scores, assign a named human decision authority, and preserve the exact evidence supporting every readiness or deployment decision.",
         "default_owner": "Deployment authority",
         "priority": "P1"
       },
@@ -1497,7 +1501,7 @@
         "automation_status": "unsupported",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fc6c7bb66f10c54ad4dfd0b355af8ad958f06bc6a512db72197df6352a64430f"
+      "content_digest": "0b877abe1336fe3d1b70684902d1d4d655e2d6e5a3836ebb6730b9c2fe1f197a"
     },
     {
       "id": "ARL-KB-011",

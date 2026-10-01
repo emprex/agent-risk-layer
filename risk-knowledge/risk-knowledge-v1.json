@@ -680,39 +680,43 @@
       },
       "solution": {
         "id": "ARL-SOL-001",
-        "control_objective": "Reduce the likelihood and impact of agent purpose is undefined or expands without approval and make the remaining risk visible.",
-        "recommended_remediation": "Record a versioned purpose, permitted outcomes, prohibited outcomes and accountable owner; require change approval before adding authority or data access.",
+        "control_objective": "Ensure the agent has a versioned, accountable and bounded purpose, with explicit permitted and prohibited outcomes, and prevent material expansion of capabilities, authority, data access or integrations without documented human approval.",
+        "recommended_remediation": "Record and approve a versioned agent purpose, permitted outcomes, prohibited outcomes, accountable owner and material scope boundaries. Require an attributable change record and accountable human approval before expanding prompts, tools, integrations, data access, network reach or execution authority.",
         "default_owner": "Product owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-001: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-001: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-001: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-001: the approved agent purpose and scope must be explicit, versioned and attributable.",
+          "ARL-KB-001: each material capability must be necessary for the approved purpose or covered by an approved scope-change record.",
+          "ARL-KB-001: permitted and prohibited outcomes must remain visible to operators and reviewers.",
+          "ARL-KB-001: material expansion of prompts, tools, integrations, data access, network reach or authority requires accountable human review before it becomes approved scope."
         ],
-        "monitoring": "For ARL-KB-001, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Product owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-001 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-001, monitor changes to the versioned purpose, permitted and prohibited outcomes, prompts, tools, integrations, data destinations and authority boundaries. Record the exact version, change author, reviewer, approval decision and evidence digest for material scope changes.",
+        "containment": "If an undeclared or unapproved capability is identified, treat it as outside the approved scope, prevent it from being accepted as an authorised capability, preserve the relevant version and change evidence, and require accountable review before the scope is expanded or the capability is accepted.",
         "retest_acceptance": [
-          "ARL-KB-001: “Agent purpose is undefined or expands without approval” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-001: Authorised in-scope use completes successfully, remains within the documented asset scope for agent purpose is undefined or expands without approval, and produces no unintended side effect.",
-          "ARL-KB-001: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-001: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-001: The exact remediated version has an explicit, versioned and attributable purpose.",
+          "ARL-KB-001: Permitted and prohibited outcomes are documented and consistent with the assessed capabilities.",
+          "ARL-KB-001: Every material prompt, tool, integration, data-access or authority capability is necessary for the approved purpose or has an attributable approved scope-change record.",
+          "ARL-KB-001: A proposed material scope expansion cannot be treated as approved without the required accountable human decision.",
+          "ARL-KB-001: Reviewer identity, timestamp, assessed version, evidence digest, known limitations and scope decision are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-001 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Record a versioned purpose, permitted outcomes, prohibited outcomes and accountable owner; require change approval before adding authority or data access. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-001 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place any undeclared or materially expanded capability outside the approved scope until its purpose, necessity, authority and change approval are reviewed. Preserve the exact assessed version and relevant scope-change evidence.",
+        "root_cause_remediation": "Establish a controlled source of truth for agent purpose and scope containing versioned permitted outcomes, prohibited outcomes, approved capabilities and accountable ownership. Integrate material scope expansion with documented change review and human approval rather than relying on informal intent.",
+        "preventive_control": "Require every material capability and scope expansion to map to the current approved agent purpose and versioned scope record, with accountable human approval required before an otherwise out-of-scope capability becomes approved.",
         "accountable_owner": "Product owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative versioned agent-purpose and scope record",
+          "current inventory of material prompts, tools, integrations, data access and authority",
+          "documented accountable owner and scope-change approver",
+          "attributable change history and approval evidence"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-001 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-001 governance review against the remediated version; verify the bounded purpose, current capability catalogue, material change history and required approvals before changing the assessment conclusion.",
+        "rollback_considerations": "Rollback must restore a version whose purpose, capabilities and authority are covered by the corresponding approved scope record. A prior version must not be treated as approved if its scope evidence is stale, incomplete or belongs to a different capability set.",
+        "retest_requirements": "Repeat the ARL-KB-001 governance review against the exact remediated version. Compare the versioned purpose, permitted and prohibited outcomes, current capability inventory and material change history, then test a representative scope expansion and verify that it cannot become approved scope without the required accountable human decision.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-001",
-          "Passed retest evidence bound to ARL-KB-001 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Versioned agent purpose with permitted and prohibited outcomes for the exact assessed version",
+          "Current material capability inventory aligned to the approved purpose",
+          "Attributable evidence for any material scope expansion and its human approval",
+          "Passed KB-001 retest bound to the current knowledge digest and assessed version",
+          "Named accountable reviewer and recorded scope decision"
         ]
       },
       "mappings": [
@@ -819,7 +823,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "4d21ee39a4364afaba6dfec038b63208be91cec3fcaa31a5a1650c2151aa5716"
+      "content_digest": "1614736dbfbf3086d3afef594d122604506c72a244f053d2b9c0aa5dda3c88de"
     },
     {
       "id": "ARL-KB-002",
@@ -830,29 +834,29 @@
       "title": "No accountable risk owner",
       "problem": {
         "statement": "No named person is responsible for accepting residual risk, funding remediation or stopping deployment.",
-        "customer_symptom": "A user or operator may observe no named person is responsible for accepting residual risk, funding remediation or stopping deployment; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in no named person is responsible for accepting residual risk, funding remediation or stopping deployment, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot identify who is accountable for accepting residual risk, authorising remediation or stopping deployment, so material security decisions may remain unresolved, be made informally, or be attributed to someone without the required authority.",
+        "credible_failure_or_attack": "governance failure can leave a material risk, unresolved finding or deployment decision without a named accountable human who has documented authority to accept residual risk, authorise remediation or stop or withhold deployment.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "residual-risk decisions",
+          "remediation funding and authorisation",
+          "deployment and readiness decisions",
+          "security findings and exceptions",
+          "assessment evidence and governance records",
+          "accountability and escalation paths"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If no named person is responsible for accepting residual risk, funding remediation or stopping deployment, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing ownership, ambiguous responsibility, expired appointment, incomplete delegation or unsupported decision authority",
+        "trust_boundary": "The control governs the boundary between technical assessment evidence and the human governance authority responsible for accepting risk, authorising remediation and stopping or withholding deployment.",
+        "operational_impact": "Without an accountable risk owner, critical findings, remediation funding, residual-risk acceptance and deployment holds may have no authorised decision-maker, causing unresolved risk, delayed response or unsupported deployment decisions."
       },
       "check": {
         "id": "ARL-CHK-002",
-        "objective": "Determine whether the assessed system prevents or detects: no accountable risk owner.",
-        "method": "Inspect project records and deployment approvals for a named owner with authority, contact details, decision date and expiry. Review the exact assessed version against the approved governance record for “No accountable risk owner”; compare the declared purpose, permitted and prohibited outcomes, prompts, tools, integrations and recent change history, and require explicit approval for any material scope expansion. Review the exact assessed version against the approved governance record for “No accountable risk owner”; verify a named accountable risk owner is assigned to the assessed system and scope, with documented authority to accept residual risk, fund or authorise remediation, and stop or withhold deployment, and verify the appointment and authority are version-bound and attributable.",
+        "objective": "Determine whether the exact assessed system and scope have a named, current and attributable human risk owner with documented authority for residual-risk acceptance, remediation authorisation and deployment withholding.",
+        "method": "Identify the exact assessed system, version, environment and scope. Inspect the current risk-owner appointment, governance record or equivalent authoritative evidence. Verify that a named accountable risk owner is assigned to the assessed system and scope, that the appointment is current, attributable and not expired, and that the documented authority includes the ability to accept residual risk, fund or authorise remediation, and stop or withhold deployment. Where delegation exists, verify its scope, authority, effective date and expiry. Record the reviewer, timestamp and evidence digest.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -868,11 +872,12 @@
         ],
         "pass_condition": "ARL-KB-002 passes only when the exact assessed system and scope have a named accountable risk owner with documented authority to accept residual risk, fund or authorise remediation, and stop or withhold deployment; the ownership record is current and attributable; and version-bound evidence records the reviewer, timestamp and digest.",
         "fail_condition": "ARL-KB-002 fails when no named person is responsible for accepting residual risk, funding remediation or stopping deployment, when ownership is unnamed, expired or not bound to the assessed system and scope, when any required authority is absent or unsupported, or when the conclusion lacks version-bound review evidence.",
-        "limitations": "This bounded ARL-KB-002 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "This review verifies documented ownership and authority for the assessed system and scope. It does not prove how the named person would exercise that authority in every future incident or decision.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-002's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed system, version, environment and scope.",
+          "Obtain the current authoritative risk-owner appointment, governance record or equivalent evidence.",
+          "Identify any delegation or deputy arrangement relevant to the assessed scope.",
+          "Do not fabricate ownership, authority or approval evidence to satisfy the control."
         ],
         "positive_test": "Review the current accountable risk-owner record for ARL-KB-002 and verify that the named person is assigned to the exact assessed system and scope and has documented authority to accept residual risk, fund or authorise remediation, and stop or withhold deployment.",
         "negative_test": "Review a case for ARL-KB-002 where the risk-owner record is missing, expired, names no individual, or omits one of the required authorities; verify that the governance review cannot conclude the control is satisfied without explicit human correction and attributable evidence.",
@@ -886,47 +891,52 @@
           "The named owner must have documented authority for residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding decisions."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Use governance and documentary evidence; no destructive runtime test is required.",
+          "Do not impersonate an owner, approver or delegate.",
+          "Do not modify production authority or appointments solely to exercise this control.",
+          "Preserve the exact owner record, reviewer identity, timestamp and evidence digest."
         ]
       },
       "solution": {
         "id": "ARL-SOL-002",
-        "control_objective": "Reduce the likelihood and impact of no accountable risk owner and make the remaining risk visible.",
-        "recommended_remediation": "Assign an accountable risk owner and deputies; require their signed decision for material residual risk and deployment exceptions.",
+        "control_objective": "Ensure every assessed agent has a named and accountable human risk owner with documented authority to accept residual risk, authorise or fund remediation, and stop or withhold deployment.",
+        "recommended_remediation": "Appoint a named accountable risk owner for the exact assessed system and scope. Document the owner's role, contact, effective date, expiry where applicable, and explicit authority for residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding. Define deputies or delegation only where their authority and scope are explicitly recorded.",
         "default_owner": "Executive risk owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-002: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-002: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-002: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-002: accountability must be assigned to a named human, not an unnamed team, model or automated system.",
+          "ARL-KB-002: the owner record must be bound to the assessed system and scope.",
+          "ARL-KB-002: residual-risk acceptance, remediation authority and deployment-withholding authority must be explicit.",
+          "ARL-KB-002: appointment, delegation and expiry must be attributable and reviewable."
         ],
-        "monitoring": "For ARL-KB-002, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Executive risk owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-002 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-002, monitor ownership changes, role changes, delegation, expiry and loss of required authority. Record the current owner, assessed scope, effective date, reviewer and evidence digest whenever ownership evidence changes.",
+        "containment": "If the accountable risk owner is missing, expired, unnamed or lacks a required authority, place affected residual-risk or deployment decisions on hold until a valid owner or authorised delegate is formally recorded.",
         "retest_acceptance": [
-          "ARL-KB-002: “No accountable risk owner” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-002: The named accountable risk owner, exact assessed system and scope, and documented authority for residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding are recorded.",
-          "ARL-KB-002: Missing, expired, unnamed or incomplete ownership evidence is denied before the control can be concluded as satisfied, unless explicit human correction and attributable approval are recorded.",
-          "ARL-KB-002: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-002: A named accountable risk owner is recorded for the exact assessed system and scope.",
+          "ARL-KB-002: Residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding authorities are explicitly documented.",
+          "ARL-KB-002: Appointment and delegation records are current, attributable and not expired.",
+          "ARL-KB-002: Missing, expired, unnamed or incomplete ownership evidence results in hold or review rather than control satisfaction.",
+          "ARL-KB-002: Reviewer identity, assessed version, timestamp and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-002 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Assign an accountable risk owner and deputies; require their signed decision for material residual risk and deployment exceptions. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-002 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately hold any residual-risk acceptance, remediation exception or deployment decision that lacks a valid accountable risk owner. Preserve the current governance record and identify the required human authority before the decision proceeds.",
+        "root_cause_remediation": "Establish an authoritative ownership record that assigns a named human to the assessed system and scope with explicit decision authorities, effective dates, review requirements and delegation rules.",
+        "preventive_control": "Require a valid current accountable risk-owner record before residual risk can be accepted, remediation exceptions approved or deployment authorised.",
         "accountable_owner": "Executive risk owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative assessed system and scope",
+          "named human owner identity and contact",
+          "documented residual-risk, remediation and deployment authorities",
+          "current appointment and delegation records",
+          "attributable review and evidence-retention process"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-002 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-002 governance review against the remediated version; verify the named accountable risk owner, the assessed scope, the required decision authorities, the current appointment or delegation record, and version-bound review evidence before changing the assessment conclusion.",
+        "rollback_considerations": "Do not restore or rely on a historical ownership record unless it remains valid for the current assessed system and scope. Superseded, expired or differently scoped appointments must not be treated as current authority.",
+        "retest_requirements": "Repeat the KB-002 governance review against the exact assessed version and scope. Verify the named accountable risk owner, required authorities, current appointment, any delegation, effective dates and attributable review evidence before changing the assessment conclusion.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-002",
-          "Passed retest evidence bound to ARL-KB-002 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Current named accountable risk-owner record bound to the exact assessed system and scope",
+          "Documented authority for residual-risk acceptance, remediation funding or authorisation, and deployment stop or withholding",
+          "Current appointment or delegation evidence with effective date and expiry where applicable",
+          "Passed KB-002 retest bound to the current knowledge digest and assessed version",
+          "Named reviewer, timestamp and recorded governance decision"
         ]
       },
       "mappings": [
@@ -1024,7 +1034,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "46d2c836136e363b829547daf676dd7d46b2f0e4d0ceb023c53bb3110d0d17f3"
+      "content_digest": "11db8602b7874cd5f4b81cb7e07e9f199f2b6f1ca9d4a7e39cc550ea04814e3f"
     },
     {
       "id": "ARL-KB-003",
@@ -1035,29 +1045,29 @@
       "title": "Prohibited uses and harm boundaries are missing",
       "problem": {
         "statement": "The organisation has not stated which users, decisions, sectors or actions the agent must never support.",
-        "customer_symptom": "A user or operator may observe the organisation has not stated which users, decisions, sectors or actions the agent must never support; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the organisation has not stated which users, decisions, sectors or actions the agent must never support, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot determine which users, decisions, sectors, actions or outcomes the agent must never support, so prohibited or harmful behaviour may be treated as ordinary in-scope use.",
+        "credible_failure_or_attack": "a user, model, tool path or operator can request or trigger an action that falls inside a prohibited-use or harm boundary when those boundaries are absent, ambiguous, incomplete or not enforced before the consequential action.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "people, rights and safety affected by agent actions",
+          "regulated or otherwise prohibited activities",
+          "high-impact decisions and downstream actions",
+          "agent tools and execution authority",
+          "prohibited-use and harm-boundary policy",
+          "assessment and enforcement evidence"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents affecting people, rights, safety or regulated activity"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents affecting people, rights, safety or regulated activity and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the organisation has not stated which users, decisions, sectors or actions the agent must never support, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing or ambiguous prohibited-use rules, incomplete harm analysis, unsafe requests, model behaviour, tool execution or operator error",
+        "trust_boundary": "The control governs the boundary between an agent request or proposed action and the prohibited-use or harm rules that determine whether that activity may proceed, must be refused, or requires explicit human escalation.",
+        "operational_impact": "If prohibited uses and harm boundaries are undefined or unenforced, the agent may support an activity the organisation intended to forbid, potentially requiring immediate containment, investigation, human escalation and a hold on the affected capability."
       },
       "check": {
         "id": "ARL-CHK-003",
-        "objective": "Determine whether the assessed system prevents or detects: prohibited uses and harm boundaries are missing.",
-        "method": "Review policy, prompts and tool rules for explicit prohibited uses and test representative forbidden requests. Review the exact assessed version against the approved governance record for “Prohibited uses and harm boundaries are missing”; compare the declared purpose, permitted and prohibited outcomes, prompts, tools, integrations and recent change history, and require explicit approval for any material scope expansion. Review the exact assessed version against the approved governance record for “Prohibited uses and harm boundaries are missing”; verify explicit prohibited-use and harm boundaries identify relevant prohibited users, decisions, sectors or actions, and verify representative forbidden requests are refused or escalated before any material side effect.",
+        "objective": "Determine whether relevant prohibited uses and harm boundaries are explicit, versioned and enforced for the exact assessed system and whether representative forbidden requests are refused or explicitly escalated before a prohibited material action occurs.",
+        "method": "Identify the exact assessed system, version, environment and scope. Review the versioned prohibited-use and harm boundaries and determine which users, decisions, sectors, actions or outcomes are explicitly forbidden or require human escalation. Trace those boundaries to the relevant prompts, policy rules, tool restrictions or other enforcement points. Execute an authorised positive case and representative forbidden requests using safe non-production conditions. Verify that legitimate in-scope use remains available and that each prohibited case is refused or escalated before the prohibited material action occurs.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -1073,11 +1083,12 @@
         ],
         "pass_condition": "ARL-KB-003 passes only when the exact assessed version has explicit, versioned prohibited-use and harm boundaries covering the relevant users, decisions, sectors or actions; representative forbidden requests are refused or escalated before material side effects; authorised in-scope use remains available; and version-bound evidence records the reviewer, timestamp and digest.",
         "fail_condition": "ARL-KB-003 fails when the organisation has not stated which users, decisions, sectors or actions the agent must never support, when prohibited boundaries are ambiguous or unsupported, when a representative forbidden request can proceed to a material side effect, or when the conclusion lacks version-bound review evidence.",
-        "limitations": "This bounded ARL-KB-003 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "A bounded set of prohibited-use tests cannot prove that every possible harmful request or future bypass has been identified. The conclusion applies only to the documented boundaries, tested scenarios, exact assessed version and scope.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-003's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment and scope.",
+          "Obtain the current prohibited-use and harm-boundary policy or equivalent authoritative record.",
+          "Identify the enforcement locations relevant to the representative prohibited case.",
+          "Use an owner-authorised non-production, synthetic or dry-run path for any test that could otherwise create a harmful or irreversible effect."
         ],
         "positive_test": "Review an authorised in-scope request for ARL-KB-003 and verify that it remains outside the documented prohibited-use and harm boundaries and completes without violating a prohibited user, decision, sector or action rule.",
         "negative_test": "Submit a representative forbidden request for ARL-KB-003 that matches a documented prohibited user, decision, sector or action; verify it is refused or routed to explicit human escalation before any material side effect.",
@@ -1091,47 +1102,52 @@
           "A representative prohibited request must be refused or escalated before any material side effect, while an authorised request outside those boundaries remains usable."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Do not execute a genuinely harmful, illegal, irreversible or third-party action to prove the control.",
+          "Use synthetic, staged, mocked or dry-run requests for representative prohibited cases.",
+          "Stop testing if a prohibited request reaches an uncontrolled material side effect.",
+          "Preserve the exact policy version, assessed version, observed decision and evidence digest."
         ]
       },
       "solution": {
         "id": "ARL-SOL-003",
-        "control_objective": "Reduce the likelihood and impact of prohibited uses and harm boundaries are missing and make the remaining risk visible.",
-        "recommended_remediation": "Define prohibited-use rules, refusal behaviour, escalation routes and enforcement tests; block prohibited actions at the policy and tool layers.",
+        "control_objective": "Ensure relevant prohibited uses and harm boundaries are explicitly defined, versioned and enforced so prohibited agent activity is refused or routed to the required human decision before a prohibited material action occurs.",
+        "recommended_remediation": "Define a versioned prohibited-use and harm-boundary policy covering relevant users, decisions, sectors, actions and outcomes. Map each material boundary to an enforceable control point, define refusal and escalation behaviour, assign an accountable owner, and test representative allowed and prohibited cases.",
         "default_owner": "Risk and compliance owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-003: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-003: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-003: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-003: prohibited uses and harm boundaries must be explicit, versioned and attributable.",
+          "ARL-KB-003: prohibited boundaries must be enforced at a control point capable of preventing the material action, not only described in model instructions.",
+          "ARL-KB-003: legitimate in-scope activity should remain available while prohibited activity is refused or escalated.",
+          "ARL-KB-003: changes to prohibited boundaries or enforcement require accountable review and retest."
         ],
-        "monitoring": "For ARL-KB-003, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Risk and compliance owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-003 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-003, record prohibited-use policy version, assessed version, representative prohibited requests, resulting refusal or escalation decisions, enforcement point, reviewer and evidence digest. Review boundary changes, bypass attempts and enforcement drift.",
+        "containment": "If a prohibited-use boundary is missing, ambiguous or bypassable, place the affected capability on hold or restrict it to a safe bounded mode until the boundary and enforcement path are corrected and retested.",
         "retest_acceptance": [
-          "ARL-KB-003: “Prohibited uses and harm boundaries are missing” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-003: Authorised use outside the documented prohibited-use and harm boundaries completes successfully with no prohibited side effect.",
-          "ARL-KB-003: Representative prohibited users, decisions, sectors or actions are denied before any material side effect or are routed to explicit human escalation.",
-          "ARL-KB-003: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-003: The exact remediated version has explicit and versioned prohibited-use and harm boundaries relevant to its assessed scope.",
+          "ARL-KB-003: An authorised request outside the prohibited boundaries remains usable.",
+          "ARL-KB-003: Prohibited users, decisions, sectors or actions are denied before the prohibited material action occurs, or routed to the explicitly required human escalation.",
+          "ARL-KB-003: The tested boundary is traceable to an identified enforcement location.",
+          "ARL-KB-003: Reviewer identity, timestamp, assessed version, policy version and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-003 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Define prohibited-use rules, refusal behaviour, escalation routes and enforcement tests; block prohibited actions at the policy and tool layers. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-003 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place an affected capability outside approved operation when a relevant prohibited-use or harm boundary is absent or can be bypassed. Preserve the triggering request, enforcement evidence and exact assessed version before remediation.",
+        "root_cause_remediation": "Establish an authoritative prohibited-use and harm-boundary model tied to the agent's actual capabilities and impact. Implement enforceable refusal or escalation controls for each material boundary and maintain them under versioned change control.",
+        "preventive_control": "Require every materially harmful or prohibited category identified for the assessed agent to have an explicit policy decision, an attributable enforcement point and a representative negative test before the capability is accepted.",
         "accountable_owner": "Risk and compliance owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative assessed system and scope",
+          "versioned prohibited-use and harm-boundary policy",
+          "identified enforcement points for relevant prohibited actions",
+          "safe staged, synthetic or dry-run test capability",
+          "accountable policy owner and review evidence"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-003 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-003 governance review against the remediated version; verify the prohibited-use and harm-boundary policy, its enforcement locations, an authorised positive case, a representative forbidden request, and version-bound review evidence before changing the assessment conclusion.",
+        "rollback_considerations": "Rollback must restore a version whose prohibited-use boundaries and enforcement behaviour are compatible with the corresponding policy evidence. Do not restore a version known to omit, weaken or bypass a required boundary.",
+        "retest_requirements": "Repeat the KB-003 review against the exact remediated version. Verify the versioned prohibited-use and harm-boundary policy, relevant enforcement locations, one authorised positive case and representative prohibited cases, and confirm that prohibited material actions remain blocked or explicitly escalated before execution.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-003",
-          "Passed retest evidence bound to ARL-KB-003 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Versioned prohibited-use and harm-boundary policy applicable to the exact assessed scope",
+          "Evidence identifying the enforcement point for each tested material boundary",
+          "Passed authorised positive case and representative prohibited negative case",
+          "Passed KB-003 retest bound to the current knowledge digest and exact assessed version",
+          "Named accountable reviewer and recorded residual-risk or scope decision"
         ]
       },
       "mappings": [
@@ -1229,7 +1245,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "282b745f6a124ef5834dc211debfa45e05acedb0ce388bb2664dc79be27b0a2b"
+      "content_digest": "ca5240e23ed7b1b29c2b03a2dbc4bc75650c106863c3031da97ca52914488bc6"
     },
     {
       "id": "ARL-KB-004",
@@ -1240,24 +1256,24 @@
       "title": "Risk classification does not match real impact",
       "problem": {
         "statement": "The agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure.",
-        "customer_symptom": "A user or operator may observe the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The system is governed as lower risk than its actual reachable capabilities justify, so controls, review depth, evidence requirements or deployment gates may be weaker than the maximum credible impact requires.",
+        "credible_failure_or_attack": "an incomplete or outdated risk classification can omit impact-relevant capabilities such as authority, sensitive-data access, irreversible actions, financial effects, effects on people or rights, infrastructure control, scale or downstream dependency chains, causing the declared risk tier to understate the system's real maximum credible impact.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "risk classification and assurance requirements",
+          "people, rights and safety affected by agent actions",
+          "financial and state-changing actions",
+          "sensitive data and regulated information",
+          "infrastructure and downstream systems",
+          "deployment and residual-risk decisions"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents with tools or consequential outputs"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents with tools or consequential outputs and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the agent is treated as low risk even though it can move money, alter records, affect rights, disclose sensitive data or control infrastructure, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "incomplete capability inventory, outdated classification evidence, underestimated impact, configuration drift or human classification error",
+        "trust_boundary": "The control governs the boundary between the agent's actual reachable authority and impact and the governance classification used to determine required controls, testing, evidence and deployment decisions.",
+        "operational_impact": "If the declared risk tier understates real impact, the system may receive weaker controls, testing or review than its capabilities require. The affected classification and deployment decision must remain on hold until impact is reassessed and an accountable human records the resulting tier."
       },
       "check": {
         "id": "ARL-CHK-004",
@@ -1278,11 +1294,12 @@
         ],
         "pass_condition": "ARL-KB-004 passes only when the declared risk tier for the exact assessed version is supported by evidence of the system's actual authority, reachable assets, data exposure, reversibility, scale, affected people and dependency chains; the declared tier is not lower than the tier required by the maximum credible observed impact; and the human reviewer, timestamp, rationale and evidence digest are recorded.",
         "fail_condition": "ARL-KB-004 fails when the declared risk tier understates the maximum credible impact of the system's actual reachable capabilities, including the ability to move money, alter records, affect rights, disclose sensitive data, control infrastructure or cause material downstream effects; when impact-relevant capabilities are omitted from classification; or when the classification conclusion lacks accountable, version-bound human review evidence.",
-        "limitations": "This bounded ARL-KB-004 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "This review establishes the maximum credible impact supported by evidence for the exact assessed version and known reachable capabilities. It does not prove that no undiscovered capability or future architectural change could increase impact.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-004's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed system, version, environment, scope and declared risk tier.",
+          "Obtain an inventory of impact-relevant reachable capabilities and authority.",
+          "Define the classification criteria or tiering model used for the assessment before comparing the declared tier.",
+          "Use synthetic, staged, dry-run or documentary evidence when evaluating potentially consequential capabilities."
         ],
         "positive_test": "Select an approved in-scope capability and verify that its authority, reachable assets, data access, reversibility, scale and downstream effects are represented in the declared risk classification for the exact assessed version.",
         "negative_test": "Introduce or identify a capability with materially greater credible impact than the currently declared risk tier permits; verify that the existing classification cannot remain unchanged without explicit accountable human reclassification and a versioned evidence record.",
@@ -1298,47 +1315,52 @@
           "The resulting classification or reclassification decision must be attributable to an accountable human reviewer."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Do not execute irreversible, production, third-party or genuinely harmful actions solely to establish maximum credible impact.",
+          "Use configuration, architecture, policy, dry-run or bounded evidence to establish authority and credible impact where possible.",
+          "Do not reduce a declared risk tier automatically; classification and reclassification remain accountable human decisions.",
+          "Preserve the exact assessed version, impact evidence, classification rationale, reviewer and evidence digest."
         ]
       },
       "solution": {
         "id": "ARL-SOL-004",
-        "control_objective": "Reduce the likelihood and impact of risk classification does not match real impact and make the remaining risk visible.",
-        "recommended_remediation": "Use impact-based classification that considers authority, data, reversibility, scale, affected people and dependency chains; raise controls when capability changes.",
+        "control_objective": "Ensure the declared risk classification is not lower than the level required by the maximum credible impact of the agent's actual reachable capabilities.",
+        "recommended_remediation": "Reclassify the system using evidence of actual reachable authority, assets, data exposure, maximum action values, reversibility, scale, affected people and downstream dependency chains. Bind the resulting tier and rationale to the exact assessed version and require accountable human approval of any classification decision.",
         "default_owner": "Security and risk owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-004: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-004: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-004: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-004: classification must be based on observed reachable capability and credible impact, not intended use alone.",
+          "ARL-KB-004: the maximum credible impact determines the minimum acceptable risk tier.",
+          "ARL-KB-004: material capability, authority, data-access or architecture changes trigger classification review.",
+          "ARL-KB-004: classification and reclassification decisions remain attributable human governance decisions."
         ],
-        "monitoring": "For ARL-KB-004, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security and risk owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-004 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-004, monitor changes to tools, permissions, data access, action value, reversibility, affected population, scale and dependency chains. Record any material impact change, resulting classification review, reviewer, rationale and evidence digest.",
+        "containment": "If the declared risk tier may understate the observed maximum credible impact, hold the affected readiness or deployment decision and apply the more restrictive risk treatment until an accountable human completes and records reclassification.",
         "retest_acceptance": [
-          "ARL-KB-004: The declared risk tier for the exact remediated version is not lower than the tier required by the maximum credible observed impact.",
-          "ARL-KB-004: Impact-relevant authority, assets, data access, maximum action values, reversibility, scale, affected people and dependency chains are represented in the classification evidence.",
-          "ARL-KB-004: Any materially higher-impact capability triggers reclassification or explicit containment before the assessment conclusion can change.",
-          "ARL-KB-004: Reviewer identity, timestamp, exact assessed version, classification rationale, evidence digest, known limitations and residual-risk decision are recorded."
+          "ARL-KB-004: The exact remediated version has a declared risk tier supported by observed impact evidence.",
+          "ARL-KB-004: Authority, reachable assets, data exposure, action value, reversibility, scale, affected people and dependency chains relevant to impact are represented in the classification.",
+          "ARL-KB-004: The declared tier is not lower than that required by the maximum credible observed impact.",
+          "ARL-KB-004: A materially higher-impact capability triggers review or reclassification rather than silently inheriting the previous tier.",
+          "ARL-KB-004: Reviewer identity, timestamp, exact version, rationale and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-004 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Use impact-based classification that considers authority, data, reversibility, scale, affected people and dependency chains; raise controls when capability changes. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-004 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place the affected classification or deployment decision on hold when evidence shows that the declared tier may understate actual impact. Preserve the exact version, capability evidence and current classification record until an accountable reassessment is completed.",
+        "root_cause_remediation": "Establish an impact-based classification process tied to the system's actual reachable capabilities. Require material changes in authority, tools, data access, reversibility, scale, affected people or dependencies to trigger reassessment and attributable human classification.",
+        "preventive_control": "Require classification evidence to be bound to the exact assessed version and invalidate or review the classification whenever a material capability or impact-changing condition is introduced.",
         "accountable_owner": "Security and risk owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative assessed version, environment and scope",
+          "defined risk-tier or classification criteria",
+          "inventory of impact-relevant reachable capabilities",
+          "evidence of authority, data exposure, reversibility, scale and dependency chains",
+          "accountable human classification owner and review record"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-004 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the ARL-KB-004 impact-classification review against the exact remediated version; re-inventory impact-relevant capabilities, determine the maximum credible observed impact, compare it with the declared risk tier, and require an accountable human reviewer to record the resulting classification decision and version-bound evidence before changing the assessment conclusion.",
+        "rollback_considerations": "Rollback may use only a version whose impact profile is supported by its own classification evidence. A historical classification must not be inherited when the restored capability set, authority or dependencies differ materially.",
+        "retest_requirements": "Repeat the ARL-KB-004 impact-classification review against the exact remediated version. Re-inventory impact-relevant capabilities, determine the maximum credible observed impact, compare it with the declared tier, test a representative material impact increase, and verify that it triggers accountable review or reclassification by an accountable human reviewer.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-004",
-          "Passed retest evidence bound to ARL-KB-004 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Exact assessed version, environment, scope and declared risk tier",
+          "Observed inventory of impact-relevant reachable capabilities",
+          "Documented maximum credible impact analysis and classification rationale",
+          "Passed KB-004 retest bound to the current knowledge digest and assessed version",
+          "Named accountable human reviewer and recorded classification decision"
         ]
       },
       "mappings": [
@@ -1449,7 +1471,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "41db34aaf6a212dda7cd09dd8aae6df9aae46676de5394b9946f50005eef3f49"
+      "content_digest": "d747957f1f708f19a3c178023fb076c8783f16fa5410445c35999ad4bebe66a7"
     },
     {
       "id": "ARL-KB-005",
@@ -1460,29 +1482,30 @@
       "title": "Trust boundaries and data flows are undocumented",
       "problem": {
         "statement": "Reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems.",
-        "customer_symptom": "A user or operator may observe reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Reviewers cannot reliably determine how inputs, model context, memory, tools, data stores, identities, network destinations, human approvals and evidence stores connect, so important trust-boundary crossings or data flows may be missed during assessment.",
+        "credible_failure_or_attack": "an undocumented or stale architecture path can allow untrusted input, model output, sensitive data, authority or tool execution to cross a trust boundary without being visible to reviewers, causing controls to be applied to the wrong component or leaving a material path outside the assessment.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "system and architecture model",
+          "untrusted input and model context",
+          "memory and retrieved context",
+          "tools and downstream systems",
+          "data stores and network destinations",
+          "human approval points and authority boundaries",
+          "audit and assessment evidence paths"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "incomplete architecture documentation, stale data-flow mapping, undocumented integration, hidden execution path, configuration drift or review error",
+        "trust_boundary": "The control governs whether all material crossings between users, agents, models, tools, stores, networks, approval authorities and evidence stores are explicitly identified and traceable for the exact assessed version.",
+        "operational_impact": "If trust boundaries and data flows are incomplete or stale, reviewers may miss where untrusted input enters, where authority changes, where sensitive data moves, or where model output reaches consequential systems, making downstream security conclusions incomplete or unreliable."
       },
       "check": {
         "id": "ARL-CHK-005",
-        "objective": "Determine whether the assessed system prevents or detects: trust boundaries and data flows are undocumented.",
-        "method": "Build and verify a data-flow and trust-boundary model against code, configuration, network calls, tools, stores and human approval points. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether the exact assessed system has a current, version-bound and evidence-backed architecture model that documents all material actors, trust boundaries, data flows, stores, tools, network destinations, authority changes, human approval points and evidence paths.",
+        "method": "Identify the exact assessed version, environment and scope. Build or obtain the current architecture and data-flow model, then verify it against source code, configuration, runtime wiring and documented integrations. Trace representative flows from user input through model context and orchestration to tools, stores, network destinations, human approvals and audit evidence. Confirm that every material actor, trust-zone transition, data destination, authority boundary and known alternate path is represented, and record any limitation or unresolved path.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -1490,73 +1513,82 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-005 assessed system, version, environment and scope for Trust boundaries and data flows are undocumented",
-          "ARL-KB-005 control configuration or source location showing how reduce the likelihood and impact of trust boundaries and data flows are undocumented and make the remaining risk visible.",
-          "ARL-KB-005 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
-          "ARL-KB-005 policy, authorization, tool or audit events proving whether the tested trust boundaries and data flows are undocumented path executed",
-          "ARL-KB-005 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-005 exact assessed system, version, environment and scope",
+          "ARL-KB-005 versioned architecture and trust-boundary model",
+          "ARL-KB-005 documented actors, trust zones, data flows, stores, tools, network destinations and approval points",
+          "ARL-KB-005 source or configuration evidence supporting representative documented flows",
+          "ARL-KB-005 known limitations, alternate paths and unresolved architecture uncertainties",
+          "ARL-KB-005 reviewer identity, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-005 passes only when “Trust boundaries and data flows are undocumented” is not reproducible through the documented abuse cases, the valid workflow remains bounded to system prompt, retrieved context and persistent memory and source documents, messages and generated outputs, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-005 fails when reviewers cannot see where untrusted input becomes model context, where identities change, or where outputs reach tools and external systems, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-005 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "ARL-KB-005 passes only when the exact assessed version has a current architecture model that identifies all material actors, trust zones, data flows, stores, tools, network destinations, authority boundaries, human approval points and evidence paths; representative documented flows are supported by observed source or configuration evidence; known limitations and alternate paths are recorded; and the review is version-bound and attributable.",
+        "fail_condition": "ARL-KB-005 fails or requires review when a material actor, trust boundary, data flow, tool, store, network destination, approval point or alternate path is missing, stale, contradicted by observed implementation, or unsupported by version-bound evidence.",
+        "limitations": "This review establishes the documented architecture and observed material paths for the exact assessed version. It does not prove that no hidden runtime path, future integration or undocumented external dependency exists.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-005's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment and scope.",
+          "Obtain current architecture, configuration and implementation evidence.",
+          "Identify representative material inputs, tools, stores, network paths and approval points.",
+          "Use non-production observation or documentary evidence where exercising a path could create an unsafe or irreversible effect."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-005, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-005 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Select a representative documented end-to-end flow and verify that each actor, trust-boundary crossing, data destination, authority transition and evidence path matches the exact assessed implementation.",
+        "negative_test": "Identify a known alternate, dormant or changed integration path and verify that it is either represented in the architecture model with its assessment status and limitations or explicitly recorded as an unresolved architecture gap.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "security architect or system owner",
+          "authorised human reviewer",
+          "relevant component or integration owner where clarification is required"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-005 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Trust boundaries and data flows are undocumented” must be denied, quarantined or routed to explicit review before a material side effect."
+          "The architecture model must identify material actors, trust zones and data flows for the exact assessed version.",
+          "Observed implementation and configuration must support the documented representative paths.",
+          "Known alternate, dormant or uncertain paths must remain visible as limitations rather than being silently omitted."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Do not exercise production, third-party or irreversible paths solely to prove architecture completeness.",
+          "Use source, configuration, runtime observation, staging or dry-run evidence where appropriate.",
+          "Do not infer undocumented external endpoints or authority relationships without evidence.",
+          "Preserve the exact assessed version, architecture version, reviewer identity and evidence digest."
         ]
       },
       "solution": {
         "id": "ARL-SOL-005",
-        "control_objective": "Reduce the likelihood and impact of trust boundaries and data flows are undocumented and make the remaining risk visible.",
-        "recommended_remediation": "Maintain a versioned architecture model showing actors, inputs, stores, models, agents, tools, networks, approvals and evidence paths.",
+        "control_objective": "Maintain an accurate, versioned and attributable architecture and data-flow model that makes all material trust boundaries, authority transitions, data destinations and approval points visible to reviewers.",
+        "recommended_remediation": "Create and maintain a versioned architecture model for the exact assessed system. Document material actors, trust zones, data flows, models, memory, tools, stores, network destinations, authority boundaries, approval points and evidence paths. Bind the model to implementation evidence and update it whenever material architecture or scope changes.",
         "default_owner": "Security architect",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-005: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-005: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-005: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-005: every material actor and trust-zone transition must be represented.",
+          "ARL-KB-005: documented data flows must be traceable to observed source, configuration or runtime evidence.",
+          "ARL-KB-005: alternate, dormant and uncertain paths must remain visible with their assessment status and limitations.",
+          "ARL-KB-005: material architecture or scope changes require architecture-model update and reassessment."
         ],
-        "monitoring": "For ARL-KB-005, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security architect on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-005 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-005, monitor changes to models, tools, integrations, stores, network destinations, approval points and authority relationships. Record the exact version, architecture-model version, changed flow, reviewer and evidence digest.",
+        "containment": "If a material path or trust boundary is undocumented or contradicted by implementation, hold conclusions that depend on that path and treat the architecture as incomplete until the model and supporting evidence are corrected.",
         "retest_acceptance": [
-          "ARL-KB-005: “Trust boundaries and data flows are undocumented” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-005: Authorised in-scope use completes successfully, remains within the documented asset scope for trust boundaries and data flows are undocumented, and produces no unintended side effect.",
-          "ARL-KB-005: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-005: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-005: The exact remediated version has a current versioned architecture and trust-boundary model.",
+          "ARL-KB-005: Material actors, trust zones, data flows, tools, stores, network destinations, authority boundaries and human approval points are represented.",
+          "ARL-KB-005: Representative flows match observed source or configuration evidence.",
+          "ARL-KB-005: Alternate, dormant and unresolved paths are explicitly recorded with limitations.",
+          "ARL-KB-005: Reviewer identity, timestamp, exact assessed version, architecture version and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-005 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Maintain a versioned architecture model showing actors, inputs, stores, models, agents, tools, networks, approvals and evidence paths. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-005 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place any assessment conclusion that depends on an undocumented or contradicted architecture path on hold. Preserve the exact version and observed path evidence until the architecture model is corrected.",
+        "root_cause_remediation": "Establish the architecture and trust-boundary model as an authoritative, versioned assessment artefact maintained alongside material system changes, rather than as an informal or one-time diagram.",
+        "preventive_control": "Require material architecture, integration, tool, store, network or authority changes to update the trust-boundary and data-flow model before the new version inherits previous assessment conclusions.",
         "accountable_owner": "Security architect",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "exact assessed version, environment and scope",
+          "versioned architecture and trust-boundary model",
+          "source and configuration evidence for material flows",
+          "inventory of tools, stores, integrations and network destinations",
+          "documented human approval and authority relationships",
+          "accountable architecture reviewer"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-005 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-005 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "rollback_considerations": "Rollback must use architecture evidence corresponding to the restored version. A previous architecture model must not be treated as current when actors, flows, integrations, authority or network paths differ materially.",
+        "retest_requirements": "Repeat the KB-005 architecture review against the exact remediated version. Trace representative end-to-end flows, compare documented actors and trust boundaries with source and configuration evidence, inspect known alternate paths, and confirm that unresolved uncertainties remain explicitly recorded.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-005",
-          "Passed retest evidence bound to ARL-KB-005 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Versioned architecture and trust-boundary model for the exact assessed version",
+          "Observed evidence supporting representative material flows and trust-boundary crossings",
+          "Recorded alternate paths, limitations and unresolved architecture uncertainties",
+          "Passed KB-005 retest bound to the current knowledge digest and assessed version",
+          "Named accountable reviewer and recorded architecture review decision"
         ]
       },
       "mappings": [
@@ -1654,7 +1686,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9466b8639b097068a5a546d0f1bc59a8ecda6e80ecf09715325c8300428ff779"
+      "content_digest": "0d58fd0dc790966a8ce033633fe154892ba0e21f427a56fa7059fbc4146f2e49"
     },
     {
       "id": "ARL-KB-006",
@@ -1665,29 +1697,30 @@
       "title": "Data classification is absent or inconsistent",
       "problem": {
         "statement": "Prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules.",
-        "customer_symptom": "A user or operator may observe prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The system handles personal, confidential, regulated or secret data without a consistent classification and handling model, so restricted data may enter model context, logs, tools, storage or exports under rules intended for less sensitive data.",
+        "credible_failure_or_attack": "unclassified or misclassified data can be routed to an incompatible destination, retained too long, exposed in logs or model context, written to an unsafe location, or exported when its handling policy should have required redaction, denial or restriction.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "prompts and model context",
+          "retrieved content and memory",
+          "tool arguments and tool results",
+          "runtime and audit logs",
+          "local and external data destinations",
+          "personal, confidential, regulated and secret data",
+          "retention and export controls"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents processing non-public data"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between agents processing non-public data and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing classification, inconsistent labels, incomplete propagation, misclassification, policy drift or handling rules that do not match the data class",
+        "trust_boundary": "The control governs the boundary between data classification and every destination where that data may be processed, persisted, transmitted, displayed or exported.",
+        "operational_impact": "If data classification is absent or inconsistent, restricted information may be processed under weaker rules than intended, requiring containment, evidence review, correction of handling rules and retest before the affected path can be trusted."
       },
       "check": {
         "id": "ARL-CHK-006",
-        "objective": "Determine whether the assessed system prevents or detects: data classification is absent or inconsistent.",
-        "method": "Sample schemas and redacted evidence from each data path; verify classification, purpose, retention, access and export restrictions. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether the exact assessed system consistently classifies relevant data and applies handling rules appropriate to that classification across model context, memory, tools, logs, storage, retention and export paths.",
+        "method": "Identify the exact assessed version, environment and scope. Review the current data classification and handling policy, supported classes and restricted classes. Trace representative data through model context, memory, tool arguments, tool results, runtime logging, persistence and export paths. Verify that classification is applied consistently, that restricted classes receive the documented redaction, denial, retention or export treatment, and that classification or handling failure does not silently downgrade protection.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -1695,73 +1728,81 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-006 assessed system, version, environment and scope for Data classification is absent or inconsistent",
-          "ARL-KB-006 control configuration or source location showing how reduce the likelihood and impact of data classification is absent or inconsistent and make the remaining risk visible.",
-          "ARL-KB-006 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
-          "ARL-KB-006 policy, authorization, tool or audit events proving whether the tested data classification is absent or inconsistent path executed",
-          "ARL-KB-006 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-006 exact assessed system, version, environment and scope",
+          "ARL-KB-006 versioned data-classification and handling policy",
+          "ARL-KB-006 supported data classes and restricted-class definitions",
+          "ARL-KB-006 evidence showing classification and handling across representative model, tool, log, persistence and export paths",
+          "ARL-KB-006 evidence of redaction, denial, retention or export restriction for restricted data",
+          "ARL-KB-006 reviewer identity, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-006 passes only when “Data classification is absent or inconsistent” is not reproducible through the documented abuse cases, the valid workflow remains bounded to system prompt, retrieved context and persistent memory and source documents, messages and generated outputs, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-006 fails when prompts, memories, logs and tool arguments may contain personal, confidential, regulated or secret data without suitable handling rules, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-006 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "ARL-KB-006 passes only when relevant data is consistently classified for the exact assessed version, restricted classes receive the documented handling across applicable model, tool, log, persistence, retention and export paths, classification or handling failure does not silently reduce protection, and the conclusion is supported by version-bound attributable evidence.",
+        "fail_condition": "ARL-KB-006 fails or requires review when relevant data is unclassified, inconsistently classified, downgraded between components, sent to a destination incompatible with its class, retained or exported contrary to policy, or when required handling evidence is absent.",
+        "limitations": "This review covers the documented and observed data paths for the exact assessed version. It does not prove that every future data type, hidden integration or external destination will be classified correctly.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-006's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment and scope.",
+          "Obtain the current data-classification and handling policy.",
+          "Identify representative model, tool, logging, storage, retention and export paths.",
+          "Use synthetic or redacted test data rather than real restricted customer data."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-006, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-006 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Submit representative data with a known classification and verify that the expected handling is applied consistently across each relevant destination for the assessed path.",
+        "negative_test": "Submit synthetic restricted data or create a representative classification failure and verify that the system redacts, denies, contains or otherwise applies the documented restricted-data handling rather than silently treating it as lower sensitivity.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "data protection or security owner",
+          "authorised human reviewer",
+          "relevant system or data-path owner where clarification is required"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-006 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Data classification is absent or inconsistent” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Each representative input must receive a documented data classification.",
+          "Restricted classes must receive the expected redaction, denial, retention or export treatment for each applicable destination.",
+          "Classification or policy-processing failure must not silently downgrade handling requirements."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Use synthetic, test or redacted data; do not expose real personal, confidential, regulated or secret customer data solely for testing.",
+          "Do not export restricted data to an external destination to prove the control.",
+          "Use staging or bounded local paths where a handling test could otherwise create persistent exposure.",
+          "Preserve the policy version, assessed version, observed classification, handling decision and evidence digest."
         ]
       },
       "solution": {
         "id": "ARL-SOL-006",
-        "control_objective": "Reduce the likelihood and impact of data classification is absent or inconsistent and make the remaining risk visible.",
-        "recommended_remediation": "Classify data at ingestion and propagate labels through retrieval, model calls, tools, memory, logs and exports; deny incompatible destinations.",
+        "control_objective": "Ensure relevant data is consistently classified and that handling rules appropriate to each class are applied across model context, memory, tools, logs, storage, retention and export paths.",
+        "recommended_remediation": "Define and maintain a versioned data-classification and handling policy. Classify data before or at entry to material processing paths, propagate or recompute classification where needed, and enforce class-appropriate redaction, denial, retention and export rules at each relevant destination.",
         "default_owner": "Data protection and security owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-006: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-006: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-006: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-006: supported data classes and restricted classes must be explicit and versioned.",
+          "ARL-KB-006: classification must remain consistent across model, tool, log, persistence and export paths.",
+          "ARL-KB-006: restricted data must receive destination-specific handling such as redaction, denial, retention control or export prohibition.",
+          "ARL-KB-006: classification or handling failure must not silently reduce the required level of protection."
         ],
-        "monitoring": "For ARL-KB-006, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Data protection and security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-006 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-006, monitor classification failures, unexpected class changes, redaction events, denied restricted-data writes, retention-policy errors and attempted restricted exports. Record policy version, assessed version, classification result and evidence digest.",
+        "containment": "If classification is missing, inconsistent or incompatible with a destination, hold or disable the affected data path, prevent further restricted-data propagation where possible, and preserve the relevant classification and handling evidence until corrected.",
         "retest_acceptance": [
-          "ARL-KB-006: “Data classification is absent or inconsistent” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-006: Authorised in-scope use completes successfully, remains within the documented asset scope for data classification is absent or inconsistent, and produces no unintended side effect.",
-          "ARL-KB-006: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-006: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-006: The exact remediated version has a documented and versioned classification and handling policy.",
+          "ARL-KB-006: Representative data receives the expected classification across applicable processing paths.",
+          "ARL-KB-006: Restricted data receives the documented redaction, denial, retention and export treatment.",
+          "ARL-KB-006: Classification or handling failure does not silently downgrade protection.",
+          "ARL-KB-006: Reviewer identity, timestamp, exact assessed version, policy version and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-006 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Classify data at ingestion and propagate labels through retrieval, model calls, tools, memory, logs and exports; deny incompatible destinations. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-006 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately stop or restrict any path where restricted data can be processed without reliable classification or class-appropriate handling. Preserve the exact version, affected data path, classification result and relevant evidence.",
+        "root_cause_remediation": "Establish classification as a first-class control tied to every material data path, with explicit classes, restricted-class handling and consistent enforcement at model, tool, logging, persistence, retention and export boundaries.",
+        "preventive_control": "Require every material data destination to declare which classifications it accepts and the handling required for restricted classes, and require reassessment when new data classes, destinations, providers, retention periods or real-data uses are introduced.",
         "accountable_owner": "Data protection and security owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "versioned data-classification and handling policy",
+          "defined supported and restricted data classes",
+          "classification logic or authoritative classification source",
+          "identified model, tool, log, persistence, retention and export destinations",
+          "evidence-capable handling controls for redaction, denial, retention and export restriction"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-006 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-006 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "rollback_considerations": "Rollback must restore a version whose classification logic and handling policy are compatible with the restored data paths. Do not restore a version known to omit a required class, destination restriction, redaction rule or retention control.",
+        "retest_requirements": "Repeat the KB-006 review against the exact remediated version. Exercise representative classified and restricted synthetic data through relevant model, tool, logging, persistence, retention and export paths, and verify that each receives the documented class-appropriate handling.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-006",
-          "Passed retest evidence bound to ARL-KB-006 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Versioned data-classification and handling policy for the exact assessed version",
+          "Evidence of classification across representative data paths",
+          "Evidence of restricted-data redaction, denial, retention and export controls",
+          "Passed KB-006 retest bound to the current knowledge digest and assessed version",
+          "Named accountable reviewer and recorded data-handling decision"
         ]
       },
       "mappings": [
@@ -1859,7 +1900,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c446f390316609e3353c47ac1e0fe61e997692c7af068e5e71524ab6391ef6c0"
+      "content_digest": "b6dc24f2cd2b949e58f810b78f95eec37f9052057f10f56a334845a4a4a20b7e"
     },
     {
       "id": "ARL-KB-007",
@@ -1909,18 +1950,19 @@
         ],
         "pass_condition": "ARL-KB-007 passes only when every applicable external provider or remotely operated dependency observed in the exact assessed version is identified and consistent with the approved scope; its relevant data, network and authority boundaries are documented; material provider or configuration changes require accountable review; and version-bound evidence supports the conclusion. A dormant external-provider path does not pass merely because credentials are currently absent if it can be activated outside the approved change process.",
         "fail_condition": "ARL-KB-007 fails when an external AI, MCP, plugin, vector, observability or other provider can influence behaviour, receive data or become active without being identified and approved; when observed provider/configuration state differs materially from the approved scope without accountable review; when provider change, compromise, fallback or disablement is unmanaged; or when the conclusion is unsupported by version-bound evidence.",
-        "limitations": "This bounded ARL-KB-007 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "This review establishes the observed and declared provider set for the exact assessed version and scope. It does not independently prove a provider's internal security posture, contractual compliance or future behaviour.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-007's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment and approved scope.",
+          "Obtain the current provider, model, MCP, plugin, API and remotely operated dependency inventory.",
+          "Identify approved provider configurations and any dormant or alternate external-provider paths.",
+          "Do not contact or exercise a third-party provider without explicit authorisation."
         ],
         "positive_test": "Inspect the exact approved provider and tool configuration and verify that the active provider set matches the documented scope, with expected bounded data, network and authority paths.",
         "negative_test": "Introduce or identify a synthetic unapproved or dormant external-provider path, provider/configuration drift, or an unapproved provider change and verify that the assessment identifies it for review or failure rather than silently treating it as approved.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "vendor or provider risk owner",
+          "authorised human reviewer",
+          "system or integration owner able to evidence provider configuration"
         ],
         "required_inputs_and_expected_outputs": [
           "An exact in-scope provider configuration matching the approved scope must produce a bounded documented result.",
@@ -1928,10 +1970,10 @@
           "Missing provider approval or configuration evidence must not be converted into a pass."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Use local, synthetic, configuration or documentary evidence for provider assessment wherever possible.",
+          "Do not send real customer data or secrets to a third-party service solely for testing.",
+          "Do not activate dormant external-provider paths against real services without explicit authorisation.",
+          "Preserve exact version, provider configuration, approval state, reviewer identity and evidence digest."
         ]
       },
       "solution": {
@@ -1941,34 +1983,40 @@
         "default_owner": "Vendor risk owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-007: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-007: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-007: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-007: every applicable external provider or remotely operated dependency must be explicitly inventoried and attributable.",
+          "ARL-KB-007: approved provider purpose, configuration, data boundaries, network boundaries and authority must be documented.",
+          "ARL-KB-007: dormant but activatable provider paths remain review items when they can be enabled without an approved scope change.",
+          "ARL-KB-007: material provider, endpoint, model or configuration changes require accountable review and reassessment."
         ],
-        "monitoring": "For ARL-KB-007, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Vendor risk owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-007 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-007, monitor provider additions, removals, endpoint changes, model changes, configuration drift, dependency changes, activation of dormant provider paths, fallback behaviour and provider incidents. Record the exact assessed version, provider state, reviewer and evidence digest.",
+        "containment": "If an external provider is unapproved, materially drifted, compromised, or cannot be reconciled with the approved scope, hold or disable the affected provider path where operationally possible and prevent it from being treated as approved until accountable review is complete.",
         "retest_acceptance": [
-          "ARL-KB-007: “Third-party AI and tool providers are not assessed” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-007: Authorised in-scope use completes successfully, remains within the documented asset scope for third-party ai and tool providers are not assessed, and produces no unintended side effect.",
-          "ARL-KB-007: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-007: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-007: Every applicable external provider or remotely operated dependency observed in the exact remediated version is identified and reconciled with the approved scope.",
+          "ARL-KB-007: Relevant provider purpose, configuration, data, network and authority boundaries are documented.",
+          "ARL-KB-007: Dormant or alternate external-provider paths are explicitly recorded with their activation and approval status.",
+          "ARL-KB-007: Material provider or configuration changes require accountable review before they inherit prior approval.",
+          "ARL-KB-007: Reviewer identity, timestamp, exact assessed version, provider configuration and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-007 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Maintain a vendor register, approved configurations, data-processing constraints, change alerts, fallback plans and periodic reassessment. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-007 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place an unapproved, materially drifted or suspected-compromised external-provider path outside approved operation. Preserve the exact provider configuration, activation state and relevant evidence before remediation.",
+        "root_cause_remediation": "Maintain an authoritative provider register bound to system scope and exact configuration. Record provider purpose, data and network boundaries, authority, change controls, incident handling, disablement, fallback and exit strategy, and reassess after material provider changes.",
+        "preventive_control": "Require every external provider, model endpoint, remotely operated dependency or dormant provider path to be reconciled with the approved provider register and scope before it can be treated as an approved component.",
         "accountable_owner": "Vendor risk owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "exact assessed version, environment and approved scope",
+          "authoritative provider and remotely operated dependency inventory",
+          "approved provider configuration and endpoint records",
+          "documented data, network and authority boundaries",
+          "provider change-control, disablement, fallback and incident-response records",
+          "accountable provider-risk reviewer"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-007 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact provider-inventory and configuration comparison against the remediated version, including the original unapproved, drifted or dormant-provider case, and confirm that the discrepancy is removed or explicitly approved before changing the deployment decision.",
+        "rollback_considerations": "Rollback must restore a provider configuration that is itself approved for the restored system version and scope. Historical provider approval must not be inherited when endpoint, model, dependency, authority or data-boundary state differs materially.",
+        "retest_requirements": "Repeat the KB-007 provider inventory and configuration review against the exact remediated version. Reconcile active, alternate and dormant provider paths with the approved scope, reproduce the original unapproved or drifted case using safe evidence, and verify that it is surfaced for review rather than silently accepted.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-007",
-          "Passed retest evidence bound to ARL-KB-007 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Provider inventory for the exact assessed version and scope",
+          "Approved provider configuration with relevant data, network and authority boundaries",
+          "Evidence covering provider drift, dormant paths and material change handling",
+          "Passed KB-007 retest bound to the current knowledge digest and assessed version",
+          "Named accountable reviewer and recorded provider-risk decision"
         ]
       },
       "mappings": [
@@ -2066,7 +2114,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ac0f9fa807c348a227bf6df6c569185c07df13648ba33a07ea70b671bc422621"
+      "content_digest": "23d874f4639df52e790c715f3779fdb46944897ab572400cfca06a41afeb3546"
     },
     {
       "id": "ARL-KB-008",
@@ -2077,22 +2125,24 @@
       "title": "Legal basis, transparency or user notice is unsupported",
       "problem": {
         "statement": "The organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights.",
-        "customer_symptom": "A user or operator may observe the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "The organisation cannot trace observed personal-data processing or human-facing agent behaviour to a documented purpose, asserted legal-basis analysis, relevant user information, retention rules or a route for affected people to exercise rights.",
+        "credible_failure_or_attack": "personal-data processing or human-facing agent behaviour can materially differ from the organisation's documented purpose, privacy analysis or user notice, leaving processing unsupported, opaque or without a usable rights-handling route.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "personal data processed by the agent",
+          "user-facing agent interactions",
+          "privacy and transparency records",
+          "retention and deletion rules",
+          "rights-handling and contact routes",
+          "accountable privacy governance evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "agents processing personal data or interacting with people"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between agents processing personal data or interacting with people and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "missing privacy analysis, undocumented purpose, stale or inaccurate notice, unrecorded processing change, incomplete retention governance or missing rights-handling ownership",
+        "trust_boundary": "The control governs the boundary between the system's observed processing and human-facing behaviour and the organisation's documented privacy purpose, asserted legal-basis analysis, transparency, retention and rights-handling evidence.",
+        "operational_impact": "If observed processing is unsupported or materially inconsistent with documented privacy governance, the affected use may require review or hold until the organisation provides current, attributable evidence and an accountable human records the resulting decision."
       },
       "check": {
         "id": "ARL-CHK-008",
@@ -2114,18 +2164,19 @@
         ],
         "pass_condition": "ARL-KB-008 passes only when applicable personal-data processing and human-facing use observed in the exact assessed version are traceable to documented purposes and the organisation's asserted legal-basis analysis; relevant user information, retention and rights-handling evidence exists and is consistent with the observed system; accountable ownership is identified; and version-bound evidence supports the conclusion. ARL does not independently certify legal compliance.",
         "fail_condition": "ARL-KB-008 fails or requires review when applicable personal-data processing or human-facing agent use lacks a documented purpose or organisational legal-basis record; observed processing materially differs from the documented notice or purpose; relevant retention, transparency, rights-handling or accountable-owner evidence is absent; or the conclusion is unsupported by attributable version-bound evidence.",
-        "limitations": "This bounded ARL-KB-008 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "ARL verifies the presence, traceability and consistency of privacy-governance evidence for the exact assessed version. It does not determine whether a legal basis is legally sufficient, provide legal advice, or independently certify compliance with privacy law.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-008's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment and applicable personal-data or human-interaction scope.",
+          "Identify observed personal-data categories, purposes, destinations, retention and user journeys.",
+          "Obtain the organisation's applicable privacy analysis, asserted legal-basis record, notice and rights-handling evidence.",
+          "Use synthetic or non-production data and do not exercise real individuals' rights solely for testing."
         ],
         "positive_test": "Trace an authorised synthetic user interaction through the assessed system and verify that the observed data categories, purpose, destinations and retention are represented in the applicable documented privacy and transparency evidence.",
         "negative_test": "Remove or omit one required governance element in a synthetic assessment case, such as purpose, asserted legal-basis record, notice, retention or rights-handling evidence, or introduce a material mismatch between documented and observed processing, and verify that the assessment does not return a pass.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable privacy or data-protection owner",
+          "authorised human reviewer",
+          "system or product owner able to evidence observed processing and user journeys"
         ],
         "required_inputs_and_expected_outputs": [
           "A documented in-scope processing path consistent with observed data use and transparency evidence may proceed to human review for closure.",
@@ -2133,10 +2184,10 @@
           "Absence of real customer data must not by itself produce a pass when the agent interacts with people."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Use synthetic or non-production personal-data examples.",
+          "Do not submit rights requests in the name of real individuals solely for assessment.",
+          "Do not contact third parties or expose real customer data solely to test this control.",
+          "Preserve the exact assessed version, privacy evidence version, reviewer identity and evidence digest."
         ]
       },
       "solution": {
@@ -2146,34 +2197,40 @@
         "default_owner": "Privacy counsel and DPO",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-008: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-008: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-008: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-008: observed personal-data processing must be traceable to an organisation-documented purpose and asserted legal-basis analysis.",
+          "ARL-KB-008: relevant user information must accurately reflect material agent and data-processing behaviour.",
+          "ARL-KB-008: retention and rights-handling routes must be explicit, attributable and consistent with the assessed use.",
+          "ARL-KB-008: material changes to data, purpose, provider, retention or user journey require privacy-governance review."
         ],
-        "monitoring": "For ARL-KB-008, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Privacy counsel and DPO on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-008 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-008, monitor material changes to personal-data categories, purposes, destinations, providers, retention, user journeys, notices and rights-handling routes. Record the exact assessed version, changed processing, accountable reviewer and evidence digest.",
+        "containment": "If material personal-data processing or human-facing behaviour lacks supporting privacy-governance evidence or materially contradicts the documented purpose or notice, place the affected use or assessment conclusion on hold until accountable review is completed.",
         "retest_acceptance": [
-          "ARL-KB-008: “Legal basis, transparency or user notice is unsupported” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-008: Authorised in-scope use completes successfully, remains within the documented asset scope for legal basis, transparency or user notice is unsupported, and produces no unintended side effect.",
-          "ARL-KB-008: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-008: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-008: Applicable observed processing for the exact remediated version is traceable to a documented purpose and organisation-recorded legal-basis analysis.",
+          "ARL-KB-008: Relevant user-facing transparency evidence is consistent with material observed agent and data-processing behaviour.",
+          "ARL-KB-008: Applicable retention and rights-handling routes are documented and attributable.",
+          "ARL-KB-008: A deliberately missing or inconsistent privacy-governance element produces review or failure rather than a pass.",
+          "ARL-KB-008: Reviewer identity, timestamp, exact assessed version and evidence digest are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-008 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Record role-specific legal analysis, transparent notices, rights handling, human review and data-protection impact assessment where required. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-008 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place the affected processing or human-facing use on review hold when required purpose, asserted legal-basis, notice, retention or rights-handling evidence is absent or materially inconsistent with observed behaviour. Preserve the exact version and relevant evidence.",
+        "root_cause_remediation": "Establish an authoritative privacy-governance record linking observed processing to purpose, organisation-recorded legal-basis analysis, user information, retention, rights handling and accountable ownership. Keep that record aligned with material system changes.",
+        "preventive_control": "Require material changes to personal-data categories, processing purpose, provider, destination, retention or user journey to trigger privacy-governance review before prior evidence is inherited by the changed system.",
         "accountable_owner": "Privacy counsel and DPO",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "exact assessed version and applicable processing scope",
+          "observed personal-data categories, purposes and destinations",
+          "organisation-approved privacy analysis and asserted legal-basis record",
+          "applicable user-facing notice or transparency evidence",
+          "retention and rights-handling records",
+          "accountable privacy or data-protection reviewer"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-008 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact privacy-evidence comparison against the remediated version, including the original missing or inconsistent governance element, and confirm that observed processing and documented purpose, notice, retention and rights-handling evidence now align before changing the assessment decision.",
+        "rollback_considerations": "Rollback must use privacy-governance evidence applicable to the restored processing and user journey. Historical purpose, notice or legal-basis evidence must not be inherited when material processing conditions differ.",
+        "retest_requirements": "Repeat the KB-008 privacy-governance comparison against the exact remediated version. Trace observed processing, purpose, destinations, retention and user journeys to the organisation's privacy analysis, transparency and rights-handling evidence, including reproduction of the original missing or inconsistent element.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-008",
-          "Passed retest evidence bound to ARL-KB-008 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Exact assessed version and applicable personal-data or human-interaction scope",
+          "Organisation-recorded purpose and asserted legal-basis analysis",
+          "Applicable user-facing transparency, retention and rights-handling evidence",
+          "Passed KB-008 retest bound to the current knowledge digest and assessed version",
+          "Named accountable human reviewer and recorded privacy-governance decision"
         ]
       },
       "mappings": [
@@ -2276,7 +2333,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "60eec8ff9ce6eb730357d77436e2f0db9dc47c95537a1a5806848c3b8068b3e4"
+      "content_digest": "dbe0f9f3b3c1aee4021a57bde2d08b1450c288e1ac786972910a96c2e0eb27fb"
     },
     {
       "id": "ARL-KB-009",
@@ -2287,24 +2344,24 @@
       "title": "Security-relevant changes bypass review",
       "problem": {
         "statement": "Prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval.",
-        "customer_symptom": "A user or operator may observe prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A security-relevant production change can become authoritative without the required classification, review, testing, accountable approval or exact-version deployment evidence.",
+        "credible_failure_or_attack": "a prompt, model, tool, permission, policy, schema, data-source, dependency or provider change can bypass the approved production change process, or reuse stale review evidence from a materially different version.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance"
+          "production prompts, models and tools",
+          "permissions, policies and schemas",
+          "data sources and providers",
+          "dependencies and deployment artefacts",
+          "review and test evidence",
+          "deployment provenance and rollback state"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all production agents"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between all production agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If prompt, model, tool, policy or data-source changes can reach production without threat modelling, tests or approval, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "unreviewed production change, stale approval reuse, version substitution, deployment drift, incomplete change classification or release-process failure",
+        "trust_boundary": "The control governs the transition from a proposed security-relevant change to the authoritative production artefact, including review, testing, approval, version binding, deployment provenance and reassessment.",
+        "operational_impact": "If a security-relevant change bypasses review or inherits stale approval, an unassessed artefact may become authoritative in production. The affected release or deployment decision must remain on hold until the exact version is reviewed, tested and approved."
       },
       "check": {
         "id": "ARL-CHK-009",
@@ -2327,7 +2384,7 @@
         ],
         "pass_condition": "ARL-KB-009 passes only when security-relevant production changes are identified before deployment, receive the required review and tests, and have accountable approval bound to the exact deployed version or immutable artefact; stale evidence or approval from a different material version cannot authorize the change; material scope or architecture changes trigger reassessment or revalidation; and attributable deployment evidence supports the conclusion.",
         "fail_condition": "ARL-KB-009 fails when a security-relevant prompt, model, tool, permission, policy, schema, data-source, dependency or provider change can become authoritative in production without the required review, tests or approval; when approval or evidence can be reused across a materially different version; when production provenance cannot identify the reviewed artefact; or when a material scope or architecture change does not trigger required reassessment or revalidation.",
-        "limitations": "This bounded ARL-KB-009 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "limitations": "This review evaluates the documented production change path and exact-version evidence available for the assessed release. It does not prove that no separate deployment path, privileged override or future process regression exists.",
         "preconditions": [
           "Identify the exact production environment and authoritative deployed version or immutable artefact covered by the assessment.",
           "Obtain owner authorisation before inspecting deployment/change evidence or executing any change-path test.",
@@ -2361,34 +2418,40 @@
         "default_owner": "Engineering owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-009: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-009: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-009: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-009: security-relevant changes must be identified and classified before production deployment.",
+          "ARL-KB-009: review, tests and accountable approval must be bound to the exact production version or immutable artefact.",
+          "ARL-KB-009: stale approval or evidence from a materially different version must not authorize a changed artefact.",
+          "ARL-KB-009: material architecture or scope changes require reassessment or revalidation before production approval."
         ],
-        "monitoring": "For ARL-KB-009, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Engineering owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-009 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-009, monitor production changes to prompts, models, tools, permissions, policies, schemas, data sources, dependencies and providers. Record change classification, reviewed version or digest, required tests, accountable approval, deployment provenance and any reassessment trigger.",
+        "containment": "If a security-relevant change lacks required review, tests, approval or exact-version provenance, block or hold that release from becoming authoritative in production. If already deployed, preserve evidence and move to a known reviewed state where operationally safe.",
         "retest_acceptance": [
-          "ARL-KB-009: “Security-relevant changes bypass review” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-009: Authorised in-scope use completes successfully, remains within the documented asset scope for security-relevant changes bypass review, and produces no unintended side effect.",
-          "ARL-KB-009: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-009: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-009: The exact remediated production change path requires classification, review, required tests and accountable approval before deployment.",
+          "ARL-KB-009: Approval and test evidence are bound to the exact deployed version or immutable artefact.",
+          "ARL-KB-009: An altered or materially changed artefact cannot inherit stale approval or test evidence.",
+          "ARL-KB-009: Material architecture or scope change triggers reassessment or revalidation before production approval.",
+          "ARL-KB-009: Reviewer identity, timestamp, exact deployed version, evidence digest and rollback state are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-009 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Use change classification, code review, signed artefacts, automated negative tests, staged rollout and rollback for all security-relevant changes. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-009 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately hold any production release whose security-relevant change cannot be bound to required review, tests and accountable approval for the exact artefact. Preserve the deployed version, change record, approvals and deployment provenance.",
+        "root_cause_remediation": "Establish a version-bound production change-control process that classifies security-relevant changes, requires appropriate review and tests, binds approval to immutable artefacts, records deployment provenance, triggers reassessment after material scope or architecture changes, and maintains a known reviewed rollback state.",
+        "preventive_control": "Require every production artefact to prove that its exact version or immutable digest is the same version that received the required security review, tests and accountable approval before it can become authoritative.",
         "accountable_owner": "Engineering owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative production version or immutable artefact identity",
+          "security-relevant change-classification process",
+          "review and testing requirements for material changes",
+          "accountable approval mechanism bound to exact versions",
+          "deployment provenance and release evidence",
+          "known reviewed rollback artefact"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-009 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the original change-bypass case against the remediated production workflow using an altered version, stale approval or material scope change, and confirm that the changed artefact cannot become authoritative until new review, tests and accountable approval are bound to that exact version.",
+        "rollback_considerations": "Rollback must restore a known reviewed artefact whose approval and evidence remain valid for that exact version. Do not treat rollback as safe when its scope, architecture, dependencies or configuration have materially changed since approval.",
+        "retest_requirements": "Repeat the KB-009 production change-control review against the exact remediated workflow. Use an altered-version, stale-approval or material-scope-change case in an authorised non-production or historical test path and verify that the changed artefact cannot become authoritative until new review, tests and approval are bound to that exact version.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-009",
-          "Passed retest evidence bound to ARL-KB-009 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Exact production artefact identity and authoritative deployment provenance",
+          "Security-relevant change classification and required review record",
+          "Tests and accountable approval bound to the exact artefact",
+          "Passed KB-009 stale-evidence or altered-version retest",
+          "Named accountable reviewer and recorded deployment decision"
         ]
       },
       "mappings": [
@@ -2486,7 +2549,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0a5e48687f199e24eca1fb3a8af2fedfc47d825de1c4c44dd2f20f44b590e6ab"
+      "content_digest": "33d640238ab1a9871fe597809703393ede22051c187633d2e5d9a2f5947a0391"
     },
     {
       "id": "ARL-KB-010",
@@ -2498,28 +2561,28 @@
       "problem": {
         "statement": "A high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path.",
         "customer_symptom": "A user or operator may observe a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "a deployment or readiness decision can incorrectly treat an aggregate score as sufficient evidence and overlook a non-negotiable blocker such as an unresolved critical finding, missing accountable approval, unverified recovery path, failed exact retest or unsupported evidence.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "backups, runtime state and recovery infrastructure",
-          "service availability and data integrity"
+          "deployment and readiness decisions",
+          "critical and high-risk findings",
+          "human approvals and residual-risk decisions",
+          "retest and remediation evidence",
+          "recovery and rollback evidence",
+          "assessment evidence and decision records"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "all agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between all agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "ambiguous acceptance criteria, score aggregation, incomplete evidence, operator error or unsupported readiness logic",
+        "trust_boundary": "The control governs the boundary between assessment evidence and the human decision that authorises readiness, deployment, continued operation or residual-risk acceptance.",
+        "operational_impact": "If acceptance criteria are vague or score-driven, an accountable operator may approve deployment or continued operation while a mandatory blocker, missing approval, failed retest, unsupported recovery path or unresolved critical risk remains open."
       },
       "check": {
         "id": "ARL-CHK-010",
-        "objective": "Determine whether the assessed system prevents or detects: acceptance criteria are vague or based on a score alone.",
-        "method": "Check whether deployment criteria enumerate non-negotiable gates, evidence types, residual risks, limitations and decision authority. Create Tenant A and Tenant B users, roles and object IDs. Attempt direct-ID, list, search, export and tool access across tenants; expect indistinguishable authorization failures and no foreign metadata.",
+        "objective": "Determine whether readiness or deployment decisions use explicit, non-negotiable acceptance gates and attributable evidence rather than an aggregate score alone.",
+        "method": "Identify the exact assessed version and the decision being made. Inspect the documented acceptance criteria, readiness or deployment gates, evidence requirements, unresolved-risk rules, approval authority, recovery or rollback requirements and known limitations. Verify that mandatory blockers are evaluated independently of any aggregate score and that critical unresolved findings, missing required evidence, failed exact retests, missing accountable approval or required recovery evidence cannot be averaged away. Trace a representative decision to the exact evidence and named human authority that accepted, rejected or held the system.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -2527,73 +2590,81 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-010 assessed system, version, environment and scope for Acceptance criteria are vague or based on a score alone",
-          "ARL-KB-010 control configuration or source location showing how reduce the likelihood and impact of acceptance criteria are vague or based on a score alone and make the remaining risk visible.",
-          "ARL-KB-010 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-010 policy, authorization, tool or audit events proving whether the tested acceptance criteria are vague or based on a score alone path executed",
-          "ARL-KB-010 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-010 exact assessed system version, environment, scope and decision under review",
+          "ARL-KB-010 documented acceptance or readiness criteria with explicit mandatory gates",
+          "ARL-KB-010 evidence requirements and blocker rules for unresolved critical risks, approvals and required retests",
+          "ARL-KB-010 recovery, rollback or operational-readiness evidence where required by the assessed decision",
+          "ARL-KB-010 decision record showing that aggregate score cannot override a mandatory failed gate",
+          "ARL-KB-010 accountable human decision authority and residual-risk decision where applicable",
+          "ARL-KB-010 reviewer identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-010 passes only when “Acceptance criteria are vague or based on a score alone” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-010 fails when a high aggregate score can hide a critical unresolved action, missing approval, tenant breach or untested recovery path, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-010 passes only when the assessed readiness or deployment decision is governed by explicit mandatory gates; required evidence, approvals, exact retests and recovery requirements are attributable to the assessed version; an unresolved mandatory blocker cannot be hidden or offset by a high aggregate score; known limitations and residual risks remain visible; and the final decision is made by the documented human authority.",
+        "fail_condition": "ARL-KB-010 fails or requires review when acceptance criteria are undefined, ambiguous or score-only; when a high aggregate score can override or obscure an unresolved mandatory blocker; when required approval, exact retest, recovery, rollback or other decision evidence is missing; when known limitations or residual risks are not visible to the decision-maker; or when the readiness decision is unsupported by attributable version-bound evidence.",
         "limitations": "This bounded ARL-KB-010 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-010's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Identify the exact assessed version, environment, scope and readiness or deployment decision under review.",
+          "Identify the documented human authority responsible for the decision.",
+          "Obtain the acceptance criteria, mandatory gates and required evidence before evaluating the decision.",
+          "Use historical, synthetic or non-production decision scenarios when testing a failed-gate case; do not deliberately create unsafe production conditions."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-010, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-010 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Evaluate a representative decision in which every mandatory acceptance gate is satisfied and verify that the decision is supported by attributable version-bound evidence and the documented human authority.",
+        "negative_test": "Introduce or use a synthetic decision scenario with a high aggregate score but at least one mandatory blocker, such as an unresolved critical finding, missing required approval, failed exact retest or missing recovery evidence, and verify that the system cannot be treated as ready solely because of the aggregate score.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "assessment or control reviewer",
+          "accountable readiness or deployment decision authority",
+          "finding or remediation owner where a mandatory blocker is being evaluated"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-010 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Acceptance criteria are vague or based on a score alone” must be denied, quarantined or routed to explicit review before a material side effect."
+          "All mandatory gates satisfied with attributable evidence may proceed to human readiness or deployment decision.",
+          "A failed mandatory gate must produce HOLD, REVIEW REQUIRED, DO NOT DEPLOY or an equivalent non-ready decision regardless of aggregate score.",
+          "Missing required evidence or approval must not be converted into a passing state by averaging or scoring.",
+          "Known limitations and residual risks must remain visible to the accountable decision-maker."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Do not deliberately introduce an unsafe condition into production to test a failed acceptance gate.",
+          "Use synthetic, historical, staged or already-existing failed-gate evidence for negative testing.",
+          "Do not fabricate approvals, retest evidence or recovery evidence.",
+          "Preserve the exact version, evidence digest, limitations and human decision record."
         ]
       },
       "solution": {
         "id": "ARL-SOL-010",
-        "control_objective": "Reduce the likelihood and impact of acceptance criteria are vague or based on a score alone and make the remaining risk visible.",
-        "recommended_remediation": "Define explicit pass/fail gates for critical risks, tenant isolation, exact approvals, recovery, monitoring and evidence; prohibit score-only approval.",
+        "control_objective": "Ensure readiness and deployment decisions are based on explicit mandatory acceptance gates and attributable evidence, with no aggregate score able to override a required blocker.",
+        "recommended_remediation": "Define explicit pass, hold and fail criteria for critical findings, required approvals, exact retests, recovery or rollback readiness, evidence quality and known limitations. Treat mandatory blockers independently from aggregate scores, assign a named human decision authority, and preserve the exact evidence supporting every readiness or deployment decision.",
         "default_owner": "Deployment authority",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-010: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-010: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-010: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-010: mandatory blockers are evaluated independently and cannot be averaged away by aggregate scoring.",
+          "ARL-KB-010: every readiness decision is bound to the exact assessed version and attributable evidence.",
+          "ARL-KB-010: missing required evidence, approval or exact retest fails closed to hold or review rather than pass.",
+          "ARL-KB-010: consequential readiness and deployment decisions remain with a documented human authority."
         ],
-        "monitoring": "For ARL-KB-010, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Deployment authority on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-010 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "For ARL-KB-010, record the assessed version, acceptance-gate results, open mandatory blockers, evidence digests, limitations, residual risks, accountable decision-maker and final readiness or deployment decision.",
+        "containment": "If a mandatory acceptance gate is unresolved or evidence is missing, hold deployment or the affected readiness decision, preserve the decision evidence, assign remediation ownership and require exact retest or new approval before the hold is removed.",
         "retest_acceptance": [
-          "ARL-KB-010: “Acceptance criteria are vague or based on a score alone” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-010: Authorised in-scope use completes successfully, remains within the documented asset scope for acceptance criteria are vague or based on a score alone, and produces no unintended side effect.",
-          "ARL-KB-010: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-010: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-010: The original vague or score-only decision condition is no longer reproducible against the remediated decision process.",
+          "ARL-KB-010: Every mandatory acceptance gate has explicit pass, hold or fail semantics.",
+          "ARL-KB-010: A high aggregate score cannot override an unresolved mandatory blocker or missing required evidence.",
+          "ARL-KB-010: Reviewer identity, exact assessed version, evidence digest, known limitations, residual risks and human decision are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-010 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Define explicit pass/fail gates for critical risks, tenant isolation, exact approvals, recovery, monitoring and evidence; prohibit score-only approval. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-010 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately place the affected readiness or deployment decision on hold when a mandatory acceptance gate is unresolved or its required evidence is missing. Preserve the exact assessed version, open blockers, evidence digests, known limitations and current human decision until the deficiency is resolved.",
+        "root_cause_remediation": "Replace vague or score-only readiness logic with explicit mandatory pass, hold and fail gates for critical findings, required approvals, exact retests, recovery or rollback readiness, evidence quality and known limitations. Bind the decision to the exact assessed version and named human authority.",
+        "preventive_control": "Prevent score-only approval by evaluating mandatory acceptance gates independently from aggregate scoring and fail closed to hold or review whenever required evidence, approval, exact retest or recovery evidence is absent.",
         "accountable_owner": "Deployment authority",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative assessed version and scope",
+          "explicit acceptance and mandatory-blocker criteria",
+          "attributable finding, remediation and exact-retest evidence",
+          "documented readiness or deployment decision authority",
+          "recovery or rollback evidence where required by the decision"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-010 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-010 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "rollback_considerations": "Preserve the last decision state supported by complete attributable evidence. Rollback must not restore a readiness decision that depended on stale evidence, a superseded assessed version or an unresolved mandatory blocker.",
+        "retest_requirements": "Repeat the original acceptance-decision scenario against the remediated criteria, including a high-score case containing a mandatory failed gate, and confirm that the failed gate produces a non-ready decision until attributable remediation, exact retest and required approval exist.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-010",
-          "Passed retest evidence bound to ARL-KB-010 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Approved KB-010 remediation defining explicit mandatory acceptance gates",
+          "Passed retest showing a high aggregate score cannot override a mandatory failed gate",
+          "Exact assessed version and attributable evidence supporting the current gate results",
+          "Named accountable human reviewer and recorded readiness, deployment or residual-risk decision"
         ]
       },
       "mappings": [
@@ -2691,7 +2762,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "fc6c7bb66f10c54ad4dfd0b355af8ad958f06bc6a512db72197df6352a64430f"
+      "content_digest": "0b877abe1336fe3d1b70684902d1d4d655e2d6e5a3836ebb6730b9c2fe1f197a"
     },
     {
       "id": "ARL-KB-011",
