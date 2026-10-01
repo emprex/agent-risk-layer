@@ -2096,8 +2096,8 @@
       },
       "check": {
         "id": "ARL-CHK-008",
-        "objective": "Determine whether the assessed system prevents or detects: legal basis, transparency or user notice is unsupported.",
-        "method": "Review the actual data, purposes, notices, user journeys, decisions and retention against the organisation's documented legal analysis. Execute the documented check for “Legal basis, transparency or user notice is unsupported” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether personal-data processing and human-facing agent use are supported by documented purpose, organisational legal-basis analysis, transparent user information, retention and rights-handling evidence.",
+        "method": "Identify the personal data and human interactions present in the exact assessed version. Compare the observed processing, purposes, recipients, model or tool destinations, retention and user journey with the organisation's documented privacy analysis and notices. Verify that the organisation records the purpose and asserted legal basis for applicable processing, provides appropriate transparency about the agent and material data use, defines retention and rights-handling routes, and assigns accountable ownership. ARL verifies the presence, traceability and consistency of this evidence; it does not determine legal sufficiency or provide legal advice. Use synthetic or non-production data and do not exercise rights against real people or third parties during the test.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -2105,30 +2105,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-008 assessed system, version, environment and scope for Legal basis, transparency or user notice is unsupported",
-          "ARL-KB-008 control configuration or source location showing how reduce the likelihood and impact of legal basis, transparency or user notice is unsupported and make the remaining risk visible.",
-          "ARL-KB-008 positive and abuse inputs with expected and observed outputs for agent and model context",
-          "ARL-KB-008 policy, authorization, tool or audit events proving whether the tested legal basis, transparency or user notice is unsupported path executed",
-          "ARL-KB-008 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-008 assessed system, exact version, environment and applicable data/human-interaction scope",
+          "ARL-KB-008 observed personal-data categories, purposes, destinations and retention relevant to the assessed path",
+          "ARL-KB-008 organisation-approved purpose and asserted legal-basis record for applicable processing",
+          "ARL-KB-008 user-facing transparency or notice evidence describing relevant agent/data processing",
+          "ARL-KB-008 rights-handling, contact or escalation route and accountable owner where applicable",
+          "ARL-KB-008 reviewer identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-008 passes only when “Legal basis, transparency or user notice is unsupported” is not reproducible through the documented abuse cases, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-008 fails when the organisation cannot show why personal data is processed, what the agent does, or how affected people can exercise rights, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-008 passes only when applicable personal-data processing and human-facing use observed in the exact assessed version are traceable to documented purposes and the organisation's asserted legal-basis analysis; relevant user information, retention and rights-handling evidence exists and is consistent with the observed system; accountable ownership is identified; and version-bound evidence supports the conclusion. ARL does not independently certify legal compliance.",
+        "fail_condition": "ARL-KB-008 fails or requires review when applicable personal-data processing or human-facing agent use lacks a documented purpose or organisational legal-basis record; observed processing materially differs from the documented notice or purpose; relevant retention, transparency, rights-handling or accountable-owner evidence is absent; or the conclusion is unsupported by attributable version-bound evidence.",
         "limitations": "This bounded ARL-KB-008 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-008's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-008, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-008 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Trace an authorised synthetic user interaction through the assessed system and verify that the observed data categories, purpose, destinations and retention are represented in the applicable documented privacy and transparency evidence.",
+        "negative_test": "Remove or omit one required governance element in a synthetic assessment case, such as purpose, asserted legal-basis record, notice, retention or rights-handling evidence, or introduce a material mismatch between documented and observed processing, and verify that the assessment does not return a pass.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-008 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Legal basis, transparency or user notice is unsupported” must be denied, quarantined or routed to explicit review before a material side effect."
+          "A documented in-scope processing path consistent with observed data use and transparency evidence may proceed to human review for closure.",
+          "Missing or materially inconsistent purpose, legal-basis, notice, retention or rights-handling evidence must produce a review or failure condition.",
+          "Absence of real customer data must not by itself produce a pass when the agent interacts with people."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -2139,8 +2141,8 @@
       },
       "solution": {
         "id": "ARL-SOL-008",
-        "control_objective": "Reduce the likelihood and impact of legal basis, transparency or user notice is unsupported and make the remaining risk visible.",
-        "recommended_remediation": "Record role-specific legal analysis, transparent notices, rights handling, human review and data-protection impact assessment where required.",
+        "control_objective": "Make the purpose, organisational legal-basis analysis, transparency, retention and rights handling for applicable personal-data and human-facing agent use explicit, attributable and reviewable.",
+        "recommended_remediation": "Document the applicable processing purpose and organisation-approved legal-basis analysis; align notices with observed agent and data behaviour; document relevant retention and rights-handling routes; assign accountable privacy ownership; and review the records after material changes to data, purpose, provider or user journey.",
         "default_owner": "Privacy counsel and DPO",
         "priority": "P1",
         "implementation_principles": [
@@ -2167,7 +2169,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-008 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-008 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact privacy-evidence comparison against the remediated version, including the original missing or inconsistent governance element, and confirm that observed processing and documented purpose, notice, retention and rights-handling evidence now align before changing the assessment decision.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-008",
           "Passed retest evidence bound to ARL-KB-008 and the current knowledge digest",
@@ -2274,7 +2276,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "d186036b4cafff8d46035851608d0b4eb22604cd14cb48d4403d3180972869e5"
+      "content_digest": "60eec8ff9ce6eb730357d77436e2f0db9dc47c95537a1a5806848c3b8068b3e4"
     },
     {
       "id": "ARL-KB-009",
