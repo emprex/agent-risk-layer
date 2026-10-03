@@ -3371,27 +3371,28 @@
       "title": "Credential inventory is incomplete",
       "problem": {
         "statement": "Long-lived API keys, tokens, cookies or private keys remain active without known owner, scope or rotation plan.",
-        "customer_symptom": "A user or operator may observe long-lived api keys, tokens, cookies or private keys remain active without known owner, scope or rotation plan; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in long-lived api keys, tokens, cookies or private keys remain active without known owner, scope or rotation plan, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Operators cannot reliably identify which API keys, tokens, cookies, private keys or service credentials remain active, who owns them, what they can access, or when they expire.",
+        "credible_failure_or_attack": "Unowned, forgotten, over-scoped or long-lived credentials can remain usable after their original purpose ends and may be reused following leakage, personnel change, system drift or compromise.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "API keys, tokens, cookies and private keys",
+          "service and workload identities",
+          "tool and downstream-system privileges",
+          "secret stores and deployment configuration",
+          "credential ownership, scope, expiry and rotation records"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Incomplete credential inventory can leave active authority unowned or unmonitored. Final severity depends on credential privilege, reachability, lifetime, exposure and compensating controls.",
         "applicability": [
           "tool-using agents"
         ],
         "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between tool-using agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "The boundary between the assessed agent and the credentials or workload identities it can use to access tools, providers and downstream systems.",
         "operational_impact": "If long-lived api keys, tokens, cookies or private keys remain active without known owner, scope or rotation plan, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-014",
-        "objective": "Determine whether the assessed system prevents or detects: credential inventory is incomplete.",
-        "method": "Enumerate secret stores, environment references, CI variables, service accounts and runtime key use without exposing values. Execute the documented check for “Credential inventory is incomplete” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether every credential available to the assessed agent has an attributable owner, purpose, scope, storage location, lifecycle state and rotation or expiry policy.",
+        "method": "Enumerate secret stores, environment references, CI variables, service accounts and observed runtime credential use without exposing secret values. Reconcile discovered credentials against the approved inventory and identify orphaned, duplicate, unused, over-scoped or non-expiring credentials.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -3399,22 +3400,22 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-014 assessed system, version, environment and scope for Credential inventory is incomplete",
-          "ARL-KB-014 control configuration or source location showing how reduce the likelihood and impact of credential inventory is incomplete and make the remaining risk visible.",
-          "ARL-KB-014 positive and abuse inputs with expected and observed outputs for agent and model context",
-          "ARL-KB-014 policy, authorization, tool or audit events proving whether the tested credential inventory is incomplete path executed",
-          "ARL-KB-014 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-014 assessed system, exact version, environment and credential scope",
+          "Authoritative credential or workload-identity inventory with owner, purpose, scope and lifecycle state",
+          "Secret-store, environment, CI/CD and runtime references showing which credentials the assessed version can use",
+          "Evidence of expiry, rotation, revocation or short-lived issuance where applicable",
+          "Tester identity, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-014 passes only when “Credential inventory is incomplete” is not reproducible through the documented abuse cases, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-014 fails when long-lived api keys, tokens, cookies or private keys remain active without known owner, scope or rotation plan, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-014 passes when all credentials available to the assessed agent are represented in the approved inventory with attributable ownership, necessary scope and documented lifecycle controls, and no tested active credential is orphaned or unexplained.",
+        "fail_condition": "ARL-KB-014 fails when an active credential available to the assessed system lacks an accountable owner, purpose, known scope, lifecycle state or required rotation/expiry control, or when runtime use cannot be reconciled to the approved inventory.",
         "limitations": "This bounded ARL-KB-014 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-014's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-014, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-014 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Select representative authorised credentials and verify their runtime use matches the documented owner, purpose, scope and lifecycle record without revealing secret values.",
+        "negative_test": "Search for an intentionally deprecated, revoked or synthetic orphan credential reference and verify it cannot remain active or silently re-enter the assessed runtime.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -3438,17 +3439,17 @@
         "default_owner": "Identity and secrets owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-014: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-014: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-014: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-014: Give every credential or workload identity an accountable owner, documented purpose and minimum required scope.",
+          "ARL-KB-014: Prefer short-lived workload identity and automatic expiry or rotation over long-lived static secrets.",
+          "ARL-KB-014: Reconcile secret stores and runtime use against the authoritative inventory and revoke orphaned or unused credentials."
         ],
-        "monitoring": "For ARL-KB-014, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity and secrets owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-014 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor creation, use, expiry, rotation and revocation of credentials and workload identities; alert the Identity and secrets owner on orphaned credentials, unexpected use, excessive lifetime or scope drift.",
+        "containment": "Revoke or disable affected credentials, preserve attributable use records, rotate potentially exposed secrets and restore only the minimum required authority after owner review.",
         "retest_acceptance": [
-          "ARL-KB-014: “Credential inventory is incomplete” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-014: Authorised in-scope use completes successfully, remains within the documented asset scope for credential inventory is incomplete, and produces no unintended side effect.",
-          "ARL-KB-014: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-014: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-014: Every credential available to the exact remediated version is represented in the approved inventory.",
+          "ARL-KB-014: Credential owner, purpose, scope and lifecycle state are attributable and current.",
+          "ARL-KB-014: Deprecated, revoked, synthetic orphan or otherwise unapproved credentials cannot be used by the assessed runtime.",
+          "ARL-KB-014: Reviewer identity, timestamp, assessed version, evidence digest, known limitations and residual-risk decision are recorded."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-014 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Assign ownership and expiry, use short-lived workload identity, reduce scopes, revoke unused credentials and monitor anomalous use. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -3461,7 +3462,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-014 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-014 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat inventory reconciliation and verify the exact previously orphaned, unmanaged or excessive credential condition is no longer present in the remediated version.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-014",
           "Passed retest evidence bound to ARL-KB-014 and the current knowledge digest",
@@ -3499,13 +3500,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-014 control or enforcement change",
-          "ARL-KB-014 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-014 bypass, incident or new attack evidence",
-          "ARL-KB-014 evidence expiry or material scope change"
+          "ARL-KB-014 credential, secret-store, workload-identity or service-account change",
+          "ARL-KB-014 credential scope, owner, expiry, rotation or revocation-policy change",
+          "ARL-KB-014 credential leak, orphaned secret, unexpected use or identity incident",
+          "ARL-KB-014 evidence expiry or material scope, environment or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3563,7 +3564,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "66eff190d8506c1fdb674d27a02fddecca3f46b2e16cb1884dad58e5fbbc2add"
+      "content_digest": "37d4568c5b8066eb244d3981ef94793544b0ecf18fbb8c24549054de4481b8aa"
     },
     {
       "id": "ARL-KB-015",
@@ -3595,8 +3596,8 @@
       },
       "check": {
         "id": "ARL-CHK-015",
-        "objective": "Determine whether the assessed system prevents or detects: memory and vector stores are untracked.",
-        "method": "Inventory all stores, namespaces, indexes, replicas, backups and deletion paths; map which agent identities can query or write them. Create Tenant A and Tenant B users, roles and object IDs. Attempt direct-ID, list, search, export and tool access across tenants; expect indistinguishable authorization failures and no foreign metadata.",
+        "objective": "Determine whether every persistent memory, vector, embedding and retrieval store used by the assessed agent is inventoried with owner, environment, namespace, retention and access boundaries.",
+        "method": "Inventory persistent memory stores, vector databases, indexes, namespaces, replicas, caches, backups and deletion paths. Map which assessed identities can read or write each store, which environment and tenant or project boundary applies, and whether retention and deletion behaviour are documented.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -3610,16 +3611,16 @@
           "ARL-KB-015 policy, authorization, tool or audit events proving whether the tested memory and vector stores are untracked path executed",
           "ARL-KB-015 tester identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-015 passes only when “Memory and vector stores are untracked” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-015 fails when persistent context, embeddings and retrieved documents may outlive the project or cross environments and tenants, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-015 passes when all persistent context and retrieval stores reachable by the assessed version are represented in the governed inventory with attributable ownership, access boundaries, environment, retention and deletion behaviour.",
+        "fail_condition": "ARL-KB-015 fails when the assessed agent can read from or write to an undeclared persistent store, namespace, replica or backup, or when ownership, environment, retention or deletion behaviour cannot be established with version-bound evidence.",
         "limitations": "This bounded ARL-KB-015 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-015's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-015, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-015 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Verify representative authorised memory and retrieval operations use only the documented store, namespace and environment.",
+        "negative_test": "Use an owner-authorised synthetic undeclared or retired namespace/store reference and verify it is unavailable or explicitly rejected by the assessed configuration.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -3643,9 +3644,9 @@
         "default_owner": "Data platform owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-015: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-015: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-015: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-015: Register every persistent memory, vector, embedding, cache and retrieval store as a governed asset.",
+          "ARL-KB-015: Bind stores and namespaces to explicit environments, tenants or projects with least-privilege read and write access.",
+          "ARL-KB-015: Define retention, deletion, backup and restoration behaviour and verify retired stores cannot silently remain in use."
         ],
         "monitoring": "For ARL-KB-015, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Data platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-015 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -3704,13 +3705,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-015 control or enforcement change",
-          "ARL-KB-015 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-015 bypass, incident or new attack evidence",
-          "ARL-KB-015 evidence expiry or material scope change"
+          "ARL-KB-015 memory, vector-store, index, namespace, cache, backup or retrieval-source change",
+          "ARL-KB-015 retention, deletion, restoration or access-boundary change",
+          "ARL-KB-015 cross-environment, cross-tenant, stale-store or unexpected persistence evidence",
+          "ARL-KB-015 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3774,7 +3775,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "7dc73b5a99c2d312d211c565c9073f609297890a7965499cd0e507ba28f8753d"
+      "content_digest": "c477e354d0ad83803c0eae3d001cfae1c5c615d64ff90ac777e5ce61275404fb"
     },
     {
       "id": "ARL-KB-016",
@@ -3806,8 +3807,8 @@
       },
       "check": {
         "id": "ARL-CHK-016",
-        "objective": "Determine whether the assessed system prevents or detects: model versions and digests are not pinned.",
-        "method": "Record provider model identifier, revision, digest where available, system prompt version and inference settings for every assessed run. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether the exact model and inference configuration assessed by ARL can be identified and whether an unreviewed model or configuration change invalidates prior evidence.",
+        "method": "Record provider, model identifier, immutable revision or digest where available, local artifact hash where applicable, system-prompt/configuration version and security-relevant inference settings. Resolve the deployed runtime to those identifiers, detect mutable aliases or drift, and verify that a material model or configuration change requires targeted reassessment before prior approval is reused.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -3821,16 +3822,16 @@
           "ARL-KB-016 policy, authorization, tool or audit events proving whether the tested model versions and digests are not pinned path executed",
           "ARL-KB-016 tester identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-016 passes only when “Model versions and digests are not pinned” is not reproducible through the documented abuse cases, the valid workflow remains bounded to model and dependency artefacts and build, registry and deployment provenance, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-016 fails when the same model name can resolve to different weights or behaviour, invalidating prior tests and approvals, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-016 passes when the assessed model and security-relevant configuration are attributable to an exact version or immutable evidence reference and material drift cannot silently inherit prior assessment evidence.",
+        "fail_condition": "ARL-KB-016 fails when the deployed model or relevant inference configuration can change without an attributable version or digest, or when evidence from a materially different model/configuration remains accepted as current.",
         "limitations": "This bounded ARL-KB-016 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-016's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-016, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-016 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Resolve the deployed model and configuration to the exact identifiers recorded for the assessed version.",
+        "negative_test": "In a controlled configuration, change a model revision or other material version-bound setting and verify prior assessment evidence is marked stale, unknown or otherwise requires reassessment rather than being silently reused.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -3854,9 +3855,9 @@
         "default_owner": "ML platform owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-016: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-016: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-016: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-016: Prefer immutable model revisions, digests or locally verifiable artifact hashes over mutable aliases.",
+          "ARL-KB-016: Bind assessment evidence to the exact model, prompt/configuration version and security-relevant inference settings.",
+          "ARL-KB-016: Treat material model or configuration drift as a revalidation trigger before prior readiness or closure decisions are reused."
         ],
         "monitoring": "For ARL-KB-016, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the ML platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-016 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -3915,13 +3916,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-016 control or enforcement change",
-          "ARL-KB-016 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-016 bypass, incident or new attack evidence",
-          "ARL-KB-016 evidence expiry or material scope change"
+          "ARL-KB-016 model identifier, revision, digest, provider or artifact change",
+          "ARL-KB-016 system-prompt, inference-setting or security-relevant model-configuration change",
+          "ARL-KB-016 provenance failure, unexpected model drift or mutable-alias resolution change",
+          "ARL-KB-016 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3979,7 +3980,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e483e6fd4acbe06923e0b5fb01ee01cc283e9ca7042d10fdbd11fb88e5894abb"
+      "content_digest": "f17308b95ec1df9dfc20ea4173bfc1c73b46b5c3e9f71715d075226cdc3f637f"
     },
     {
       "id": "ARL-KB-017",
@@ -4120,13 +4121,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-017 control or enforcement change",
-          "ARL-KB-017 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-017 bypass, incident or new attack evidence",
-          "ARL-KB-017 evidence expiry or material scope change"
+          "ARL-KB-017 dependency, model, adapter, container, plugin, MCP server or build-artifact change",
+          "ARL-KB-017 registry, provenance, signing, digest or build-pipeline change",
+          "ARL-KB-017 new vulnerability advisory, compromised dependency or supply-chain incident",
+          "ARL-KB-017 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4185,7 +4186,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "5125b74a5277637725798a734a0727bd1c4046b7b35b913f9be6a4dbecba5b9d"
+      "content_digest": "757ab40fc3c8ff934197a48c12a798821a71268e440ccbf1d0c1e0bc41fe213b"
     },
     {
       "id": "ARL-KB-018",
@@ -4206,8 +4207,8 @@
           "tools or downstream systems",
           "customer evidence"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Weak environment separation can allow lower-trust development or test identities, data and tools to affect production. Final severity depends on reachable production authority, data sensitivity, exposure and compensating controls.",
         "applicability": [
           "agents with multiple environments"
         ],
@@ -4217,8 +4218,8 @@
       },
       "check": {
         "id": "ARL-CHK-018",
-        "objective": "Determine whether the assessed system prevents or detects: environment separation is weak.",
-        "method": "Compare accounts, networks, databases, secrets, providers and tool endpoints across environments; attempt controlled cross-environment access. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether development, test and production environments are separated across identities, credentials, data, networks, queues, providers and tool endpoints.",
+        "method": "Compare accounts, projects, networks, databases, queues, secrets, providers and tool endpoints across environments. Using owner-authorised synthetic or production-equivalent resources, verify that a lower-environment identity or route cannot access prohibited production-equivalent data, credentials, tools or queues.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4232,16 +4233,16 @@
           "ARL-KB-018 policy, authorization, tool or audit events proving whether the tested environment separation is weak path executed",
           "ARL-KB-018 tester identity, role, timestamp and evidence digest"
         ],
-        "pass_condition": "ARL-KB-018 passes only when “Environment separation is weak” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tool endpoints and downstream systems and financial, administrative or state-changing actions, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-018 fails when development, test and production share data, credentials, queues or tools, allowing tests or compromised lower environments to affect production, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-018 passes when lower environments remain confined to their documented identities, data, networks and tools and cannot reach prohibited production-equivalent resources through the tested paths.",
+        "fail_condition": "ARL-KB-018 fails when development or test identities, credentials, data paths, queues, networks or tool routes can access or affect prohibited production resources, or when claimed separation cannot be demonstrated.",
         "limitations": "This bounded ARL-KB-018 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-018's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-018, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-018 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Verify an authorised lower-environment workflow completes using only its documented non-production resources.",
+        "negative_test": "Attempt a controlled lower-environment access to a prohibited production-equivalent resource and verify the boundary prevents access before data retrieval or state change.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -4265,9 +4266,9 @@
         "default_owner": "Platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-018: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-018: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-018: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-018: Use distinct identities, credentials, networks, data stores and tool endpoints for lower and production environments.",
+          "ARL-KB-018: Deny lower-environment access to production resources by default and use synthetic data wherever possible.",
+          "ARL-KB-018: Require explicit governed promotion and revalidation before a lower-environment component receives production authority."
         ],
         "monitoring": "For ARL-KB-018, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-018 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -4326,13 +4327,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-018 control or enforcement change",
-          "ARL-KB-018 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-018 bypass, incident or new attack evidence",
-          "ARL-KB-018 evidence expiry or material scope change"
+          "ARL-KB-018 environment, account, project, network, database, queue, secret or provider-boundary change",
+          "ARL-KB-018 new cross-environment route, shared credential, shared data source or production tool endpoint",
+          "ARL-KB-018 environment-boundary bypass, drift or incident evidence",
+          "ARL-KB-018 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4390,7 +4391,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "83922379fbf2eed3a64f579974205bb5df8e2291a6a796af811a330096d55e7e"
+      "content_digest": "e96c3e00269f9e34a86463a2f77a778dbad427f5b180ba7bf87b537cf846adf9"
     },
     {
       "id": "ARL-KB-019",
@@ -4423,7 +4424,7 @@
       "check": {
         "id": "ARL-CHK-019",
         "objective": "Determine whether the assessed system prevents or detects: authentication is missing or can fail open.",
-        "method": "Call every sensitive route without credentials, with malformed credentials and during dependency failures; verify uniform denial. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "method": "Enumerate every sensitive route and administrative or agent-control function. Call representative routes without credentials, with invalid or malformed credentials, with expired or revoked credentials where safely testable, and during simulated identity-provider or verification failure. Verify authentication is enforced server-side and fails closed before protected state, tools, evidence or functions are exposed.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4445,8 +4446,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-019, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-019 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Use a valid least-privileged test identity and verify only authenticated functions within its documented scope are available.",
+        "negative_test": "Call representative sensitive routes without credentials and with invalid, expired or malformed credentials, and simulate an authentication-verification failure; verify uniform denial before protected access occurs.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -4470,9 +4471,9 @@
         "default_owner": "Application security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-019: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-019: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-019: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-019: Enforce authentication server-side on every sensitive route rather than relying on model or client behaviour.",
+          "ARL-KB-019: Centralise identity verification and fail closed when credentials cannot be validated.",
+          "ARL-KB-019: Treat authentication-provider, session and verification failures as denial conditions unless an explicitly approved degraded mode exists."
         ],
         "monitoring": "For ARL-KB-019, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-019 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -4531,13 +4532,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-019 control or enforcement change",
-          "ARL-KB-019 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-019 bypass, incident or new attack evidence",
-          "ARL-KB-019 evidence expiry or material scope change"
+          "ARL-KB-019 authentication, session, identity-provider, gateway or sensitive-route change",
+          "ARL-KB-019 new administrative, evidence, agent-state or tool-control endpoint",
+          "ARL-KB-019 authentication bypass, fail-open behaviour, credential-verification incident or session anomaly",
+          "ARL-KB-019 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4601,7 +4602,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f6e6c2920ab35512d3e7beb6c975a81ff9960daf83e2513c448e9d2b6acec2fe"
+      "content_digest": "a37481c06db1aa4dcdfe6a1139f9e291109d58ede832bc9ec2d0203d0e18138d"
     },
     {
       "id": "ARL-KB-020",
@@ -4622,8 +4623,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Weak privileged authentication can allow takeover of high-impact administrative capabilities. Final severity depends on the authority of affected accounts, exposed functions, recovery controls and compensating safeguards.",
         "applicability": [
           "hosted platforms"
         ],
@@ -4633,8 +4634,8 @@
       },
       "check": {
         "id": "ARL-CHK-020",
-        "objective": "Determine whether the assessed system prevents or detects: administrative accounts lack phishing-resistant protection.",
-        "method": "Review admin authentication, MFA enrolment, recovery, session risk and recent privileged logins. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether privileged administrative accounts use phishing-resistant authentication or an equivalent approved control and whether enrolment, recovery and sensitive-session paths preserve that protection.",
+        "method": "Review privileged authentication policy, MFA enrolment, permitted factors, recovery, reset, session lifetime, step-up requirements and recent privileged login evidence. Verify that representative privileged accounts cannot authenticate or recover access using a weaker path that bypasses the documented protection.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4656,8 +4657,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-020, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-020 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Authenticate with an authorised privileged test account using the documented strong factor and verify the expected administrative scope.",
+        "negative_test": "Attempt an owner-authorised privileged login or recovery flow using a prohibited weaker factor or bypass path and verify access is denied or routed to explicit secure recovery.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -4681,9 +4682,9 @@
         "default_owner": "Identity owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-020: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-020: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-020: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-020: Require phishing-resistant authentication for privileged administrative roles where supported by the assessed platform.",
+          "ARL-KB-020: Protect enrolment, recovery and factor reset so they cannot downgrade the effective strength of privileged authentication.",
+          "ARL-KB-020: Require step-up or reauthentication for high-impact administrative changes and monitor privileged-session anomalies."
         ],
         "monitoring": "For ARL-KB-020, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-020 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -4742,13 +4743,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-020 control or enforcement change",
-          "ARL-KB-020 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-020 bypass, incident or new attack evidence",
-          "ARL-KB-020 evidence expiry or material scope change"
+          "ARL-KB-020 privileged authentication, MFA, recovery, factor-enrolment or session-policy change",
+          "ARL-KB-020 new privileged role, administrative capability or high-impact operation",
+          "ARL-KB-020 phishing, account takeover, MFA bypass, insecure recovery or privileged-session incident",
+          "ARL-KB-020 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4806,7 +4807,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ddddd7066f297f3814c72a8dbff84a29acf99072461beecd47dad956fbac20f5"
+      "content_digest": "c62118a61bc97d9a0f11e7bc68f31903e90d731a06cc1e02f50a122970398fdb"
     },
     {
       "id": "ARL-KB-021",
