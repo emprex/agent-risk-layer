@@ -1609,28 +1609,27 @@
       "category": "Inventory and architecture",
       "title": "Shadow or experimental agents reach real data",
       "problem": {
-        "statement": "A prototype, notebook, personal API key or unofficial bot can access production systems without standard controls.",
-        "customer_symptom": "A user or operator may observe a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "A prototype, notebook, personal API key or unofficial agent can reach production data, tools or services outside approved controls.",
+        "customer_symptom": "Operators discover experimental or unofficial AI components using real production endpoints, customer data, provider accounts or service credentials without the approved inventory, identity, network, logging or change-control path.",
+        "credible_failure_or_attack": "Developer or operator experimentation, unmanaged personal credentials, shadow AI deployment or environment misconfiguration can allow a prototype, notebook or unofficial agent to cross from an experimental context into production data or services outside normal governance and monitoring.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "production customer or business data",
+          "production service identities, API keys and credentials",
+          "production tools, APIs, databases and model or provider endpoints",
+          "approved environment and network boundaries",
+          "inventory, audit and change-control evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "organisations with decentralised AI adoption"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations with decentralised AI adoption and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "developer or operator experimentation, unmanaged personal credentials, shadow AI deployment, environment misconfiguration or missing identity and network separation",
+        "trust_boundary": "The relevant trust boundary separates approved experimentation and sandbox environments from production identities, data stores, tools, networks and provider accounts; experimental components must not cross it except through an explicitly governed production path.",
+        "operational_impact": "An experimental or shadow agent reaching production can expose real data, exercise production authority, create untracked side effects and leave incomplete audit or ownership evidence. Operators may need to revoke credentials, isolate routes, investigate affected data and services, and hold production use until the boundary is restored and retested."
       },
       "solution_summary": {
-        "recommended_remediation": "Separate experimentation from production, issue governed sandboxes, block unapproved providers and rotate shadow credentials after containment.",
+        "recommended_remediation": "Separate experimentation from production with distinct accounts, projects, networks and credentials; provide governed sandboxes with synthetic data; block unapproved providers and routes; prohibit personal credentials for production access; and rotate exposed shadow credentials after containment.",
         "default_owner": "Cloud and identity owner",
         "priority": "P1"
       },
@@ -1642,14 +1641,6 @@
           "reference_id": "REF-NCSC-SECURE-AI-1",
           "mapping_status": "informative",
           "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
-          "framework": "OWASP Agentic Top 10 2026",
-          "version": "2026",
-          "reference": "ASI10",
-          "reference_id": "REF-OWASP-AGENTIC-2026",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
         }
       ],
       "review": {
@@ -1657,10 +1648,10 @@
         "last_reviewed": "2026-08-05",
         "next_review_due": "2026-11-03",
         "change_triggers": [
-          "ARL-KB-012 control or enforcement change",
-          "ARL-KB-012 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-012 bypass, incident or new attack evidence",
-          "ARL-KB-012 evidence expiry or material scope change"
+          "ARL-KB-012 experimentation, sandbox, production-boundary or enforcement change",
+          "ARL-KB-012 new agent, notebook, credential, provider, network route, data source or production service",
+          "ARL-KB-012 discovery of shadow AI usage, cross-environment access, bypass or incident evidence",
+          "ARL-KB-012 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -1697,7 +1688,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "691f6940509b3cab02618af6cbcdb7a142b62f5d7c6dd314d480b8d47915acce"
+      "content_digest": "34c15fa58b33aa7c38fc0f55d2f457b60a02405dcbcba9c3853d1d0cde97a709"
     },
     {
       "id": "ARL-KB-013",
