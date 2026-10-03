@@ -2976,61 +2976,61 @@
       "category": "Inventory and architecture",
       "title": "Shadow or experimental agents reach real data",
       "problem": {
-        "statement": "A prototype, notebook, personal API key or unofficial bot can access production systems without standard controls.",
-        "customer_symptom": "A user or operator may observe a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "A prototype, notebook, personal API key or unofficial agent can reach production data, tools or services outside approved controls.",
+        "customer_symptom": "Operators discover experimental or unofficial AI components using real production endpoints, customer data, provider accounts or service credentials without the approved inventory, identity, network, logging or change-control path.",
+        "credible_failure_or_attack": "Developer or operator experimentation, unmanaged personal credentials, shadow AI deployment or environment misconfiguration can allow a prototype, notebook or unofficial agent to cross from an experimental context into production data or services outside normal governance and monitoring.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "production customer or business data",
+          "production service identities, API keys and credentials",
+          "production tools, APIs, databases and model or provider endpoints",
+          "approved environment and network boundaries",
+          "inventory, audit and change-control evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "organisations with decentralised AI adoption"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations with decentralised AI adoption and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "developer or operator experimentation, unmanaged personal credentials, shadow AI deployment, environment misconfiguration or missing identity and network separation",
+        "trust_boundary": "The relevant trust boundary separates approved experimentation and sandbox environments from production identities, data stores, tools, networks and provider accounts; experimental components must not cross it except through an explicitly governed production path.",
+        "operational_impact": "An experimental or shadow agent reaching production can expose real data, exercise production authority, create untracked side effects and leave incomplete audit or ownership evidence. Operators may need to revoke credentials, isolate routes, investigate affected data and services, and hold production use until the boundary is restored and retested."
       },
       "check": {
         "id": "ARL-CHK-012",
-        "objective": "Determine whether the assessed system prevents or detects: shadow or experimental agents reach real data.",
-        "method": "Search identity, network, billing and provider logs for undeclared model or agent usage and compare with approved environments. Execute the documented check for “Shadow or experimental agents reach real data” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether experimental, shadow or unofficial AI components are prevented from reaching production data, credentials, tools and services outside approved governed paths.",
+        "method": "Reconcile approved experimental environments, identities and providers with identity, network, billing, provider and audit logs to identify undeclared agent or model usage. Inspect the controls separating experimentation from production. In an owner-authorised non-production or production-equivalent test environment, verify that a prototype, notebook or unofficial-agent identity cannot authenticate to, route to or retrieve production-equivalent data and services through prohibited paths, while the approved sandbox workflow remains usable. Bind all observations to the exact assessed version and configuration.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
-          "negative or abuse test",
+          "environment-boundary test",
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-012 assessed system, version, environment and scope for Shadow or experimental agents reach real data",
-          "ARL-KB-012 control configuration or source location showing how reduce the likelihood and impact of shadow or experimental agents reach real data and make the remaining risk visible.",
-          "ARL-KB-012 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-012 policy, authorization, tool or audit events proving whether the tested shadow or experimental agents reach real data path executed",
-          "ARL-KB-012 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-012 assessed system, exact version, environment and experimental-versus-production scope",
+          "Approved environment, identity, credential, network and provider configuration defining the experimentation-to-production boundary",
+          "Identity, network, provider, billing or audit evidence showing which experimental agents, notebooks, credentials and endpoints were observed",
+          "Bounded positive evidence showing the approved experimental workflow operates only with authorised sandbox resources",
+          "Bounded negative evidence showing an experimental or unofficial identity cannot reach the prohibited production-equivalent data, credential, tool or service path",
+          "Tester identity, role, timestamp and evidence digest binding the observations to the assessed version"
         ],
-        "pass_condition": "ARL-KB-012 passes only when “Shadow or experimental agents reach real data” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-012 fails when a prototype, notebook, personal api key or unofficial bot can access production systems without standard controls, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-012 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "ARL-KB-012 passes only when approved experimental workflows remain confined to their authorised sandbox scope, no tested prototype, notebook, personal credential or unofficial-agent path can reach prohibited production-equivalent data or services, attempted boundary crossings are blocked or otherwise prevented before access occurs, and attributable version-bound evidence demonstrates the result.",
+        "fail_condition": "ARL-KB-012 fails when an experimental or unofficial AI component can authenticate to, route to, retrieve from or act on prohibited production data or services; when personal or unmanaged credentials provide such access; when an undocumented exception bypasses the approved environment boundary; or when the claimed separation cannot be demonstrated with reproducible version-bound evidence.",
+        "limitations": "This bounded assessment cannot prove that no dormant, transient or externally operated shadow agent exists outside the documented discovery sources. It evaluates only the stated environments, identities, providers, routes and exact assessed version and does not require access to real production customer data.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-012's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Use an owner-authorised non-production or production-equivalent target representing the relevant experimentation-to-production controls.",
+          "Use synthetic data, dedicated test identities and reversible or dry-run tools; do not use real production customer data or live third-party targets.",
+          "Record the assessed version, environment boundary, identities, credentials, network routes, providers and expected decisions before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-012, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-012 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Run an approved experimental agent or notebook with its documented sandbox identity and synthetic data, and verify that the intended experimental workflow completes entirely within the authorised sandbox resources and produces attributable audit evidence.",
+        "negative_test": "Using a dedicated simulated shadow or experimental identity in the authorised test environment, attempt the documented prohibited route toward production-equivalent data, credentials, tools or services and verify that access is prevented before data retrieval or material action occurs.",
         "required_identities": [
           "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "approved sandbox or experimental service identity",
+          "dedicated simulated unmanaged or shadow-agent test identity"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-012 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Shadow or experimental agents reach real data” must be denied, quarantined or routed to explicit review before a material side effect."
+          "An approved experimental workflow using synthetic sandbox resources must complete only within the documented experimental scope and produce attributable audit evidence.",
+          "A simulated shadow or experimental attempt to reach a prohibited production-equivalent resource must be prevented before data access or material action, with the boundary decision recorded."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -3041,39 +3041,40 @@
       },
       "solution": {
         "id": "ARL-SOL-012",
-        "control_objective": "Reduce the likelihood and impact of shadow or experimental agents reach real data and make the remaining risk visible.",
-        "recommended_remediation": "Separate experimentation from production, issue governed sandboxes, block unapproved providers and rotate shadow credentials after containment.",
+        "control_objective": "Prevent experimental or shadow AI components from reaching production data, credentials, tools or services outside governed and attributable paths, and make attempted boundary crossings visible.",
+        "recommended_remediation": "Separate experimentation from production with distinct accounts, projects, networks and credentials; provide governed sandboxes with synthetic data; block unapproved providers and routes; prohibit personal credentials for production access; and rotate exposed shadow credentials after containment.",
         "default_owner": "Cloud and identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-012: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-012: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-012: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-012: use distinct identities, credentials and network paths for experimental and production environments, with cross-environment access denied by default.",
+          "ARL-KB-012: provide governed experimentation environments with synthetic or explicitly approved data and no inherited production secrets or authority.",
+          "ARL-KB-012: version environment allowlists and access policies, record attempted boundary crossings, and require explicit governed promotion before experimental components receive production access."
         ],
-        "monitoring": "For ARL-KB-012, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Cloud and identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-012 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor identity, network, provider, billing and audit telemetry for experimental agents, notebooks, personal credentials, undeclared providers and cross-environment access attempts; alert the Cloud and identity owner on unexpected production routes, unmanaged credentials, policy drift or missing boundary evidence.",
+        "containment": "Contain ARL-KB-012 by disabling the shadow or experimental route, revoking or rotating affected credentials, blocking the relevant production path, isolating impacted identities and preserving attributable network, identity, provider and audit evidence before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-012: “Shadow or experimental agents reach real data” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-012: Authorised in-scope use completes successfully, remains within the documented asset scope for shadow or experimental agents reach real data, and produces no unintended side effect.",
-          "ARL-KB-012: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-012: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-012: The exact remediated version preserves the documented separation between experimental and production identities, data, tools, networks and provider accounts.",
+          "ARL-KB-012: The approved experimental workflow completes successfully using only authorised sandbox resources and synthetic or explicitly approved test data.",
+          "ARL-KB-012: A dedicated simulated shadow or experimental identity cannot reach the documented prohibited production-equivalent data, credential, tool or service paths, and evidence of the boundary-crossing attempt is recorded.",
+          "ARL-KB-012: Reviewer identity, timestamp, assessed version, relevant configuration digests, known limitations and residual-risk or deployment decision are recorded."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-012 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Separate experimentation from production, issue governed sandboxes, block unapproved providers and rotate shadow credentials after containment. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-012 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Immediately disable the identified shadow or experimental production path, revoke or rotate affected credentials, block unmanaged provider or network access, stop queued side effects where possible, and preserve relevant identity, network, provider and audit evidence.",
+        "root_cause_remediation": "Establish governed separation between experimentation and production using dedicated identities, credentials, accounts, networks, data and provider policies. Remove shared production secrets and undocumented routes rather than relying on prompt wording, convention or operator vigilance.",
+        "preventive_control": "Enforce explicit environment separation outside the model with deny-by-default identity, credential, network and provider controls, governed sandbox access and an attributable promotion path for any component that is authorised to reach production.",
         "accountable_owner": "Cloud and identity owner",
         "implementation_dependencies": [
-          "authoritative identity and project scope",
-          "external enforcement point or configuration owner",
-          "audit/event retention appropriate to the assessed risk",
-          "reversible deployment and test environment"
+          "authoritative inventory of experimental and production environments",
+          "separate identity and credential ownership for experimentation and production",
+          "network, provider or platform enforcement capable of restricting cross-environment access",
+          "audit and telemetry sources capable of identifying experimental identities and boundary crossings",
+          "reversible production-equivalent test environment"
         ],
-        "rollback_considerations": "Keep the prior known-good ARL-KB-012 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-012 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "rollback_considerations": "Keep the prior known-good environment-boundary configuration and its digest; rollback must not restore shared production credentials, unmanaged provider routes, experimental access to production resources or stale evidence links.",
+        "retest_requirements": "Repeat the approved sandbox workflow and the exact prohibited experimentation-to-production boundary test against the remediated version, including every documented identity, provider, credential and network route that enabled or could enable the original condition.",
         "evidence_required_to_close": [
-          "Approved remediation change and exact deployed version for ARL-KB-012",
-          "Passed retest evidence bound to ARL-KB-012 and the current knowledge digest",
-          "Named accountable reviewer and residual-risk/deployment decision"
+          "Approved remediation and exact deployed or assessed version showing the restored experimentation-to-production boundary",
+          "Passed positive and negative retest evidence bound to ARL-KB-012, the current control digest and the tested environment configuration",
+          "Named accountable reviewer, documented limitations, residual-risk decision and deployment or readiness decision"
         ]
       },
       "mappings": [
@@ -3082,14 +3083,6 @@
           "version": "1.0",
           "reference": "secure deployment",
           "reference_id": "REF-NCSC-SECURE-AI-1",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
-          "framework": "OWASP Agentic Top 10 2026",
-          "version": "2026",
-          "reference": "ASI10",
-          "reference_id": "REF-OWASP-AGENTIC-2026",
           "mapping_status": "informative",
           "mapping_limit": "This mapping does not prove compliance or certification."
         }
@@ -3110,10 +3103,10 @@
         "last_reviewed": "2026-08-05",
         "next_review_due": "2026-11-03",
         "change_triggers": [
-          "ARL-KB-012 control or enforcement change",
-          "ARL-KB-012 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-012 bypass, incident or new attack evidence",
-          "ARL-KB-012 evidence expiry or material scope change"
+          "ARL-KB-012 experimentation, sandbox, production-boundary or enforcement change",
+          "ARL-KB-012 new agent, notebook, credential, provider, network route, data source or production service",
+          "ARL-KB-012 discovery of shadow AI usage, cross-environment access, bypass or incident evidence",
+          "ARL-KB-012 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3171,7 +3164,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "691f6940509b3cab02618af6cbcdb7a142b62f5d7c6dd314d480b8d47915acce"
+      "content_digest": "34c15fa58b33aa7c38fc0f55d2f457b60a02405dcbcba9c3853d1d0cde97a709"
     },
     {
       "id": "ARL-KB-013",
