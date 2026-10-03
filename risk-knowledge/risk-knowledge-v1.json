@@ -4837,8 +4837,8 @@
       },
       "check": {
         "id": "ARL-CHK-021",
-        "objective": "Determine whether the assessed system prevents or detects: session tokens are weak or mishandled.",
-        "method": "Test token entropy, cookie attributes, rotation, logout, expiry, concurrent sessions, log leakage and fixation. Execute the documented check for “Session tokens are weak or mishandled” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether authenticated sessions are unpredictable, protected from disclosure or fixation, bounded in lifetime and invalidated when logout, revocation or privilege changes require it.",
+        "method": "Test session-token unpredictability, cookie attributes, fixation resistance, rotation after authentication or privilege change, idle and absolute expiry, logout invalidation, concurrent-session handling and accidental disclosure through logs, URLs or client storage.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4860,8 +4860,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-021, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-021 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Authenticate normally and verify the session uses the documented protected transport/storage attributes, lifetime and rotation behaviour.",
+        "negative_test": "Attempt reuse of a logged-out, expired, superseded or synthetic fixed session token and verify it is rejected.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -4885,9 +4885,9 @@
         "default_owner": "Application security owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-021: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-021: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-021: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-021: Generate high-entropy session identifiers and protect them with secure cookie and transport settings.",
+          "ARL-KB-021: Rotate sessions after authentication or privilege changes and enforce bounded idle and absolute lifetimes.",
+          "ARL-KB-021: Support server-side revocation and prevent session identifiers from appearing in URLs, logs or other unintended evidence."
         ],
         "monitoring": "For ARL-KB-021, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-021 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -4938,13 +4938,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-021 control or enforcement change",
-          "ARL-KB-021 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-021 bypass, incident or new attack evidence",
-          "ARL-KB-021 evidence expiry or material scope change"
+          "ARL-KB-021 session-token, cookie, login, logout or session-storage change",
+          "ARL-KB-021 session lifetime, rotation, revocation or privilege-change behaviour change",
+          "ARL-KB-021 fixation, token leakage, session theft or continued-use incident",
+          "ARL-KB-021 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5009,7 +5009,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "fcdf0e318b84b0d79880237023daa52232c09352d4ac662e925f9c7e53f928a7"
+      "content_digest": "e74238b658c662dcfcb291485d607c458d78a1cdc7a8f626dffffccbe1072114"
     },
     {
       "id": "ARL-KB-022",
@@ -5041,8 +5041,8 @@
       },
       "check": {
         "id": "ARL-CHK-022",
-        "objective": "Determine whether the assessed system prevents or detects: account recovery bypasses normal assurance.",
-        "method": "Test enumeration, token entropy, expiry, single use, identity proofing, notification and recovery-code handling. Restore an isolated copy, verify object counts and integrity digests, measure recovery objectives, reconcile transactions, and re-enable only after an accountable reviewer accepts the evidence.",
+        "objective": "Determine whether account recovery preserves the required authentication assurance and cannot be used to take over a privileged account through enumeration, weak proofing or reusable recovery material.",
+        "method": "Test account enumeration resistance, recovery-token entropy, expiry and single-use behaviour, identity proofing, notification, recovery-code handling, session invalidation and privileged-account recovery. Verify recovery cannot silently downgrade the normal authentication assurance.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5064,8 +5064,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-022, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-022 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Complete an authorised recovery flow with a synthetic test account and verify the documented proofing, notification and post-recovery session controls occur.",
+        "negative_test": "Attempt expired, reused, altered or insufficiently proven recovery material and verify recovery is denied without exposing whether an unrelated account exists.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -5089,9 +5089,9 @@
         "default_owner": "Identity owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-022: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-022: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-022: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-022: Recovery must provide assurance appropriate to the account's privilege and must not become a weaker authentication bypass.",
+          "ARL-KB-022: Use high-entropy, short-lived, single-use recovery material and rate-limit recovery attempts.",
+          "ARL-KB-022: Notify the account owner and invalidate affected sessions or recovery material after successful reset."
         ],
         "monitoring": "For ARL-KB-022, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-022 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -5142,13 +5142,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-022 control or enforcement change",
-          "ARL-KB-022 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-022 bypass, incident or new attack evidence",
-          "ARL-KB-022 evidence expiry or material scope change"
+          "ARL-KB-022 recovery, reset, identity-proofing, notification or recovery-code change",
+          "ARL-KB-022 privileged-account recovery or MFA-recovery policy change",
+          "ARL-KB-022 takeover, enumeration, token-reuse or recovery-bypass incident",
+          "ARL-KB-022 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5206,7 +5206,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f5e58ed831f4ac1a9d1974514910f1bf797b13b05b626d77b5ed3781809de81c"
+      "content_digest": "74b05f86e5e4e96cd27d70c01a22f359758eb2e08bd5d350bb50b8c9b0204ec9"
     },
     {
       "id": "ARL-KB-023",
@@ -5237,7 +5237,7 @@
       "check": {
         "id": "ARL-CHK-023",
         "objective": "Determine whether the assessed system prevents or detects: role enforcement exists only in the interface.",
-        "method": "Replay privileged requests as each role and tenant, including direct object IDs and alternate HTTP methods. Capture policy version, digest, input, decision and blocked action. Test missing policy, stale policy, malformed input, direct endpoint calls and alternate execution paths for fail-closed behaviour.",
+        "method": "Replay representative privileged requests as each relevant lower-privilege role and through direct API or service calls, including alternate HTTP methods where applicable. Verify authorization is enforced server-side on every sensitive function and fails closed when policy is missing, stale or unavailable.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5284,9 +5284,9 @@
         "default_owner": "Application security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-023: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-023: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-023: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-023: Enforce role and function authorization server-side on every sensitive route and service method.",
+          "ARL-KB-023: Do not treat hidden interface elements or model behaviour as an authorization boundary.",
+          "ARL-KB-023: Maintain negative authorization tests for each privileged function and relevant lower-privilege role."
         ],
         "monitoring": "For ARL-KB-023, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-023 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -5345,13 +5345,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-023 control or enforcement change",
-          "ARL-KB-023 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-023 bypass, incident or new attack evidence",
-          "ARL-KB-023 evidence expiry or material scope change"
+          "ARL-KB-023 role, permission, route, service-method or authorization-policy change",
+          "ARL-KB-023 new privileged function or alternate execution path",
+          "ARL-KB-023 function-level authorization bypass or fail-open incident",
+          "ARL-KB-023 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5409,7 +5409,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "484407582f493414fdae6a9d0de773209f6e463ccda00bb708072dd4cdbd1c81"
+      "content_digest": "650b26be760c6b40724f15df8ab7e0df57c864b5a90e8123ac94ac673fb31b30"
     },
     {
       "id": "ARL-KB-024",
@@ -5441,8 +5441,8 @@
       },
       "check": {
         "id": "ARL-CHK-024",
-        "objective": "Determine whether the assessed system prevents or detects: object-level authorization can be bypassed.",
-        "method": "Test sequential and random identifiers across users, workspaces and roles for every read, update, export and delete operation. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether object access is authorized against the authenticated principal and tenant or workspace for every read, update, export and delete operation.",
+        "method": "Using owner-authorised synthetic users and objects, test sequential and random identifiers across users, workspaces and roles for representative read, update, export and delete operations. Verify ownership and tenant scope are resolved server-side rather than trusted from caller-supplied identifiers.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5464,8 +5464,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-024, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-024 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Access an authorised object using the legitimate owner or workspace identity and verify the expected operation succeeds.",
+        "negative_test": "Change the object identifier to another synthetic user's or workspace's object and verify access is denied without exposing foreign object metadata.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -5489,9 +5489,9 @@
         "default_owner": "Application security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-024: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-024: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-024: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-024: Resolve objects through server-side principal- and tenant-scoped queries.",
+          "ARL-KB-024: Never trust caller-supplied ownership, tenant or workspace identifiers as authorization evidence.",
+          "ARL-KB-024: Apply object authorization consistently to read, update, delete, export and indirect service paths."
         ],
         "monitoring": "For ARL-KB-024, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-024 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -5542,13 +5542,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-024 control or enforcement change",
-          "ARL-KB-024 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-024 bypass, incident or new attack evidence",
-          "ARL-KB-024 evidence expiry or material scope change"
+          "ARL-KB-024 object model, ownership, tenant, workspace, route or authorization-query change",
+          "ARL-KB-024 new object read, update, export, delete or indirect access path",
+          "ARL-KB-024 cross-user or cross-workspace object-access incident",
+          "ARL-KB-024 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5607,7 +5607,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "be1d40eb47debc0c449d0a70adb205100f8a7d0b83e40e8804fe5321bbdb3645"
+      "content_digest": "d2596bc1b0593bc6ac5ddc9e017d0163b839812bde2dbf1aae4b24f215e4a4b4"
     },
     {
       "id": "ARL-KB-025",
@@ -5639,7 +5639,7 @@
       },
       "check": {
         "id": "ARL-CHK-025",
-        "objective": "Determine whether the assessed system prevents or detects: tenant isolation fails in retrieval or tools.",
+        "objective": "Determine whether tenant identity is enforced across direct APIs, retrieval, memory, caches, background jobs, tools, exports and logs so one tenant cannot access another tenant's data or actions.",
         "method": "Run cross-tenant tests through direct APIs, vector retrieval, memory, caches, background jobs, tools, exports and logs. Create Tenant A and Tenant B users, roles and object IDs. Attempt direct-ID, list, search, export and tool access across tenants; expect indistinguishable authorization failures and no foreign metadata.",
         "check_types": [
           "declared-control review",
@@ -5687,9 +5687,9 @@
         "default_owner": "Security architect",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-025: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-025: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-025: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-025: Bind authoritative tenant identity to every request, retrieval, memory and tool operation.",
+          "ARL-KB-025: Isolate indexes, namespaces, caches and asynchronous work by tenant or enforce equivalent server-side policy.",
+          "ARL-KB-025: Propagate and revalidate tenant scope across tool calls, exports, background jobs and downstream services."
         ],
         "monitoring": "For ARL-KB-025, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security architect on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-025 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -5748,13 +5748,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-025 control or enforcement change",
-          "ARL-KB-025 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-025 bypass, incident or new attack evidence",
-          "ARL-KB-025 evidence expiry or material scope change"
+          "ARL-KB-025 tenant-identity, retrieval, memory, cache, background-job, tool or export-path change",
+          "ARL-KB-025 namespace, index, downstream-service or tenant-claim propagation change",
+          "ARL-KB-025 cross-tenant access, metadata exposure or isolation-bypass incident",
+          "ARL-KB-025 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5814,7 +5814,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "23f86f4cb47ada951846af3c3eb8b9bd1284ea16098b46513829ce3d72c53179"
+      "content_digest": "197ba5752f39227029c46e7b4bfedeb821b66947bf4213f9e4b33484de7208eb"
     },
     {
       "id": "ARL-KB-026",
@@ -5846,8 +5846,8 @@
       },
       "check": {
         "id": "ARL-CHK-026",
-        "objective": "Determine whether the assessed system prevents or detects: service-to-service identity is unauthenticated or shared.",
-        "method": "Inspect calls between orchestrator, model gateway, tool gateway, vector store and evidence service for mutual identity and audience checks. Execute the documented check for “Service-to-service identity is unauthenticated or shared” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether internal services authenticate each other with distinct attributable workload identities and enforce the intended service audience and privilege boundaries.",
+        "method": "Inspect calls between orchestrator, model gateway, tool gateway, vector store, evidence service and other relevant components for mutual identity, service-specific audience and short-lived credential enforcement. Attempt a synthetic request using an absent, wrong-service or retired workload identity and verify denial.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5869,8 +5869,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-026, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-026 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Execute an authorised service-to-service request and verify the expected workload identity and audience are enforced.",
+        "negative_test": "Attempt the same request with no service identity, a shared or wrong-service identity, or an invalid audience and verify it is rejected.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -5894,9 +5894,9 @@
         "default_owner": "Platform identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-026: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-026: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-026: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-026: Give services distinct workload identities rather than trusting network location or broadly shared secrets.",
+          "ARL-KB-026: Bind credentials to the intended service audience and use short lifetimes and least privilege.",
+          "ARL-KB-026: Authenticate and authorize every service hop, including internal agent and tool infrastructure."
         ],
         "monitoring": "For ARL-KB-026, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-026 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -5955,13 +5955,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-026 control or enforcement change",
-          "ARL-KB-026 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-026 bypass, incident or new attack evidence",
-          "ARL-KB-026 evidence expiry or material scope change"
+          "ARL-KB-026 workload-identity, service, audience, trust-channel or internal-route change",
+          "ARL-KB-026 credential lifetime, mutual-authentication or service-policy change",
+          "ARL-KB-026 shared-secret exposure, service impersonation or internal identity incident",
+          "ARL-KB-026 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6019,7 +6019,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "52ab65f2df31375c1a7d5ff96aa86cce3a427b9b5a1c536a02c9f3c3da26d074"
+      "content_digest": "a94e810240ecb11adaeb9ec4bfb757001033a4522785a2529e755f6fc704e259"
     },
     {
       "id": "ARL-KB-027",
@@ -6040,8 +6040,8 @@
           "tools or downstream systems",
           "customer evidence"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Over-scoped or long-lived API keys can amplify credential compromise. Final severity depends on reachable projects, environments, tools, data, lifetime and revocation controls.",
         "applicability": [
           "API-integrated agents"
         ],
@@ -6051,8 +6051,8 @@
       },
       "check": {
         "id": "ARL-CHK-027",
-        "objective": "Determine whether the assessed system prevents or detects: api keys have excessive scope and lifetime.",
-        "method": "Review key scope, environment, owner, last use, expiry, rotation and revocation; test use against unrelated projects and actions. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether API keys are constrained to the minimum required project, environment, purpose and lifetime and can be promptly revoked.",
+        "method": "Review key owner, purpose, project/environment scope, permitted actions, issue time, last use, expiry, rotation and revocation. Using synthetic authorised resources, verify a key cannot be reused against unrelated projects, environments or higher-impact actions outside its documented scope.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6074,8 +6074,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-027, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-027 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Use a scoped test key for its intended project and operation and verify the documented bounded action succeeds.",
+        "negative_test": "Attempt the same key against an unrelated synthetic project, environment or prohibited action and verify denial; verify revocation makes the key unusable.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -6099,9 +6099,9 @@
         "default_owner": "Platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-027: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-027: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-027: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-027: Issue project-, environment- and purpose-scoped credentials with the minimum required actions.",
+          "ARL-KB-027: Prefer short-lived credentials and support immediate revocation and regular rotation.",
+          "ARL-KB-027: Store secrets securely, avoid redisplay where possible and monitor use outside the expected scope."
         ],
         "monitoring": "For ARL-KB-027, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-027 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -6131,14 +6131,6 @@
       },
       "mappings": [
         {
-          "framework": "OWASP API Security 2023",
-          "version": "2023",
-          "reference": "API2 Broken Authentication",
-          "reference_id": "REF-OWASP-API-2023",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
           "framework": "OWASP Agentic Top 10 2026",
           "version": "2026",
           "reference": "ASI03",
@@ -6160,13 +6152,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-027 control or enforcement change",
-          "ARL-KB-027 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-027 bypass, incident or new attack evidence",
-          "ARL-KB-027 evidence expiry or material scope change"
+          "ARL-KB-027 API-key scope, lifetime, project, environment or permitted-action change",
+          "ARL-KB-027 key issuance, storage, rotation or revocation mechanism change",
+          "ARL-KB-027 key leakage, cross-project use, excessive-scope use or revocation failure",
+          "ARL-KB-027 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6224,7 +6216,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "8235a07a5f0d75afab4c9b812d94558b93dec60e249f6f4540c87d0a10bee49a"
+      "content_digest": "2e8f54cc8cc000c94ff2d2bfe530ce5630412fcb10b147caaab4d3cee30295a7"
     },
     {
       "id": "ARL-KB-028",
@@ -6256,8 +6248,8 @@
       },
       "check": {
         "id": "ARL-CHK-028",
-        "objective": "Determine whether the assessed system prevents or detects: revoked users or stale roles retain access.",
-        "method": "Change and revoke identities during active sessions and jobs; verify all derived credentials and approvals become unusable. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether user removal and role reduction revoke all derived sessions, keys, approvals and queued authority quickly enough to prevent continued use.",
+        "method": "Using an owner-authorised test identity, revoke the user or reduce its role while sessions, API credentials, approvals or queued work exist. Verify each derived authority becomes unusable or is re-evaluated before execution.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6279,8 +6271,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-028, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-028 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Verify the active test identity can perform only the actions allowed by its current role before deprovisioning.",
+        "negative_test": "After role reduction or deprovisioning, reuse the prior session, credential, approval or queued action and verify the former authority is rejected or re-authorized under current state.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -6304,9 +6296,9 @@
         "default_owner": "Identity lifecycle owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-028: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-028: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-028: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-028: Propagate identity and role revocation to sessions, API credentials, approvals and queued authority.",
+          "ARL-KB-028: Re-check current authorization before delayed or asynchronous execution.",
+          "ARL-KB-028: Record attributable deprovisioning evidence and alert on continued use after revocation."
         ],
         "monitoring": "For ARL-KB-028, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity lifecycle owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-028 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -6365,13 +6357,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-028 control or enforcement change",
-          "ARL-KB-028 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-028 bypass, incident or new attack evidence",
-          "ARL-KB-028 evidence expiry or material scope change"
+          "ARL-KB-028 user lifecycle, role, workspace-membership or deprovisioning change",
+          "ARL-KB-028 session, key, approval, queue or delayed-execution revocation change",
+          "ARL-KB-028 continued access after role removal or deprovisioning incident",
+          "ARL-KB-028 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6429,7 +6421,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "d6e2c4e070c73c7f6654a33a76df4081debff5e8eec16a56d583c4c34126cbd7"
+      "content_digest": "7b118d8444fee489af94b52f1e31c6c20baef271ef5b9aa9a8ace99e27f2f7ce"
     },
     {
       "id": "ARL-KB-029",
@@ -6461,8 +6453,8 @@
       },
       "check": {
         "id": "ARL-CHK-029",
-        "objective": "Determine whether the assessed system prevents or detects: shared accounts destroy accountability.",
-        "method": "Inspect identity records, audit trails and access patterns for shared credentials or generic approver names. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether human and workload actions requiring accountability are attributable to distinct verified principals.",
+        "method": "Inspect identity records, privileged account assignments, workload credentials, approval records and audit trails for shared credentials, generic approver identities or ambiguous principals. Verify representative consequential actions can be traced to a distinct human or workload identity.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6484,8 +6476,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-029, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-029 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Perform an authorised test action and verify the resulting evidence identifies the specific human or workload principal.",
+        "negative_test": "Attempt to use a prohibited shared or generic test identity for an accountable action and verify the platform rejects it or explicitly records an approved exception with an accountable owner.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -6509,9 +6501,9 @@
         "default_owner": "Identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-029: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-029: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-029: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-029: Provide distinct identities for individual humans and workloads involved in accountable actions.",
+          "ARL-KB-029: Prohibit shared privileged credentials except for documented emergency mechanisms with explicit accountability.",
+          "ARL-KB-029: Bind approvals, security decisions and audit evidence to verified principals."
         ],
         "monitoring": "For ARL-KB-029, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-029 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -6547,14 +6539,6 @@
           "reference_id": "REF-ISO-42001",
           "mapping_status": "informative",
           "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
-          "framework": "OWASP Agentic Top 10 2026",
-          "version": "2026",
-          "reference": "ASI09",
-          "reference_id": "REF-OWASP-AGENTIC-2026",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
         }
       ],
       "evidence_chain": [
@@ -6570,13 +6554,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-029 control or enforcement change",
-          "ARL-KB-029 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-029 bypass, incident or new attack evidence",
-          "ARL-KB-029 evidence expiry or material scope change"
+          "ARL-KB-029 identity, privileged-account, workload-identity or approval-attribution change",
+          "ARL-KB-029 introduction of shared, generic, break-glass or service credentials",
+          "ARL-KB-029 unattributable privileged action or shared-account incident",
+          "ARL-KB-029 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6634,7 +6618,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "227019fab1945e2a7ea9cc46812bb9819a89ccda92bb2df747a0e95fb00320b9"
+      "content_digest": "841a557f997753b1a56875550346c45bd5a58e0f24fcfda58dad8b9eeead29db"
     },
     {
       "id": "ARL-KB-030",
@@ -6664,8 +6648,8 @@
       },
       "check": {
         "id": "ARL-CHK-030",
-        "objective": "Determine whether the assessed system prevents or detects: impersonation and delegation are uncontrolled.",
-        "method": "Test impersonation entry, scope, target visibility, privilege ceiling, approval and termination. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether impersonation and delegated authority are explicitly scoped to a principal, purpose, target, privilege ceiling and expiry and remain attributable throughout the delegated session.",
+        "method": "Test impersonation or delegation entry, authorizing principal, reason, target identity, privilege ceiling, session visibility, expiry and termination. Attempt to exceed the delegated scope, change target or continue after termination and verify denial with attributable audit evidence.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6687,8 +6671,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-030, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-030 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Start an authorised delegated test session and verify the target, reason, scope, expiry and acting principal remain visible and auditable.",
+        "negative_test": "Attempt to exceed the delegated privilege ceiling, switch to an unapproved target or reuse the delegation after expiry or termination and verify denial.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -6712,9 +6696,9 @@
         "default_owner": "Security and support owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-030: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-030: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-030: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-030: Require explicit delegated authority with attributable actor, reason, target, scope and expiry.",
+          "ARL-KB-030: Prevent delegated or impersonated sessions from exceeding the delegating principal's approved privilege ceiling.",
+          "ARL-KB-030: Make impersonation visible to the operator and target context and preserve immutable start, action and termination evidence."
         ],
         "monitoring": "For ARL-KB-030, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security and support owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-030 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -6773,13 +6757,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-030 control or enforcement change",
-          "ARL-KB-030 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-030 bypass, incident or new attack evidence",
-          "ARL-KB-030 evidence expiry or material scope change"
+          "ARL-KB-030 impersonation, delegation, support-session or delegated-approval change",
+          "ARL-KB-030 target visibility, privilege ceiling, expiry or termination-control change",
+          "ARL-KB-030 delegation abuse, impersonation bypass or unattributable support-action incident",
+          "ARL-KB-030 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6837,7 +6821,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "fb325a75922e382f9c3473b344f7c1256a0cdb588d2d0dc8d26c00b4f6b8a4c0"
+      "content_digest": "520554bd344c8ee338c95b605c995ca07d069a3ab31dda141ba7ee6874cade26"
     },
     {
       "id": "ARL-KB-031",
