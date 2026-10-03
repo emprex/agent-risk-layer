@@ -1699,27 +1699,26 @@
       "title": "External destinations and egress paths are unknown",
       "problem": {
         "statement": "The agent can send data to domains, webhooks or tools that are absent from the threat model.",
-        "customer_symptom": "A user or operator may observe the agent can send data to domains, webhooks or tools that are absent from the threat model; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in the agent can send data to domains, webhooks or tools that are absent from the threat model, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "An operator cannot account for every external domain, IP, webhook, tool endpoint, callback or proxy route the assessed agent can reach, creating an unreviewed path for data disclosure, unintended external interaction or policy bypass.",
+        "credible_failure_or_attack": "Untrusted input, unsafe agent behaviour, configuration drift or a compromised tool can cause the agent to use an external destination or egress route that was not included in the assessed architecture or approved destination inventory.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "model and dependency artefacts",
-          "build, registry and deployment provenance",
-          "agent",
-          "model context"
+          "outbound network paths and egress controls",
+          "external domains, IP addresses, webhooks and callbacks",
+          "tool endpoints and downstream services",
+          "data transmitted outside the assessed trust boundary",
+          "DNS, proxy and destination-routing configuration"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Unknown or uncontrolled egress can enable data disclosure or unintended interaction with external systems. Final severity depends on reachable destinations, transmitted data, available actions, exposure, reversibility and compensating controls.",
         "applicability": [
           "network-capable agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between network-capable agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If the agent can send data to domains, webhooks or tools that are absent from the threat model, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "untrusted input, unsafe agent behaviour, compromised tool or dependency, configuration drift, or operator error",
+        "trust_boundary": "The boundary between the assessed agent or tool runtime and external network destinations, downstream services, webhooks, callbacks and other outbound routes.",
+        "operational_impact": "An undocumented or uncontrolled outbound path can expose scoped data, reach an unapproved service or bypass expected network controls. Operators may need to disable the route, investigate transmitted data and destinations, update the architecture inventory and repeat testing against the corrected version."
       },
       "solution_summary": {
-        "recommended_remediation": "Enforce egress allowlists, destination classification, DNS/IP validation, proxy policy, request signing and privacy-aware logging.",
+        "recommended_remediation": "Maintain an explicit destination and egress inventory; enforce deny-by-default outbound policy using controlled proxy, firewall or equivalent enforcement; apply destination allowlists and DNS/IP validation; constrain dynamic destinations; and record privacy-aware runtime egress evidence.",
         "default_owner": "Network security owner",
         "priority": "P0"
       },
@@ -1731,25 +1730,17 @@
           "reference_id": "REF-OWASP-AGENTIC-2026",
           "mapping_status": "informative",
           "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
-          "framework": "OWASP API Security 2023",
-          "version": "2023",
-          "reference": "API7 SSRF",
-          "reference_id": "REF-OWASP-API-2023",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
         }
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-03",
+        "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-013 control or enforcement change",
-          "ARL-KB-013 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-013 bypass, incident or new attack evidence",
-          "ARL-KB-013 evidence expiry or material scope change"
+          "ARL-KB-013 destination inventory, egress policy, proxy, firewall or DNS enforcement change",
+          "ARL-KB-013 new or changed domain, IP, webhook, callback, tool endpoint, redirect or outbound route",
+          "ARL-KB-013 new dynamic-destination capability, egress bypass, route drift or incident evidence",
+          "ARL-KB-013 evidence expiry or material scope, architecture, environment or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -1786,7 +1777,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "74122ac659fe312b1b1865a3635d41c00805b24ed7074de7822d47f0769cd286"
+      "content_digest": "aaef3a655fd6315c6488fe18ca0aebbaa541c2908f6d4202e41da01fe0b3e650"
     },
     {
       "id": "ARL-KB-014",
