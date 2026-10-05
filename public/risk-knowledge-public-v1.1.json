@@ -3432,8 +3432,8 @@
           "tool endpoints and downstream systems",
           "financial, administrative or state-changing actions"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Direct prompt injection can cause disclosure, policy bypass or unsafe tool intent. Final severity depends on reachable authority, protected data, tool capability and external enforcement.",
         "applicability": [
           "interactive agents"
         ],
@@ -3466,13 +3466,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-031 control or enforcement change",
-          "ARL-KB-031 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-031 bypass, incident or new attack evidence",
-          "ARL-KB-031 evidence expiry or material scope change"
+          "ARL-KB-031 system instruction, user-input path, model or prompt-processing change",
+          "ARL-KB-031 tool authority, policy enforcement or authenticated-intent change",
+          "ARL-KB-031 new direct prompt-injection bypass or protected-context disclosure evidence",
+          "ARL-KB-031 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3509,7 +3509,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "d8508ac720d6072b09c92b4862335777bed702dd2dd84a82cd1fb3416f832fe7"
+      "content_digest": "26c35a21faab06d992a018ddca3107725f18e40c2e749ceb0652862825f643c1"
     },
     {
       "id": "ARL-KB-032",
@@ -3530,8 +3530,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Indirect prompt injection can redirect agent behaviour through externally supplied content. Final severity depends on reachable data, tools, autonomy and external enforcement controls.",
         "applicability": [
           "agents processing external content"
         ],
@@ -3564,13 +3564,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-032 control or enforcement change",
-          "ARL-KB-032 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-032 bypass, incident or new attack evidence",
-          "ARL-KB-032 evidence expiry or material scope change"
+          "ARL-KB-032 retrieval, email, document, browser, tool-output or external-content pipeline change",
+          "ARL-KB-032 provenance, sanitisation, tool-policy or context-construction change",
+          "ARL-KB-032 new indirect prompt-injection or retrieved-content compromise evidence",
+          "ARL-KB-032 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3607,7 +3607,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "db37b44eec967e9982c6944ec47de6d759aadce142e1dbfcc12bd8545addd086"
+      "content_digest": "44bc90f6d8a9ab2be8149720ca7493eaf7384aacc0eb94feb620c33499525a38"
     },
     {
       "id": "ARL-KB-033",
@@ -3628,8 +3628,8 @@
           "tools or downstream systems",
           "customer evidence"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Multi-step goal hijacking can redirect an autonomous or planning agent toward an unauthorised outcome. Final severity depends on autonomy, available authority, reachable assets and reversibility.",
         "applicability": [
           "planning or autonomous agents"
         ],
@@ -3654,13 +3654,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-033 control or enforcement change",
-          "ARL-KB-033 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-033 bypass, incident or new attack evidence",
-          "ARL-KB-033 evidence expiry or material scope change"
+          "ARL-KB-033 planner, autonomy, goal representation or multi-step execution change",
+          "ARL-KB-033 task-intent, constraint or material-action validation change",
+          "ARL-KB-033 goal-drift, plan-hijack or unauthorised multi-step outcome evidence",
+          "ARL-KB-033 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3697,7 +3697,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fe29868cb853675e27552fa2e178abdda7d8313b2531f7160bca3e03809161bf"
+      "content_digest": "f01fc9a625a0c290a65261c56da5abc25527c3b5dbf21a7df601d2fa69a7a9aa"
     },
     {
       "id": "ARL-KB-034",
@@ -3744,13 +3744,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-034 control or enforcement change",
-          "ARL-KB-034 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-034 bypass, incident or new attack evidence",
-          "ARL-KB-034 evidence expiry or material scope change"
+          "ARL-KB-034 system-prompt, hidden-context, diagnostic or logging change",
+          "ARL-KB-034 confidential policy, endpoint or model-context content change",
+          "ARL-KB-034 prompt leakage, diagnostic exposure or protected-context incident",
+          "ARL-KB-034 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3787,7 +3787,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "458776d13b2274df269d72ccdbafebd53ddcfa4721ea69bf83f53d4c669b0041"
+      "content_digest": "9129857a61c08135a23f6b9b7486ad0f585f95afe121d3582cf6a0a89be96b46"
     },
     {
       "id": "ARL-KB-035",
@@ -3842,13 +3842,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-035 control or enforcement change",
-          "ARL-KB-035 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-035 bypass, incident or new attack evidence",
-          "ARL-KB-035 evidence expiry or material scope change"
+          "ARL-KB-035 message hierarchy, context builder, provenance or instruction-source change",
+          "ARL-KB-035 new retrieved, tool-generated or external context source",
+          "ARL-KB-035 role-spoofing, precedence-confusion or provenance-loss evidence",
+          "ARL-KB-035 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3885,7 +3885,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ad7e21e594fd73ab818c6437d4a57277f7216bf81a8ebbf8fc552dd93d54e9c4"
+      "content_digest": "7a5d87706fa26cae4c2787552f3ba35954d563ffb9efb8266df8f1e35c537525"
     },
     {
       "id": "ARL-KB-036",
@@ -3906,8 +3906,8 @@
           "tool endpoints and downstream systems",
           "financial, administrative or state-changing actions"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Untrusted files, messages or browser data can influence agent behaviour and may lead to unsafe actions. Final severity depends on reachable tools, authority, data and the effectiveness of external policy enforcement.",
         "applicability": [
           "agents handling files, messages or browser data"
         ],
@@ -3940,13 +3940,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-036 control or enforcement change",
-          "ARL-KB-036 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-036 bypass, incident or new attack evidence",
-          "ARL-KB-036 evidence expiry or material scope change"
+          "ARL-KB-036 file parser, message ingestion, browser-data or document-processing change",
+          "ARL-KB-036 new supported format, metadata source or action-triggering integration",
+          "ARL-KB-036 malicious-document, message-based authority confusion or parser-bypass evidence",
+          "ARL-KB-036 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -3983,7 +3983,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4cf31d9eb85a8c6f1cb747519274f87151dda7e298812dd13171f7fcbfce78b9"
+      "content_digest": "fd042ed1b670b231205cf7d55477ba123d30bd0294a0e1570754171ca49ff4c1"
     },
     {
       "id": "ARL-KB-037",
@@ -4038,13 +4038,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-037 control or enforcement change",
-          "ARL-KB-037 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-037 bypass, incident or new attack evidence",
-          "ARL-KB-037 evidence expiry or material scope change"
+          "ARL-KB-037 decoder, parser, normalisation, validation or text-filter change",
+          "ARL-KB-037 new encoding, serialization or structured-input format",
+          "ARL-KB-037 canonicalisation bypass, homoglyph or alternate-encoding attack evidence",
+          "ARL-KB-037 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4081,7 +4081,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fb7c2d8a076759420a56fcd581ea475b8e69740b8f933b552e685e83fd68a8d4"
+      "content_digest": "9aa61a32c182328d0f19f86d73bde054c30254746f553b096f1dd13d7262f6f3"
     },
     {
       "id": "ARL-KB-038",
@@ -4134,13 +4134,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-038 control or enforcement change",
-          "ARL-KB-038 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-038 bypass, incident or new attack evidence",
-          "ARL-KB-038 evidence expiry or material scope change"
+          "ARL-KB-038 multimodal model, image, audio, document-extraction or metadata-processing change",
+          "ARL-KB-038 new modality, extraction pipeline or multimodal tool integration",
+          "ARL-KB-038 hidden multimodal instruction or cross-modal policy-bypass evidence",
+          "ARL-KB-038 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4177,7 +4177,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "708a3bcb030e5e3f0e4f777daac03371c65ba834b25d1657eb5aeef34d1d2a73"
+      "content_digest": "cf75f7c2e07758dfee0af7adf5d81d2ab6c1e5c7896117f93d0505d227e128fe"
     },
     {
       "id": "ARL-KB-039",
@@ -4232,13 +4232,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-039 control or enforcement change",
-          "ARL-KB-039 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-039 bypass, incident or new attack evidence",
-          "ARL-KB-039 evidence expiry or material scope change"
+          "ARL-KB-039 prompt-template, message-builder, schema or interpolation change",
+          "ARL-KB-039 new dynamically inserted field or tool-schema generation path",
+          "ARL-KB-039 delimiter escape, role injection or structural prompt-bypass evidence",
+          "ARL-KB-039 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4275,7 +4275,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a8ce22facb2aa89ed4d02442912613b3f525841a76c496e2735615840f4db0c5"
+      "content_digest": "57b04b55be47cf43bc72084346cfa87ff170c5615dc2c39ec928396a02d12a47"
     },
     {
       "id": "ARL-KB-040",
@@ -4312,14 +4312,6 @@
       },
       "mappings": [
         {
-          "framework": "OWASP LLM Top 10 2025",
-          "version": "2025",
-          "reference": "LLM10",
-          "reference_id": "REF-OWASP-LLM-2025",
-          "mapping_status": "informative",
-          "mapping_limit": "This mapping does not prove compliance or certification."
-        },
-        {
           "framework": "OWASP Agentic Top 10 2026",
           "version": "2026",
           "reference": "ASI01",
@@ -4330,13 +4322,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-040 control or enforcement change",
-          "ARL-KB-040 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-040 bypass, incident or new attack evidence",
-          "ARL-KB-040 evidence expiry or material scope change"
+          "ARL-KB-040 context-window, summarisation, truncation, retrieval or conversation-history change",
+          "ARL-KB-040 context budget, reviewer-visible content or retained-segment policy change",
+          "ARL-KB-040 long-context smuggling, truncation bypass or hidden-instruction evidence",
+          "ARL-KB-040 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4373,7 +4365,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "b801faacbc748deea880eea3140d9c873331d7e4f0183744454a78f0dff735cb"
+      "content_digest": "e0c8ed7907f37a78599a1cf6e4327fe9e97f5ba30ab0416e0223c3d0d2c49f5d"
     },
     {
       "id": "ARL-KB-041",
