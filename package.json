@@ -20,7 +20,7 @@
     "arl17k:phase6:decision": "node benchmarks/arl17k/record-phase6-decision.mjs",
     "arl17k:phase7": "node benchmarks/arl17k/run-phase7.mjs",
     "arl17k:phase8": "node benchmarks/arl17k/run-phase8.mjs",
-    "check": "node --check server.js && for f in src/*.js public/*.js inspector/*.mjs redteam/*.mjs runtime/*.mjs public/downloads/*.mjs scripts/*.mjs; do node --check \"$f\"; done",
+    "check": "node --check server.js && find src public inspector redteam runtime scripts -type f \\( -name '*.js' -o -name '*.mjs' \\) -print0 | sort -z | xargs -0 -n1 node --check",
     "smoke": "node tests/smoke.mjs",
     "test:scenarios": "node scripts/run-1000-scenarios.mjs test-artifacts",
     "test:load": "node scripts/load-stress.mjs",

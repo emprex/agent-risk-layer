@@ -42,8 +42,6 @@ services:
         value: "24"
       - key: TRUSTED_PROXY_HOPS
         value: "1"
-      - key: FULFILMENT_WORKER_INTERVAL_MS
-        value: "15000"
       - key: RETENTION_WORKER_INTERVAL_MS
         value: "3600000"
       - key: BACKUP_RETENTION_DAYS
