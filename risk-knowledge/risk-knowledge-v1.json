@@ -14989,8 +14989,8 @@
       },
       "check": {
         "id": "ARL-CHK-071",
-        "objective": "Determine whether the assessed system prevents or detects: high-value actions lack threshold and dual control.",
-        "method": "Test values just below, at and above thresholds, cumulative transactions and split transactions. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether transaction risk, value and cumulative impact trigger proportionately stronger approval controls before high-value or irreversible actions execute.",
+        "method": "Using owner-authorised synthetic transactions, test values immediately below, at and above documented thresholds, including cumulative and deliberately split transactions. Verify thresholds cannot be bypassed by fragmentation and that required independent or dual approval is enforced before execution.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -15012,8 +15012,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-071, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-071 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Execute a synthetic low-risk action below the defined threshold and verify the documented approval path is applied.",
+        "negative_test": "Attempt threshold, above-threshold, cumulative and split high-value actions without the required stronger approval and verify execution is denied.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -15037,9 +15037,9 @@
         "default_owner": "Financial or operational risk owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-071: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-071: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-071: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-071: Apply approval strength according to transaction value, irreversibility and systemic impact.",
+          "ARL-KB-071: Evaluate cumulative and split transactions so thresholds cannot be bypassed through fragmentation.",
+          "ARL-KB-071: Require independent dual control or equivalent stronger governance above documented risk thresholds."
         ],
         "monitoring": "For ARL-KB-071, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Financial or operational risk owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-071 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -15098,13 +15098,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-071 control or enforcement change",
-          "ARL-KB-071 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-071 bypass, incident or new attack evidence",
-          "ARL-KB-071 evidence expiry or material scope change"
+          "ARL-KB-071 transaction threshold, cumulative-limit or approval-policy change",
+          "ARL-KB-071 new financial, deletion, deployment or access-changing action",
+          "ARL-KB-071 threshold bypass, transaction splitting or missing dual-control evidence",
+          "ARL-KB-071 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -15162,7 +15162,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "97bd306bf2dfd227e66eb0c544f4a80ddd1def14a9d6f04cc84dbd6d1e28eb33"
+      "content_digest": "51a4c330121991f2d6cca96fdbf7e3ea052e5b399b8e37f77dbe2258d45de70d"
     },
     {
       "id": "ARL-KB-072",
@@ -15183,8 +15183,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Misleading approval context can cause a human to authorise an action they did not intend. Final severity depends on the action's impact, reversibility and the authority available after approval.",
         "applicability": [
           "human-in-the-loop agents"
         ],
@@ -15194,8 +15194,8 @@
       },
       "check": {
         "id": "ARL-CHK-072",
-        "objective": "Determine whether the assessed system prevents or detects: approval interface hides material context.",
-        "method": "Compare the UI, API approval object and final executed canonical action; test truncation, confusables and last-second changes. Bind approval to the exact action, canonical parameters, target, value, actor, environment, expiry and nonce. Mutate each field and replay the token; every variant must be denied.",
+        "objective": "Determine whether the human approver sees the same material action, target, destination, permissions and consequences that will actually be executed.",
+        "method": "Compare the approval interface, authoritative approval object and final canonical execution request. Test truncated values, Unicode confusables, hidden defaults, misleading summaries and last-second parameter changes. Verify material execution data cannot differ from what the approver reviewed.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -15217,8 +15217,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-072, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-072 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Approve a synthetic action and verify the displayed material parameters exactly correspond to the canonical action executed.",
+        "negative_test": "Alter or obscure a material target, destination, permission or value after presentation and verify execution is blocked or requires a new explicit approval.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -15242,9 +15242,9 @@
         "default_owner": "Product security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-072: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-072: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-072: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-072: Display the exact canonical material action rather than a model-generated summary alone.",
+          "ARL-KB-072: Make consequential targets, values, permissions and side effects explicit before confirmation.",
+          "ARL-KB-072: Freeze approved parameters and require fresh approval after any material change."
         ],
         "monitoring": "For ARL-KB-072, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Product security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-072 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -15295,13 +15295,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-072 control or enforcement change",
-          "ARL-KB-072 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-072 bypass, incident or new attack evidence",
-          "ARL-KB-072 evidence expiry or material scope change"
+          "ARL-KB-072 approval UI, canonical action or parameter-presentation change",
+          "ARL-KB-072 new high-impact action or hidden execution default",
+          "ARL-KB-072 misleading approval display, confusable value or post-approval mutation evidence",
+          "ARL-KB-072 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -15360,7 +15360,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2d6c3cfa3e9f6408a4677360a44e2a455153390ac3dd5ddfa7a1a533bfdd56fa"
+      "content_digest": "1bd5268992e299c87426cb3645122d88aa828263adc6ee6dcdabbec48c67447a"
     },
     {
       "id": "ARL-KB-073",
@@ -15381,8 +15381,8 @@
           "tools or downstream systems",
           "customer evidence"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Unverifiable model provenance creates substitution and tampering risk. Final severity depends on model privileges, deployment exposure, downstream authority and whether untrusted model bytes can execute code.",
         "applicability": [
           "self-hosted or imported models"
         ],
@@ -15392,8 +15392,8 @@
       },
       "check": {
         "id": "ARL-CHK-073",
-        "objective": "Determine whether the assessed system prevents or detects: model provenance cannot be verified.",
-        "method": "Verify source, licence, digest or immutable provider revision, signing evidence and transfer path for the deployed model. Verify model provenance, signed dependency and container digests, MCP-server trust, allowed registries and rejection of executable or unsafe model formats before loading.",
+        "objective": "Determine whether the exact deployed model can be traced to an approved publisher, immutable version or digest and documented transfer or acquisition path.",
+        "method": "For the exact assessed model, verify publisher or provider origin, licence where relevant, immutable revision or digest, available signature or attestation evidence and the transfer path into deployment. Compare the recorded provenance with the exact deployed bytes or provider revision and test rejection of an unapproved substitute.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -15415,8 +15415,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-073, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-073 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Load or reference an approved model whose publisher, immutable revision and digest or provider identity match the recorded provenance.",
+        "negative_test": "Substitute a synthetic unapproved model artifact or mismatched revision and verify deployment or loading is rejected or routed to explicit review.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -15440,9 +15440,9 @@
         "default_owner": "ML supply-chain owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-073: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-073: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-073: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-073: Record approved model publisher, source, immutable revision or digest and acquisition path.",
+          "ARL-KB-073: Verify model identity against the exact artifact or provider revision used in deployment.",
+          "ARL-KB-073: Quarantine and review model artifacts whose provenance cannot be established."
         ],
         "monitoring": "For ARL-KB-073, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the ML supply-chain owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-073 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -15501,13 +15501,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-073 control or enforcement change",
-          "ARL-KB-073 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-073 bypass, incident or new attack evidence",
-          "ARL-KB-073 evidence expiry or material scope change"
+          "ARL-KB-073 model publisher, artifact, endpoint, revision or provenance mechanism change",
+          "ARL-KB-073 model replacement, import or provider-version change",
+          "ARL-KB-073 digest mismatch, substituted model or provenance-failure evidence",
+          "ARL-KB-073 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -15566,7 +15566,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "829dbbebb720f94943395a2e86bbe2a75998ce1474af6ba1cfbe794b07f360eb"
+      "content_digest": "6f716278a754d929f7a2e6aabfbbac0ecd9d124ec7eeb8254f9eb08ec4bdba12"
     },
     {
       "id": "ARL-KB-074",
@@ -15598,8 +15598,8 @@
       },
       "check": {
         "id": "ARL-CHK-074",
-        "objective": "Determine whether the assessed system prevents or detects: executable model formats load arbitrary code.",
-        "method": "Inspect formats and loaders; attempt authorised malicious serialization in an isolated environment. Verify model provenance, signed dependency and container digests, MCP-server trust, allowed registries and rejection of executable or unsafe model formats before loading.",
+        "objective": "Determine whether model, adapter or checkpoint loading can execute attacker-controlled code during deserialisation or conversion.",
+        "method": "Inventory accepted model and adapter formats and the exact loaders used. In an owner-authorised isolated environment, attempt controlled malicious serialization or loader payloads relevant to executable formats. Verify unsafe formats are rejected or converted inside a disposable sandbox without host, secret or production access.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -15621,8 +15621,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-074, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-074 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Load an approved non-executable model artifact and verify it is processed through the documented safe loader path.",
+        "negative_test": "Present an authorised synthetic artifact requiring unsafe deserialisation or embedded code execution and verify it cannot execute with host or production authority.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -15646,9 +15646,9 @@
         "default_owner": "ML platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-074: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-074: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-074: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-074: Prefer non-executable model serialization formats wherever practical.",
+          "ARL-KB-074: Reject unsafe deserialisation paths unless explicitly isolated and justified.",
+          "ARL-KB-074: Perform unavoidable conversion or inspection in disposable sandboxes without ambient secrets or production access."
         ],
         "monitoring": "For ARL-KB-074, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the ML platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-074 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -15707,13 +15707,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-074 control or enforcement change",
-          "ARL-KB-074 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-074 bypass, incident or new attack evidence",
-          "ARL-KB-074 evidence expiry or material scope change"
+          "ARL-KB-074 model format, adapter format, loader or deserialisation-library change",
+          "ARL-KB-074 new imported artifact type or conversion pipeline",
+          "ARL-KB-074 unsafe deserialisation or model-load code-execution evidence",
+          "ARL-KB-074 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -15771,7 +15771,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "8b7d0e2c2402b40c4a5b1931d8ea58563b9d808dd58040fe09a1811accd45786"
+      "content_digest": "2b65959e23364218aab03a0f247027c6e4688b73b2075037971569be959b3195"
     },
     {
       "id": "ARL-KB-075",
@@ -15801,8 +15801,8 @@
       },
       "check": {
         "id": "ARL-CHK-075",
-        "objective": "Determine whether the assessed system prevents or detects: container or runtime image uses a mutable tag.",
-        "method": "Compare build manifests, image digest and deployed runtime; rebuild after upstream tag movement. Capture policy version, digest, input, decision and blocked action. Test missing policy, stale policy, malformed input, direct endpoint calls and alternate execution paths for fail-closed behaviour.",
+        "objective": "Determine whether the exact container or runtime image assessed can be identified immutably and reproduced without silently resolving a mutable tag to different bytes.",
+        "method": "Compare source build records, image manifest, immutable digest and the exact deployed runtime image. Resolve any mutable tag currently in use and test whether rebuilding or redeploying after upstream tag movement would produce different bytes from the assessed release.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -15824,8 +15824,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-075, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-075 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Deploy or inspect an image referenced by immutable digest and verify the running artifact matches the recorded assessed digest.",
+        "negative_test": "Move or simulate movement of a mutable test tag and verify the release process cannot silently substitute different image bytes without explicit review and retesting.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -15849,9 +15849,9 @@
         "default_owner": "DevSecOps owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-075: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-075: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-075: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-075: Reference production runtime images by immutable digest rather than mutable tags alone.",
+          "ARL-KB-075: Record build provenance and tie security evidence to the exact deployed image digest.",
+          "ARL-KB-075: Treat image-byte changes as a new release requiring explicit validation rather than silent replacement."
         ],
         "monitoring": "For ARL-KB-075, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the DevSecOps owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-075 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -15910,13 +15910,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-075 control or enforcement change",
-          "ARL-KB-075 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-075 bypass, incident or new attack evidence",
-          "ARL-KB-075 evidence expiry or material scope change"
+          "ARL-KB-075 container image, runtime image, registry or release-process change",
+          "ARL-KB-075 digest, tag-resolution or build-provenance change",
+          "ARL-KB-075 mutable-tag drift or deployed-image mismatch evidence",
+          "ARL-KB-075 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -15974,7 +15974,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "5742b9c46ef7b252553cc5ed41ae690bdf53312295924e736095081825fbee21"
+      "content_digest": "1fcdd83fc261f2e3872ee2b0185332c8e4ceae66081ba6fb09c275fba3d0d6be"
     },
     {
       "id": "ARL-KB-076",
@@ -16006,8 +16006,8 @@
       },
       "check": {
         "id": "ARL-CHK-076",
-        "objective": "Determine whether the assessed system prevents or detects: known vulnerable dependencies remain reachable.",
-        "method": "Generate an exact dependency inventory, correlate advisories and verify whether vulnerable code paths are reachable. Verify model provenance, signed dependency and container digests, MCP-server trust, allowed registries and rejection of executable or unsafe model formats before loading.",
+        "objective": "Determine whether known vulnerable dependencies are present in the exact deployed agent and whether the affected code paths are reachable within the assessed attack surface.",
+        "method": "Generate an exact dependency and version inventory for the assessed release, correlate it with relevant security advisories, then determine whether vulnerable functions, endpoints or execution paths are actually reachable. Verify compensating controls where remediation is temporarily deferred.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -16029,8 +16029,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-076, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-076 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Verify a known dependency version and demonstrate that an unaffected or remediated path behaves as documented.",
+        "negative_test": "For an authorised test case involving a relevant vulnerable dependency, verify the exposed path is patched, removed, unreachable or effectively constrained by a documented compensating control.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -16054,9 +16054,9 @@
         "default_owner": "DevSecOps owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-076: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-076: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-076: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-076: Maintain an exact dependency inventory tied to the deployed release.",
+          "ARL-KB-076: Prioritise remediation using exploitability and reachable attack surface rather than package presence alone.",
+          "ARL-KB-076: Time-bound accepted dependency risk, document compensating controls and retest the exposed path after change."
         ],
         "monitoring": "For ARL-KB-076, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the DevSecOps owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-076 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -16115,13 +16115,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-076 control or enforcement change",
-          "ARL-KB-076 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-076 bypass, incident or new attack evidence",
-          "ARL-KB-076 evidence expiry or material scope change"
+          "ARL-KB-076 dependency, framework, model-server or runtime-package change",
+          "ARL-KB-076 new advisory affecting a deployed component",
+          "ARL-KB-076 reachable vulnerable path, exploit evidence or compensating-control failure",
+          "ARL-KB-076 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -16179,7 +16179,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "b370cdf605b79400fa653a8ab1d6148b1adbbda74c4382da6192381a87dab095"
+      "content_digest": "0957bfe9d547f7411f8f0dc7b70665cb0088376208383bf1f4879e87481464e3"
     },
     {
       "id": "ARL-KB-077",
@@ -16211,8 +16211,8 @@
       },
       "check": {
         "id": "ARL-CHK-077",
-        "objective": "Determine whether the assessed system prevents or detects: plugin, package or mcp dependency is malicious.",
-        "method": "Review publisher, package integrity, install scripts, permissions, network calls and update channel; test in quarantine. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether plugins, packages and MCP dependencies come from approved trustworthy sources and cannot gain unreviewed permissions, install-time execution or network access.",
+        "method": "Review exact publisher identity, package integrity, registry source, install scripts, requested permissions, network behaviour and update channel. In quarantine, inspect or test a synthetic untrusted dependency and verify it cannot enter the trusted runtime or gain authority without explicit approval.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -16234,8 +16234,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-077, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-077 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Install or load an approved dependency from the authorised source and verify publisher, digest, permissions and update channel match the recorded trust decision.",
+        "negative_test": "Present a synthetic typosquatted, mismatched, overprivileged or unapproved dependency and verify it is rejected or quarantined before trusted execution.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -16259,9 +16259,9 @@
         "default_owner": "Supply-chain owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-077: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-077: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-077: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-077: Restrict extensions to approved registries, publishers and integrity-verified artifacts.",
+          "ARL-KB-077: Review install scripts, runtime permissions and network authority before trusted use.",
+          "ARL-KB-077: Quarantine new or changed extensions and support rapid revocation of compromised dependencies."
         ],
         "monitoring": "For ARL-KB-077, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Supply-chain owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-077 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -16320,13 +16320,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-077 control or enforcement change",
-          "ARL-KB-077 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-077 bypass, incident or new attack evidence",
-          "ARL-KB-077 evidence expiry or material scope change"
+          "ARL-KB-077 plugin, package, MCP dependency, registry or publisher change",
+          "ARL-KB-077 install script, permission, update-channel or network-authority change",
+          "ARL-KB-077 malicious dependency, typosquat, publisher compromise or integrity-failure evidence",
+          "ARL-KB-077 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -16386,7 +16386,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "d17d3afc628ef958eff2003dc32f7f0195906728addc08aff45b3911841ce941"
+      "content_digest": "2971ec9a976ad41e77e14f8b7f36213d0abb377d0ae82a7cf527b6c850eb4327"
     },
     {
       "id": "ARL-KB-078",
@@ -16418,8 +16418,8 @@
       },
       "check": {
         "id": "ARL-CHK-078",
-        "objective": "Determine whether the assessed system prevents or detects: model update causes unmeasured behavioural drift.",
-        "method": "Run versioned regression and adversarial suites against old and new versions with identical seeds and policy. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether a model version change materially alters safety, refusal, tool selection, privacy or task behaviour without being detected before broader deployment.",
+        "method": "Run versioned regression, safety and adversarial suites against the previous and candidate model using identical test cases, policy configuration and controlled conditions. Compare consequential outputs, refusal behaviour, tool selection, data exposure and task quality, and record material differences before release.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -16441,8 +16441,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-078, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-078 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Evaluate a candidate model version that remains within documented acceptance bounds across the approved regression suite.",
+        "negative_test": "Introduce or identify a candidate version with a material regression in refusal, leakage, tool use or task behaviour and verify promotion is blocked pending review.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -16466,9 +16466,9 @@
         "default_owner": "ML platform owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-078: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-078: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-078: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-078: Treat model-version changes as assessed release changes rather than transparent substitutions.",
+          "ARL-KB-078: Compare safety and task behaviour using stable versioned regression suites.",
+          "ARL-KB-078: Canary changed models, require explicit release approval and preserve rollback to the known assessed version."
         ],
         "monitoring": "For ARL-KB-078, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the ML platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-078 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -16527,13 +16527,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-078 control or enforcement change",
-          "ARL-KB-078 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-078 bypass, incident or new attack evidence",
-          "ARL-KB-078 evidence expiry or material scope change"
+          "ARL-KB-078 model version, provider revision, inference configuration or safety-policy change",
+          "ARL-KB-078 material regression-suite or acceptance-threshold change",
+          "ARL-KB-078 behavioural drift, refusal regression, tool-selection change or leakage evidence",
+          "ARL-KB-078 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -16591,7 +16591,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "94e7d1637646b7e8d5f62270371b6d35e7a9744169a11b6f7a8b446211cb2f4d"
+      "content_digest": "444b5d5aa34187424c8bb63ce05e443a92c376e505183eb333e0d6ba98f65d22"
     },
     {
       "id": "ARL-KB-079",
@@ -16623,8 +16623,8 @@
       },
       "check": {
         "id": "ARL-CHK-079",
-        "objective": "Determine whether the assessed system prevents or detects: training or fine-tuning data is poisoned.",
-        "method": "Review dataset lineage and contributors; test suspicious triggers, outliers and targeted behaviours on a held-out set. Execute the documented check for “Training or fine-tuning data is poisoned” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether malicious or untrusted training and fine-tuning data can introduce targeted backdoors, unsafe trigger behaviour or systematic model corruption.",
+        "method": "Review dataset lineage, contributors, ingestion controls and curation history. Identify suspicious clusters, outliers and targeted trigger patterns, then evaluate the exact trained or fine-tuned model on held-out tests designed to detect backdoors, trigger-specific unsafe actions and unexpected targeted behaviour.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -16646,8 +16646,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-079, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-079 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Evaluate clean held-out examples and verify expected behaviour is stable across relevant training-data segments.",
+        "negative_test": "Test synthetic suspicious triggers or poisoned-example patterns in a controlled evaluation and verify they do not produce hidden unsafe or attacker-selected behaviour.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -16671,9 +16671,9 @@
         "default_owner": "ML data owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-079: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-079: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-079: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-079: Preserve training-data provenance and contributor attribution where feasible.",
+          "ARL-KB-079: Separate, inspect or quarantine untrusted datasets before training or fine-tuning.",
+          "ARL-KB-079: Retain clean rollback datasets and test exact trained artifacts for targeted trigger behaviour."
         ],
         "monitoring": "For ARL-KB-079, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the ML data owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-079 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -16732,13 +16732,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-079 control or enforcement change",
-          "ARL-KB-079 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-079 bypass, incident or new attack evidence",
-          "ARL-KB-079 evidence expiry or material scope change"
+          "ARL-KB-079 training dataset, contributor, ingestion, curation or fine-tuning pipeline change",
+          "ARL-KB-079 new external or untrusted training-data source",
+          "ARL-KB-079 poisoning indicator, backdoor trigger or targeted unsafe-behaviour evidence",
+          "ARL-KB-079 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -16796,7 +16796,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "20fd8413c59da40508e76affe0efc377993bb9b72e051cf93f4599af060c1af6"
+      "content_digest": "ac61f734c2e8055c6f152edafb3c57b9c4f17bb4defb6d34969ccc99e195d2aa"
     },
     {
       "id": "ARL-KB-080",
@@ -16828,8 +16828,8 @@
       },
       "check": {
         "id": "ARL-CHK-080",
-        "objective": "Determine whether the assessed system prevents or detects: provider fallback changes security properties.",
-        "method": "Trigger fallback in a controlled environment and compare provider, location, retention, capabilities, policy and output. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether provider or model fallback preserves the required privacy, safety, regional, retention and tool-use security properties of the primary execution path.",
+        "method": "Trigger each configured fallback path in a controlled environment and compare provider identity, model capabilities, processing location, retention terms, safety controls, tool behaviour and policy enforcement with the approved primary path. Verify fallback fails closed when mandatory security or privacy requirements cannot be preserved.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -16851,8 +16851,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-080, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-080 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Trigger an explicitly approved fallback and verify all required security and privacy properties remain within documented bounds.",
+        "negative_test": "Trigger or simulate a fallback target with weaker mandatory controls, regional guarantees, retention terms or tool behaviour and verify the system refuses to route traffic to that target.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -16876,9 +16876,9 @@
         "default_owner": "Platform and vendor owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-080: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-080: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-080: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-080: Approve fallback providers, models and regions explicitly rather than selecting them dynamically without review.",
+          "ARL-KB-080: Preserve or tighten mandatory security, privacy and tool-authority controls on fallback paths.",
+          "ARL-KB-080: Fail closed when no fallback can satisfy the required security and data-governance properties."
         ],
         "monitoring": "For ARL-KB-080, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform and vendor owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-080 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -16937,13 +16937,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-080 control or enforcement change",
-          "ARL-KB-080 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-080 bypass, incident or new attack evidence",
-          "ARL-KB-080 evidence expiry or material scope change"
+          "ARL-KB-080 provider, fallback target, region, retention or model-capability change",
+          "ARL-KB-080 primary/fallback routing or outage-handling change",
+          "ARL-KB-080 silent weaker-provider fallback or security-property regression evidence",
+          "ARL-KB-080 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -17001,7 +17001,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "48974bad3f2e1a805b3d2deb07aaff4296d2e13b011755c8dbb21358a40b2b81"
+      "content_digest": "0fc5c4d5a8c25d5a611f4ff0577f5a06004c19e807bb5ccf62ad8a492b2c6ef6"
     },
     {
       "id": "ARL-KB-081",
