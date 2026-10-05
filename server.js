@@ -34,6 +34,44 @@ import {
 } from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
+const publicSurfaceRedirects = new Map([
+    ['/admin.html', '/'],
+    ['/sales-agent.html', '/'],
+    ['/dashboard.html', '/'],
+    ['/auth.html', '/'],
+    ['/reset.html', '/'],
+    ['/verify.html', '/'],
+    ['/workspaces.html', '/'],
+    ['/control-plane.html', '/'],
+    ['/control-intelligence.html', '/trust.html'],
+    ['/control-intelligence-control.html', '/trust.html'],
+    ['/control-intelligence-report.html', '/sample-report.html'],
+    ['/inspection-detail.html', '/ai-agent-security-assessment.html'],
+    ['/inspector.html', '/ai-agent-security-assessment.html'],
+    ['/redteam.html', '/ai-agent-security-assessment.html'],
+    ['/redteam-run.html', '/ai-agent-security-assessment.html'],
+    ['/runtime.html', '/ai-agent-security-assessment.html'],
+    ['/assessment.html', '/ai-agent-security-assessment.html'],
+    ['/result.html', '/sample-report.html'],
+    ['/risk-library.html', '/trust.html'],
+    ['/risk-library-detail.html', '/trust.html'],
+    ['/risk-profiler.html', '/trust.html'],
+    ['/risk-readiness.html', '/trust.html'],
+    ['/shared.html', '/'],
+    ['/status.html', '/trust.html'],
+    ['/demo.html', '/ai-agent-security-assessment.html'],
+    ['/success.html', '/request-assessment.html'],
+    ['/help.html', '/'],
+    ['/arl17k.html', '/trust.html'],
+    ['/methodology.html', '/trust.html'],
+    ['/standards.html', '/trust.html'],
+    ['/security-center.html', '/trust.html'],
+    ['/quickstart.html', '/ai-agent-security-assessment.html'],
+    ['/compare.html', '/ai-agent-security-assessment.html'],
+    ['/start.html', '/request-assessment.html'],
+    ['/privacy.html', '/legal/privacy.html'],
+    ['/terms.html', '/legal/terms.html'],
+]);
 const mimeTypes = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -74,6 +112,17 @@ function publicDatabaseHealth(database, initialisation) {
 const server = http.createServer(async (req, res) => {
     applySecurityHeaders(res);
     const url = new URL(req.url, config.baseUrl);
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        const redirectTarget = publicSurfaceRedirects.get(url.pathname);
+        if (redirectTarget) {
+            res.writeHead(301, {
+                Location: redirectTarget,
+                'Cache-Control': 'no-store',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return res.end();
+        }
+    }
     if (req.method === 'GET' && url.pathname === '/api/health') {
         return json(res, 200, { ok: true, version: config.appVersion, productStage: config.productStage, timestamp: nowIso() });
     }
