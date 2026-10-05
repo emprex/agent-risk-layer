@@ -60,7 +60,7 @@ test('HTTP crawler responses include metadata and a real PNG; HEAD agrees', { ti
   const port = probe.address().port;
   await new Promise(resolve => probe.close(resolve));
   const db = `/tmp/arl-social-test-${process.pid}.sqlite`;
-  const child = spawn(process.execPath, ['--import', './src/public-surface-preload.js', 'server.js'], {
+  const child = spawn(process.execPath, ['server.js'], {
     cwd: root, env: { ...process.env, NODE_ENV: 'test', PRODUCT_STAGE: 'development', DATABASE_URL: '', DATABASE_PATH: db, PORT: String(port), HOST: '127.0.0.1', DEMO_MODE: 'true', BASE_URL: `http://127.0.0.1:${port}` }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let logs = '';
@@ -77,6 +77,21 @@ test('HTTP crawler responses include metadata and a real PNG; HEAD agrees', { ti
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   assert.match(logs, /server_started/);
+  for (const [route, target] of [
+    ['/admin.html', '/'],
+    ['/control-intelligence.html?projectId=prj_test', '/trust.html'],
+    ['/privacy.html', '/legal/privacy.html'],
+    ['/result.html', '/sample-report.html'],
+  ]) {
+    for (const method of ['GET', 'HEAD']) {
+      const response = await fetch(base + route, { method, redirect: 'manual' });
+      assert.equal(response.status, 301);
+      assert.equal(response.headers.get('location'), target);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      if (method === 'HEAD') assert.equal((await response.arrayBuffer()).byteLength, 0);
+    }
+  }
   for (const route of ['/', '/research', '/research/mcp-runtime-security-evidence-not-verdict', '/checks/mcp-server-risk-assessment']) {
     const response = await fetch(base + route, { headers: { 'User-Agent': 'Twitterbot/1.0' } });
     assert.equal(response.status, 200);
