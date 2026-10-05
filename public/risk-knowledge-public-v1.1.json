@@ -4386,8 +4386,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Unnecessary transmission of sensitive data increases disclosure and retention exposure. Final severity depends on data sensitivity, provider handling, reachable recipients and compensating controls.",
         "applicability": [
           "agents handling non-public data"
         ],
@@ -4420,13 +4420,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-041 control or enforcement change",
-          "ARL-KB-041 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-041 bypass, incident or new attack evidence",
-          "ARL-KB-041 evidence expiry or material scope change"
+          "ARL-KB-041 model payload, preprocessing, provider or data-field change",
+          "ARL-KB-041 purpose, minimisation, redaction or pseudonymisation policy change",
+          "ARL-KB-041 sensitive-data disclosure or unexpected provider-retention evidence",
+          "ARL-KB-041 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4463,7 +4463,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "1cb1c947535cc5075bad49842ac04bebb00fad125002efbad0ea00afa49524db"
+      "content_digest": "1fdbc653ad439b76db2c1621fefd9d1714836f93e438442bfc84962e1c5c2668"
     },
     {
       "id": "ARL-KB-042",
@@ -4518,13 +4518,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-042 control or enforcement change",
-          "ARL-KB-042 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-042 bypass, incident or new attack evidence",
-          "ARL-KB-042 evidence expiry or material scope change"
+          "ARL-KB-042 collected-field, telemetry, attachment or tool-result change",
+          "ARL-KB-042 purpose, notice, retention or deletion-policy change",
+          "ARL-KB-042 unexpected collection, excessive retention or privacy incident",
+          "ARL-KB-042 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4561,7 +4561,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "6e82fa2adbd06f5a91139937b99c30ba8f95028326dfc97b76b87398c421b8d1"
+      "content_digest": "09075da3021c787b91965bd5b5bdcd0d28307e4588b896bfcafe3f3aa5d78cdc"
     },
     {
       "id": "ARL-KB-043",
@@ -4616,13 +4616,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-043 control or enforcement change",
-          "ARL-KB-043 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-043 bypass, incident or new attack evidence",
-          "ARL-KB-043 evidence expiry or material scope change"
+          "ARL-KB-043 retrieval, index, metadata-filter, namespace or authorization-policy change",
+          "ARL-KB-043 tenant, role, cache or direct-document access-path change",
+          "ARL-KB-043 cross-tenant retrieval or unauthorized-document exposure evidence",
+          "ARL-KB-043 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4659,7 +4659,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "2fa2597a6bf55b0b8486e2110db89b3c508536b0a42739e0f60f5486b93641d3"
+      "content_digest": "07dd810c60d6bd9591a333d14f2117070906b838f0acb54af3e0089fccfa6296"
     },
     {
       "id": "ARL-KB-044",
@@ -4680,8 +4680,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Poisoned retrieval content can corrupt answers, influence downstream actions or distort trusted knowledge. Final severity depends on writer access, ranking influence, downstream tool authority and rollback capability.",
         "applicability": [
           "RAG systems"
         ],
@@ -4714,13 +4714,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-044 control or enforcement change",
-          "ARL-KB-044 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-044 bypass, incident or new attack evidence",
-          "ARL-KB-044 evidence expiry or material scope change"
+          "ARL-KB-044 ingestion, indexing, provenance, ranking or writer-authorization change",
+          "ARL-KB-044 new data source, crawler, connector or knowledge-maintenance pipeline",
+          "ARL-KB-044 poisoned-content, compromised-source or anomalous-ranking evidence",
+          "ARL-KB-044 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4757,7 +4757,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9c53917bb556c883438d4d168443f54899d0b3d9f2c990437969d484a4210b16"
+      "content_digest": "a46608a90c81d268b06ff109e17ebf59143425aba25d60a5a47877bec418e66d"
     },
     {
       "id": "ARL-KB-045",
@@ -4812,13 +4812,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-045 control or enforcement change",
-          "ARL-KB-045 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-045 bypass, incident or new attack evidence",
-          "ARL-KB-045 evidence expiry or material scope change"
+          "ARL-KB-045 vector service, embedding store, namespace, metadata-filter or access-policy change",
+          "ARL-KB-045 export, bulk-query, similarity-search or network-exposure change",
+          "ARL-KB-045 enumeration, membership-inference, cross-namespace or data-exposure evidence",
+          "ARL-KB-045 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4855,7 +4855,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9185cf54113691be34924282188647637d56710f7351e220ad2030c14afabe50"
+      "content_digest": "5c82d9991745ea68ff0d0ebe89e154a074db9263b00d26b43a6647f0ee32c883"
     },
     {
       "id": "ARL-KB-046",
@@ -4876,8 +4876,8 @@
           "tool endpoints and downstream systems",
           "financial, administrative or state-changing actions"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Persistent memory poisoning can influence later sessions and decisions long after the original interaction. Final severity depends on what memory can influence, write authority, persistence, visibility and correction controls.",
         "applicability": [
           "memory-enabled agents"
         ],
@@ -4902,13 +4902,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-046 control or enforcement change",
-          "ARL-KB-046 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-046 bypass, incident or new attack evidence",
-          "ARL-KB-046 evidence expiry or material scope change"
+          "ARL-KB-046 persistent-memory store, write path, schema or authorization change",
+          "ARL-KB-046 provenance, confidence, expiry, correction or deletion-policy change",
+          "ARL-KB-046 memory-poisoning, false-identity or persistent-instruction evidence",
+          "ARL-KB-046 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -4945,7 +4945,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "38cba5f52b5312dc3242d84c4e97c99f87f4088475e3af145050dad50052d319"
+      "content_digest": "c17edce79f3ec8a2997335d6708bb8886a11abfdc0fcb42da91a9639bacb1968"
     },
     {
       "id": "ARL-KB-047",
@@ -5000,13 +5000,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-047 control or enforcement change",
-          "ARL-KB-047 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-047 bypass, incident or new attack evidence",
-          "ARL-KB-047 evidence expiry or material scope change"
+          "ARL-KB-047 memory, cache, vectorisation, summarisation or source-of-truth change",
+          "ARL-KB-047 freshness, invalidation, TTL or precedence-policy change",
+          "ARL-KB-047 stale-permission, stale-price, stale-policy or outdated-fact incident",
+          "ARL-KB-047 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5043,7 +5043,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fcfc9fe8630b4051a5a198924d3a133f7b1b6ee4084c8c1f78e3973c50426d67"
+      "content_digest": "b91f8cef888993fb7e6459386fed8e7d567d079335526cc8bdfb1c3c9a0aedb6"
     },
     {
       "id": "ARL-KB-048",
@@ -5098,13 +5098,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-048 control or enforcement change",
-          "ARL-KB-048 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-048 bypass, incident or new attack evidence",
-          "ARL-KB-048 evidence expiry or material scope change"
+          "ARL-KB-048 retention, deletion, backup, provider-copy or derived-data flow change",
+          "ARL-KB-048 new embedding, summary, cache, export or evidence store",
+          "ARL-KB-048 deletion failure, retained-derived-data or rights-request incident",
+          "ARL-KB-048 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5141,7 +5141,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "010bf9f92f30ef92033c024ff4362eef5b70bb227a749054b9afa1260d6e00c3"
+      "content_digest": "4693772a0f2f243eb3771f6798cc6f7ff6e9f697b1d2c3f22d9c0d319cacfea2"
     },
     {
       "id": "ARL-KB-049",
@@ -5162,8 +5162,8 @@
           "model and dependency artefacts",
           "build, registry and deployment provenance"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Agent output can disclose confidential context that the requesting user is not authorized to access. Final severity depends on data sensitivity, extraction scale, reachable destinations and output controls.",
         "applicability": [
           "agents with confidential context"
         ],
@@ -5196,13 +5196,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-049 control or enforcement change",
-          "ARL-KB-049 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-049 bypass, incident or new attack evidence",
-          "ARL-KB-049 evidence expiry or material scope change"
+          "ARL-KB-049 context-assembly, output-filter, destination or data-authorization change",
+          "ARL-KB-049 new confidential data source or output channel",
+          "ARL-KB-049 extraction, reconstruction, encoded-disclosure or exfiltration evidence",
+          "ARL-KB-049 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5239,7 +5239,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ab71aed8a5166993ff2d7c43348c34c3f5bb03e2ec586d3f824d16d807a7753e"
+      "content_digest": "aa1bfdc838930097edd4026aa5d6d21599eaae11e6f5e3ea18619d4021b16348"
     },
     {
       "id": "ARL-KB-050",
@@ -5294,13 +5294,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-050 control or enforcement change",
-          "ARL-KB-050 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-050 bypass, incident or new attack evidence",
-          "ARL-KB-050 evidence expiry or material scope change"
+          "ARL-KB-050 training dataset, fine-tune corpus, preprocessing or model-version change",
+          "ARL-KB-050 privacy-preserving training, deduplication or access-control change",
+          "ARL-KB-050 extraction, memorisation or membership-inference evidence",
+          "ARL-KB-050 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5337,7 +5337,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "39dd7849bbbd2bb73f3b12b0009bbdb71e498d9d4ac751593bd5c0cf49412651"
+      "content_digest": "635012a115c0f0ccf4eb648b002ce3f905af3eff7ae2ccb5cc17b15da35274bb"
     },
     {
       "id": "ARL-KB-051",
