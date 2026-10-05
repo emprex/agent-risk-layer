@@ -10928,8 +10928,8 @@
       },
       "check": {
         "id": "ARL-CHK-051",
-        "objective": "Determine whether the assessed system prevents or detects: answers lack verifiable provenance.",
-        "method": "Sample consequential answers and verify citations resolve to the exact accessible source and support the claim. Verify model provenance, signed dependency and container digests, MCP-server trust, allowed registries and rejection of executable or unsafe model formats before loading.",
+        "objective": "Determine whether consequential factual claims can be traced to the exact retrieved or authoritative source that supports them and whether generated content is distinguishable from sourced evidence.",
+        "method": "Sample consequential answers and follow each citation or evidence reference to the exact accessible source, version and relevant passage. Verify the cited material supports the claim, provenance survives retrieval and summarisation, and unsupported model-generated assertions are not presented as sourced fact.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -10951,8 +10951,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-051, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-051 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Use known authoritative test sources and verify that every consequential sourced claim links to accessible evidence that directly supports the complete claim.",
+        "negative_test": "Introduce a synthetic unsupported or conflicting claim and verify it is not given fabricated provenance or presented as supported by an unrelated source.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -10976,9 +10976,9 @@
         "default_owner": "Product owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-051: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-051: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-051: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-051: Preserve source identifiers, versions and retrieval evidence for consequential factual claims.",
+          "ARL-KB-051: Distinguish generated inference from externally supported evidence.",
+          "ARL-KB-051: Require human validation when consequential use depends on uncertain, missing or conflicting provenance."
         ],
         "monitoring": "For ARL-KB-051, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Product owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-051 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -11037,13 +11037,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-051 control or enforcement change",
-          "ARL-KB-051 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-051 bypass, incident or new attack evidence",
-          "ARL-KB-051 evidence expiry or material scope change"
+          "ARL-KB-051 retrieval, citation, provenance or answer-generation change",
+          "ARL-KB-051 source-version, summarisation or evidence-linking change",
+          "ARL-KB-051 fabricated citation, unsupported claim or provenance-loss evidence",
+          "ARL-KB-051 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -11101,7 +11101,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "924f03656bb198cdab65694d7cd8a240665683029754b95a923bc883b47ce554"
+      "content_digest": "7e54217f2d43eed5f1fc019822593744b308ecf36ec7b539b07301b496f193c9"
     },
     {
       "id": "ARL-KB-052",
@@ -11131,8 +11131,8 @@
       },
       "check": {
         "id": "ARL-CHK-052",
-        "objective": "Determine whether the assessed system prevents or detects: aggregates enable re-identification or inference.",
-        "method": "Test small cohorts, overlapping queries, repeated prompts and auxiliary information for reconstruction or membership inference. Execute the documented check for “Aggregates enable re-identification or inference” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether repeated aggregate or analytical queries can reconstruct, identify or infer sensitive facts about individuals beyond the approved privacy boundary.",
+        "method": "Using owner-authorised synthetic or approved population data, test small cohorts, overlapping aggregates, repeated queries and auxiliary information for reconstruction, differencing or membership inference. Measure whether query budgets, minimum cohort rules or other privacy controls prevent cumulative disclosure.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -11154,8 +11154,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-052, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-052 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Run an authorised aggregate query over a sufficiently large synthetic cohort and verify the expected bounded statistical result is returned.",
+        "negative_test": "Use repeated or overlapping synthetic aggregate queries designed to isolate an individual or small cohort and verify the system suppresses, limits or otherwise prevents prohibited inference.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -11179,9 +11179,9 @@
         "default_owner": "Privacy engineering owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-052: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-052: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-052: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-052: Apply minimum cohort sizes and query controls appropriate to the sensitivity of the analysed population.",
+          "ARL-KB-052: Detect cumulative disclosure across repeated and overlapping analytical queries.",
+          "ARL-KB-052: Use controlled noise, aggregation or human review where necessary to keep inference within the approved privacy boundary."
         ],
         "monitoring": "For ARL-KB-052, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Privacy engineering owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-052 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -11240,13 +11240,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-052 control or enforcement change",
-          "ARL-KB-052 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-052 bypass, incident or new attack evidence",
-          "ARL-KB-052 evidence expiry or material scope change"
+          "ARL-KB-052 analytics, cohort, aggregation, privacy-budget or query-policy change",
+          "ARL-KB-052 new population dataset, auxiliary data source or analytical capability",
+          "ARL-KB-052 reconstruction, differencing, membership-inference or re-identification evidence",
+          "ARL-KB-052 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -11304,7 +11304,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ba6bfc2aacf69781100657368a1617f382e8dde1462049a77d20782c4d474820"
+      "content_digest": "2d305b99d1cfc867255cb2c0cad06994f2ff8af3584bf512ead5a05fab09034a"
     },
     {
       "id": "ARL-KB-053",
@@ -11325,8 +11325,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Excessive agent authority increases the impact of model error, prompt injection or compromise. Final severity depends on available actions, reachable assets, reversibility and external approval controls.",
         "applicability": [
           "tool-using agents"
         ],
@@ -11336,8 +11336,8 @@
       },
       "check": {
         "id": "ARL-CHK-053",
-        "objective": "Determine whether the assessed system prevents or detects: agent has more authority than the task requires.",
-        "method": "Compare every tool permission and credential scope with real workflows and observed use; identify unused high-impact capability. Execute the documented check for “Agent has more authority than the task requires” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether the agent has only the tool capabilities and credential authority required for its documented tasks.",
+        "method": "Inventory every available tool operation and credential scope and compare them with documented workflows and observed legitimate use. Identify unused write, delete, send, purchase, administrative or cross-environment authority and test whether lower-authority workflows can operate without those capabilities.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -11359,8 +11359,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-053, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-053 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Execute a representative authorised workflow using the minimum documented tool and credential authority.",
+        "negative_test": "Attempt an owner-authorised synthetic action outside the task's required authority and verify the capability is unavailable, denied or requires a stronger explicit approval boundary.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -11384,9 +11384,9 @@
         "default_owner": "Security architect",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-053: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-053: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-053: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-053: Default agents to the least agency and least privilege required for the approved task.",
+          "ARL-KB-053: Separate drafting or recommendation capabilities from consequential execution authority.",
+          "ARL-KB-053: Use purpose-scoped credentials and stronger explicit controls for irreversible or high-impact actions."
         ],
         "monitoring": "For ARL-KB-053, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security architect on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-053 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -11445,13 +11445,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-053 control or enforcement change",
-          "ARL-KB-053 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-053 bypass, incident or new attack evidence",
-          "ARL-KB-053 evidence expiry or material scope change"
+          "ARL-KB-053 tool catalogue, permission, credential-scope or agent-capability change",
+          "ARL-KB-053 new state-changing, destructive, financial or administrative action",
+          "ARL-KB-053 excessive-authority, unused-capability or privilege-abuse evidence",
+          "ARL-KB-053 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -11509,7 +11509,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "55d86200fb03882f15946b9c8ba84317f5532aad93b67adf453ebadb3c2dbe9b"
+      "content_digest": "e5b8d061f02047ccc03965fb8eb9008cba5dd1963cf27cf00cc8a10c9aaffd38"
     },
     {
       "id": "ARL-KB-054",
@@ -11541,8 +11541,8 @@
       },
       "check": {
         "id": "ARL-CHK-054",
-        "objective": "Determine whether the assessed system prevents or detects: tool allowlist and environment boundaries are absent.",
-        "method": "Enumerate tools at runtime, attempt unknown names and cross-environment calls, and verify default-deny behaviour. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether the agent can invoke only explicitly approved tools for the assessed project and environment and whether unknown, newly registered or cross-environment tools are denied by default.",
+        "method": "Enumerate the runtime tool catalogue, tool identities and environment bindings. Attempt owner-authorised calls to unknown tool names, newly introduced unapproved tools and prohibited cross-environment tool endpoints. Verify catalogue drift is detected and execution fails closed outside the approved allowlist.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -11564,8 +11564,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-054, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-054 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Invoke an authorised tool in the assessed environment and verify its immutable identity and expected scope are enforced.",
+        "negative_test": "Attempt an unknown, unapproved or wrong-environment tool invocation and verify denial occurs before execution.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -11589,9 +11589,9 @@
         "default_owner": "Runtime policy owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-054: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-054: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-054: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-054: Maintain explicit project- and environment-specific tool allowlists.",
+          "ARL-KB-054: Bind policy to stable tool identities rather than model-selected names alone.",
+          "ARL-KB-054: Deny unknown or drifted tool catalogue entries by default and alert on catalogue changes."
         ],
         "monitoring": "For ARL-KB-054, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Runtime policy owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-054 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -11642,13 +11642,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-054 control or enforcement change",
-          "ARL-KB-054 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-054 bypass, incident or new attack evidence",
-          "ARL-KB-054 evidence expiry or material scope change"
+          "ARL-KB-054 tool catalogue, registration, identity or environment-binding change",
+          "ARL-KB-054 new tool, plugin, MCP capability or production endpoint",
+          "ARL-KB-054 unknown-tool execution, catalogue drift or cross-environment access evidence",
+          "ARL-KB-054 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -11706,7 +11706,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "296a66b6705d9034e979774c6d8d932179912d2384129f7e1002f7a8f3792c52"
+      "content_digest": "ec9ebcd50b865622f0eab7d43c0138645895433705f6bfb413589c6e4e1c518f"
     },
     {
       "id": "ARL-KB-055",
@@ -11738,8 +11738,8 @@
       },
       "check": {
         "id": "ARL-CHK-055",
-        "objective": "Determine whether the assessed system prevents or detects: tool parameters are not independently validated.",
-        "method": "Bypass the model and submit missing, malformed, excessive, cross-tenant and policy-violating parameters directly to the tool boundary. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether state-changing tools independently validate model-supplied parameters against authenticated identity, ownership, allowed ranges, destinations and business constraints before side effects.",
+        "method": "Bypass normal model orchestration and submit owner-authorised synthetic tool calls with missing, malformed, out-of-range, cross-tenant, unauthorized-destination and policy-violating parameters directly at the tool boundary. Verify typed validation and authorization occur inside the tool service before any side effect.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -11761,8 +11761,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-055, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-055 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Submit a valid authorised tool request and verify the intended bounded side effect succeeds.",
+        "negative_test": "Submit malformed, excessive, cross-boundary or unauthorized parameters directly to the tool and verify rejection before any material side effect.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -11786,9 +11786,9 @@
         "default_owner": "Tool service owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-055: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-055: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-055: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-055: Validate typed schemas and business constraints inside the tool service, not in model reasoning alone.",
+          "ARL-KB-055: Re-check authenticated identity, ownership, destination and allowed ranges at execution time.",
+          "ARL-KB-055: Fail closed on missing, ambiguous or policy-violating parameters before state change."
         ],
         "monitoring": "For ARL-KB-055, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Tool service owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-055 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -11847,13 +11847,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-055 control or enforcement change",
-          "ARL-KB-055 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-055 bypass, incident or new attack evidence",
-          "ARL-KB-055 evidence expiry or material scope change"
+          "ARL-KB-055 tool schema, parameter, authorization or business-rule change",
+          "ARL-KB-055 new state-changing parameter, destination or object-reference path",
+          "ARL-KB-055 malformed-parameter, ownership-bypass or business-rule abuse evidence",
+          "ARL-KB-055 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -11911,7 +11911,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "54632be0dde9cd1cd09a36bd233fb5615f644e7987aec5cefa69017d0176e111"
+      "content_digest": "4e76d79a9a2e9e777b2cf45ff8ce67c4970c2b01bd70c02f91003618592f7340"
     },
     {
       "id": "ARL-KB-056",
@@ -11943,8 +11943,8 @@
       },
       "check": {
         "id": "ARL-CHK-056",
-        "objective": "Determine whether the assessed system prevents or detects: tool input reaches command or code interpreters.",
-        "method": "Trace tool arguments to execution sinks and fuzz with metacharacters, substitutions, newlines and serialized payloads in an authorised sandbox. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether agent-controlled tool input can reach shell, script, template or dynamic evaluation sinks without safe parameterisation and containment.",
+        "method": "Trace tool arguments from model-controlled input to command, script, template and dynamic-evaluation sinks. In an owner-authorised sandbox, test shell metacharacters, substitutions, newlines, quote termination and serialized payloads. Verify fixed APIs or parameterised execution prevent interpretation as unintended code.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -11966,8 +11966,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-056, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-056 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Execute a valid authorised tool action and verify arguments remain data rather than executable syntax.",
+        "negative_test": "Submit synthetic command- or code-injection payloads in relevant tool parameters and verify they cannot create additional commands, evaluation steps or unintended execution.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -11991,9 +11991,9 @@
         "default_owner": "Application security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-056: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-056: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-056: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-056: Avoid shell construction and dynamic evaluation when a fixed API or parameterised interface exists.",
+          "ARL-KB-056: Allowlist permitted operations and validate arguments before they reach execution sinks.",
+          "ARL-KB-056: Isolate unavoidable code execution and remove ambient secrets, unnecessary filesystem access and network authority."
         ],
         "monitoring": "For ARL-KB-056, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-056 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -12052,13 +12052,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-056 control or enforcement change",
-          "ARL-KB-056 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-056 bypass, incident or new attack evidence",
-          "ARL-KB-056 evidence expiry or material scope change"
+          "ARL-KB-056 command, shell, template, script or dynamic-evaluation path change",
+          "ARL-KB-056 new executable tool, interpreter or model-controlled argument path",
+          "ARL-KB-056 command injection, template injection or arbitrary-code execution evidence",
+          "ARL-KB-056 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -12122,7 +12122,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f2ac81adad3d35fd3f6ee18df3c1a643fd2960d6d5be059067f37b629e4b874c"
+      "content_digest": "69cafca2ad089d310cf8ad892a923b93e170608f514aa301b5be587c9ede9eb3"
     },
     {
       "id": "ARL-KB-057",
@@ -12154,8 +12154,8 @@
       },
       "check": {
         "id": "ARL-CHK-057",
-        "objective": "Determine whether the assessed system prevents or detects: network tools permit ssrf and unsafe egress.",
-        "method": "Test URLs using alternate IP forms, DNS rebinding, redirects, credentials, non-HTTP schemes and private address ranges. Exercise loopback, private, link-local, multicast and reserved ranges; cloud metadata endpoints; redirects; DNS rebinding; IPv4/IPv6 and alternate numeric IP forms. Resolve and validate every hop and require fail-closed denial.",
+        "objective": "Determine whether network-capable tools prevent access to prohibited destinations, internal networks, metadata services and unsafe redirect or resolution paths.",
+        "method": "In an owner-authorised test environment, exercise loopback, private, link-local, multicast and reserved address ranges, cloud metadata endpoints, redirects, DNS rebinding, alternate IPv4/IPv6 forms, numeric IP representations, embedded credentials and unsupported schemes. Resolve and validate every hop and verify fail-closed denial.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -12177,8 +12177,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-057, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-057 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Request an explicitly authorised external destination and verify it is reached only through the documented egress path.",
+        "negative_test": "Request prohibited internal, metadata, redirected or alternate-encoded destinations and verify denial before any network connection or sensitive response is exposed.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -12202,9 +12202,9 @@
         "default_owner": "Network security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-057: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-057: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-057: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-057: Parse, canonicalise and resolve network destinations before connection.",
+          "ARL-KB-057: Deny private, link-local, loopback, metadata and other prohibited ranges and re-check every redirect or resolution hop.",
+          "ARL-KB-057: Restrict schemes and route network access through controlled egress where policy can be enforced and evidenced."
         ],
         "monitoring": "For ARL-KB-057, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Network security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-057 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -12263,13 +12263,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-057 control or enforcement change",
-          "ARL-KB-057 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-057 bypass, incident or new attack evidence",
-          "ARL-KB-057 evidence expiry or material scope change"
+          "ARL-KB-057 URL parser, DNS resolver, proxy, redirect or network-policy change",
+          "ARL-KB-057 new network-capable tool, scheme or destination class",
+          "ARL-KB-057 SSRF, metadata access, DNS rebinding or egress-bypass evidence",
+          "ARL-KB-057 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -12328,7 +12328,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "eb3bcdbc00079e0db14256784cffff8535aae58b8afee150fc8784b3b7987809"
+      "content_digest": "63bf921461839b9edd151019af4b76a4767a3d29851f24e98a1da5cbd7403e2a"
     },
     {
       "id": "ARL-KB-058",
@@ -12360,8 +12360,8 @@
       },
       "check": {
         "id": "ARL-CHK-058",
-        "objective": "Determine whether the assessed system prevents or detects: file tools escape approved paths.",
-        "method": "Test encoded traversal, absolute paths, symlinks, hard links, race conditions and malicious archives inside a sandbox. Use least-privileged test identities; mutate tool names, arguments, object IDs and response fields. Recheck authorization at execution time and verify restricted response data is removed.",
+        "objective": "Determine whether filesystem-capable tools remain confined to approved paths and cannot escape through traversal, links, race conditions or archive extraction.",
+        "method": "In an owner-authorised sandbox, test encoded traversal, absolute paths, symlinks, hard links, path races and malicious archive entries. Verify path canonicalisation and file capabilities are checked after resolution and before every read, write or extraction side effect.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -12383,8 +12383,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-058, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-058 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Read or write an authorised synthetic file inside the approved sandbox path and verify the intended operation succeeds.",
+        "negative_test": "Attempt traversal, link escape or malicious archive extraction outside the approved path and verify denial before external file access or overwrite occurs.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -12408,9 +12408,9 @@
         "default_owner": "Application security owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-058: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-058: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-058: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-058: Prefer capability-based file handles or canonical jailed paths over caller-controlled paths.",
+          "ARL-KB-058: Revalidate resolved paths and links immediately before filesystem access.",
+          "ARL-KB-058: Separate read and write authority and safely inspect archive contents before extraction."
         ],
         "monitoring": "For ARL-KB-058, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-058 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -12469,13 +12469,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-058 control or enforcement change",
-          "ARL-KB-058 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-058 bypass, incident or new attack evidence",
-          "ARL-KB-058 evidence expiry or material scope change"
+          "ARL-KB-058 filesystem tool, path resolver, archive handler or sandbox-boundary change",
+          "ARL-KB-058 new file operation, mount, symlink or extraction capability",
+          "ARL-KB-058 traversal, link escape, race-condition or archive-breakout evidence",
+          "ARL-KB-058 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -12534,7 +12534,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0651685a3cfa3b4009aafd9edd09c1d099d381ebe4c67aabd899477d9bec4205"
+      "content_digest": "025e5b00ba4f910174c983df5b17c59603f03cfcfa52507f0dac386692eede46"
     },
     {
       "id": "ARL-KB-059",
@@ -12566,8 +12566,8 @@
       },
       "check": {
         "id": "ARL-CHK-059",
-        "objective": "Determine whether the assessed system prevents or detects: generated code executes without containment.",
-        "method": "Execute authorised malicious samples that attempt file, process, network, secret and resource access; verify isolation and termination. Execute the documented check for “Generated code executes without containment” against the exact assessed version, then vary identity, scope, malformed input, replay and a bypass path relevant to the control.",
+        "objective": "Determine whether generated or agent-selected code executes inside a bounded disposable environment without ambient host, secret, network or production authority.",
+        "method": "In an owner-authorised sandbox, execute controlled samples that attempt filesystem escape, process spawning, network access, secret discovery, persistence and resource exhaustion. Verify isolation, resource limits, termination, blocked egress and absence of ambient production credentials.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -12589,8 +12589,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-059, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-059 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Execute benign generated code inside the approved sandbox and verify only documented resources are available.",
+        "negative_test": "Execute controlled malicious samples attempting host, network, secret or resource access and verify containment and termination prevent impact outside the sandbox.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -12614,9 +12614,9 @@
         "default_owner": "Sandbox platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-059: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-059: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-059: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-059: Execute generated code in disposable least-privilege sandboxes rather than on the application host.",
+          "ARL-KB-059: Remove ambient secrets and deny network access by default unless explicitly required.",
+          "ARL-KB-059: Enforce strict CPU, memory, process, filesystem and execution-time limits and require governed promotion to production."
         ],
         "monitoring": "For ARL-KB-059, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Sandbox platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-059 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -12675,13 +12675,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-059 control or enforcement change",
-          "ARL-KB-059 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-059 bypass, incident or new attack evidence",
-          "ARL-KB-059 evidence expiry or material scope change"
+          "ARL-KB-059 sandbox runtime, container, VM, code-execution or isolation-policy change",
+          "ARL-KB-059 network, secret, filesystem or resource-limit change",
+          "ARL-KB-059 sandbox escape, ambient-secret access or uncontrolled execution evidence",
+          "ARL-KB-059 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -12739,7 +12739,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e5715d9d36de4ff08a908f5d3212e2c7185ad3fd0075b1156fc1d8bf684aa372"
+      "content_digest": "470b27d5980fff9a5eb706a3da5ad9174141acb4c70710c4fb874f181c1e837d"
     },
     {
       "id": "ARL-KB-060",
@@ -12771,8 +12771,8 @@
       },
       "check": {
         "id": "ARL-CHK-060",
-        "objective": "Determine whether the assessed system prevents or detects: mcp server identity and provenance are unverified.",
-        "method": "Verify server origin, transport identity, package provenance, tool catalogue digest and change history; simulate server replacement. Inject conflicting instructions directly and through retrieved pages, files, email, tool output and memory. Verify untrusted text cannot change authority, disclose protected context or bypass approval.",
+        "objective": "Determine whether each MCP server and advertised tool catalogue is attributable to an approved origin, version and transport identity and whether server replacement or catalogue drift is detected before use.",
+        "method": "Verify MCP server origin, transport identity, package or deployment provenance, exact version or digest, tool catalogue digest and change history. In a controlled environment, simulate server replacement or an unexpected catalogue change and verify trust is denied or routed to explicit review before tool use.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -12794,8 +12794,8 @@
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-060, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-060 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Connect to an approved MCP server and verify its origin, transport identity, version and expected tool catalogue match the recorded trust decision.",
+        "negative_test": "Substitute a synthetic unapproved server identity, version or altered tool catalogue and verify the agent refuses or quarantines it before accepting tools or sensitive context exchange.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -12819,9 +12819,9 @@
         "default_owner": "MCP platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-060: enforce the decision outside the model before any material side effect.",
-          "ARL-KB-060: grant the minimum identity, data, tool and network scope required for the approved task.",
-          "ARL-KB-060: version configuration, preserve rollback, and fail closed when policy, identity or evidence is unavailable."
+          "ARL-KB-060: Pin approved MCP server identities, versions or digests and authenticate transport.",
+          "ARL-KB-060: Treat tool-catalogue changes as security-relevant drift requiring review before use.",
+          "ARL-KB-060: Isolate server credentials and do not allow an MCP server's text output to grant additional authority."
         ],
         "monitoring": "For ARL-KB-060, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the MCP platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-060 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
@@ -12880,13 +12880,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-060 control or enforcement change",
-          "ARL-KB-060 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-060 bypass, incident or new attack evidence",
-          "ARL-KB-060 evidence expiry or material scope change"
+          "ARL-KB-060 MCP server identity, transport, package, version or deployment change",
+          "ARL-KB-060 tool catalogue, schema, credential or trust-policy change",
+          "ARL-KB-060 server replacement, provenance failure or unexpected catalogue-drift evidence",
+          "ARL-KB-060 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -12945,7 +12945,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0e9fda5f6913c9487157276600c018c7130d574779abee81d3f541cf45f146fe"
+      "content_digest": "f21ef447f50971edc2d4fe611b85d7a38b11bb75cb19bc0472dbdeeabbdb9a36"
     },
     {
       "id": "ARL-KB-061",

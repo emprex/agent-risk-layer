@@ -5390,13 +5390,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-051 control or enforcement change",
-          "ARL-KB-051 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-051 bypass, incident or new attack evidence",
-          "ARL-KB-051 evidence expiry or material scope change"
+          "ARL-KB-051 retrieval, citation, provenance or answer-generation change",
+          "ARL-KB-051 source-version, summarisation or evidence-linking change",
+          "ARL-KB-051 fabricated citation, unsupported claim or provenance-loss evidence",
+          "ARL-KB-051 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5433,7 +5433,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "924f03656bb198cdab65694d7cd8a240665683029754b95a923bc883b47ce554"
+      "content_digest": "7e54217f2d43eed5f1fc019822593744b308ecf36ec7b539b07301b496f193c9"
     },
     {
       "id": "ARL-KB-052",
@@ -5486,13 +5486,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-11-03",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-052 control or enforcement change",
-          "ARL-KB-052 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-052 bypass, incident or new attack evidence",
-          "ARL-KB-052 evidence expiry or material scope change"
+          "ARL-KB-052 analytics, cohort, aggregation, privacy-budget or query-policy change",
+          "ARL-KB-052 new population dataset, auxiliary data source or analytical capability",
+          "ARL-KB-052 reconstruction, differencing, membership-inference or re-identification evidence",
+          "ARL-KB-052 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5529,7 +5529,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ba6bfc2aacf69781100657368a1617f382e8dde1462049a77d20782c4d474820"
+      "content_digest": "2d305b99d1cfc867255cb2c0cad06994f2ff8af3584bf512ead5a05fab09034a"
     },
     {
       "id": "ARL-KB-053",
@@ -5550,8 +5550,8 @@
           "agent",
           "model context"
         ],
-        "default_severity": "critical",
-        "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "default_severity": "high",
+        "severity_rationale": "Excessive agent authority increases the impact of model error, prompt injection or compromise. Final severity depends on available actions, reachable assets, reversibility and external approval controls.",
         "applicability": [
           "tool-using agents"
         ],
@@ -5584,13 +5584,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-053 control or enforcement change",
-          "ARL-KB-053 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-053 bypass, incident or new attack evidence",
-          "ARL-KB-053 evidence expiry or material scope change"
+          "ARL-KB-053 tool catalogue, permission, credential-scope or agent-capability change",
+          "ARL-KB-053 new state-changing, destructive, financial or administrative action",
+          "ARL-KB-053 excessive-authority, unused-capability or privilege-abuse evidence",
+          "ARL-KB-053 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5627,7 +5627,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "55d86200fb03882f15946b9c8ba84317f5532aad93b67adf453ebadb3c2dbe9b"
+      "content_digest": "e5b8d061f02047ccc03965fb8eb9008cba5dd1963cf27cf00cc8a10c9aaffd38"
     },
     {
       "id": "ARL-KB-054",
@@ -5674,13 +5674,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-054 control or enforcement change",
-          "ARL-KB-054 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-054 bypass, incident or new attack evidence",
-          "ARL-KB-054 evidence expiry or material scope change"
+          "ARL-KB-054 tool catalogue, registration, identity or environment-binding change",
+          "ARL-KB-054 new tool, plugin, MCP capability or production endpoint",
+          "ARL-KB-054 unknown-tool execution, catalogue drift or cross-environment access evidence",
+          "ARL-KB-054 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5717,7 +5717,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "296a66b6705d9034e979774c6d8d932179912d2384129f7e1002f7a8f3792c52"
+      "content_digest": "ec9ebcd50b865622f0eab7d43c0138645895433705f6bfb413589c6e4e1c518f"
     },
     {
       "id": "ARL-KB-055",
@@ -5772,13 +5772,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-055 control or enforcement change",
-          "ARL-KB-055 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-055 bypass, incident or new attack evidence",
-          "ARL-KB-055 evidence expiry or material scope change"
+          "ARL-KB-055 tool schema, parameter, authorization or business-rule change",
+          "ARL-KB-055 new state-changing parameter, destination or object-reference path",
+          "ARL-KB-055 malformed-parameter, ownership-bypass or business-rule abuse evidence",
+          "ARL-KB-055 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5815,7 +5815,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "54632be0dde9cd1cd09a36bd233fb5615f644e7987aec5cefa69017d0176e111"
+      "content_digest": "4e76d79a9a2e9e777b2cf45ff8ce67c4970c2b01bd70c02f91003618592f7340"
     },
     {
       "id": "ARL-KB-056",
@@ -5870,13 +5870,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-056 control or enforcement change",
-          "ARL-KB-056 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-056 bypass, incident or new attack evidence",
-          "ARL-KB-056 evidence expiry or material scope change"
+          "ARL-KB-056 command, shell, template, script or dynamic-evaluation path change",
+          "ARL-KB-056 new executable tool, interpreter or model-controlled argument path",
+          "ARL-KB-056 command injection, template injection or arbitrary-code execution evidence",
+          "ARL-KB-056 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -5918,7 +5918,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f2ac81adad3d35fd3f6ee18df3c1a643fd2960d6d5be059067f37b629e4b874c"
+      "content_digest": "69cafca2ad089d310cf8ad892a923b93e170608f514aa301b5be587c9ede9eb3"
     },
     {
       "id": "ARL-KB-057",
@@ -5973,13 +5973,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-057 control or enforcement change",
-          "ARL-KB-057 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-057 bypass, incident or new attack evidence",
-          "ARL-KB-057 evidence expiry or material scope change"
+          "ARL-KB-057 URL parser, DNS resolver, proxy, redirect or network-policy change",
+          "ARL-KB-057 new network-capable tool, scheme or destination class",
+          "ARL-KB-057 SSRF, metadata access, DNS rebinding or egress-bypass evidence",
+          "ARL-KB-057 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6016,7 +6016,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "eb3bcdbc00079e0db14256784cffff8535aae58b8afee150fc8784b3b7987809"
+      "content_digest": "63bf921461839b9edd151019af4b76a4767a3d29851f24e98a1da5cbd7403e2a"
     },
     {
       "id": "ARL-KB-058",
@@ -6071,13 +6071,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-058 control or enforcement change",
-          "ARL-KB-058 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-058 bypass, incident or new attack evidence",
-          "ARL-KB-058 evidence expiry or material scope change"
+          "ARL-KB-058 filesystem tool, path resolver, archive handler or sandbox-boundary change",
+          "ARL-KB-058 new file operation, mount, symlink or extraction capability",
+          "ARL-KB-058 traversal, link escape, race-condition or archive-breakout evidence",
+          "ARL-KB-058 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6114,7 +6114,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "0651685a3cfa3b4009aafd9edd09c1d099d381ebe4c67aabd899477d9bec4205"
+      "content_digest": "025e5b00ba4f910174c983df5b17c59603f03cfcfa52507f0dac386692eede46"
     },
     {
       "id": "ARL-KB-059",
@@ -6169,13 +6169,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-059 control or enforcement change",
-          "ARL-KB-059 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-059 bypass, incident or new attack evidence",
-          "ARL-KB-059 evidence expiry or material scope change"
+          "ARL-KB-059 sandbox runtime, container, VM, code-execution or isolation-policy change",
+          "ARL-KB-059 network, secret, filesystem or resource-limit change",
+          "ARL-KB-059 sandbox escape, ambient-secret access or uncontrolled execution evidence",
+          "ARL-KB-059 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6212,7 +6212,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e5715d9d36de4ff08a908f5d3212e2c7185ad3fd0075b1156fc1d8bf684aa372"
+      "content_digest": "470b27d5980fff9a5eb706a3da5ad9174141acb4c70710c4fb874f181c1e837d"
     },
     {
       "id": "ARL-KB-060",
@@ -6267,13 +6267,13 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-08-05",
-        "next_review_due": "2026-10-04",
+        "last_reviewed": "2026-10-05",
+        "next_review_due": "2026-12-04",
         "change_triggers": [
-          "ARL-KB-060 control or enforcement change",
-          "ARL-KB-060 model, prompt, tool, identity, data-source or provider change",
-          "ARL-KB-060 bypass, incident or new attack evidence",
-          "ARL-KB-060 evidence expiry or material scope change"
+          "ARL-KB-060 MCP server identity, transport, package, version or deployment change",
+          "ARL-KB-060 tool catalogue, schema, credential or trust-policy change",
+          "ARL-KB-060 server replacement, provenance failure or unexpected catalogue-drift evidence",
+          "ARL-KB-060 evidence expiry or material scope, architecture or assessed-version change"
         ],
         "review_status": "expert-authored candidate; customer and independent practitioner validation required"
       },
@@ -6310,7 +6310,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "0e9fda5f6913c9487157276600c018c7130d574779abee81d3f541cf45f146fe"
+      "content_digest": "f21ef447f50971edc2d4fe611b85d7a38b11bb75cb19bc0472dbdeeabbdb9a36"
     },
     {
       "id": "ARL-KB-061",
