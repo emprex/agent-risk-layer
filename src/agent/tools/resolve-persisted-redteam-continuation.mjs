@@ -13,6 +13,36 @@ import {
 const EXPECTED_ABSENCE_REASON =
   'redteam_control_evidence_not_recorded';
 
+function mappedControlIdForCase(evidencePlan, caseId) {
+  const checks = Array.isArray(evidencePlan?.checks)
+    ? evidencePlan.checks
+    : [];
+
+  const matches = checks
+    .map((item) => ({
+      caseId: item?.caseId || null,
+      questionId:
+        item?.gap?.questionId ||
+        item?.questionId ||
+        null,
+      controlId:
+        item?.controlId ||
+        item?.gap?.controlId ||
+        null
+    }))
+    .filter((item) => item.caseId === caseId);
+
+  const direct = matches
+    .map((item) => item.controlId)
+    .filter(Boolean);
+
+  if (direct.length === 1) {
+    return direct[0];
+  }
+
+  return null;
+}
+
 const INTEGRITY_FAILURE_REASONS = new Set([
   'redteam_control_evidence_ambiguous',
   'redteam_test_execution_not_found',
@@ -223,7 +253,12 @@ export async function resolvePersistedRedTeamContinuation({
     }
 
     const resolvedControlId =
-      lineage.controlId || null;
+      lineage.controlId ||
+      mappedControlIdForCase(
+        evidencePlan,
+        caseId
+      ) ||
+      null;
 
     if (
       controlId &&
