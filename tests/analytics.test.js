@@ -13,13 +13,30 @@ test('GA4 uses the production stream and remains consent-gated', () => {
   assert.match(source, /send_page_view:\s*true/);
 });
 
-test('commercial funnel events are instrumented without reading form contents', () => {
-  for (const eventName of ['assessment_start', 'assessment_complete', 'sign_up', 'login', 'begin_checkout', 'purchase']) {
-    assert.match(source, new RegExp(`['\"]${eventName}['\"]`), eventName);
+test('service funnel events are instrumented without reading form contents', () => {
+  for (const eventName of [
+    'assessment_start',
+    'assessment_complete',
+    'sign_up',
+    'login',
+    'generate_lead_start',
+    'sample_report_view'
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`['\\"]${eventName}['\\"]`),
+      eventName
+    );
   }
-  assert.match(source, /#buyPro/);
-  assert.match(source, /Payment and fulfilment completed/);
-  assert.doesNotMatch(source, /#(?:registerEmail|loginEmail|registerPassword|loginPassword|mfaCode)/);
+
+  assert.doesNotMatch(
+    source,
+    /#buyPro|begin_checkout|stripe_checkout|Payment and fulfilment completed/
+  );
+  assert.doesNotMatch(
+    source,
+    /#(?:registerEmail|loginEmail|registerPassword|loginPassword|mfaCode)/
+  );
 });
 
 test('analytics parameters are bounded to primitive non-sensitive metadata', () => {
@@ -35,7 +52,12 @@ test('ARL17K attribution is allowlisted and follows the consent-gated funnel', (
   assert.match(source, /referrerPath\(\) === '\/arl17k\.html'/);
   assert.match(source, /assessment_start', \{ entry_source: entrySource \}/);
   assert.match(source, /assessment_complete', \{ entry_source: entrySource \}/);
-  assert.match(source, /begin_checkout', \{ plan: planFromElement\(target\), entry_source: entrySource \}/);
-  assert.match(source, /purchase', \{ source: 'stripe_checkout', entry_source: captureJourneySource\(\) \}/);
-  assert.doesNotMatch(source, /sessionStorage\.setItem\([^\n]*location\.search/);
+  assert.doesNotMatch(
+    source,
+    /begin_checkout|stripe_checkout|purchase-confirmed/
+  );
+  assert.doesNotMatch(
+    source,
+    /sessionStorage\.setItem\([^\n]*location\.search/
+  );
 });
