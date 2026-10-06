@@ -113,6 +113,24 @@ function remediationResponsePatch(remediationHandoff) {
 
   if (
     remediationHandoff.status ===
+    'implementation_recovered_for_revision_bound_retest'
+  ) {
+    return {
+      status: 'user_action_required',
+      message:
+        'ARL recovered the existing remediation implementation evidence because the historical failed exact retest was not bound to a target revision. The finding remains open. A new revision-bound exact retest is now required.',
+      nextStep: {
+        actor: 'user',
+        label: 'run the revision-bound exact retest',
+        requiresUserInput: true
+      },
+      needsUserAction: true,
+      canAutoAdvance: false
+    };
+  }
+
+  if (
+    remediationHandoff.status ===
     'implementation_recorded'
   ) {
     return {
