@@ -12,7 +12,7 @@ Local path: `~/agent-risk-layer`
 Current role:
 - single canonical AgentRiskLayer product / authority repository;
 - public AgentRiskLayer presentation and assessment-request site;
-- local operator assessment workflow;
+- integrated local operator assessment workflow;
 - assessment evidence, remediation/retest, deterministic inspection/red-team and Control Intelligence implementation.
 
 No second ARL repository is part of the active product.
@@ -21,12 +21,17 @@ No second ARL repository is part of the active product.
 
 Verified on 6 October 2026:
 
-- local `main` and GitHub `main` are synchronized;
-- canonical GitHub main before this cleanup branch: `2f23ea46fa94a96bbae1e96a13b499c2c7883a1c`;
-- working tree reported clean after synchronization;
-- canonical CI passed for the synchronized local ARL history.
+- GitHub `main` is the canonical remote source;
+- the previous local/GitHub synchronization completed cleanly before this final GitHub-side cleanup;
+- obsolete hosted assessment HTTP routes and wrappers have been removed;
+- obsolete remote operator-session modules have been removed;
+- local assessment freezes the exact clean target Git SHA automatically;
+- local self-proof is bound to `emprex/agent-risk-layer`;
+- the component inventory now describes one canonical repository;
+- the 108-control Risk Knowledge catalogue remains canonical;
+- exact-head CI for the final architecture cleanup passes syntax, focused regressions, unit/integration, scenario regression and detection regression.
 
-Do not assume these values remain current after this snapshot. Re-check before technical work.
+The next laptop synchronization should be performed once, after this GitHub cleanup is merged.
 
 ## Active company priority
 
@@ -57,17 +62,17 @@ request
 
 The LLM may assist with explanation, conversation, summarisation and drafting, but it is not authoritative for applicability, evidence validity, severity, finding closure, readiness, controlled-test authorisation or deployment decisions.
 
-## Known cleanup issues
+## Remaining product work
 
-1. Some legacy hosted API modules and terminology remain in the repository and require a controlled dependency audit before removal.
-2. The current local assessment CLI still exposes implementation details such as explicit target SHA/environment setup that should eventually be managed by the local operator UX.
-3. The local CLI currently uses its isolated SQLite capability; the desired long-term operator architecture should deliberately choose and validate the canonical persistence path rather than accidentally creating two persistence models.
-4. README/package metadata still contain legacy hosted/platform descriptions that may not match the current service model.
+1. The local CLI still exposes implementation-level commands. The final operator UX should hide that complexity behind one understandable local entry point.
+2. Local assessment persistence currently uses the isolated SQLite local capability. The final operator architecture must deliberately keep or replace that persistence model; it must not accidentally create two authorities.
+3. The complete customer journey still needs one final exact-head end-to-end acceptance run before calling the product finished.
+4. Historical documentation and validation archives may still describe older hosted/platform capabilities; they are historical evidence and must not override the current canonical architecture.
 
 ## Next controlled steps
 
-1. Complete dependency tracing for legacy hosted assessment routes before removing code.
-2. Keep the public request flow intact.
-3. Preserve the 108-control Risk Knowledge unless a specific defect is demonstrated.
-4. Simplify local operator startup and workflow without creating another framework.
-5. Prove the complete local customer journey with exact-head tests before declaring the product final.
+1. Keep the public assessment-request flow intact.
+2. Preserve the 108-control Risk Knowledge unless a specific defect is demonstrated.
+3. Finish the local operator UX without creating another framework or repository.
+4. Prove the complete local customer journey with exact-head tests.
+5. Perform one final laptop synchronization after GitHub `main` is final and green.
