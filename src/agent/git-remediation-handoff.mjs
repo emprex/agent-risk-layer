@@ -306,13 +306,37 @@ async function recoverLegacyUnboundRetestImplementation({
 async function resolveActiveRemediation({
   projectId,
   userId,
-  systemSnapshotId
+  systemSnapshotId,
+  previousSystemSnapshotId = null
 }) {
-  const lineage =
+  let lineage =
     await resolveSnapshotBoundActiveRemediation({
       projectId,
       systemSnapshotId
     });
+
+  if (
+    !lineage.available &&
+    lineage.reason ===
+      'active_authoritative_remediation_not_found' &&
+    previousSystemSnapshotId &&
+    previousSystemSnapshotId !== systemSnapshotId
+  ) {
+    lineage =
+      await resolveSnapshotBoundActiveRemediation({
+        projectId,
+        systemSnapshotId:
+          previousSystemSnapshotId
+      });
+
+    if (lineage.available) {
+      lineage = {
+        ...lineage,
+        inheritedFromSystemSnapshotId:
+          previousSystemSnapshotId
+      };
+    }
+  }
 
   if (!lineage.available) {
     return lineage;
@@ -656,12 +680,20 @@ export async function captureGitRemediationHandoff({
     );
   }
 
+  const previousSystemSnapshotId =
+    clean(
+      assessmentContext?.assessmentConfiguration
+        ?.remediationSnapshotConfirmation
+        ?.previousSystemSnapshotId
+    ) || null;
+
   const remediation =
     await resolveActiveRemediation({
       projectId,
       userId,
       systemSnapshotId:
-        assessmentContext.systemSnapshotId
+        assessmentContext.systemSnapshotId,
+      previousSystemSnapshotId
     });
 
   const frozen =
@@ -785,7 +817,8 @@ export async function captureGitRemediationHandoff({
           projectId,
           userId,
           systemSnapshotId:
-            assessmentContext.systemSnapshotId
+            assessmentContext.systemSnapshotId,
+          previousSystemSnapshotId
         });
 
       const state = workflowState({
