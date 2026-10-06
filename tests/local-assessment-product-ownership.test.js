@@ -210,8 +210,7 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
           DATABASE_URL: '',
           ARL_LOCAL_MODE: '1',
           ARL_LOCAL_DATABASE_PATH:
-            path.join(temp, 'assessment.sqlite'),
-          ARL_EXPECTED_TARGET_SHA: revision
+            path.join(temp, 'assessment.sqlite')
         },
         encoding: 'utf8',
         timeout: 90_000
@@ -242,6 +241,86 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
   }
 });
 
+
+test('local runner still rejects an explicitly supplied wrong frozen SHA', {
+  timeout: 120_000
+}, () => {
+  const temp = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'arl-product-local-sha-mismatch-')
+  );
+  const target = path.join(temp, 'target');
+  fs.mkdirSync(target);
+
+  const git = (args) =>
+    spawnSync('git', args, {
+      cwd: target,
+      encoding: 'utf8'
+    });
+
+  try {
+    assert.equal(git(['init', '-q']).status, 0);
+    assert.equal(
+      git(['config', 'user.email', 'arl-smoke@example.test']).status,
+      0
+    );
+    assert.equal(
+      git(['config', 'user.name', 'ARL Smoke Test']).status,
+      0
+    );
+    assert.equal(
+      git(['config', 'commit.gpgsign', 'false']).status,
+      0
+    );
+
+    fs.writeFileSync(
+      path.join(target, 'README.md'),
+      '# Synthetic frozen target\n',
+      'utf8'
+    );
+
+    assert.equal(git(['add', 'README.md']).status, 0);
+    assert.equal(
+      git(['commit', '-q', '-m', 'Synthetic frozen target']).status,
+      0
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        'src/agent/arl-local-assessment-runner.mjs',
+        target,
+        'Assess this agent'
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          PRODUCT_STAGE: 'development',
+          DATABASE_URL: '',
+          ARL_LOCAL_MODE: '1',
+          ARL_LOCAL_DATABASE_PATH:
+            path.join(temp, 'assessment.sqlite'),
+          ARL_EXPECTED_TARGET_SHA:
+            '0000000000000000000000000000000000000000'
+        },
+        encoding: 'utf8',
+        timeout: 90_000
+      }
+    );
+
+    assert.equal(result.status, 2);
+    assert.match(
+      result.stderr,
+      /Local assessment frozen target mismatch/
+    );
+  } finally {
+    fs.rmSync(temp, {
+      recursive: true,
+      force: true
+    });
+  }
+});
 
 test('local CLI controlled red-team authority is independent of hosted paid tier', () => {
   const temp = fs.mkdtempSync(
