@@ -145,7 +145,8 @@ function exactPair(baseline, retest) {
 export function selectPersistedExactRetestContinuation({
   baselines = [],
   retests = [],
-  caseId = null
+  caseId = null,
+  requiredRetestRevision = null
 } = {}) {
   if (baselines.length === 0) {
     return unavailable(
@@ -176,11 +177,29 @@ export function selectPersistedExactRetestContinuation({
     equivalentBaselineRunIds =
       collapsed.equivalentRunIds;
   }
+  const requiredRevision =
+    clean(requiredRetestRevision).toLowerCase();
+
   const exactRetests =
-    retests.filter(
-      (candidate) =>
-        exactPair(baseline, candidate)
-    );
+    retests.filter((candidate) => {
+      if (!exactPair(baseline, candidate)) {
+        return false;
+      }
+
+      if (!requiredRevision) {
+        return true;
+      }
+
+      const retestRevision =
+        clean(
+          candidate.outcome?.campaign?.target?.revision
+        ).toLowerCase();
+
+      return (
+        /^[a-f0-9]{40}$/.test(retestRevision) &&
+        retestRevision === requiredRevision
+      );
+    });
 
   if (exactRetests.length === 0) {
     return unavailable(
@@ -229,7 +248,8 @@ export async function resolvePersistedExactRetestContinuation({
   assessmentId,
   evidencePlan,
   caseId,
-  controlId = null
+  controlId = null,
+  requiredRetestRevision = null
 } = {}) {
   if (!projectId || !userId || !assessmentId) {
     return unavailable(
@@ -365,6 +385,7 @@ export async function resolvePersistedExactRetestContinuation({
   return selectPersistedExactRetestContinuation({
     baselines,
     retests,
-    caseId
+    caseId,
+    requiredRetestRevision
   });
 }
