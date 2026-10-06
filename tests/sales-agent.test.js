@@ -55,9 +55,20 @@ test('pipeline overview and demo brief support the commercial workflow', async (
   assert.equal(overview.totals.prospects, 1);
   assert.equal(overview.totals.demos, 1);
   const brief = sales.buildDemoBrief(await sales.getProspect(prospects[0].id));
-  assert.match(brief.close, /£99 assessment/);
+  assert.match(brief.close, /scope an AgentRiskLayer assessment/i);
+  assert.doesNotMatch(brief.close, /£\d|subscription/i);
   assert.ok(brief.claimBoundaries.length >= 3);
 });
+test('sales messaging follows scope-and-quote and has no retired subscription offer', () => {
+  const js = fs.readFileSync(path.join(root, 'public', 'sales-agent.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'src', 'sales-agent.js'), 'utf8');
+  const docs = fs.readFileSync(path.join(root, 'SALES_AGENT.md'), 'utf8');
+  const combined = [js, source, docs].join('\n');
+  assert.doesNotMatch(combined, /£99|£2,500|subscription_sold|Subscription sold/);
+  assert.match(source, /agree commercial terms for that exact scope/i);
+  assert.match(js, /Assessment proposal/);
+});
+
 test('sales UI remains private and contains the approval boundary', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'sales-agent.html'), 'utf8');
   const js = fs.readFileSync(path.join(root, 'public', 'sales-agent.js'), 'utf8');
