@@ -10,7 +10,7 @@ import { authenticateUser, beginMfaSetup, changePassword, clearSession, complete
 import { evaluateAssessment, questionnaire, evidenceOptions } from './src/risk-engine.js';
 import { renderReportPdf } from './src/pdf.js';
 import { buildAssessmentReport } from './src/report-service.js';
-import { sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail } from './src/email.js';
+import { sendAssessmentRequestEmail, sendEmailVerification, sendPasswordChangedEmail, sendPasswordResetEmail } from './src/email.js';
 import { applySecurityHeaders, cleanText, clearRateLimit, issueCsrfToken, primaryRateLimitAllowed, rateLimitAllowed, rateLimitSnapshot, verifyCsrf } from './src/security.js';
 import { attachInspectionToResult, consumeInspectionUpload, createInspectionToken, getInspection, latestInspection, listInspectionsForAssessment } from './src/inspector.js';
 import { runFrozenGithubSourceInspection } from './src/github-source-inspection.js';
@@ -138,6 +138,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/metrics')
         return await handleMetrics(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/assessment-request')
+        return await handleAssessmentRequest(req, res);
     if (!await primaryRateLimitAllowed(req, url.pathname))
         return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
     req.user = await getUserFromRequest(req);
@@ -1578,6 +1580,113 @@ async function readRawBody(req, limit = 100000) {
     }
     return Buffer.concat(chunks);
 }
+async function handleAssessmentRequest(req, res) {
+    try {
+        const origin = String(req.headers.origin || '').trim();
+        if (origin) {
+            let suppliedOrigin = '';
+            let configuredOrigin = '';
+            try {
+                suppliedOrigin = new URL(origin).origin;
+                configuredOrigin = new URL(config.baseUrl).origin;
+            }
+            catch {
+                return json(res, 403, { error: 'Request origin is not allowed.' });
+            }
+            if (suppliedOrigin !== configuredOrigin)
+                return json(res, 403, { error: 'Request origin is not allowed.' });
+        }
+        if (!await rateLimitAllowed(req, { windowMs: 15 * 60 * 1000, max: 5, bucket: 'assessment-request' }))
+            return json(res, 429, { error: 'Too many requests. Please try again later.' });
+        if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json'))
+            return json(res, 415, { error: 'JSON request required.' });
+
+        let body;
+        try {
+            body = await readBody(req, 32 * 1024);
+        }
+        catch (error) {
+            if (error?.code === 'BODY_TOO_LARGE')
+                return json(res, 413, { error: 'Request is too large.' });
+            if (error?.code === 'INVALID_JSON')
+                return json(res, 400, { error: 'Invalid JSON request.' });
+            throw error;
+        }
+
+        const request = validateAssessmentRequest(body);
+        const message = [
+            `Name: ${request.name}`,
+            `Company: ${request.company}`,
+            `Work email: ${request.email}`,
+            `Agent/system: ${request.systemName}`,
+            `Stage: ${request.stage}`,
+            `Repository: ${request.repository || 'Not provided'}`,
+            '',
+            'What the agent does:',
+            request.useCase,
+            '',
+            'Systems, tools or data it can access:',
+            request.access,
+            '',
+            'Assessment goal / why now:',
+            request.concern,
+            '',
+            'Submitted from the public AgentRiskLayer assessment request form.'
+        ].join('\n');
+
+        const delivery = await sendAssessmentRequestEmail({
+            to: config.supportEmail || 'support@agentrisklayer.com',
+            subject: `New AI Agent Security Assessment request — ${request.company || request.systemName}`,
+            message,
+        });
+
+        if (delivery?.simulated)
+            return json(res, 503, { error: 'Email delivery is not configured.' });
+
+        return json(res, 202, { ok: true, message: 'Request received.' });
+    }
+    catch (error) {
+        const status = Number(error?.statusCode) || 500;
+        const message = status < 500
+            ? String(error.message)
+            : 'We could not send your request. Please try again shortly.';
+        if (status >= 500)
+            console.error('Assessment request delivery failed:', error?.message || error);
+        return json(res, status, { error: message });
+    }
+}
+function validateAssessmentRequest(body) {
+    const field = (name, max) => String(body?.[name] || '').trim().slice(0, max);
+    const request = {
+        name: field('name', 120),
+        company: field('company', 160),
+        email: field('email', 254).toLowerCase(),
+        systemName: field('systemName', 160),
+        stage: field('stage', 40),
+        repository: field('repository', 500),
+        useCase: field('useCase', 2000),
+        access: field('access', 2000),
+        concern: field('concern', 2000),
+    };
+    const required = ['name', 'company', 'email', 'systemName', 'stage', 'useCase', 'access', 'concern'];
+    if (required.some((name) => !request[name])) {
+        const error = new Error('Please complete all required fields.');
+        error.statusCode = 400;
+        throw error;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.email)) {
+        const error = new Error('Please enter a valid work email.');
+        error.statusCode = 400;
+        throw error;
+    }
+    if (!['Prototype', 'Pre-production', 'Production'].includes(request.stage)) {
+        const error = new Error('Please select a valid system stage.');
+        error.statusCode = 400;
+        throw error;
+    }
+    return request;
+}
+
 async function readBody(req, limit = 100000) {
     const raw = await readRawBody(req, limit);
     if (!raw.length)
