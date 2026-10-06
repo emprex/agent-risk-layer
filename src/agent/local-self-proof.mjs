@@ -344,7 +344,7 @@ export async function runLocalSelfProofPack({repositoryPath,expectedRevision,pro
     if(!['test','deployment_decision'].includes(detail?.chain?.currentStage)) throw new Error(controlId+' is not at a self-proof-compatible stage: '+(detail?.chain?.currentStage||'unknown'));
   }
   const cases=[await proof055(),await proof046(target.revision),await proof057(),await proof090(),await proof100()];
-  const proofBody={schema:LOCAL_SELF_PROOF_SCHEMA,target:{repository:'emprex/arl-agent-ai',revision:target.revision},cases};
+  const proofBody={schema:LOCAL_SELF_PROOF_SCHEMA,target:{repository:'emprex/agent-risk-layer',revision:target.revision},cases};
   const bundleDigest=intelligenceDigest(proofBody);
   const persisted=[];
   for(const item of cases) persisted.push(await persist(item,{bundleDigest,revision:target.revision,projectId,userId,snapshotId:assessmentContext.systemSnapshotId}));
