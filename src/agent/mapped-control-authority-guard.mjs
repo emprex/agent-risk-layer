@@ -654,6 +654,35 @@ export async function applyMappedControlAuthorityGuard({
 
   const exactControls =
     exact.map((item) => item.projected);
+  const remediationCandidates =
+    exact.filter(
+      (item) =>
+        item.projected.currentStage === 'remediation'
+    );
+
+  /*
+   * An active finding/remediation lineage is stronger than unrelated mapped
+   * controls that still need ordinary applicability review. Otherwise a
+   * remediated control can be hidden by generic applicability ambiguity and
+   * the workflow loses the exact finding scope after a failed retest.
+   */
+  if (remediationCandidates.length === 1) {
+    return scopeExactRemediationState({
+      workflowState,
+      selected: remediationCandidates[0],
+      exactControls
+    });
+  }
+
+  if (remediationCandidates.length > 1) {
+    return conflictState({
+      workflowState,
+      exactControls,
+      reason: 'mapped_control_remediation_ambiguous',
+      candidateCount: remediationCandidates.length
+    });
+  }
+
   const applicability =
     exact.filter(
       (item) =>
@@ -684,29 +713,6 @@ export async function applyMappedControlAuthorityGuard({
       workflowState,
       exactControls
     );
-
-  const remediationCandidates =
-    exact.filter(
-      (item) =>
-        item.projected.currentStage === 'remediation'
-    );
-
-  if (remediationCandidates.length === 1) {
-    return scopeExactRemediationState({
-      workflowState,
-      selected: remediationCandidates[0],
-      exactControls
-    });
-  }
-
-  if (remediationCandidates.length > 1) {
-    return conflictState({
-      workflowState,
-      exactControls,
-      reason: 'mapped_control_remediation_ambiguous',
-      candidateCount: remediationCandidates.length
-    });
-  }
 
   const findingCandidates =
     exact.filter(
