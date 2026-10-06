@@ -122,20 +122,6 @@ test('staging evidence is rejected when execution falls outside the authorised t
     await new Promise(resolve => adapter.listen(0, '127.0.0.1', resolve));
     const port = adapter.address().port;
     try {
-        await db.prepare(`INSERT INTO subscriptions
-          (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,current_period_start,current_period_end,
-           authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
-           latest_stripe_event_type,latest_stripe_event_state,created_at,updated_at)
-          VALUES (?,?,?,'active','cus_test','sub_test',?,?,1,'stripe_event',1,'evt_v42',
-            'customer.subscription.updated','active',?,?)
-          ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,plan_key=excluded.plan_key,status=excluded.status,
-          stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,
-          current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,
-          authoritative_state=1,billing_state_source='stripe_event',latest_stripe_event_created=1,
-          latest_stripe_event_id='evt_v42',latest_stripe_event_type='customer.subscription.updated',
-          latest_stripe_event_state='active',updated_at=excluded.updated_at`)
-            .run('subrec_v42', userId, 'developer_monthly', new Date(Date.now() - 86400000).toISOString(),
-              new Date(Date.now() + 86400000).toISOString(), nowIso(), nowIso());
         const auth = await createRedTeamAuthorisation({ userId, assessmentId, input: { targetName: 'Window-bound local adapter', endpointOrigin: `http://127.0.0.1:${port}`, environment: 'local', authorityBasis: 'owner', authorisedBy: 'Owner', authorisedRole: 'System owner', emergencyContact: 'owner@example.com', windowStart: new Date(Date.now() - 60000).toISOString(), windowEnd: new Date(Date.now() + 3600000).toISOString(), permittedActions: ['Synthetic prompts'], prohibitedActions: ['Production effects'], dataClassification: 'synthetic-only', retentionDays: 7, syntheticDataOnly: true, dryRunToolsOnly: true, noProductionEffects: true, confirmation: 'I AUTHORISE CONTROLLED TESTING' } });
         const issued = await createRedTeamToken({ userId, assessmentId, mode: 'staging', authorisationId: auth.id });
         const bundle = await runCampaign({ authorised: true, environment: 'local', endpoint: `http://127.0.0.1:${port}/agentrisklayer/evaluate`, name: 'Window test', authorisationId: auth.id, trials: 1 });
@@ -159,19 +145,6 @@ test('completed adapter evidence can be recovered after the ROE window expires w
     await new Promise(resolve => adapter.listen(0, '127.0.0.1', resolve));
     const port = adapter.address().port;
     try {
-        await db.prepare(`INSERT INTO subscriptions
-          (id,user_id,plan_key,status,stripe_customer_id,stripe_subscription_id,current_period_start,current_period_end,
-           authoritative_state,billing_state_source,latest_stripe_event_created,latest_stripe_event_id,
-           latest_stripe_event_type,latest_stripe_event_state,created_at,updated_at)
-          VALUES (?,?,?,'active','cus_recovery','sub_recovery',?,?,1,'stripe_event',2,'evt_recovery',
-            'customer.subscription.updated','active',?,?)
-          ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,plan_key=excluded.plan_key,status=excluded.status,
-          current_period_start=excluded.current_period_start,current_period_end=excluded.current_period_end,
-          authoritative_state=1,billing_state_source='stripe_event',latest_stripe_event_created=2,
-          latest_stripe_event_id='evt_recovery',latest_stripe_event_type='customer.subscription.updated',
-          latest_stripe_event_state='active',updated_at=excluded.updated_at`)
-            .run('subrec_recovery', userId, 'developer_monthly', new Date(Date.now() - 86400000).toISOString(),
-              new Date(Date.now() + 86400000).toISOString(), nowIso(), nowIso());
         const authInput = { targetName: 'Recovery local adapter', endpointOrigin: `http://127.0.0.1:${port}`, environment: 'local', authorityBasis: 'owner', authorisedBy: 'Owner', authorisedRole: 'System owner', emergencyContact: 'owner@example.com', windowStart: new Date(Date.now() - 60000).toISOString(), windowEnd: new Date(Date.now() + 3600000).toISOString(), permittedActions: ['Synthetic prompts'], prohibitedActions: ['Production effects'], dataClassification: 'synthetic-only', retentionDays: 7, syntheticDataOnly: true, dryRunToolsOnly: true, noProductionEffects: true, confirmation: 'I AUTHORISE CONTROLLED TESTING' };
         const auth = await createRedTeamAuthorisation({ userId, assessmentId, input: authInput });
         const reusedAuth = await createRedTeamAuthorisation({ userId, assessmentId, input: authInput });
