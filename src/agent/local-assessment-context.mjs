@@ -5,14 +5,14 @@ import { localCliDatabasePath } from './local-cli-mode.mjs';
 import { db, id, nowIso, initialiseDatabase } from '../db.js';
 import { createWorkspace } from '../workspaces.js';
 import { createSecurityProject } from '../control-plane-core.js';
-import { createUnknownAssessment } from './operator-context-bootstrap.mjs';
+import { createUnknownAssessment } from './assessment-bootstrap.mjs';
 
 export async function resolveLocalAssessmentContext(repositoryPath) {
   if (!localCliDatabasePath() || db.kind !== 'sqlite-test') throw new Error('Local CLI persistence is required.');
   await initialiseDatabase();
   const root = fs.realpathSync(repositoryPath);
   const digest = crypto.createHash('sha256').update(root).digest('hex');
-  // A per-repository local principal has no usable password or hosted session.
+  // A per-repository local principal has no usable password or remote session.
   // IDs are real persisted records, resolved by canonical repository path.
   const email = `${digest}@local.invalid`;
   return db.transaction(async () => {
