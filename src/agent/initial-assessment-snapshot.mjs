@@ -15,8 +15,8 @@ import {
 export const INITIAL_ASSESSMENT_SNAPSHOT_SCHEMA =
   'arl.agent.initial-assessment-snapshot.v1';
 
-export const HOSTED_RESUME_INSPECTION_SCHEMA =
-  'arl.agent.hosted-resume-inspection.v1';
+export const RESUME_INSPECTION_SCHEMA =
+  'arl.agent.resume-inspection.v1';
 
 function snapshotError(code, message) {
   const error = new Error(message);
@@ -31,13 +31,13 @@ function requiredInternalContext(operatorContextInternal = {}) {
   if (!userId || !projectId || !assessmentId) {
     throw snapshotError(
       'INITIAL_ASSESSMENT_OPERATOR_CONTEXT_REQUIRED',
-      'Server-resolved operator, project and assessment context is required.'
+      'Resolved local operator, project and assessment context is required.'
     );
   }
   return { userId, projectId, assessmentId };
 }
 
-export function hostedResumeInspectionMarker(
+export function resumeInspectionMarker(
   frozenInspection
 ) {
   const frozen =
@@ -61,7 +61,7 @@ export function hostedResumeInspectionMarker(
       .digest('hex');
 
   return {
-    schema: HOSTED_RESUME_INSPECTION_SCHEMA,
+    schema: RESUME_INSPECTION_SCHEMA,
     source: 'transport_safe_snapshot_projection',
     sourceInspectionDigest,
     transport: {
@@ -71,7 +71,7 @@ export function hostedResumeInspectionMarker(
       binding: frozen.binding,
       inspection: {
         schema:
-          'arl.agent.hosted-resume-inspection-evidence.v1',
+          'arl.agent.resume-inspection-evidence.v1',
         observed: true,
         sourceInspectionDigest
       }
@@ -111,8 +111,8 @@ function initialSnapshotInput({
         schema: 'arl.assessment-binding.v1',
         assessmentId
       },
-      hostedResumeInspection:
-        hostedResumeInspectionMarker(
+      resumeInspection:
+        resumeInspectionMarker(
           frozenInspection
         ),
       initialContext: {
@@ -122,7 +122,7 @@ function initialSnapshotInput({
         controlDecisionInferred: false
       }
     },
-    source: 'arl_agent_hosted_initial_assessment'
+    source: 'arl_local_initial_assessment'
   };
 }
 
