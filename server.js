@@ -34,6 +34,9 @@ import {
 } from './src/control-intelligence.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
+const VALID_EVIDENCE_PLAN_IDS = new Set(['mcp-authority', 'approval-binding', 'memory-isolation', 'egress-boundary', 'containment-recovery', 'audit-reconstruction']);
+const VALID_EVIDENCE_PLAN_STATES = new Set(['not-applicable', 'evidence-gap']);
+const VALID_ASSESSMENT_DEPLOYMENT_DECISIONS = new Set(['proceed', 'hold', 'do_not_deploy']);
 const publicSurfaceRedirects = new Map([
     ['/admin.html', '/'],
     ['/sales-agent.html', '/'],
@@ -158,6 +161,12 @@ const server = http.createServer(async (req, res) => {
         if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !verifyCsrf(req)) {
             return json(res, 403, { error: 'Security token missing or invalid. Refresh the page and try again.' });
         }
+        const evidencePlanResolutionMatch = url.pathname.match(/^\/api\/assessments\/([^/]+)\/evidence-plan\/resolutions$/);
+        if (req.method === 'POST' && evidencePlanResolutionMatch)
+            return await handleEvidencePlanResolution(req, res, decodeURIComponent(evidencePlanResolutionMatch[1]));
+        const assessmentDeploymentDecisionMatch = url.pathname.match(/^\/api\/assessments\/([^/]+)\/deployment-decision$/);
+        if (req.method === 'POST' && assessmentDeploymentDecisionMatch)
+            return await handleAssessmentDeploymentDecision(req, res, decodeURIComponent(assessmentDeploymentDecisionMatch[1]));
         if (req.method === 'GET' && url.pathname === '/api/config') {
             return json(res, 200, {
                 demoMode: config.demoMode,
@@ -1557,6 +1566,100 @@ function requireAdmin(req, res, { requireMfa = false } = {}) {
         return false;
     }
     return true;
+}
+async function ownerAssessment(req, res, assessmentId) {
+    if (!req.user) {
+        json(res, 401, { error: 'Sign in is required.' });
+        return null;
+    }
+    if (!req.user.emailVerified) {
+        json(res, 403, { error: 'Verify your email before changing assessment evidence.' });
+        return null;
+    }
+    const row = await db.prepare('SELECT id,user_id,result_json FROM assessments WHERE id = ?').get(assessmentId);
+    if (!row || row.user_id !== req.user.id) {
+        json(res, 404, { error: 'Assessment not found.' });
+        return null;
+    }
+    let result;
+    try {
+        result = JSON.parse(row.result_json || '{}');
+    }
+    catch {
+        json(res, 500, { error: 'Assessment result data could not be read safely.' });
+        return null;
+    }
+    return { user: req.user, row, result };
+}
+function arrayCount(value) {
+    return Array.isArray(value) ? value.length : 0;
+}
+function proceedBlockers(result = {}) {
+    const resolutions = result.evidencePlanResolutions && typeof result.evidencePlanResolutions === 'object' && !Array.isArray(result.evidencePlanResolutions)
+        ? result.evidencePlanResolutions : {};
+    const recordedEvidenceGaps = Object.values(resolutions).filter((item) => item?.state === 'evidence-gap').length;
+    const informationGaps = Math.max(arrayCount(result.unresolvedItems), arrayCount(result.blockingInformationGaps));
+    const unresolvedEvidenceQuestions = arrayCount(result.blockingEvidenceGaps);
+    const confirmedRuntimeFailures = arrayCount(result.redTeam?.failedResults);
+    return { recordedEvidenceGaps, informationGaps, unresolvedEvidenceQuestions, confirmedRuntimeFailures, blocked: Boolean(recordedEvidenceGaps || informationGaps || unresolvedEvidenceQuestions || confirmedRuntimeFailures) };
+}
+async function readEvidencePlanJson(req) {
+    try {
+        return await readBody(req, 32 * 1024);
+    }
+    catch (error) {
+        if (error?.code === 'BODY_TOO_LARGE')
+            throw Object.assign(new Error('Request body is too large.'), { statusCode: 413 });
+        if (error?.code === 'INVALID_JSON')
+            throw Object.assign(new Error('Invalid JSON body.'), { statusCode: 400 });
+        throw error;
+    }
+}
+async function handleEvidencePlanResolution(req, res, assessmentId) {
+    const owned = await ownerAssessment(req, res, assessmentId);
+    if (!owned)
+        return;
+    const { user, result } = owned;
+    const body = await readEvidencePlanJson(req);
+    const planId = cleanText(body.planId, 80);
+    const state = cleanText(body.state, 40);
+    const rationale = cleanText(body.rationale, 3000);
+    if (!VALID_EVIDENCE_PLAN_IDS.has(planId))
+        return json(res, 400, { error: 'Unknown evidence-plan question.' });
+    if (!VALID_EVIDENCE_PLAN_STATES.has(state))
+        return json(res, 400, { error: 'Unsupported evidence-plan disposition.' });
+    if (rationale.length < 20)
+        return json(res, 400, { error: 'Add a specific evidence-based rationale of at least 20 characters.' });
+    const recordedAt = nowIso();
+    const previous = result.evidencePlanResolutions && typeof result.evidencePlanResolutions === 'object' && !Array.isArray(result.evidencePlanResolutions)
+        ? result.evidencePlanResolutions : {};
+    const resolution = { state, rationale, reviewerUserId: user.id, recordedAt };
+    result.evidencePlanResolutions = { ...previous, [planId]: resolution };
+    await db.prepare('UPDATE assessments SET result_json = ?, updated_at = ? WHERE id = ? AND user_id = ?').run(JSON.stringify(result), recordedAt, assessmentId, user.id);
+    await insertEvent(state === 'not-applicable' ? 'evidence_plan_not_applicable_recorded' : 'evidence_plan_gap_recorded', user.id, { assessmentId, planId, state, recordedAt });
+    return json(res, 200, { resolution });
+}
+async function handleAssessmentDeploymentDecision(req, res, assessmentId) {
+    const owned = await ownerAssessment(req, res, assessmentId);
+    if (!owned)
+        return;
+    const { user, result } = owned;
+    const body = await readEvidencePlanJson(req);
+    const decision = cleanText(body.decision, 40).toLowerCase();
+    const rationale = cleanText(body.rationale, 3000);
+    if (!VALID_ASSESSMENT_DEPLOYMENT_DECISIONS.has(decision))
+        return json(res, 400, { error: 'Choose Proceed, Hold or Do not deploy.' });
+    if (rationale.length < 20)
+        return json(res, 400, { error: 'Record the evidence-based rationale for this deployment decision (at least 20 characters).' });
+    const blockers = proceedBlockers(result);
+    if (decision === 'proceed' && blockers.blocked)
+        return json(res, 409, { error: 'Proceed cannot be recorded while material information gaps, evidence gaps or confirmed bounded-test failures remain.', blockers });
+    const recordedAt = nowIso();
+    const deploymentDecision = { decision, rationale, reviewerUserId: user.id, recordedAt, blockersAtDecision: blockers };
+    result.deploymentDecision = deploymentDecision;
+    await db.prepare('UPDATE assessments SET result_json = ?, updated_at = ? WHERE id = ? AND user_id = ?').run(JSON.stringify(result), recordedAt, assessmentId, user.id);
+    await insertEvent('assessment_deployment_decision_recorded', user.id, { assessmentId, decision, recordedAt, blockers });
+    return json(res, 200, { deploymentDecision });
 }
 function parseJson(value, fallback) {
     try {
