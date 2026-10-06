@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md — AgentRiskLayer Product / Authority
 
-**Snapshot:** 22 September 2026
+**Snapshot:** 6 October 2026
 
 This file is intentionally short and dated. Update it when the real project state changes.
 
@@ -10,66 +10,64 @@ Repository: `emprex/agent-risk-layer`
 Local path: `~/agent-risk-layer`
 
 Current role:
-- canonical AgentRiskLayer product / authority repository;
-- source of the live Render service;
-- public AgentRiskLayer site;
-- product-side assessment, evidence, remediation/retest, deterministic inspection/red-team and Control Intelligence implementation.
+- single canonical AgentRiskLayer product / authority repository;
+- public AgentRiskLayer presentation and assessment-request site;
+- local operator assessment workflow;
+- assessment evidence, remediation/retest, deterministic inspection/red-team and Control Intelligence implementation.
 
-## Verified current production state
+No second ARL repository is part of the active product.
 
-Verified on 22 September 2026:
+## Verified current repository state
 
-- `main` SHA: `1fd38c0415b8c11967572b8b574c89e84378232d`
-- Render service: `agent-risk-layer`
-- Render source repo: `https://github.com/emprex/agent-risk-layer`
-- Render branch: `main`
-- auto-deploy: enabled
-- live Render deploy is the same SHA: `1fd38c0415b8c11967572b8b574c89e84378232d`
+Verified on 6 October 2026:
+
+- local `main` and GitHub `main` are synchronized;
+- canonical GitHub main before this cleanup branch: `2f23ea46fa94a96bbae1e96a13b499c2c7883a1c`;
+- working tree reported clean after synchronization;
+- canonical CI passed for the synchronized local ARL history.
 
 Do not assume these values remain current after this snapshot. Re-check before technical work.
 
 ## Active company priority
 
-1. Formalise the assessment methodology.
-2. Map applicable requirements to ARL procedures, methods, evidence and human decisions.
-3. Prepare the October UKAS discussion with a precise description of the service and questions about the appropriate accreditation route/scope.
-4. Continue commercial execution toward real paid assessments.
-5. Avoid unnecessary product expansion while the method and operating model are being stabilised.
+1. Finish one usable local ARL product.
+2. Keep one canonical assessment workflow.
+3. Make the operator experience simple enough for real client delivery.
+4. Preserve deterministic/human authority boundaries.
+5. Continue commercial execution toward real paid assessments.
 
-## Current UKAS / standards position
+## Current product direction
 
-- ARL is not UKAS accredited.
-- ISO/IEC 17020:2026 is a serious current candidate framework for the inspection-style activity.
-- The exact applicability, organisation type and accreditation scope for ARL still require authoritative UKAS confirmation.
-- Never invent clause requirements or accreditation status.
+The public website is for presentation and assessment requests.
+
+Assessment execution is local and operator-led:
+
+request
+-> scope
+-> frozen target
+-> inspection/evidence
+-> applicability
+-> explicitly authorised controlled tests
+-> findings
+-> remediation
+-> changed snapshot
+-> exact retest
+-> report
+-> human final decision.
+
+The LLM may assist with explanation, conversation, summarisation and drafting, but it is not authoritative for applicability, evidence validity, severity, finding closure, readiness, controlled-test authorisation or deployment decisions.
 
 ## Known cleanup issues
 
-These are known state problems, not invitations to refactor everything at once.
-
-1. The repository README/package metadata still contain legacy product/commercial descriptions that may not match the current service model.
-2. `emprex/arl-agent-ai` currently contains duplicated product/site material despite being defined as the orchestration layer.
-3. Prior ChatGPT-created context files were discussed but were not actually present in the repositories before this configuration branch.
-
-## Paused / separate scopes
-
-Do not reopen unless explicitly requested:
-- Guardian product development;
-- Prospector development;
-- Sebbi-specific work outside an active Sebbi task;
-- Codex security research;
-- API-security training lab;
-- unrelated redesign or pricing experiments.
+1. Some legacy hosted API modules and terminology remain in the repository and require a controlled dependency audit before removal.
+2. The current local assessment CLI still exposes implementation details such as explicit target SHA/environment setup that should eventually be managed by the local operator UX.
+3. The local CLI currently uses its isolated SQLite capability; the desired long-term operator architecture should deliberately choose and validate the canonical persistence path rather than accidentally creating two persistence models.
+4. README/package metadata still contain legacy hosted/platform descriptions that may not match the current service model.
 
 ## Next controlled steps
 
-After this project-truth configuration is reviewed:
-
-1. Reconcile duplicated public/governance pages between this repo and `arl-agent-ai`.
-2. Update stale repository documentation so it reflects the current commercial and authority model.
-3. Inventory the assessment lifecycle and existing control catalogue against the intended methodology.
-4. Build the requirement -> procedure -> method/control -> evidence -> decision -> review matrix.
-5. Prepare the UKAS discussion pack and questions.
-6. Continue targeted customer acquisition in parallel.
-
-Do not start Step 1 until the configuration files are reviewed and accepted.
+1. Complete dependency tracing for legacy hosted assessment routes before removing code.
+2. Keep the public request flow intact.
+3. Preserve the 108-control Risk Knowledge unless a specific defect is demonstrated.
+4. Simplify local operator startup and workflow without creating another framework.
+5. Prove the complete local customer journey with exact-head tests before declaring the product final.
