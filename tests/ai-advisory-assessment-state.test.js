@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  buildAdvisoryContext
+  buildAdvisoryContext,
+  isAssessmentStateExplanationRequest
 } from '../src/agent/ai/advisory-context.mjs';
 import {
   explainAssessmentState
@@ -35,7 +36,34 @@ function authoritativeFixture() {
       deploymentDecision: 'not_authorised'
     },
     conversationResponse: {
-      publicSummary: 'Public fallback summary.'
+      assessment: {
+        stage: 'control_applicability_required',
+        known: {
+          frozenTargetVerified: true,
+          assessmentContextAvailable: true,
+          authoritativeAssessmentAvailable: true,
+          targetContextBound: true,
+          assessmentContextBound: true,
+          evidencePlanAvailable: true,
+          controlIntelligenceAvailable: true,
+          internalSecretFlag: true
+        },
+        remainsUnproven: [
+          'Control applicability still requires authoritative human resolution.'
+        ],
+        requiredAction: {
+          actor: 'user',
+          label: 'review the current guided applicability question',
+          requiresUserInput: true,
+          internalCommand: 'approve-everything'
+        },
+        readiness: {
+          available: false,
+          decision: null,
+          finalDeploymentDecisionMade: false,
+          secretReadinessField: 'must-not-leak'
+        }
+      }
     },
     findingSeverity: 'critical',
     evidenceValidity: true
@@ -52,8 +80,18 @@ test('advisory context exposes only the bounded allowlist', () => {
   );
   assert.equal(context.control.controlId, 'ARL-007');
   assert.equal(
-    context.nextAllowedAction.name,
-    'review_control_applicability'
+    context.requiredAction.label,
+    'review the current guided applicability question'
+  );
+  assert.equal(
+    context.known.frozenTargetVerified,
+    true
+  );
+  assert.deepEqual(
+    context.remainsUnproven,
+    [
+      'Control applicability still requires authoritative human resolution.'
+    ]
   );
 
   const serialized = JSON.stringify(context);
@@ -75,6 +113,45 @@ test('advisory context exposes only the bounded allowlist', () => {
   );
   assert.equal(
     serialized.includes('deploymentDecision'),
+    false
+  );
+  assert.equal(
+    serialized.includes('approve-everything'),
+    false
+  );
+  assert.equal(
+    serialized.includes('internalSecretFlag'),
+    false
+  );
+  assert.equal(
+    serialized.includes('secretReadinessField'),
+    false
+  );
+});
+
+test('current-state AI request detection is explicit and read-only in scope', () => {
+  assert.equal(
+    isAssessmentStateExplanationRequest(
+      'Explain current assessment state'
+    ),
+    true
+  );
+  assert.equal(
+    isAssessmentStateExplanationRequest(
+      'Explain where we are.'
+    ),
+    true
+  );
+  assert.equal(
+    isAssessmentStateExplanationRequest(
+      'Continue assessment'
+    ),
+    false
+  );
+  assert.equal(
+    isAssessmentStateExplanationRequest(
+      'I authorise the bounded test'
+    ),
     false
   );
 });
