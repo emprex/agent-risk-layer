@@ -476,6 +476,67 @@ export function scopeExactRemediationState({
   };
 }
 
+export function scopeExactRetestState({
+  workflowState,
+  selected,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+  const mapping = selected?.mapping || null;
+
+  if (!projected?.controlId || !mapping?.caseId) {
+    return null;
+  }
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    'exact_retest_required'
+  );
+
+  return {
+    ...next,
+    stage: 'exact_retest_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'exact_retest_required',
+        source: 'control_intelligence_detail',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: {
+      controlId: projected.controlId,
+      currentStage: 'retest',
+      chainStatus: projected.chainStatus || null,
+      nextAction: projected.nextAction || null,
+      deploymentImpact:
+        projected.deploymentImpact || null,
+      remediationState:
+        projected.remediationState || null
+    },
+    nextAllowedAction: {
+      name: 'authorise_and_run_exact_retest',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        projected.nextAction ||
+        'The authoritative remediation lineage requires an exact retest of the original failed bounded case.',
+      controlId: projected.controlId,
+      caseId: mapping.caseId
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactRetestScope: true
+      })
+  };
+}
+
 export function scopeExactFindingState({
   workflowState,
   selected,
@@ -680,6 +741,30 @@ export async function applyMappedControlAuthorityGuard({
       exactControls,
       reason: 'mapped_control_remediation_ambiguous',
       candidateCount: remediationCandidates.length
+    });
+  }
+
+  const retestCandidates =
+    exact.filter(
+      (item) =>
+        item.projected.currentStage === 'retest' &&
+        Boolean(item.mapping?.caseId)
+    );
+
+  if (retestCandidates.length === 1) {
+    return scopeExactRetestState({
+      workflowState,
+      selected: retestCandidates[0],
+      exactControls
+    });
+  }
+
+  if (retestCandidates.length > 1) {
+    return conflictState({
+      workflowState,
+      exactControls,
+      reason: 'mapped_control_retest_ambiguous',
+      candidateCount: retestCandidates.length
     });
   }
 
