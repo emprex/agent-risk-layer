@@ -911,7 +911,10 @@ function deriveChains(evaluations, data) {
     const remediatedSnapshotReady = Boolean(initialFailure?.system_snapshot_id && evaluation.system_snapshot_id !== initialFailure.system_snapshot_id);
     const remediationReadyForRetest = implementationRecorded && remediatedSnapshotReady;
     const passedRetest = historicalTests.some((row)=>validRetest(row,historicalTests,findings));
-    const failed = tests.some((row) => row.result === 'failed');
+    const failed = tests.some((row) =>
+      row.result === 'failed' &&
+      !failedRetestSuperseded(row, historicalTests, findings)
+    );
     const passed = currentTests.some((row) => row.result === 'passed');
     const activeEvidence = currentEvidence.some((row) => row.retention_status === 'active' && row.verification_state === 'verified');
     const runtimeRegression = links.some((row) => row.subject_type === 'runtime_event') && data.runtime.some((row) => row.decision === 'deny' && links.some((link) => link.subject_id === row.id));
@@ -1155,6 +1158,22 @@ async function verifyRows(rows,digestField,type){for(const row of rows){const st
 async function integrityFailure(row,recordType,reason){const workspaceId=row?.workspace_id||null;const projectId=row?.project_id||null;const recordId=row?.id||null;const fingerprint=intelligenceDigest({workspaceId,projectId,recordType,recordId,reason});const timestamp=nowIso();try{const inserted=await db.prepare(`INSERT INTO control_integrity_audit_dedup (fingerprint,workspace_id,project_id,record_type,record_id,first_seen_at,last_seen_at,occurrence_count) VALUES (?,?,?,?,?,?,?,1) ON CONFLICT(fingerprint) DO NOTHING`).run(fingerprint,workspaceId,projectId,recordType,recordId,timestamp,timestamp);if(Number(inserted.changes)===1)await db.prepare(`INSERT INTO security_audit_log (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id('aud_'),workspaceId,projectId,'system',null,'control_intelligence.integrity_failure',recordType,recordId,JSON.stringify({integrityStatus:'failed',reason,systemSnapshotId:row?.system_snapshot_id||(recordType==='system_snapshot'?recordId:null),controlId:row?.entry_id||null}),timestamp);else await db.prepare('UPDATE control_integrity_audit_dedup SET last_seen_at=?,occurrence_count=occurrence_count+1 WHERE fingerprint=?').run(timestamp,fingerprint);}catch(auditError){console.error(JSON.stringify({event:'control_intelligence_integrity_audit_failed',recordType,recordId,projectId,errorCode:auditError?.code||'AUDIT_WRITE_FAILED'}));}throw Object.assign(new Error('Control Intelligence digest verification failed.'),{statusCode:503,code:'CONTROL_INTELLIGENCE_INTEGRITY_FAILURE'});}
 async function findingForControl(access,snapshot,controlId,findingId,allowHistorical=false){if(!findingId)return null;const row=await db.prepare('SELECT * FROM remediation_items WHERE id=? AND project_id=? AND (finding_key=? OR finding_key LIKE ?)').get(clean(findingId,100),access.project.id,controlId,`${controlId}-%`);if(!row)return null;if(!allowHistorical){const failure=await db.prepare('SELECT id FROM control_test_executions WHERE finding_id=? AND workspace_id=? AND project_id=? AND entry_id=? AND system_snapshot_id=?').get(row.id,access.project.workspace_id,access.project.id,controlId,snapshot.id);if(!failure&&snapshot.status!=='current')return null;}return row;}
 function validRetest(row,tests,findings){if(row.execution_kind!=='retest'||row.result!=='passed'||!row.retest_of_execution_id||!row.finding_id||!row.remediation_id||!row.original_snapshot_id)return false;const original=tests.find(x=>x.id===row.retest_of_execution_id);return Boolean(original&&original.result==='failed'&&original.entry_id===row.entry_id&&original.finding_id===row.finding_id&&original.system_snapshot_id===row.original_snapshot_id&&row.system_snapshot_id!==row.original_snapshot_id&&findings.some(f=>f.id===row.finding_id));}
+function failedRetestSuperseded(row,tests,findings){
+  if(row.execution_kind!=='retest'||row.result!=='failed'||!row.retest_of_execution_id||!row.finding_id||!row.remediation_id)return false;
+  const finding=findings.find((item)=>item.id===row.finding_id);
+  if(!finding||!['verified_closed','accepted_risk'].includes(finding.status))return false;
+  const failedAt=Date.parse(row.completed_at||row.started_at||0);
+  return tests.some((candidate)=>{
+    if(!validRetest(candidate,tests,findings))return false;
+    if(candidate.retest_of_execution_id!==row.retest_of_execution_id||
+      candidate.finding_id!==row.finding_id||
+      candidate.remediation_id!==row.remediation_id||
+      candidate.entry_id!==row.entry_id||
+      candidate.system_snapshot_id!==row.system_snapshot_id)return false;
+    const passedAt=Date.parse(candidate.completed_at||candidate.started_at||0);
+    return Number.isFinite(passedAt)&&(!Number.isFinite(failedAt)||passedAt>=failedAt);
+  });
+}
 function requiredApprovalControls(snapshot,applicable){const config=parseJson(snapshot.approval_configuration_json,{});const legacy=Array.isArray(config.requiredControlIds)?config.requiredControlIds:[];const actions=Array.isArray(config.requiredActions)?config.requiredActions.map(item=>item?.controlId):[];const ids=[...legacy,...actions].map(value=>clean(value,80)).filter(Boolean);return [...new Set(ids.filter(value=>applicable.some(e=>e.entry_id===value)))].sort();}
 function validApproval(row){if(row.status!=='active'||row.consumed_at||row.revoked_at||Date.parse(row.expires_at)<=Date.now()||!row.approval_requirement_id)return false;const requirement=parseJson(row.requirement_descriptor,null);const binding=parseJson(row.binding_descriptor,null);if(!requirement||!binding||intelligenceDigest(requirement)!==row.requirement_digest||intelligenceDigest(binding)!==row.binding_digest||binding.requirementDigest!==row.requirement_digest||binding.actionDigest!==row.requirement_action_digest)return false;const expected=runtimeApprovalActionDigest({workspaceId:row.workspace_id,projectId:row.project_id,environment:row.environment,tool:requirement.action,arguments:requirement.parameters});return expected===row.action_digest;}
 function parseJson(value, fallback) { try { return JSON.parse(value); } catch { return fallback; } }
