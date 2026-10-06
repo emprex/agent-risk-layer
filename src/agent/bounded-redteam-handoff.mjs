@@ -367,6 +367,18 @@ export async function executeBoundedRedTeamHandoff({
   }
 
   const plan = reservation.executionPlan;
+  const targetRevision =
+    String(
+      workflowState?.authoritativeArtifacts
+        ?.frozenTarget?.revision || ''
+    ).trim();
+
+  if (!/^[a-f0-9]{40}$/i.test(targetRevision)) {
+    return unavailable(
+      'bounded_redteam_frozen_target_revision_required'
+    );
+  }
+
   let bundle;
 
   try {
@@ -375,6 +387,7 @@ export async function executeBoundedRedTeamHandoff({
       environment: plan.environment,
       endpoint: plan.endpoint,
       authToken,
+      targetRevision,
       authorisationId: plan.authorisationId,
       caseIds: [plan.caseId],
       trials: plan.trials,
