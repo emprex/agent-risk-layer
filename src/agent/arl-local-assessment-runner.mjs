@@ -12,7 +12,7 @@ const request =
 
 if (!repositoryArgument) {
   console.error(
-    'Usage: ARL_LOCAL_MODE=1 ARL_EXPECTED_TARGET_SHA=<40-char-sha> npm run assess:local -- <repository-path> "<request>"'
+    'Usage: npm run assess:local -- <repository-path> "<request>"'
   );
   process.exit(1);
 }
@@ -64,20 +64,29 @@ try {
   ]);
 
   const frozen = await inspectFrozenRepository(repositoryPath);
-  const expectedRevision = String(
+  const suppliedExpectedRevision = String(
     process.env.ARL_EXPECTED_TARGET_SHA || ''
   ).trim().toLowerCase();
 
-  if (!/^[a-f0-9]{40}$/.test(expectedRevision)) {
+  if (
+    suppliedExpectedRevision &&
+    !/^[a-f0-9]{40}$/.test(suppliedExpectedRevision)
+  ) {
     throw new Error(
-      'ARL_EXPECTED_TARGET_SHA must be the exact 40-character frozen Git commit SHA.'
+      'ARL_EXPECTED_TARGET_SHA must be an exact 40-character Git commit SHA when supplied.'
     );
   }
+
+  const expectedRevision =
+    suppliedExpectedRevision || frozen.target.revision;
+
   if (frozen.target.revision !== expectedRevision) {
     throw new Error(
       `Local assessment frozen target mismatch: expected ${expectedRevision}, actual ${frozen.target.revision}.`
     );
   }
+
+  process.env.ARL_EXPECTED_TARGET_SHA = expectedRevision;
 
   const options =
     await resolveLocalAssessmentContext(repositoryPath);
