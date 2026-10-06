@@ -1,6 +1,21 @@
 const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 const DEFAULT_MODEL = 'qwen3:4b-instruct';
-const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_TIMEOUT_MS = 60000;
+
+function resolveTimeoutMs(explicitTimeoutMs) {
+  if (Number.isFinite(explicitTimeoutMs) && explicitTimeoutMs > 0) {
+    return explicitTimeoutMs;
+  }
+
+  const configured = Number.parseInt(
+    String(process.env.ARL_AI_TIMEOUT_MS || '').trim(),
+    10
+  );
+
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_TIMEOUT_MS;
+}
 
 export async function askLocalOllama({
   messages,
@@ -12,8 +27,9 @@ export async function askLocalOllama({
   model =
     process.env.ARL_AI_MODEL ||
     DEFAULT_MODEL,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs
 } = {}) {
+  const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
   if (typeof fetchImpl !== 'function') {
     return {
       available: false,
@@ -24,7 +40,7 @@ export async function askLocalOllama({
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
-    timeoutMs
+    resolvedTimeoutMs
   );
 
   try {
