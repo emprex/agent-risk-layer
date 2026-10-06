@@ -645,6 +645,77 @@ function enforceConversationGatePolicy(workflowState) {
   return workflowState;
 }
 
+function failedExactRetestRemediationState({
+  workflowState,
+  controlId,
+  caseId,
+  findingId,
+  recording
+}) {
+  let next = withRelevantControl(
+    workflowState,
+    {
+      controlId,
+      currentStage: 'remediation',
+      chainStatus: 'remediation_in_progress',
+      deploymentImpact: 'blocker',
+      availableActions: ['record_remediation']
+    }
+  );
+
+  next = maskReadiness(
+    next,
+    'failed_exact_retest_requires_new_remediation'
+  );
+
+  return {
+    ...next,
+    stage: 'remediation_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code:
+          'failed_exact_retest_requires_new_remediation',
+        source: 'persisted_exact_retest',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: {
+      controlId,
+      currentStage: 'remediation',
+      chainStatus: 'remediation_in_progress',
+      nextAction:
+        'The exact retest failed. Record a new remediation implementation before creating another changed snapshot or retest.',
+      deploymentImpact: 'blocker'
+    },
+    nextAllowedAction: {
+      name: 'provide_remediation_implementation',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        'The persisted exact retest reproduced the failure, so the previous remediation implementation is no longer active evidence for this finding.',
+      controlId,
+      caseId
+    },
+    persistedGate: {
+      satisfied: true,
+      gate: 'exact_retest_failed',
+      selectionBasis:
+        'unique_exact_authorised_failed_retest_lineage',
+      selectedRunId:
+        recording?.redteamRunId || null
+    },
+    remediationSnapshotGate: {
+      active: false,
+      findingId,
+      controlId,
+      failedRetestRecorded: true,
+      exactRetestRequired: false
+    }
+  };
+}
+
 function promotedState({
   workflowState,
   stage,
@@ -814,6 +885,41 @@ export async function applyPersistedGateState({
       });
 
     if (continuation.available) {
+      if (continuation.retestStatus === 'failed') {
+        const {
+          recordFailedExactRetestAndInvalidateRemediation
+        } = await import('../control-intelligence.js');
+
+        const systemSnapshotId =
+          workflowState?.authoritativeArtifacts
+            ?.assessmentContext?.systemSnapshotId || null;
+
+        const recording =
+          await recordFailedExactRetestAndInvalidateRemediation({
+            projectId,
+            controlId: continuation.controlId,
+            userId,
+            input: {
+              systemSnapshotId,
+              retestOfExecutionId:
+                continuation.originalTestExecutionId,
+              findingId: continuation.findingId,
+              redteamRunId: continuation.retestRunId,
+              caseId: continuation.caseId,
+              requestFingerprint:
+                continuation.requestFingerprint
+            }
+          });
+
+        return failedExactRetestRemediationState({
+          workflowState,
+          controlId: continuation.controlId,
+          caseId: continuation.caseId,
+          findingId: continuation.findingId,
+          recording
+        });
+      }
+
       return promotedState({
         workflowState,
         stage: 'exact_retest_completion_ready',
