@@ -24,9 +24,9 @@ import {
 import { intelligenceDigest } from '../control-intelligence-core.js';
 import { resolvePublicHttpsUrl, validateOutboundHttpsUrl } from '../outbound-http.js';
 import { localCliDatabasePath } from './local-cli-mode.mjs';
-import { recordHostedDeclaredAssessmentContext } from './hosted-assessment-context.mjs';
+import { recordDeclaredAssessmentContext } from './assessment-context-authority.mjs';
 import { detectControlApplicabilityCommand } from './control-applicability-handoff.mjs';
-import { createUnknownAssessment } from './operator-context-bootstrap.mjs';
+import { createUnknownAssessment } from './assessment-bootstrap.mjs';
 import { getAuthoritativeAssessment } from './tools/get-authoritative-assessment.mjs';
 import { getAssessmentContext } from './tools/get-assessment-context.mjs';
 
@@ -150,7 +150,7 @@ async function proof046(targetRevision) {
   ];
 
   const authorityFieldRejected=await rejected(
-    ()=>recordHostedDeclaredAssessmentContext({
+    ()=>recordDeclaredAssessmentContext({
       operatorContextInternal:{userId:owner.userId,projectId:owner.project.id,assessmentId:assessment.id},
       frozenInspection,
       declaredContext:{
@@ -163,7 +163,7 @@ async function proof046(targetRevision) {
     /field deploymentDecision is not accepted/i
   );
 
-  await recordHostedDeclaredAssessmentContext({
+  await recordDeclaredAssessmentContext({
     operatorContextInternal:{userId:owner.userId,projectId:owner.project.id,assessmentId:assessment.id},
     frozenInspection,
     declaredContext:{
@@ -180,7 +180,7 @@ async function proof046(targetRevision) {
   const decisionsBefore=Number((await db.prepare('SELECT COUNT(*) count FROM control_deployment_decisions WHERE project_id=?').get(owner.project.id))?.count||0);
   const findingsBefore=Number((await db.prepare('SELECT COUNT(*) count FROM remediation_items WHERE project_id=?').get(owner.project.id))?.count||0);
 
-  await recordHostedDeclaredAssessmentContext({
+  await recordDeclaredAssessmentContext({
     operatorContextInternal:{userId:owner.userId,projectId:owner.project.id,assessmentId:assessment.id},
     frozenInspection,
     declaredContext:{
