@@ -2,8 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { inspectFrozenRepository } from './tools/inspect-frozen-repository.mjs';
 import { buildFrozenInspectionTransport } from './frozen-inspection-transport.mjs';
-import { recordHostedDeclaredAssessmentContext } from './hosted-assessment-context.mjs';
-import { confirmHostedMappedControlApplicability } from './hosted-applicability-confirmation.mjs';
+import { recordDeclaredAssessmentContext } from './assessment-context-authority.mjs';
+import { confirmMappedControlApplicability } from './applicability-confirmation.mjs';
 import { recordRemediationApplicabilityConfirmation } from './remediation-applicability-handoff.mjs';
 import { localCliDatabasePath } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
@@ -45,7 +45,7 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     };
   }
   if (request.startsWith('Set assessment context ')) {
-    await recordHostedDeclaredAssessmentContext({
+    await recordDeclaredAssessmentContext({
       operatorContextInternal: options,
       frozenInspection: buildFrozenInspectionTransport(await inspectFrozenRepository(repositoryPath)),
       declaredContext: JSON.parse(request.slice('Set assessment context '.length))
@@ -97,7 +97,7 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     }
 
     const result =
-      await confirmHostedMappedControlApplicability({
+      await confirmMappedControlApplicability({
         ...options,
         workflowState,
         controlId: applicability.controlId,
