@@ -1,11 +1,15 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+let localCliModeEnabled = false;
 
-let databasePath = null;
-// In-process capability: setting an environment variable on the server cannot
-// enable SQLite. Only the CLI entrypoint opts in before importing persistence.
+// In-process capability boundary for the product-owned local Operator.
+// This flag does not select a database adapter. Local product persistence
+// remains PostgreSQL through DATABASE_URL.
 export function enableLocalCliMode(env = process.env) {
-  if (env.ARL_LOCAL_MODE !== '1') throw new Error('ARL_LOCAL_MODE=1 is required.');
-  databasePath = path.resolve(env.ARL_LOCAL_DATABASE_PATH || fileURLToPath(new URL('../../data/local-assessments.sqlite', import.meta.url)));
+  if (env.ARL_LOCAL_MODE !== '1') {
+    throw new Error('ARL_LOCAL_MODE=1 is required.');
+  }
+  localCliModeEnabled = true;
 }
-export function localCliDatabasePath() { return databasePath; }
+
+export function isLocalCliModeEnabled() {
+  return localCliModeEnabled;
+}
