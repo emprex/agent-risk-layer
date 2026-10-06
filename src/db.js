@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import { config } from './config.js';
 import { runMigrations } from './migrations.js';
 const useSqliteTestAdapter = config.nodeEnv === 'test' && !config.databaseUrl;
@@ -14,8 +13,6 @@ if (db.kind === 'sqlite-test') {
     // is PostgreSQL and requires DATABASE_URL.
     const { ensureSqliteTestSchema } = await import('./db-adapters/sqlite-test-schema.js');
     await ensureSqliteTestSchema(db);
-    const migration = fs.readFileSync(new URL('../migrations/020_control_intelligence_redteam_binding.sql', import.meta.url), 'utf8');
-    await db.exec(migration);
 }
 let initialised = false;
 let initialising;
