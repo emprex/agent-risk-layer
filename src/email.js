@@ -25,7 +25,7 @@ export async function sendEmailVerification({ userId, to, token }) {
     const verifyUrl = `${config.baseUrl}/verify.html?token=${encodeURIComponent(token)}`;
     const html = emailShell(`
     <h1>Verify your email</h1>
-    <p>Confirm this address before purchasing reports, starting subscriptions or issuing security-testing tokens.</p>
+    <p>Confirm this address before using security-sensitive assessment and testing workflows.</p>
     <p><a href="${escapeHtml(verifyUrl)}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#13795b;color:white;text-decoration:none;font-weight:700">Verify email</a></p>
     <p>The link expires automatically. If you did not create the account, ignore this message.</p>
   `);
