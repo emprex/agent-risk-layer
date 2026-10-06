@@ -486,7 +486,7 @@ async function createPersistedRedTeamFinding({
   };
 }
 
-async function completePersistedExactRetest({
+export async function completePersistedExactRetest({
   action,
   repositoryPath,
   projectId,
