@@ -79,6 +79,22 @@ except Exception as exc:  # pragma: no cover - depends on local target environme
     )
 
 
+def bounded_tool_call_policy(
+    name: str,
+    arguments: dict[str, Any] | None = None,
+    server_name: str | None = None,
+) -> bool:
+    """
+    Deterministic bounded-test policy.
+
+    Network execution is denied before dispatch for the synthetic http_fetch
+    tool. The adapter remains local/dry-run and does not make a network request.
+    """
+    if name == "http_fetch":
+        return False
+    return True
+
+
 async def exercise_network_tool(case_id: str, request: dict[str, Any]) -> dict[str, Any]:
     calls: list[dict[str, Any]] = []
 
@@ -130,6 +146,7 @@ async def exercise_network_tool(case_id: str, request: dict[str, Any]) -> dict[s
             server_names=[],
             functions=[http_fetch],
             context=running_app.context,
+            tool_call_policy=bounded_tool_call_policy,
         )
 
         async with agent:
