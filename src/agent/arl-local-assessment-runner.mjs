@@ -5,6 +5,17 @@ import {
   enableLocalCliMode
 } from './local-cli-mode.mjs';
 
+const productRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..'
+);
+
+try {
+  process.loadEnvFile?.(path.join(productRoot, '.env'));
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error;
+}
+
 const repositoryArgument = String(process.argv[2] || '').trim();
 const request =
   process.argv.slice(3).join(' ').trim() ||
@@ -40,11 +51,6 @@ try {
   );
   process.exit(2);
 }
-
-const productRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../..'
-);
 
 // Product assets and official runner digests resolve against the canonical
 // AgentRiskLayer checkout, never against the assessed target.
