@@ -458,18 +458,18 @@ export async function runArlAgent(
        * enforces guided-customer applicability as a user gate instead of an
        * automatic ARL security decision.
        */
-      const persistedState =
-        await applyPersistedGateState({
+      const exactScopedState =
+        await applyMappedControlAuthorityGuard({
           workflowState: baseState,
           projectId,
-          userId,
-          assessmentId
+          userId
         });
 
-      return applyMappedControlAuthorityGuard({
-        workflowState: persistedState,
+      return applyPersistedGateState({
+        workflowState: exactScopedState,
         projectId,
-        userId
+        userId,
+        assessmentId
       });
     };
 
