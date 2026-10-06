@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AgentRiskLayer | AI Agent Security Assessment</title>
+  <meta name="description" content="Human-led security assessment for AI agents, MCP systems and tool-using workflows.">
+  <meta name="robots" content="index,follow">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="shell header">
+  <a class="brand" href="#top" aria-label="AgentRiskLayer home">AgentRiskLayer</a>
+  <nav><a href="#service">Assessment</a><a href="#process">Process</a><a href="#trust">Trust</a><a class="button small" href="#request">Request an assessment</a></nav>
+</header>
+<main id="top">
+  <section class="shell hero">
+    <div class="hero-copy">
+      <p class="eyebrow">AI agent security assessment</p>
+      <h1>Secure the agent, not just the prompt.</h1>
+      <p class="lede">AgentRiskLayer assesses AI agents that can use tools, APIs, MCP servers, data and autonomous workflows. We collect evidence, reproduce risk in an authorised boundary, guide remediation and retest the exact affected control.</p>
+      <div class="actions"><a class="button" href="#request">Request an assessment</a><a class="button ghost" href="#process">See the process</a></div>
+      <div class="trustline"><span>Human-led</span><span>Scope agreed first</span><span>No secrets through this site</span></div>
+    </div>
+    <aside class="boundary-card" aria-label="AgentRiskLayer decision boundary">
+      <div><span>01</span><strong>Agent</strong><small>model + orchestration</small></div>
+      <div><span>02</span><strong>Authority</strong><small>tools, APIs, MCP, data</small></div>
+      <div><span>03</span><strong>Evidence</strong><small>observed + reproduced</small></div>
+      <div class="accent"><span>04</span><strong>Human decision</strong><small>final accountable authority</small></div>
+    </aside>
+  </section>
+
+  <section class="shell section" id="service">
+    <div class="section-head"><p class="eyebrow">What we assess</p><h2>Security around real agent authority.</h2></div>
+    <div class="grid four">
+      <article><h3>Access &amp; permissions</h3><p>Repositories, data stores, credentials, tools and privilege boundaries.</p></article>
+      <article><h3>Instruction attacks</h3><p>Prompt injection, untrusted content, tool-result poisoning and instruction hierarchy.</p></article>
+      <article><h3>Actions &amp; approvals</h3><p>High-impact actions, exact approvals, transaction boundaries and constrained targets.</p></article>
+      <article><h3>Evidence &amp; recovery</h3><p>Auditability, containment, remediation evidence and exact retesting.</p></article>
+    </div>
+  </section>
+
+  <section class="band" id="process"><div class="shell section">
+    <div class="section-head"><p class="eyebrow">How it works</p><h2>One bounded assessment workflow.</h2></div>
+    <ol class="process">
+      <li><span>01</span><div><strong>Request &amp; scope</strong><p>We understand the system, lifecycle stage and authorised test boundary.</p></div></li>
+      <li><span>02</span><div><strong>Freeze &amp; inspect</strong><p>We bind evidence to the exact target revision and inspect the authority surface.</p></div></li>
+      <li><span>03</span><div><strong>Test &amp; remediate</strong><p>Controlled tests run only with explicit authorisation. Findings stay evidence-backed.</p></div></li>
+      <li><span>04</span><div><strong>Retest &amp; report</strong><p>The affected control is retested against the changed revision and reviewed by a human.</p></div></li>
+    </ol>
+  </div></section>
+
+  <section class="shell section" id="trust">
+    <div class="split"><div><p class="eyebrow">Decision boundary</p><h2>The LLM is not the security authority.</h2></div>
+    <div class="stack"><p>AI can assist with explanation, organisation and drafting. It does not decide applicability, evidence validity, severity, finding closure, readiness or deployment.</p><p class="note">Safe output ≠ safe action. A bounded PASS is not a universal security claim.</p></div></div>
+  </section>
+
+  <section class="band request-band" id="request"><div class="shell section request-wrap">
+    <div><p class="eyebrow">Request an assessment</p><h2>Tell us what your agent can do.</h2><p>We review the scope before any testing begins. Do not include passwords, API keys, access tokens, private keys or customer data.</p></div>
+    <form id="requestForm" action="https://formspree.io/f/xjygkpwz" method="POST">
+      <div class="form-grid">
+        <label>Name<input name="name" required maxlength="120" autocomplete="name"></label>
+        <label>Company<input name="company" required maxlength="160" autocomplete="organization"></label>
+        <label>Email<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
+        <label>System / agent<input name="systemName" required maxlength="160"></label>
+      </div>
+      <label>What does the agent do?<textarea name="useCase" required maxlength="1800" rows="4"></textarea></label>
+      <label>What can it access or change?<textarea name="access" required maxlength="1800" rows="4"></textarea></label>
+      <label>What do you want assessed?<textarea name="concern" required maxlength="1800" rows="4"></textarea></label>
+      <button class="button" type="submit">Send assessment request</button>
+      <p class="fineprint" id="formStatus">Your request is sent directly to AgentRiskLayer through Formspree. Do not include secrets, credentials or customer data.</p>
+    </form>
+  </div></section>
+</main>
+<footer class="shell footer"><div><strong>AgentRiskLayer</strong><p>Human-led AI agent security assessment.</p></div><nav><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="mailto:support@agentrisklayer.com">support@agentrisklayer.com</a></nav></footer>
+<script src="/request.js" defer></script>
+</body></html>
