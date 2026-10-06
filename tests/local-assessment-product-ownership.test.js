@@ -51,41 +51,29 @@ test('ARL_LOCAL_MODE environment alone cannot enable SQLite product persistence'
   );
 });
 
-test('explicit in-process local CLI capability enables only the isolated SQLite adapter', () => {
-  const temp = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'arl-product-local-cli-')
+test('explicit local CLI capability does not enable SQLite product persistence', () => {
+  const result = runModule(
+    `
+      const { enableLocalCliMode } =
+        await import('./src/agent/local-cli-mode.mjs');
+      enableLocalCliMode(process.env);
+      try {
+        await import('./src/db.js');
+        console.log('unexpected-db-import-success');
+        process.exit(0);
+      } catch (error) {
+        console.error(error.message);
+        process.exit(17);
+      }
+    `,
+    {
+      ARL_LOCAL_MODE: '1'
+    }
   );
 
-  try {
-    const localDatabase = path.join(temp, 'local.sqlite');
-    const result = runModule(
-      `
-        const { enableLocalCliMode } =
-          await import('./src/agent/local-cli-mode.mjs');
-        enableLocalCliMode(process.env);
-        const { db } = await import('./src/db.js');
-        console.log(db.kind);
-        process.exit(0);
-      `,
-      {
-        ARL_LOCAL_MODE: '1',
-        ARL_LOCAL_DATABASE_PATH: localDatabase
-      }
-    );
-
-    assert.equal(
-      result.status,
-      0,
-      `stderr: ${result.stderr}`
-    );
-    assert.match(result.stdout, /sqlite-test/);
-    assert.equal(fs.existsSync(localDatabase), true);
-  } finally {
-    fs.rmSync(temp, {
-      recursive: true,
-      force: true
-    });
-  }
+  assert.equal(result.status, 17);
+  assert.match(result.stderr, /DATABASE_URL is required/);
+  assert.doesNotMatch(result.stdout, /sqlite-test|unexpected-db-import-success/);
 });
 
 test('product-owned local assessment runner is local-only and syntactically valid', () => {
@@ -95,6 +83,8 @@ test('product-owned local assessment runner is local-only and syntactically vali
 
   assert.match(source, /enableLocalCliMode/);
   assert.match(source, /ARL_EXPECTED_TARGET_SHA/);
+  assert.match(source, /DATABASE_URL is required for local PostgreSQL persistence/);
+  assert.doesNotMatch(source, /ARL_LOCAL_DATABASE_PATH|local-assessments\.sqlite/);
   assert.doesNotMatch(source, /hosted-operator-client/);
   assert.doesNotMatch(source, /ARL_SERVER_URL/);
 
@@ -205,11 +195,10 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
         cwd: root,
         env: {
           ...process.env,
-          NODE_ENV: 'development',
+          NODE_ENV: 'test',
           PRODUCT_STAGE: 'development',
           DATABASE_URL: '',
-          ARL_LOCAL_DATABASE_PATH:
-            path.join(temp, 'assessment.sqlite')
+          DATABASE_PATH: path.join(temp, 'assessment.sqlite')
         },
         encoding: 'utf8',
         timeout: 90_000
@@ -294,11 +283,10 @@ test('local runner still rejects an explicitly supplied wrong frozen SHA', {
         cwd: root,
         env: {
           ...process.env,
-          NODE_ENV: 'development',
+          NODE_ENV: 'test',
           PRODUCT_STAGE: 'development',
           DATABASE_URL: '',
-          ARL_LOCAL_DATABASE_PATH:
-            path.join(temp, 'assessment.sqlite'),
+          DATABASE_PATH: path.join(temp, 'assessment.sqlite'),
           ARL_EXPECTED_TARGET_SHA:
             '0000000000000000000000000000000000000000'
         },
@@ -428,8 +416,9 @@ test('local CLI controlled red-team authority is independent of hosted paid tier
         }));
       `,
       {
+        NODE_ENV: 'test',
         ARL_LOCAL_MODE: '1',
-        ARL_LOCAL_DATABASE_PATH: databasePath
+        DATABASE_PATH: databasePath
       }
     );
 
