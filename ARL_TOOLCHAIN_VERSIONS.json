@@ -27,7 +27,12 @@
   "guardian": {
     "name": "ARL Guardian",
     "version": "0.3.0",
-    "publicContractVersion": "1.0.0"
+    "publicContractVersion": "1.0.0",
+    "canonicalRepository": "emprex/agent-risk-layer",
+    "activeRelease": "0.3.0-rc.5",
+    "activeArtifact": "public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz",
+    "digestSidecar": "public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz.sha256",
+    "sourceStatus": "release-artifact-only"
   },
   "runtime": {
     "name": "AgentRisk Runtime",
