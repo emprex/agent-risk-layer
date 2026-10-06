@@ -14,6 +14,28 @@ test('already-recorded remediation with ready changed snapshot advances to exact
   assert.match(source, /revision_bound_exact_retest_required/);
 });
 
+test('legacy finding status does not bypass unbound retest recovery', () => {
+  const source = fs.readFileSync(
+    new URL('../src/agent/git-remediation-handoff.mjs', import.meta.url),
+    'utf8'
+  );
+
+  assert.doesNotMatch(
+    source,
+    /remediation\.finding\?\.status === 'evidence_attached'/
+  );
+
+  const recoveryIndex = source.indexOf(
+    'recoverLegacyUnboundRetestImplementation'
+  );
+  const recordIndex = source.indexOf(
+    'recordAuthoritativeRemediationImplementation'
+  );
+
+  assert.notEqual(recoveryIndex, -1);
+  assert.notEqual(recordIndex, -1);
+});
+
 test('conversation reports exact retest instead of duplicate snapshot capture', () => {
   const source = fs.readFileSync(
     new URL('../src/agent/arl-conversation-agent.mjs', import.meta.url),
