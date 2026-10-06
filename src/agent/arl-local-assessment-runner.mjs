@@ -24,7 +24,10 @@ try {
   // Persistence remains PostgreSQL through DATABASE_URL.
   process.env.ARL_LOCAL_MODE = '1';
   enableLocalCliMode(process.env);
-  if (!String(process.env.DATABASE_URL || '').trim()) {
+  if (
+    process.env.NODE_ENV !== 'test' &&
+    !String(process.env.DATABASE_URL || '').trim()
+  ) {
     throw new Error(
       'DATABASE_URL is required for local PostgreSQL persistence.'
     );
