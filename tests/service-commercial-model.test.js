@@ -47,10 +47,11 @@ test('retired checkout UI and external payment form destination are absent', () 
   const active = [
     read('public/result.js'),
     read('public/shared.js'),
-    read('public/analytics.js')
+    read('public/analytics.js'),
+    read('public/dashboard.js')
   ].join('\n');
 
-  assert.doesNotMatch(active, /£99|\/api\/checkout|#buyPro|begin_checkout|stripe_checkout|checkout-return-notice/i);
+  assert.doesNotMatch(active, /£99|\/api\/checkout|\/api\/billing\/portal|\/api\/subscriptions\/demo-cancel|#buyPro|begin_checkout|stripe_checkout|checkout-return-notice|Plan and billing|Manage billing|Cancel demo plan/i);
   assert.doesNotMatch(read('src/security.js'), /checkout\.stripe\.com/i);
   assert.match(read('public/result.js'), /\/request-assessment\.html/);
 });
