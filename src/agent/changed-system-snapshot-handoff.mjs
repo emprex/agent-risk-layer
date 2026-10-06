@@ -19,7 +19,7 @@ import {
 } from './frozen-inspection-transport.mjs';
 
 import {
-  hostedResumeInspectionMarker
+  resumeInspectionMarker
 } from './initial-assessment-snapshot.mjs';
 
 import {
@@ -559,8 +559,8 @@ export async function captureChangedSystemSnapshotFromFrozenInspection({
             assessmentId:
               authoritativeAssessment.assessmentId
           },
-          hostedResumeInspection:
-            hostedResumeInspectionMarker(
+          resumeInspection:
+            resumeInspectionMarker(
               frozen
             ),
           remediationSnapshotConfirmation: {
@@ -876,8 +876,8 @@ export async function captureChangedSystemSnapshotHandoff({
             assessmentId:
               authoritativeAssessment.assessmentId
           },
-          hostedResumeInspection:
-            hostedResumeInspectionMarker(
+          resumeInspection:
+            resumeInspectionMarker(
               buildFrozenInspectionTransport(
                 inspected
               )
