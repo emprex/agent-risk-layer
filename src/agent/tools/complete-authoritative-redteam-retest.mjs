@@ -1,4 +1,8 @@
 import {
+  verifyExactRetestAuthorisationLineage
+} from '../../redteam.js';
+
+import {
   closeControlFinding,
   getControlIntelligenceControl,
   recordControlEvidence,
@@ -152,16 +156,51 @@ export async function completeAuthoritativeRedTeamRetest({
     };
   }
 
-  if (
-    !failedRedTeamOutcome.authorisationId ||
-    failedRedTeamOutcome.authorisationId !== retestRedTeamOutcome.authorisationId
-  ) {
+  if (!failedRedTeamOutcome.authorisationId) {
     return {
       type: 'authoritative_redteam_retest',
       available: false,
       reason: 'redteam_rules_of_engagement_mismatch',
       caseId
     };
+  }
+
+  if (
+    failedRedTeamOutcome.authorisationId !==
+      retestRedTeamOutcome.authorisationId
+  ) {
+    const assessmentId =
+      failedRedTeamOutcome.assessmentId ||
+      retestRedTeamOutcome.assessmentId ||
+      null;
+
+    if (!assessmentId) {
+      return {
+        type: 'authoritative_redteam_retest',
+        available: false,
+        reason: 'redteam_rules_of_engagement_mismatch',
+        caseId
+      };
+    }
+
+    const authorisationLineage =
+      await verifyExactRetestAuthorisationLineage({
+        userId,
+        assessmentId,
+        baselineAuthorisationId:
+          failedRedTeamOutcome.authorisationId,
+        retestAuthorisationId:
+          retestRedTeamOutcome.authorisationId
+      });
+
+    if (authorisationLineage.available !== true) {
+      return {
+        type: 'authoritative_redteam_retest',
+        available: false,
+        reason: 'redteam_rules_of_engagement_mismatch',
+        caseId
+      };
+    }
   }
 
   if (!sameTarget(failedRedTeamOutcome, retestRedTeamOutcome)) {
