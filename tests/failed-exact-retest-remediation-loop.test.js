@@ -8,7 +8,7 @@ import {
 
 const fingerprint = 'a'.repeat(64);
 
-function outcome(status, authorisationId = 'roe_base') {
+function outcome(status, authorisationId = 'roe_base', revision = null) {
   return {
     status,
     authorisationId,
@@ -19,7 +19,8 @@ function outcome(status, authorisationId = 'roe_base') {
         mode: 'staging-adapter',
         endpointOrigin: 'http://127.0.0.1:8787',
         endpointPathHash: 'b'.repeat(64),
-        profile: null
+        profile: null,
+        ...(revision ? { revision } : {})
       }
     }
   };
@@ -102,4 +103,66 @@ test('failed exact retest workflow reopens remediation instead of looping retest
     service,
     /control_intelligence\.failed_exact_retest_recorded/
   );
+});
+
+
+test('persisted retest must match the frozen target revision when one is required', () => {
+  const requiredRetestRevision =
+    '51c0f5d2e3db933afb3682a0a39ffe5b24024aec';
+  const baseline = {
+    runId: 'run_baseline',
+    createdAt: '2026-10-06T10:00:00.000Z',
+    outcome: outcome('failed'),
+    lineage: {
+      controlId: 'ARL-KB-057',
+      findingId: 'rem_1',
+      findingStatus: 'evidence_attached',
+      redTeamEvidence: {
+        testExecutionId: 'ctx_failed'
+      }
+    }
+  };
+  const unbound =
+    selectPersistedExactRetestContinuation({
+      caseId: 'RT-TOOL-004',
+      requiredRetestRevision,
+      baselines: [baseline],
+      retests: [{
+        runId: 'run_unbound_retest',
+        createdAt: '2026-10-06T11:00:00.000Z',
+        outcome: outcome('failed', 'roe_retest'),
+        lineage: {
+          available: false,
+          reason: 'redteam_control_evidence_not_recorded'
+        },
+        authorisationLineageVerified: true
+      }]
+    });
+
+  assert.equal(unbound.available, false);
+  assert.equal(unbound.reason, 'persisted_exact_retest_not_found');
+
+  const bound =
+    selectPersistedExactRetestContinuation({
+      caseId: 'RT-TOOL-004',
+      requiredRetestRevision,
+      baselines: [baseline],
+      retests: [{
+        runId: 'run_bound_retest',
+        createdAt: '2026-10-06T12:00:00.000Z',
+        outcome: outcome(
+          'failed',
+          'roe_retest',
+          requiredRetestRevision
+        ),
+        lineage: {
+          available: false,
+          reason: 'redteam_control_evidence_not_recorded'
+        },
+        authorisationLineageVerified: true
+      }]
+    });
+
+  assert.equal(bound.available, true);
+  assert.equal(bound.retestRunId, 'run_bound_retest');
 });
