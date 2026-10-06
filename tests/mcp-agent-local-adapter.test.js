@@ -34,3 +34,15 @@ test('mcp-agent bounded adapter suppresses outbound network side effects', () =>
   assert.doesNotMatch(source, /urllib\.request/);
   assert.doesNotMatch(source, /socket\.create_connection/);
 });
+
+
+test('mcp-agent bounded adapter distinguishes explicit denial from execution', () => {
+  assert.match(source, /"status": "denied"/);
+  assert.match(source, /getattr\(result, "isError", False\)/);
+  assert.match(source, /"args": \{\} if denied else observation\["call"\]/);
+  assert.match(source, /"toolCalls": 0 if denied else 1/);
+  assert.match(
+    source,
+    /Expected one dry-run dispatch or an explicit target denial/
+  );
+});
