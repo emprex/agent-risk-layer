@@ -53,6 +53,8 @@ function projectionItem(detail) {
       Array.isArray(detail.chain?.availableActions)
         ? detail.chain.availableActions
         : [],
+    remediationState:
+      detail.chain?.remediationState || null,
     authorityProjection: true
   };
 }
@@ -362,6 +364,230 @@ export function scopeExactBoundedTestState({
   };
 }
 
+export function scopeExactRemediationState({
+  workflowState,
+  selected,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+  const mapping = selected?.mapping || null;
+
+  if (!projected?.controlId) {
+    return null;
+  }
+
+  const remediationState =
+    projected.remediationState || {};
+
+  const implementationRecorded =
+    remediationState.implementationRecorded === true;
+
+  const changedSnapshotRequired =
+    implementationRecorded &&
+    remediationState.remediatedSnapshotReady !== true;
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    changedSnapshotRequired
+      ? 'changed_system_snapshot_required'
+      : 'remediation_implementation_evidence_required'
+  );
+
+  if (changedSnapshotRequired) {
+    return {
+      ...next,
+      stage: 'changed_system_snapshot_required',
+      blocked: true,
+      canAutoAdvance: false,
+      blockers: [
+        {
+          code: 'changed_system_snapshot_required',
+          source: 'control_intelligence_detail',
+          userActionRequired: true
+        }
+      ],
+      scopedControl: {
+        controlId: projected.controlId,
+        currentStage: 'remediation',
+        chainStatus: projected.chainStatus || null,
+        nextAction: projected.nextAction || null,
+        deploymentImpact:
+          projected.deploymentImpact || null,
+        remediationState
+      },
+      nextAllowedAction: {
+        name: 'capture_changed_system_snapshot',
+        actor: 'user',
+        requiresUserInput: true,
+        reason:
+          projected.nextAction ||
+          'Implementation evidence exists, but an authoritative changed system snapshot is required before retest.',
+        controlId: projected.controlId,
+        caseId: mapping?.caseId || null
+      },
+      mappedControlAuthorityGuard:
+        guardMetadata({
+          exactRemediationScope: true
+        })
+    };
+  }
+
+  return {
+    ...next,
+    stage: 'remediation_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code:
+          'remediation_implementation_evidence_required',
+        source: 'control_intelligence_detail',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: {
+      controlId: projected.controlId,
+      currentStage: 'remediation',
+      chainStatus: projected.chainStatus || null,
+      nextAction: projected.nextAction || null,
+      deploymentImpact:
+        projected.deploymentImpact || null,
+      remediationState
+    },
+    nextAllowedAction: {
+      name: 'provide_remediation_implementation',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        projected.nextAction ||
+        'The authoritative finding remains open and requires remediation implementation evidence.',
+      controlId: projected.controlId,
+      caseId: mapping?.caseId || null
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactRemediationScope: true
+      })
+  };
+}
+
+export function scopeExactFindingState({
+  workflowState,
+  selected,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+  const mapping = selected?.mapping || null;
+
+  if (!projected?.controlId) {
+    return null;
+  }
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    'authoritative_finding_required'
+  );
+
+  return {
+    ...next,
+    stage: 'finding_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'authoritative_finding_required',
+        source: 'control_intelligence_detail',
+        userActionRequired: false
+      }
+    ],
+    scopedControl: {
+      controlId: projected.controlId,
+      currentStage: 'finding',
+      chainStatus: projected.chainStatus || null,
+      nextAction: projected.nextAction || null,
+      deploymentImpact: projected.deploymentImpact || null
+    },
+    nextAllowedAction: {
+      name: 'create_authoritative_finding',
+      actor: 'arl',
+      requiresUserInput: false,
+      reason:
+        projected.nextAction ||
+        'The failed authoritative control test requires a finding to be created or linked.',
+      controlId: projected.controlId,
+      caseId: mapping?.caseId || null
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactFindingScope: true
+      })
+  };
+}
+
+export function scopeExactManualEvidenceState({
+  workflowState,
+  selected = null,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    'manual_evidence_required'
+  );
+
+  return {
+    ...next,
+    stage: 'manual_evidence_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'manual_evidence_required',
+        source: 'evidence_plan',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: projected
+      ? {
+          controlId: projected.controlId,
+          currentStage: 'test',
+          chainStatus: projected.chainStatus || null,
+          nextAction: projected.nextAction || null,
+          deploymentImpact: projected.deploymentImpact || null
+        }
+      : null,
+    nextAllowedAction: {
+      name: 'provide_required_manual_evidence',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        'The mapped Evidence Plan item has no executable bounded case and must remain an evidence gap until qualifying manual evidence is provided.',
+      controlId: projected?.controlId || null,
+      caseId: null
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactManualEvidenceScope: true
+      })
+  };
+}
+
 export async function applyMappedControlAuthorityGuard({
   workflowState,
   projectId,
@@ -459,6 +685,52 @@ export async function applyMappedControlAuthorityGuard({
       exactControls
     );
 
+  const remediationCandidates =
+    exact.filter(
+      (item) =>
+        item.projected.currentStage === 'remediation'
+    );
+
+  if (remediationCandidates.length === 1) {
+    return scopeExactRemediationState({
+      workflowState,
+      selected: remediationCandidates[0],
+      exactControls
+    });
+  }
+
+  if (remediationCandidates.length > 1) {
+    return conflictState({
+      workflowState,
+      exactControls,
+      reason: 'mapped_control_remediation_ambiguous',
+      candidateCount: remediationCandidates.length
+    });
+  }
+
+  const findingCandidates =
+    exact.filter(
+      (item) =>
+        item.projected.currentStage === 'finding'
+    );
+
+  if (findingCandidates.length === 1) {
+    return scopeExactFindingState({
+      workflowState,
+      selected: findingCandidates[0],
+      exactControls
+    });
+  }
+
+  if (findingCandidates.length > 1) {
+    return conflictState({
+      workflowState,
+      exactControls,
+      reason: 'mapped_control_finding_ambiguous',
+      candidateCount: findingCandidates.length
+    });
+  }
+
   const deploymentCandidates =
     exact.filter(
       (item) =>
@@ -520,6 +792,25 @@ export async function applyMappedControlAuthorityGuard({
       exact.filter(
         (item) => item.projected.currentStage === 'test'
       );
+
+    const manualCandidates =
+      testCandidates.filter(
+        (item) => !item.mapping?.caseId
+      );
+
+    if (
+      manualCandidates.length > 0 &&
+      manualCandidates.length === testCandidates.length
+    ) {
+      return scopeExactManualEvidenceState({
+        workflowState,
+        selected:
+          manualCandidates.length === 1
+            ? manualCandidates[0]
+            : null,
+        exactControls
+      });
+    }
 
     return conflictState({
       workflowState,

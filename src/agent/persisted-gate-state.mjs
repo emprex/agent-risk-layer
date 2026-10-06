@@ -310,6 +310,12 @@ function exactRetestState({
   const caseId =
     caseIdForControl(workflowState, controlId);
 
+  const passedRetestAwaitingEvidence =
+    typeof chain?.nextAction === 'string' &&
+    chain.nextAction.startsWith(
+      'Verify evidence for the passed exact retest'
+    );
+
   let next = withRelevantControl(
     workflowState,
     {
@@ -325,6 +331,53 @@ function exactRetestState({
           : ['record_retest']
     }
   );
+
+  if (passedRetestAwaitingEvidence) {
+    next = maskReadiness(
+      next,
+      'retest_evidence_verification_required'
+    );
+
+    return {
+      ...next,
+      stage: 'retest_evidence_verification_required',
+      blocked: true,
+      canAutoAdvance: false,
+      blockers: [
+        {
+          code: 'retest_evidence_verification_required',
+          source: 'control_intelligence',
+          userActionRequired: true
+        }
+      ],
+      scopedControl: {
+        controlId,
+        currentStage: 'retest',
+        chainStatus:
+          chain?.chainStatus || 'remediation_in_progress',
+        nextAction: chain.nextAction,
+        deploymentImpact:
+          chain?.deploymentImpact || 'blocker'
+      },
+      nextAllowedAction: {
+        name: 'provide_verified_retest_evidence',
+        actor: 'user',
+        requiresUserInput: true,
+        reason: chain.nextAction,
+        controlId,
+        caseId
+      },
+      remediationSnapshotGate: {
+        active: true,
+        findingId,
+        controlId,
+        previousSystemSnapshotId,
+        freshApplicabilityRequired: false,
+        exactRetestRequired: false,
+        retestEvidenceVerificationRequired: true
+      }
+    };
+  }
 
   next = maskReadiness(
     next,

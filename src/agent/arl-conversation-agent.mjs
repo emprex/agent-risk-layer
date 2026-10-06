@@ -18,6 +18,10 @@ import {
 } from './persisted-gate-state.mjs';
 
 import {
+  applyMappedControlAuthorityGuard
+} from './mapped-control-authority-guard.mjs';
+
+import {
   captureGitRemediationHandoff
 } from './git-remediation-handoff.mjs';
 
@@ -454,11 +458,18 @@ export async function runArlAgent(
        * enforces guided-customer applicability as a user gate instead of an
        * automatic ARL security decision.
        */
-      return applyPersistedGateState({
-        workflowState: baseState,
+      const persistedState =
+        await applyPersistedGateState({
+          workflowState: baseState,
+          projectId,
+          userId,
+          assessmentId
+        });
+
+      return applyMappedControlAuthorityGuard({
+        workflowState: persistedState,
         projectId,
-        userId,
-        assessmentId
+        userId
       });
     };
 
