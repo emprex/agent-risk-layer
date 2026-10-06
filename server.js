@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { assertSafeProductionConfig, config, launchReadiness } from './src/config.js';
+import { isPublicServiceRestrictedPath } from './src/public-service-boundary.js';
 import { db, id, initialiseDatabase, insertEvent, nowIso } from './src/db.js';
 import { authenticateUser, beginMfaSetup, changePassword, clearSession, completeMfaLogin, createEmailVerification, createMfaLoginChallenge, createPasswordReset, createSession, disableMfa, enableMfa, getUserFromRequest, reauthenticateSession, registerUser, resetPassword, verifyEmailToken } from './src/auth.js';
 import { evaluateAssessment, questionnaire, evidenceOptions } from './src/risk-engine.js';
@@ -143,6 +144,8 @@ const server = http.createServer(async (req, res) => {
         return await handleMetrics(req, res);
     if (req.method === 'POST' && url.pathname === '/api/assessment-request')
         return await handleAssessmentRequest(req, res);
+    if (config.publicServiceOnly && isPublicServiceRestrictedPath(url.pathname))
+        return json(res, 404, { error: 'Not found.' });
     if (!await primaryRateLimitAllowed(req, url.pathname))
         return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
     req.user = await getUserFromRequest(req);
