@@ -146,17 +146,11 @@ test('retired Stripe and billing tables are removed by the final migration', () 
   );
 });
 
-test('release infrastructure contains PostgreSQL only and no persistent SQLite disk', () => {
-  const render = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
+test('release infrastructure keeps product persistence PostgreSQL-only without a Render backend blueprint', () => {
+  assert.equal(fs.existsSync(path.join(root, 'render.yaml')), false);
   const docker = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-  assert.match(render, /fromDatabase:[\s\S]*property: connectionString/);
-  assert.match(render, /databases:[\s\S]*plan: basic-1gb/);
-  assert.match(render, /healthCheckPath: \/api\/ready/);
-  assert.match(render, /diskSizeGB: 25/);
-  assert.match(render, /storageAutoscalingEnabled: true/);
-  assert.doesNotMatch(render, /DATABASE_PATH|\bdisk:/);
   assert.doesNotMatch(docker, /\/var\/data|sqlite/i);
   assert.match(docker, /npm ci --omit=dev/);
   assert.equal(packageJson.dependencies.pg, '8.23.0');
