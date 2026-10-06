@@ -132,7 +132,7 @@ export function draftOutreach(prospect, messageType = 'first_message', channel =
   const bodies = {
     connection: `Hi ${buyer} — I saw that ${company} is working on ${useCase}. I focus on security testing for AI agents with real tools and permissions. I would be interested to follow what you are building.`,
     first_message: `Thanks for connecting, ${buyer}. AgentRiskLayer tests what can happen when an AI agent receives malicious instructions, misuses a tool, or acts beyond its intended authority. We produce an integrity-digested assessment, remediation list, and evidence-bounded deployment decision. I noticed ${signal}. Have you already tested the agent's tool permissions and prompt-injection paths?`,
-    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for an AgentRiskLayer AI Agent Security Assessment. Scope starts from £2,500 and includes evidence, authorised testing, remediation guidance, exact retesting and a final report. The report claims only work actually completed. Would a 15-minute demonstration be useful this week?`,
+    assessment_offer: `Hi ${buyer} — based on ${signal}, ${company}'s agent looks suitable for an AgentRiskLayer AI Agent Security Assessment. We first review the system and authorised test boundary, then agree commercial terms for that exact scope. The assessment includes evidence, authorised testing, remediation guidance, exact retesting and a final report. Would a 15-minute demonstration be useful this week?`,
     follow_up: `Hi ${buyer} — one practical question: if the agent took an unsafe action tomorrow, could ${company} show exactly which controls were tested before deployment? That evidence gap is what AgentRiskLayer is designed to close.`,
   };
   const body = bodies[messageType];
@@ -197,10 +197,10 @@ export async function salesOverview() {
     db.prepare('SELECT stage,COUNT(*) count FROM sales_prospects GROUP BY stage ORDER BY count DESC').all(),
     db.prepare(`SELECT * FROM sales_prospects WHERE next_action_at IS NOT NULL AND stage NOT IN ('customer','lost') ORDER BY next_action_at ASC LIMIT 30`).all(),
     db.prepare(`SELECT COUNT(*) drafts, COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) approved, COALESCE(SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END),0) sent FROM sales_messages`).get(),
-    db.prepare(`SELECT COALESCE(SUM(CASE WHEN activity_type='assessment_sold' THEN amount_pence ELSE 0 END),0) assessment_revenue_pence, COALESCE(SUM(CASE WHEN activity_type='subscription_sold' THEN amount_pence ELSE 0 END),0) subscription_revenue_pence, COALESCE(SUM(CASE WHEN activity_type='demo' THEN 1 ELSE 0 END),0) demos FROM sales_activities`).get(),
+    db.prepare(`SELECT COALESCE(SUM(CASE WHEN activity_type='assessment_sold' THEN amount_pence ELSE 0 END),0) assessment_revenue_pence, COALESCE(SUM(CASE WHEN activity_type='demo' THEN 1 ELSE 0 END),0) demos FROM sales_activities`).get(),
   ]);
   return {
-    totals: { prospects: Number(totals.prospects), customers: Number(totals.customers), pipelineValuePence: Number(totals.pipeline_value_pence), drafts: Number(messages.drafts), approved: Number(messages.approved), sent: Number(messages.sent), demos: Number(activities.demos), assessmentRevenuePence: Number(activities.assessment_revenue_pence), subscriptionRevenuePence: Number(activities.subscription_revenue_pence) },
+    totals: { prospects: Number(totals.prospects), customers: Number(totals.customers), pipelineValuePence: Number(totals.pipeline_value_pence), drafts: Number(messages.drafts), approved: Number(messages.approved), sent: Number(messages.sent), demos: Number(activities.demos), assessmentRevenuePence: Number(activities.assessment_revenue_pence) },
     stages: stagesRows.map((row) => ({ stage: row.stage, count: Number(row.count) })),
     due: dueRows.map(publicProspect),
   };
@@ -224,9 +224,9 @@ export function buildDemoBrief(prospect) {
       '4 min — show deterministic inspection and controlled red-team evidence',
       '3 min — show findings, remediation owners and evidence chain',
       '2 min — show retest and deployment decision',
-      '1 min — ask for the £99 assessment',
+      '1 min — agree the next step for scope and proposal',
     ],
-    close: `Would you like us to run the £99 assessment on ${prospect.companyName}'s real agent this week?`,
+    close: `Would you like us to scope an AgentRiskLayer assessment for ${prospect.companyName}'s real agent and send a proposal for the agreed boundary?`,
     claimBoundaries: ['Do not promise zero risk or guaranteed security.', 'Do not claim certification or automatic compliance.', 'Do not invent customers, outcomes or findings.'],
   };
 }
