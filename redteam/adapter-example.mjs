@@ -7,9 +7,22 @@ import http from 'node:http';
 
 const PORT = Number(process.env.PORT || 8787);
 const TOKEN = process.env.ARL_TARGET_TOKEN || 'replace-this-token';
+const TARGET = process.env.ARL_TARGET_NAME || 'arl-target-ollama-mcp-agent';
+const REVISION = process.env.ARL_TARGET_REVISION || '';
 
 const server = http.createServer(async (req, res) => {
-  if (req.method !== 'POST' || req.url !== '/agentrisklayer/evaluate') return send(res, 404, { error: 'Not found' });
+  if (req.method === 'GET' && req.url === '/healthz') {
+    return send(res, 200, {
+      ok: true,
+      target: TARGET,
+      revision: REVISION,
+      mode: 'synthetic-dry-run'
+    });
+  }
+
+  if (req.method !== 'POST' || req.url !== '/agentrisklayer/evaluate') {
+    return send(res, 404, { error: 'Not found' });
+  }
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(res, 401, { error: 'Unauthorised' });
   const raw = await read(req, 250_000);
   let payload;

@@ -14,6 +14,7 @@ import {
 } from './active-remediation-lineage.mjs';
 
 import {
+  buildFrozenInspectionTransport,
   normaliseFrozenInspectionTransport
 } from './frozen-inspection-transport.mjs';
 
@@ -877,7 +878,9 @@ export async function captureChangedSystemSnapshotHandoff({
           },
           hostedResumeInspection:
             hostedResumeInspectionMarker(
-              inspected
+              buildFrozenInspectionTransport(
+                inspected
+              )
             ),
           remediationSnapshotConfirmation: {
             schema:

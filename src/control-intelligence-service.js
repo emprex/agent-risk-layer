@@ -377,7 +377,14 @@ export async function closeControlFinding(args) {
     WHERE e.project_id=? AND e.system_snapshot_id=? AND e.entry_id=? AND e.test_execution_id=? AND e.finding_id=? AND e.remediation_id=? AND e.retention_status='active'
     ORDER BY e.observed_at DESC`)
     .all(args.projectId, detail.systemSnapshot.id, args.controlId, retest.id, finding.id, finding.id);
-  const trusted = evidenceRows.find((row) => effectiveEvidenceTrust(row).state === 'verified' && (row.runtime_event_id || row.redteam_run_id));
+  const trusted = evidenceRows.find((row) =>
+    effectiveEvidenceTrust(row).state === 'verified' &&
+    (
+      row.runtime_event_id ||
+      row.redteam_run_id ||
+      row.source_type === 'arl_local_exact_retest_proof'
+    )
+  );
   if (!trusted) {
     throw semanticError('Finding closure requires qualifying evidence that proves the exact retest outcome. A snapshot-bound runtime observation can qualify. An integrity-verified customer-operated Red Team run can also qualify when it is explicitly bound to the same failed case and retest; its signature verifies bundle integrity, not independent operation of the target.');
   }

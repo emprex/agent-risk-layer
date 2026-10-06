@@ -4,11 +4,18 @@ import { inspectFrozenRepository } from './tools/inspect-frozen-repository.mjs';
 import { buildFrozenInspectionTransport } from './frozen-inspection-transport.mjs';
 import { recordHostedDeclaredAssessmentContext } from './hosted-assessment-context.mjs';
 import { confirmHostedMappedControlApplicability } from './hosted-applicability-confirmation.mjs';
+import { recordRemediationApplicabilityConfirmation } from './remediation-applicability-handoff.mjs';
 import { localCliDatabasePath } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from './local-applicability-command.mjs';
+import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
+import {
+  getControlIntelligenceControl,
+  recordControlEvidence,
+  recordControlTestExecution
+} from '../control-intelligence.js';
 
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!localCliDatabasePath()) throw new Error('Local CLI mode is required.');
@@ -47,18 +54,272 @@ export async function runLocalAssessment(repositoryPath, request, options) {
   }
   const applicability = parseLocalApplicabilityCommand(request);
   if (applicability) {
-    const current = await runArlAgent(repositoryPath, 'Where are we?', options);
-    const result = await confirmHostedMappedControlApplicability({
-      ...options,
-      workflowState: current.canonicalData.workflowState,
-      controlId: applicability.controlId,
-      decision: applicability.decision,
-      reason: applicability.reason,
-      architectureFactIds: applicability.architectureFactIds
-    });
-    if (!result.available) throw new Error(result.reason);
-    return runArlAgent(repositoryPath, 'Where are we?', options);
+    const current = await runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
+
+    const workflowState =
+      current?.canonicalData?.workflowState || null;
+
+    const remediationGate =
+      workflowState?.remediationSnapshotGate || null;
+
+    const freshRemediationApplicability =
+      applicability.decision === 'applicable' &&
+      workflowState?.stage ===
+        'control_applicability_required' &&
+      remediationGate?.active === true &&
+      remediationGate?.freshApplicabilityRequired === true &&
+      remediationGate?.controlId === applicability.controlId &&
+      workflowState?.scopedControl?.controlId ===
+        applicability.controlId;
+
+    if (freshRemediationApplicability) {
+      const result =
+        await recordRemediationApplicabilityConfirmation({
+          repositoryPath,
+          projectId: options.projectId,
+          userId: options.userId,
+          assessmentId: options.assessmentId
+        });
+
+      if (!result.available) {
+        throw new Error(result.reason);
+      }
+
+      return runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+    }
+
+    const result =
+      await confirmHostedMappedControlApplicability({
+        ...options,
+        workflowState,
+        controlId: applicability.controlId,
+        decision: applicability.decision,
+        reason: applicability.reason,
+        architectureFactIds:
+          applicability.architectureFactIds
+      });
+
+    if (!result.available) {
+      throw new Error(result.reason);
+    }
+
+    return runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
   }
+  const manualEvidence =
+    parseLocalManualEvidenceCommand(request);
+
+  if (manualEvidence) {
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState;
+
+    const action =
+      state?.nextAllowedAction || {};
+
+    const scopedControlId =
+      String(
+        action.controlId ||
+        state?.scopedControl?.controlId ||
+        ''
+      ).trim();
+
+    const initialManualEvidenceGate =
+      state?.stage === 'manual_evidence_required' &&
+      action.name === 'provide_required_manual_evidence';
+
+    const exactManualRetestGate =
+      state?.stage === 'exact_retest_required' &&
+      action.name === 'authorise_and_run_exact_retest' &&
+      action.caseId == null;
+
+    if (
+      (!initialManualEvidenceGate && !exactManualRetestGate) ||
+      action.actor !== 'user' ||
+      action.requiresUserInput !== true
+    ) {
+      throw new Error(
+        'Manual evidence can only be recorded at an authoritative manual evidence or manual exact-retest gate.'
+      );
+    }
+
+    if (
+      !scopedControlId ||
+      manualEvidence.controlId !== scopedControlId
+    ) {
+      throw new Error(
+        `Manual evidence control mismatch: expected ${scopedControlId || 'none'}, received ${manualEvidence.controlId}.`
+      );
+    }
+
+    const systemSnapshotId =
+      state?.authoritativeArtifacts
+        ?.assessmentContext?.systemSnapshotId ||
+      '';
+
+    if (!systemSnapshotId) {
+      throw new Error(
+        'Manual evidence requires the current authoritative system snapshot.'
+      );
+    }
+
+    const detail =
+      await getControlIntelligenceControl({
+        projectId: options.projectId,
+        controlId: scopedControlId,
+        userId: options.userId
+      });
+
+    if (
+      detail?.systemSnapshot?.id !== systemSnapshotId
+    ) {
+      throw new Error(
+        'Manual evidence is not bound to the current authoritative snapshot.'
+      );
+    }
+
+    let executionInput;
+
+    if (initialManualEvidenceGate) {
+      if (detail?.chain?.currentStage !== 'test') {
+        throw new Error(
+          'Manual evidence control is not at the authoritative test stage for the current snapshot.'
+        );
+      }
+
+      executionInput = {
+        systemSnapshotId,
+        executionKind: 'initial',
+        executionMethod: 'manual_review',
+        result: manualEvidence.result,
+        observedResult:
+          manualEvidence.observedResult,
+        inputReference:
+          manualEvidence.sourceReference,
+        limitations:
+          manualEvidence.limitations
+      };
+    } else {
+      if (detail?.chain?.currentStage !== 'retest') {
+        throw new Error(
+          'Manual exact retest control is not at the authoritative retest stage.'
+        );
+      }
+
+      const tests = [
+        ...(Array.isArray(detail?.tests) ? detail.tests : []),
+        ...(Array.isArray(detail?.testHistory) ? detail.testHistory : [])
+      ];
+
+      const uniqueTests = [
+        ...new Map(
+          tests
+            .filter((item) => item?.id)
+            .map((item) => [item.id, item])
+        ).values()
+      ];
+
+      const failed = uniqueTests.filter(
+        (item) =>
+          item.result === 'failed' &&
+          item.executionKind !== 'retest'
+      );
+
+      const openFindings = (Array.isArray(detail?.findings)
+        ? detail.findings
+        : []
+      ).filter(
+        (item) =>
+          item?.id &&
+          !['verified_closed', 'accepted_risk'].includes(item.status)
+      );
+
+      if (failed.length !== 1) {
+        throw new Error(
+          `Manual exact retest requires exactly one failed baseline; found ${failed.length}.`
+        );
+      }
+
+      if (openFindings.length !== 1) {
+        throw new Error(
+          `Manual exact retest requires exactly one open finding; found ${openFindings.length}.`
+        );
+      }
+
+      const baseline = failed[0];
+      const finding = openFindings[0];
+
+      executionInput = {
+        systemSnapshotId,
+        executionKind: 'retest',
+        retestOfExecutionId: baseline.id,
+        findingId: finding.id,
+        remediationId: finding.id,
+        originalSnapshotId: baseline.systemSnapshotId,
+        executionMethod: 'manual_exact_retest',
+        result: manualEvidence.result,
+        expectedResult: baseline.expectedResult,
+        observedResult:
+          manualEvidence.observedResult,
+        inputReference:
+          baseline.inputReference ||
+          manualEvidence.sourceReference,
+        limitations:
+          manualEvidence.limitations
+      };
+    }
+
+    const execution =
+      await recordControlTestExecution({
+        projectId: options.projectId,
+        controlId: scopedControlId,
+        userId: options.userId,
+        input: executionInput
+      });
+
+    await recordControlEvidence({
+      projectId: options.projectId,
+      controlId: scopedControlId,
+      userId: options.userId,
+      input: {
+        systemSnapshotId,
+        evidenceClass: 'human_provided',
+        sourceType:
+          exactManualRetestGate
+            ? 'manual_exact_retest'
+            : 'manual_review',
+        sourceReference:
+          manualEvidence.sourceReference,
+        testExecutionId: execution.id,
+        limitations:
+          manualEvidence.limitations
+      }
+    });
+
+    return runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
+  }
+
   if (/^i authorise the bounded test[.!?]*$/i.test(request.trim())) {
     const prepared = await runArlAgent(repositoryPath, 'Assess this agent', options);
     if (prepared?.canonicalData?.workflowState?.stage !== 'bounded_test_required') {
@@ -135,7 +396,7 @@ async function explainLocalGate(result, { repositoryPath } = {}) {
   if (pending.length) {
     result.answer += '\n\nLocal human review required. Authoritative applicability control' +
       (pending.length === 1 ? ': ' : 's: ') + pending.join(', ') +
-      '.\nFor Applicable, use: Control ARL-KB-### applies' +
+      '.\nFor Applicable, use: Set control applicability {"controlId":"ARL-KB-###","decision":"applicable","reason":"specific human rationale"}' +
       '\nFor Not applicable or More information required, use: Set control applicability {"controlId":"ARL-KB-###","decision":"not_applicable|context_required","reason":"specific human rationale","architectureFactIds":["confirmed:fact"]}';
   }
 

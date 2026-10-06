@@ -34,6 +34,11 @@ import {
   advanceAuthoritativeAssessmentWorkflow
 } from './authoritative-assessment-workflow.mjs';
 
+import {
+  createControlFinding,
+  getControlIntelligenceControl
+} from '../control-intelligence.js';
+
 async function authoritativePreparation({
   repositoryPath,
   projectId,
@@ -202,6 +207,199 @@ async function recordPersistedRedTeamEvidence({
     executed: true,
     effect: 'authoritative_redteam_evidence_recorded',
     selectionBasis: continuation.selectionBasis,
+    securityStateChanged: true
+  };
+}
+
+async function createPersistedManualFinding({
+  action,
+  repositoryPath,
+  projectId,
+  userId,
+  assessmentId,
+  preparation = null
+}) {
+  const prepared =
+    await authoritativePreparation({
+      repositoryPath,
+      projectId,
+      userId,
+      assessmentId,
+      preparation
+    });
+
+  if (!prepared.available) {
+    return {
+      executed: false,
+      reason: prepared.reason
+    };
+  }
+
+  const resolvedPreparation =
+    prepared.preparation;
+
+  const snapshotId =
+    resolvedPreparation?.assessmentContext
+      ?.systemSnapshotId || null;
+
+  if (!snapshotId || !action.controlId) {
+    return {
+      executed: false,
+      reason: 'authoritative_manual_finding_context_required'
+    };
+  }
+
+  const detail =
+    await getControlIntelligenceControl({
+      projectId,
+      controlId: action.controlId,
+      userId
+    });
+
+  if (
+    detail?.systemSnapshot?.id !== snapshotId ||
+    detail?.chain?.currentStage !== 'finding'
+  ) {
+    return {
+      executed: false,
+      reason: 'authoritative_manual_finding_stage_required'
+    };
+  }
+
+  const testsById = new Map();
+
+  for (const item of [
+    ...(Array.isArray(detail.tests) ? detail.tests : []),
+    ...(Array.isArray(detail.testHistory)
+      ? detail.testHistory
+      : [])
+  ]) {
+    if (item?.id && !testsById.has(item.id)) {
+      testsById.set(item.id, item);
+    }
+  }
+
+  const failures =
+    [...testsById.values()].filter((item) =>
+      item?.result === 'failed' &&
+      item?.executionKind !== 'retest' &&
+      item?.systemSnapshotId === snapshotId
+    );
+
+  if (failures.length !== 1) {
+    return {
+      executed: false,
+      reason:
+        failures.length > 1
+          ? 'authoritative_manual_failure_lineage_ambiguous'
+          : 'authoritative_manual_failed_test_required'
+    };
+  }
+
+  const failed = failures[0];
+
+  if (failed.findingId) {
+    return {
+      executed: true,
+      effect: 'finding_open',
+      securityStateChanged: false
+    };
+  }
+
+  const evidenceItems = [
+    ...(Array.isArray(detail.evidence)
+      ? detail.evidence
+      : []),
+    ...(Array.isArray(detail.evidenceHistory)
+      ? detail.evidenceHistory
+      : [])
+  ];
+
+  const byId = new Map();
+
+  for (const item of evidenceItems) {
+    if (item?.id && !byId.has(item.id)) {
+      byId.set(item.id, item);
+    }
+  }
+
+  const evidence =
+    [...byId.values()]
+      .filter((item) =>
+        item?.testExecutionId === failed.id &&
+        item?.retentionStatus === 'active' &&
+        ['unverified', 'verified'].includes(
+          item?.verificationState
+        )
+      )
+      .sort((a, b) =>
+        Date.parse(b?.observedAt || 0) -
+        Date.parse(a?.observedAt || 0)
+      )[0] || null;
+
+  if (!evidence) {
+    return {
+      executed: false,
+      reason: 'authoritative_manual_failure_evidence_required'
+    };
+  }
+
+  const observed =
+    String(
+      failed.observedResult ||
+      'The authoritative manual test reproduced the control failure.'
+    ).trim();
+
+  const controlTitle =
+    String(
+      detail?.control?.title ||
+      action.controlId
+    ).trim();
+
+  const finding =
+    await createControlFinding({
+      projectId,
+      controlId: action.controlId,
+      userId,
+      input: {
+        systemSnapshotId: snapshotId,
+        testExecutionId: failed.id,
+
+        title: controlTitle,
+
+        narrative:
+          observed,
+
+        impact:
+          'The failed control test shows that the assessed target does not satisfy the required audit and evidence condition for this control.',
+
+        affectedAsset:
+          'Assessed AI agent control boundary',
+
+        reproductionSummary:
+          observed.slice(0, 1000),
+
+        limitations:
+          String(
+            evidence.limitations ||
+            'Finding is limited to the exact frozen target, current system snapshot, failed manual control test and persisted evidence.'
+          ).slice(0, 1000),
+
+        /*
+         * No severity-driving impact fact is inferred here.
+         * Human review remains authoritative for finding
+         * interpretation and final severity.
+         */
+        impactFacts: {}
+      }
+    });
+
+  return {
+    executed: true,
+    effect: 'finding_open',
+    findingId: finding.id,
+    testExecutionId: failed.id,
+    evidenceId: evidence.id,
     securityStateChanged: true
   };
 }
@@ -454,7 +652,18 @@ export async function executeAuthoritativeArlAction({
   }
 
   if (action.name === 'create_authoritative_finding') {
-    return createPersistedRedTeamFinding({
+    if (action.caseId) {
+      return createPersistedRedTeamFinding({
+        action,
+        repositoryPath,
+        projectId,
+        userId,
+        assessmentId,
+        preparation
+      });
+    }
+
+    return createPersistedManualFinding({
       action,
       repositoryPath,
       projectId,

@@ -115,7 +115,27 @@ test('migration is additive, foreign-keyed and SQLite has no orphan graph record
   for(const table of ['system_snapshots','control_snapshot_evaluations','control_test_executions','control_evidence_items','control_deployment_decisions','deployment_decision_evidence','control_snapshot_runtime_bindings']) assert.match(migration,new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
   assert.match(migration,/REFERENCES security_projects\(id\)/);
   assert.match(migration,/REFERENCES system_snapshots\(id\)/);
-  assert.deepEqual(await db.prepare('PRAGMA foreign_key_check').all(),[]);
+  if (db.kind === 'sqlite-test') {
+    assert.deepEqual(await db.prepare('PRAGMA foreign_key_check').all(),[]);
+  } else {
+    assert.equal(db.kind, 'postgres');
+    const invalidForeignKeys = await db.prepare(`
+      SELECT conname
+      FROM pg_constraint
+      WHERE contype='f'
+        AND convalidated=FALSE
+        AND conrelid IN (
+          to_regclass('system_snapshots'),
+          to_regclass('control_snapshot_evaluations'),
+          to_regclass('control_test_executions'),
+          to_regclass('control_evidence_items'),
+          to_regclass('control_deployment_decisions'),
+          to_regclass('deployment_decision_evidence'),
+          to_regclass('control_snapshot_runtime_bindings')
+        )
+    `).all();
+    assert.deepEqual(invalidForeignKeys,[]);
+  }
 });
 
 test('Control Intelligence UI has one clear navigation entry, text graph alternative and responsive boundaries',()=>{

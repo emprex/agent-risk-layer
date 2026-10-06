@@ -90,13 +90,8 @@ function unavailable(reason) {
   };
 }
 
-function explicitReason(decision, reason) {
-  const supplied = clean(reason);
-  if (decision === 'applicable') {
-    return supplied ||
-      'The customer explicitly confirmed that this Evidence Plan control applies to the current declared agent architecture and assessment scope.';
-  }
-  return supplied;
+function explicitReason(reason) {
+  return clean(reason);
 }
 
 export async function recordControlApplicabilityConfirmation({
@@ -120,15 +115,14 @@ export async function recordControlApplicabilityConfirmation({
     );
   }
 
-  const requestedReason = explicitReason(requestedDecision, reason);
-  if (
-    ['not_applicable', 'context_required'].includes(requestedDecision) &&
-    requestedReason.length < 10
-  ) {
+  const requestedReason = explicitReason(reason);
+  if (requestedReason.length < 10) {
     return unavailable(
       requestedDecision === 'not_applicable'
         ? 'guided_customer_not_applicable_reason_required'
-        : 'guided_customer_missing_context_required'
+        : requestedDecision === 'context_required'
+          ? 'guided_customer_missing_context_required'
+          : 'guided_customer_applicability_reason_required'
     );
   }
 

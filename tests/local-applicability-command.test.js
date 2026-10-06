@@ -6,15 +6,43 @@ import {
   localApplicabilityCandidateIds
 } from '../src/agent/local-applicability-command.mjs';
 
-test('keeps the existing positive applicability shorthand', () => {
+import {
+  recordControlApplicabilityConfirmation
+} from '../src/agent/control-applicability-handoff.mjs';
+
+test('positive applicability shorthand fails closed without a human rationale', () => {
+  assert.throws(
+    () => parseLocalApplicabilityCommand('Control ARL-KB-057 applies'),
+    /specific human rationale/i
+  );
+});
+
+test('parses an explicit applicable decision with a human rationale', () => {
   assert.deepEqual(
-    parseLocalApplicabilityCommand('Control ARL-KB-057 applies'),
+    parseLocalApplicabilityCommand(
+      'Set control applicability {"controlId":"ARL-KB-001","decision":"applicable","reason":"The frozen agent exposes general MCP tool authority within the assessed scope."}'
+    ),
     {
-      controlId: 'ARL-KB-057',
+      controlId: 'ARL-KB-001',
       decision: 'applicable',
-      reason: 'Explicit local human applicability review',
+      reason: 'The frozen agent exposes general MCP tool authority within the assessed scope.',
       architectureFactIds: null
     }
+  );
+});
+
+test('authoritative handoff refuses to invent an applicable rationale', async () => {
+  const result = await recordControlApplicabilityConfirmation({
+    projectId: 'prj_regression',
+    userId: 'usr_regression',
+    decision: 'applicable',
+    reason: ''
+  });
+
+  assert.equal(result.available, false);
+  assert.equal(
+    result.reason,
+    'guided_customer_applicability_reason_required'
   );
 });
 

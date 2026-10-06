@@ -14,14 +14,10 @@ export function parseLocalApplicabilityCommand(request) {
   const text = clean(request);
   if (!text) return null;
 
-  const shorthand = text.match(/^Control (ARL-KB-\d+) applies$/i);
-  if (shorthand) {
-    return {
-      controlId: shorthand[1].toUpperCase(),
-      decision: 'applicable',
-      reason: 'Explicit local human applicability review',
-      architectureFactIds: null
-    };
+  if (/^Control ARL-KB-\d+ applies$/i.test(text)) {
+    throw new Error(
+      'Applicable decisions require a specific human rationale. Use Set control applicability with controlId, decision and reason.'
+    );
   }
 
   if (!text.startsWith(PREFIX)) return null;
@@ -56,12 +52,9 @@ export function parseLocalApplicabilityCommand(request) {
   }
 
   const reason = clean(input.reason);
-  if (
-    ['not_applicable', 'context_required'].includes(decision) &&
-    reason.length < 10
-  ) {
+  if (reason.length < 10) {
     throw new Error(
-      'Not-applicable and context-required decisions require a specific reason of at least 10 characters.'
+      'Applicability decisions require a specific human reason of at least 10 characters.'
     );
   }
 

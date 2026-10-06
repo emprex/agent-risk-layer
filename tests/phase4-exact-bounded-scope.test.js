@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 
 import {
   selectExactBoundedTestCandidate,
-  scopeExactBoundedTestState
+  scopeExactBoundedTestState,
+  scopeExactManualEvidenceState,
+  scopeExactFindingState,
+  scopeExactRemediationState
 } from '../src/agent/mapped-control-authority-guard.mjs';
 
 import {
@@ -162,6 +165,135 @@ test('a test-stage control without an executable case is not selected', () => {
     ]);
 
   assert.equal(selected, null);
+});
+
+test('exact open finding at remediation stage replaces stale bounded fallback', () => {
+  const selected = {
+    mapping: {
+      controlId: 'ARL-KB-090',
+      caseId: null
+    },
+    projected: {
+      ...projected('ARL-KB-090', 'remediation'),
+      chainStatus: 'finding_open',
+      nextAction: 'Record and implement remediation.',
+      deploymentImpact: 'blocker',
+      remediationState: {
+        implementationRecorded: false,
+        remediatedSnapshotReady: false
+      }
+    }
+  };
+
+  const state = scopeExactRemediationState({
+    workflowState: baseState(),
+    selected,
+    exactControls: [selected.projected]
+  });
+
+  assert.equal(state.stage, 'remediation_required');
+  assert.equal(
+    state.scopedControl.controlId,
+    'ARL-KB-090'
+  );
+  assert.equal(
+    state.scopedControl.currentStage,
+    'remediation'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'provide_remediation_implementation'
+  );
+  assert.equal(
+    state.nextAllowedAction.actor,
+    'user'
+  );
+  assert.equal(
+    state.nextAllowedAction.requiresUserInput,
+    true
+  );
+  assert.equal(
+    state.mappedControlAuthorityGuard
+      .exactRemediationScope,
+    true
+  );
+});
+
+test('exact failed control at finding stage replaces stale bounded fallback', () => {
+  const selected = {
+    mapping: {
+      controlId: 'ARL-KB-090',
+      caseId: null
+    },
+    projected: {
+      ...projected('ARL-KB-090', 'finding'),
+      chainStatus: 'test_failed',
+      nextAction:
+        'Create or link a finding for the failed test.',
+      deploymentImpact: 'blocker'
+    }
+  };
+
+  const state = scopeExactFindingState({
+    workflowState: baseState(),
+    selected,
+    exactControls: [selected.projected]
+  });
+
+  assert.equal(state.stage, 'finding_required');
+  assert.equal(state.scopedControl.controlId, 'ARL-KB-090');
+  assert.equal(state.scopedControl.currentStage, 'finding');
+  assert.equal(
+    state.nextAllowedAction.name,
+    'create_authoritative_finding'
+  );
+  assert.equal(state.nextAllowedAction.actor, 'arl');
+  assert.equal(
+    state.nextAllowedAction.requiresUserInput,
+    false
+  );
+  assert.equal(
+    state.mappedControlAuthorityGuard.exactFindingScope,
+    true
+  );
+});
+
+test('a mapped test-stage control without a case routes to manual evidence', () => {
+  const selected = {
+    mapping: {
+      controlId: 'ARL-KB-090',
+      caseId: null
+    },
+    projected: projected(
+      'ARL-KB-090',
+      'test'
+    )
+  };
+
+  const state = scopeExactManualEvidenceState({
+    workflowState: baseState(),
+    selected,
+    exactControls: [selected.projected]
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(
+    state.blockers[0].code,
+    'manual_evidence_required'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'provide_required_manual_evidence'
+  );
+  assert.equal(
+    state.nextAllowedAction.controlId,
+    'ARL-KB-090'
+  );
+  assert.equal(state.nextAllowedAction.caseId, null);
+  assert.equal(
+    state.mappedControlAuthorityGuard.exactManualEvidenceScope,
+    true
+  );
 });
 
 test('persisted bounded result advances after exact scope replaces stale fallback', async () => {

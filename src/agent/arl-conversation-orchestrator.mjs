@@ -453,10 +453,97 @@ export async function runArlAgent(
         currentBase,
         options
       );
+
+    const currentWorkflowState =
+      current?.canonicalData?.workflowState || null;
+
+    const freshRemediationApplicability =
+      currentWorkflowState?.stage ===
+        'control_applicability_required' &&
+      currentWorkflowState?.nextAllowedAction?.name ===
+        'resolve_control_applicability' &&
+      currentWorkflowState?.remediationSnapshotGate?.active === true &&
+      currentWorkflowState?.remediationSnapshotGate
+        ?.freshApplicabilityRequired === true &&
+      currentWorkflowState?.scopedControl?.controlId &&
+      currentWorkflowState.scopedControl.controlId ===
+        currentWorkflowState.remediationSnapshotGate.controlId;
+
+    if (freshRemediationApplicability) {
+      const handoff =
+        await recordRemediationApplicabilityConfirmation({
+          repositoryPath,
+          projectId: options.projectId || null,
+          userId: options.userId || null,
+          assessmentId: options.assessmentId || null
+        });
+
+      if (handoff.available !== true) {
+        const conversationResponse =
+          blockedApplicabilityResponse(handoff);
+
+        return {
+          intent: {
+            type: 'assessment_conversation',
+            command: 'remediation_applicability_confirm'
+          },
+          canonicalData: {
+            type: 'conversation_workflow',
+            schema: CONVERSATION_ORCHESTRATOR_SCHEMA,
+            workflowState: currentWorkflowState,
+            workflowExecution:
+              handoff.execution || null,
+            remediationApplicabilityHandoff: handoff,
+            conversationResponse
+          },
+          answer:
+            renderConversationAnswer(conversationResponse)
+        };
+      }
+
+      const reloadedBase =
+        await runBaseArlAgent(
+          repositoryPath,
+          'Where are we?',
+          options
+        );
+      const reloaded =
+        await applyExactMappedControlGuard(
+          reloadedBase,
+          options
+        );
+      const workflowState =
+        reloaded?.canonicalData?.workflowState || null;
+
+      const conversationResponse =
+        successfulApplicabilityResponse({
+          baseResponse:
+            reloaded?.canonicalData?.conversationResponse || null,
+          handoff,
+          workflowState
+        });
+
+      return {
+        ...reloaded,
+        intent: {
+          type: 'assessment_conversation',
+          command: 'remediation_applicability_confirm'
+        },
+        canonicalData: {
+          ...reloaded.canonicalData,
+          type: 'conversation_workflow',
+          schema: CONVERSATION_ORCHESTRATOR_SCHEMA,
+          remediationApplicabilityHandoff: handoff,
+          conversationResponse
+        },
+        answer:
+          renderConversationAnswer(conversationResponse)
+      };
+    }
+
     const handoff =
       await recordControlApplicabilityConfirmation({
-        workflowState:
-          current?.canonicalData?.workflowState || null,
+        workflowState: currentWorkflowState,
         projectId: options.projectId || null,
         userId: options.userId || null
       });
