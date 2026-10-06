@@ -315,7 +315,26 @@ export async function completeAuthoritativeRedTeamRetest({
     };
   }
 
+  const existingRetest =
+    [
+      ...(before.testHistory || []),
+      ...(before.tests || [])
+    ].find(
+      (item) =>
+        item.executionKind === 'retest' &&
+        item.result === 'passed' &&
+        item.systemSnapshotId ===
+          assessmentContext.systemSnapshotId &&
+        item.retestOfExecutionId ===
+          failedRedTeamEvidence.testExecutionId &&
+        item.findingId === findingId &&
+        item.remediationId === findingId &&
+        item.inputReference ===
+          `${caseId}:${retestFingerprint}`
+    ) || null;
+
   const retest =
+    existingRetest ||
     await recordControlTestExecution({
       projectId,
       controlId: binding.controlId,
