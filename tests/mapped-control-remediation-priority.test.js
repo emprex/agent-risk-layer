@@ -27,6 +27,11 @@ test('mapped-control guard prioritises one active remediation over unrelated app
 
   assert.match(
     source,
+    /\[\.\.\.applicability\]\.sort/
+  );
+
+  assert.doesNotMatch(
+    source,
     /mapped_control_applicability_ambiguous/
   );
 });
