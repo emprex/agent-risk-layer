@@ -5,7 +5,7 @@ import { buildFrozenInspectionTransport } from './frozen-inspection-transport.mj
 import { recordDeclaredAssessmentContext } from './assessment-context-authority.mjs';
 import { confirmMappedControlApplicability } from './applicability-confirmation.mjs';
 import { recordRemediationApplicabilityConfirmation } from './remediation-applicability-handoff.mjs';
-import { localCliDatabasePath } from './local-cli-mode.mjs';
+import { isLocalCliModeEnabled } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
@@ -18,7 +18,7 @@ import {
 } from '../control-intelligence.js';
 
 export async function runLocalAssessment(repositoryPath, request, options) {
-  if (!localCliDatabasePath()) throw new Error('Local CLI mode is required.');
+  if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
   if (/(?:bounded test|retest)/i.test(request)) {
     const authorisations = await listRedTeamAuthorisations(options);
     const unsafe = authorisations.some(item => {
