@@ -38,7 +38,7 @@ test('retired billing implementation modules are removed', () => {
 
 test('production and deployment configuration contain no Stripe surface', () => {
   assert.doesNotMatch(read('src/config.js'), /STRIPE_|stripeSecret|stripePrices|BILLABLE_PLANS|commercial-catalogue/);
-  assert.doesNotMatch(read('render.yaml'), /STRIPE_/);
+  assert.equal(exists('render.yaml'), false);
   assert.doesNotMatch(read('.env.example'), /STRIPE_/);
   assert.doesNotMatch(read('package.json'), /prices:update|update-stripe-render-prices/);
 });
