@@ -739,36 +739,61 @@ export async function captureGitRemediationHandoff({
     });
   }
 
+  const remediationState =
+    remediation.detail?.chain?.remediationState || {};
+
   const implementationRecorded =
-    remediation.detail?.chain
-      ?.remediationState?.implementationRecorded === true ||
+    remediationState.implementationRecorded === true ||
     remediation.finding?.status === 'evidence_attached';
 
+  const remediatedSnapshotReady =
+    remediationState.remediatedSnapshotReady === true;
+
   if (implementationRecorded) {
+    const exactRetestReady =
+      remediatedSnapshotReady === true;
+
     const state = workflowState({
-      stage: 'changed_system_snapshot_required',
-      actionName: 'capture_changed_system_snapshot',
+      stage:
+        exactRetestReady
+          ? 'exact_retest_required'
+          : 'changed_system_snapshot_required',
+      actionName:
+        exactRetestReady
+          ? 'authorise_and_run_exact_retest'
+          : 'capture_changed_system_snapshot',
       actor: 'user',
       reason:
-        'Remediation implementation evidence is already recorded. A changed authoritative system snapshot is required before exact retest.',
+        exactRetestReady
+          ? 'Remediation implementation evidence and the changed authoritative system snapshot are already recorded. A revision-bound exact retest is required.'
+          : 'Remediation implementation evidence is already recorded. A changed authoritative system snapshot is required before exact retest.',
       assessmentContext,
       authoritativeAssessment,
       frozen,
       remediation,
       baselineRevision,
-      blockerCode: 'changed_system_snapshot_required'
+      blockerCode:
+        exactRetestReady
+          ? 'revision_bound_exact_retest_required'
+          : 'changed_system_snapshot_required'
     });
 
     return result({
-      status: 'already_recorded',
+      status:
+        exactRetestReady
+          ? 'already_recorded_exact_retest_required'
+          : 'already_recorded',
       reason:
-        'remediation_implementation_already_recorded',
+        exactRetestReady
+          ? 'remediation_and_changed_snapshot_already_recorded'
+          : 'remediation_implementation_already_recorded',
       state,
       extra: {
         findingId: remediation.finding.id,
         controlId: remediation.controlId,
         baselineRevision,
-        currentRevision: frozen.revision
+        currentRevision: frozen.revision,
+        remediationState
       }
     });
   }
