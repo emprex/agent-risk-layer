@@ -69,7 +69,8 @@ try {
       publicCustomerAssessmentDeliverable,
       writeCustomerAssessmentDeliverable
     },
-    { runArlAgent }
+    { runArlAgent },
+    { explainAssessmentState }
   ] = await Promise.all([
     import('./local-assessment-context.mjs'),
     import('./tools/inspect-frozen-repository.mjs'),
@@ -77,7 +78,8 @@ try {
     import('./initial-assessment-snapshot.mjs'),
     import('./local-assessment-workflow.mjs'),
     import('./customer-assessment-deliverable.mjs'),
-    import('./arl-operational-orchestrator.mjs')
+    import('./arl-operational-orchestrator.mjs'),
+    import('./ai/assessment-explainer.mjs')
   ]);
 
   const frozen = await inspectFrozenRepository(repositoryPath);
@@ -205,6 +207,38 @@ try {
       '\n=== ARL LOCAL ASSESSMENT ANSWER ===\n'
     );
     console.log(result.answer);
+
+    if (process.env.ARL_AI_ADVISORY !== '0') {
+      try {
+        const advisory =
+          await explainAssessmentState(
+            result.canonicalData
+          );
+
+        console.log(
+          '\n=== AI ADVISORY EXPLANATION ===\n'
+        );
+
+        if (advisory.available) {
+          console.log(advisory.explanation);
+          console.log('');
+          console.log(
+            'Advisory only — authoritative ARL state and human decision remain unchanged.'
+          );
+        } else {
+          console.log(
+            `AI unavailable (${advisory.reason}). Authoritative ARL workflow continues normally.`
+          );
+        }
+      } catch {
+        console.log(
+          '\n=== AI ADVISORY EXPLANATION ===\n'
+        );
+        console.log(
+          'AI unavailable. Authoritative ARL workflow continues normally.'
+        );
+      }
+    }
   }
 } catch (error) {
   console.error('ARL LOCAL ASSESSMENT FAILED');
