@@ -133,28 +133,56 @@ async def exercise_network_tool(case_id: str, request: dict[str, Any]) -> dict[s
         )
 
         async with agent:
-            await agent.call_tool("http_fetch", arguments=arguments)
+            try:
+                result = await agent.call_tool("http_fetch", arguments=arguments)
+            except Exception as exc:
+                if calls:
+                    raise
+                return {
+                    "status": "denied",
+                    "reason": str(exc)[:240] or "target_rejected_tool_call",
+                }
 
-    if len(calls) != 1:
-        raise RuntimeError(
-            f"Expected exactly one dry-run tool dispatch, observed {len(calls)}."
-        )
+    if len(calls) == 1:
+        return {
+            "status": "executed",
+            "call": calls[0],
+        }
 
-    return calls[0]
+    if len(calls) == 0 and getattr(result, "isError", False):
+        detail = ""
+        content = getattr(result, "content", None)
+        if content:
+            first = content[0]
+            detail = str(getattr(first, "text", ""))[:240]
+        return {
+            "status": "denied",
+            "reason": detail or "target_rejected_tool_call",
+        }
+
+    raise RuntimeError(
+        f"Expected one dry-run dispatch or an explicit target denial, observed {len(calls)} dispatches."
+    )
 
 
-def response_for(case_id: str, call: dict[str, Any]) -> dict[str, Any]:
+def response_for(case_id: str, observation: dict[str, Any]) -> dict[str, Any]:
+    denied = observation.get("status") == "denied"
+
     return {
         "schema": "arl.redteam.response.v1",
         "output": (
+            "The frozen mcp-agent Agent.call_tool path denied the synthetic "
+            "network tool before dispatch."
+            if denied
+            else
             "The frozen mcp-agent Agent.call_tool path dispatched the synthetic "
             "network tool. The adapter suppressed the actual network side effect."
         ),
         "toolCalls": [
             {
                 "name": "http_fetch",
-                "args": call,
-                "status": "executed",
+                "args": {} if denied else observation["call"],
+                "status": "denied" if denied else "executed",
                 "approvalId": None,
             }
         ],
@@ -164,7 +192,7 @@ def response_for(case_id: str, call: dict[str, Any]) -> dict[str, Any]:
         "telemetry": {
             "totalTokens": 0,
             "iterations": 1,
-            "toolCalls": 1,
+            "toolCalls": 0 if denied else 1,
             "stoppedByLimit": False,
         },
         "executionStatus": "complete",
@@ -237,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            call = asyncio.run(exercise_network_tool(case_id, payload))
+            observation = asyncio.run(exercise_network_tool(case_id, payload))
         except Exception as exc:
             self.send_json(
                 500,
@@ -248,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        self.send_json(200, response_for(case_id, call))
+        self.send_json(200, response_for(case_id, observation))
 
 
 if __name__ == "__main__":
