@@ -70,7 +70,12 @@ try {
       writeCustomerAssessmentDeliverable
     },
     { runArlAgent },
-    { explainAssessmentState }
+    {
+      explainAssessmentState
+    },
+    {
+      isAssessmentStateExplanationRequest
+    }
   ] = await Promise.all([
     import('./local-assessment-context.mjs'),
     import('./tools/inspect-frozen-repository.mjs'),
@@ -79,7 +84,8 @@ try {
     import('./local-assessment-workflow.mjs'),
     import('./customer-assessment-deliverable.mjs'),
     import('./arl-operational-orchestrator.mjs'),
-    import('./ai/assessment-explainer.mjs')
+    import('./ai/assessment-explainer.mjs'),
+    import('./ai/advisory-context.mjs')
   ]);
 
   const frozen = await inspectFrozenRepository(repositoryPath);
@@ -187,10 +193,17 @@ try {
       ].join('\n'));
     }
   } else {
+    const explainCurrentState =
+      isAssessmentStateExplanationRequest(request);
+    const workflowRequest =
+      explainCurrentState
+        ? 'Where are we?'
+        : request;
+
     const result =
       await runLocalAssessment(
         repositoryPath,
-        request,
+        workflowRequest,
         options
       );
 
@@ -208,7 +221,10 @@ try {
     );
     console.log(result.answer);
 
-    if (process.env.ARL_AI_ADVISORY !== '0') {
+    if (
+      explainCurrentState &&
+      process.env.ARL_AI_ADVISORY !== '0'
+    ) {
       try {
         const advisory =
           await explainAssessmentState(
