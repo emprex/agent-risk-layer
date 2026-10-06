@@ -184,3 +184,38 @@ test('Ollama HTTP failure is advisory-only unavailability', async () => {
     reason: 'ollama_http_503'
   });
 });
+
+
+test('Ollama timeout can be configured for slower local models', async () => {
+  const previous = process.env.ARL_AI_TIMEOUT_MS;
+  process.env.ARL_AI_TIMEOUT_MS = '25';
+
+  try {
+    const started = Date.now();
+    const result = await askLocalOllama({
+      fetchImpl: async (_url, options) => {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, 100);
+          options.signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          });
+        });
+        return { ok: true, async json() { return {}; } };
+      },
+      messages: []
+    });
+
+    assert.equal(result.available, false);
+    assert.equal(result.reason, 'ollama_timeout');
+    assert.ok(Date.now() - started < 500);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.ARL_AI_TIMEOUT_MS;
+    } else {
+      process.env.ARL_AI_TIMEOUT_MS = previous;
+    }
+  }
+});
