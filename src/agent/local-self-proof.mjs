@@ -23,7 +23,7 @@ import {
 } from '../control-intelligence.js';
 import { intelligenceDigest } from '../control-intelligence-core.js';
 import { resolvePublicHttpsUrl, validateOutboundHttpsUrl } from '../outbound-http.js';
-import { localCliDatabasePath } from './local-cli-mode.mjs';
+import { isLocalCliModeEnabled } from './local-cli-mode.mjs';
 import { recordDeclaredAssessmentContext } from './assessment-context-authority.mjs';
 import { detectControlApplicabilityCommand } from './control-applicability-handoff.mjs';
 import { createUnknownAssessment } from './assessment-bootstrap.mjs';
@@ -331,7 +331,8 @@ async function persist(item,ctx) {
 }
 
 export async function runLocalSelfProofPack({repositoryPath,expectedRevision,projectId,userId}={}) {
-  if(!localCliDatabasePath()||db.kind!=='sqlite-test') throw new Error('Local self-proof requires explicit ARL local CLI SQLite mode.');
+  if(!isLocalCliModeEnabled()) throw new Error('Local self-proof requires explicit ARL local CLI mode.');
+  if(db.kind!=='postgres' && !(process.env.NODE_ENV==='test' && db.kind==='sqlite-test')) throw new Error('Local self-proof requires PostgreSQL product persistence.');
   if(!projectId||!userId) throw new Error('Authoritative local assessment project and user context are required.');
   const target=assertSelfTarget(repositoryPath,clean(expectedRevision).toLowerCase());
   const assessmentContext=await getAssessmentContext({projectId,userId});
