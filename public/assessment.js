@@ -115,7 +115,7 @@ async function init() {
     evidenceOptions = questionPayload.evidenceOptions || [];
     if (cfg.demoMode) {
       const demoNotice = document.querySelector('#demoNotice');
-      demoNotice.textContent = 'Demo mode is active. Paid checkout will be simulated; no card is charged.';
+      demoNotice.textContent = 'Demo mode is active. This assessment uses demo data and does not represent an authorised customer engagement.';
       demoNotice.hidden = false;
     }
     if (updateFrom) {
