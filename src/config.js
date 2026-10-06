@@ -52,6 +52,7 @@ export const config = {
     baseUrl: String(process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
     nodeEnv: resolvedNodeEnv,
     demoMode: String(process.env.DEMO_MODE ?? 'true').toLowerCase() !== 'false',
+    publicServiceOnly: String(process.env.PUBLIC_SERVICE_ONLY || 'false').toLowerCase() === 'true',
     allowDemoInProduction: String(process.env.ALLOW_DEMO_IN_PRODUCTION || 'false').toLowerCase() === 'true',
     sessionSecret: process.env.SESSION_SECRET || defaultSessionSecret,
     databaseUrl: (process.env.DATABASE_URL || '').trim(),
@@ -91,6 +92,7 @@ export function launchReadiness() {
     const productionStage = config.productStage === 'production';
     const checks = [
         { key: 'production_mode', label: 'NODE_ENV is production', ok: config.nodeEnv === 'production', required: productionStage },
+        { key: 'public_service_boundary', label: 'Public deployment exposes only the website/request service boundary', ok: config.publicServiceOnly, required: productionStage },
         { key: 'managed_postgres', label: 'Managed PostgreSQL DATABASE_URL configured', ok: isManagedPostgresUrl(config.databaseUrl), required: productionStage },
         { key: 'secure_base_url', label: 'BASE_URL uses HTTPS', ok: config.baseUrl.startsWith('https://'), required: productionStage },
         { key: 'session_secret', label: 'Strong session secret configured', ok: config.sessionSecret.length >= 32 && config.sessionSecret !== defaultSessionSecret, required: productionStage },
