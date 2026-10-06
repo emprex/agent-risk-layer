@@ -1,35 +1,46 @@
 # Deployment owner inputs
 
-The code package is complete. Only owner-controlled credentials, billing and legal decisions remain.
+This file lists owner-controlled inputs for the current public website/request deployment.
+
+## Repository and deployment
+
+- Canonical repository: `emprex/agent-risk-layer`
+- Deploy only reviewed `main` commits with green CI.
+- Keep local assessment execution independent from the hosted website.
 
 ## Render
 
-- Enable paid Render billing.
-- Connect the production GitHub repository and deploy `render.yaml` as a Blueprint.
-- Record the web service ID (`srv-...`) for the price-update script.
-- Confirm the generated managed PostgreSQL database, private `DATABASE_URL`, 25 GB initial storage and storage autoscaling. The production Blueprint uses `basic-1gb`; moving to multiple web instances or PostgreSQL high availability is an owner-controlled cost decision after live load evidence.
+If Render remains the selected host:
 
-## Company and support
+- maintain the Render account and billing required for the public web service;
+- connect the canonical GitHub repository;
+- review `render.yaml` before deployment;
+- configure the required environment variables and managed PostgreSQL connection;
+- verify custom-domain DNS and TLS.
 
-Set the final legal entity name, trading/registered address, support email, admin email and legal jurisdiction. The production readiness gate rejects placeholders.
+## Email
 
-## Stripe Managed Payments
+If assessment-request notifications use Resend:
 
-Provide the live Stripe secret/restricted key and webhook signing secret. Run:
+- maintain the verified sender domain;
+- configure `RESEND_API_KEY` and `EMAIL_FROM`;
+- verify delivery and failure handling;
+- never include secrets or customer credentials in automated email content.
 
-```bash
-STRIPE_SECRET_KEY='...' \
-RENDER_API_KEY='...' \
-RENDER_SERVICE_ID='srv-...' \
-npm run prices:update -- --apply --deploy
-```
+## Legal and company data
 
-This creates or reuses the four versioned GBP prices and writes their IDs into Render. Verify the live webhook URL and all Checkout/billing flows before inviting customers.
+Keep the following factual and current:
 
-## Resend and domain
+- company legal name;
+- support email;
+- jurisdiction;
+- privacy and terms pages;
+- public claims about accreditation/certification status.
 
-Provide the live Resend API key and a sender on the already verified AgentRiskLayer domain. Confirm Namecheap DNS, TLS and the production `BASE_URL`. Configure the generated `METRICS_TOKEN` in the selected monitoring service and create availability/error alerts.
+ARL must not claim UKAS accreditation unless it has actually been granted for the relevant scope.
 
-## Existing data decision
+## Retired commercial inputs
 
-This release creates the PostgreSQL schema for a clean production deployment. If any existing SQLite database contains real customer or payment records that must be preserved, approve a separately tested migration and reconciliation window before cutover. Do not copy the SQLite file into production.
+Stripe checkout, subscription prices and billing-portal configuration are not part of the current assessment service model and must not be reintroduced accidentally.
+
+Commercial terms are agreed directly after scope review.
