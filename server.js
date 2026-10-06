@@ -1344,11 +1344,6 @@ async function exportAccount(req, res) {
     const assessments = (await db.prepare(`SELECT id,name,agent_type,answers_json,score,risk_band,result_json,paid_tier,public_enabled,
     scoring_version,created_at,updated_at FROM assessments WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id)).map((row) => ({ ...row, answers: parseJson(row.answers_json, {}), result: parseJson(row.result_json, {}),
         answers_json: undefined, result_json: undefined, public_enabled: Boolean(row.public_enabled) }));
-    const purchases = await db.prepare(`SELECT id,assessment_id,product_key,amount_pence,currency,status,fulfilment_state,
-    fulfilment_attempts,fulfilment_error,fulfilled_at,access_granted_at,email_state,email_attempts,email_error,email_sent_at,
-    report_digest,created_at,updated_at FROM purchases WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
-    const subscriptions = await db.prepare(`SELECT plan_key,status,current_period_end,created_at,updated_at
-    FROM subscriptions WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id);
     const inspections = (await db.prepare(`SELECT id,assessment_id,schema_version,scanner_version,policy_version,bundle_digest,
     subject_json,scope_json,summary_json,findings_json,technologies_json,trust_json,delta_json,created_at
     FROM inspections WHERE user_id=? ORDER BY created_at DESC`).all(req.user.id)).map((row) => ({ ...row,
@@ -1374,7 +1369,7 @@ async function exportAccount(req, res) {
     const projects = await listSecurityProjectsForExport(req.user.id);
     const payload = JSON.stringify({ exportedAt: nowIso(), service: config.companyName, version: config.appVersion,
         user: { ...user, emailVerified: Boolean(user.email_verified_at), mfaEnabled: Boolean(user.mfa_enabled_at) },
-        assessments, purchases, subscriptions, inspections, redTeamRuns, redTeamAuthorisations, purgeReceipts, projects }, null, 2);
+        assessments, inspections, redTeamRuns, redTeamAuthorisations, purgeReceipts, projects }, null, 2);
     await insertEvent('account_exported', req.user.id);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': 'attachment; filename=\"agentrisklayer-data-export.json\"',
@@ -1427,9 +1422,7 @@ async function deleteAccount(req, res, body) {
             await db.prepare('DELETE FROM email_log WHERE user_id=?').run(userId);
             await db.prepare('DELETE FROM events WHERE user_id=?').run(userId);
             await db.prepare('DELETE FROM data_purge_receipts WHERE user_id=?').run(userId);
-            await db.prepare('DELETE FROM purchases WHERE user_id=?').run(userId);
             await db.prepare('DELETE FROM assessments WHERE user_id=?').run(userId);
-            await db.prepare('DELETE FROM subscriptions WHERE user_id=?').run(userId);
             await db.prepare('DELETE FROM users WHERE id=?').run(userId);
         });
     }
