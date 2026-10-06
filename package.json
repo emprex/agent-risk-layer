@@ -3,7 +3,7 @@
   "version": "10.1.1",
   "private": true,
   "type": "module",
-  "description": "Production AI-agent security platform with PostgreSQL persistence, hosted runtime enforcement, asset drift, remediation, deterministic inspection, controlled red teaming, workspaces, signed evidence, and operational recovery.",
+  "description": "Human-led AI-agent security assessment product with deterministic inspection, evidence, controlled testing, remediation, exact retest, reporting and explicit human authority.",
   "engines": {
     "node": "24.21.0"
   },
