@@ -8,8 +8,8 @@
     "node": "24.21.0"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --import ./src/hosted-agent-api-preload.js --watch server.js",
-    "start": "node --env-file-if-exists=.env --import ./src/hosted-agent-api-preload.js server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' -print | sort)",
     "test:arl17k": "node --test benchmarks/arl17k/tests/*.test.mjs",
     "arl17k:phase2": "node benchmarks/arl17k/run-phase2.mjs",

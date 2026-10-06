@@ -37,6 +37,9 @@ const publicDir = path.join(__dirname, 'public');
 const VALID_EVIDENCE_PLAN_IDS = new Set(['mcp-authority', 'approval-binding', 'memory-isolation', 'egress-boundary', 'containment-recovery', 'audit-reconstruction']);
 const VALID_EVIDENCE_PLAN_STATES = new Set(['not-applicable', 'evidence-gap']);
 const VALID_ASSESSMENT_DEPLOYMENT_DECISIONS = new Set(['proceed', 'hold', 'do_not_deploy']);
+const HOSTED_AGENT_PREFIX = '/api/agent/assessment/';
+const HOSTED_BOUNDED_ROE_PATH = '/api/agent/assessment/bounded-test/authorise';
+const HOSTED_AGENT_MAX_BODY_BYTES = 8 * 1024 * 1024;
 const publicSurfaceRedirects = new Map([
     ['/admin.html', '/'],
     ['/sales-agent.html', '/'],
@@ -143,6 +146,8 @@ const server = http.createServer(async (req, res) => {
         return await handleMetrics(req, res);
     if (req.method === 'POST' && url.pathname === '/api/assessment-request')
         return await handleAssessmentRequest(req, res);
+    if (url.pathname.startsWith(HOSTED_AGENT_PREFIX))
+        return await handleHostedAgentHttpRequest(req, res, url.pathname);
     if (!await primaryRateLimitAllowed(req, url.pathname))
         return json(res, 429, { error: 'Too many requests. Please try again shortly.' });
     req.user = await getUserFromRequest(req);
@@ -1682,6 +1687,109 @@ async function readRawBody(req, limit = 100000) {
         chunks.push(chunk);
     }
     return Buffer.concat(chunks);
+}
+async function readHostedAgentJson(req) {
+    try {
+        const raw = await readRawBody(req, HOSTED_AGENT_MAX_BODY_BYTES);
+        return JSON.parse(raw.toString('utf8') || '{}');
+    }
+    catch (error) {
+        if (error?.code === 'BODY_TOO_LARGE') {
+            throw Object.assign(new Error('Hosted assessment request is too large.'), {
+                statusCode: 413,
+                code: 'HOSTED_AGENT_BODY_TOO_LARGE',
+            });
+        }
+        if (error instanceof SyntaxError) {
+            throw Object.assign(new Error('Invalid JSON request.'), {
+                statusCode: 400,
+                code: 'HOSTED_AGENT_JSON_INVALID',
+            });
+        }
+        throw error;
+    }
+}
+async function handleHostedAgentHttpRequest(req, res, pathname) {
+    try {
+        if (!await primaryRateLimitAllowed(req, pathname)) {
+            return json(res, 429, {
+                error: 'Too many requests. Please try again shortly.',
+                code: 'HOSTED_AGENT_RATE_LIMITED',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        if (req.method !== 'POST') {
+            return json(res, 405, {
+                error: 'Method not allowed.',
+                code: 'HOSTED_AGENT_METHOD_NOT_ALLOWED',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        if (!verifyCsrf(req)) {
+            return json(res, 403, {
+                error: 'Security token missing or invalid. Refresh the session and try again.',
+                code: 'HOSTED_AGENT_CSRF_REQUIRED',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+            return json(res, 415, {
+                error: 'JSON request required.',
+                code: 'HOSTED_AGENT_JSON_REQUIRED',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        const operator = await getUserFromRequest(req);
+        if (!operator?.id) {
+            return json(res, 401, {
+                error: 'Sign in required.',
+                code: 'HOSTED_OPERATOR_AUTHENTICATION_REQUIRED',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        const body = await readHostedAgentJson(req);
+        let result;
+        if (pathname === HOSTED_BOUNDED_ROE_PATH) {
+            const { handleHostedBoundedRoeApi } = await import('./src/agent/hosted-bounded-roe-api.mjs');
+            result = await handleHostedBoundedRoeApi({ pathname, method: req.method, operator, body });
+        }
+        else {
+            const { handleHostedAgentApi } = await import('./src/agent/hosted-agent-api.mjs');
+            result = await handleHostedAgentApi({ pathname, method: req.method, operator, body });
+        }
+        if (result?.handled !== true) {
+            return json(res, 404, {
+                error: 'Hosted assessment route not found.',
+                code: 'HOSTED_AGENT_ROUTE_NOT_FOUND',
+                deploymentDecisionWritten: false,
+                humanReviewRequired: true,
+            });
+        }
+        return json(res, Number(result.statusCode) || 500, result.body || {
+            error: 'Hosted assessment returned no response.',
+            code: 'HOSTED_AGENT_EMPTY_RESPONSE',
+            deploymentDecisionWritten: false,
+            humanReviewRequired: true,
+        });
+    }
+    catch (error) {
+        const statusCode = Number(error?.statusCode) || 500;
+        if (statusCode >= 500)
+            console.error('Hosted agent API failed:', error?.message || error);
+        return json(res, statusCode, {
+            error: statusCode < 500
+                ? String(error?.message || 'Hosted assessment request failed.')
+                : 'Hosted assessment request failed.',
+            code: error?.code || 'HOSTED_AGENT_API_FAILED',
+            deploymentDecisionWritten: false,
+            humanReviewRequired: true,
+        });
+    }
 }
 async function handleAssessmentRequest(req, res) {
     try {
