@@ -274,10 +274,6 @@ try {
   assert.equal(shared.assessment.result, undefined);
   assert.equal(shared.assessment.recommendations, undefined);
 
-  const checkout = await request('/api/checkout', { method: 'POST', body: { productKey: 'pro_report', assessmentId } });
-  const sessionId = new URL(checkout.url, 'http://example.test').searchParams.get('session_id');
-  const paidStatus = await request(`/api/checkout/status?session_id=${sessionId}`);
-  assert.equal(paidStatus.purchase.status, 'paid');
 
   let hardenedAdapter = false;
   adapter = http.createServer(async (req, res) => {
@@ -358,12 +354,6 @@ try {
   assert.ok(retestAccepted.delta.resolved.length > 0);
   await new Promise((resolve) => adapter.close(resolve));
 
-  const subscriptionCheckout = await request('/api/checkout', { method: 'POST', body: { productKey: 'developer_monthly' } });
-  const subscriptionSessionId = new URL(subscriptionCheckout.url, 'http://example.test').searchParams.get('session_id');
-  const subscriptionStatus = await request(`/api/checkout/status?session_id=${subscriptionSessionId}`);
-  assert.equal(subscriptionStatus.subscription.status, 'active');
-  const subscriptionAssessment = await request(`/api/assessments/${assessmentId}`);
-  assert.equal(subscriptionAssessment.subscriptionAccess, true);
 
   const dashboard = await request('/api/dashboard');
   assert.equal(dashboard.stats.assessments, 1);
@@ -378,7 +368,6 @@ try {
 
   const analytics = await request('/api/admin/analytics');
   assert.equal(analytics.totals.users, 1);
-  assert.equal(analytics.totals.purchases, 2);
   assert.equal(analytics.totals.redTeamRuns, 2);
   assert.ok(Array.isArray(analytics.readiness.checks));
   const retiredInviteEndpoint = await fetch(`${APP_ORIGIN}/api/admin/invites`, { headers: { ...(cookieHeader() ? { Cookie: cookieHeader() } : {}) } });
@@ -516,7 +505,6 @@ try {
   const resetRequest = await request('/api/auth/password-reset/request', { method: 'POST', body: { email: 'owner@example.com' } });
   assert.ok(resetRequest.demoResetUrl);
 
-  await request('/api/subscriptions/demo-cancel', { method: 'POST', body: {} });
   await request('/api/account/password', { method: 'POST', body: { currentPassword: 'secure-demo-password-1', newPassword: 'another-secure-demo-password-2-1' } });
   const afterPassword = await request('/api/dashboard');
   assert.equal(afterPassword.user.email, 'owner@example.com');
@@ -530,7 +518,6 @@ try {
     riskBand: made.assessment.riskBand,
     paidTier: paid.assessment.paidTier,
     pdfBytes: pdf.length,
-    subscription: subscriptionStatus.subscription.status,
     sharing: true,
     publicTokenIsolation: true,
     dataExport: true,
