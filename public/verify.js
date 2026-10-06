@@ -1,5 +1,5 @@
 import { api, escapeHtml, qs } from './shared.js';
-import { parsePostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY, targetForContinuation } from './purchase-continuation.js';
+import { parsePostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY, targetForContinuation } from './post-verify-continuation.js';
 
 const root = document.querySelector('#verifyStatus');
 const token = qs('token');
@@ -22,7 +22,6 @@ function clearContinuation() {
 
 async function continuationTarget(continuation) {
   if (!continuation) return null;
-  if (continuation.kind === 'path') return targetForContinuation(continuation);
   const dashboard = await api('/api/dashboard');
   return targetForContinuation(continuation, dashboard.assessments || []);
 }
@@ -31,7 +30,7 @@ function setContinueLink(href, continuation) {
   const primary = document.querySelector('a.button.primary');
   if (!primary || !href) return;
   primary.href = href;
-  primary.textContent = continuation?.kind === 'assessment' ? 'Continue assessment purchase' : 'Continue';
+  primary.textContent = continuation?.kind === 'assessment' ? 'Continue assessment' : 'Continue';
 }
 
 (async () => {
@@ -53,7 +52,7 @@ function setContinueLink(href, continuation) {
     }
     if (continuationResolved) clearContinuation();
     root.className = 'success-box';
-    root.innerHTML = '<strong>Email verified.</strong><p>You can now purchase reports and run authorised inspection and red-team workflows.</p>';
+    root.innerHTML = '<strong>Email verified.</strong><p>Your email is verified. You can now continue authorised assessment workflows.</p>';
     setContinueLink(href, continuation);
   } catch (error) {
     root.className = 'error-box show';
