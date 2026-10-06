@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ARL Guardian | AgentRiskLayer</title>
+  <meta name="description" content="Local, read-only capability discovery for AI-agent repositories.">
+  <meta name="robots" content="index,follow">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="shell header">
+  <a class="brand" href="/">AgentRiskLayer</a>
+  <nav><a href="/">Home</a><a href="/#service">Assessment</a><a class="button small" href="/#request">Request an assessment</a></nav>
+</header>
+<main>
+  <section class="shell hero">
+    <div class="hero-copy">
+      <p class="eyebrow">ARL Guardian · Public Preview</p>
+      <h1>See what authority your agent repository exposes.</h1>
+      <p class="lede">Guardian scans source locally, without running the agent, and maps reviewable evidence for MCP, network access, filesystem mutation, process execution, credential references and approval boundaries.</p>
+      <div class="actions">
+        <a class="button" href="https://raw.githubusercontent.com/emprex/agent-risk-layer/main/public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz">Download Guardian RC5</a>
+        <a class="button ghost" href="/#request">Request ARL review</a>
+      </div>
+      <div class="trustline"><span>Runs locally</span><span>Read-only discovery</span><span>No LLM</span><span>No API key</span></div>
+    </div>
+    <aside class="boundary-card" aria-label="Guardian authority boundary">
+      <div><span>01</span><strong>Repository</strong><small>source is inspected locally</small></div>
+      <div><span>02</span><strong>Capabilities</strong><small>MCP, network, files, execution, credentials</small></div>
+      <div><span>03</span><strong>Evidence</strong><small>reviewable source references</small></div>
+      <div class="accent"><span>04</span><strong>Human review</strong><small>no autonomous security verdict</small></div>
+    </aside>
+  </section>
+
+  <section class="band"><div class="shell section">
+    <div class="section-head"><p class="eyebrow">Install</p><h2>Current preview: 0.3.0-rc.5</h2></div>
+    <div class="grid four">
+      <article><h3>Install</h3><p><code>npm install https://raw.githubusercontent.com/emprex/agent-risk-layer/main/public/downloads/agentrisklayer-guardian-0.3.0-rc.5.tgz</code></p></article>
+      <article><h3>Report</h3><p><code>npx --no-install arl-guardian report /path/to/your-agent</code></p></article>
+      <article><h3>Evidence</h3><p><code>npx --no-install arl-guardian evidence /path/to/your-agent</code></p></article>
+      <article><h3>Integrity</h3><p>SHA-256:<br><code>eae7836e88e30902b13774f1e2b86d116d371d4c2ae3c30dd4fba71b7cf0ca35</code></p></article>
+    </div>
+  </div></section>
+
+  <section class="shell section">
+    <div class="split">
+      <div><p class="eyebrow">Boundary</p><h2>Guardian discovers. AgentRiskLayer assesses.</h2></div>
+      <div class="stack">
+        <p>Guardian observations are not findings, severity decisions, readiness decisions or deployment verdicts.</p>
+        <p>AgentRiskLayer uses scope, evidence, authorised testing, remediation and exact retesting to support the final human decision.</p>
+        <div class="actions"><a class="button" href="/#request">Request an assessment</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="shell footer"><div><strong>AgentRiskLayer</strong><p>Human-led AI agent security assessment.</p></div><nav><a href="/">Home</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></footer>
+</body>
+</html>
