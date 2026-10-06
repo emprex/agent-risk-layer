@@ -1,14 +1,17 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
-import { localCliDatabasePath } from './local-cli-mode.mjs';
+import { isLocalCliModeEnabled } from './local-cli-mode.mjs';
 import { db, id, nowIso, initialiseDatabase } from '../db.js';
 import { createWorkspace } from '../workspaces.js';
 import { createSecurityProject } from '../control-plane-core.js';
 import { createUnknownAssessment } from './assessment-bootstrap.mjs';
 
 export async function resolveLocalAssessmentContext(repositoryPath) {
-  if (!localCliDatabasePath() || db.kind !== 'sqlite-test') throw new Error('Local CLI persistence is required.');
+  if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
+  if (db.kind !== 'postgres' && !(process.env.NODE_ENV === 'test' && db.kind === 'sqlite-test')) {
+    throw new Error('Local ARL persistence must use PostgreSQL.');
+  }
   await initialiseDatabase();
   const root = fs.realpathSync(repositoryPath);
   const digest = crypto.createHash('sha256').update(root).digest('hex');
