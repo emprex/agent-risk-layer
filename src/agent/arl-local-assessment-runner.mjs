@@ -236,6 +236,12 @@ try {
         );
 
         if (advisory.available) {
+          console.log('Authoritative facts supplied to the model:');
+          for (const fact of advisory.facts || []) {
+            console.log(`[${fact.id}] ${fact.text}`);
+          }
+          console.log('');
+          console.log('Model commentary:');
           console.log(advisory.explanation);
           console.log('');
           console.log(
