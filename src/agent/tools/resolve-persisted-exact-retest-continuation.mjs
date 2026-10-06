@@ -27,6 +27,59 @@ function clean(value) {
   return String(value ?? '').trim();
 }
 
+function baselineSemanticKey(candidate) {
+  return JSON.stringify({
+    controlId:
+      candidate.lineage?.controlId || null,
+    findingId:
+      candidate.lineage?.findingId || null,
+    caseId:
+      candidate.outcome?.caseId || null,
+    requestFingerprint:
+      clean(candidate.outcome?.result?.requestFingerprint),
+    targetIdentity:
+      targetIdentity(candidate.outcome)
+  });
+}
+
+function collapseEquivalentBaselines(items = []) {
+  const groups = new Map();
+
+  for (const item of items) {
+    const key = baselineSemanticKey(item);
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  }
+
+  if (groups.size !== 1) {
+    return {
+      available: false,
+      candidates: items
+    };
+  }
+
+  const equivalent = [...groups.values()][0]
+    .slice()
+    .sort((left, right) => {
+      const timeOrder =
+        String(left.createdAt || '')
+          .localeCompare(String(right.createdAt || ''));
+
+      if (timeOrder !== 0) return timeOrder;
+
+      return String(left.runId || '')
+        .localeCompare(String(right.runId || ''));
+    });
+
+  return {
+    available: true,
+    baseline: equivalent[0],
+    equivalentRunIds:
+      equivalent.map((item) => item.runId)
+  };
+}
+
 function targetIdentity(outcome) {
   const campaign = outcome?.campaign || {};
   const target = campaign.target || {};
@@ -100,16 +153,29 @@ export function selectPersistedExactRetestContinuation({
     );
   }
 
-  if (baselines.length !== 1) {
-    return unavailable(
-      'persisted_failed_redteam_baseline_ambiguous',
-      {
-        candidateCount: baselines.length
-      }
-    );
-  }
+  let baseline;
+  let equivalentBaselineRunIds = [];
 
-  const baseline = baselines[0];
+  if (baselines.length === 1) {
+    baseline = baselines[0];
+    equivalentBaselineRunIds = [baseline.runId];
+  } else {
+    const collapsed =
+      collapseEquivalentBaselines(baselines);
+
+    if (!collapsed.available) {
+      return unavailable(
+        'persisted_failed_redteam_baseline_ambiguous',
+        {
+          candidateCount: baselines.length
+        }
+      );
+    }
+
+    baseline = collapsed.baseline;
+    equivalentBaselineRunIds =
+      collapsed.equivalentRunIds;
+  }
   const exactRetests =
     retests.filter(
       (candidate) =>
@@ -139,6 +205,7 @@ export function selectPersistedExactRetestContinuation({
     selectionBasis:
       'unique_exact_authorised_retest_lineage',
     baselineRunId: baseline.runId,
+    equivalentBaselineRunIds,
     retestRunId: retest.runId,
     caseId,
     controlId:
@@ -240,6 +307,7 @@ export async function resolvePersistedExactRetestContinuation({
     if (
       outcome.status === 'failed' &&
       lineage.available === true &&
+      lineage.redTeamEvidence?.executionKind === 'initial' &&
       lineage.findingId &&
       !['verified_closed', 'accepted_risk'].includes(
         lineage.findingStatus
