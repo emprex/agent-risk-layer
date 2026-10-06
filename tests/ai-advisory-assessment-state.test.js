@@ -6,6 +6,7 @@ import {
   isAssessmentStateExplanationRequest
 } from '../src/agent/ai/advisory-context.mjs';
 import {
+  buildGroundedFacts,
   explainAssessmentState
 } from '../src/agent/ai/assessment-explainer.mjs';
 import {
@@ -295,4 +296,49 @@ test('Ollama timeout can be configured for slower local models', async () => {
       process.env.ARL_AI_TIMEOUT_MS = previous;
     }
   }
+});
+
+
+test('grounded facts contain only projected ARL state and no invented lineage', () => {
+  const context = buildAdvisoryContext(authoritativeFixture());
+  const facts = buildGroundedFacts(context);
+  const rendered = JSON.stringify(facts);
+
+  assert.equal(rendered.includes('lineage'), false);
+  assert.equal(rendered.includes('ambiguity'), false);
+  assert.equal(rendered.includes('never-send-this'), false);
+  assert.ok(
+    facts.some((fact) =>
+      fact.text.includes('Control applicability still requires authoritative human resolution.')
+    )
+  );
+});
+
+test('AI prompt forbids unsupported causal inference and carries numbered facts', async () => {
+  let messages = null;
+
+  await explainAssessmentState(
+    authoritativeFixture(),
+    {
+      ask: async (input) => {
+        messages = input.messages;
+        return {
+          available: true,
+          model: 'test-model',
+          content: '[F1] Current stage explained.'
+        };
+      }
+    }
+  );
+
+  assert.ok(
+    messages[0].content.includes(
+      'Do not infer causes, hidden state, ambiguity, lineage'
+    )
+  );
+  assert.ok(messages[1].content.includes('[F1]'));
+  assert.equal(
+    messages[1].content.includes('never-send-this'),
+    false
+  );
 });
