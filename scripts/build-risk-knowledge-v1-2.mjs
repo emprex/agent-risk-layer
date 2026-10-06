@@ -15,6 +15,15 @@ function canonical(value) {
   return JSON.stringify(value);
 }
 function digest(value) { return crypto.createHash('sha256').update(canonical(value)).digest('hex'); }
+function writeFileAtomicSync(target, content) {
+  const temporary = `${target}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temporary, content, 'utf8');
+    fs.renameSync(temporary, target);
+  } finally {
+    if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+  }
+}
 // Canonical control semantics are human-authored in risk-knowledge-v1.json.
 //
 // This builder MUST NOT invent, replace or normalise control objectives,
@@ -35,7 +44,7 @@ for (const entry of asset.entries) {
 
 const quality = assertRiskKnowledgeQuality(asset);
 
-fs.writeFileSync(assetPath, `${JSON.stringify(asset, null, 2)}\n`);
+writeFileAtomicSync(assetPath, `${JSON.stringify(asset, null, 2)}\n`);
 const publicAsset = {
   schema: 'arl.risk-knowledge-public.v1.2',
   asset: asset.asset,
@@ -49,12 +58,12 @@ const publicAsset = {
     content_digest: entry.content_digest,
   })),
 };
-fs.writeFileSync(publicPath, `${JSON.stringify(publicAsset, null, 2)}\n`);
+writeFileAtomicSync(publicPath, `${JSON.stringify(publicAsset, null, 2)}\n`);
 
 const csvColumns = ['id','knowledge_version','status','category','title','default_severity','priority','problem','check_method','solution','owner','applicability','applicability_profile','mappings','pass_condition','fail_condition','retest_acceptance','test_mode','test_families','automation_status','remediation_effort','evidence_types','review_interval_days','machine_rule_status','control_dependencies','validation_status','next_review_due','content_digest'];
 function csv(value) { const text = String(value ?? ''); return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; }
 const csvRows = asset.entries.map((entry) => [entry.id,entry.knowledge_version,entry.status,entry.category,entry.title,entry.problem.default_severity,entry.solution.priority,entry.problem.statement,entry.check.method,entry.solution.recommended_remediation,entry.solution.default_owner,(entry.problem.applicability||[]).join('|'),JSON.stringify(entry.applicability_profile),entry.mappings.map((mapping)=>`${mapping.framework} ${mapping.reference}`).join('|'),entry.check.pass_condition,entry.check.fail_condition,entry.solution.retest_acceptance.join('|'),entry.operational_metadata.test_mode,entry.operational_metadata.test_families.join('|'),entry.operational_metadata.automation_status,entry.operational_metadata.remediation_effort,entry.operational_metadata.evidence_types.join('|'),entry.operational_metadata.review_interval_days,entry.operational_metadata.machine_rule_status,entry.operational_metadata.control_dependencies.join('|'),entry.validation.status,entry.review.next_review_due,entry.content_digest].map(csv).join(','));
-fs.writeFileSync(path.join(root, 'risk-knowledge', 'risk-knowledge-v1.csv'), `${csvColumns.join(',')}\n${csvRows.join('\n')}\n`);
+writeFileAtomicSync(path.join(root, 'risk-knowledge', 'risk-knowledge-v1.csv'), `${csvColumns.join(',')}\n${csvRows.join('\n')}\n`);
 
 function sql(value) { return `'${String(value ?? '').replaceAll("'", "''")}'`; }
 const seed = ['-- Generated deterministically from risk-knowledge-v1.json by scripts/build-risk-knowledge-v1-2.mjs.'];
@@ -71,7 +80,7 @@ for (const predicate of ARCHITECTURE_PREDICATE_REGISTRY) {
 }
 // Generated current-state SQL is an artifact, NOT an applied migration.
 // Applied migrations are immutable; canonical changes require a new numbered migration.
-fs.writeFileSync(path.join(root, 'risk-knowledge', 'risk-knowledge-v1.sql'), `${seed.join('\n')}\n`);
+writeFileAtomicSync(path.join(root, 'risk-knowledge', 'risk-knowledge-v1.sql'), `${seed.join('\n')}\n`);
 
 const qualityReport = `# ARL-RKA-1.2 semantic quality report
 
@@ -85,4 +94,4 @@ const qualityReport = `# ARL-RKA-1.2 semantic quality report
 
 The scan validates structural quality, unresolved placeholders, duplicate control-specific evidence blocks and canonical record digests across all 108 controls. Control semantics remain human-authored in the canonical risk knowledge asset.
 `;
-fs.writeFileSync(path.join(root, 'docs', 'RISK_KNOWLEDGE_SEMANTIC_QUALITY.md'), qualityReport);
+writeFileAtomicSync(path.join(root, 'docs', 'RISK_KNOWLEDGE_SEMANTIC_QUALITY.md'), qualityReport);
