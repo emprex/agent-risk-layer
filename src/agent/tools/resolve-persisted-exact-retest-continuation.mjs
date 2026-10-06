@@ -146,7 +146,13 @@ export function selectPersistedExactRetestContinuation({
     findingId:
       baseline.lineage?.findingId || null,
     findingStatus:
-      baseline.lineage?.findingStatus || null
+      baseline.lineage?.findingStatus || null,
+    originalTestExecutionId:
+      baseline.lineage?.redTeamEvidence?.testExecutionId || null,
+    retestStatus:
+      retest.outcome?.status || null,
+    requestFingerprint:
+      retest.outcome?.result?.requestFingerprint || null
   };
 }
 
@@ -225,6 +231,7 @@ export async function resolvePersistedExactRetestContinuation({
 
     if (
       controlId &&
+      lineageControlId &&
       lineageControlId !== controlId
     ) {
       continue;
@@ -248,7 +255,7 @@ export async function resolvePersistedExactRetestContinuation({
     }
 
     if (
-      outcome.status === 'passed' &&
+      ['passed', 'failed'].includes(outcome.status) &&
       lineage.available !== true &&
       lineage.reason === EVIDENCE_NOT_RECORDED
     ) {
