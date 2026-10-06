@@ -149,6 +149,24 @@ function remediationResponsePatch(remediationHandoff) {
 
   if (
     remediationHandoff.status ===
+    'already_recorded_exact_retest_required'
+  ) {
+    return {
+      status: 'user_action_required',
+      message:
+        'The remediation implementation evidence and changed system snapshot are already recorded. The finding remains open. A revision-bound exact retest is now required.',
+      nextStep: {
+        actor: 'user',
+        label: 'run the revision-bound exact retest',
+        requiresUserInput: true
+      },
+      needsUserAction: true,
+      canAutoAdvance: false
+    };
+  }
+
+  if (
+    remediationHandoff.status ===
     'already_recorded'
   ) {
     return {
