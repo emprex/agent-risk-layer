@@ -1,5 +1,6 @@
 import {
-  listRedTeamRunsForAssessment
+  listRedTeamRunsForAssessment,
+  verifyExactRetestAuthorisationLineage
 } from '../../redteam.js';
 
 import {
@@ -55,10 +56,14 @@ function exactPair(baseline, retest) {
     return false;
   }
 
+  if (!baseline.outcome?.authorisationId) {
+    return false;
+  }
+
   if (
-    !baseline.outcome?.authorisationId ||
     baseline.outcome.authorisationId !==
-      retest.outcome?.authorisationId
+      retest.outcome?.authorisationId &&
+    retest.authorisationLineageVerified !== true
   ) {
     return false;
   }
@@ -253,6 +258,32 @@ export async function resolvePersistedExactRetestContinuation({
         outcome,
         lineage
       });
+    }
+  }
+
+  if (baselines.length === 1) {
+    const baseline = baselines[0];
+
+    for (const retest of retests) {
+      if (
+        baseline.outcome?.authorisationId &&
+        retest.outcome?.authorisationId &&
+        baseline.outcome.authorisationId !==
+          retest.outcome.authorisationId
+      ) {
+        const lineage =
+          await verifyExactRetestAuthorisationLineage({
+            userId,
+            assessmentId,
+            baselineAuthorisationId:
+              baseline.outcome.authorisationId,
+            retestAuthorisationId:
+              retest.outcome.authorisationId
+          });
+
+        retest.authorisationLineageVerified =
+          lineage.available === true;
+      }
     }
   }
 
