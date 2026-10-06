@@ -1,66 +1,113 @@
-# AgentRiskLayer v9.1 production deployment
+# AgentRiskLayer deployment
 
-## 1. Repository and Render Blueprint
+This document covers deployment of the public AgentRiskLayer website and assessment-request service.
 
-1. Put the definitive package at the GitHub repository root.
-2. Confirm `render.yaml`, `Dockerfile`, `package-lock.json`, `migrations/`, `server.js` and `src/control-plane.js` are committed.
-3. Create a Render Blueprint from the repository.
-4. Confirm it provisions the paid `agent-risk-layer` web service and `agent-risk-layer-db` managed PostgreSQL service in Oregon.
-5. Confirm the web service has no persistent disk and receives the database private connection string as `DATABASE_URL`.
+It does **not** define the authority for customer assessments. Assessment execution remains local and operator-led from the canonical repository.
 
-## 2. Owner-controlled variables
+## Public service boundary
 
-Set every `sync: false` value in Render. Values for legal identity, jurisdiction, support, payments and email must be factual. Production startup refuses incomplete configuration.
+The deployed web service may provide:
 
-Create/update the Stripe catalogue only with owner-controlled credentials:
+- the public marketing site;
+- trust, research and methodology pages;
+- assessment-request intake;
+- supporting authenticated product surfaces that are intentionally retained;
+- health/readiness endpoints and operational telemetry.
 
-```bash
-STRIPE_SECRET_KEY=... RENDER_API_KEY=... RENDER_SERVICE_ID=srv-... \
-  npm run prices:update -- --apply
+The deployed web service is not a remote security authority for local assessments.
+
+## Repository
+
+Canonical repository:
+
+```text
+emprex/agent-risk-layer
 ```
 
-Review all products and prices in Stripe before adding `--deploy`.
+Before deployment:
 
-## 3. First deployment
+1. confirm the intended Git commit;
+2. require CI success;
+3. review the diff;
+4. verify no secrets are committed;
+5. verify the public request flow and legal pages;
+6. verify the deployment configuration matches the current service model.
 
-The application will:
+## Render
 
-1. validate production configuration and fail closed if unsafe;
-2. connect to managed PostgreSQL;
-3. acquire the migration advisory lock;
-4. apply checksum-recorded migrations, including the security control plane;
-5. clean expired credentials and enforce retention;
-6. start fulfilment and retention workers;
-7. expose `/api/ready` only after database and configuration checks pass.
+The current repository still contains `render.yaml` for the public web service.
 
-Check Render logs for `server_started`, the applied migration list and no unresolved operational alert.
+If Render is used:
 
-## 4. External services
+- connect only the canonical repository;
+- deploy the intended `main` revision;
+- configure secrets in Render, not in Git;
+- use the configured PostgreSQL service where the web application requires persistence;
+- do not make local assessment execution depend on Render availability.
 
-- Stripe webhook: `https://agentrisklayer.com/api/stripe/webhook`
-- Resend sender: verified address on `agentrisklayer.com`
-- DNS: use the exact Render custom-domain records
-- HTTPS: wait for Render certificate issuance before customer traffic
-- Metrics: configure the monitoring service to call `/metrics` with `METRICS_TOKEN`
+## Configuration
 
-## 5. Live public customer journey
+Use `.env.example` only as a reference.
 
-Use dedicated test identities and synthetic content. Verify:
+Typical deployed-service settings include:
 
-1. public account registration, email verification, MFA and recovery;
-2. free Community project creation and one-time API key display;
-3. Guard allow, deny, monitor, replay and revoked-key behaviour;
-4. project quota and burst-rate responses, including `Retry-After`;
-5. inventory baseline, risky drift and `review-required` gate;
-6. remediation assignment, status changes and verification evidence;
-7. assessment, £99 checkout, Stripe webhook and idempotent fulfilment;
-8. Developer/Team/Agency checkout, billing portal and cancellation;
-9. Resend report delivery and failure/retry handling;
-10. inspector and red-team token upload, replay rejection and signed evidence;
-11. workspace role isolation, owner billing limits and SCIM provisioning;
-12. protected metrics, health/readiness and alert visibility;
-13. export and account deletion with owned projects/workspaces;
-14. desktop and mobile navigation, dashboard, control plane and checkout;
-15. PostgreSQL backup, checksum verification and restore into a separate non-production database.
+```text
+DATABASE_URL
+SESSION_SECRET
+BASE_URL
+METRICS_TOKEN
+RESEND_API_KEY
+EMAIL_FROM
+ADMIN_EMAIL
+SUPPORT_EMAIL
+COMPANY_LEGAL_NAME
+LEGAL_JURISDICTION
+```
 
-Record IDs, timestamps and outcomes without copying secrets, raw customer prompts or payment data.
+Only configure values actually required by the active deployment. Do not restore retired payment/subscription settings.
+
+## Pre-deployment checks
+
+Run:
+
+```bash
+npm ci
+npm run check
+npm test
+npm run smoke
+```
+
+Then verify:
+
+- homepage and assessment pages render correctly;
+- `/request-assessment.html` submits successfully;
+- no secret or credential is requested from prospects;
+- legal/privacy pages are reachable;
+- trust and accreditation wording remains bounded;
+- `/api/health` and `/api/ready` behave as expected for the deployed environment.
+
+## Assessment execution boundary
+
+Customer assessment work is performed locally from the canonical repository.
+
+The normal assessment path is:
+
+request
+-> scope
+-> frozen target
+-> inspection/evidence
+-> applicability
+-> authorised controlled tests
+-> findings
+-> remediation
+-> exact retest
+-> report
+-> human final decision
+
+A website deployment must never become a prerequisite for that authority chain.
+
+## Recovery
+
+Database backup/restore procedures apply only to deployed web-service data that actually uses the configured database.
+
+Never infer customer assessment closure or readiness from infrastructure recovery state.
