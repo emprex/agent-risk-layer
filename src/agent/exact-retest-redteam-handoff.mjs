@@ -1,10 +1,13 @@
 import crypto from 'node:crypto';
 
 import {
+  createExactRetestReauthorisation,
   createRedTeamToken,
   consumeRedTeamUpload,
+  EXACT_RETEST_REAUTHORISATION_CONFIRMATION,
   listRedTeamAuthorisations,
-  listRedTeamRunsForAssessment
+  listRedTeamRunsForAssessment,
+  verifyExactRetestAuthorisationLineage
 } from '../redteam.js';
 
 import {
@@ -70,6 +73,13 @@ export function detectExactRetestExecutionCommand(userRequest) {
   }
 
   return null;
+}
+
+export function detectExactRetestReauthorisationCommand(userRequest) {
+  const text = normalise(userRequest);
+  return /^i (?:reauthorise|reauthorize) (?:the )?exact retest[.!?]*$/.test(text)
+    ? 'exact_retest_reauthorise'
+    : null;
 }
 
 function execution({
@@ -288,6 +298,88 @@ async function uniqueOpenFailedBaseline({
   };
 }
 
+export async function reauthoriseExactRetestRedTeamHandoff({
+  workflowState,
+  projectId,
+  userId,
+  assessmentId
+} = {}) {
+  if (!projectId || !userId || !assessmentId) {
+    return blocked('authoritative_exact_retest_identity_required');
+  }
+
+  const action = workflowState?.nextAllowedAction || null;
+  if (
+    workflowState?.stage !== 'exact_retest_required' ||
+    action?.actor !== 'user' ||
+    action?.requiresUserInput !== true
+  ) {
+    return blocked('authoritative_exact_retest_gate_required');
+  }
+
+  const evidencePlan = evidencePlanFromState(workflowState);
+  const mapping = exactPlanMapping(workflowState);
+  if (!evidencePlan || !mapping) {
+    return blocked('exact_retest_evidence_plan_mapping_ambiguous');
+  }
+
+  const baseline = await uniqueOpenFailedBaseline({
+    projectId,
+    userId,
+    assessmentId,
+    evidencePlan,
+    caseId: mapping.caseId,
+    controlId: mapping.controlId
+  });
+
+  if (baseline.available !== true) {
+    return blocked(baseline.reason, {
+      candidateCount: baseline.candidateCount || 0
+    });
+  }
+
+  const baselineAuthorisationId =
+    clean(baseline.outcome?.authorisationId);
+
+  if (!baselineAuthorisationId) {
+    return blocked('exact_retest_baseline_target_authority_required');
+  }
+
+  let fresh;
+  try {
+    fresh = await createExactRetestReauthorisation({
+      userId,
+      assessmentId,
+      baselineAuthorisationId,
+      confirmation:
+        EXACT_RETEST_REAUTHORISATION_CONFIRMATION
+    });
+  } catch (error) {
+    return blocked(
+      `exact_retest_reauthorisation_failed:${clean(
+        error?.message || 'unknown'
+      )}`
+    );
+  }
+
+  return {
+    type: 'exact_retest_redteam_handoff',
+    schema: EXACT_RETEST_REDTEAM_HANDOFF_SCHEMA,
+    available: true,
+    status: 'exact_retest_reauthorised',
+    reason: 'exact_retest_reauthorised',
+    baselineAuthorisationId,
+    retestAuthorisationId: fresh.id,
+    securityStateChanged: true,
+    execution: execution({
+      changed: true,
+      status: 'exact_retest_reauthorised'
+    }),
+    deploymentDecisionWritten: false,
+    humanReviewRequired: true
+  };
+}
+
 export const EXACT_RETEST_REDTEAM_RESERVATION_SCHEMA =
   'arl.agent.exact-retest-redteam-reservation.v1';
 
@@ -426,17 +518,52 @@ export async function prepareExactRetestRedTeamReservation({
     );
   }
 
-  const authorisation = matches[0];
+  const baselineAuthorisation = matches[0];
+  let authorisation = baselineAuthorisation;
 
   if (
     !activeSafeAuthorisation(
-      authorisation,
+      baselineAuthorisation,
       Date.now()
     )
   ) {
-    return blocked(
-      'exact_retest_rules_of_engagement_not_active'
-    );
+    const linked = [];
+
+    for (const candidate of authorisations) {
+      if (
+        candidate?.id === authorisationId ||
+        !activeSafeAuthorisation(candidate, Date.now())
+      ) {
+        continue;
+      }
+
+      const lineage =
+        await verifyExactRetestAuthorisationLineage({
+          userId,
+          assessmentId,
+          baselineAuthorisationId: authorisationId,
+          retestAuthorisationId: candidate.id
+        });
+
+      if (lineage.available === true) {
+        linked.push(candidate);
+      }
+    }
+
+    if (linked.length === 0) {
+      return blocked(
+        'exact_retest_reauthorisation_required'
+      );
+    }
+
+    if (linked.length !== 1) {
+      return blocked(
+        'exact_retest_reauthorisation_ambiguous',
+        { candidateCount: linked.length }
+      );
+    }
+
+    authorisation = linked[0];
   }
 
   const endpoint =
