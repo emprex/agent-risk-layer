@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { db, id, nowIso } from '../db.js';
+
 import {
   getControlIntelligenceControl
 } from '../control-intelligence.js';
@@ -66,6 +68,239 @@ function targetRevision(assessmentContext) {
   return /^[a-f0-9]{40}$/.test(value)
     ? value
     : null;
+}
+
+function parseJson(value, fallback = {}) {
+  try {
+    return value && typeof value === 'object'
+      ? value
+      : JSON.parse(value || '{}');
+  } catch {
+    return fallback;
+  }
+}
+
+function revisionFromAssetName(name) {
+  const match = String(name || '')
+    .match(/@([a-f0-9]{40})$/i);
+
+  return match?.[1]?.toLowerCase() || null;
+}
+
+async function recoverLegacyUnboundRetestImplementation({
+  projectId,
+  userId,
+  findingId,
+  revision
+}) {
+  const failedRetest =
+    await db.prepare(`
+      SELECT
+        id,
+        input_reference,
+        completed_at
+      FROM control_test_executions
+      WHERE project_id=?
+        AND remediation_id=?
+        AND finding_id=?
+        AND execution_kind='retest'
+        AND result='failed'
+      ORDER BY completed_at DESC,id DESC
+      LIMIT 1
+    `).get(
+      projectId,
+      findingId,
+      findingId
+    );
+
+  if (!failedRetest?.input_reference) {
+    return {
+      available: false,
+      reason: 'legacy_unbound_failed_retest_not_found'
+    };
+  }
+
+  const match =
+    String(failedRetest.input_reference)
+      .match(
+        /^redteam-failed-retest:(rtr_[a-f0-9]+):/i
+      );
+
+  if (!match?.[1]) {
+    return {
+      available: false,
+      reason: 'failed_retest_redteam_lineage_required'
+    };
+  }
+
+  const redteamRun =
+    await db.prepare(`
+      SELECT id,campaign_json
+      FROM redteam_runs
+      WHERE id=?
+    `).get(match[1]);
+
+  if (!redteamRun) {
+    return {
+      available: false,
+      reason: 'failed_retest_redteam_run_required'
+    };
+  }
+
+  const campaign =
+    parseJson(redteamRun.campaign_json, {});
+  const boundRevision =
+    clean(campaign?.target?.revision).toLowerCase();
+
+  if (/^[a-f0-9]{40}$/.test(boundRevision)) {
+    return {
+      available: false,
+      reason: 'failed_retest_already_revision_bound',
+      boundRevision
+    };
+  }
+
+  const project =
+    await db.prepare(`
+      SELECT workspace_id
+      FROM security_projects
+      WHERE id=?
+    `).get(projectId);
+
+  if (!project?.workspace_id) {
+    return {
+      available: false,
+      reason: 'project_workspace_required'
+    };
+  }
+
+  const rows =
+    await db.prepare(`
+      SELECT
+        a.id AS artifact_id,
+        a.source_id,
+        s.source,
+        s.assets_json
+      FROM remediation_evidence_artifacts a
+      JOIN asset_snapshots s
+        ON s.id=a.source_id
+       AND s.project_id=a.project_id
+      WHERE a.workspace_id=?
+        AND a.project_id=?
+        AND a.remediation_id=?
+        AND a.artifact_type='implementation'
+        AND a.source_type='asset_snapshot'
+        AND a.lifecycle_state='invalidated'
+        AND a.invalidated_at IS NOT NULL
+      ORDER BY a.invalidated_at DESC,a.id DESC
+    `).all(
+      project.workspace_id,
+      projectId,
+      findingId
+    );
+
+  const matches = [];
+
+  for (const row of rows) {
+    if (row.source !== 'arl-agent-git-remediation') {
+      continue;
+    }
+
+    const assets =
+      parseJson(row.assets_json, []);
+
+    if (!Array.isArray(assets)) {
+      continue;
+    }
+
+    const revisions =
+      assets
+        .map((asset) =>
+          revisionFromAssetName(asset?.name)
+        )
+        .filter(Boolean);
+
+    if (revisions.includes(revision)) {
+      matches.push(row);
+    }
+  }
+
+  if (matches.length !== 1) {
+    return {
+      available: false,
+      reason:
+        matches.length === 0
+          ? 'matching_invalidated_implementation_not_found'
+          : 'matching_invalidated_implementation_ambiguous',
+      candidateCount: matches.length
+    };
+  }
+
+  const recoveredAt = nowIso();
+  const artifact = matches[0];
+
+  const updated =
+    await db.prepare(`
+      UPDATE remediation_evidence_artifacts
+      SET lifecycle_state='active',
+          invalidated_at=NULL
+      WHERE id=?
+        AND workspace_id=?
+        AND project_id=?
+        AND remediation_id=?
+        AND lifecycle_state='invalidated'
+        AND invalidated_at IS NOT NULL
+    `).run(
+      artifact.artifact_id,
+      project.workspace_id,
+      projectId,
+      findingId
+    );
+
+  if (Number(updated.changes || 0) !== 1) {
+    return {
+      available: false,
+      reason: 'implementation_recovery_conflict'
+    };
+  }
+
+  await db.prepare(`
+    INSERT INTO security_audit_log
+    (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    id('aud_'),
+    project.workspace_id,
+    projectId,
+    'user',
+    userId,
+    'control_intelligence.legacy_unbound_retest_recovery',
+    'remediation',
+    findingId,
+    JSON.stringify({
+      failedRetestExecutionId:
+        failedRetest.id,
+      redteamRunId:
+        redteamRun.id,
+      restoredImplementationArtifactId:
+        artifact.artifact_id,
+      revision,
+      reason:
+        'The historical failed exact retest had no target revision binding and therefore cannot remain authoritative for invalidating implementation evidence.'
+    }),
+    recoveredAt
+  );
+
+  return {
+    available: true,
+    status: 'implementation_recovered',
+    artifactId: artifact.artifact_id,
+    failedRetestExecutionId:
+      failedRetest.id,
+    redteamRunId:
+      redteamRun.id,
+    revision
+  };
 }
 
 async function resolveActiveRemediation({
@@ -536,12 +771,69 @@ export async function captureGitRemediationHandoff({
   }
 
   if (frozen.revision === baselineRevision) {
+    const recovery =
+      await recoverLegacyUnboundRetestImplementation({
+        projectId,
+        userId,
+        findingId: remediation.finding.id,
+        revision: frozen.revision
+      });
+
+    if (recovery.available === true) {
+      const refreshed =
+        await resolveActiveRemediation({
+          projectId,
+          userId,
+          systemSnapshotId:
+            assessmentContext.systemSnapshotId
+        });
+
+      const state = workflowState({
+        stage: 'exact_retest_required',
+        actionName: 'authorise_and_run_exact_retest',
+        actor: 'user',
+        reason:
+          'ARL restored the existing remediation implementation evidence because the historical failed exact retest was not bound to a target revision. The finding remains open and a new revision-bound exact retest is required.',
+        assessmentContext,
+        authoritativeAssessment,
+        frozen,
+        remediation:
+          refreshed.available === true
+            ? refreshed
+            : remediation,
+        baselineRevision,
+        blockerCode: 'revision_bound_exact_retest_required',
+        securityStateChanged: true
+      });
+
+      return result({
+        status:
+          'implementation_recovered_for_revision_bound_retest',
+        reason:
+          'legacy_unbound_failed_retest_recovery',
+        state,
+        securityStateChanged: true,
+        extra: {
+          findingId: remediation.finding.id,
+          controlId: remediation.controlId,
+          baselineRevision,
+          currentRevision: frozen.revision,
+          recoveredImplementationArtifactId:
+            recovery.artifactId,
+          historicalFailedRetestExecutionId:
+            recovery.failedRetestExecutionId,
+          historicalRedTeamRunId:
+            recovery.redteamRunId
+        }
+      });
+    }
+
     const state = workflowState({
       stage: 'remediation_change_required',
       actionName: 'commit_remediation_change',
       actor: 'user',
       reason:
-        'The repository is clean but still at the revision bound to the failed snapshot. ARL will not record the statement “I fixed it” as implementation evidence.',
+        'The repository is clean but still at the revision bound to the failed snapshot. ARL will not record the statement “I fixed it” as implementation evidence unless the previous failed retest is provably legacy and unbound to the target revision.',
       assessmentContext,
       authoritativeAssessment,
       frozen,
@@ -558,7 +850,9 @@ export async function captureGitRemediationHandoff({
         findingId: remediation.finding.id,
         controlId: remediation.controlId,
         baselineRevision,
-        currentRevision: frozen.revision
+        currentRevision: frozen.revision,
+        recoveryReason:
+          recovery.reason || null
       }
     });
   }
