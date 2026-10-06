@@ -122,6 +122,7 @@ async function remediationLineage({
     SELECT DISTINCT
       r.id AS finding_id,
       r.status AS finding_status,
+      r.updated_at AS finding_updated_at,
       b.entry_id AS control_id
     FROM remediation_items r
     JOIN control_finding_bindings b
@@ -130,7 +131,7 @@ async function remediationLineage({
     WHERE r.project_id=?
       AND b.system_snapshot_id=?
       AND r.status NOT IN ('verified_closed','accepted_risk')
-    ORDER BY r.updated_at DESC,r.id
+    ORDER BY finding_updated_at DESC,finding_id
   `).all(
     projectId,
     previousSystemSnapshotId
