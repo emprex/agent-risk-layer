@@ -1,27 +1,47 @@
-# AgentRiskLayer public production launch checklist
+# AgentRiskLayer launch checklist
 
-## Customer journey
-- [ ] Homepage explains the product in one sentence and links to the 90-second demonstration.
-- [ ] A new user can create an account without a payment card.
-- [ ] Verification email arrives and the verification link succeeds.
-- [ ] The guided dashboard explains the first project, API key and Guard request.
-- [ ] Sign in, password reset, logout, MFA setup and account deletion work on the custom domain.
+## Canonical product
 
-## Commercial journey
-- [ ] Community registration creates one free project allowance.
-- [ ] £99 assessment checkout completes through Stripe and the webhook grants access once.
-- [ ] Developer, Team and Agency checkout, billing portal and cancellation work.
-- [ ] Enterprise enquiries reach support@agentrisklayer.com.
+- [ ] `emprex/agent-risk-layer` is the only canonical ARL repository.
+- [ ] `main` is the intended reviewed release revision.
+- [ ] CI is green on the exact release head.
+- [ ] `npm run check`, `npm test` and required smoke/acceptance checks pass.
+- [ ] No retired hosted-operator dependency is required for local assessment.
+- [ ] Local assessment freezes the exact clean target revision.
 
-## Security and operations
-- [ ] /api/ready is green and exposes no database hostname, username or version detail.
-- [ ] Managed PostgreSQL backup is created, verified and restored in a controlled exercise.
-- [ ] Resend delivery, SPF, DKIM and DMARC are verified.
-- [ ] security.txt, Trust Centre, Security Centre, Company and Status pages are reachable.
-- [ ] Owner MFA is enabled before administrative operations.
-- [ ] External penetration testing and formal certifications are not claimed before completion.
+## Public website
 
-## Public proof
-- [ ] Publish a real product demonstration.
-- [ ] Publish founder and company LinkedIn profiles.
-- [ ] Add genuine customer evidence only after permission and verification.
+- [ ] Homepage clearly presents a human-led AI-agent security assessment.
+- [ ] Assessment page reflects the current service.
+- [ ] Request form submits successfully.
+- [ ] No password, API key, token or production secret is requested through the public form.
+- [ ] Scope-and-quote wording is consistent.
+- [ ] No active checkout/subscription claim remains.
+- [ ] Privacy, terms, company, trust and complaints/appeals pages are reachable.
+- [ ] No page claims UKAS accreditation unless actually granted.
+
+## Assessment workflow
+
+- [ ] Request -> scope -> frozen target works.
+- [ ] Inspection/evidence is bound to the exact revision.
+- [ ] Applicability requires authoritative evidence/human review as defined by the method.
+- [ ] Controlled tests require explicit authorisation and Rules of Engagement.
+- [ ] Findings cannot be created or closed by LLM authority.
+- [ ] Remediation preserves finding/snapshot lineage.
+- [ ] Exact retest is required for closure where applicable.
+- [ ] Final readiness/deployment decision remains attributable to a human.
+- [ ] Final report states evidence, limitations and unresolved items clearly.
+
+## Operational boundary
+
+- [ ] Public-site deployment is operationally separate from local assessment authority.
+- [ ] Local assessment remains usable when the hosted website is unavailable.
+- [ ] Deployed secrets exist only in the deployment environment.
+- [ ] Backup/recovery procedures are verified for any deployed persistence in use.
+
+## Commercial readiness
+
+- [ ] Assessment request can be received and reviewed.
+- [ ] Scope and authorised test boundary can be agreed before work begins.
+- [ ] Commercial terms can be issued without a retired self-service checkout dependency.
+- [ ] Sample report accurately represents the current deliverable.
