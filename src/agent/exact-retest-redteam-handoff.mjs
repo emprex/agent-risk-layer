@@ -643,7 +643,10 @@ export async function prepareExactRetestRedTeamReservation({
       caseId:
         mapping.caseId,
       controlId:
-        mapping.controlId
+        mapping.controlId,
+      requiredRetestRevision:
+        workflowState?.authoritativeArtifacts
+          ?.frozenTarget?.revision || null
     },
     securityStateChanged: false,
     deploymentDecisionWritten: false,
@@ -732,7 +735,9 @@ export async function persistExactRetestRedTeamReservation({
       caseId:
         continuationContext.caseId,
       controlId:
-        continuationContext.controlId
+        continuationContext.controlId,
+      requiredRetestRevision:
+        continuationContext.requiredRetestRevision || null
     });
 
   if (
