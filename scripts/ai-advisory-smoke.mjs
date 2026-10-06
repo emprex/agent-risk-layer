@@ -21,8 +21,31 @@ const syntheticCanonicalData = {
     }
   },
   conversationResponse: {
-    publicSummary:
-      'Synthetic local advisory connectivity probe.'
+    assessment: {
+      stage: 'control_applicability_required',
+      known: {
+        frozenTargetVerified: true,
+        assessmentContextAvailable: true,
+        authoritativeAssessmentAvailable: true,
+        targetContextBound: true,
+        assessmentContextBound: true,
+        evidencePlanAvailable: true,
+        controlIntelligenceAvailable: true
+      },
+      remainsUnproven: [
+        'Synthetic control applicability has not been resolved.'
+      ],
+      requiredAction: {
+        actor: 'user',
+        label: 'review control applicability',
+        requiresUserInput: true
+      },
+      readiness: {
+        available: false,
+        decision: null,
+        finalDeploymentDecisionMade: false
+      }
+    }
   }
 };
 
