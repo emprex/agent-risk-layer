@@ -495,6 +495,147 @@ function publicAuthorisation(row) {
         evidenceRetentionEndsAt: new Date(Date.parse(row.window_end) + Number(row.retention_days || 30) * 86400000).toISOString(),
         acceptedAt: row.accepted_at, revokedAt: row.revoked_at, createdAt: row.created_at };
 }
+
+export const EXACT_RETEST_REAUTHORISATION_CONFIRMATION =
+    'I REAUTHORISE THE EXACT RETEST';
+
+function sameAuthorisationScopeRows(left, right) {
+    if (!left || !right)
+        return false;
+    return left.assessment_id === right.assessment_id
+        && left.target_name === right.target_name
+        && left.endpoint_origin === right.endpoint_origin
+        && left.environment === right.environment
+        && left.authority_basis === right.authority_basis
+        && left.authorised_by === right.authorised_by
+        && left.authorised_role === right.authorised_role
+        && left.emergency_contact === right.emergency_contact
+        && left.permitted_actions_json === right.permitted_actions_json
+        && left.prohibited_actions_json === right.prohibited_actions_json
+        && left.data_classification === right.data_classification
+        && Number(left.retention_days) === Number(right.retention_days)
+        && Boolean(left.synthetic_data_only) === Boolean(right.synthetic_data_only)
+        && Boolean(left.dry_run_tools_only) === Boolean(right.dry_run_tools_only);
+}
+
+export async function createExactRetestReauthorisation({
+    userId,
+    assessmentId,
+    baselineAuthorisationId,
+    confirmation
+}) {
+    if (clean(confirmation, 80) !== EXACT_RETEST_REAUTHORISATION_CONFIRMATION)
+        throw new Error(`Type exactly: ${EXACT_RETEST_REAUTHORISATION_CONFIRMATION}`);
+
+    const baseline = await db.prepare(
+        'SELECT * FROM redteam_authorisations WHERE id=? AND assessment_id=? AND user_id=?'
+    ).get(baselineAuthorisationId, assessmentId, userId);
+
+    if (!baseline)
+        throw new Error('Baseline Rules of Engagement were not found.');
+    if (baseline.status === 'revoked')
+        throw new Error('Revoked Rules of Engagement cannot be reauthorised implicitly.');
+
+    const now = Date.now();
+    const fresh = await createRedTeamAuthorisation({
+        userId,
+        assessmentId,
+        input: {
+            targetName: baseline.target_name,
+            endpointOrigin: baseline.endpoint_origin,
+            environment: baseline.environment,
+            authorityBasis: baseline.authority_basis,
+            authorisedBy: baseline.authorised_by,
+            authorisedRole: baseline.authorised_role,
+            emergencyContact: baseline.emergency_contact,
+            windowStart: new Date(now - 1000).toISOString(),
+            windowEnd: new Date(now + 60 * 60 * 1000).toISOString(),
+            permittedActions: parse(baseline.permitted_actions_json, []),
+            prohibitedActions: parse(baseline.prohibited_actions_json, []),
+            dataClassification: baseline.data_classification,
+            retentionDays: Number(baseline.retention_days || 30),
+            syntheticDataOnly: true,
+            dryRunToolsOnly: true,
+            noProductionEffects: true,
+            confirmation: ROE_CONFIRMATION
+        }
+    });
+
+    const createdAt = nowIso();
+    await db.prepare(
+        `INSERT INTO events (id,user_id,name,properties_json,created_at)
+         VALUES (?,?, 'redteam_exact_retest_reauthorised', ?, ?)`
+    ).run(
+        id('evt_'),
+        userId,
+        JSON.stringify({
+            assessmentId,
+            baselineAuthorisationId,
+            retestAuthorisationId: fresh.id
+        }),
+        createdAt
+    );
+
+    return {
+        ...fresh,
+        reauthorisationOfId: baselineAuthorisationId
+    };
+}
+
+export async function verifyExactRetestAuthorisationLineage({
+    userId,
+    assessmentId,
+    baselineAuthorisationId,
+    retestAuthorisationId
+}) {
+    if (!baselineAuthorisationId || !retestAuthorisationId)
+        return { available: false, reason: 'redteam_authorisation_identity_required' };
+
+    const [baseline, retest] = await Promise.all([
+        db.prepare(
+            'SELECT * FROM redteam_authorisations WHERE id=? AND assessment_id=? AND user_id=?'
+        ).get(baselineAuthorisationId, assessmentId, userId),
+        db.prepare(
+            'SELECT * FROM redteam_authorisations WHERE id=? AND assessment_id=? AND user_id=?'
+        ).get(retestAuthorisationId, assessmentId, userId)
+    ]);
+
+    if (!baseline || !retest)
+        return { available: false, reason: 'redteam_authorisation_lineage_not_found' };
+
+    if (baselineAuthorisationId === retestAuthorisationId) {
+        return {
+            available: true,
+            sameAuthorisation: true,
+            scopeEquivalent: true
+        };
+    }
+
+    if (!sameAuthorisationScopeRows(baseline, retest))
+        return { available: false, reason: 'redteam_reauthorisation_scope_mismatch' };
+
+    const events = await db.prepare(
+        `SELECT properties_json FROM events
+         WHERE user_id=? AND name='redteam_exact_retest_reauthorised'
+         ORDER BY created_at DESC`
+    ).all(userId);
+
+    const linked = events.some((event) => {
+        const properties = parse(event.properties_json, {});
+        return properties.assessmentId === assessmentId
+            && properties.baselineAuthorisationId === baselineAuthorisationId
+            && properties.retestAuthorisationId === retestAuthorisationId;
+    });
+
+    if (!linked)
+        return { available: false, reason: 'redteam_reauthorisation_link_required' };
+
+    return {
+        available: true,
+        sameAuthorisation: false,
+        scopeEquivalent: true
+    };
+}
 function normaliseStringList(value, maxItems, maxLength) { return Array.isArray(value) ? value.slice(0, maxItems).map((item) => clean(item, maxLength)).filter(Boolean) : []; }
 function canonicalJson(value) {
     if (value === null || typeof value !== 'object')
