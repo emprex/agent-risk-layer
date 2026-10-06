@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, id, nowIso } from './db.js';
 import { config } from './config.js';
-import { localCliDatabasePath } from './agent/local-cli-mode.mjs';
+import { isLocalCliModeEnabled } from './agent/local-cli-mode.mjs';
 export const REDTEAM_SCHEMA = 'arl.redteam.bundle.v1';
 export const REDTEAM_TOKEN_TTL_MS = 15 * 60000;
 export const MAX_REDTEAM_AGE_MS = 24 * 60 * 60000;
@@ -154,8 +154,8 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
         const activeAssessmentReservations = Number((await db.prepare(`SELECT COUNT(*) AS count FROM redteam_tokens
           WHERE assessment_id = ? AND used_at IS NULL AND expires_at > ?`).get(assessmentId, createdAt)).count || 0);
         const localCliAuthorised =
-            Boolean(localCliDatabasePath()) &&
-            db.kind === 'sqlite-test';
+            isLocalCliModeEnabled() &&
+            (db.kind === 'postgres' || (process.env.NODE_ENV === 'test' && db.kind === 'sqlite-test'));
         const limit = superuser || localCliAuthorised
             ? Number.MAX_SAFE_INTEGER
             : (assessment.paid_tier === 'pro' ? 2 : 0);
