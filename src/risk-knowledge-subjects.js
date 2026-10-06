@@ -49,7 +49,7 @@ export async function resolveRiskKnowledgeSubject({ workspaceId, projectId, subj
       row = await db.prepare(`SELECT c.id FROM remediation_retest_criteria c
         JOIN runtime_events e ON e.id=c.runtime_event_id AND e.project_id=c.project_id
         WHERE c.id=? AND c.project_id=? AND c.workspace_id=? AND c.status='completed'
-          AND c.result='passed' AND e.retest_satisfied=1 AND e.retest_criteria_id=c.id`).get(safeSubjectId, safeProjectId, safeWorkspaceId);
+          AND c.result='passed' AND e.retest_satisfied=TRUE AND e.retest_criteria_id=c.id`).get(safeSubjectId, safeProjectId, safeWorkspaceId);
       break;
     case 'evidence_artifact': {
       const artifact = await db.prepare(`SELECT id,artifact_type,source_type,source_id FROM remediation_evidence_artifacts
@@ -60,7 +60,7 @@ export async function resolveRiskKnowledgeSubject({ workspaceId, projectId, subj
         row = await db.prepare('SELECT id FROM asset_snapshots WHERE id=? AND project_id=?').get(artifact.source_id, safeProjectId);
       } else if (artifact.source_type === 'runtime_event') {
         row = artifact.artifact_type === 'retest'
-          ? await db.prepare(`SELECT id FROM runtime_events WHERE id=? AND project_id=? AND retest_satisfied=1`).get(artifact.source_id, safeProjectId)
+          ? await db.prepare(`SELECT id FROM runtime_events WHERE id=? AND project_id=? AND retest_satisfied=TRUE`).get(artifact.source_id, safeProjectId)
           : await db.prepare('SELECT id FROM runtime_events WHERE id=? AND project_id=?').get(artifact.source_id, safeProjectId);
       }
       break;
