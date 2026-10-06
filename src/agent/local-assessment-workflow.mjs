@@ -8,6 +8,7 @@ import { recordRemediationApplicabilityConfirmation } from './remediation-applic
 import { isLocalCliModeEnabled } from './local-cli-mode.mjs';
 import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsForAssessment, getRedTeamRun, ROE_CONFIRMATION } from '../redteam.js';
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
+import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
@@ -51,6 +52,55 @@ export async function runLocalAssessment(repositoryPath, request, options) {
         : 'No bounded-test evidence is persisted yet. Human final deployment decision remains required.'
     };
   }
+  if (/^I have reviewed and verify the exact retest evidence[.!?]*$/i.test(request.trim())) {
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+    const action =
+      state?.nextAllowedAction || {};
+
+    if (
+      state?.stage !== 'retest_evidence_verification_required' ||
+      action.name !== 'provide_verified_retest_evidence' ||
+      action.actor !== 'user' ||
+      action.requiresUserInput !== true ||
+      !action.controlId ||
+      !action.caseId
+    ) {
+      throw new Error(
+        'Exact retest evidence review is only accepted at the authoritative retest-evidence verification gate.'
+      );
+    }
+
+    const completion =
+      await completePersistedExactRetest({
+        action,
+        repositoryPath,
+        projectId: options.projectId,
+        userId: options.userId,
+        assessmentId: options.assessmentId
+      });
+
+    if (completion?.executed !== true) {
+      throw new Error(
+        completion?.reason ||
+        'Authoritative exact retest evidence completion failed.'
+      );
+    }
+
+    return runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
+  }
+
   if (request.startsWith('Set assessment context ')) {
     await recordDeclaredAssessmentContext({
       operatorContextInternal: options,
