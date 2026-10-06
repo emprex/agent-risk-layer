@@ -1,4 +1,5 @@
 import { db, id, nowIso } from './db.js';
+import { verifyExactRetestAuthorisationLineage } from './redteam.js';
 import { canonicalJson, intelligenceDigest } from './control-intelligence-core.js';
 
 export const REDTEAM_VERIFICATION_SCOPE = 'integrity_verified_customer_operated';
@@ -214,7 +215,17 @@ export async function recordRedTeamEvidenceBinding({ projectId, controlId, userI
     const retestMeta = assertRunIsUsable(retestRun, 'Retest');
     const baselineMeta = assertRunIsUsable(baselineRun, 'Baseline');
     if (retestRun.assessment_id !== baselineRun.assessment_id) throw error('Baseline and retest runs must belong to the same assessment.');
-    if (retestRun.authorisation_id !== baselineRun.authorisation_id) throw error('Baseline and retest runs must use the same Rules of Engagement authorisation.');
+    if (retestRun.authorisation_id !== baselineRun.authorisation_id) {
+      const lineage = await verifyExactRetestAuthorisationLineage({
+        userId: project.billing_user_id,
+        assessmentId: retestRun.assessment_id,
+        baselineAuthorisationId: baselineRun.authorisation_id,
+        retestAuthorisationId: retestRun.authorisation_id,
+      });
+      if (lineage.available !== true || lineage.scopeEquivalent !== true) {
+        throw error('Baseline and retest Rules of Engagement must be identical or explicitly linked by an equivalent-scope exact-retest reauthorisation.');
+      }
+    }
     if (!sameTarget(retestMeta.target, baselineMeta.target)) throw error('Baseline and retest runs do not describe the same authorised adapter target.');
     if (retestRun.policy_version !== baselineRun.policy_version) throw error('Baseline and retest runs must use the same red-team policy version for an exact comparison.');
     const baselineCampaignForChronology = parse(baselineRun.campaign_json, {});
