@@ -43,6 +43,18 @@ test('production and deployment configuration contain no Stripe surface', () => 
   assert.doesNotMatch(read('package.json'), /prices:update|update-stripe-render-prices/);
 });
 
+test('retired checkout UI and external payment form destination are absent', () => {
+  const active = [
+    read('public/result.js'),
+    read('public/shared.js'),
+    read('public/analytics.js')
+  ].join('\n');
+
+  assert.doesNotMatch(active, /£99|\/api\/checkout|#buyPro|begin_checkout|stripe_checkout|checkout-return-notice/i);
+  assert.doesNotMatch(read('src/security.js'), /checkout\.stripe\.com/i);
+  assert.match(read('public/result.js'), /\/request-assessment\.html/);
+});
+
 test('canonical legal pages use the current service visual system and no personal street address', () => {
   for (const page of ['public/legal/terms.html', 'public/legal/privacy.html']) {
     const html = read(page);
