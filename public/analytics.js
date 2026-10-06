@@ -125,12 +125,6 @@ function showConsentBanner() {
   });
 }
 
-function planFromElement(element) {
-  const card = element.closest('[data-plan], .pricing-card, article');
-  return element.dataset.plan || element.dataset.checkout || card?.dataset.plan ||
-    card?.querySelector('h2,h3,strong')?.textContent?.trim().slice(0, 80) || 'unknown';
-}
-
 function currentPath() {
   return location.pathname === '/' ? '/' : location.pathname.replace(/\/$/, '');
 }
@@ -157,22 +151,6 @@ function captureJourneySource(params = new URLSearchParams(location.search)) {
   return ALLOWED_JOURNEY_SOURCES.has(stored) ? stored : 'direct_or_other';
 }
 
-function observeConfirmedPurchase() {
-  if (currentPath() !== '/success.html') return;
-  const root = document.querySelector('#successRoot');
-  if (!root) return;
-  const check = () => {
-    if (!/Payment and fulfilment completed\./i.test(root.textContent || '')) return false;
-    trackOnce('purchase-confirmed', 'purchase', { source: 'stripe_checkout', entry_source: captureJourneySource() });
-    return true;
-  };
-  if (check()) return;
-  const observer = new MutationObserver(() => {
-    if (check()) observer.disconnect();
-  });
-  observer.observe(root, { childList: true, subtree: true, characterData: true });
-}
-
 function trackJourneyState() {
   if (consentState() !== 'granted') return;
   const path = currentPath();
@@ -197,7 +175,6 @@ function trackJourneyState() {
     trackOnce('pricing-view', 'view_pricing', { entry_source: entrySource });
   }
 
-  observeConfirmedPurchase();
 }
 
 document.addEventListener('click', event => {
@@ -207,11 +184,8 @@ document.addEventListener('click', event => {
   const href = target.getAttribute('href') || '';
   const entrySource = currentPath() === '/arl17k.html' ? 'arl17k' : captureJourneySource();
 
-  if (target.matches('[data-plan], [data-checkout], #buyPro') ||
-      /checkout|subscribe|upgrade|buy|choose plan|get reviewed assessment/.test(text)) {
-    track('begin_checkout', { plan: planFromElement(target), entry_source: entrySource });
-  } else if (/create (free )?account|sign up|register/.test(text) ||
-             /auth\.html.*register/.test(href)) {
+  if (/create (free )?account|sign up|register/.test(text) ||
+      /auth\.html.*register/.test(href)) {
     track('sign_up_start', { entry_source: entrySource });
   } else if (/contact|request.*assessment|request.*quote|talk to/.test(text)) {
     track('generate_lead_start', { entry_source: entrySource });
