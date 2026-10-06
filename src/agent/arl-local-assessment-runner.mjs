@@ -20,10 +20,15 @@ if (!repositoryArgument) {
 const repositoryPath = path.resolve(repositoryArgument);
 
 try {
-  // This executable is the explicit local-persistence capability boundary.
-  // Users should not need to know or set an internal mode flag.
+  // This executable enables local Operator authority only.
+  // Persistence remains PostgreSQL through DATABASE_URL.
   process.env.ARL_LOCAL_MODE = '1';
   enableLocalCliMode(process.env);
+  if (!String(process.env.DATABASE_URL || '').trim()) {
+    throw new Error(
+      'DATABASE_URL is required for local PostgreSQL persistence.'
+    );
+  }
 } catch (error) {
   console.error('ARL LOCAL ASSESSMENT PREFLIGHT FAILED');
   console.error('');
