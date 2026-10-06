@@ -1,5 +1,5 @@
 import { api, hideError, qs, setBusy, showError, warmCsrf } from './shared.js';
-import { buildPostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY } from './purchase-continuation.js';
+import { buildPostVerifyContinuation, POST_VERIFY_CONTINUATION_KEY } from './post-verify-continuation.js';
 
 const tabs = [...document.querySelectorAll('[data-tab]')];
 const login = document.querySelector('#loginForm');
@@ -34,12 +34,12 @@ function selectTab(name, { focus = false } = {}) {
 }
 
 function rememberPostVerifyContinuation() {
-  const record = buildPostVerifyContinuation({ claimAssessmentId, next, origin: location.origin });
+  const record = buildPostVerifyContinuation({ claimAssessmentId });
   if (!record) return;
   try {
     localStorage.setItem(POST_VERIFY_CONTINUATION_KEY, JSON.stringify(record));
   } catch {
-    // Continuation is a convenience only. Checkout authorization remains server-enforced.
+    // Continuation is a convenience only and contains no credentials.
   }
 }
 
@@ -53,7 +53,7 @@ function showVerificationWait() {
   noticeBox.textContent = '';
 
   const message = document.createElement('p');
-  message.textContent = 'Your account is created. Verify your email, then come back here and continue. We will return you to the purchase you started.';
+  message.textContent = 'Your account is created. Verify your email, then come back here and continue your assessment.';
   const status = document.createElement('p');
   status.className = 'muted small-copy';
   status.textContent = 'Waiting for email verification.';
