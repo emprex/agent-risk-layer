@@ -7,7 +7,9 @@
   },
   "operator": {
     "name": "ARL Operator",
-    "version": "0.1.0"
+    "version": "integrated",
+    "mode": "local",
+    "canonicalEntryPoint": "src/agent/arl-local-assessment-runner.mjs"
   },
   "inspector": {
     "name": "AgentRisk Inspector",
@@ -52,8 +54,8 @@
     "version": "arl-risk-v3.4"
   },
   "orchestration": {
-    "commercialSessionSchema": "arl.agent.commercial-assessment-session.v1",
-    "managedAdapterSchema": "arl.agent.managed-commercial-adapter.v1"
+    "mode": "integrated-local",
+    "canonicalWorkflow": "src/agent/local-assessment-workflow.mjs"
   },
   "platform": {
     "node": "24.21.0",
