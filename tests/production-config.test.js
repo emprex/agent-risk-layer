@@ -96,6 +96,7 @@ test('production configuration fails closed before deployment when mandatory con
 test('launch readiness passes when all required production settings exist', () => {
   const result = runConfig({
     NODE_ENV: 'production',
+    PUBLIC_SERVICE_ONLY: 'true',
     BASE_URL: 'https://security.example',
     DATABASE_URL: 'postgresql://arl:secret@managed-db.internal/agentrisklayer',
     DEMO_MODE: 'false',
@@ -118,6 +119,17 @@ test('launch readiness passes when all required production settings exist', () =
   assert.equal(result.status, 0, result.stderr);
   const readiness = JSON.parse(result.stdout.trim());
   assert.equal(readiness.ready, true);
+});
+
+test('production readiness requires the public-only service boundary', () => {
+  const result = runConfig({
+    NODE_ENV: 'production',
+    PUBLIC_SERVICE_ONLY: 'false',
+  }, `console.log(JSON.stringify(m.launchReadiness().checks.find(c=>c.key==='public_service_boundary')))`);
+  assert.equal(result.status, 0, result.stderr);
+  const check = JSON.parse(result.stdout.trim());
+  assert.equal(check.required, true);
+  assert.equal(check.ok, false);
 });
 
 test('production readiness rejects local or non-PostgreSQL persistence URLs', () => {
