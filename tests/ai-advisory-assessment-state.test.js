@@ -7,6 +7,9 @@ import {
 import {
   explainAssessmentState
 } from '../src/agent/ai/assessment-explainer.mjs';
+import {
+  askLocalOllama
+} from '../src/agent/ai/ollama-client.mjs';
 
 function authoritativeFixture() {
   return {
@@ -118,4 +121,66 @@ test('AI failure degrades safely without changing ARL state', async () => {
   assert.equal(result.available, false);
   assert.equal(result.advisoryOnly, true);
   assert.equal(result.reason, 'ollama_unavailable');
+});
+
+
+test('Ollama client uses the bounded local chat endpoint', async () => {
+  let observedUrl = null;
+  let observedBody = null;
+
+  const result = await askLocalOllama({
+    baseUrl: 'http://127.0.0.1:11434/',
+    model: 'test-model',
+    fetchImpl: async (url, options) => {
+      observedUrl = url;
+      observedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        async json() {
+          return {
+            message: {
+              content: 'Local advisory response.'
+            }
+          };
+        }
+      };
+    },
+    messages: [
+      {
+        role: 'user',
+        content: '{"stage":"inspection"}'
+      }
+    ]
+  });
+
+  assert.equal(
+    observedUrl,
+    'http://127.0.0.1:11434/api/chat'
+  );
+  assert.deepEqual(observedBody, {
+    model: 'test-model',
+    stream: false,
+    messages: [
+      {
+        role: 'user',
+        content: '{"stage":"inspection"}'
+      }
+    ]
+  });
+  assert.equal(result.available, true);
+});
+
+test('Ollama HTTP failure is advisory-only unavailability', async () => {
+  const result = await askLocalOllama({
+    fetchImpl: async () => ({
+      ok: false,
+      status: 503
+    }),
+    messages: []
+  });
+
+  assert.deepEqual(result, {
+    available: false,
+    reason: 'ollama_http_503'
+  });
 });
