@@ -442,3 +442,16 @@ test('local CLI controlled red-team authority is independent of hosted paid tier
     });
   }
 });
+
+
+test('local product exposes one simple Operator command and loads canonical .env', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const runner = fs.readFileSync(path.join(root, 'src/agent/arl-local-assessment-runner.mjs'), 'utf8');
+  const bin = fs.readFileSync(path.join(root, 'bin/arl-operator.mjs'), 'utf8');
+
+  assert.equal(packageJson.bin['arl-operator'], 'bin/arl-operator.mjs');
+  assert.match(packageJson.scripts.operator, /arl-local-assessment-runner\.mjs/);
+  assert.match(packageJson.scripts['assess:local'], /--env-file-if-exists=\.env/);
+  assert.match(runner, /process\.loadEnvFile\?\.\(path\.join\(productRoot, '\.env'\)\)/);
+  assert.match(bin, /arl-local-assessment-runner\.mjs/);
+});
