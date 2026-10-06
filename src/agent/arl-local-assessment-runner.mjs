@@ -20,6 +20,9 @@ if (!repositoryArgument) {
 const repositoryPath = path.resolve(repositoryArgument);
 
 try {
+  // This executable is the explicit local-persistence capability boundary.
+  // Users should not need to know or set an internal mode flag.
+  process.env.ARL_LOCAL_MODE = '1';
   enableLocalCliMode(process.env);
 } catch (error) {
   console.error('ARL LOCAL ASSESSMENT PREFLIGHT FAILED');
