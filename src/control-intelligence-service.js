@@ -153,6 +153,25 @@ async function repairFailureJourney(detail) {
   const { failed, open } = unresolvedFailure(detail);
   if (!failed && !open) return detail;
 
+  /*
+   * A closed finding with a qualifying verified passed exact retest is a
+   * completed lineage. Historical baseline failures may remain intentionally
+   * unbound on the original execution record for audit provenance; they must
+   * not cause this compatibility repair layer to reopen the journey.
+   */
+  if (!open && failed) {
+    const completedClosedLineage =
+      (detail.findings || []).some((finding) => {
+        if (!CLOSED_FINDING_STATES.has(finding.status)) return false;
+        const retest = passedExactRetest(detail, failed, finding);
+        return Boolean(retest && hasVerifiedRetestEvidence(detail, retest));
+      });
+
+    if (completedClosedLineage) {
+      return detail;
+    }
+  }
+
   const chain = { ...detail.chain };
   const approvalRequired = Boolean(detail.approvalRequirements?.length);
   const completed = new Set(chain.completedStages || []);
