@@ -519,7 +519,9 @@ async function completePersistedExactRetest({
       assessmentId,
       evidencePlan: resolvedPreparation.evidencePlan,
       caseId: action.caseId,
-      controlId: action.controlId
+      controlId: action.controlId,
+      requiredRetestRevision:
+        resolvedPreparation?.target?.revision || null
     });
 
   if (!continuation.available) {
