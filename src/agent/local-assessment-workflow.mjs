@@ -11,6 +11,7 @@ import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
+import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import {
   getControlIntelligenceControl,
   recordControlEvidence,
@@ -30,6 +31,12 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       } catch { return true; }
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
+  }
+  if (/^show assessment context[.!?]*$/i.test(request.trim())) {
+    return showLocalAssessmentContext({
+      projectId: options.projectId,
+      userId: options.userId
+    });
   }
   if (/^show evidence[.!?]*$/i.test(request.trim())) {
     const runs = await listRedTeamRunsForAssessment(options);
