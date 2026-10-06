@@ -208,7 +208,6 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
           NODE_ENV: 'development',
           PRODUCT_STAGE: 'development',
           DATABASE_URL: '',
-          ARL_LOCAL_MODE: '1',
           ARL_LOCAL_DATABASE_PATH:
             path.join(temp, 'assessment.sqlite')
         },
@@ -298,7 +297,6 @@ test('local runner still rejects an explicitly supplied wrong frozen SHA', {
           NODE_ENV: 'development',
           PRODUCT_STAGE: 'development',
           DATABASE_URL: '',
-          ARL_LOCAL_MODE: '1',
           ARL_LOCAL_DATABASE_PATH:
             path.join(temp, 'assessment.sqlite'),
           ARL_EXPECTED_TARGET_SHA:
