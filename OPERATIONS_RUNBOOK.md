@@ -1,52 +1,62 @@
-# AgentRiskLayer v9 operations runbook
+# AgentRiskLayer operations runbook
 
-## Daily
+This runbook covers the public website/request service and the local assessment product.
 
-- Check Render status, `/api/ready`, deployment logs and open operational alerts.
-- Check protected `/metrics` for request volume, runtime denies, project growth, open remediation and memory/uptime anomalies.
-- Review Stripe webhook failures, incomplete purchases and Resend delivery failures.
-- Confirm PostgreSQL connections, storage and managed backup status.
-- Review unusual Guard authentication/rate-limit activity without logging project secrets.
+## Public service checks
 
-## Weekly
+For the deployed website:
 
-- Create an independent PostgreSQL archive and run `npm run db:verify-backup`.
-- Review control-plane quota use, denied decisions, risky inventory drift and overdue remediation.
-- Review public registration abuse signals, owner/admin activity, key revocations and integration failures.
-- Run one sandbox payment and one transactional email after payment/email configuration changes.
+- confirm homepage, assessment, trust and request pages are reachable;
+- check `/api/health` and `/api/ready`;
+- review deployment logs and operational alerts;
+- verify assessment-request intake;
+- verify email delivery if configured;
+- review account/workspace access where authenticated surfaces are intentionally retained.
 
-## Monthly
+## Local assessment operations
 
-- Restore the latest verified archive into a non-production PostgreSQL database.
-- Record restore duration, archive digest, migration state, table counts and functional smoke results.
-- Review account/workspace access, SCIM tokens, project keys, integration secrets and GitHub/Render membership.
-- Rotate credentials on schedule or immediately after suspected disclosure.
-- Patch the Node base image and dependencies only after full validation.
+The canonical assessment workflow runs locally from `~/agent-risk-layer`.
 
-## Runtime-control incident
+Before starting customer work:
 
-1. Put affected projects into enforce mode or revoke exposed keys.
-2. Fail closed for high-impact actions while integrity is uncertain.
-3. Preserve privacy-safe runtime evidence, audit history and database recovery points.
-4. Compare inventory snapshots and identify new agents/tools/MCP servers/models.
-5. Assign remediation with owner, severity and due date.
-6. Retest and verify before reopening deployment gates.
-7. Notify affected customers according to the approved incident process.
+1. confirm `main` is the intended reviewed revision;
+2. confirm the target repository is authorised and in scope;
+3. require a clean frozen target before authoritative inspection;
+4. record scope and Rules of Engagement before controlled testing;
+5. never let an LLM decide applicability, severity, evidence validity, closure, readiness or deployment;
+6. preserve exact revision/snapshot lineage;
+7. retest the exact affected control after remediation;
+8. require the final accountable human decision.
 
-## Payment/email incident
+## Incident handling
 
-- Disable checkout or fulfilment if webhook integrity is uncertain.
-- Never fulfil from a browser redirect alone; reconcile against signed Stripe events.
-- Retry transactional email from the recorded fulfilment state without duplicating purchases.
+If the public website has an operational incident:
+
+- protect assessment-request data;
+- preserve logs/evidence needed for diagnosis;
+- disable affected public functionality if integrity is uncertain;
+- rotate exposed credentials;
+- restore from an approved backup only when needed.
+
+A public-site incident does not automatically invalidate local assessment evidence unless the affected infrastructure participated in that evidence chain.
 
 ## Database recovery
 
-- Prefer Render-managed point-in-time recovery where available.
-- Verify independent `.dump` archives before restoration.
-- Restore to a new database first; never test restoration against production.
-- Require `--force`, an approved maintenance window and separately supplied `RESTORE_DATABASE_URL`.
-- Re-run migrations, `/api/ready`, the full smoke journey and business reconciliation before routing traffic.
+Where PostgreSQL is used for the deployed website:
 
-## Graceful shutdown
+- prefer the hosting provider's supported recovery capability;
+- use repository backup/restore scripts only with an approved destination and maintenance window;
+- never overwrite a live database casually;
+- verify restored data before reopening affected functionality.
 
-Render `SIGTERM` stops accepting new HTTP connections, waits for in-flight work and closes the PostgreSQL pool. The process forces termination after ten seconds if shutdown cannot complete.
+## Shutdown and maintenance
+
+Use normal process termination and allow the server to close connections cleanly.
+
+Do not treat deployment status as an assessment readiness decision.
+
+## Commercial operations
+
+The active commercial flow is request -> scope -> quote/agreement -> assessment.
+
+There is no active self-service Stripe checkout/subscription workflow in the current model.
