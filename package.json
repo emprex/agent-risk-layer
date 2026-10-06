@@ -46,7 +46,8 @@
     "assess:local": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
     "build:toolchain-release": "node scripts/build-toolchain-release.mjs",
     "build:test-assets": "npm run build:toolchain-release && npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
-    "operator": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs"
+    "operator": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
+    "ai:smoke": "node --env-file-if-exists=.env scripts/ai-advisory-smoke.mjs"
   },
   "dependencies": {
     "pg": "8.23.0"
