@@ -46,3 +46,10 @@ test('mcp-agent bounded adapter distinguishes explicit denial from execution', (
     /Expected one dry-run dispatch or an explicit target denial/
   );
 });
+
+
+test('mcp-agent bounded adapter configures deterministic pre-dispatch tool policy', () => {
+  assert.match(source, /def bounded_tool_call_policy/);
+  assert.match(source, /if name == "http_fetch":\n        return False/);
+  assert.match(source, /tool_call_policy=bounded_tool_call_policy/);
+});
