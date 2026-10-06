@@ -3,6 +3,10 @@ import {
 } from '../../redteam.js';
 
 import {
+  getAssessmentControlBinding
+} from '../assessment-control-bindings.mjs';
+
+import {
   getAuthoritativeRedTeamOutcome
 } from './get-authoritative-redteam-outcome.mjs';
 
@@ -13,7 +17,7 @@ import {
 const EXPECTED_ABSENCE_REASON =
   'redteam_control_evidence_not_recorded';
 
-function mappedControlIdForCase(evidencePlan, caseId) {
+export function mappedControlIdForCase(evidencePlan, caseId) {
   const checks = Array.isArray(evidencePlan?.checks)
     ? evidencePlan.checks
     : [];
@@ -32,15 +36,30 @@ function mappedControlIdForCase(evidencePlan, caseId) {
     }))
     .filter((item) => item.caseId === caseId);
 
-  const direct = matches
-    .map((item) => item.controlId)
-    .filter(Boolean);
+  const resolved = [
+    ...new Set(
+      matches
+        .map((item) => {
+          if (item.controlId) {
+            return item.controlId;
+          }
 
-  if (direct.length === 1) {
-    return direct[0];
-  }
+          const binding =
+            getAssessmentControlBinding(
+              item.questionId
+            );
 
-  return null;
+          return binding?.available === true
+            ? binding.controlId
+            : null;
+        })
+        .filter(Boolean)
+    )
+  ];
+
+  return resolved.length === 1
+    ? resolved[0]
+    : null;
 }
 
 const INTEGRITY_FAILURE_REASONS = new Set([
