@@ -10,6 +10,8 @@ services:
         value: production
       - key: PRODUCT_STAGE
         value: production
+      - key: PUBLIC_SERVICE_ONLY
+        value: "true"
       - key: BASE_URL
         sync: false
       - key: SESSION_SECRET
