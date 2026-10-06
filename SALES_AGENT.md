@@ -41,7 +41,7 @@ The module does not scrape LinkedIn, send email, or publish messages automatical
 6. Send it manually, then mark it sent.
 7. Record the reply and next action.
 8. Use the demo brief when a meeting is booked.
-9. Record the £99 assessment or subscription sale and move the pipeline stage.
+9. Record the agreed assessment sale and move the pipeline stage.
 
 ## Production migration
 
