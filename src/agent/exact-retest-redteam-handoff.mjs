@@ -815,6 +815,18 @@ export async function executeExactRetestRedTeamHandoff({
   const plan =
     reservation.executionPlan;
 
+  const targetRevision =
+    clean(
+      workflowState?.authoritativeArtifacts
+        ?.frozenTarget?.revision || ''
+    );
+
+  if (!/^[a-f0-9]{40}$/i.test(targetRevision)) {
+    return blocked(
+      'exact_retest_frozen_target_revision_required'
+    );
+  }
+
   let bundle;
 
   try {
@@ -826,6 +838,7 @@ export async function executeExactRetestRedTeamHandoff({
         endpoint:
           plan.endpoint,
         authToken,
+        targetRevision,
         authorisationId:
           plan.authorisationId,
         caseIds: [
