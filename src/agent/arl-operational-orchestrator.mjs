@@ -14,7 +14,9 @@ import {
 
 import {
   detectExactRetestExecutionCommand,
-  executeExactRetestRedTeamHandoff
+  detectExactRetestReauthorisationCommand,
+  executeExactRetestRedTeamHandoff,
+  reauthoriseExactRetestRedTeamHandoff
 } from './exact-retest-redteam-handoff.mjs';
 
 import {
@@ -143,10 +145,12 @@ function blockedExactRetestResponse({
     handoff?.reason ===
       'exact_retest_rules_of_engagement_not_active' ||
     handoff?.reason ===
-      'exact_retest_rules_of_engagement_missing'
+      'exact_retest_rules_of_engagement_missing' ||
+    handoff?.reason ===
+      'exact_retest_reauthorisation_required'
   ) {
     message =
-      'ARL cannot run the exact retest because the Rules of Engagement used by the failed baseline are no longer available and active. ARL will not silently switch authority.';
+      'ARL cannot run the exact retest because the failed baseline no longer has an active Rules of Engagement record. Explicitly reauthorise the exact retest under the same bounded scope first; ARL will preserve both authorisation records.';
   } else if (
     handoff?.reason ===
       'exact_retest_adapter_credential_required'
@@ -350,6 +354,8 @@ export async function runArlAgent(
     detectCustomerAssessmentReportCommand(userRequest);
   const exactRetestCommand =
     detectExactRetestExecutionCommand(userRequest);
+  const exactRetestReauthorisationCommand =
+    detectExactRetestReauthorisationCommand(userRequest);
   const boundedTestCommand =
     detectBoundedTestCommand(userRequest);
 
@@ -375,7 +381,11 @@ export async function runArlAgent(
     });
   }
 
-  if (!exactRetestCommand && !boundedTestCommand) {
+  if (
+    !exactRetestCommand &&
+    !exactRetestReauthorisationCommand &&
+    !boundedTestCommand
+  ) {
     return runPhase3ArlAgent(
       repositoryPath,
       userRequest,
@@ -391,6 +401,51 @@ export async function runArlAgent(
     );
   const workflowState =
     current?.canonicalData?.workflowState || null;
+
+  if (exactRetestReauthorisationCommand) {
+    const handoff =
+      await reauthoriseExactRetestRedTeamHandoff({
+        workflowState,
+        projectId: options.projectId || null,
+        userId: options.userId || null,
+        assessmentId: options.assessmentId || null
+      });
+
+    const conversationResponse = handoff.available === true
+      ? {
+          type: 'conversation_response',
+          schema: CONVERSATION_RESPONSE_SCHEMA,
+          command: exactRetestReauthorisationCommand,
+          stage: workflowState?.stage || 'exact_retest_required',
+          status: 'user_action_required',
+          message:
+            'The exact retest has been reauthorised under a new immutable Rules of Engagement record with the same bounded scope as the failed baseline. The previous authorisation remains unchanged. You may now authorise and run the exact retest.',
+          nextStep: {
+            actor: 'user',
+            label: 'authorise and run the exact retest',
+            requiresUserInput: true
+          },
+          publicSummary: null,
+          needsUserAction: true,
+          canAutoAdvance: false,
+          acknowledgementOnly: false,
+          securityStateChanged: true,
+          deploymentDecisionMade: false,
+          humanReviewRequired: true
+        }
+      : blockedExactRetestResponse({
+          handoff,
+          workflowState
+        });
+
+    return operationalResult({
+      base: current,
+      command: exactRetestReauthorisationCommand,
+      handoffKey: 'exactRetestRedTeamHandoff',
+      handoff,
+      conversationResponse
+    });
+  }
 
   if (exactRetestCommand) {
     const handoff =
