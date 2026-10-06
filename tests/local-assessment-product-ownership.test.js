@@ -110,6 +110,29 @@ test('product-owned local assessment runner is local-only and syntactically vali
   );
 });
 
+test('public server exposes no hosted assessment transport', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'server.js'),
+    'utf8'
+  );
+
+  assert.doesNotMatch(source, /HOSTED_AGENT_PREFIX/);
+  assert.doesNotMatch(source, /handleHostedAgentHttpRequest/);
+  assert.doesNotMatch(source, /\/api\/agent\/assessment\//);
+  assert.equal(
+    fs.existsSync(
+      path.join(root, 'src/agent/hosted-agent-api.mjs')
+    ),
+    false
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(root, 'src/agent/hosted-bounded-roe-api.mjs')
+    ),
+    false
+  );
+});
+
 test('local self-proof is owned by the canonical product repository', () => {
   const source = fs.readFileSync(
     path.join(root, 'src/agent/local-self-proof.mjs'),
