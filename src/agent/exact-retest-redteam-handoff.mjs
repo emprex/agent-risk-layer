@@ -601,7 +601,7 @@ export async function prepareExactRetestRedTeamReservation({
         userId,
         assessmentId,
         mode: 'staging',
-        authorisationId
+        authorisationId: authorisation.id
       });
   } catch (error) {
     return blocked(
@@ -627,7 +627,8 @@ export async function prepareExactRetestRedTeamReservation({
       environment:
         authorisation.environment,
       endpoint,
-      authorisationId,
+      authorisationId:
+        authorisation.id,
       caseId:
         mapping.caseId,
       trials: 1,
