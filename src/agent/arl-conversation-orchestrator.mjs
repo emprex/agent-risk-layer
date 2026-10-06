@@ -259,6 +259,20 @@ async function applyExactMappedControlGuard(
     return result;
   }
 
+  /*
+   * The base conversation agent already applies the exact mapped-control
+   * guard before the persisted remediation-snapshot policy. Once that policy
+   * has established an authoritative remediationSnapshotGate, reapplying the
+   * generic mapped-control guard here can erase the remediation scope when
+   * other mapped controls also require fresh applicability review.
+   *
+   * Preserve the stronger remediation lineage instead of reclassifying it as
+   * a generic multi-control ambiguity.
+   */
+  if (workflowState?.remediationSnapshotGate?.active === true) {
+    return result;
+  }
+
   const guardedState =
     await applyMappedControlAuthorityGuard({
       workflowState,
