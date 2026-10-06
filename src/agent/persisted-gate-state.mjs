@@ -881,7 +881,10 @@ export async function applyPersistedGateState({
         assessmentId,
         evidencePlan: authoritativeEvidencePlan,
         caseId: action.caseId,
-        controlId: action.controlId
+        controlId: action.controlId,
+        requiredRetestRevision:
+          workflowState?.authoritativeArtifacts
+            ?.frozenTarget?.revision || null
       });
 
     if (continuation.available) {
