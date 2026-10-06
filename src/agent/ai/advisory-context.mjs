@@ -1,9 +1,23 @@
-const ALLOWED_ACTION_FIELDS = [
-  'name',
+const KNOWN_FIELDS = [
+  'frozenTargetVerified',
+  'assessmentContextAvailable',
+  'authoritativeAssessmentAvailable',
+  'targetContextBound',
+  'assessmentContextBound',
+  'evidencePlanAvailable',
+  'controlIntelligenceAvailable'
+];
+
+const REQUIRED_ACTION_FIELDS = [
   'actor',
-  'requiresUserInput',
-  'controlId',
-  'caseId'
+  'label',
+  'requiresUserInput'
+];
+
+const READINESS_FIELDS = [
+  'available',
+  'decision',
+  'finalDeploymentDecisionMade'
 ];
 
 function pick(source, fields) {
@@ -21,16 +35,46 @@ function cleanText(value, max = 500) {
   return text ? text.slice(0, max) : null;
 }
 
+function cleanTextList(value, maxItems = 8, maxLength = 500) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, maxItems)
+    .map((item) => cleanText(item, maxLength))
+    .filter(Boolean);
+}
+
+export function isAssessmentStateExplanationRequest(value) {
+  const text = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+  return [
+    /^explain (?:the )?current assessment state[.!?]*$/,
+    /^explain (?:the )?assessment state[.!?]*$/,
+    /^explain where (?:we|i) (?:are|am)[.!?]*$/
+  ].some((pattern) => pattern.test(text));
+}
+
 export function buildAdvisoryContext(canonicalData) {
   const workflowState = canonicalData?.workflowState || {};
   const scopedControl = workflowState?.scopedControl || {};
   const conversationResponse =
     canonicalData?.conversationResponse || {};
+  const assessment =
+    conversationResponse?.assessment || {};
 
   return {
-    schema: 'arl.ai.advisory-context.v1',
+    schema: 'arl.ai.advisory-context.v2',
     advisoryOnly: true,
-    stage: cleanText(workflowState.stage, 120),
+    stage: cleanText(
+      assessment.stage ||
+      workflowState.stage,
+      120
+    ),
     control: {
       controlId: cleanText(scopedControl.controlId, 120),
       title: cleanText(
@@ -39,19 +83,20 @@ export function buildAdvisoryContext(canonicalData) {
         240
       )
     },
-    evidenceSummary: cleanText(
-      workflowState.evidenceSummary ||
-      conversationResponse.publicSummary,
-      1200
+    known: pick(
+      assessment.known || {},
+      KNOWN_FIELDS
     ),
-    limitations: cleanText(
-      workflowState.limitations ||
-      conversationResponse.limitations,
-      1200
+    remainsUnproven: cleanTextList(
+      assessment.remainsUnproven
     ),
-    nextAllowedAction: pick(
-      workflowState.nextAllowedAction || {},
-      ALLOWED_ACTION_FIELDS
+    requiredAction: pick(
+      assessment.requiredAction || {},
+      REQUIRED_ACTION_FIELDS
+    ),
+    readiness: pick(
+      assessment.readiness || {},
+      READINESS_FIELDS
     ),
     humanReviewRequired: true
   };
