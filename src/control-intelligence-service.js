@@ -1,5 +1,5 @@
 import * as core from './control-intelligence-core.js';
-import { db } from './db.js';
+import { db, id, nowIso } from './db.js';
 import { recordRedTeamEvidenceBinding, redTeamTrustFromRow } from './control-redteam-evidence.js';
 import {
   assertRetestSnapshotAfterImplementation,
@@ -399,6 +399,173 @@ export async function recordDeploymentDecision(args) {
     throw semanticError('Deployment decision blocked: current snapshot contains legacy evidence whose stored verification is not valid under the current evidence policy. Reassess with trustworthy evidence before recording a deployment decision.');
   }
   return core.recordDeploymentDecision(args);
+}
+
+export async function recordFailedExactRetestAndInvalidateRemediation({
+  projectId,
+  controlId,
+  userId,
+  input = {}
+}) {
+  const systemSnapshotId =
+    String(input.systemSnapshotId || '').trim();
+  const retestOfExecutionId =
+    String(input.retestOfExecutionId || '').trim();
+  const findingId =
+    String(input.findingId || '').trim();
+  const redteamRunId =
+    String(input.redteamRunId || '').trim();
+  const caseId =
+    String(input.caseId || '').trim();
+  const requestFingerprint =
+    String(input.requestFingerprint || '').trim();
+
+  if (
+    !projectId ||
+    !controlId ||
+    !userId ||
+    !systemSnapshotId ||
+    !retestOfExecutionId ||
+    !findingId ||
+    !redteamRunId ||
+    !caseId ||
+    !/^[a-f0-9]{64}$/i.test(requestFingerprint)
+  ) {
+    throw semanticError(
+      'Failed exact retest recording requires the current snapshot, original failed execution, finding, signed Red Team run, case and request fingerprint.',
+      400
+    );
+  }
+
+  const sourceReference =
+    `redteam-failed-retest:${redteamRunId}:${caseId}:${requestFingerprint}`;
+
+  const before =
+    await getControlIntelligenceControl({
+      projectId,
+      controlId,
+      userId
+    });
+
+  const tests = [
+    ...(before.testHistory || []),
+    ...(before.tests || [])
+  ];
+
+  let retest =
+    tests.find(
+      (item) =>
+        item.executionKind === 'retest' &&
+        item.result === 'failed' &&
+        item.findingId === findingId &&
+        item.retestOfExecutionId === retestOfExecutionId &&
+        item.inputReference === sourceReference
+    ) || null;
+
+  if (!retest) {
+    retest =
+      await recordControlTestExecution({
+        projectId,
+        controlId,
+        userId,
+        input: {
+          systemSnapshotId,
+          result: 'failed',
+          executionKind: 'retest',
+          retestOfExecutionId,
+          findingId,
+          remediationId: findingId,
+          executionMethod:
+            'bounded_redteam_exact_retest',
+          inputReference: sourceReference,
+          expectedResult:
+            'The exact bounded adversarial case is denied before unauthorised execution or side effect.',
+          observedResult:
+            'The exact bounded adversarial case still reproduced the failure against the remediated snapshot within the authorised test scope.',
+          failureReason:
+            'authorised_exact_retest_did_not_pass'
+        }
+      });
+  }
+
+  const project =
+    await db.prepare(
+      'SELECT workspace_id FROM security_projects WHERE id=?'
+    ).get(projectId);
+
+  if (!project?.workspace_id) {
+    throw semanticError(
+      'Project workspace identity is required to invalidate the failed remediation implementation.',
+      409
+    );
+  }
+
+  const invalidatedAt = nowIso();
+  const invalidated =
+    await db.prepare(`
+      UPDATE remediation_evidence_artifacts
+      SET lifecycle_state='invalidated',
+          invalidated_at=?
+      WHERE workspace_id=?
+        AND project_id=?
+        AND remediation_id=?
+        AND artifact_type='implementation'
+        AND lifecycle_state='active'
+        AND invalidated_at IS NULL
+    `).run(
+      invalidatedAt,
+      project.workspace_id,
+      projectId,
+      findingId
+    );
+
+  if (Number(invalidated.changes || 0) > 0) {
+    await db.prepare(`
+      INSERT INTO security_audit_log
+      (id,workspace_id,project_id,actor_type,actor_id,action,target_type,target_id,metadata_json,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      id('aud_'),
+      project.workspace_id,
+      projectId,
+      'user',
+      userId,
+      'control_intelligence.failed_exact_retest_recorded',
+      'remediation',
+      findingId,
+      JSON.stringify({
+        controlId,
+        redteamRunId,
+        caseId,
+        testExecutionId: retest.id,
+        invalidatedImplementationArtifacts:
+          Number(invalidated.changes || 0)
+      }),
+      invalidatedAt
+    );
+  }
+
+  const after =
+    await getControlIntelligenceControl({
+      projectId,
+      controlId,
+      userId
+    });
+
+  return {
+    type: 'failed_exact_retest_recording',
+    available: true,
+    controlId,
+    findingId,
+    testExecutionId: retest.id,
+    redteamRunId,
+    invalidatedImplementationArtifacts:
+      Number(invalidated.changes || 0),
+    currentStage:
+      after?.chain?.currentStage || null,
+    chainStatus:
+      after?.chain?.chainStatus || null
+  };
 }
 
 export async function recordControlTestExecution(args) {
