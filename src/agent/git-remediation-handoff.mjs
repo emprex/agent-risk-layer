@@ -743,8 +743,7 @@ export async function captureGitRemediationHandoff({
     remediation.detail?.chain?.remediationState || {};
 
   const implementationRecorded =
-    remediationState.implementationRecorded === true ||
-    remediation.finding?.status === 'evidence_attached';
+    remediationState.implementationRecorded === true;
 
   const remediatedSnapshotReady =
     remediationState.remediatedSnapshotReady === true;
