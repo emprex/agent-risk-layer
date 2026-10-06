@@ -784,12 +784,17 @@ export async function applyMappedControlAuthorityGuard({
   }
 
   if (applicability.length > 1) {
-    return conflictState({
+    const selected =
+      [...applicability].sort((left, right) =>
+        String(left.projected.controlId)
+          .localeCompare(String(right.projected.controlId))
+      )[0];
+
+    return applicabilityState({
       workflowState,
-      exactControls,
-      reason:
-        'mapped_control_applicability_ambiguous',
-      candidateCount: applicability.length
+      selected: selected.projected,
+      mapping: selected.mapping,
+      exactControls
     });
   }
 
