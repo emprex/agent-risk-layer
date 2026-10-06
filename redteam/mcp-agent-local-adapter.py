@@ -270,6 +270,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": "unsupported_schema"})
             return
 
+        requested_revision = str(payload.get("targetRevision", "")).strip().lower()
+        if not requested_revision:
+            self.send_json(
+                409,
+                {
+                    "error": "target_revision_required",
+                    "loadedRevision": REVISION,
+                },
+            )
+            return
+        if requested_revision != REVISION:
+            self.send_json(
+                409,
+                {
+                    "error": "target_revision_mismatch",
+                    "expectedRevision": requested_revision,
+                    "loadedRevision": REVISION,
+                },
+            )
+            return
+
         case_id = str(payload.get("caseId", ""))
         if case_id not in SUPPORTED_CASES:
             self.send_json(
