@@ -14,7 +14,9 @@ import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLo
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
+import { deriveLocalOwnerApplicability } from './local-owner-applicability-policy.mjs';
 import {
+  assessControlApplicability,
   closeControlFinding,
   getControlIntelligenceControl,
   recordControlEvidence,
@@ -39,6 +41,74 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^continue(?: assessment)?[.!?]*$/i.test(request.trim())) {
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+
+    if (
+      state?.stage === 'control_applicability_required' &&
+      state?.nextAllowedAction?.name === 'resolve_control_applicability' &&
+      state?.nextAllowedAction?.actor === 'user' &&
+      state?.nextAllowedAction?.requiresUserInput === true &&
+      state?.scopedControl?.controlId
+    ) {
+      const controlId =
+        state.scopedControl.controlId;
+
+      const detail =
+        await getControlIntelligenceControl({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId
+        });
+
+      const ownerDecision =
+        deriveLocalOwnerApplicability(detail);
+
+      if (ownerDecision) {
+        const snapshotId =
+          state?.authoritativeArtifacts
+            ?.assessmentContext
+            ?.systemSnapshotId || null;
+
+        if (
+          !snapshotId ||
+          detail?.systemSnapshot?.id !== snapshotId
+        ) {
+          throw new Error(
+            'Owner-authorised applicability resolution requires the exact current authoritative snapshot.'
+          );
+        }
+
+        await assessControlApplicability({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId,
+          input: {
+            snapshotId,
+            decision: ownerDecision.decision,
+            reason: ownerDecision.reason,
+            architectureFactIds:
+              ownerDecision.architectureFactIds
+          }
+        });
+
+        return runArlAgent(
+          repositoryPath,
+          'Continue assessment',
+          options
+        );
+      }
+    }
+  }
+
   if (/^show assessment context[.!?]*$/i.test(request.trim())) {
     return showLocalAssessmentContext({
       projectId: options.projectId,
