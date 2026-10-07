@@ -167,7 +167,7 @@ test('once frozen evidence is already recorded the same control falls back to ac
             evidence: [
               {
                 sourceType:
-                  'arl_frozen_source_evidence_collection'
+                  'arl_frozen_source_evidence_collection_v2'
               }
             ]
           })
@@ -193,7 +193,7 @@ test('inconclusive post-collection manual control exposes the canonical evidence
     evidence: [
       {
         sourceType:
-          'arl_frozen_source_evidence_collection'
+          'arl_frozen_source_evidence_collection_v2'
       }
     ]
   });
@@ -262,7 +262,7 @@ test('post-collection runtime evidence is routed to an explicit active-test gate
     evidence: [
       {
         sourceType:
-          'arl_frozen_source_evidence_collection'
+          'arl_frozen_source_evidence_collection_v2'
       }
     ]
   });
@@ -326,5 +326,39 @@ test('post-collection runtime evidence is routed to an explicit active-test gate
   assert.equal(
     state.nextAllowedAction.requirements.length,
     1
+  );
+});
+
+
+test('legacy generic source collection is intentionally upgraded through the typed v2 collector', () => {
+  const queue =
+    buildFullProfileEvidenceWorkQueue({
+      controlIntelligence: {
+        items: [
+          control({
+            evidence: [
+              {
+                sourceType:
+                  'arl_frozen_source_evidence_collection'
+              }
+            ]
+          })
+        ]
+      },
+      riskKnowledge: knowledge(),
+      readiness: readiness()
+    });
+
+  assert.equal(
+    queue.items[0].automaticEvidenceCollected,
+    false
+  );
+  assert.equal(
+    queue.items[0].classification,
+    'machine_observable'
+  );
+  assert.equal(
+    queue.items[0].automaticCollectionRequired,
+    true
   );
 });
