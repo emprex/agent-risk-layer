@@ -293,3 +293,53 @@ test('human evidence batch identity is stable when completed controls disappear 
     /^human_evidence_batch_[a-f0-9]{12}$/
   );
 });
+
+
+test('human review fails closed instead of creating an empty canonical evidence batch', () => {
+  const queue =
+    buildFullProfileEvidenceWorkQueue({
+      readiness: {
+        summary: {
+          profileControls: 108,
+          applicableControls: 105,
+          controlsMissingEvidence: 1
+        }
+      },
+      riskKnowledge: {
+        items: [
+          {
+            id: 'ARL-KB-004',
+            title:
+              'Risk classification does not match real impact',
+            category: 'Governance and scope',
+            claimsBoundary:
+              'Bound to observed evidence only.',
+            checks: []
+          }
+        ]
+      },
+      controlIntelligence: {
+        items: [
+          {
+            controlId: 'ARL-KB-004',
+            currentStage: 'test',
+            chainStatus: 'test_required',
+            testMode: 'manual',
+            automationStatus: 'unsupported'
+          }
+        ]
+      }
+    });
+
+  assert.equal(
+    queue.items[0].classification,
+    'unavailable_or_inconclusive'
+  );
+  assert.match(
+    queue.items[0].classificationReason,
+    /Canonical Risk Knowledge test\/evidence requirements are unavailable/
+  );
+  assert.equal(queue.humanReviewBatches.length, 0);
+  assert.equal(queue.summary.humanOnly, 0);
+  assert.equal(queue.summary.unavailableOrInconclusive, 1);
+});
