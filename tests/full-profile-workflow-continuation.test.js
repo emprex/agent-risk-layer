@@ -82,8 +82,9 @@ test('full-profile workflow continues an explicitly scoped unmapped control befo
   assert.equal(state.stage, 'control_test_required');
   assert.equal(state.scopedControl.controlId, 'ARL-KB-001');
   assert.equal(state.nextAllowedAction.controlId, 'ARL-KB-001');
-  assert.equal(state.nextAllowedAction.name, 'provide_authoritative_control_test');
-  assert.equal(state.nextAllowedAction.actor, 'user');
+  assert.equal(state.nextAllowedAction.name, 'run_authoritative_control_test');
+  assert.equal(state.nextAllowedAction.actor, 'arl');
+  assert.equal(state.nextAllowedAction.requiresUserInput, false);
   assert.equal(state.nextAllowedAction.caseId, null);
 });
 
@@ -119,4 +120,27 @@ test('after current scoped work completes, next untouched canonical control is o
   assert.equal(state.nextAllowedAction.requiresUserInput, true);
   assert.equal(state.deploymentDecisionWritten, false);
   assert.equal(state.humanReviewRequired, true);
+});
+
+
+test('ordinary source-backed control test is automatic while bounded tests still require explicit user authorisation', () => {
+  const ordinary = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [item('ARL-KB-001', 'test')]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current'
+    }
+  });
+
+  assert.equal(ordinary.nextAllowedAction.name, 'run_authoritative_control_test');
+  assert.equal(ordinary.nextAllowedAction.actor, 'arl');
+  assert.equal(ordinary.nextAllowedAction.requiresUserInput, false);
 });
