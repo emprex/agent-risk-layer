@@ -903,13 +903,46 @@ export async function getAuthoritativeWorkflowState({
     const { getControlIntelligence } =
       await import('../control-intelligence.js');
 
-    controlIntelligence =
+    const firstPage =
       await getControlIntelligence({
         projectId,
         userId,
-        limit: 200,
+        limit: 50,
         offset: 0
       });
+
+    const pages = [firstPage];
+
+    for (
+      let offset = firstPage.items?.length || 0;
+      firstPage.hasMore === true && offset < (firstPage.total || 0);
+      offset += 50
+    ) {
+      pages.push(
+        await getControlIntelligence({
+          projectId,
+          userId,
+          limit: 50,
+          offset
+        })
+      );
+
+      const latest = pages.at(-1);
+      if (latest?.hasMore !== true) break;
+    }
+
+    controlIntelligence = {
+      ...firstPage,
+      items: pages.flatMap((page) =>
+        Array.isArray(page?.items) ? page.items : []
+      ),
+      limit: pages.reduce(
+        (count, page) => count + (page?.items?.length || 0),
+        0
+      ),
+      offset: 0,
+      hasMore: false
+    };
 
     const { listRiskKnowledge } =
       await import('../risk-knowledge.js');
