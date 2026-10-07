@@ -315,6 +315,16 @@ function stateResult({
     nextAllowedAction?.actor === 'arl' &&
     requiresUserInput === false;
 
+  const humanEvidenceBatch =
+    scopedControl?.controlId
+      ? (evidenceWorkQueue?.humanReviewBatches || [])
+          .find((batch) =>
+            batch?.controlIds?.includes(
+              scopedControl.controlId
+            )
+          ) || null
+      : null;
+
   return {
     type: 'authoritative_workflow_state',
     schema: AUTHORITATIVE_WORKFLOW_STATE_SCHEMA,
@@ -354,6 +364,18 @@ function stateResult({
     nextAllowedAction,
     readiness,
     evidenceWorkQueue,
+    humanEvidenceBatch:
+      humanEvidenceBatch
+        ? {
+            batchId: humanEvidenceBatch.batchId,
+            controlIds:
+              humanEvidenceBatch.controlIds || [],
+            requirements:
+              humanEvidenceBatch.requirements || [],
+            reviewInstruction:
+              humanEvidenceBatch.reviewInstruction || null
+          }
+        : null,
     deploymentDecisionWritten: false,
     humanReviewRequired: true
   };
@@ -364,7 +386,8 @@ function stateFromScopedControl({
   preparation,
   controlIntelligence,
   readiness,
-  planMappings
+  planMappings,
+  evidenceWorkQueue = null
 }) {
   const mapping =
     planMappingForControl(
@@ -377,7 +400,8 @@ function stateFromScopedControl({
     controlIntelligence,
     readiness,
     planMappings,
-    scopedControl
+    scopedControl,
+    evidenceWorkQueue
   };
 
   if (scopedControl.currentStage === 'finding') {
