@@ -75,12 +75,17 @@ test('parses context-required decisions without inventing facts', () => {
   );
 });
 
-test('not-applicable decisions fail closed without a supporting confirmed fact', () => {
-  assert.throws(
-    () => parseLocalApplicabilityCommand(
-      'Set control applicability {"controlId":"ARL-KB-046","decision":"not_applicable","reason":"No persistent memory is present."}'
+test('local owner command can carry an explicit factless not-applicable attestation', () => {
+  assert.deepEqual(
+    parseLocalApplicabilityCommand(
+      'Set control applicability {"controlId":"ARL-KB-003","decision":"not_applicable","reason":"The assessed agent does not affect people, rights, safety or regulated activity."}'
     ),
-    /requires at least one confirmed supporting architecture fact/i
+    {
+      controlId: 'ARL-KB-003',
+      decision: 'not_applicable',
+      reason: 'The assessed agent does not affect people, rights, safety or regulated activity.',
+      architectureFactIds: null
+    }
   );
 });
 
@@ -223,5 +228,39 @@ test('generic control focus fails closed on stale snapshot or non-applicability 
       'ARL-KB-001'
     ),
     null
+  );
+});
+
+
+test('factless not-applicable remains restricted to the dedicated local owner attestation path', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../', import.meta.url));
+
+  const core = fs.readFileSync(
+    path.join(root, 'src/control-intelligence-core.js'),
+    'utf8'
+  );
+  const workflow = fs.readFileSync(
+    path.join(root, 'src/agent/local-assessment-workflow.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    core,
+    /assessControlApplicabilityFromLocalOwnerAttestation/
+  );
+  assert.match(
+    core,
+    /new Set\(\['admin','owner'\]\)/
+  );
+  assert.match(
+    core,
+    /allowFactlessNotApplicable:true/
+  );
+  assert.match(
+    workflow,
+    /assessControlApplicabilityFromLocalOwnerAttestation/
   );
 });
