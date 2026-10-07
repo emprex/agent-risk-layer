@@ -14,7 +14,9 @@ export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
   userId,
-  controlId
+  controlId,
+  requirements = [],
+  collectionOnly = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -60,8 +62,18 @@ export async function runAuthoritativeControlSourceReview({
     }))
     .digest('hex');
 
+  const normalizedRequirements =
+    (Array.isArray(requirements) ? requirements : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+
+  const collectionKind =
+    collectionOnly
+      ? 'arl_frozen_source_evidence_collection'
+      : 'arl_frozen_source_review';
+
   const inputReference =
-    `arl-source-review:${frozen.target.revision}:${controlId}:${sourceDigest}`;
+    `${collectionKind}:${frozen.target.revision}:${controlId}:${sourceDigest}`;
 
   const previous = [
     ...(Array.isArray(detail.tests) ? detail.tests : []),
@@ -88,13 +100,19 @@ export async function runAuthoritativeControlSourceReview({
       input: {
         systemSnapshotId: snapshotId,
         executionKind: 'initial',
-        executionMethod: 'arl_frozen_source_review',
+        executionMethod: collectionKind,
         result: 'inconclusive',
         inputReference,
         observedResult:
-          'ARL completed deterministic frozen-source inspection for this control. Source evidence alone does not establish the required accountable governance or external approval record, so the result remains inconclusive rather than being guessed as pass or fail.',
+          [
+            'ARL completed deterministic frozen-source inspection for this control.',
+            normalizedRequirements.length
+              ? `Canonical requirements supported by this collection: ${normalizedRequirements.join(' | ')}`
+              : 'No canonical requirement was asserted as satisfied by source inspection alone.',
+            'The collection records observations only. It does not infer a PASS/FAIL result.'
+          ].join(' '),
         limitations:
-          'This automatic source review is bound to the exact frozen Git revision. It does not invent business-purpose approval, external governance records, reviewer identity, or change approval evidence that is not observable in the frozen target.'
+          'This automatic source collection is bound to the exact frozen Git revision. It may support canonical evidence requirements but does not invent human approval, reviewer identity, organisational records, runtime effects or a conclusive control result.'
       }
     });
 
@@ -105,7 +123,7 @@ export async function runAuthoritativeControlSourceReview({
     input: {
       systemSnapshotId: snapshotId,
       evidenceClass: 'observed',
-      sourceType: 'arl_frozen_source_review',
+      sourceType: collectionKind,
       sourceReference: inputReference,
       testExecutionId: execution.id,
       limitations:
