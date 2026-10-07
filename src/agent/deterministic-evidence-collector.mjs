@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import {
   classifyCanonicalEvidenceRequirement
-} from '../canonical-evidence-requirement-plan.mjs';
+} from './canonical-evidence-requirement-plan.mjs';
 
 const MAX_FILES = 500;
 const MAX_TEXT_BYTES = 256_000;
