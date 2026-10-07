@@ -144,3 +144,59 @@ test('ordinary source-backed control test is automatic while bounded tests still
   assert.equal(ordinary.nextAllowedAction.actor, 'arl');
   assert.equal(ordinary.nextAllowedAction.requiresUserInput, false);
 });
+
+
+test('inconclusive automatic source review stops auto-loop and requests only missing evidence', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        {
+          ...item('ARL-KB-001', 'test'),
+          chainStatus: 'test_inconclusive',
+          nextAction: 'Resolve the inconclusive test with additional evidence or rerun it.'
+        }
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current'
+    }
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(state.scopedControl.controlId, 'ARL-KB-001');
+  assert.equal(state.nextAllowedAction.name, 'provide_required_manual_evidence');
+  assert.equal(state.nextAllowedAction.actor, 'user');
+  assert.equal(state.nextAllowedAction.requiresUserInput, true);
+  assert.equal(state.canAutoAdvance, false);
+});
+
+test('ordinary automatic control test does not falsely advertise a user blocker', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [item('ARL-KB-001', 'test')]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current'
+    }
+  });
+
+  assert.equal(state.nextAllowedAction.actor, 'arl');
+  assert.equal(state.nextAllowedAction.requiresUserInput, false);
+  assert.equal(state.blockers.length, 0);
+  assert.equal(state.blocked, false);
+  assert.equal(state.canAutoAdvance, true);
+});
