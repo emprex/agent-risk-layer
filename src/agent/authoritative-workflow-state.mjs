@@ -131,6 +131,7 @@ function selectScopedControlState(
           item.currentStage === 'test' &&
           [
             'human_only',
+            'active_test_required',
             'unavailable_or_inconclusive'
           ].includes(
             queueClassificationByControl.get(item.controlId)
@@ -607,6 +608,69 @@ function stateFromScopedControl({
     });
 
     if (
+      queueItem?.classification ===
+        'active_test_required'
+    ) {
+      if (boundedCaseId) {
+        return stateResult({
+          ...common,
+          stage: 'bounded_test_required',
+          blockers: [
+            {
+              code:
+                'authorised_bounded_test_required',
+              source:
+                'canonical_evidence_requirement',
+              userActionRequired: true
+            }
+          ],
+          nextAllowedAction: action({
+            name:
+              'authorise_and_run_bounded_test',
+            actor: 'user',
+            requiresUserInput: true,
+            reason:
+              queueItem.classificationReason,
+            controlId:
+              scopedControl.controlId,
+            caseId: boundedCaseId,
+            requirements:
+              queueItem.activeTestRequirements || []
+          })
+        });
+      }
+
+      return stateResult({
+        ...common,
+        stage:
+          'active_test_plan_required',
+        blockers: [
+          {
+            code:
+              'bounded_active_test_plan_required',
+            source:
+              'canonical_evidence_requirement',
+            userActionRequired: true
+          }
+        ],
+        nextAllowedAction: action({
+          name:
+            'define_and_authorise_control_test',
+          actor: 'human',
+          requiresUserInput: true,
+          reason:
+            queueItem.classificationReason ||
+            'Canonical evidence requires an explicitly bounded runtime or abuse-case test before the control can be concluded.',
+          controlId:
+            scopedControl.controlId,
+          caseId: null,
+          requirements:
+            queueItem.activeTestRequirements || []
+        })
+      });
+    }
+
+    if (
       scopedControl.chainStatus === 'test_inconclusive' ||
       policy.mode === 'manual_evidence'
     ) {
@@ -625,10 +689,13 @@ function stateFromScopedControl({
           actor: 'user',
           requiresUserInput: true,
           reason:
+            queueItem?.classificationReason ||
             scopedControl.nextAction ||
             'This control is manual or has no verified automatic executor. Provide only the evidence that cannot be derived from the frozen target.',
           controlId: scopedControl.controlId,
-          caseId: null
+          caseId: null,
+          requirements:
+            queueItem?.requiredEvidence || []
         })
       });
     }
