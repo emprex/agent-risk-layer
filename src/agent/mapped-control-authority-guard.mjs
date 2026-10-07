@@ -537,6 +537,59 @@ export function scopeExactRetestState({
   };
 }
 
+export function scopeExactEvidenceState({
+  workflowState,
+  selected,
+  exactControls = []
+} = {}) {
+  const projected = selected?.projected || null;
+  const mapping = selected?.mapping || null;
+
+  if (!projected?.controlId) {
+    return null;
+  }
+
+  let next = withExactRelevantControls(
+    workflowState,
+    exactControls
+  );
+
+  next = maskReadiness(
+    next,
+    'authoritative_evidence_required'
+  );
+
+  return {
+    ...next,
+    stage: 'evidence_recording_required',
+    blocked: false,
+    canAutoAdvance: true,
+    blockers: [],
+    scopedControl: {
+      controlId: projected.controlId,
+      currentStage: 'evidence',
+      chainStatus: projected.chainStatus || null,
+      nextAction: projected.nextAction || null,
+      deploymentImpact:
+        projected.deploymentImpact || null
+    },
+    nextAllowedAction: {
+      name: 'record_authoritative_evidence',
+      actor: 'arl',
+      requiresUserInput: false,
+      reason:
+        projected.nextAction ||
+        'The executed authoritative test requires its verified evidence binding.',
+      controlId: projected.controlId,
+      caseId: mapping?.caseId || null
+    },
+    mappedControlAuthorityGuard:
+      guardMetadata({
+        exactEvidenceScope: true
+      })
+  };
+}
+
 export function scopeExactFindingState({
   workflowState,
   selected,
@@ -824,6 +877,29 @@ export async function applyMappedControlAuthorityGuard({
       exactControls,
       reason: 'mapped_control_finding_ambiguous',
       candidateCount: findingCandidates.length
+    });
+  }
+
+  const evidenceCandidates =
+    exact.filter(
+      (item) =>
+        item.projected.currentStage === 'evidence'
+    );
+
+  if (evidenceCandidates.length === 1) {
+    return scopeExactEvidenceState({
+      workflowState,
+      selected: evidenceCandidates[0],
+      exactControls
+    });
+  }
+
+  if (evidenceCandidates.length > 1) {
+    return conflictState({
+      workflowState,
+      exactControls,
+      reason: 'mapped_control_evidence_ambiguous',
+      candidateCount: evidenceCandidates.length
     });
   }
 

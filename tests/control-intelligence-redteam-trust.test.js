@@ -75,3 +75,38 @@ test('binding UI requires explicit human confirmation and states the limited ver
   assert.match(source, /confirmTrustBoundary:\s*document\.querySelector\('#redteamTrustConfirm'\)\.checked/);
   assert.doesNotMatch(source, /click\(\).*redteamBindingForm|dispatchEvent\([^)]*submit/i);
 });
+
+
+test('initial bounded Red Team evidence remains verified when its signed source matches the integrity-bound descriptor', () => {
+  const trusted = redTeamTrustFromRow({
+    redteam_run_id: 'rtr_initial',
+    redteam_baseline_run_id: null,
+    redteam_case_id: 'RT-TOOL-004',
+    redteam_signature_valid: 1,
+    redteam_bundle_digest: 'a'.repeat(64),
+    redteam_retention_expires_at:
+      '2099-01-01T00:00:00.000Z',
+    descriptor_json: JSON.stringify({
+      verificationScope:
+        'integrity_verified_customer_operated_initial',
+      redteamRunId: 'rtr_initial',
+      redteamCaseId: 'RT-TOOL-004',
+      sourceDigest: 'a'.repeat(64),
+      trustBoundary: 'synthetic bounded test'
+    })
+  });
+
+  assert.equal(trusted.state, 'verified');
+  assert.equal(
+    trusted.redteamRunId,
+    'rtr_initial'
+  );
+  assert.equal(
+    trusted.redteamBaselineRunId,
+    null
+  );
+  assert.equal(
+    trusted.redteamCaseId,
+    'RT-TOOL-004'
+  );
+});

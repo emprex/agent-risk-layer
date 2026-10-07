@@ -181,7 +181,8 @@ export async function resolvePersistedRedTeamContinuation({
   evidencePlan,
   caseId,
   controlId = null,
-  selectedRunId = null
+  selectedRunId = null,
+  requiredTargetRevision = null
 } = {}) {
   if (!projectId || !userId || !assessmentId) {
     return unavailable(
@@ -237,6 +238,29 @@ export async function resolvePersistedRedTeamContinuation({
      */
     if (!outcome.available) {
       continue;
+    }
+
+    /*
+     * Persisted Red Team evidence can satisfy the current bounded-test gate
+     * only when it belongs to the exact frozen target revision.
+     * Historical or revision-less runs are not candidates.
+     */
+    const requiredRevision =
+      String(requiredTargetRevision || '')
+        .trim()
+        .toLowerCase();
+
+    if (requiredRevision) {
+      const runRevision =
+        String(
+          outcome?.campaign?.target?.revision || ''
+        )
+          .trim()
+          .toLowerCase();
+
+      if (runRevision !== requiredRevision) {
+        continue;
+      }
     }
 
     const lineage =

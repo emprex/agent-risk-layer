@@ -23,7 +23,8 @@ import {
 } from './tools/get-authoritative-redteam-lineage.mjs';
 
 import {
-  recordAuthoritativeRedTeamEvidence
+  recordAuthoritativeRedTeamEvidence,
+  promoteInitialRedTeamEvidence
 } from './tools/record-authoritative-redteam-evidence.mjs';
 
 import {
@@ -109,7 +110,9 @@ async function persistedRedTeamContinuation({
       evidencePlan: resolvedPreparation.evidencePlan,
       caseId: action.caseId,
       controlId: action.controlId,
-      selectedRunId: action.selectedRunId || null
+      selectedRunId: action.selectedRunId || null,
+      requiredTargetRevision:
+        resolvedPreparation?.target?.revision || null
     });
 
   if (!continuation.available) {
@@ -155,11 +158,86 @@ async function recordPersistedRedTeamEvidence({
   const { preparation: resolvedPreparation, continuation } = resolved;
 
   if (continuation.persisted === true) {
+    const lineage =
+      await getAuthoritativeRedTeamLineage({
+        projectId,
+        userId,
+        assessmentId,
+        evidencePlan:
+          resolvedPreparation.evidencePlan,
+        runId:
+          continuation.runId,
+        caseId:
+          continuation.caseId
+      });
+
+    if (!lineage.available) {
+      return {
+        executed: false,
+        reason:
+          lineage.reason ||
+          'authoritative_redteam_lineage_required'
+      };
+    }
+
+    if (
+      lineage.redTeamEvidence
+        ?.verificationState === 'verified'
+    ) {
+      return {
+        executed: true,
+        effect:
+          'authoritative_redteam_evidence_already_verified',
+        selectionBasis:
+          continuation.selectionBasis,
+        securityStateChanged: false
+      };
+    }
+
+    const outcome =
+      await getAuthoritativeRedTeamOutcome({
+        runId:
+          continuation.runId,
+        userId,
+        assessmentId,
+        evidencePlan:
+          resolvedPreparation.evidencePlan,
+        caseId:
+          continuation.caseId
+      });
+
+    if (!outcome.available) {
+      return {
+        executed: false,
+        reason:
+          outcome.reason ||
+          'authoritative_redteam_outcome_required'
+      };
+    }
+
+    const promoted =
+      await promoteInitialRedTeamEvidence({
+        evidence:
+          lineage.redTeamEvidence,
+        projectId,
+        userId,
+        assessmentContext:
+          resolvedPreparation.assessmentContext,
+        redTeamOutcome:
+          outcome
+      });
+
     return {
       executed: true,
-      effect: 'authoritative_redteam_evidence_already_recorded',
-      selectionBasis: continuation.selectionBasis,
-      securityStateChanged: false
+      effect:
+        'authoritative_redteam_existing_evidence_verified',
+      evidenceId:
+        promoted.evidenceId,
+      verificationState:
+        promoted.verificationState,
+      selectionBasis:
+        continuation.selectionBasis,
+      securityStateChanged: true
     };
   }
 

@@ -327,6 +327,12 @@ test('persisted bounded result advances after exact scope replaces stale fallbac
 
   const stale = baseState();
 
+  stale.authoritativeArtifacts.frozenTarget = {
+    available: true,
+    revision:
+      'b3116fcfcec3bf6967773c3e9587c502b1fed5e5'
+  };
+
   const exactScoped =
     scopeExactBoundedTestState({
       workflowState: {
@@ -386,6 +392,11 @@ test('persisted bounded result advances after exact scope replaces stale fallbac
   assert.equal(
     resolverArgs.caseId,
     'RT-TOOL-004'
+  );
+
+  assert.equal(
+    resolverArgs.requiredTargetRevision,
+    'b3116fcfcec3bf6967773c3e9587c502b1fed5e5'
   );
 
   assert.equal(

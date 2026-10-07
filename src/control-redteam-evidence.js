@@ -3,6 +3,8 @@ import { verifyExactRetestAuthorisationLineage } from './redteam.js';
 import { canonicalJson, intelligenceDigest } from './control-intelligence-core.js';
 
 export const REDTEAM_VERIFICATION_SCOPE = 'integrity_verified_customer_operated';
+export const REDTEAM_INITIAL_VERIFICATION_SCOPE =
+  'integrity_verified_customer_operated_initial';
 export const REDTEAM_TRUST_BOUNDARY = 'Integrity-verified redacted outcomes from a customer-operated local/test/staging run. AgentRiskLayer did not independently operate the target or retain raw transcripts.';
 const BIND_ROLES = new Set(['admin', 'owner']);
 const EVIDENCE_CLASS = 'test_generated';
@@ -77,6 +79,67 @@ function sameTarget(left, right) {
 export function redTeamTrustFromRow(row) {
   if (!row?.redteam_run_id) return null;
   const descriptor = parse(row.descriptor_json, {});
+
+  if (
+    descriptor.verificationScope ===
+      REDTEAM_INITIAL_VERIFICATION_SCOPE
+  ) {
+    if (
+      !row.redteam_case_id ||
+      descriptor.redteamRunId !== row.redteam_run_id ||
+      descriptor.redteamCaseId !== row.redteam_case_id
+    ) {
+      return {
+        state: 'unverified',
+        reason:
+          'Initial Red-team evidence provenance IDs do not match the integrity-bound evidence descriptor.'
+      };
+    }
+
+    if (Number(row.redteam_signature_valid) !== 1) {
+      return {
+        state: 'unverified',
+        reason:
+          'The linked initial Red-team run no longer has a valid uploaded signature.'
+      };
+    }
+
+    if (
+      !row.redteam_bundle_digest ||
+      descriptor.sourceDigest !== row.redteam_bundle_digest
+    ) {
+      return {
+        state: 'unverified',
+        reason:
+          'The linked initial Red-team bundle digest does not match the evidence source digest.'
+      };
+    }
+
+    if (
+      row.redteam_retention_expires_at &&
+      time(row.redteam_retention_expires_at) <= Date.now()
+    ) {
+      return {
+        state: 'stale',
+        reason:
+          'The linked initial Red-team source is outside its retained evidence window.'
+      };
+    }
+
+    return {
+      state: 'verified',
+      reason: null,
+      verificationScope:
+        REDTEAM_INITIAL_VERIFICATION_SCOPE,
+      trustBoundary:
+        descriptor.trustBoundary ||
+        REDTEAM_TRUST_BOUNDARY,
+      redteamRunId: row.redteam_run_id,
+      redteamBaselineRunId: null,
+      redteamCaseId: row.redteam_case_id
+    };
+  }
+
   if (descriptor.verificationScope !== REDTEAM_VERIFICATION_SCOPE) {
     return { state: 'unverified', reason: 'Red-team evidence is missing the required integrity-verification scope.' };
   }
