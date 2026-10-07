@@ -417,6 +417,32 @@ function defaultMessage({ command, stage, actor, label }) {
   return `Assessment state loaded: ${current}. Next: ${label}.`;
 }
 
+
+function manualEvidenceMessage({ workflowState, label }) {
+  const batch =
+    workflowState?.humanEvidenceBatch || null;
+
+  if (!batch?.batchId) {
+    return `ARL cannot advance this step without your input. The next step is to ${label}.`;
+  }
+
+  const controlCount =
+    Array.isArray(batch.controlIds)
+      ? batch.controlIds.length
+      : 0;
+
+  const requirementCount =
+    Array.isArray(batch.requirements)
+      ? batch.requirements.length
+      : 0;
+
+  return [
+    `ARL consolidated the current human-only evidence work into batch ${batch.batchId} covering ${controlCount} control${controlCount === 1 ? '' : 's'}.`,
+    `Review the ${requirementCount} canonical evidence requirement${requirementCount === 1 ? '' : 's'} once and submit the batch.`,
+    'ARL derives each conclusive control result from the structured checklist and will not accept a bare PASS/FAIL claim.'
+  ].join(' ');
+}
+
 function findingsMessage({ workflowState, label }) {
   const summary = buildFindingSummary(workflowState);
 
@@ -524,6 +550,16 @@ function commandMessage({
   actor,
   label
 }) {
+  if (
+    workflowState?.stage === 'manual_evidence_required' &&
+    workflowState?.humanEvidenceBatch?.batchId
+  ) {
+    return manualEvidenceMessage({
+      workflowState,
+      label
+    });
+  }
+
   if (command === 'findings') {
     return findingsMessage({
       workflowState,
