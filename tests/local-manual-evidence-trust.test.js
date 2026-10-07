@@ -130,7 +130,7 @@ test('conclusive manual evidence is checked against the exact canonical Risk Kno
 
   assert.match(
     checklist,
-    /Conclusive manual evidence must address the exact canonical required-evidence checklist/
+    /Conclusive manual evidence must address the exact remaining human-only canonical evidence checklist/
   );
 
   assert.match(
@@ -140,6 +140,6 @@ test('conclusive manual evidence is checked against the exact canonical Risk Kno
 
   assert.match(
     workflow,
-    /Canonical required-evidence checklist verified against Risk Knowledge/
+    /Canonical remaining human-only evidence checklist verified against Risk Knowledge/
   );
 });
