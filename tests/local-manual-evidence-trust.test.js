@@ -113,6 +113,10 @@ test('conclusive manual evidence is checked against the exact canonical Risk Kno
     path.join(root, 'src/agent/local-assessment-workflow.mjs'),
     'utf8'
   );
+  const checklist = fs.readFileSync(
+    path.join(root, 'src/agent/manual-evidence-checklist.mjs'),
+    'utf8'
+  );
 
   assert.match(
     workflow,
@@ -120,12 +124,12 @@ test('conclusive manual evidence is checked against the exact canonical Risk Kno
   );
 
   assert.match(
-    workflow,
+    checklist,
     /workflowState\?\.evidenceWorkQueue\?\.items/
   );
 
   assert.match(
-    workflow,
+    checklist,
     /Conclusive manual evidence must address the exact canonical required-evidence checklist/
   );
 
