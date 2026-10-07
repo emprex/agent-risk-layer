@@ -54,3 +54,36 @@ test('owner policy never changes a control outside applicability stage', () => {
     null
   );
 });
+
+
+test('full-profile local continuation conservatively includes unresolved conditional controls instead of blocking per control', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const source = fs.readFileSync(
+    path.join(root, 'src/agent/local-assessment-workflow.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    source,
+    /profileControls \|\| 0\) === 108/
+  );
+  assert.match(
+    source,
+    /assessControlApplicabilityFromLocalOwnerAttestation/
+  );
+  assert.match(
+    source,
+    /unresolved conditional applicability is conservatively included for assessment/
+  );
+  assert.match(
+    source,
+    /decision: 'applicable'/
+  );
+  assert.match(
+    source,
+    /does not prove the control passes and does not approve deployment/
+  );
+});
