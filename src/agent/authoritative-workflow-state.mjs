@@ -77,7 +77,8 @@ function mapEvidencePlanControls(evidencePlan) {
 function selectScopedControlState(
   controlIntelligence,
   planMappings,
-  readiness
+  readiness,
+  evidenceWorkQueue = null
 ) {
   if (!Array.isArray(controlIntelligence?.items)) {
     return null;
@@ -101,19 +102,40 @@ function selectScopedControlState(
     approval: 3,
     evidence: 4,
     applicability: 5,
-    test: 6,
-    deployment_decision: 7
+    test: 7,
+    deployment_decision: 8
   });
+
+  const queueClassificationByControl =
+    new Map(
+      (evidenceWorkQueue?.items || []).map((item) => [
+        item.controlId,
+        item.classification
+      ])
+    );
 
   const candidates =
     controlIntelligence.items
-      .map((item) => ({
-        ...item,
-        workflowPriority:
+      .map((item) => {
+        let workflowPriority =
           (fullProfile
             ? fullProfilePriority[item.currentStage]
-            : CONTROL_STAGE_PRIORITY[item.currentStage]) ?? 99
-      }))
+            : CONTROL_STAGE_PRIORITY[item.currentStage]) ?? 99;
+
+        if (
+          fullProfile &&
+          item.currentStage === 'test' &&
+          queueClassificationByControl.get(item.controlId) ===
+            'machine_observable'
+        ) {
+          workflowPriority = 6;
+        }
+
+        return {
+          ...item,
+          workflowPriority
+        };
+      })
       .sort((left, right) => {
         if (
           left.workflowPriority !==
@@ -788,7 +810,8 @@ export function deriveAuthoritativeWorkflowState({
     selectScopedControlState(
       controlIntelligence,
       planMappings,
-      readiness
+      readiness,
+      evidenceWorkQueue
     );
 
   if (scopedControl) {
