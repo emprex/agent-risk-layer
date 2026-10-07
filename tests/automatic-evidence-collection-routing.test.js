@@ -240,11 +240,15 @@ test('inconclusive post-collection manual control exposes the canonical evidence
   );
   assert.deepEqual(
     state.nextAllowedAction.requirements,
-    knowledge().items[0].checks[0].requiredEvidence
+    [
+      'ARL-KB-004 accountable human reviewer identity, role, timestamp, decision and evidence digest'
+    ]
   );
-  assert.ok(
-    state.humanEvidenceBatch
-      .requirements.length > 0
+  assert.deepEqual(
+    state.humanEvidenceBatch.requirements,
+    [
+      'ARL-KB-004 accountable human reviewer identity, role, timestamp, decision and evidence digest'
+    ]
   );
 });
 
