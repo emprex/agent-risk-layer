@@ -65,11 +65,42 @@ export function parseLocalManualEvidenceCommand(request) {
     );
   }
 
+  const evidenceChecklist =
+    Array.isArray(input.evidenceChecklist)
+      ? input.evidenceChecklist.map((item) => ({
+          requirement: clean(item?.requirement),
+          evidenceReference: clean(item?.evidenceReference),
+          observation: clean(item?.observation)
+        }))
+      : [];
+
+  if (
+    result !== 'inconclusive' &&
+    evidenceChecklist.length === 0
+  ) {
+    throw new Error(
+      'Conclusive manual evidence requires evidenceChecklist entries for every canonical required-evidence item.'
+    );
+  }
+
+  for (const item of evidenceChecklist) {
+    if (
+      item.requirement.length < 3 ||
+      item.evidenceReference.length < 3 ||
+      item.observation.length < 10
+    ) {
+      throw new Error(
+        'Each manual evidence checklist item requires requirement, privacy-safe evidenceReference, and a specific observation of at least 10 characters.'
+      );
+    }
+  }
+
   return {
     controlId,
     result,
     observedResult,
     sourceReference,
-    limitations: clean(input.limitations)
+    limitations: clean(input.limitations),
+    evidenceChecklist
   };
 }
