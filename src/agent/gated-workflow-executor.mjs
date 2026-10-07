@@ -79,7 +79,7 @@ export async function executeGatedWorkflow({
   initialState,
   loadState,
   executeAction,
-  maxSteps = 8
+  maxSteps = 128
 } = {}) {
   if (typeof loadState !== 'function') {
     throw new Error('loadState is required');
@@ -92,9 +92,9 @@ export async function executeGatedWorkflow({
   if (
     !Number.isInteger(maxSteps) ||
     maxSteps < 1 ||
-    maxSteps > 32
+    maxSteps > 256
   ) {
-    throw new Error('maxSteps must be an integer between 1 and 32');
+    throw new Error('maxSteps must be an integer between 1 and 256');
   }
 
   let workflowState = initialState;
