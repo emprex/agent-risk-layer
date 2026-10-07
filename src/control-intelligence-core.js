@@ -819,7 +819,7 @@ export async function getControlIntelligenceControl({ projectId, controlId, user
     db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id<? ORDER BY entry_id DESC LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
     db.prepare('SELECT entry_id FROM control_snapshot_evaluations WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id>? ORDER BY entry_id LIMIT 1').get(access.project.workspace_id,projectId,snapshot.id,controlId),
   ]);
-  const derived = { tests, evidence, testHistory:lineageTests, evidenceHistory:lineageEvidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
+  const derived = { tests, evidence, testHistory, evidenceHistory:lineageEvidence, links, remediations, runtime, approvals, requirements:requirements.map(row=>({entry_id:controlId,...row})), decisions };
   const chain = deriveChains([evaluation], derived)[0];
   return { graphVersion: '1.0', project: { id: projectId, name: access.project.name, role: access.role }, systemSnapshot: serializeSnapshot(snapshot),
     control: { id: evaluation.entry_id, title: evaluation.title, category: evaluation.category, problem: parseJson(evaluation.problem_json, {}),
