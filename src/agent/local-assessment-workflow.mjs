@@ -478,13 +478,20 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       state?.stage === 'manual_evidence_required' &&
       action.name === 'provide_required_manual_evidence';
 
+    const existingManualEvidenceGate =
+      state?.stage === 'evidence_recording_required' &&
+      action.name === 'record_authoritative_evidence' &&
+      action.caseId == null;
+
     const exactManualRetestGate =
       state?.stage === 'exact_retest_required' &&
       action.name === 'authorise_and_run_exact_retest' &&
       action.caseId == null;
 
     if (
-      (!initialManualEvidenceGate && !exactManualRetestGate) ||
+      (!initialManualEvidenceGate &&
+        !existingManualEvidenceGate &&
+        !exactManualRetestGate) ||
       action.actor !== 'user' ||
       action.requiresUserInput !== true
     ) {
@@ -525,6 +532,51 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     ) {
       throw new Error(
         'Manual evidence is not bound to the current authoritative snapshot.'
+      );
+    }
+
+    if (existingManualEvidenceGate) {
+      const tests = [
+        ...(Array.isArray(detail?.tests) ? detail.tests : []),
+        ...(Array.isArray(detail?.testHistory) ? detail.testHistory : [])
+      ];
+
+      const passed = tests.filter(
+        (item) =>
+          item?.result === 'passed' &&
+          item?.executionKind !== 'retest' &&
+          item?.systemSnapshotId === systemSnapshotId
+      );
+
+      const evidence = (detail?.evidence || []).filter(
+        (item) =>
+          item?.testExecutionId === passed[0]?.id &&
+          item?.sourceType === 'manual_review' &&
+          item?.retentionStatus === 'active' &&
+          item?.verificationState === 'unverified'
+      );
+
+      if (passed.length !== 1 || evidence.length !== 1) {
+        throw new Error(
+          'Existing manual evidence recovery requires exactly one passed initial test and one matching active unverified manual-review evidence item.'
+        );
+      }
+
+      await verifyExplicitHumanEvidence({
+        projectId: options.projectId,
+        evidenceId: evidence[0].id,
+        userId: options.userId,
+        controlId: scopedControlId,
+        verificationScope:
+          'explicit_human_manual_control_review_recovery',
+        reason:
+          'The accountable operator explicitly resubmitted the same manual control review to complete trust verification for the current authoritative snapshot.'
+      });
+
+      return runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
       );
     }
 
