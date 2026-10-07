@@ -106,3 +106,36 @@ test('manual evidence recording stage auto-promotes persisted operator evidence 
     /explicit_human_manual_control_review_auto_promotion/
   );
 });
+
+
+test('conclusive manual evidence is checked against the exact canonical Risk Knowledge checklist before test recording', () => {
+  const workflow = fs.readFileSync(
+    path.join(root, 'src/agent/local-assessment-workflow.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    workflow,
+    /validateCanonicalManualEvidenceChecklist/
+  );
+
+  assert.match(
+    workflow,
+    /workflowState\?\.evidenceWorkQueue\?\.items/
+  );
+
+  assert.match(
+    workflow,
+    /Conclusive manual evidence must address the exact canonical required-evidence checklist/
+  );
+
+  assert.match(
+    workflow,
+    /checklistValidation\.observedResult/
+  );
+
+  assert.match(
+    workflow,
+    /Canonical required-evidence checklist verified against Risk Knowledge/
+  );
+});
