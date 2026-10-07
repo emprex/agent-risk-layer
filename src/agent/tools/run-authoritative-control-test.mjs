@@ -167,7 +167,7 @@ export async function runAuthoritativeControlSourceReview({
 
   const collectionKind =
     collectionOnly
-      ? 'arl_frozen_source_evidence_collection'
+      ? 'arl_frozen_source_evidence_collection_v2'
       : 'arl_frozen_source_review';
 
   const inputReference =
