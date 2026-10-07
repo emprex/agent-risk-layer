@@ -1100,13 +1100,38 @@ export async function getAuthoritativeWorkflowState({
         ])
       );
 
+    const enrichedItems =
+      (controlIntelligence?.items || []).map((item) => ({
+        ...item,
+        ...(metadataByControl.get(item.controlId) || {})
+      }));
+
+    const detailPairs =
+      await Promise.all(
+        enrichedItems
+          .filter((item) =>
+            ['test', 'evidence'].includes(item.currentStage)
+          )
+          .map(async (item) => [
+            item.controlId,
+            await getControlIntelligenceControl({
+              projectId,
+              controlId: item.controlId,
+              userId
+            })
+          ])
+      );
+
+    const detailByControl =
+      new Map(detailPairs);
+
     controlIntelligence = {
       ...controlIntelligence,
-      items:
-        (controlIntelligence?.items || []).map((item) => ({
-          ...item,
-          ...(metadataByControl.get(item.controlId) || {})
-        }))
+      items: enrichedItems.map((item) => ({
+        ...item,
+        authoritativeDetail:
+          detailByControl.get(item.controlId) || null
+      }))
     };
   }
 
