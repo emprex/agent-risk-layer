@@ -840,7 +840,10 @@ export async function applyPersistedGateState({
         evidencePlan: authoritativeEvidencePlan,
         caseId: action.caseId,
         controlId: action.controlId,
-        selectedRunId
+        selectedRunId,
+        requiredTargetRevision:
+          workflowState?.authoritativeArtifacts
+            ?.frozenTarget?.revision || null
       });
 
     if (continuation.available) {

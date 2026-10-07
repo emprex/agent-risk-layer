@@ -17,7 +17,8 @@ import {
   closeControlFinding,
   getControlIntelligenceControl,
   recordControlEvidence,
-  recordControlTestExecution
+  recordControlTestExecution,
+  recordDeploymentDecision
 } from '../control-intelligence.js';
 
 import { db, id, nowIso } from '../db.js';
@@ -664,6 +665,102 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     } });
     return runArlAgent(repositoryPath, 'Run the bounded test', options);
   }
+  if (
+    /^I reviewed the current ARL readiness and approve the final deployment decision[.!?]*$/i.test(
+      request.trim()
+    )
+  ) {
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+
+    const readiness =
+      state?.readiness ||
+      state?.authoritativeArtifacts?.readiness ||
+      null;
+
+    const snapshotId =
+      state?.authoritativeArtifacts
+        ?.assessmentContext
+        ?.systemSnapshotId || null;
+
+    if (
+      state?.stage !== 'readiness_review' ||
+      readiness?.available !== true ||
+      !snapshotId
+    ) {
+      throw new Error(
+        'Final deployment decision can only be recorded at the authoritative readiness-review gate.'
+      );
+    }
+
+    const existing =
+      await db.prepare(`
+        SELECT id, decision, status, decision_method,
+               decision_maker_id, decided_at, decision_digest
+        FROM control_deployment_decisions
+        WHERE project_id = ?
+          AND system_snapshot_id = ?
+          AND status = 'current'
+      `).get(
+        options.projectId,
+        snapshotId
+      );
+
+    if (existing) {
+      return {
+        canonicalData: {
+          type: 'final_human_deployment_decision',
+          decision: existing,
+          deploymentDecisionWritten: true,
+          humanReviewRequired: false,
+          securityStateChanged: false
+        },
+        answer: [
+          `Final human deployment decision already recorded: ${String(existing.decision || '').toUpperCase()}`,
+          `Decision ID: ${existing.id}`,
+          `Snapshot: ${snapshotId}`,
+          'Assessment complete.'
+        ].join('\\n')
+      };
+    }
+
+    const decision =
+      await recordDeploymentDecision({
+        projectId: options.projectId,
+        userId: options.userId,
+        input: {
+          systemSnapshotId: snapshotId,
+          expectedCurrentDecisionId: '',
+          rationale:
+            'Accountable human reviewed the current ARL readiness and approved the server-derived deployment decision for this exact assessed snapshot.'
+        }
+      });
+
+    return {
+      canonicalData: {
+        type: 'final_human_deployment_decision',
+        decision,
+        deploymentDecisionWritten: true,
+        humanReviewRequired: false,
+        securityStateChanged: true
+      },
+      answer: [
+        `Final human deployment decision recorded: ${String(decision.decision || '').toUpperCase()}`,
+        `Decision ID: ${decision.id}`,
+        `Snapshot: ${decision.systemSnapshotId}`,
+        `Decision method: ${decision.decisionMethod}`,
+        'Assessment complete.'
+      ].join('\\n')
+    };
+  }
+
   if (request === 'I have reviewed the evidence') request = 'Continue assessment';
   // Review/Continue is deliberately a separate human invocation. The existing
   // workflow binds evidence and findings; it never writes deployment approval.
