@@ -14,10 +14,14 @@ import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from '
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import {
+  closeControlFinding,
   getControlIntelligenceControl,
   recordControlEvidence,
   recordControlTestExecution
 } from '../control-intelligence.js';
+
+import { db, id, nowIso } from '../db.js';
+import { intelligenceDigest } from '../control-intelligence-core.js';
 
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
@@ -65,33 +69,274 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     const action =
       state?.nextAllowedAction || {};
 
-    if (
-      state?.stage !== 'retest_evidence_verification_required' ||
-      action.name !== 'provide_verified_retest_evidence' ||
-      action.actor !== 'user' ||
-      action.requiresUserInput !== true ||
-      !action.controlId ||
-      !action.caseId
-    ) {
+    const standardEvidenceGate =
+      state?.stage === 'retest_evidence_verification_required' &&
+      action.name === 'provide_verified_retest_evidence' &&
+      action.actor === 'user' &&
+      action.requiresUserInput === true &&
+      Boolean(action.controlId);
+
+    const manualRetestRecoveryGate =
+      action.caseId == null &&
+      Boolean(action.controlId) &&
+      state?.scopedControl?.currentStage === 'retest' &&
+      state?.remediationSnapshotGate?.active === true;
+
+    if (!standardEvidenceGate && !manualRetestRecoveryGate) {
       throw new Error(
-        'Exact retest evidence review is only accepted at the authoritative retest-evidence verification gate.'
+        'Exact retest evidence review is only accepted for the authoritative exact-retest evidence lineage.'
       );
     }
 
-    const completion =
-      await completePersistedExactRetest({
-        action,
-        repositoryPath,
-        projectId: options.projectId,
-        userId: options.userId,
-        assessmentId: options.assessmentId
+    /*
+     * Bounded Red Team exact retests have a caseId and keep using the
+     * authoritative Red Team completion path.
+     *
+     * Manual controls intentionally have caseId=null. Their passed retest
+     * already exists in Control Intelligence and must be human-verified
+     * without inventing a Red Team case.
+     */
+    if (action.caseId) {
+      const completion =
+        await completePersistedExactRetest({
+          action,
+          repositoryPath,
+          projectId: options.projectId,
+          userId: options.userId,
+          assessmentId: options.assessmentId
+        });
+
+      if (completion?.executed !== true) {
+        throw new Error(
+          completion?.reason ||
+          'Authoritative exact retest evidence completion failed.'
+        );
+      }
+    } else {
+      const detail =
+        await getControlIntelligenceControl({
+          projectId: options.projectId,
+          controlId: action.controlId,
+          userId: options.userId
+        });
+
+      const systemSnapshotId =
+        state?.authoritativeArtifacts
+          ?.assessmentContext?.systemSnapshotId ||
+        null;
+
+      if (
+        !systemSnapshotId ||
+        detail?.systemSnapshot?.id !== systemSnapshotId
+      ) {
+        throw new Error(
+          'Manual exact retest evidence is not bound to the current authoritative snapshot.'
+        );
+      }
+
+      const tests = [
+        ...(Array.isArray(detail.tests) ? detail.tests : []),
+        ...(Array.isArray(detail.testHistory)
+          ? detail.testHistory
+          : [])
+      ];
+
+      const uniqueTests = [
+        ...new Map(
+          tests
+            .filter((item) => item?.id)
+            .map((item) => [item.id, item])
+        ).values()
+      ];
+
+      const retests = uniqueTests.filter(
+        (item) =>
+          item.executionKind === 'retest' &&
+          item.result === 'passed' &&
+          item.systemSnapshotId === systemSnapshotId &&
+          item.findingId &&
+          item.remediationId &&
+          item.findingId === item.remediationId &&
+          item.retestOfExecutionId &&
+          item.originalSnapshotId &&
+          item.originalSnapshotId !== systemSnapshotId
+      );
+
+      if (retests.length !== 1) {
+        throw new Error(
+          `Manual exact retest verification requires exactly one passed exact retest; found ${retests.length}.`
+        );
+      }
+
+      const retest = retests[0];
+
+      const finding =
+        (detail.findings || []).find(
+          (item) =>
+            item.id === retest.findingId &&
+            !['verified_closed', 'accepted_risk'].includes(
+              item.status
+            )
+        );
+
+      if (!finding) {
+        throw new Error(
+          'Open finding for the manual exact retest was not found.'
+        );
+      }
+
+      const existingEvidence =
+        (detail.evidence || []).find(
+          (item) =>
+            item.testExecutionId === retest.id &&
+            item.sourceType === 'manual_exact_retest' &&
+            item.retentionStatus === 'active'
+        );
+
+      if (!existingEvidence) {
+        throw new Error(
+          'Manual exact retest evidence was not found for the passed retest.'
+        );
+      }
+
+      /*
+       * Record a closure-scoped evidence item carrying the exact finding and
+       * remediation lineage. The original observation is retained unchanged.
+       */
+      const closureEvidence =
+        await recordControlEvidence({
+          projectId: options.projectId,
+          controlId: action.controlId,
+          userId: options.userId,
+          input: {
+            systemSnapshotId,
+            evidenceClass: 'human_provided',
+            sourceType: 'arl_local_exact_retest_proof',
+            sourceReference:
+              existingEvidence.sourceReference,
+            testExecutionId: retest.id,
+            findingId: finding.id,
+            remediationId: finding.id,
+            limitations:
+              existingEvidence.limitations ||
+              'Human verification is limited to the exact manual retest and remediated snapshot.'
+          }
+        });
+
+      const row =
+        await db.prepare(`
+          SELECT *
+          FROM control_evidence_items
+          WHERE id=? AND project_id=?
+        `).get(
+          closureEvidence.id,
+          options.projectId
+        );
+
+      if (!row || row.verification_state !== 'unverified') {
+        throw new Error(
+          'Manual exact retest closure evidence is not available for human verification.'
+        );
+      }
+
+      const previousDescriptor =
+        JSON.parse(row.descriptor_json || '{}');
+
+      const timestamp = nowIso();
+      const reason =
+        'Explicit human review verified the persisted manual exact-retest evidence for the current remediated snapshot.';
+
+      const descriptor = {
+        ...previousDescriptor,
+        verificationState: 'verified',
+        verificationScope:
+          'human_reviewed_manual_exact_retest'
+      };
+
+      const nextDigest =
+        intelligenceDigest(descriptor);
+
+      const trust = {
+        schema:
+          'arl.control-evidence-trust-revision.v1',
+        evidenceId: closureEvidence.id,
+        previousVerificationState: 'unverified',
+        newVerificationState: 'verified',
+        reason,
+        controlId: action.controlId,
+        actorId: options.userId,
+        createdAt: timestamp
+      };
+
+      await db.transaction(async () => {
+        const updated =
+          await db.prepare(`
+            UPDATE control_evidence_items
+            SET verification_state='verified',
+                descriptor_json=?,
+                integrity_digest=?
+            WHERE id=?
+              AND project_id=?
+              AND verification_state='unverified'
+          `).run(
+            JSON.stringify(descriptor),
+            nextDigest,
+            closureEvidence.id,
+            options.projectId
+          );
+
+        if (Number(updated.changes || 0) !== 1) {
+          throw new Error(
+            'Manual exact retest evidence verification conflict.'
+          );
+        }
+
+        await db.prepare(`
+          INSERT INTO control_evidence_trust_revisions
+          (
+            id,
+            workspace_id,
+            project_id,
+            evidence_id,
+            replacement_evidence_id,
+            previous_verification_state,
+            new_verification_state,
+            reason,
+            previous_descriptor_json,
+            previous_integrity_digest,
+            revision_digest,
+            actor_id,
+            created_at
+          )
+          VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?)
+        `).run(
+          id('ctr_'),
+          row.workspace_id,
+          options.projectId,
+          closureEvidence.id,
+          'unverified',
+          'verified',
+          reason,
+          row.descriptor_json,
+          row.integrity_digest,
+          intelligenceDigest(trust),
+          options.userId,
+          timestamp
+        );
       });
 
-    if (completion?.executed !== true) {
-      throw new Error(
-        completion?.reason ||
-        'Authoritative exact retest evidence completion failed.'
-      );
+      await closeControlFinding({
+        projectId: options.projectId,
+        controlId: action.controlId,
+        findingId: finding.id,
+        userId: options.userId,
+        input: {
+          systemSnapshotId,
+          expectedUpdatedAt: finding.updatedAt,
+          limitations:
+            'Verified closed after explicit human review of the exact manual retest evidence for the remediated snapshot. This is not a deployment approval.'
+        }
+      });
     }
 
     return runArlAgent(
