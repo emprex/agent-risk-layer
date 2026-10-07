@@ -18,6 +18,10 @@ import {
   buildFullProfileEvidenceWorkQueue
 } from './full-profile-evidence-work-queue.mjs';
 
+import {
+  buildAccreditationReadinessProjection
+} from './accreditation-readiness.mjs';
+
 export const AUTHORITATIVE_WORKFLOW_STATE_SCHEMA =
   'arl.agent.workflow-state.v1';
 
@@ -325,6 +329,20 @@ function stateResult({
           ) || null
       : null;
 
+  const accreditationReadiness =
+    buildAccreditationReadinessProjection({
+      workflowState: {
+        authoritativeArtifacts:
+          artifactProjection({
+            preparation,
+            controlIntelligence,
+            readiness,
+            planMappings
+          }),
+        humanReviewRequired: true
+      }
+    });
+
   return {
     type: 'authoritative_workflow_state',
     schema: AUTHORITATIVE_WORKFLOW_STATE_SCHEMA,
@@ -363,6 +381,7 @@ function stateResult({
         : null,
     nextAllowedAction,
     readiness,
+    accreditationReadiness,
     evidenceWorkQueue,
     humanEvidenceBatch:
       humanEvidenceBatch
