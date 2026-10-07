@@ -86,12 +86,28 @@ function selectScopedControlState(
    * controls remain eligible after active scoped work is complete, allowing
    * deterministic canonical-order expansion of the same assessment.
    */
+  const fullProfile =
+    controlIntelligence.items.length === 108;
+
+  const fullProfilePriority = Object.freeze({
+    finding: 0,
+    remediation: 1,
+    retest: 2,
+    approval: 3,
+    evidence: 4,
+    applicability: 5,
+    test: 6,
+    deployment_decision: 7
+  });
+
   const candidates =
     controlIntelligence.items
       .map((item) => ({
         ...item,
         workflowPriority:
-          CONTROL_STAGE_PRIORITY[item.currentStage] ?? 99
+          (fullProfile
+            ? fullProfilePriority[item.currentStage]
+            : CONTROL_STAGE_PRIORITY[item.currentStage]) ?? 99
       }))
       .sort((left, right) => {
         if (
