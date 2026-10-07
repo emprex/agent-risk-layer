@@ -1,13 +1,28 @@
+import {
+  UKAS_ROUTE_BASELINE,
+  ORGANISATIONAL_ASSURANCE_BASELINE
+} from './controlled-assurance-baseline.mjs';
+
 export const ACCREDITATION_READINESS_SCHEMA =
   'arl.agent.accreditation-readiness.v1';
 
 const CANDIDATE_ROUTE = Object.freeze({
-  accreditationBody: 'UKAS',
-  candidateStandard: 'ISO/IEC 17020:2026',
-  candidateActivity: 'inspection-style AI-agent security assessment',
-  status: 'candidate_route_not_confirmed',
+  accreditationBody:
+    UKAS_ROUTE_BASELINE.accreditationBody,
+  candidateStandard:
+    UKAS_ROUTE_BASELINE.workingHypothesisStandard,
+  alternativeRouteStandard:
+    UKAS_ROUTE_BASELINE.alternativeRouteStandard,
+  candidateActivity:
+    'inspection-style AI-agent security assessment',
+  status:
+    UKAS_ROUTE_BASELINE.routeStatus,
+  sourceRecord:
+    UKAS_ROUTE_BASELINE.sourceRecord,
+  sourceState:
+    UKAS_ROUTE_BASELINE.sourceState,
   limitation:
-    'The applicable UKAS accreditation route and scope must be confirmed with UKAS. This projection is readiness evidence only and is not accreditation, certification, legal advice, or proof of conformity.'
+    UKAS_ROUTE_BASELINE.claimBoundary
 });
 
 const PRODUCT_EVIDENCE = Object.freeze([
@@ -55,38 +70,9 @@ const PRODUCT_EVIDENCE = Object.freeze([
   }
 ]);
 
-const ORGANISATIONAL_EVIDENCE = Object.freeze([
-  {
-    id: 'impartiality_and_independence',
-    label: 'Impartiality and independence arrangements',
-    evidenceType: 'organisation'
-  },
-  {
-    id: 'personnel_competence',
-    label: 'Personnel competence, qualification, training and monitoring records',
-    evidenceType: 'organisation'
-  },
-  {
-    id: 'method_validation',
-    label: 'Documented validation and control of assessment methods',
-    evidenceType: 'organisation'
-  },
-  {
-    id: 'records_and_confidentiality',
-    label: 'Record control, confidentiality and information-handling procedures',
-    evidenceType: 'organisation'
-  },
-  {
-    id: 'complaints_and_appeals',
-    label: 'Complaints, challenges and appeals handling with independence safeguards',
-    evidenceType: 'organisation'
-  },
-  {
-    id: 'management_system',
-    label: 'Management-system controls, internal audit and management review',
-    evidenceType: 'organisation'
-  }
-]);
+const ORGANISATIONAL_EVIDENCE =
+  ORGANISATIONAL_ASSURANCE_BASELINE;
+
 
 function readPath(object, path) {
   return path
@@ -146,7 +132,9 @@ export function buildAccreditationReadinessProjection({
   const organisationalEvidence =
     ORGANISATIONAL_EVIDENCE.map((item) => ({
       ...item,
-      status: 'documentary_evidence_required'
+      evidenceType: 'organisation',
+      accreditationEvidence: false,
+      certificationEvidence: false
     }));
 
   const currentProductObserved =
@@ -156,6 +144,26 @@ export function buildAccreditationReadinessProjection({
         'observed_in_current_assessment'
       ].includes(item.status)
     ).length;
+
+  const organisationalControlled =
+    organisationalEvidence.filter((item) =>
+      String(item.status || '').startsWith(
+        'controlled_'
+      ) ||
+      String(item.status || '').startsWith(
+        'implemented_'
+      )
+    ).length;
+
+  const organisationalOpenLimitations =
+    organisationalEvidence.reduce(
+      (count, item) =>
+        count +
+        (Array.isArray(item.openLimitations)
+          ? item.openLimitations.length
+          : 0),
+      0
+    );
 
   return {
     schema: ACCREDITATION_READINESS_SCHEMA,
@@ -182,13 +190,16 @@ export function buildAccreditationReadinessProjection({
         currentProductObserved,
       organisationalEvidenceItems:
         organisationalEvidence.length,
+      organisationalEvidenceControlled:
+        organisationalControlled,
+      organisationalOpenLimitations,
       organisationalEvidenceComplete: 0,
       accreditationClaimPermitted: false,
       certificationClaimPermitted: false
     },
     limitations: [
       'OWASP mappings do not establish compliance, certification or accreditation.',
-      'Product safeguards are only one part of conformity-assessment-body readiness; organisational competence, impartiality, management-system and records evidence remain separately required.',
+      'Controlled organisational procedures and records exist, but document existence is not equivalent to route-specific conformity or demonstrated continuing effectiveness.',
       'Only UKAS can grant UKAS accreditation for an accepted scope.'
     ]
   };
