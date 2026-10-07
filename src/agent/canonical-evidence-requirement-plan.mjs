@@ -10,7 +10,10 @@ const ACTIVE_TEST_PATTERNS = Object.freeze([
   /\badversarial retest\b/i,
   /\breplay(?:ed|ing)? representative\b/i,
   /\battempt (?:to|a|an)\b/i,
-  /\bverify .* denial\b/i
+  /\bverify .* denial\b/i,
+  /\bevidence showing .* across representative .* paths\b/i,
+  /\bevidence of (?:redaction|denial|retention|export restriction)\b/i,
+  /\bevidence showing (?:classification|handling|enforcement|isolation|authorization|authorisation)\b/i
 ]);
 
 const HUMAN_ONLY_PATTERNS = Object.freeze([
@@ -29,7 +32,9 @@ const HUMAN_ONLY_PATTERNS = Object.freeze([
   /\baccountable approval\b/i,
   /\bapproved provider and configuration record\b/i,
   /\bauthoritative declared inventory\b/i,
-  /\bauthoritative .* register\b/i
+  /\bauthoritative .* register\b/i,
+  /\bauthoritative credential or workload-identity inventory\b/i,
+  /\binventory with owner, purpose, scope and lifecycle state\b/i
 ]);
 
 const MACHINE_FAMILIES = Object.freeze([
