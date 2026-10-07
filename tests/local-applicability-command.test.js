@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   parseLocalApplicabilityCommand,
-  localApplicabilityCandidateIds
+  localApplicabilityCandidateIds,
+  focusLocalApplicabilityControl
 } from '../src/agent/local-applicability-command.mjs';
 
 import {
@@ -138,5 +139,89 @@ test('local review filters applicability ambiguity to Evidence Plan mapped contr
       }
     }),
     ['ARL-KB-057', 'ARL-KB-090']
+  );
+});
+
+
+test('focuses any canonical control at applicability on the current authoritative snapshot', () => {
+  const workflowState = {
+    schema: 'arl.agent.workflow-state.v1',
+    available: true,
+    stage: 'readiness_review',
+    blocked: true,
+    canAutoAdvance: false,
+    authoritativeArtifacts: {
+      assessmentContext: {
+        systemSnapshotId: 'sys_current'
+      },
+      evidencePlan: {
+        mappedControls: [
+          { controlId: 'ARL-KB-046' },
+          { controlId: 'ARL-KB-057' },
+          { controlId: 'ARL-KB-090' },
+          { controlId: 'ARL-KB-100' }
+        ]
+      }
+    },
+    deploymentDecisionWritten: false,
+    humanReviewRequired: true
+  };
+
+  const focused = focusLocalApplicabilityControl(
+    workflowState,
+    {
+      systemSnapshot: { id: 'sys_current' },
+      control: { id: 'ARL-KB-001' },
+      chain: {
+        currentStage: 'applicability',
+        status: 'context_required',
+        nextAction: 'Confirm applicability.',
+        deploymentImpact: 'hold'
+      }
+    },
+    'ARL-KB-001'
+  );
+
+  assert.equal(focused.stage, 'control_applicability_required');
+  assert.equal(focused.scopedControl.controlId, 'ARL-KB-001');
+  assert.equal(focused.nextAllowedAction.name, 'resolve_control_applicability');
+  assert.equal(focused.nextAllowedAction.actor, 'user');
+  assert.equal(focused.deploymentDecisionWritten, false);
+  assert.equal(focused.humanReviewRequired, true);
+});
+
+test('generic control focus fails closed on stale snapshot or non-applicability stage', () => {
+  const workflowState = {
+    authoritativeArtifacts: {
+      assessmentContext: {
+        systemSnapshotId: 'sys_current'
+      }
+    }
+  };
+
+  assert.equal(
+    focusLocalApplicabilityControl(
+      workflowState,
+      {
+        systemSnapshot: { id: 'sys_old' },
+        control: { id: 'ARL-KB-001' },
+        chain: { currentStage: 'applicability' }
+      },
+      'ARL-KB-001'
+    ),
+    null
+  );
+
+  assert.equal(
+    focusLocalApplicabilityControl(
+      workflowState,
+      {
+        systemSnapshot: { id: 'sys_current' },
+        control: { id: 'ARL-KB-001' },
+        chain: { currentStage: 'test' }
+      },
+      'ARL-KB-001'
+    ),
+    null
   );
 });
