@@ -55,3 +55,26 @@ test('explicit human evidence promotion is integrity checked and append-audited'
     /verificationScope/
   );
 });
+
+
+test('a repeated manual evidence command can recover the exact prior evidence at the evidence stage', () => {
+  const workflow = fs.readFileSync(
+    path.join(root, 'src/agent/local-assessment-workflow.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    workflow,
+    /existingManualEvidenceGate =[\s\S]*evidence_recording_required[\s\S]*record_authoritative_evidence/
+  );
+
+  assert.match(
+    workflow,
+    /explicit_human_manual_control_review_recovery/
+  );
+
+  assert.match(
+    workflow,
+    /passed\.length !== 1 \|\| evidence\.length !== 1/
+  );
+});
