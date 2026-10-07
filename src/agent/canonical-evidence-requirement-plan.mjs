@@ -2,6 +2,7 @@ const ACTIVE_TEST_PATTERNS = Object.freeze([
   /\bpositive and abuse inputs\b/i,
   /\bbounded (?:positive|negative) evidence\b/i,
   /\bobserved runtime\b/i,
+  /\bidentity, network, provider, billing or audit evidence\b/i,
   /\btest result\b/i,
   /\btested .* path executed\b/i,
   /\bpolicy, authorization, tool or audit events proving whether the tested\b/i,
