@@ -246,3 +246,50 @@ test('human-only controls with the same canonical evidence requirement are conso
     /will not infer pass\/fail/
   );
 });
+
+
+test('human evidence batch identity is stable when completed controls disappear from the same requirement group', () => {
+  const build = (controlIds) =>
+    buildFullProfileEvidenceWorkQueue({
+      readiness: {
+        summary: {
+          profileControls: 108,
+          applicableControls: 105,
+          controlsMissingEvidence: controlIds.length
+        }
+      },
+      riskKnowledge: {
+        items: controlIds.map((controlId) =>
+          riskEntry(controlId, {
+            requiredEvidence: [
+              'Accountable owner declaration',
+              'Documented review record'
+            ]
+          })
+        )
+      },
+      controlIntelligence: {
+        items: controlIds.map((controlId) => ({
+          controlId,
+          currentStage: 'test',
+          chainStatus: 'test_required',
+          testMode: 'manual',
+          automationStatus: 'unsupported'
+        }))
+      }
+    });
+
+  const before = build(['ARL-KB-010', 'ARL-KB-011']);
+  const after = build(['ARL-KB-011']);
+
+  assert.equal(before.humanReviewBatches.length, 1);
+  assert.equal(after.humanReviewBatches.length, 1);
+  assert.equal(
+    before.humanReviewBatches[0].batchId,
+    after.humanReviewBatches[0].batchId
+  );
+  assert.match(
+    before.humanReviewBatches[0].batchId,
+    /^human_evidence_batch_[a-f0-9]{12}$/
+  );
+});
