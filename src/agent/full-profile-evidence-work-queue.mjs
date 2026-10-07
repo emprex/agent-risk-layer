@@ -276,8 +276,16 @@ export function buildFullProfileEvidenceWorkQueue({
         const check =
           canonicalCheck(knowledge);
 
+        const requirementPlan =
+          buildCanonicalEvidenceRequirementPlan(
+            check.requiredEvidence
+          );
+
         let classification =
-          classifyControl(control);
+          classifyControl(
+            control,
+            requirementPlan
+          );
 
         const canonicalCheckAvailable =
           Boolean(check.objective) &&
@@ -316,6 +324,27 @@ export function buildFullProfileEvidenceWorkQueue({
           method: check.method,
           requiredEvidence:
             check.requiredEvidence,
+          requirementPlan,
+          automaticEvidenceCollected:
+            hasFrozenSourceCollection(control),
+          machineCollectableRequirements:
+            requirementPlan
+              .filter((item) =>
+                item.mode === 'machine_collectable'
+              )
+              .map((item) => item.requirement),
+          activeTestRequirements:
+            requirementPlan
+              .filter((item) =>
+                item.mode === 'active_test_or_runtime'
+              )
+              .map((item) => item.requirement),
+          humanOnlyRequirements:
+            requirementPlan
+              .filter((item) =>
+                item.mode === 'human_only'
+              )
+              .map((item) => item.requirement),
           passCondition:
             check.passCondition,
           failCondition:
