@@ -186,3 +186,141 @@ test('once frozen evidence is already recorded the same control falls back to ac
     'human_only'
   );
 });
+
+
+test('inconclusive post-collection manual control exposes the canonical evidence checklist instead of an empty user gate', () => {
+  const collected = control({
+    evidence: [
+      {
+        sourceType:
+          'arl_frozen_source_evidence_collection'
+      }
+    ]
+  });
+
+  collected.chainStatus = 'test_inconclusive';
+  collected.nextAction =
+    'Resolve the inconclusive test with additional evidence or rerun it.';
+
+  const queue =
+    buildFullProfileEvidenceWorkQueue({
+      controlIntelligence: {
+        items: [collected]
+      },
+      riskKnowledge: knowledge(),
+      readiness: readiness()
+    });
+
+  assert.equal(
+    queue.items[0].classification,
+    'human_only'
+  );
+
+  const state =
+    deriveAuthoritativeWorkflowState({
+      projectId: 'prj_test',
+      userId: 'usr_test',
+      assessmentId: 'asm_test',
+      preparation: preparation(),
+      controlIntelligence: {
+        systemSnapshot: { id: 'sys_current' },
+        items: [collected]
+      },
+      readiness: readiness(),
+      evidenceWorkQueue: queue
+    });
+
+  assert.equal(
+    state.stage,
+    'manual_evidence_required'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'provide_required_manual_evidence'
+  );
+  assert.deepEqual(
+    state.nextAllowedAction.requirements,
+    knowledge().items[0].checks[0].requiredEvidence
+  );
+  assert.ok(
+    state.humanEvidenceBatch
+      .requirements.length > 0
+  );
+});
+
+test('post-collection runtime evidence is routed to an explicit active-test gate instead of generic inconclusive', () => {
+  const activeKnowledge = knowledge();
+  activeKnowledge.items[0].checks[0].requiredEvidence.push(
+    'ARL-KB-004 bounded negative evidence showing an unapproved action is denied before side effects'
+  );
+
+  const collected = control({
+    evidence: [
+      {
+        sourceType:
+          'arl_frozen_source_evidence_collection'
+      }
+    ]
+  });
+
+  collected.chainStatus = 'test_inconclusive';
+  collected.testMode = 'hybrid';
+  collected.automationStatus = 'candidate';
+
+  const queue =
+    buildFullProfileEvidenceWorkQueue({
+      controlIntelligence: {
+        items: [collected]
+      },
+      riskKnowledge: activeKnowledge,
+      readiness: readiness()
+    });
+
+  assert.equal(
+    queue.items[0].classification,
+    'active_test_required'
+  );
+  assert.equal(
+    queue.summary.activeTestRequired,
+    1
+  );
+  assert.equal(
+    queue.summary.unavailableOrInconclusive,
+    0
+  );
+
+  const state =
+    deriveAuthoritativeWorkflowState({
+      projectId: 'prj_test',
+      userId: 'usr_test',
+      assessmentId: 'asm_test',
+      preparation: preparation(),
+      controlIntelligence: {
+        systemSnapshot: { id: 'sys_current' },
+        items: [collected]
+      },
+      readiness: readiness(),
+      evidenceWorkQueue: queue
+    });
+
+  assert.equal(
+    state.stage,
+    'active_test_plan_required'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'define_and_authorise_control_test'
+  );
+  assert.equal(
+    state.nextAllowedAction.actor,
+    'human'
+  );
+  assert.equal(
+    state.nextAllowedAction.requiresUserInput,
+    true
+  );
+  assert.equal(
+    state.nextAllowedAction.requirements.length,
+    1
+  );
+});
