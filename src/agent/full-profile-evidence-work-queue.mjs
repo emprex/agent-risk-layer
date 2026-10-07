@@ -40,6 +40,67 @@ function canonicalCheck(entry) {
   };
 }
 
+
+function normalizeRequirement(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function buildHumanReviewBatches(items) {
+  const grouped = new Map();
+
+  for (const item of items) {
+    if (item.classification !== CLASSIFICATIONS.HUMAN_ONLY) {
+      continue;
+    }
+
+    const requirements =
+      (item.requiredEvidence || [])
+        .map(normalizeRequirement)
+        .filter(Boolean);
+
+    const signature =
+      JSON.stringify(requirements);
+
+    if (!grouped.has(signature)) {
+      grouped.set(signature, {
+        requirements,
+        controls: []
+      });
+    }
+
+    grouped.get(signature).controls.push({
+      controlId: item.controlId,
+      title: item.title,
+      category: item.category,
+      passCondition: item.passCondition,
+      failCondition: item.failCondition,
+      limitations: item.limitations
+    });
+  }
+
+  return [...grouped.values()]
+    .sort((left, right) =>
+      String(left.controls[0]?.controlId || '')
+        .localeCompare(
+          String(right.controls[0]?.controlId || '')
+        )
+    )
+    .map((group, index) => ({
+      batchId:
+        `human_evidence_batch_${String(index + 1).padStart(3, '0')}`,
+      requirements: group.requirements,
+      controlIds:
+        group.controls.map((item) => item.controlId),
+      controls: group.controls,
+      reviewInstruction:
+        group.requirements.length
+          ? 'Provide one authoritative, privacy-safe response that addresses every listed requirement. ARL will bind it only to the controls listed in this batch and will not infer pass/fail from the response alone.'
+          : 'Provide the missing accountable human evidence for the listed controls. ARL will not infer pass/fail from the response alone.'
+    }));
+}
+
 function classifyControl(control) {
   if (control?.currentStage === 'evidence') {
     return {
@@ -198,6 +259,9 @@ export function buildFullProfileEvidenceWorkQueue({
     }
   }
 
+  const humanReviewBatches =
+    buildHumanReviewBatches(items);
+
   return {
     schema: FULL_PROFILE_EVIDENCE_QUEUE_SCHEMA,
     available: true,
@@ -207,9 +271,11 @@ export function buildFullProfileEvidenceWorkQueue({
     controlsMissingEvidence:
       Number(readiness?.summary?.controlsMissingEvidence || 0),
     items,
+    humanReviewBatches,
     summary: {
       total: items.length,
-      ...counts
+      ...counts,
+      humanReviewBatches: humanReviewBatches.length
     }
   };
 }
