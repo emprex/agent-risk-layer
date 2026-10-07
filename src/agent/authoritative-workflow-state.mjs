@@ -482,9 +482,9 @@ function stateFromScopedControl({
         name:
           boundedCaseId
             ? 'authorise_and_run_bounded_test'
-            : 'provide_authoritative_control_test',
-        actor: 'user',
-        requiresUserInput: true,
+            : 'run_authoritative_control_test',
+        actor: boundedCaseId ? 'user' : 'arl',
+        requiresUserInput: Boolean(boundedCaseId),
         reason:
           scopedControl.nextAction ||
           'The authoritative control state requires a test result before evidence can satisfy the control.',
