@@ -73,21 +73,21 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       const ownerDecision =
         deriveLocalOwnerApplicability(detail);
 
+      const snapshotId =
+        state?.authoritativeArtifacts
+          ?.assessmentContext
+          ?.systemSnapshotId || null;
+
+      if (
+        !snapshotId ||
+        detail?.systemSnapshot?.id !== snapshotId
+      ) {
+        throw new Error(
+          'Owner-authorised applicability resolution requires the exact current authoritative snapshot.'
+        );
+      }
+
       if (ownerDecision) {
-        const snapshotId =
-          state?.authoritativeArtifacts
-            ?.assessmentContext
-            ?.systemSnapshotId || null;
-
-        if (
-          !snapshotId ||
-          detail?.systemSnapshot?.id !== snapshotId
-        ) {
-          throw new Error(
-            'Owner-authorised applicability resolution requires the exact current authoritative snapshot.'
-          );
-        }
-
         await assessControlApplicability({
           projectId: options.projectId,
           controlId,
@@ -98,6 +98,29 @@ export async function runLocalAssessment(repositoryPath, request, options) {
             reason: ownerDecision.reason,
             architectureFactIds:
               ownerDecision.architectureFactIds
+          }
+        });
+
+        return runArlAgent(
+          repositoryPath,
+          'Continue assessment',
+          options
+        );
+      }
+
+      if (
+        Number(state?.readiness?.summary?.profileControls || 0) === 108
+      ) {
+        await assessControlApplicabilityFromLocalOwnerAttestation({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId,
+          input: {
+            snapshotId,
+            decision: 'applicable',
+            reason:
+              'Owner-authorised full-profile policy: unresolved conditional applicability is conservatively included for assessment instead of blocking the workflow or excluding the control. This inclusion does not prove the control passes and does not approve deployment.',
+            architectureFactIds: []
           }
         });
 
