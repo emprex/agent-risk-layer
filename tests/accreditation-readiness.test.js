@@ -32,7 +32,11 @@ test('accreditation readiness is explicitly non-claiming and separates product f
   );
   assert.equal(
     projection.candidateRoute.status,
-    'candidate_route_not_confirmed'
+    'ukas_confirmation_required'
+  );
+  assert.equal(
+    projection.candidateRoute.alternativeRouteStandard,
+    'ISO/IEC 17065'
   );
   assert.equal(
     projection.summary.accreditationClaimPermitted,
@@ -53,11 +57,15 @@ test('accreditation readiness is explicitly non-claiming and separates product f
   assert.ok(
     projection.organisationalEvidence.length > 0
   );
+  assert.equal(
+    projection.summary.organisationalEvidenceControlled,
+    6
+  );
   assert.ok(
     projection.organisationalEvidence.every(
       (item) =>
-        item.status ===
-        'documentary_evidence_required'
+        item.accreditationEvidence === false &&
+        Array.isArray(item.openLimitations)
     )
   );
 });
@@ -85,8 +93,15 @@ test('current assessment observations never imply UKAS accreditation', () => {
     projection.summary.productEvidenceObserved >= 5
   );
   assert.equal(
+    projection.summary.organisationalEvidenceControlled,
+    6
+  );
+  assert.equal(
     projection.summary.organisationalEvidenceComplete,
     0
+  );
+  assert.ok(
+    projection.summary.organisationalOpenLimitations > 0
   );
   assert.match(
     projection.limitations.join(' '),
