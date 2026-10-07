@@ -172,18 +172,6 @@ function classifyControl(control, requirementPlan = []) {
       (item) => item.mode === 'machine_collectable'
     );
 
-  if (
-    machineCollectable.length > 0 &&
-    !sourceCollected
-  ) {
-    return {
-      classification:
-        CLASSIFICATIONS.MACHINE_OBSERVABLE,
-      reason:
-        'Canonical evidence contains deterministic frozen-target observations that ARL can collect before asking for human-only evidence.'
-    };
-  }
-
   const activeRequirements =
     requirementPlan.filter(
       (item) => item.mode === 'active_test_or_runtime'
@@ -194,18 +182,6 @@ function classifyControl(control, requirementPlan = []) {
       (item) => item.mode === 'human_only'
     );
 
-  if (
-    control?.chainStatus === 'test_inconclusive' &&
-    activeRequirements.length > 0 &&
-    humanRequirements.length === 0
-  ) {
-    return {
-      classification: CLASSIFICATIONS.UNAVAILABLE,
-      reason:
-        'The remaining canonical evidence requires runtime or active-test observations and no verified automatic executor is registered.'
-    };
-  }
-
   const policy =
     deriveControlExecutionPolicy({
       currentStage: control.currentStage,
@@ -213,6 +189,31 @@ function classifyControl(control, requirementPlan = []) {
       testMode: control.testMode,
       automationStatus: control.automationStatus
     });
+
+  const sourceCollectionRequired =
+    machineCollectable.length > 0 &&
+    !sourceCollected &&
+    policy.mode !== 'automatic_test';
+
+  if (sourceCollectionRequired) {
+    return {
+      classification:
+        CLASSIFICATIONS.MACHINE_OBSERVABLE,
+      reason:
+        'Canonical evidence contains deterministic frozen-target observations that ARL can collect before asking for human-only evidence.'
+    };
+  }
+
+  if (control?.chainStatus === 'test_inconclusive') {
+    return {
+      classification: CLASSIFICATIONS.UNAVAILABLE,
+      reason:
+        activeRequirements.length > 0 &&
+        humanRequirements.length === 0
+          ? 'The remaining canonical evidence requires runtime or active-test observations and no verified automatic executor is registered.'
+          : 'The current authoritative test is inconclusive and needs additional evidence before a pass/fail result can be established.'
+    };
+  }
 
   if (policy.mode === 'automatic_test') {
     return {
@@ -327,6 +328,18 @@ export function buildFullProfileEvidenceWorkQueue({
           requirementPlan,
           automaticEvidenceCollected:
             hasFrozenSourceCollection(control),
+          automaticCollectionRequired:
+            requirementPlan.some(
+              (item) =>
+                item.mode === 'machine_collectable'
+            ) &&
+            !hasFrozenSourceCollection(control) &&
+            deriveControlExecutionPolicy({
+              currentStage: control.currentStage,
+              caseId: control.caseId || null,
+              testMode: control.testMode,
+              automationStatus: control.automationStatus
+            }).mode !== 'automatic_test',
           machineCollectableRequirements:
             requirementPlan
               .filter((item) =>
