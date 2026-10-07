@@ -88,7 +88,8 @@ test('full-profile evidence queue classifies safe automatic, persisted, human-on
     machineObservable: 1,
     existingAuthoritativeEvidence: 1,
     humanOnly: 1,
-    unavailableOrInconclusive: 1
+    unavailableOrInconclusive: 1,
+    humanReviewBatches: 1
   });
 
   assert.equal(
@@ -179,4 +180,69 @@ test('controls already beyond evidence collection are not re-opened by the queue
 
   assert.equal(queue.items.length, 1);
   assert.equal(queue.items[0].controlId, 'ARL-KB-004');
+});
+
+
+test('human-only controls with the same canonical evidence requirement are consolidated into one review batch', () => {
+  const queue =
+    buildFullProfileEvidenceWorkQueue({
+      readiness: {
+        summary: {
+          profileControls: 108,
+          applicableControls: 105,
+          controlsMissingEvidence: 2
+        }
+      },
+      riskKnowledge: {
+        items: [
+          riskEntry('ARL-KB-010', {
+            requiredEvidence: [
+              'Accountable owner declaration',
+              'Documented review record'
+            ]
+          }),
+          riskEntry('ARL-KB-011', {
+            requiredEvidence: [
+              'Accountable owner declaration',
+              'Documented review record'
+            ]
+          })
+        ]
+      },
+      controlIntelligence: {
+        items: [
+          {
+            controlId: 'ARL-KB-010',
+            currentStage: 'test',
+            chainStatus: 'test_required',
+            testMode: 'manual',
+            automationStatus: 'unsupported'
+          },
+          {
+            controlId: 'ARL-KB-011',
+            currentStage: 'test',
+            chainStatus: 'test_required',
+            testMode: 'manual',
+            automationStatus: 'unsupported'
+          }
+        ]
+      }
+    });
+
+  assert.equal(queue.humanReviewBatches.length, 1);
+  assert.deepEqual(
+    queue.humanReviewBatches[0].controlIds,
+    ['ARL-KB-010', 'ARL-KB-011']
+  );
+  assert.deepEqual(
+    queue.humanReviewBatches[0].requirements,
+    [
+      'Accountable owner declaration',
+      'Documented review record'
+    ]
+  );
+  assert.match(
+    queue.humanReviewBatches[0].reviewInstruction,
+    /will not infer pass\/fail/
+  );
 });
