@@ -21,9 +21,40 @@ export function validateCanonicalManualEvidenceChecklist({
       .find((item) => item.controlId === controlId) || null;
 
   const expected =
-    (queueItem?.requiredEvidence || [])
+    (
+      queueItem?.humanOnlyRequirements?.length
+        ? queueItem.humanOnlyRequirements
+        : queueItem?.requiredEvidence || []
+    )
       .map(normalizeEvidenceRequirement)
       .filter(Boolean);
+
+  const machineRequirements =
+    (queueItem?.machineCollectableRequirements || [])
+      .map(normalizeEvidenceRequirement)
+      .filter(Boolean);
+
+  const activeRequirements =
+    (queueItem?.activeTestRequirements || [])
+      .map(normalizeEvidenceRequirement)
+      .filter(Boolean);
+
+  if (
+    activeRequirements.length > 0
+  ) {
+    throw new Error(
+      'Conclusive manual evidence is blocked because active or runtime evidence is still required for this control.'
+    );
+  }
+
+  if (
+    machineRequirements.length > 0 &&
+    queueItem?.automaticEvidenceCollected !== true
+  ) {
+    throw new Error(
+      'Conclusive manual evidence is blocked because deterministic machine evidence has not yet been collected for this control.'
+    );
+  }
 
   if (!expected.length) {
     throw new Error(
@@ -70,7 +101,7 @@ export function validateCanonicalManualEvidenceChecklist({
     supplied.length !== expected.length
   ) {
     throw new Error(
-      'Conclusive manual evidence must address the exact canonical required-evidence checklist for this control.'
+      'Conclusive manual evidence must address the exact remaining human-only canonical evidence checklist for this control.'
     );
   }
 
@@ -93,7 +124,7 @@ export function validateCanonicalManualEvidenceChecklist({
   const observedResult = [
     manualEvidence.observedResult,
     '',
-    'Canonical required-evidence checklist:',
+    'Canonical human-only evidence checklist:',
     ...checklistProjection.map(
       (item, index) =>
         `${index + 1}. ${item.requirement} | ${item.evidenceReference} | satisfied=${item.satisfied} | ${item.observation}`
