@@ -3,6 +3,10 @@ import {
 } from './tools/inspect-frozen-repository.mjs';
 
 import {
+  runAuthoritativeControlSourceReview
+} from './tools/run-authoritative-control-test.mjs';
+
+import {
   prepareAuthoritativeAssessmentWorkflow
 } from './tools/prepare-authoritative-assessment-workflow.mjs';
 
@@ -718,6 +722,15 @@ export async function executeAuthoritativeArlAction({
       effect: 'frozen_source_inspection_completed',
       securityStateChanged: false
     };
+  }
+
+  if (action.name === 'run_authoritative_control_test') {
+    return runAuthoritativeControlSourceReview({
+      repositoryPath,
+      projectId,
+      userId,
+      controlId: action.controlId
+    });
   }
 
   if (action.name === 'record_authoritative_evidence') {
