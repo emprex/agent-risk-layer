@@ -12,6 +12,8 @@ import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
+import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
+import { validateCanonicalManualEvidenceChecklist } from './manual-evidence-checklist.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import { deriveLocalOwnerApplicability } from './local-owner-applicability-policy.mjs';
@@ -28,118 +30,6 @@ import {
 import { db, id, nowIso } from '../db.js';
 import { intelligenceDigest } from '../control-intelligence-core.js';
 
-function normalizeEvidenceRequirement(value) {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function validateCanonicalManualEvidenceChecklist({
-  manualEvidence,
-  workflowState,
-  controlId
-}) {
-  if (manualEvidence.result === 'inconclusive') {
-    return {
-      observedResult: manualEvidence.observedResult,
-      canonicalChecklistVerified: false
-    };
-  }
-
-  const queueItem =
-    (workflowState?.evidenceWorkQueue?.items || [])
-      .find((item) => item.controlId === controlId) || null;
-
-  const expected =
-    (queueItem?.requiredEvidence || [])
-      .map(normalizeEvidenceRequirement)
-      .filter(Boolean);
-
-  if (!expected.length) {
-    throw new Error(
-      'Conclusive manual evidence is blocked because canonical required evidence is unavailable for this control.'
-    );
-  }
-
-  const supplied =
-    (manualEvidence.evidenceChecklist || [])
-      .map((item) => ({
-        ...item,
-        normalizedRequirement:
-          normalizeEvidenceRequirement(item.requirement)
-      }));
-
-  const suppliedRequirements =
-    supplied.map((item) => item.normalizedRequirement);
-
-  if (
-    new Set(suppliedRequirements).size !==
-    suppliedRequirements.length
-  ) {
-    throw new Error(
-      'Manual evidence checklist contains duplicate canonical requirements.'
-    );
-  }
-
-  const expectedSet = new Set(expected);
-  const suppliedSet = new Set(suppliedRequirements);
-
-  const missing =
-    expected.filter((requirement) =>
-      !suppliedSet.has(requirement)
-    );
-
-  const unexpected =
-    suppliedRequirements.filter((requirement) =>
-      !expectedSet.has(requirement)
-    );
-
-  if (
-    missing.length ||
-    unexpected.length ||
-    supplied.length !== expected.length
-  ) {
-    throw new Error(
-      'Conclusive manual evidence must address the exact canonical required-evidence checklist for this control.'
-    );
-  }
-
-  const checklistProjection =
-    expected.map((requirement) => {
-      const item =
-        supplied.find(
-          (candidate) =>
-            candidate.normalizedRequirement === requirement
-        );
-
-      return {
-        requirement,
-        evidenceReference: item.evidenceReference,
-        observation: item.observation
-      };
-    });
-
-  const observedResult = [
-    manualEvidence.observedResult,
-    '',
-    'Canonical required-evidence checklist:',
-    ...checklistProjection.map(
-      (item, index) =>
-        `${index + 1}. ${item.requirement} | ${item.evidenceReference} | ${item.observation}`
-    )
-  ].join('\n');
-
-  if (observedResult.length > 6000) {
-    throw new Error(
-      'Manual evidence checklist is too large for the bounded authoritative observation record.'
-    );
-  }
-
-  return {
-    observedResult,
-    canonicalChecklistVerified: true
-  };
-}
 
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
@@ -696,6 +586,175 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       options
     );
   }
+  const humanEvidenceBatch =
+    parseLocalHumanEvidenceBatchCommand(request);
+
+  if (humanEvidenceBatch) {
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+
+    const snapshotId =
+      state?.authoritativeArtifacts
+        ?.assessmentContext?.systemSnapshotId ||
+      null;
+
+    const queue =
+      state?.evidenceWorkQueue || null;
+
+    const batch =
+      (queue?.humanReviewBatches || [])
+        .find(
+          (item) =>
+            item.batchId === humanEvidenceBatch.batchId
+        ) || null;
+
+    if (
+      state?.stage !== 'manual_evidence_required' ||
+      !snapshotId ||
+      queue?.available !== true ||
+      !batch
+    ) {
+      throw new Error(
+        'Human evidence batch can only be recorded for the current authoritative manual-evidence queue.'
+      );
+    }
+
+    const scopedControlId =
+      state?.scopedControl?.controlId || null;
+
+    if (
+      !scopedControlId ||
+      !batch.controlIds.includes(scopedControlId)
+    ) {
+      throw new Error(
+        'Human evidence batch is not the currently actionable authoritative review batch.'
+      );
+    }
+
+    const expectedIds =
+      [...batch.controlIds].sort();
+
+    const suppliedIds =
+      humanEvidenceBatch.controls
+        .map((item) => item.controlId)
+        .sort();
+
+    if (
+      expectedIds.length !== suppliedIds.length ||
+      expectedIds.some(
+        (controlId, index) =>
+          controlId !== suppliedIds[index]
+      )
+    ) {
+      throw new Error(
+        'Human evidence batch must contain exactly the controls in the current authoritative batch.'
+      );
+    }
+
+    const byControl =
+      new Map(
+        humanEvidenceBatch.controls.map((item) => [
+          item.controlId,
+          item
+        ])
+      );
+
+    for (const controlId of batch.controlIds) {
+      const manualEvidence =
+        byControl.get(controlId);
+
+      const detail =
+        await getControlIntelligenceControl({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId
+        });
+
+      if (
+        detail?.systemSnapshot?.id !== snapshotId ||
+        detail?.chain?.currentStage !== 'test'
+      ) {
+        throw new Error(
+          `Human evidence batch control ${controlId} is not at the authoritative test stage on the current snapshot.`
+        );
+      }
+
+      const checklistValidation =
+        validateCanonicalManualEvidenceChecklist({
+          manualEvidence,
+          workflowState: state,
+          controlId
+        });
+
+      const execution =
+        await recordControlTestExecution({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId,
+          input: {
+            systemSnapshotId: snapshotId,
+            executionKind: 'initial',
+            executionMethod:
+              'consolidated_human_review',
+            result: manualEvidence.result,
+            observedResult:
+              checklistValidation.observedResult,
+            inputReference:
+              manualEvidence.sourceReference,
+            limitations:
+              manualEvidence.limitations
+          }
+        });
+
+      const evidence =
+        await recordControlEvidence({
+          projectId: options.projectId,
+          controlId,
+          userId: options.userId,
+          input: {
+            systemSnapshotId: snapshotId,
+            evidenceClass: 'human_provided',
+            sourceType:
+              'consolidated_human_review',
+            sourceReference:
+              manualEvidence.sourceReference,
+            testExecutionId: execution.id,
+            limitations:
+              [
+                manualEvidence.limitations,
+                checklistValidation.canonicalChecklistVerified
+                  ? 'Canonical required-evidence checklist verified against Risk Knowledge inside the exact consolidated human review batch.'
+                  : 'Human evidence remains inconclusive; canonical checklist completion was not asserted.'
+              ].filter(Boolean).join(' ')
+          }
+        });
+
+      await verifyExplicitHumanEvidence({
+        projectId: options.projectId,
+        evidenceId: evidence.id,
+        userId: options.userId,
+        controlId,
+        verificationScope:
+          'explicit_consolidated_human_control_review',
+        reason:
+          `The accountable local operator explicitly submitted control ${controlId} inside authoritative human evidence batch ${humanEvidenceBatch.batchId} for the current snapshot.`
+      });
+    }
+
+    return runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
+  }
+
   const manualEvidence =
     parseLocalManualEvidenceCommand(request);
 
