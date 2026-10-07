@@ -1,0 +1,219 @@
+import {
+  deriveControlExecutionPolicy
+} from './control-execution-policy.mjs';
+
+export const FULL_PROFILE_EVIDENCE_QUEUE_SCHEMA =
+  'arl.agent.full-profile-evidence-work-queue.v1';
+
+const CLASSIFICATIONS = Object.freeze({
+  MACHINE_OBSERVABLE: 'machine_observable',
+  EXISTING_AUTHORITATIVE: 'existing_authoritative_evidence',
+  HUMAN_ONLY: 'human_only',
+  UNAVAILABLE: 'unavailable_or_inconclusive'
+});
+
+function canonicalCheck(entry) {
+  const check =
+    Array.isArray(entry?.checks) && entry.checks.length
+      ? entry.checks[0]
+      : entry?.check || null;
+
+  return {
+    objective:
+      check?.objective || null,
+    method:
+      check?.method || null,
+    requiredEvidence:
+      Array.isArray(check?.requiredEvidence)
+        ? check.requiredEvidence
+        : Array.isArray(check?.required_evidence)
+          ? check.required_evidence
+          : [],
+    passCondition:
+      check?.passCondition ||
+      check?.pass_condition ||
+      null,
+    failCondition:
+      check?.failCondition ||
+      check?.fail_condition ||
+      null
+  };
+}
+
+function classifyControl(control) {
+  if (control?.currentStage === 'evidence') {
+    return {
+      classification: CLASSIFICATIONS.EXISTING_AUTHORITATIVE,
+      reason:
+        'Qualifying evidence already exists in authoritative Control Intelligence and is waiting to be recorded/promoted.'
+    };
+  }
+
+  if (control?.currentStage !== 'test') {
+    return {
+      classification: CLASSIFICATIONS.UNAVAILABLE,
+      reason:
+        'This control is outside evidence collection because another lifecycle stage is currently authoritative.'
+    };
+  }
+
+  if (control?.chainStatus === 'test_inconclusive') {
+    return {
+      classification: CLASSIFICATIONS.UNAVAILABLE,
+      reason:
+        'The current authoritative test is inconclusive and needs additional evidence before a pass/fail result can be established.'
+    };
+  }
+
+  const policy =
+    deriveControlExecutionPolicy({
+      currentStage: control.currentStage,
+      caseId: control.caseId || null,
+      testMode: control.testMode,
+      automationStatus: control.automationStatus
+    });
+
+  if (policy.mode === 'automatic_test') {
+    return {
+      classification: CLASSIFICATIONS.MACHINE_OBSERVABLE,
+      reason:
+        'A verified automatic executor is available and may gather or derive this evidence without human judgement.'
+    };
+  }
+
+  if (policy.mode === 'manual_evidence') {
+    return {
+      classification: CLASSIFICATIONS.HUMAN_ONLY,
+      reason:
+        'No verified automatic executor is available; only genuinely missing human evidence should be requested.'
+    };
+  }
+
+  return {
+    classification: CLASSIFICATIONS.UNAVAILABLE,
+    reason:
+      'This control requires an explicitly authorised active/bounded test or another non-automatic step.'
+  };
+}
+
+export function buildFullProfileEvidenceWorkQueue({
+  controlIntelligence = null,
+  riskKnowledge = null,
+  readiness = null
+} = {}) {
+  const profileControls =
+    Number(readiness?.summary?.profileControls || 0);
+
+  if (profileControls !== 108) {
+    return {
+      schema: FULL_PROFILE_EVIDENCE_QUEUE_SCHEMA,
+      available: false,
+      reason: 'full_profile_not_active',
+      profileControls,
+      items: [],
+      summary: null
+    };
+  }
+
+  const knowledgeById =
+    new Map(
+      (riskKnowledge?.items || []).map((entry) => [
+        entry.id,
+        entry
+      ])
+    );
+
+  const items =
+    (controlIntelligence?.items || [])
+      .filter((control) =>
+        ['test', 'evidence'].includes(control?.currentStage)
+      )
+      .map((control) => {
+        const knowledge =
+          knowledgeById.get(control.controlId) || null;
+
+        const check =
+          canonicalCheck(knowledge);
+
+        const classification =
+          classifyControl(control);
+
+        return {
+          controlId: control.controlId,
+          title: knowledge?.title || null,
+          category: knowledge?.category || null,
+          currentStage: control.currentStage || null,
+          chainStatus: control.chainStatus || null,
+          testMode: control.testMode || null,
+          automationStatus:
+            control.automationStatus || null,
+          classification:
+            classification.classification,
+          classificationReason:
+            classification.reason,
+          objective: check.objective,
+          method: check.method,
+          requiredEvidence:
+            check.requiredEvidence,
+          passCondition:
+            check.passCondition,
+          failCondition:
+            check.failCondition,
+          limitations:
+            knowledge?.claimsBoundary ||
+            knowledge?.claims_boundary ||
+            null
+        };
+      })
+      .sort((left, right) =>
+        String(left.controlId)
+          .localeCompare(String(right.controlId))
+      );
+
+  const counts = {
+    machineObservable: 0,
+    existingAuthoritativeEvidence: 0,
+    humanOnly: 0,
+    unavailableOrInconclusive: 0
+  };
+
+  for (const item of items) {
+    if (
+      item.classification ===
+      CLASSIFICATIONS.MACHINE_OBSERVABLE
+    ) {
+      counts.machineObservable += 1;
+    } else if (
+      item.classification ===
+      CLASSIFICATIONS.EXISTING_AUTHORITATIVE
+    ) {
+      counts.existingAuthoritativeEvidence += 1;
+    } else if (
+      item.classification ===
+      CLASSIFICATIONS.HUMAN_ONLY
+    ) {
+      counts.humanOnly += 1;
+    } else {
+      counts.unavailableOrInconclusive += 1;
+    }
+  }
+
+  return {
+    schema: FULL_PROFILE_EVIDENCE_QUEUE_SCHEMA,
+    available: true,
+    profileControls,
+    applicableControls:
+      Number(readiness?.summary?.applicableControls || 0),
+    controlsMissingEvidence:
+      Number(readiness?.summary?.controlsMissingEvidence || 0),
+    items,
+    summary: {
+      total: items.length,
+      ...counts
+    }
+  };
+}
+
+export {
+  CLASSIFICATIONS as FULL_PROFILE_EVIDENCE_CLASSIFICATIONS
+};
