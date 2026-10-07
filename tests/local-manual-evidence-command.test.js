@@ -71,3 +71,54 @@ test('manual evidence requires a valid control id', () => {
     /ARL-KB-###/
   );
 });
+
+
+test('conclusive manual evidence requires a structured evidence checklist', () => {
+  assert.throws(
+    () =>
+      parseLocalManualEvidenceCommand(
+        'Record manual evidence ' +
+        JSON.stringify({
+          controlId: 'ARL-KB-090',
+          result: 'passed',
+          observedResult:
+            'The operator states that reconstruction requirements are satisfied.',
+          sourceReference:
+            'manual-review:test'
+        })
+      ),
+    /requires evidenceChecklist entries/
+  );
+});
+
+test('conclusive manual evidence parses bounded checklist items', () => {
+  const result =
+    parseLocalManualEvidenceCommand(
+      'Record manual evidence ' +
+      JSON.stringify({
+        controlId: 'ARL-KB-090',
+        result: 'passed',
+        observedResult:
+          'The reviewed records support the asserted control outcome.',
+        sourceReference:
+          'manual-review:test',
+        evidenceChecklist: [
+          {
+            requirement:
+              'Documented audit reconstruction record',
+            evidenceReference:
+              'policy:audit-record-1',
+            observation:
+              'The record contains the required reconstruction fields.'
+          }
+        ]
+      })
+    );
+
+  assert.equal(result.result, 'passed');
+  assert.equal(result.evidenceChecklist.length, 1);
+  assert.equal(
+    result.evidenceChecklist[0].evidenceReference,
+    'policy:audit-record-1'
+  );
+});
