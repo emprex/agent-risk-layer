@@ -12,6 +12,7 @@ import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
+import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import {
   closeControlFinding,
@@ -626,24 +627,44 @@ export async function runLocalAssessment(repositoryPath, request, options) {
         input: executionInput
       });
 
-    await recordControlEvidence({
-      projectId: options.projectId,
-      controlId: scopedControlId,
-      userId: options.userId,
-      input: {
-        systemSnapshotId,
-        evidenceClass: 'human_provided',
-        sourceType:
-          exactManualRetestGate
-            ? 'manual_exact_retest'
-            : 'manual_review',
-        sourceReference:
-          manualEvidence.sourceReference,
-        testExecutionId: execution.id,
-        limitations:
-          manualEvidence.limitations
-      }
-    });
+    const evidence =
+      await recordControlEvidence({
+        projectId: options.projectId,
+        controlId: scopedControlId,
+        userId: options.userId,
+        input: {
+          systemSnapshotId,
+          evidenceClass: 'human_provided',
+          sourceType:
+            exactManualRetestGate
+              ? 'manual_exact_retest'
+              : 'manual_review',
+          sourceReference:
+            manualEvidence.sourceReference,
+          testExecutionId: execution.id,
+          limitations:
+            manualEvidence.limitations
+        }
+      });
+
+    /*
+     * For the initial manual-control gate, this command itself is the
+     * accountable human review. Promote only the exact evidence item created
+     * by this explicit invocation. Retest evidence keeps its separate explicit
+     * verification step and is intentionally not promoted here.
+     */
+    if (initialManualEvidenceGate) {
+      await verifyExplicitHumanEvidence({
+        projectId: options.projectId,
+        evidenceId: evidence.id,
+        userId: options.userId,
+        controlId: scopedControlId,
+        verificationScope:
+          'explicit_human_manual_control_review',
+        reason:
+          'The accountable local operator explicitly submitted and validated this manual control evidence for the current authoritative snapshot.'
+      });
+    }
 
     return runArlAgent(
       repositoryPath,
