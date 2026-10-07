@@ -139,14 +139,12 @@ function hasFrozenSourceCollection(control) {
   return (
     evidence.some((item) =>
       [
-        'arl_frozen_source_review',
-        'arl_frozen_source_evidence_collection'
+        'arl_frozen_source_evidence_collection_v2'
       ].includes(item?.sourceType)
     ) ||
     tests.some((item) =>
       [
-        'arl_frozen_source_review',
-        'arl_frozen_source_evidence_collection'
+        'arl_frozen_source_evidence_collection_v2'
       ].includes(item?.executionMethod)
     )
   );
