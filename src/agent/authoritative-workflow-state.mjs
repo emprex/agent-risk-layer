@@ -72,7 +72,8 @@ function mapEvidencePlanControls(evidencePlan) {
 
 function selectScopedControlState(
   controlIntelligence,
-  planMappings
+  planMappings,
+  readiness
 ) {
   if (!Array.isArray(controlIntelligence?.items)) {
     return null;
@@ -87,7 +88,7 @@ function selectScopedControlState(
    * deterministic canonical-order expansion of the same assessment.
    */
   const fullProfile =
-    controlIntelligence.items.length === 108;
+    Number(readiness?.summary?.profileControls || 0) === 108;
 
   const fullProfilePriority = Object.freeze({
     finding: 0,
@@ -778,7 +779,8 @@ export function deriveAuthoritativeWorkflowState({
   const scopedControl =
     selectScopedControlState(
       controlIntelligence,
-      planMappings
+      planMappings,
+      readiness
     );
 
   if (scopedControl) {
