@@ -36,8 +36,9 @@ function preparation() {
   };
 }
 
-function item(controlId, currentStage) {
+function item(controlId, currentStage, metadata = {}) {
   return {
+    ...metadata,
     controlId,
     currentStage,
     chainStatus:
@@ -68,7 +69,10 @@ test('full-profile workflow continues an explicitly scoped unmapped control befo
         item('ARL-KB-057', 'deployment_decision'),
         item('ARL-KB-090', 'deployment_decision'),
         item('ARL-KB-100', 'deployment_decision'),
-        item('ARL-KB-001', 'test'),
+        item('ARL-KB-001', 'test', {
+          testMode: 'automated',
+          automationStatus: 'verified'
+        }),
         item('ARL-KB-002', 'applicability')
       ]
     },
@@ -131,7 +135,10 @@ test('ordinary source-backed control test is automatic while bounded tests still
     preparation: preparation(),
     controlIntelligence: {
       systemSnapshot: { id: 'sys_current' },
-      items: [item('ARL-KB-001', 'test')]
+      items: [item('ARL-KB-001', 'test', {
+        testMode: 'automated',
+        automationStatus: 'verified'
+      })]
     },
     readiness: {
       available: true,
@@ -156,7 +163,10 @@ test('inconclusive automatic source review stops auto-loop and requests only mis
       systemSnapshot: { id: 'sys_current' },
       items: [
         {
-          ...item('ARL-KB-001', 'test'),
+          ...item('ARL-KB-001', 'test', {
+            testMode: 'automated',
+            automationStatus: 'verified'
+          }),
           chainStatus: 'test_inconclusive',
           nextAction: 'Resolve the inconclusive test with additional evidence or rerun it.'
         }
@@ -185,7 +195,10 @@ test('ordinary automatic control test does not falsely advertise a user blocker'
     preparation: preparation(),
     controlIntelligence: {
       systemSnapshot: { id: 'sys_current' },
-      items: [item('ARL-KB-001', 'test')]
+      items: [item('ARL-KB-001', 'test', {
+        testMode: 'automated',
+        automationStatus: 'verified'
+      })]
     },
     readiness: {
       available: true,
@@ -199,4 +212,61 @@ test('ordinary automatic control test does not falsely advertise a user blocker'
   assert.equal(state.blockers.length, 0);
   assert.equal(state.blocked, false);
   assert.equal(state.canAutoAdvance, true);
+});
+
+
+test('manual unsupported controls never enter fake automatic source-test loops', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        item('ARL-KB-001', 'test', {
+          testMode: 'manual',
+          automationStatus: 'unsupported'
+        })
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current'
+    }
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(state.nextAllowedAction.name, 'provide_required_manual_evidence');
+  assert.equal(state.nextAllowedAction.actor, 'user');
+  assert.equal(state.nextAllowedAction.requiresUserInput, true);
+  assert.equal(state.canAutoAdvance, false);
+});
+
+test('candidate automation is not treated as verified executable automation', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        item('ARL-KB-031', 'test', {
+          testMode: 'hybrid',
+          automationStatus: 'candidate'
+        })
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current'
+    }
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(state.nextAllowedAction.name, 'provide_required_manual_evidence');
+  assert.equal(state.canAutoAdvance, false);
 });
