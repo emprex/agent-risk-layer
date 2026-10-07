@@ -10,6 +10,10 @@ import {
   inspectFrozenRepository
 } from './inspect-frozen-repository.mjs';
 
+import {
+  collectDeterministicEvidence
+} from '../deterministic-evidence-collector.mjs';
+
 function frozenInspectionObservation({
   frozen,
   requirements = []
@@ -151,6 +155,16 @@ export async function runAuthoritativeControlSourceReview({
       requirements: normalizedRequirements
     });
 
+  const deterministicEvidence =
+    collectDeterministicEvidence({
+      repositoryPath,
+      frozen,
+      requirements: normalizedRequirements
+    });
+
+  const deterministicEvidenceText =
+    JSON.stringify(deterministicEvidence);
+
   const collectionKind =
     collectionOnly
       ? 'arl_frozen_source_evidence_collection'
@@ -192,6 +206,10 @@ export async function runAuthoritativeControlSourceReview({
             'ARL completed deterministic frozen-source inspection for this control.',
             'Observed frozen-target facts:',
             observedFacts,
+            'Requirement-specific deterministic observations:',
+            deterministicEvidenceText.length <= 12000
+              ? deterministicEvidenceText
+              : deterministicEvidenceText.slice(0, 12000),
             'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
           ].join('\n'),
         limitations:
@@ -210,7 +228,7 @@ export async function runAuthoritativeControlSourceReview({
       sourceReference: inputReference,
       testExecutionId: execution.id,
       limitations:
-        'Observed evidence is limited to deterministic frozen-source inspection. Human-supplied governance evidence remains separate and must not be inferred by ARL.'
+        'Observed evidence is limited to deterministic frozen-source inspection and typed repository collectors. Human governance decisions, legal-basis conclusions, runtime effects and active-test outcomes remain separate and must not be inferred by ARL.'
     }
   });
 
