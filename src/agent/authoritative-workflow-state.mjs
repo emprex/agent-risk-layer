@@ -10,6 +10,10 @@ import {
   getAssessmentControlBinding
 } from './assessment-control-bindings.mjs';
 
+import {
+  deriveControlExecutionPolicy
+} from './control-execution-policy.mjs';
+
 export const AUTHORITATIVE_WORKFLOW_STATE_SCHEMA =
   'arl.agent.workflow-state.v1';
 
@@ -292,7 +296,11 @@ function stateResult({
             nextAction:
               scopedControl.nextAction || null,
             deploymentImpact:
-              scopedControl.deploymentImpact || null
+              scopedControl.deploymentImpact || null,
+            testMode:
+              scopedControl.testMode || null,
+            automationStatus:
+              scopedControl.automationStatus || null
           }
         : null,
     nextAllowedAction,
@@ -461,10 +469,16 @@ function stateFromScopedControl({
 
   if (scopedControl.currentStage === 'test') {
     const boundedCaseId = mapping?.caseId || null;
+    const policy = deriveControlExecutionPolicy({
+      currentStage: scopedControl.currentStage,
+      caseId: boundedCaseId,
+      testMode: scopedControl.testMode,
+      automationStatus: scopedControl.automationStatus
+    });
 
     if (
-      !boundedCaseId &&
-      scopedControl.chainStatus === 'test_inconclusive'
+      scopedControl.chainStatus === 'test_inconclusive' ||
+      policy.mode === 'manual_evidence'
     ) {
       return stateResult({
         ...common,
@@ -472,7 +486,7 @@ function stateFromScopedControl({
         blockers: [
           {
             code: 'manual_evidence_required',
-            source: 'control_intelligence',
+            source: 'control_execution_policy',
             userActionRequired: true
           }
         ],
@@ -482,40 +496,50 @@ function stateFromScopedControl({
           requiresUserInput: true,
           reason:
             scopedControl.nextAction ||
-            'Automatic frozen-source review completed but cannot prove the remaining external or governance facts. Provide the missing evidence or mark the control inconclusive.',
+            'This control is manual or has no verified automatic executor. Provide only the evidence that cannot be derived from the frozen target.',
           controlId: scopedControl.controlId,
           caseId: null
         })
       });
     }
 
+    if (policy.mode === 'bounded_test') {
+      return stateResult({
+        ...common,
+        stage: 'bounded_test_required',
+        blockers: [
+          {
+            code: 'authorised_bounded_test_required',
+            source: 'control_execution_policy',
+            userActionRequired: true
+          }
+        ],
+        nextAllowedAction: action({
+          name: 'authorise_and_run_bounded_test',
+          actor: 'user',
+          requiresUserInput: true,
+          reason:
+            scopedControl.nextAction ||
+            'This control requires an explicitly authorised bounded test.',
+          controlId: scopedControl.controlId,
+          caseId: boundedCaseId
+        })
+      });
+    }
+
     return stateResult({
       ...common,
-      stage:
-        boundedCaseId
-          ? 'bounded_test_required'
-          : 'control_test_required',
-      blockers: boundedCaseId
-        ? [
-            {
-              code: 'authorised_bounded_test_required',
-              source: 'control_intelligence',
-              userActionRequired: true
-            }
-          ]
-        : [],
+      stage: 'control_test_required',
+      blockers: [],
       nextAllowedAction: action({
-        name:
-          boundedCaseId
-            ? 'authorise_and_run_bounded_test'
-            : 'run_authoritative_control_test',
-        actor: boundedCaseId ? 'user' : 'arl',
-        requiresUserInput: Boolean(boundedCaseId),
+        name: 'run_authoritative_control_test',
+        actor: 'arl',
+        requiresUserInput: false,
         reason:
           scopedControl.nextAction ||
-          'The authoritative control state requires a test result before evidence can satisfy the control.',
+          'A verified automatic executor is available for this control.',
         controlId: scopedControl.controlId,
-        caseId: boundedCaseId
+        caseId: null
       })
     });
   }
@@ -868,6 +892,37 @@ export async function getAuthoritativeWorkflowState({
         limit: 200,
         offset: 0
       });
+
+    const { listRiskKnowledge } =
+      await import('../risk-knowledge.js');
+
+    const riskKnowledge =
+      await listRiskKnowledge({
+        limit: 250,
+        offset: 0
+      });
+
+    const metadataByControl =
+      new Map(
+        (riskKnowledge?.items || []).map((item) => [
+          item.id,
+          {
+            testMode:
+              item?.operationalMetadata?.testMode || null,
+            automationStatus:
+              item?.operationalMetadata?.automationStatus || null
+          }
+        ])
+      );
+
+    controlIntelligence = {
+      ...controlIntelligence,
+      items:
+        (controlIntelligence?.items || []).map((item) => ({
+          ...item,
+          ...(metadataByControl.get(item.controlId) || {})
+        }))
+    };
   }
 
   const readiness =
