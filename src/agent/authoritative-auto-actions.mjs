@@ -862,6 +862,20 @@ export async function executeAuthoritativeArlAction({
     };
   }
 
+  if (
+    action.name ===
+    'collect_authoritative_control_evidence'
+  ) {
+    return runAuthoritativeControlSourceReview({
+      repositoryPath,
+      projectId,
+      userId,
+      controlId: action.controlId,
+      requirements: action.requirements,
+      collectionOnly: true
+    });
+  }
+
   if (action.name === 'run_authoritative_control_test') {
     return runAuthoritativeControlSourceReview({
       repositoryPath,
