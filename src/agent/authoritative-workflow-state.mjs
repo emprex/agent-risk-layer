@@ -14,6 +14,10 @@ import {
   deriveControlExecutionPolicy
 } from './control-execution-policy.mjs';
 
+import {
+  buildFullProfileEvidenceWorkQueue
+} from './full-profile-evidence-work-queue.mjs';
+
 export const AUTHORITATIVE_WORKFLOW_STATE_SCHEMA =
   'arl.agent.workflow-state.v1';
 
@@ -275,7 +279,8 @@ function stateResult({
   controlIntelligence,
   readiness,
   planMappings,
-  scopedControl = null
+  scopedControl = null,
+  evidenceWorkQueue = null
 }) {
   const requiresUserInput =
     nextAllowedAction?.requiresUserInput === true;
@@ -322,6 +327,7 @@ function stateResult({
         : null,
     nextAllowedAction,
     readiness,
+    evidenceWorkQueue,
     deploymentDecisionWritten: false,
     humanReviewRequired: true
   };
@@ -611,7 +617,8 @@ export function deriveAuthoritativeWorkflowState({
   assessmentId = null,
   preparation = null,
   controlIntelligence = null,
-  readiness = null
+  readiness = null,
+  evidenceWorkQueue = null
 } = {}) {
   const evidencePlan =
     preparation?.evidencePlan || null;
@@ -623,7 +630,8 @@ export function deriveAuthoritativeWorkflowState({
     preparation,
     controlIntelligence,
     readiness,
-    planMappings
+    planMappings,
+    evidenceWorkQueue
   };
 
   const missingIdentity = [
@@ -894,6 +902,7 @@ export async function getAuthoritativeWorkflowState({
     });
 
   let controlIntelligence = null;
+  let riskKnowledge = null;
 
   if (
     projectId &&
@@ -947,7 +956,7 @@ export async function getAuthoritativeWorkflowState({
     const { listRiskKnowledge } =
       await import('../risk-knowledge.js');
 
-    const riskKnowledge =
+    riskKnowledge =
       await listRiskKnowledge({
         limit: 250,
         offset: 0
@@ -982,12 +991,20 @@ export async function getAuthoritativeWorkflowState({
       userId
     });
 
+  const evidenceWorkQueue =
+    buildFullProfileEvidenceWorkQueue({
+      controlIntelligence,
+      riskKnowledge,
+      readiness
+    });
+
   return deriveAuthoritativeWorkflowState({
     projectId,
     userId,
     assessmentId,
     preparation,
     controlIntelligence,
-    readiness
+    readiness,
+    evidenceWorkQueue
   });
 }
