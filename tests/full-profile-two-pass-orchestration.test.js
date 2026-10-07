@@ -62,3 +62,31 @@ test('full-profile detection does not depend on how many controls are already sc
     /controlIntelligence\.items\.length === 108/
   );
 });
+
+
+test('authoritative orchestration loads every control page instead of silently truncating at 50', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'src/agent/authoritative-workflow-state.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    source,
+    /limit: 50,[\s\S]*offset: 0/
+  );
+
+  assert.match(
+    source,
+    /for \([\s\S]*offset < \(firstPage\.total \|\| 0\)[\s\S]*offset \+= 50/
+  );
+
+  assert.match(
+    source,
+    /items: pages\.flatMap/
+  );
+
+  assert.match(
+    source,
+    /hasMore: false/
+  );
+});
