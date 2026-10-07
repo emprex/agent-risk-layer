@@ -576,7 +576,8 @@ function stateFromScopedControl({
 
     if (
       queueItem?.classification ===
-        'machine_observable'
+        'machine_observable' &&
+      queueItem?.automaticCollectionRequired === true
     ) {
       return stateResult({
         ...common,
