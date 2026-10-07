@@ -929,6 +929,7 @@ function deriveChains(evaluations, data) {
     else if (open.length && implementationRecorded) chainStatus = 'remediation_in_progress';
     else if (open.length || failed) chainStatus = 'finding_open';
     else if (passed && activeEvidence) chainStatus = 'controlled_with_evidence';
+    else if (latest?.result === 'inconclusive') chainStatus = 'test_inconclusive';
     else if (tests.length) chainStatus = failed ? 'test_failed' : 'test_planned';
     const reviewed=evaluation.decision_method==='guided_customer_review';const completedStages=[];const notRequiredStages=[];let currentStage='applicability';let nextAction='Review whether this control applies to this agent.';let deploymentImpact='no_impact_yet';
     if(reviewed)completedStages.push('applicability');
