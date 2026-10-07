@@ -118,7 +118,36 @@ function buildHumanReviewBatches(items) {
     }));
 }
 
-function classifyControl(control) {
+function hasFrozenSourceCollection(control) {
+  const detail = control?.authoritativeDetail || null;
+
+  const evidence = [
+    ...(Array.isArray(detail?.evidence) ? detail.evidence : []),
+    ...(Array.isArray(detail?.evidenceHistory) ? detail.evidenceHistory : [])
+  ];
+
+  const tests = [
+    ...(Array.isArray(detail?.tests) ? detail.tests : []),
+    ...(Array.isArray(detail?.testHistory) ? detail.testHistory : [])
+  ];
+
+  return (
+    evidence.some((item) =>
+      [
+        'arl_frozen_source_review',
+        'arl_frozen_source_evidence_collection'
+      ].includes(item?.sourceType)
+    ) ||
+    tests.some((item) =>
+      [
+        'arl_frozen_source_review',
+        'arl_frozen_source_evidence_collection'
+      ].includes(item?.executionMethod)
+    )
+  );
+}
+
+function classifyControl(control, requirementPlan = []) {
   if (control?.currentStage === 'evidence') {
     return {
       classification: CLASSIFICATIONS.EXISTING_AUTHORITATIVE,
