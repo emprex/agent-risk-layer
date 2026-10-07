@@ -10,7 +10,7 @@ import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsF
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
-import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds } from './local-applicability-command.mjs';
+import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import {
@@ -399,10 +399,39 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       );
     }
 
+    let applicabilityWorkflowState = workflowState;
+
+    if (
+      workflowState?.stage !== 'control_applicability_required' ||
+      workflowState?.scopedControl?.controlId !== applicability.controlId
+    ) {
+      const detail =
+        await getControlIntelligenceControl({
+          projectId: options.projectId,
+          controlId: applicability.controlId,
+          userId: options.userId
+        });
+
+      const focused =
+        focusLocalApplicabilityControl(
+          workflowState,
+          detail,
+          applicability.controlId
+        );
+
+      if (!focused) {
+        throw new Error(
+          'The selected control is not at the applicability gate on the current authoritative snapshot.'
+        );
+      }
+
+      applicabilityWorkflowState = focused;
+    }
+
     const result =
       await confirmMappedControlApplicability({
         ...options,
-        workflowState,
+        workflowState: applicabilityWorkflowState,
         controlId: applicability.controlId,
         decision: applicability.decision,
         reason: applicability.reason,
