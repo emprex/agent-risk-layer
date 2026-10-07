@@ -78,3 +78,31 @@ test('a repeated manual evidence command can recover the exact prior evidence at
     /passed\.length !== 1 \|\| evidence\.length !== 1/
   );
 });
+
+
+test('manual evidence recording stage auto-promotes persisted operator evidence instead of asking for the same input again', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'src/agent/authoritative-auto-actions.mjs'),
+    'utf8'
+  );
+
+  assert.match(
+    source,
+    /action\.name === 'record_authoritative_evidence'[\s\S]*if \(action\.caseId\)[\s\S]*promotePersistedManualEvidence/
+  );
+
+  assert.match(
+    source,
+    /sourceType === 'manual_review'/
+  );
+
+  assert.match(
+    source,
+    /verificationState === 'unverified'/
+  );
+
+  assert.match(
+    source,
+    /explicit_human_manual_control_review_auto_promotion/
+  );
+});
