@@ -15,6 +15,7 @@ const CLASSIFICATIONS = Object.freeze({
   MACHINE_OBSERVABLE: 'machine_observable',
   EXISTING_AUTHORITATIVE: 'existing_authoritative_evidence',
   HUMAN_ONLY: 'human_only',
+  ACTIVE_TEST_REQUIRED: 'active_test_required',
   UNAVAILABLE: 'unavailable_or_inconclusive'
 });
 
@@ -204,14 +205,36 @@ function classifyControl(control, requirementPlan = []) {
     };
   }
 
+  if (activeRequirements.length > 0) {
+    return {
+      classification:
+        CLASSIFICATIONS.ACTIVE_TEST_REQUIRED,
+      reason:
+        'Static evidence collection is exhausted. Canonical evidence still requires explicit runtime, abuse-case or bounded-test observations.'
+    };
+  }
+
+  if (
+    humanRequirements.length > 0 &&
+    (
+      control?.chainStatus === 'test_inconclusive' ||
+      policy.mode === 'manual_evidence'
+    )
+  ) {
+    return {
+      classification: CLASSIFICATIONS.HUMAN_ONLY,
+      reason:
+        sourceCollected
+          ? 'Deterministic frozen-target evidence is already collected. The remaining control conclusion requires accountable human review of the canonical evidence.'
+          : 'The remaining canonical evidence requires accountable human review.'
+    };
+  }
+
   if (control?.chainStatus === 'test_inconclusive') {
     return {
       classification: CLASSIFICATIONS.UNAVAILABLE,
       reason:
-        activeRequirements.length > 0 &&
-        humanRequirements.length === 0
-          ? 'The remaining canonical evidence requires runtime or active-test observations and no verified automatic executor is registered.'
-          : 'The current authoritative test is inconclusive and needs additional evidence before a pass/fail result can be established.'
+        'The current authoritative test is inconclusive and no reviewed deterministic, active-test or human-evidence route remains available.'
     };
   }
 
@@ -377,6 +400,7 @@ export function buildFullProfileEvidenceWorkQueue({
     machineObservable: 0,
     existingAuthoritativeEvidence: 0,
     humanOnly: 0,
+    activeTestRequired: 0,
     unavailableOrInconclusive: 0
   };
 
@@ -396,6 +420,11 @@ export function buildFullProfileEvidenceWorkQueue({
       CLASSIFICATIONS.HUMAN_ONLY
     ) {
       counts.humanOnly += 1;
+    } else if (
+      item.classification ===
+      CLASSIFICATIONS.ACTIVE_TEST_REQUIRED
+    ) {
+      counts.activeTestRequired += 1;
     } else {
       counts.unavailableOrInconclusive += 1;
     }
