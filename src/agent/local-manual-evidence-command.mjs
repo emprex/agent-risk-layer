@@ -70,7 +70,11 @@ export function parseLocalManualEvidenceCommand(request) {
       ? input.evidenceChecklist.map((item) => ({
           requirement: clean(item?.requirement),
           evidenceReference: clean(item?.evidenceReference),
-          observation: clean(item?.observation)
+          observation: clean(item?.observation),
+          satisfied:
+            typeof item?.satisfied === 'boolean'
+              ? item.satisfied
+              : null
         }))
       : [];
 
@@ -93,11 +97,36 @@ export function parseLocalManualEvidenceCommand(request) {
         'Each manual evidence checklist item requires requirement, privacy-safe evidenceReference, and a specific observation of at least 10 characters.'
       );
     }
+
+    if (
+      result !== 'inconclusive' &&
+      typeof item.satisfied !== 'boolean'
+    ) {
+      throw new Error(
+        'Each conclusive manual evidence checklist item requires a boolean satisfied value.'
+      );
+    }
+  }
+
+  const derivedResult =
+    result === 'inconclusive'
+      ? 'inconclusive'
+      : evidenceChecklist.every((item) => item.satisfied === true)
+        ? 'passed'
+        : 'failed';
+
+  if (
+    result !== 'inconclusive' &&
+    result !== derivedResult
+  ) {
+    throw new Error(
+      `Manual evidence result mismatch: canonical checklist deterministically derives ${derivedResult}, not ${result}.`
+    );
   }
 
   return {
     controlId,
-    result,
+    result: derivedResult,
     observedResult,
     sourceReference,
     limitations: clean(input.limitations),
