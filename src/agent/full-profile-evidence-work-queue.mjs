@@ -164,11 +164,45 @@ function classifyControl(control, requirementPlan = []) {
     };
   }
 
-  if (control?.chainStatus === 'test_inconclusive') {
+  const sourceCollected =
+    hasFrozenSourceCollection(control);
+
+  const machineCollectable =
+    requirementPlan.filter(
+      (item) => item.mode === 'machine_collectable'
+    );
+
+  if (
+    machineCollectable.length > 0 &&
+    !sourceCollected
+  ) {
+    return {
+      classification:
+        CLASSIFICATIONS.MACHINE_OBSERVABLE,
+      reason:
+        'Canonical evidence contains deterministic frozen-target observations that ARL can collect before asking for human-only evidence.'
+    };
+  }
+
+  const activeRequirements =
+    requirementPlan.filter(
+      (item) => item.mode === 'active_test_or_runtime'
+    );
+
+  const humanRequirements =
+    requirementPlan.filter(
+      (item) => item.mode === 'human_only'
+    );
+
+  if (
+    control?.chainStatus === 'test_inconclusive' &&
+    activeRequirements.length > 0 &&
+    humanRequirements.length === 0
+  ) {
     return {
       classification: CLASSIFICATIONS.UNAVAILABLE,
       reason:
-        'The current authoritative test is inconclusive and needs additional evidence before a pass/fail result can be established.'
+        'The remaining canonical evidence requires runtime or active-test observations and no verified automatic executor is registered.'
     };
   }
 
