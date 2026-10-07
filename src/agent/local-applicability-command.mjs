@@ -72,14 +72,11 @@ export function parseLocalApplicabilityCommand(request) {
     )].sort();
   }
 
-  if (
-    decision === 'not_applicable' &&
-    (!architectureFactIds || architectureFactIds.length === 0)
-  ) {
-    throw new Error(
-      'A not_applicable decision requires at least one confirmed supporting architecture fact ID.'
-    );
-  }
+  /*
+   * In local owner mode, a factless not_applicable decision may be accepted
+   * only by the dedicated owner-attestation path. The core guided-review API
+   * still requires confirmed snapshot facts.
+   */
 
   return {
     controlId,
