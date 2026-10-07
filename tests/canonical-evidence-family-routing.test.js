@@ -83,3 +83,49 @@ test('accountable approval, legal-basis and reviewer evidence remain human-only'
     );
   }
 });
+
+
+test('KB-006 behavioral handling evidence stays on the runtime or active-test path', () => {
+  const values = [
+    'ARL-KB-006 evidence showing classification and handling across representative model, tool, log, persistence and export paths',
+    'ARL-KB-006 evidence of redaction, denial, retention or export restriction for restricted data'
+  ];
+
+  for (const value of values) {
+    assert.equal(
+      classifyCanonicalEvidenceRequirement(value).mode,
+      'active_test_or_runtime'
+    );
+  }
+});
+
+test('KB-014 authoritative credential ownership and lifecycle inventory stays human-controlled', () => {
+  const values = [
+    'Authoritative credential or workload-identity inventory with owner, purpose, scope and lifecycle state',
+    'Credential inventory with owner, purpose, scope and lifecycle state'
+  ];
+
+  for (const value of values) {
+    assert.equal(
+      classifyCanonicalEvidenceRequirement(value).mode,
+      'human_only'
+    );
+  }
+});
+
+test('KB-014 technical credential references remain deterministic machine evidence', () => {
+  const result =
+    classifyCanonicalEvidenceRequirement(
+      'Secret-store, environment, CI/CD and runtime references showing which credentials the assessed version can use'
+    );
+
+  assert.equal(
+    result.mode,
+    'machine_collectable'
+  );
+  assert.ok(
+    result.collectors.includes(
+      'source_and_configuration'
+    )
+  );
+});
