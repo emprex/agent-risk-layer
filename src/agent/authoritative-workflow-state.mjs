@@ -289,7 +289,8 @@ function action({
   requiresUserInput,
   reason,
   controlId = null,
-  caseId = null
+  caseId = null,
+  requirements = []
 }) {
   return {
     name,
@@ -297,7 +298,11 @@ function action({
     requiresUserInput,
     reason,
     controlId,
-    caseId
+    caseId,
+    requirements:
+      Array.isArray(requirements)
+        ? requirements
+        : []
   };
 }
 
