@@ -10,23 +10,7 @@ function clean(value) {
   return String(value ?? '').trim();
 }
 
-export function parseLocalManualEvidenceCommand(request) {
-  const text = clean(request);
-
-  if (!text.startsWith(PREFIX)) {
-    return null;
-  }
-
-  let input;
-
-  try {
-    input = JSON.parse(text.slice(PREFIX.length));
-  } catch {
-    throw new Error(
-      'Record manual evidence requires a valid JSON object.'
-    );
-  }
-
+export function parseLocalManualEvidencePayload(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error(
       'Record manual evidence requires a JSON object.'
@@ -132,4 +116,24 @@ export function parseLocalManualEvidenceCommand(request) {
     limitations: clean(input.limitations),
     evidenceChecklist
   };
+}
+
+export function parseLocalManualEvidenceCommand(request) {
+  const text = clean(request);
+
+  if (!text.startsWith(PREFIX)) {
+    return null;
+  }
+
+  let input;
+
+  try {
+    input = JSON.parse(text.slice(PREFIX.length));
+  } catch {
+    throw new Error(
+      'Record manual evidence requires a valid JSON object.'
+    );
+  }
+
+  return parseLocalManualEvidencePayload(input);
 }
