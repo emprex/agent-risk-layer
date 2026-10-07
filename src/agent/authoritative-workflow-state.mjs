@@ -70,24 +70,20 @@ function selectScopedControlState(
   controlIntelligence,
   planMappings
 ) {
-  const controlIds = new Set(
-    planMappings
-      .map((item) => item.controlId)
-      .filter(Boolean)
-  );
-
-  if (
-    controlIds.size === 0 ||
-    !Array.isArray(controlIntelligence?.items)
-  ) {
+  if (!Array.isArray(controlIntelligence?.items)) {
     return null;
   }
 
+  /*
+   * The 108-control assessment is not limited to the historical Evidence Plan
+   * mappings. Control Intelligence is authoritative for the full current
+   * snapshot, so any control that has progressed beyond untouched
+   * applicability must remain eligible for workflow continuation. Untouched
+   * controls remain eligible after active scoped work is complete, allowing
+   * deterministic canonical-order expansion of the same assessment.
+   */
   const candidates =
     controlIntelligence.items
-      .filter((item) =>
-        controlIds.has(item.controlId)
-      )
       .map((item) => ({
         ...item,
         workflowPriority:
@@ -499,13 +495,14 @@ function stateFromScopedControl({
   }
 
   if (scopedControl.currentStage === 'applicability') {
+    const mapped = Boolean(mapping);
     return stateResult({
       ...common,
       stage: 'control_applicability_required',
       nextAllowedAction: action({
         name: 'resolve_control_applicability',
-        actor: 'arl',
-        requiresUserInput: false,
+        actor: mapped ? 'arl' : 'user',
+        requiresUserInput: !mapped,
         reason:
           scopedControl.nextAction ||
           'Control Intelligence must resolve applicability from authoritative project state before testing.',
@@ -841,7 +838,9 @@ export async function getAuthoritativeWorkflowState({
     controlIntelligence =
       await getControlIntelligence({
         projectId,
-        userId
+        userId,
+        limit: 200,
+        offset: 0
       });
   }
 
