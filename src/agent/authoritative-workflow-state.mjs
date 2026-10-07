@@ -102,7 +102,7 @@ function selectScopedControlState(
     approval: 3,
     evidence: 4,
     applicability: 5,
-    test: 7,
+    test: 6,
     deployment_decision: 8
   });
 
@@ -125,10 +125,14 @@ function selectScopedControlState(
         if (
           fullProfile &&
           item.currentStage === 'test' &&
-          queueClassificationByControl.get(item.controlId) ===
-            'machine_observable'
+          [
+            'human_only',
+            'unavailable_or_inconclusive'
+          ].includes(
+            queueClassificationByControl.get(item.controlId)
+          )
         ) {
-          workflowPriority = 6;
+          workflowPriority = 7;
         }
 
         return {
