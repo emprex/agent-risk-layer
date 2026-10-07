@@ -14,7 +14,7 @@ test('full-profile selection scopes applicability before per-control tests', () 
 
   assert.match(
     source,
-    /const fullProfile =\s*controlIntelligence\.items\.length === 108/
+    /const fullProfile =\s*Number\(readiness\?\.summary\?\.profileControls \|\| 0\) === 108/
   );
 
   assert.match(
@@ -47,5 +47,18 @@ test('one Continue assessment resolves consecutive full-profile applicability ga
   assert.match(
     source,
     /current =\s*await runArlAgent\([\s\S]*'Where are we\?'/
+  );
+});
+
+
+test('full-profile detection does not depend on how many controls are already scoped', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'src/agent/authoritative-workflow-state.mjs'),
+    'utf8'
+  );
+
+  assert.doesNotMatch(
+    source,
+    /controlIntelligence\.items\.length === 108/
   );
 });
