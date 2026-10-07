@@ -566,6 +566,38 @@ function stateFromScopedControl({
 
   if (scopedControl.currentStage === 'test') {
     const boundedCaseId = mapping?.caseId || null;
+
+    const queueItem =
+      (evidenceWorkQueue?.items || [])
+        .find(
+          (item) =>
+            item.controlId === scopedControl.controlId
+        ) || null;
+
+    if (
+      queueItem?.classification ===
+        'machine_observable'
+    ) {
+      return stateResult({
+        ...common,
+        stage: 'control_evidence_collection_required',
+        blockers: [],
+        nextAllowedAction: action({
+          name:
+            'collect_authoritative_control_evidence',
+          actor: 'arl',
+          requiresUserInput: false,
+          reason:
+            queueItem.classificationReason ||
+            'ARL can collect deterministic evidence from the frozen target before requesting human review.',
+          controlId: scopedControl.controlId,
+          caseId: null,
+          requirements:
+            queueItem.machineCollectableRequirements || []
+        })
+      });
+    }
+
     const policy = deriveControlExecutionPolicy({
       currentStage: scopedControl.currentStage,
       caseId: boundedCaseId,
