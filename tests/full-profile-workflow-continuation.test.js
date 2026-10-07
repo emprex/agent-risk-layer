@@ -362,3 +362,63 @@ test('full-profile workflow falls back to human evidence after automatic evidenc
   assert.equal(state.scopedControl.controlId, 'ARL-KB-004');
   assert.equal(state.canAutoAdvance, false);
 });
+
+
+test('scoped full-profile manual evidence state preserves and exposes its authoritative human batch', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        item('ARL-KB-004', 'test', {
+          testMode: 'manual',
+          automationStatus: 'unsupported'
+        })
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current',
+      summary: {
+        profileControls: 108
+      }
+    },
+    evidenceWorkQueue: {
+      available: true,
+      items: [
+        {
+          controlId: 'ARL-KB-004',
+          classification: 'human_only'
+        }
+      ],
+      humanReviewBatches: [
+        {
+          batchId:
+            'human_evidence_batch_abcdef123456',
+          controlIds: ['ARL-KB-004'],
+          requirements: [
+            'Documented accountable review record'
+          ],
+          reviewInstruction:
+            'Provide one authoritative response.'
+        }
+      ]
+    }
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(state.evidenceWorkQueue.available, true);
+  assert.deepEqual(state.humanEvidenceBatch, {
+    batchId: 'human_evidence_batch_abcdef123456',
+    controlIds: ['ARL-KB-004'],
+    requirements: [
+      'Documented accountable review record'
+    ],
+    reviewInstruction:
+      'Provide one authoritative response.'
+  });
+});
