@@ -462,22 +462,48 @@ function stateFromScopedControl({
   if (scopedControl.currentStage === 'test') {
     const boundedCaseId = mapping?.caseId || null;
 
+    if (
+      !boundedCaseId &&
+      scopedControl.chainStatus === 'test_inconclusive'
+    ) {
+      return stateResult({
+        ...common,
+        stage: 'manual_evidence_required',
+        blockers: [
+          {
+            code: 'manual_evidence_required',
+            source: 'control_intelligence',
+            userActionRequired: true
+          }
+        ],
+        nextAllowedAction: action({
+          name: 'provide_required_manual_evidence',
+          actor: 'user',
+          requiresUserInput: true,
+          reason:
+            scopedControl.nextAction ||
+            'Automatic frozen-source review completed but cannot prove the remaining external or governance facts. Provide the missing evidence or mark the control inconclusive.',
+          controlId: scopedControl.controlId,
+          caseId: null
+        })
+      });
+    }
+
     return stateResult({
       ...common,
       stage:
         boundedCaseId
           ? 'bounded_test_required'
           : 'control_test_required',
-      blockers: [
-        {
-          code:
-            boundedCaseId
-              ? 'authorised_bounded_test_required'
-              : 'authoritative_control_test_required',
-          source: 'control_intelligence',
-          userActionRequired: true
-        }
-      ],
+      blockers: boundedCaseId
+        ? [
+            {
+              code: 'authorised_bounded_test_required',
+              source: 'control_intelligence',
+              userActionRequired: true
+            }
+          ]
+        : [],
       nextAllowedAction: action({
         name:
           boundedCaseId
