@@ -74,7 +74,11 @@ function buildHumanReviewBatches(items) {
     }
 
     const requirements =
-      (item.requiredEvidence || [])
+      (
+        item.humanOnlyRequirements?.length
+          ? item.humanOnlyRequirements
+          : item.requiredEvidence || []
+      )
         .map(normalizeRequirement)
         .filter(Boolean);
 
