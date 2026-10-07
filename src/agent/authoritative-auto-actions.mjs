@@ -44,6 +44,10 @@ import {
   getControlIntelligenceControl
 } from '../control-intelligence.js';
 
+import {
+  verifyExplicitHumanEvidence
+} from './verify-explicit-human-evidence.mjs';
+
 async function authoritativePreparation({
   repositoryPath,
   projectId,
@@ -290,6 +294,140 @@ async function recordPersistedRedTeamEvidence({
     effect: 'authoritative_redteam_evidence_recorded',
     selectionBasis: continuation.selectionBasis,
     securityStateChanged: true
+  };
+}
+
+async function promotePersistedManualEvidence({
+  action,
+  projectId,
+  userId
+}) {
+  if (!action?.controlId || !projectId || !userId) {
+    return {
+      executed: false,
+      reason: 'authoritative_manual_evidence_context_required'
+    };
+  }
+
+  const detail =
+    await getControlIntelligenceControl({
+      projectId,
+      controlId: action.controlId,
+      userId
+    });
+
+  const snapshotId =
+    detail?.systemSnapshot?.id || null;
+
+  if (
+    !snapshotId ||
+    detail?.chain?.currentStage !== 'evidence'
+  ) {
+    return {
+      executed: false,
+      reason: 'authoritative_manual_evidence_stage_required'
+    };
+  }
+
+  const tests = [
+    ...(Array.isArray(detail.tests) ? detail.tests : []),
+    ...(Array.isArray(detail.testHistory) ? detail.testHistory : [])
+  ];
+
+  const uniqueTests = [
+    ...new Map(
+      tests
+        .filter((item) => item?.id)
+        .map((item) => [item.id, item])
+    ).values()
+  ];
+
+  const passedInitial =
+    uniqueTests.filter((item) =>
+      item?.result === 'passed' &&
+      item?.executionKind !== 'retest' &&
+      item?.systemSnapshotId === snapshotId
+    );
+
+  if (passedInitial.length !== 1) {
+    return {
+      executed: false,
+      reason:
+        passedInitial.length > 1
+          ? 'authoritative_manual_passed_test_ambiguous'
+          : 'authoritative_manual_passed_test_required'
+    };
+  }
+
+  const evidenceItems = [
+    ...(Array.isArray(detail.evidence) ? detail.evidence : []),
+    ...(Array.isArray(detail.evidenceHistory) ? detail.evidenceHistory : [])
+  ];
+
+  const uniqueEvidence = [
+    ...new Map(
+      evidenceItems
+        .filter((item) => item?.id)
+        .map((item) => [item.id, item])
+    ).values()
+  ];
+
+  const matching =
+    uniqueEvidence.filter((item) =>
+      item?.testExecutionId === passedInitial[0].id &&
+      item?.systemSnapshotId === snapshotId &&
+      item?.sourceType === 'manual_review' &&
+      item?.retentionStatus === 'active'
+    );
+
+  const verified =
+    matching.find(
+      (item) => item?.verificationState === 'verified'
+    );
+
+  if (verified) {
+    return {
+      executed: true,
+      effect: 'authoritative_manual_evidence_already_verified',
+      evidenceId: verified.id,
+      securityStateChanged: false
+    };
+  }
+
+  const unverified =
+    matching.filter(
+      (item) => item?.verificationState === 'unverified'
+    );
+
+  if (unverified.length !== 1) {
+    return {
+      executed: false,
+      reason:
+        unverified.length > 1
+          ? 'authoritative_manual_evidence_ambiguous'
+          : 'authoritative_manual_evidence_required'
+    };
+  }
+
+  const promoted =
+    await verifyExplicitHumanEvidence({
+      projectId,
+      evidenceId: unverified[0].id,
+      userId,
+      controlId: action.controlId,
+      verificationScope:
+        'explicit_human_manual_control_review_auto_promotion',
+      reason:
+        'ARL automatically promoted the exact persisted manual evidence created by the accountable operator at the preceding manual-review gate.'
+    });
+
+  return {
+    executed: true,
+    effect: 'authoritative_manual_evidence_verified',
+    evidenceId: promoted.evidenceId,
+    verificationState: promoted.verificationState,
+    securityStateChanged:
+      promoted.alreadyVerified !== true
   };
 }
 
@@ -734,13 +872,21 @@ export async function executeAuthoritativeArlAction({
   }
 
   if (action.name === 'record_authoritative_evidence') {
-    return recordPersistedRedTeamEvidence({
+    if (action.caseId) {
+      return recordPersistedRedTeamEvidence({
+        action,
+        repositoryPath,
+        projectId,
+        userId,
+        assessmentId,
+        preparation
+      });
+    }
+
+    return promotePersistedManualEvidence({
       action,
-      repositoryPath,
       projectId,
-      userId,
-      assessmentId,
-      preparation
+      userId
     });
   }
 
