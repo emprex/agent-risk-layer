@@ -4,6 +4,10 @@ import {
   deriveControlExecutionPolicy
 } from './control-execution-policy.mjs';
 
+import {
+  buildCanonicalEvidenceRequirementPlan
+} from './canonical-evidence-requirement-plan.mjs';
+
 export const FULL_PROFILE_EVIDENCE_QUEUE_SCHEMA =
   'arl.agent.full-profile-evidence-work-queue.v1';
 
