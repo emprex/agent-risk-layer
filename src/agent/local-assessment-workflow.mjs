@@ -17,6 +17,7 @@ import { showLocalAssessmentContext } from './local-assessment-context-view.mjs'
 import { deriveLocalOwnerApplicability } from './local-owner-applicability-policy.mjs';
 import {
   assessControlApplicability,
+  assessControlApplicabilityFromLocalOwnerAttestation,
   closeControlFinding,
   getControlIntelligenceControl,
   recordControlEvidence,
@@ -497,6 +498,40 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       }
 
       applicabilityWorkflowState = focused;
+    }
+
+    if (
+      applicability.decision === 'not_applicable' &&
+      (!applicability.architectureFactIds ||
+        applicability.architectureFactIds.length === 0)
+    ) {
+      const snapshotId =
+        applicabilityWorkflowState?.authoritativeArtifacts
+          ?.assessmentContext?.systemSnapshotId || null;
+
+      if (!snapshotId) {
+        throw new Error(
+          'Local owner applicability attestation requires the current authoritative snapshot.'
+        );
+      }
+
+      await assessControlApplicabilityFromLocalOwnerAttestation({
+        projectId: options.projectId,
+        controlId: applicability.controlId,
+        userId: options.userId,
+        input: {
+          snapshotId,
+          decision: applicability.decision,
+          reason: applicability.reason,
+          architectureFactIds: []
+        }
+      });
+
+      return runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
     }
 
     const result =
