@@ -43,23 +43,31 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
   if (/^continue(?: assessment)?[.!?]*$/i.test(request.trim())) {
-    const current =
+    let current =
       await runArlAgent(
         repositoryPath,
         'Where are we?',
         options
       );
 
-    const state =
-      current?.canonicalData?.workflowState || null;
+    for (let step = 0; step < 108; step += 1) {
+      const state =
+        current?.canonicalData?.workflowState || null;
 
-    if (
-      state?.stage === 'control_applicability_required' &&
-      state?.nextAllowedAction?.name === 'resolve_control_applicability' &&
-      state?.nextAllowedAction?.actor === 'user' &&
-      state?.nextAllowedAction?.requiresUserInput === true &&
-      state?.scopedControl?.controlId
-    ) {
+      const fullProfile =
+        Number(state?.readiness?.summary?.profileControls || 0) === 108;
+
+      if (
+        !fullProfile ||
+        state?.stage !== 'control_applicability_required' ||
+        state?.nextAllowedAction?.name !== 'resolve_control_applicability' ||
+        state?.nextAllowedAction?.actor !== 'user' ||
+        state?.nextAllowedAction?.requiresUserInput !== true ||
+        !state?.scopedControl?.controlId
+      ) {
+        break;
+      }
+
       const controlId =
         state.scopedControl.controlId;
 
@@ -69,9 +77,6 @@ export async function runLocalAssessment(repositoryPath, request, options) {
           controlId,
           userId: options.userId
         });
-
-      const ownerDecision =
-        deriveLocalOwnerApplicability(detail);
 
       const snapshotId =
         state?.authoritativeArtifacts
@@ -87,6 +92,9 @@ export async function runLocalAssessment(repositoryPath, request, options) {
         );
       }
 
+      const ownerDecision =
+        deriveLocalOwnerApplicability(detail);
+
       if (ownerDecision) {
         await assessControlApplicability({
           projectId: options.projectId,
@@ -100,17 +108,7 @@ export async function runLocalAssessment(repositoryPath, request, options) {
               ownerDecision.architectureFactIds
           }
         });
-
-        return runArlAgent(
-          repositoryPath,
-          'Continue assessment',
-          options
-        );
-      }
-
-      if (
-        Number(state?.readiness?.summary?.profileControls || 0) === 108
-      ) {
+      } else {
         await assessControlApplicabilityFromLocalOwnerAttestation({
           projectId: options.projectId,
           controlId,
@@ -123,14 +121,21 @@ export async function runLocalAssessment(repositoryPath, request, options) {
             architectureFactIds: []
           }
         });
+      }
 
-        return runArlAgent(
+      current =
+        await runArlAgent(
           repositoryPath,
-          'Continue assessment',
+          'Where are we?',
           options
         );
-      }
     }
+
+    return runArlAgent(
+      repositoryPath,
+      'Continue assessment',
+      options
+    );
   }
 
   if (/^show assessment context[.!?]*$/i.test(request.trim())) {
