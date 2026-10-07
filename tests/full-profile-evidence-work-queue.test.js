@@ -27,7 +27,7 @@ function riskEntry(id, overrides = {}) {
   };
 }
 
-test('full-profile evidence queue classifies safe automatic, persisted, human-only and inconclusive work', () => {
+test('full-profile evidence queue classifies safe automatic, persisted and accountable human work', () => {
   const queue =
     buildFullProfileEvidenceWorkQueue({
       readiness: {
@@ -87,8 +87,9 @@ test('full-profile evidence queue classifies safe automatic, persisted, human-on
     total: 4,
     machineObservable: 1,
     existingAuthoritativeEvidence: 1,
-    humanOnly: 1,
-    unavailableOrInconclusive: 1,
+    humanOnly: 2,
+    activeTestRequired: 0,
+    unavailableOrInconclusive: 0,
     humanReviewBatches: 1
   });
 
@@ -106,7 +107,7 @@ test('full-profile evidence queue classifies safe automatic, persisted, human-on
   );
   assert.equal(
     queue.items[3].classification,
-    'unavailable_or_inconclusive'
+    'human_only'
   );
 
   assert.deepEqual(
