@@ -730,7 +730,7 @@ export async function runLocalAssessment(repositoryPath, request, options) {
               [
                 manualEvidence.limitations,
                 checklistValidation.canonicalChecklistVerified
-                  ? 'Canonical required-evidence checklist verified against Risk Knowledge inside the exact consolidated human review batch.'
+                  ? 'Canonical remaining human-only evidence checklist verified against Risk Knowledge after deterministic machine evidence collection inside the exact consolidated human review batch.'
                   : 'Human evidence remains inconclusive; canonical checklist completion was not asserted.'
               ].filter(Boolean).join(' ')
           }
@@ -1010,7 +1010,7 @@ export async function runLocalAssessment(repositoryPath, request, options) {
             [
               manualEvidence.limitations,
               checklistValidation.canonicalChecklistVerified
-                ? 'Canonical required-evidence checklist verified against Risk Knowledge before accepting a conclusive manual result.'
+                ? 'Canonical remaining human-only evidence checklist verified against Risk Knowledge after deterministic machine evidence collection before accepting a conclusive manual result.'
                 : 'Manual result remains inconclusive; canonical checklist completion was not asserted.'
             ].filter(Boolean).join(' ')
         }
