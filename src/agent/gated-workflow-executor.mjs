@@ -7,6 +7,7 @@ const WORKFLOW_STATE_SCHEMA =
 const AUTO_EXECUTABLE_ACTIONS = new Set([
   'build_authoritative_evidence_plan',
   'run_frozen_source_inspection',
+  'run_authoritative_control_test',
   'record_authoritative_evidence',
   'create_authoritative_finding',
   'complete_authoritative_retest'
