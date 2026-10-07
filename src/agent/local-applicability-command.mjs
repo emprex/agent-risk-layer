@@ -92,6 +92,65 @@ export function parseLocalApplicabilityCommand(request) {
 }
 
 
+export function focusLocalApplicabilityControl(
+  workflowState,
+  controlDetail,
+  requestedControlId
+) {
+  const controlId = clean(requestedControlId).toUpperCase();
+  const snapshotId =
+    workflowState?.authoritativeArtifacts
+      ?.assessmentContext?.systemSnapshotId || null;
+
+  if (
+    !/^ARL-KB-\d{3}$/.test(controlId) ||
+    !snapshotId ||
+    controlDetail?.systemSnapshot?.id !== snapshotId ||
+    controlDetail?.control?.id !== controlId ||
+    controlDetail?.chain?.currentStage !== 'applicability'
+  ) {
+    return null;
+  }
+
+  return {
+    ...workflowState,
+    stage: 'control_applicability_required',
+    blocked: true,
+    canAutoAdvance: false,
+    blockers: [
+      {
+        code: 'control_applicability_required',
+        source: 'control_intelligence_detail',
+        userActionRequired: true
+      }
+    ],
+    scopedControl: {
+      controlId,
+      currentStage: 'applicability',
+      chainStatus:
+        controlDetail?.chain?.status ||
+        controlDetail?.chain?.chainStatus ||
+        'context_required',
+      nextAction:
+        controlDetail?.chain?.nextAction ||
+        'Confirm whether this canonical control applies to the current assessed agent and snapshot.',
+      deploymentImpact:
+        controlDetail?.chain?.deploymentImpact || 'hold'
+    },
+    nextAllowedAction: {
+      name: 'resolve_control_applicability',
+      actor: 'user',
+      requiresUserInput: true,
+      reason:
+        'The operator explicitly selected a canonical Control Intelligence control on the current authoritative snapshot. Applicability remains a human decision.',
+      controlId,
+      caseId: null
+    },
+    deploymentDecisionWritten: false,
+    humanReviewRequired: true
+  };
+}
+
 export function localApplicabilityCandidateIds(workflowState) {
   const scoped =
     workflowState?.stage === 'control_applicability_required'
