@@ -209,8 +209,28 @@ export function buildFullProfileEvidenceWorkQueue({
         const check =
           canonicalCheck(knowledge);
 
-        const classification =
+        let classification =
           classifyControl(control);
+
+        const canonicalCheckAvailable =
+          Boolean(check.objective) &&
+          Boolean(check.method) &&
+          check.requiredEvidence.length > 0 &&
+          Boolean(check.passCondition) &&
+          Boolean(check.failCondition);
+
+        if (
+          classification.classification ===
+            CLASSIFICATIONS.HUMAN_ONLY &&
+          !canonicalCheckAvailable
+        ) {
+          classification = {
+            classification:
+              CLASSIFICATIONS.UNAVAILABLE,
+            reason:
+              'Canonical Risk Knowledge test/evidence requirements are unavailable. ARL fails closed instead of asking for an unbounded or empty human review.'
+          };
+        }
 
         return {
           controlId: control.controlId,
