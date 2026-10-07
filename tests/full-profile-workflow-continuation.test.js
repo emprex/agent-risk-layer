@@ -270,3 +270,95 @@ test('candidate automation is not treated as verified executable automation', ()
   assert.equal(state.nextAllowedAction.name, 'provide_required_manual_evidence');
   assert.equal(state.canAutoAdvance, false);
 });
+
+
+test('full-profile workflow drains verified automatic evidence work before a lower-id manual control', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        item('ARL-KB-004', 'test', {
+          testMode: 'manual',
+          automationStatus: 'unsupported'
+        }),
+        item('ARL-KB-005', 'test', {
+          testMode: 'automated',
+          automationStatus: 'verified'
+        })
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current',
+      summary: {
+        profileControls: 108
+      }
+    },
+    evidenceWorkQueue: {
+      available: true,
+      items: [
+        {
+          controlId: 'ARL-KB-004',
+          classification: 'human_only'
+        },
+        {
+          controlId: 'ARL-KB-005',
+          classification: 'machine_observable'
+        }
+      ]
+    }
+  });
+
+  assert.equal(state.stage, 'control_test_required');
+  assert.equal(state.scopedControl.controlId, 'ARL-KB-005');
+  assert.equal(
+    state.nextAllowedAction.name,
+    'run_authoritative_control_test'
+  );
+  assert.equal(state.canAutoAdvance, true);
+});
+
+test('full-profile workflow falls back to human evidence after automatic evidence work is exhausted', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: preparation(),
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_current' },
+      items: [
+        item('ARL-KB-004', 'test', {
+          testMode: 'manual',
+          automationStatus: 'unsupported'
+        }),
+        item('ARL-KB-005', 'deployment_decision')
+      ]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_current',
+      summary: {
+        profileControls: 108
+      }
+    },
+    evidenceWorkQueue: {
+      available: true,
+      items: [
+        {
+          controlId: 'ARL-KB-004',
+          classification: 'human_only'
+        }
+      ]
+    }
+  });
+
+  assert.equal(state.stage, 'manual_evidence_required');
+  assert.equal(state.scopedControl.controlId, 'ARL-KB-004');
+  assert.equal(state.canAutoAdvance, false);
+});
