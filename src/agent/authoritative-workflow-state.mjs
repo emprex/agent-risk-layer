@@ -695,7 +695,11 @@ function stateFromScopedControl({
           controlId: scopedControl.controlId,
           caseId: null,
           requirements:
-            queueItem?.requiredEvidence || []
+            (
+              queueItem?.humanOnlyRequirements?.length
+                ? queueItem.humanOnlyRequirements
+                : queueItem?.requiredEvidence
+            ) || []
         })
       });
     }
