@@ -109,7 +109,8 @@ test('conclusive manual evidence parses bounded checklist items', () => {
             evidenceReference:
               'policy:audit-record-1',
             observation:
-              'The record contains the required reconstruction fields.'
+              'The record contains the required reconstruction fields.',
+            satisfied: true
           }
         ]
       })
@@ -120,5 +121,91 @@ test('conclusive manual evidence parses bounded checklist items', () => {
   assert.equal(
     result.evidenceChecklist[0].evidenceReference,
     'policy:audit-record-1'
+  );
+});
+
+
+test('conclusive manual evidence derives failed when any canonical checklist item is unsatisfied', () => {
+  const result =
+    parseLocalManualEvidenceCommand(
+      'Record manual evidence ' +
+      JSON.stringify({
+        controlId: 'ARL-KB-090',
+        result: 'failed',
+        observedResult:
+          'One required evidence item is not satisfied.',
+        sourceReference:
+          'manual-review:test',
+        evidenceChecklist: [
+          {
+            requirement:
+              'Documented audit reconstruction record',
+            evidenceReference:
+              'policy:audit-record-1',
+            observation:
+              'The record is missing the required actor identity field.',
+            satisfied: false
+          }
+        ]
+      })
+    );
+
+  assert.equal(result.result, 'failed');
+});
+
+test('manual evidence rejects a claimed pass when the checklist deterministically derives failure', () => {
+  assert.throws(
+    () =>
+      parseLocalManualEvidenceCommand(
+        'Record manual evidence ' +
+        JSON.stringify({
+          controlId: 'ARL-KB-090',
+          result: 'passed',
+          observedResult:
+            'The operator attempted to claim a pass.',
+          sourceReference:
+            'manual-review:test',
+          evidenceChecklist: [
+            {
+              requirement:
+                'Documented audit reconstruction record',
+              evidenceReference:
+                'policy:audit-record-1',
+              observation:
+                'The record is missing the required actor identity field.',
+              satisfied: false
+            }
+          ]
+        })
+      ),
+    /deterministically derives failed/
+  );
+});
+
+test('conclusive manual evidence requires boolean checklist satisfaction assertions', () => {
+  assert.throws(
+    () =>
+      parseLocalManualEvidenceCommand(
+        'Record manual evidence ' +
+        JSON.stringify({
+          controlId: 'ARL-KB-090',
+          result: 'passed',
+          observedResult:
+            'The operator supplied evidence without a structured satisfaction value.',
+          sourceReference:
+            'manual-review:test',
+          evidenceChecklist: [
+            {
+              requirement:
+                'Documented audit reconstruction record',
+              evidenceReference:
+                'policy:audit-record-1',
+              observation:
+                'The record contains the required reconstruction fields.'
+            }
+          ]
+        })
+      ),
+    /requires a boolean satisfied value/
   );
 });
