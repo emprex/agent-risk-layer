@@ -1023,14 +1023,29 @@ export async function getAuthoritativeWorkflowState({
       hasMore: false
     };
 
-    const { listRiskKnowledge } =
+    const {
+      listRiskKnowledge,
+      getRiskKnowledgeEntry
+    } =
       await import('../risk-knowledge.js');
 
-    riskKnowledge =
+    const riskKnowledgeIndex =
       await listRiskKnowledge({
         limit: 250,
         offset: 0
       });
+
+    const detailedItems =
+      await Promise.all(
+        (riskKnowledgeIndex?.items || []).map((item) =>
+          getRiskKnowledgeEntry(item.id)
+        )
+      );
+
+    riskKnowledge = {
+      ...riskKnowledgeIndex,
+      items: detailedItems.filter(Boolean)
+    };
 
     const metadataByControl =
       new Map(
