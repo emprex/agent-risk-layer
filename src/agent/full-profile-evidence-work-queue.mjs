@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import {
   deriveControlExecutionPolicy
 } from './control-execution-policy.mjs';
@@ -47,6 +49,17 @@ function normalizeRequirement(value) {
     .replace(/\s+/g, ' ');
 }
 
+function stableHumanBatchId(requirements) {
+  const digest =
+    crypto
+      .createHash('sha256')
+      .update(JSON.stringify(requirements))
+      .digest('hex')
+      .slice(0, 12);
+
+  return `human_evidence_batch_${digest}`;
+}
+
 function buildHumanReviewBatches(items) {
   const grouped = new Map();
 
@@ -87,9 +100,9 @@ function buildHumanReviewBatches(items) {
           String(right.controls[0]?.controlId || '')
         )
     )
-    .map((group, index) => ({
+    .map((group) => ({
       batchId:
-        `human_evidence_batch_${String(index + 1).padStart(3, '0')}`,
+        stableHumanBatchId(group.requirements),
       requirements: group.requirements,
       controlIds:
         group.controls.map((item) => item.controlId),
