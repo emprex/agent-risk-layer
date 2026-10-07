@@ -1016,7 +1016,10 @@ export async function getAuthoritativeWorkflowState({
     userId &&
     preparation.assessmentContext?.available === true
   ) {
-    const { getControlIntelligence } =
+    const {
+      getControlIntelligence,
+      getControlIntelligenceControl
+    } =
       await import('../control-intelligence.js');
 
     const firstPage =
