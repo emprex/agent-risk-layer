@@ -31,6 +31,7 @@ import {
 import { db, id, nowIso } from '../db.js';
 import { intelligenceDigest } from '../control-intelligence-core.js';
 import { buildControlWorkQueue } from './control-work-queue.mjs';
+import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
 
 
 export async function runLocalAssessment(repositoryPath, request, options) {
@@ -47,6 +48,44 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^show pilot batch plan[.!?]*$/i.test(request.trim())) {
+    const pages = [];
+    for (let offset = 0; offset < 250; offset += 50) {
+      const page = await getControlIntelligence({
+        projectId: options.projectId,
+        userId: options.userId,
+        limit: 50,
+        offset
+      });
+      pages.push(page);
+      if (!page.hasMore) break;
+    }
+    const queue = buildControlWorkQueue(pages);
+    if (!queue.complete) throw new Error('Pilot plan requires the complete current control queue.');
+    const controlIds = Array.from({length: 12}, (_, n) =>
+      'ARL-KB-' + String(n + 7).padStart(3, '0')
+    );
+    const details = await Promise.all(controlIds.map(controlId =>
+      getControlIntelligenceControl({
+        projectId: options.projectId,
+        controlId,
+        userId: options.userId
+      })
+    ));
+    const plan = buildPilotBatchPlan(queue, details, controlIds);
+    return {
+      canonicalData: {
+        pilotBatchPlan: plan,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'KB-007 to KB-018 pilot plan (read-only):\n' +
+        JSON.stringify(plan, null, 2) +
+        '\nNo tests authorised or executed; no evidence promoted; HOLD unchanged.'
+    };
+  }
+
   if (/^show control work queue[.!?]*$/i.test(request.trim())) {
     const pages = [];
     for (let offset = 0; offset < 250; offset += 50) {
