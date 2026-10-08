@@ -22,6 +22,7 @@ import {
   assessControlApplicabilityFromLocalOwnerAttestation,
   closeControlFinding,
   getControlIntelligenceControl,
+  getControlIntelligence,
   recordControlEvidence,
   recordControlTestExecution,
   recordDeploymentDecision
@@ -29,6 +30,7 @@ import {
 
 import { db, id, nowIso } from '../db.js';
 import { intelligenceDigest } from '../control-intelligence-core.js';
+import { buildControlWorkQueue } from './control-work-queue.mjs';
 
 
 export async function runLocalAssessment(repositoryPath, request, options) {
@@ -45,6 +47,45 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^show control work queue[.!?]*$/i.test(request.trim())) {
+    const pages = [];
+    for (let offset = 0; offset < 250; offset += 50) {
+      const page = await getControlIntelligence({
+        projectId: options.projectId,
+        userId: options.userId,
+        limit: 50,
+        offset
+      });
+      pages.push(page);
+      if (!page.hasMore) break;
+    }
+    const queue = buildControlWorkQueue(pages);
+    if (!queue.complete) throw new Error('Incomplete authoritative work queue: pagination must be complete.');
+    const counts = Object.fromEntries(
+      Object.entries(queue.lanes).map(([key, values]) => [key, values.length])
+    );
+    return {
+      canonicalData: {
+        controlWorkQueue: queue,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Authoritative control work queue (read-only): ' +
+        JSON.stringify({
+          snapshotId: queue.systemSnapshotId,
+          total: queue.total,
+          laneCounts: counts,
+          nextIndependentControls: [
+            ...queue.lanes.evidence_collection,
+            ...queue.lanes.test_planning,
+            ...queue.lanes.human_applicability
+          ].slice(0, 12).map(item => ({ controlId: item.controlId, lane: item.lane }))
+        }, null, 2) +
+        '\\nNo test executed, no finding closed, no readiness inferred.'
+    };
+  }
+
   if (/^continue(?: assessment)?[.!?]*$/i.test(request.trim())) {
     let current =
       await runArlAgent(
