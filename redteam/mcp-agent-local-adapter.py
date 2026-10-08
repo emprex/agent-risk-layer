@@ -221,6 +221,8 @@ async def exercise_data_handling(request: dict[str, Any]) -> dict[str, Any]:
             server_names=[],
             functions=[restricted_sink],
             context=running_app.context,
+            # Deliberately no owner policy: this probes the unconfigured
+            # framework default, not an authorised production data boundary.
         )
 
         async with agent:
@@ -252,6 +254,7 @@ async def exercise_data_handling(request: dict[str, Any]) -> dict[str, Any]:
             "classificationLabelObserved": (
                 call.get("classification") == "restricted"
             ),
+            "toolPolicyConfigured": False,
         }
 
     if len(calls) == 0 and getattr(result, "isError", False):
@@ -311,6 +314,7 @@ def data_response(observation: dict[str, Any]) -> dict[str, Any]:
             "classificationLabelObserved": bool(
                 observation.get("classificationLabelObserved")
             ),
+            "toolPolicyConfigured": observation.get("toolPolicyConfigured") is True,
         },
         "telemetry": {
             "totalTokens": 0,
