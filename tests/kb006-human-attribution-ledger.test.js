@@ -19,7 +19,7 @@ test('human attribution attestation must be tied to persisted open finding, fail
   assert.match(block, /further_investigation_required/);
   assert.match(block, /reason\.length < 40/);
   assert.match(block, /item\.status === 'open'/);
-  assert.match(block, /test\.findingId === finding\?\.id/);
+  assert.match(block, /item\.findingId === finding\?\.id/);
   assert.match(block, /input\.systemSnapshotId !== detail\?\.systemSnapshot\?\.id/);
   assert.match(block, /INSERT INTO events/);
   assert.match(block, /actorId: options\.userId/);
