@@ -855,6 +855,250 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     };
   }
 
+  if (request.startsWith('Record active control test result ')) {
+    let input;
+
+    try {
+      input = JSON.parse(
+        request.slice(
+          'Record active control test result '.length
+        )
+      );
+    } catch {
+      throw new Error(
+        'Record active control test result requires a valid JSON object.'
+      );
+    }
+
+    const controlId =
+      String(input?.controlId || '').trim();
+
+    const result =
+      String(input?.result || '')
+        .trim()
+        .toLowerCase();
+
+    const observedResult =
+      String(input?.observedResult || '').trim();
+
+    const sourceReference =
+      String(input?.sourceReference || '').trim();
+
+    const limitations =
+      String(input?.limitations || '').trim();
+
+    const checklist =
+      Array.isArray(input?.evidenceChecklist)
+        ? input.evidenceChecklist
+        : [];
+
+    if (
+      !/^ARL-KB-\d{3}$/.test(controlId) ||
+      !['passed', 'failed', 'inconclusive'].includes(result) ||
+      !observedResult ||
+      !sourceReference ||
+      !limitations
+    ) {
+      throw new Error(
+        'Active control test result requires controlId, passed|failed|inconclusive result, observedResult, sourceReference and limitations.'
+      );
+    }
+
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+
+    const action =
+      state?.nextAllowedAction || {};
+
+    if (
+      state?.stage !==
+        'authorised_active_test_execution_required' ||
+      action.name !==
+        'perform_authorised_control_test' ||
+      action.controlId !== controlId ||
+      action.actor !== 'user' ||
+      action.requiresUserInput !== true
+    ) {
+      throw new Error(
+        'Active control test results can only be recorded at the current authorised active-test execution gate.'
+      );
+    }
+
+    const systemSnapshotId =
+      state?.authoritativeArtifacts
+        ?.assessmentContext?.systemSnapshotId ||
+      null;
+
+    if (!systemSnapshotId) {
+      throw new Error(
+        'Active control test result requires the current authoritative snapshot.'
+      );
+    }
+
+    const detail =
+      await getControlIntelligenceControl({
+        projectId: options.projectId,
+        controlId,
+        userId: options.userId
+      });
+
+    if (
+      detail?.systemSnapshot?.id !==
+        systemSnapshotId ||
+      detail?.chain?.currentStage !== 'test'
+    ) {
+      throw new Error(
+        'Active control test result is not bound to the current authoritative control test stage.'
+      );
+    }
+
+    const planEvidence =
+      (detail?.evidence || []).find(
+        (item) =>
+          item?.sourceType ===
+            'active_test_plan_authorisation' &&
+          item?.sourceReference ===
+            action.authorisationReference &&
+          item?.verificationState === 'verified' &&
+          item?.retentionStatus === 'active'
+      );
+
+    if (!planEvidence) {
+      throw new Error(
+        'The verified active-test plan authorisation for this control and snapshot was not found.'
+      );
+    }
+
+    const expectedRequirements =
+      Array.isArray(action.requirements)
+        ? action.requirements
+        : [];
+
+    const checklistByRequirement =
+      new Map(
+        checklist.map((item) => [
+          String(item?.requirement || '').trim(),
+          item
+        ])
+      );
+
+    const missing =
+      expectedRequirements.filter(
+        (requirement) =>
+          !checklistByRequirement.has(requirement)
+      );
+
+    if (missing.length) {
+      throw new Error(
+        `Active control test result is missing canonical observations for: ${
+          missing.join('; ')
+        }`
+      );
+    }
+
+    if (
+      result !== 'inconclusive' &&
+      expectedRequirements.some(
+        (requirement) =>
+          checklistByRequirement.get(requirement)
+            ?.satisfied !== true
+      )
+    ) {
+      throw new Error(
+        'A conclusive active control test result requires every current active-test evidence requirement to be explicitly satisfied by an observed test record.'
+      );
+    }
+
+    const checklistSummary =
+      expectedRequirements
+        .map((requirement) => {
+          const item =
+            checklistByRequirement.get(requirement);
+
+          return [
+            requirement,
+            String(
+              item?.observation || ''
+            ).trim()
+          ]
+            .filter(Boolean)
+            .join(': ');
+        })
+        .join(' | ');
+
+    const execution =
+      await recordControlTestExecution({
+        projectId: options.projectId,
+        controlId,
+        userId: options.userId,
+        input: {
+          systemSnapshotId,
+          executionKind: 'initial',
+          executionMethod:
+            'authorised_manual_active_test',
+          result,
+          observedResult:
+            [
+              observedResult,
+              checklistSummary
+            ].filter(Boolean).join(' | '),
+          inputReference:
+            sourceReference,
+          limitations
+        }
+      });
+
+    const evidence =
+      await recordControlEvidence({
+        projectId: options.projectId,
+        controlId,
+        userId: options.userId,
+        input: {
+          systemSnapshotId,
+          evidenceClass:
+            'human_provided',
+          sourceType:
+            'authorised_active_test_result',
+          sourceReference,
+          testExecutionId:
+            execution.id,
+          limitations:
+            [
+              limitations,
+              `Bound to active-test authorisation ${
+                action.authorisationReference
+              }.`
+            ].join(' ')
+        }
+      });
+
+    await verifyExplicitHumanEvidence({
+      projectId: options.projectId,
+      evidenceId: evidence.id,
+      userId: options.userId,
+      controlId,
+      verificationScope:
+        'explicit_authorised_active_control_test_result',
+      reason:
+        `The accountable local operator explicitly submitted the observed bounded active-test result for ${
+          controlId
+        } on the current frozen snapshot.`
+    });
+
+    return runArlAgent(
+      repositoryPath,
+      'Where are we?',
+      options
+    );
+  }
+
   const humanEvidenceBatch =
     parseLocalHumanEvidenceBatchCommand(request);
 
