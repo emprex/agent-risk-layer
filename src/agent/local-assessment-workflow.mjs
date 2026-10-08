@@ -141,6 +141,58 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     );
   }
 
+  if (/^review kb-006 finding[.!?]*$/i.test(request.trim())) {
+    // Read-only human triage: the original test, evidence, and finding must
+    // remain authoritative until a separately reviewed disposition exists.
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId,
+      controlId: 'ARL-KB-006',
+      userId: options.userId
+    });
+    const tests = [...(detail?.tests || []), ...(detail?.testHistory || [])];
+    const failed = tests.filter(item =>
+      item?.result === 'failed' && item?.executionKind !== 'retest'
+    );
+    const findings = (detail?.findings || []).map(item => ({
+      id: item.id,
+      status: item.status,
+      title: item.title || null,
+      description: item.description || null,
+      systemSnapshotId: item.systemSnapshotId || null
+    }));
+    const review = {
+      schema: 'arl.agent.finding-attribution-review.v1',
+      controlId: 'ARL-KB-006',
+      systemSnapshotId: detail?.systemSnapshot?.id || null,
+      findings,
+      initialFailures: failed.map(item => ({
+        id: item.id,
+        result: item.result,
+        systemSnapshotId: item.systemSnapshotId || null,
+        inputReference: item.inputReference || null,
+        observedResult: item.observedResult || null,
+        failureReason: item.failureReason || null,
+        findingId: item.findingId || null
+      })),
+      interpretation: 'RT-DATA-001 created a permitted in-memory sink without a configured owner tool-data policy. Canary forwarding alone does not prove a policy bypass or unauthorised recipient. The original failure and finding remain immutable historical evidence.',
+      disposition: 'human_review_required',
+      securityStateChanged: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    };
+    return {
+      canonicalData: {
+        findingAttributionReview: review,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'KB-006 attribution review (read-only):\\n' +
+        JSON.stringify(review, null, 2) +
+        '\\nNo finding was closed, no test was changed, and no deployment decision was written.'
+    };
+  }
+
   if (/^show assessment context[.!?]*$/i.test(request.trim())) {
     return showLocalAssessmentContext({
       projectId: options.projectId,
