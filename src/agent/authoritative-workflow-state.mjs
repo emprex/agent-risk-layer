@@ -291,7 +291,9 @@ function action({
   reason,
   controlId = null,
   caseId = null,
-  requirements = []
+  requirements = [],
+  testMethod = null,
+  authorisationReference = null
 }) {
   return {
     name,
@@ -303,8 +305,22 @@ function action({
     requirements:
       Array.isArray(requirements)
         ? requirements
-        : []
+        : [],
+    testMethod,
+    authorisationReference
   };
+}
+
+function verifiedActiveTestPlan(scopedControl) {
+  const evidence =
+    scopedControl?.authoritativeDetail?.evidence || [];
+
+  return evidence.find((item) =>
+    item?.sourceType ===
+      'active_test_plan_authorisation' &&
+    item?.verificationState === 'verified' &&
+    item?.retentionStatus === 'active'
+  ) || null;
 }
 
 function stateResult({
