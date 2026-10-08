@@ -656,6 +656,43 @@ function stateFromScopedControl({
         });
       }
 
+      const activeTestPlan =
+        verifiedActiveTestPlan(scopedControl);
+
+      if (activeTestPlan) {
+        return stateResult({
+          ...common,
+          stage:
+            'authorised_active_test_execution_required',
+          blockers: [
+            {
+              code:
+                'authorised_active_test_execution_required',
+              source:
+                'canonical_evidence_requirement',
+              userActionRequired: true
+            }
+          ],
+          nextAllowedAction: action({
+            name:
+              'perform_authorised_control_test',
+            actor: 'user',
+            requiresUserInput: true,
+            reason:
+              'A bounded active-test plan is already human-authorised for this exact control and snapshot. Execution evidence is still required; authorisation alone cannot establish PASS or FAIL.',
+            controlId:
+              scopedControl.controlId,
+            caseId: null,
+            requirements:
+              queueItem.activeTestRequirements || [],
+            testMethod:
+              queueItem.method || null,
+            authorisationReference:
+              activeTestPlan.sourceReference || null
+          })
+        });
+      }
+
       return stateResult({
         ...common,
         stage:
@@ -681,7 +718,9 @@ function stateFromScopedControl({
             scopedControl.controlId,
           caseId: null,
           requirements:
-            queueItem.activeTestRequirements || []
+            queueItem.activeTestRequirements || [],
+          testMethod:
+            queueItem.method || null
         })
       });
     }
