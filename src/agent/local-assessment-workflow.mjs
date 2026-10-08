@@ -141,6 +141,78 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     );
   }
 
+  if (request.startsWith('Record KB-006 attribution review ')) {
+    let input;
+    try {
+      input = JSON.parse(request.slice('Record KB-006 attribution review '.length));
+    } catch {
+      throw new Error('KB-006 attribution review requires valid JSON.');
+    }
+    if (!input || Array.isArray(input) || typeof input !== 'object') {
+      throw new Error('KB-006 attribution review requires a JSON object.');
+    }
+    const allowed = new Set(['attribution_disputed', 'further_investigation_required']);
+    const disposition = String(input.disposition || '');
+    const reason = String(input.reason || '').trim();
+    if (!allowed.has(disposition) || reason.length < 40 || reason.length > 2000) {
+      throw new Error('Explicit human disposition (attribution_disputed or further_investigation_required) and 40-2000 character reason required. Neither closes the finding.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId,
+      controlId: 'ARL-KB-006',
+      userId: options.userId
+    });
+    const finding = (detail?.findings || []).find(item =>
+      item.id === input.findingId && item.status === 'open'
+    );
+    const tests = [...new Map(
+      [...(detail?.tests || []), ...(detail?.testHistory || [])]
+        .filter(item => item?.id)
+        .map(item => [item.id, item])
+    ).values()];
+    const test = tests.find(item =>
+      item.id === input.testExecutionId &&
+      item.result === 'failed' &&
+      item.executionKind !== 'retest' &&
+      item.findingId === finding?.id &&
+      item.systemSnapshotId === detail?.systemSnapshot?.id
+    );
+    if (!finding || !test || input.systemSnapshotId !== detail?.systemSnapshot?.id) {
+      throw new Error('Review must match one open KB-006 finding and its historical failed test on the exact snapshot.');
+    }
+    const entry = {
+      schema: 'arl.agent.finding-attribution-human-review.v1',
+      projectId: options.projectId,
+      controlId: 'ARL-KB-006',
+      systemSnapshotId: detail.systemSnapshot.id,
+      findingId: finding.id,
+      testExecutionId: test.id,
+      disposition,
+      reason,
+      actorId: options.userId,
+      recordedAt: nowIso(),
+      findingClosed: false,
+      deploymentDecisionWritten: false
+    };
+    // Append-only operator attestation: no changes to findings, tests or evidence.
+    const eventId = id('evt_');
+    await db.prepare(`
+      INSERT INTO events (id, user_id, name, properties_json, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(eventId, options.userId, 'arl.kb006.attribution_human_review',
+      JSON.stringify(entry), entry.recordedAt);
+    return {
+      canonicalData: {
+        findingAttributionHumanReview: { ...entry, eventId },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Human KB-006 attribution review recorded as ' + eventId +
+        '. Original finding and failed test remain unchanged; assessment stays HOLD.'
+    };
+  }
+
   if (/^review kb-006 finding[.!?]*$/i.test(request.trim())) {
     // Read-only human triage: the original test, evidence, and finding must
     // remain authoritative until a separately reviewed disposition exists.
@@ -149,7 +221,11 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       controlId: 'ARL-KB-006',
       userId: options.userId
     });
-    const tests = [...(detail?.tests || []), ...(detail?.testHistory || [])];
+    const tests = [...new Map(
+      [...(detail?.tests || []), ...(detail?.testHistory || [])]
+        .filter(item => item?.id)
+        .map(item => [item.id, item])
+    ).values()];
     const failed = tests.filter(item =>
       item?.result === 'failed' && item?.executionKind !== 'retest'
     );
@@ -160,8 +236,21 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       description: item.description || null,
       systemSnapshotId: item.systemSnapshotId || null
     }));
+    const entries = await db.prepare(
+      "SELECT id, properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 200"
+    ).all(options.userId, 'arl.kb006.attribution_human_review');
+    const historicalReviews = entries.flatMap(row => {
+      try {
+        const value = JSON.parse(row.properties_json || '{}');
+        return value.projectId === options.projectId &&
+          value.systemSnapshotId === detail?.systemSnapshot?.id &&
+          value.controlId === 'ARL-KB-006'
+          ? [{ ...value, eventId: row.id }] : [];
+      } catch { return []; }
+    });
     const review = {
       schema: 'arl.agent.finding-attribution-review.v1',
+      historicalReviews,
       controlId: 'ARL-KB-006',
       systemSnapshotId: detail?.systemSnapshot?.id || null,
       findings,
