@@ -25,6 +25,18 @@ test('local workflow exposes explicit active-test authorisation and result comma
   );
   assert.match(
     source,
+    /Execute authorised active control test/
+  );
+  assert.match(
+    source,
+    /RT-DATA-001/
+  );
+  assert.match(
+    source,
+    /authorised_local_active_test/
+  );
+  assert.match(
+    source,
     /Record active control test result/
   );
   assert.match(
