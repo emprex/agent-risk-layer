@@ -586,6 +586,275 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       options
     );
   }
+  if (request.startsWith('Authorise active control test ')) {
+    let input;
+
+    try {
+      input = JSON.parse(
+        request.slice(
+          'Authorise active control test '.length
+        )
+      );
+    } catch {
+      throw new Error(
+        'Authorise active control test requires a valid JSON object.'
+      );
+    }
+
+    const requestedControlId =
+      String(input?.controlId || '').trim();
+
+    if (
+      !/^ARL-KB-\d{3}$/.test(requestedControlId)
+    ) {
+      throw new Error(
+        'Authorise active control test requires a valid controlId.'
+      );
+    }
+
+    const current =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    const state =
+      current?.canonicalData?.workflowState || null;
+
+    const action =
+      state?.nextAllowedAction || {};
+
+    if (
+      state?.stage !== 'active_test_plan_required' ||
+      action.name !==
+        'define_and_authorise_control_test' ||
+      action.actor !== 'human' ||
+      action.requiresUserInput !== true ||
+      action.controlId !== requestedControlId
+    ) {
+      throw new Error(
+        'Active control test authorisation is only accepted for the current authoritative active-test-plan gate.'
+      );
+    }
+
+    const systemSnapshotId =
+      state?.authoritativeArtifacts
+        ?.assessmentContext?.systemSnapshotId ||
+      null;
+
+    const expectedRevision =
+      state?.authoritativeArtifacts
+        ?.frozenTarget?.revision ||
+      process.env.ARL_EXPECTED_TARGET_SHA ||
+      '';
+
+    if (!systemSnapshotId || !expectedRevision) {
+      throw new Error(
+        'Active control test authorisation requires the current authoritative snapshot and frozen target revision.'
+      );
+    }
+
+    const origin =
+      `http://127.0.0.1:${
+        process.env.ARL_TARGET_ADAPTER_PORT || '8787'
+      }`;
+
+    const adapterGate =
+      await verifyLocalTargetAdapter({
+        repositoryPath,
+        expectedRevision,
+        origin
+      });
+
+    if (adapterGate.available !== true) {
+      return blockedLocalAdapterResult(
+        current,
+        adapterGate
+      );
+    }
+
+    const marker =
+      `ARL active control test ${
+        requestedControlId
+      }`;
+
+    const now = Date.now();
+
+    const active =
+      (await listRedTeamAuthorisations(options))
+        .filter((item) =>
+          item.status === 'active' &&
+          Date.parse(item.windowStart) <= now &&
+          Date.parse(item.windowEnd) > now &&
+          item.environment === 'local' &&
+          item.endpointOrigin === origin &&
+          Array.isArray(item.permittedActions) &&
+          item.permittedActions.includes(marker)
+        );
+
+    if (active.length > 1) {
+      throw new Error(
+        'Multiple active Rules of Engagement records exist for this control test. Revoke the duplicate authorisation before continuing.'
+      );
+    }
+
+    const authorisation =
+      active[0] ||
+      await createRedTeamAuthorisation({
+        ...options,
+        input: {
+          environment: 'local',
+          targetName:
+            `Local ${
+              path.basename(
+                path.resolve(repositoryPath || '.')
+              )
+            } ${
+              requestedControlId
+            }`,
+          endpointOrigin: origin,
+          authorityBasis: 'owner',
+          authorisedBy:
+            os.userInfo().username,
+          authorisedRole:
+            'Local repository operator',
+          emergencyContact:
+            `Local terminal operator ${
+              os.userInfo().username
+            }`,
+          windowStart:
+            new Date(now - 1000).toISOString(),
+          windowEnd:
+            new Date(
+              now + 3600000
+            ).toISOString(),
+          permittedActions: [
+            marker,
+            'Bounded synthetic runtime or abuse-case evaluation for the current canonical evidence requirements'
+          ],
+          prohibitedActions: [
+            'Production effects',
+            'External actions',
+            'Real credentials or non-synthetic sensitive data'
+          ],
+          dataClassification:
+            'synthetic-only',
+          retentionDays: 30,
+          syntheticDataOnly: true,
+          dryRunToolsOnly: true,
+          noProductionEffects: true,
+          confirmation: ROE_CONFIRMATION
+        }
+      });
+
+    const sourceReference =
+      `roe:${authorisation.id}:control:${
+        requestedControlId
+      }`;
+
+    const detail =
+      await getControlIntelligenceControl({
+        projectId: options.projectId,
+        controlId: requestedControlId,
+        userId: options.userId
+      });
+
+    if (
+      detail?.systemSnapshot?.id !==
+      systemSnapshotId ||
+      detail?.chain?.currentStage !== 'test'
+    ) {
+      throw new Error(
+        'Active control test authorisation is not bound to the current authoritative control test stage.'
+      );
+    }
+
+    const existingPlan =
+      (detail?.evidence || []).find(
+        (item) =>
+          item?.sourceType ===
+            'active_test_plan_authorisation' &&
+          item?.sourceReference ===
+            sourceReference &&
+          item?.retentionStatus === 'active'
+      );
+
+    if (!existingPlan) {
+      const evidence =
+        await recordControlEvidence({
+          projectId: options.projectId,
+          controlId: requestedControlId,
+          userId: options.userId,
+          input: {
+            systemSnapshotId,
+            evidenceClass:
+              'human_provided',
+            sourceType:
+              'active_test_plan_authorisation',
+            sourceReference,
+            limitations:
+              [
+                'Human authorisation covers only the current frozen local/staging target and the canonical active-test requirements for this control.',
+                'Synthetic data only; dry-run tools only; no production or external effects.',
+                'Authorisation is not evidence that the control passes or fails.'
+              ].join(' ')
+          }
+        });
+
+      await verifyExplicitHumanEvidence({
+        projectId: options.projectId,
+        evidenceId: evidence.id,
+        userId: options.userId,
+        controlId: requestedControlId,
+        verificationScope:
+          'explicit_active_control_test_authorisation',
+        reason:
+          `The accountable local operator explicitly authorised the bounded active-test plan for ${
+            requestedControlId
+          } on the current frozen snapshot.`
+      });
+    }
+
+    const updated =
+      await runArlAgent(
+        repositoryPath,
+        'Where are we?',
+        options
+      );
+
+    return {
+      ...updated,
+      canonicalData: {
+        ...(updated?.canonicalData || {}),
+        activeTestPlan: {
+          schema:
+            'arl.agent.active-test-plan.v1',
+          controlId:
+            requestedControlId,
+          systemSnapshotId,
+          targetRevision:
+            expectedRevision,
+          authorisationId:
+            authorisation.id,
+          endpointOrigin: origin,
+          syntheticDataOnly: true,
+          dryRunToolsOnly: true,
+          noProductionEffects: true,
+          method:
+            action.testMethod || null,
+          requirements:
+            action.requirements || [],
+          executionStatus:
+            'authorised_not_executed'
+        },
+        securityStateChanged: true,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      }
+    };
+  }
+
   const humanEvidenceBatch =
     parseLocalHumanEvidenceBatchCommand(request);
 
