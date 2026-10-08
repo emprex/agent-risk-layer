@@ -15,13 +15,17 @@ test('mcp-agent bounded adapter is exact-revision and loopback bound', () => {
   assert.match(source, /ARL_TARGET_TOKEN/);
 });
 
-test('mcp-agent bounded adapter supports only network boundary cases', () => {
+test('mcp-agent bounded adapter supports reviewed network and KB-006 data probes', () => {
   assert.match(
     source,
-    /SUPPORTED_CASES = \{"RT-TOOL-004", "RT-TOOL-005"\}/
+    /SUPPORTED_CASES = \{"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"\}/
   );
   assert.match(source, /unsupported_bounded_case/);
   assert.match(source, /await agent\.call_tool\("http_fetch"/);
+  assert.match(source, /"restricted_sink"/);
+  assert.match(source, /ARL_RESTRICTED_CANARY_KB006/);
+  assert.match(source, /arl\.active-control-observation\.v1/);
+  assert.match(source, /restrictedMarkerForwardedUnredacted/);
 });
 
 test('mcp-agent bounded adapter suppresses outbound network side effects', () => {
