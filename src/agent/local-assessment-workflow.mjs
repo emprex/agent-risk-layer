@@ -32,6 +32,7 @@ import { db, id, nowIso } from '../db.js';
 import { intelligenceDigest } from '../control-intelligence-core.js';
 import { buildControlWorkQueue } from './control-work-queue.mjs';
 import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
+import { buildPilotEvidenceGapMatrix } from './pilot-evidence-gap-matrix.mjs';
 
 
 export async function runLocalAssessment(repositoryPath, request, options) {
@@ -73,15 +74,17 @@ export async function runLocalAssessment(repositoryPath, request, options) {
       })
     ));
     const plan = buildPilotBatchPlan(queue, details, controlIds);
+    const evidenceGapMatrix = buildPilotEvidenceGapMatrix(plan, details);
     return {
       canonicalData: {
         pilotBatchPlan: plan,
+        pilotEvidenceGapMatrix: evidenceGapMatrix,
         securityStateChanged: false,
         deploymentDecisionWritten: false,
         humanReviewRequired: true
       },
       answer: 'KB-007 to KB-018 pilot plan (read-only):\n' +
-        JSON.stringify(plan, null, 2) +
+        JSON.stringify(evidenceGapMatrix, null, 2) +
         '\nNo tests authorised or executed; no evidence promoted; HOLD unchanged.'
     };
   }
