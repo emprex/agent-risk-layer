@@ -5296,10 +5296,10 @@
         "monitoring": "For ARL-KB-023, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-023 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-023: exact revised role-function authorization policy, version and evidence digest recorded.",
-          "ARL-KB-023: allowed synthetic role-function combinations succeed within documented tenant and function scope.",
-          "ARL-KB-023: low-privilege, alternate-method and missing-policy bypass variants denied before side effects with attributable logs.",
-          "ARL-KB-023: accountable human reviewer, residual exceptions and exact-retest decision recorded."
+          "ARL-KB-023: The exact revised role-function authorization policy, version and evidence digest are recorded.",
+          "ARL-KB-023: Authorised synthetic role-function combinations succeed within the documented tenant and function scope.",
+          "ARL-KB-023: Low-privilege, alternate-method and missing-policy bypass variants are denied before side effects, with attributable logs.",
+          "ARL-KB-023: An accountable human reviewer records residual exceptions and the exact-retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-023 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Enforce role and object authorization server-side on every route and service method; maintain negative authorization tests. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5414,7 +5414,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f3a6d7cb7c0caa202a6aca960f4aa73b060ad63cc65f3788da17dcb8836b7a22"
+      "content_digest": "a7e3378cd874fa79b9f231fd519c2a9344e08c2950b63a2b7d9f2d0a9fb6f467"
     },
     {
       "id": "ARL-KB-024",
