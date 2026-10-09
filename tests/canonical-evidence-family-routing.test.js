@@ -186,3 +186,22 @@ test('KB-012 routes all canonical experimentation-to-production boundary evidenc
     assert.deepEqual(plan[index].collectors, []);
   }
 });
+
+test('KB-013 keeps approved egress inventory human-owned and runtime network traces non-static', () => {
+  const requirements = [
+    'ARL-KB-013 assessed system, exact version, environment and network scope',
+    'Declared inventory of authorised external destinations, tools, webhooks, callbacks and egress routes',
+    'Relevant source, proxy, DNS, firewall, allowlist or tool configuration governing outbound access',
+    'Observed runtime DNS, HTTP, proxy, tool or network records for approved and attempted unapproved destinations',
+    'ARL-KB-013 tester identity, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.equal(plan.length, 5);
+  assert.deepEqual(plan.map(row=>row.mode), [
+    'machine_collectable', 'human_only', 'machine_collectable',
+    'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[2].collectors.includes('source_and_configuration'));
+  for (const index of [1,3,4]) assert.deepEqual(plan[index].collectors, []);
+});
