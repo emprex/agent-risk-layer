@@ -224,3 +224,22 @@ test('KB-014 retains credential ownership and lifecycle authority outside determ
   assert.deepEqual(plan[2].collectors, ['source_and_configuration']);
   for (const index of [1, 3, 4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-015 memory and vector-store evidence requires distinct source, runtime and human authority', () => {
+  const requirements = [
+    'ARL-KB-015 assessed system, version, environment and scope for Memory and vector stores are untracked',
+    'ARL-KB-015 control configuration or source location showing how reduce the likelihood and impact of memory and vector stores are untracked and make the remaining risk visible.',
+    'ARL-KB-015 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials',
+    'ARL-KB-015 policy, authorization, tool or audit events proving whether the tested memory and vector stores are untracked path executed',
+    'ARL-KB-015 tester identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.equal(plan.length, 5);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'machine_collectable',
+    'active_test_or_runtime', 'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[1].collectors.includes('source_and_configuration'));
+  for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
