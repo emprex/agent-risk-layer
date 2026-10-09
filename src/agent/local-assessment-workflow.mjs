@@ -33,38 +33,65 @@ import { intelligenceDigest } from '../control-intelligence-core.js';
 import { buildControlWorkQueue } from './control-work-queue.mjs';
 import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
 import { buildPilotEvidenceGapMatrix } from './pilot-evidence-gap-matrix.mjs';
+import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage.mjs';
 
 
-export async function runLocalAssessment(repositoryPath, request, options) {
-  if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
-  if (/(?:bounded test|retest)/i.test(request)) {
-    const authorisations = await listRedTeamAuthorisations(options);
-    const unsafe = authorisations.some(item => {
-      if (item.status !== 'active' || Date.parse(item.windowEnd) <= Date.now()) return false;
-      try {
-        const url = new URL(item.endpointOrigin);
-        return item.environment !== 'local' || url.protocol !== 'http:' ||
-          !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
-      } catch { return true; }
+async function readPilotBatch(options) {
+  const pages = [];
+  for (let offset = 0; offset < 250; offset += 50) {
+    const page = await getControlIntelligence({
+      projectId: options.projectId,
+      userId: options.userId,
+      limit: 50,
+      offset
     });
-    if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
+    pages.push(page);
+    if (!page.hasMore) break;
   }
+  const queue = buildControlWorkQueue(pages);
+  if (!queue.complete) throw new Error('Pilot plan requires the complete current control queue.');
+  const controlIds = Array.from({length: 12}, (_, n) =>
+    'ARL-KB-' + String(n + 7).padStart(3, '0')
+  );
+  const details = await Promise.all(controlIds.map(controlId =>
+    getControlIntelligenceControl({
+      projectId: options.projectId,
+      controlId,
+      userId: options.userId
+    if (/^show pilot evidence triage[.!?]*$/i.test(request.trim())) {
+    const { plan, details } = await readPilotBatch(options);
+    const triage = buildPilotEvidenceLineageTriage(plan, details);
+    return {
+      canonicalData: {
+        pilotEvidenceLineageTriage: triage,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Pilot KB-007 to KB-018 evidence lineage triage (read-only). ' +
+        'Review metadata candidates and missing requirements; no PASS, evidence verification, ' +
+        'finding closure, runtime test or deployment action was performed.'
+    };
+  }
+
   if (/^show pilot batch plan[.!?]*$/i.test(request.trim())) {
-    const pages = [];
-    for (let offset = 0; offset < 250; offset += 50) {
-      const page = await getControlIntelligence({
-        projectId: options.projectId,
-        userId: options.userId,
-        limit: 50,
-        offset
-      });
-      pages.push(page);
-      if (!page.hasMore) break;
-    }
-    const queue = buildControlWorkQueue(pages);
-    if (!queue.complete) throw new Error('Pilot plan requires the complete current control queue.');
-    const controlIds = Array.from({length: 12}, (_, n) =>
-      'ARL-KB-' + String(n + 7).padStart(3, '0')
+    const { plan, details } = await readPilotBatch(options);
+    const evidenceGapMatrix = buildPilotEvidenceGapMatrix(plan, details);
+    return {
+      canonicalData: {
+        pilotBatchPlan: plan,
+        pilotEvidenceGapMatrix: evidenceGapMatrix,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'KB-007 to KB-018 pilot plan (read-only):\n' +
+        JSON.stringify(evidenceGapMatrix, null, 2) +
+        '\nNo tests authorised or executed; no evidence promoted; HOLD unchanged.'
+    };
+  }
+
+   'ARL-KB-' + String(n + 7).padStart(3, '0')
     );
     const details = await Promise.all(controlIds.map(controlId =>
       getControlIntelligenceControl({
