@@ -164,3 +164,25 @@ test('immutable source version alone is not attributable approval', () => {
     'machine_collectable'
   );
 });
+
+test('KB-012 routes all canonical experimentation-to-production boundary evidence without inferring enforcement', () => {
+  const requirements = [
+    'ARL-KB-012 assessed system, exact version, environment and experimental-versus-production scope',
+    'Approved environment, identity, credential, network and provider configuration defining the experimentation-to-production boundary',
+    'Identity, network, provider, billing or audit evidence showing which experimental agents, notebooks, credentials and endpoints were observed',
+    'Bounded positive evidence showing the approved experimental workflow operates only with authorised sandbox resources',
+    'Bounded negative evidence showing an experimental or unofficial identity cannot reach the prohibited production-equivalent data, credential, tool or service path',
+    'Tester identity, role, timestamp and evidence digest binding the observations to the assessed version'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.equal(plan.length, 6);
+  assert.deepEqual(
+    plan.map(item => item.mode),
+    ['machine_collectable', 'human_only', 'active_test_or_runtime',
+      'active_test_or_runtime', 'active_test_or_runtime', 'human_only']
+  );
+  assert.deepEqual(plan[0].collectors, ['target_identity']);
+  for (const index of [1, 2, 3, 4, 5]) {
+    assert.deepEqual(plan[index].collectors, []);
+  }
+});
