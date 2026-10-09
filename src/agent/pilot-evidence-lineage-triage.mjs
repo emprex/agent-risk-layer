@@ -138,6 +138,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
       }
       return {
         requirementIndex: i + 1,
+        requirement: entry.requirement,
         mode: entry.mode,
         expectedCollectors: entry.collectors,
         observedCollectors: [...observedCollectorIds].sort(),
