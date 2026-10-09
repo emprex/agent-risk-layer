@@ -25,6 +25,7 @@ const HUMAN_ONLY_PATTERNS = Object.freeze([
   /\bresidual-risk\b/i,
   /\bresidual risk\b/i,
   /\borganisation-approved\b/i,
+  /\bauthoritative privileged-account inventory\b/i,
   /\basserted legal-basis\b/i,
   /\blegal-basis\b/i,
   /\bdecision record\b/i,
