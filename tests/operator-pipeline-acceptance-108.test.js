@@ -192,10 +192,10 @@ test('mixed assessment versions and blocked KB-006 cannot leak into active dossi
   const controlId=id(7);
   const wrong=detail(controlId);
   wrong.systemSnapshot.assessmentConfiguration.targetBinding.revision='f'.repeat(40);
-  // A mismatch between the observed SHA and the snapshot version is not a passing observation.
-  const result=buildAssessmentReviewDossiers({queue,details:[wrong],controlIds:[controlId]});
-  assert.equal(result.dossiers[0].summary.sourceMetadataCandidates,1);
-  assert.equal(result.evidenceAutomaticallyVerified,0);
+  // A mismatch between the snapshot Git binding and its version identifier fails closed.
+  assert.throws(() => buildAssessmentReviewDossiers({
+    queue,details:[wrong],controlIds:[controlId]
+  }),/target binding changed/);
   assert.throws(()=>buildAssessmentReviewDossiers({
     queue,details:[detail(id(6))],controlIds:[id(6)]
   }),/not independently actionable/);
