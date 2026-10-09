@@ -125,8 +125,8 @@ test('KB-009 human approval criterion never receives a static observation candid
     controlId,
     checkId:'check-9',
     inputReference:sourceRef,
-    observedResult:'Requirement-specific deterministic observations:\\n' + JSON.stringify(observations) +
-      '\\nThis collection does not assert that any canonical requirement is satisfied'
+    observedResult:'Requirement-specific deterministic observations:\n' + JSON.stringify(observations) +
+      '\nThis collection does not assert that any canonical requirement is satisfied'
   };
   const originalEvidence = {...evidence, controlId, sourceReference:sourceRef};
   const targetDetail = {
