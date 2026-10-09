@@ -205,3 +205,22 @@ test('KB-013 keeps approved egress inventory human-owned and runtime network tra
   assert.ok(plan[2].collectors.includes('source_and_configuration'));
   for (const index of [1,3,4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-014 retains credential ownership and lifecycle authority outside deterministic discovery', () => {
+  const requirements = [
+    'ARL-KB-014 assessed system, exact version, environment and credential scope',
+    'Authoritative credential or workload-identity inventory with owner, purpose, scope and lifecycle state',
+    'Secret-store, environment, CI/CD and runtime references showing which credentials the assessed version can use',
+    'Evidence of expiry, rotation, revocation or short-lived issuance where applicable',
+    'Tester identity, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.equal(plan.length, 5);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'human_only', 'machine_collectable',
+    'human_only', 'human_only'
+  ]);
+  assert.deepEqual(plan[0].collectors, ['target_identity']);
+  assert.deepEqual(plan[2].collectors, ['source_and_configuration']);
+  for (const index of [1, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
