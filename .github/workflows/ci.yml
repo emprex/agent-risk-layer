@@ -56,6 +56,17 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+      - name: Generate synthetic offline operator dashboard
+        run: npm run demo:operator -- "$RUNNER_TEMP/arl-operator-demo"
+
+      - name: Upload synthetic offline operator dashboard
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: arl-operator-dashboard-synthetic-demo
+          path: ${{ runner.temp }}/arl-operator-demo/*.html
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Scenario regression
         run: npm run test:scenarios
 
