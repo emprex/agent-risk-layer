@@ -5024,14 +5024,12 @@
       "problem": {
         "statement": "Password reset or recovery can be abused to take over a high-privilege user.",
         "customer_symptom": "A user or operator may observe password reset or recovery can be abused to take over a high-privilege user; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in password reset or recovery can be abused to take over a high-privilege user, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An attacker can use enumeration, reused recovery codes, expired or altered reset tokens or weak proofing to take over an account despite the normal authentication assurance.",
         "affected_assets": [
-          "backups, runtime state and recovery infrastructure",
-          "service availability and data integrity",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "account identity and recovery records",
+          "password-reset tokens and recovery codes",
+          "identity provider and privileged access",
+          "sessions affected by recovery"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -5053,14 +5051,16 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-022 assessed system, version, environment and scope for Account recovery bypasses normal assurance",
-          "ARL-KB-022 control configuration or source location showing how reduce the likelihood and impact of account recovery bypasses normal assurance and make the remaining risk visible.",
-          "ARL-KB-022 positive and abuse inputs with expected and observed outputs for backups, runtime state and recovery infrastructure and service availability and data integrity",
-          "ARL-KB-022 policy, authorization, tool or audit events proving whether the tested account recovery bypasses normal assurance path executed",
-          "ARL-KB-022 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-022 exact assessed system, version, environment and recovery scope",
+          "ARL-KB-022 organisation-approved recovery and identity proofing policy with MFA and privileged reset requirements",
+          "ARL-KB-022 source or configuration evidence for reset-token expiry, single-use, rate limits, proofing and session invalidation",
+          "ARL-KB-022 bounded positive evidence of authorised synthetic recovery preserving identity assurance",
+          "ARL-KB-022 bounded negative evidence for account enumeration, expired or reused tokens, weak proofing and MFA downgrade",
+          "ARL-KB-022 observed runtime recovery, identity-provider and session invalidation events",
+          "ARL-KB-022 tester and reviewer identity, role, timestamp, version and evidence digest"
         ],
-        "pass_condition": "ARL-KB-022 passes only when “Account recovery bypasses normal assurance” is not reproducible through the documented abuse cases, the valid workflow remains bounded to backups, runtime state and recovery infrastructure and service availability and data integrity, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-022 fails when password reset or recovery can be abused to take over a high-privilege user, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "Authorised recovery preserves identity proofing and MFA assurance; expired and reused tokens, enumeration and weaker recovery paths cannot grant access, supported by exact-version bounded tests and accountable review.",
+        "fail_condition": "Account recovery or reset permits enumeration, token replay, weak proofing, MFA downgrade or unauthorised account control, or version-bound evidence is missing.",
         "limitations": "This bounded ARL-KB-022 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-022's relevant configuration.",
@@ -5145,7 +5145,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-022 recovery, reset, identity-proofing, notification or recovery-code change",
@@ -5153,7 +5153,7 @@
           "ARL-KB-022 takeover, enumeration, token-reuse or recovery-bypass incident",
           "ARL-KB-022 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -5209,7 +5209,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "74b05f86e5e4e96cd27d70c01a22f359758eb2e08bd5d350bb50b8c9b0204ec9"
+      "content_digest": "642ce68cf5a406ca7bd3af7b34b1f18b90b6f99c7402edb6225cf51c4205ebcf"
     },
     {
       "id": "ARL-KB-023",
