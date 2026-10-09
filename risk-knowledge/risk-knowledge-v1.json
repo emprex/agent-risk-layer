@@ -4819,27 +4819,27 @@
       "title": "Session tokens are weak or mishandled",
       "problem": {
         "statement": "Predictable, long-lived, logged or broadly scoped sessions can be stolen or reused.",
-        "customer_symptom": "A user or operator may observe predictable, long-lived, logged or broadly scoped sessions can be stolen or reused; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in predictable, long-lived, logged or broadly scoped sessions can be stolen or reused, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Users or administrators may observe sessions that remain active after logout, expire too late, survive privilege changes without rotation, or expose session identifiers in insecure storage, URLs or logs.",
+        "credible_failure_or_attack": "An attacker who predicts, fixes, obtains or reuses a session identifier can impersonate an authenticated user or retain access after logout, expiry, revocation or a privilege change.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "web control-plane user sessions",
+          "session identifiers, cookies and server-side session records",
+          "authenticated account and tenant scope",
+          "privileged administrative actions and evidence access"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "web control planes"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between web control planes and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "threat_actor_or_failure_source": "session fixation, token theft or reuse, insecure cookie or browser storage, weak expiry or invalidation, and session-policy configuration error",
+        "trust_boundary": "The boundary between an unauthenticated or superseded session identifier and currently authorised account, tenant and privilege scope on the web control plane.",
         "operational_impact": "If predictable, long-lived, logged or broadly scoped sessions can be stolen or reused, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-021",
-        "objective": "Determine whether authenticated sessions are unpredictable, protected from disclosure or fixation, bounded in lifetime and invalidated when logout, revocation or privilege changes require it.",
-        "method": "Test session-token unpredictability, cookie attributes, fixation resistance, rotation after authentication or privilege change, idle and absolute expiry, logout invalidation, concurrent-session handling and accidental disclosure through logs, URLs or client storage.",
+        "objective": "Determine whether web control-plane sessions are unpredictable, confidential, correctly scoped and protected against fixation, leakage, replay and continued use after timeout, logout, revocation or privilege changes.",
+        "method": "Review the owner-approved session policy covering issuance, entropy, cookie/storage flags, idle and absolute lifetime, rotation, concurrent sessions, logout, revocation and role changes. Inspect server-side source/configuration and privacy-safe session metadata without storing raw tokens. With separate written owner authorisation, use synthetic identities in a bounded staging environment to verify valid session use and negative fixation, expired, logged-out, superseded, revoked, replayed and privilege-changed token scenarios; reconcile observed authentication/audit events with the exact assessed version and human-reviewed exceptions.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4847,30 +4847,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-021 assessed system, version, environment and scope for Session tokens are weak or mishandled",
-          "ARL-KB-021 control configuration or source location showing how reduce the likelihood and impact of session tokens are weak or mishandled and make the remaining risk visible.",
-          "ARL-KB-021 positive and abuse inputs with expected and observed outputs for agent and model context",
-          "ARL-KB-021 policy, authorization, tool or audit events proving whether the tested session tokens are weak or mishandled path executed",
-          "ARL-KB-021 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-021 exact assessed system, version, environment, authenticated identity, tenant and session scope",
+          "ARL-KB-021 organisation-approved session policy covering issuance, idle and absolute expiry, secure cookies, storage, rotation, logout, revocation and privilege changes",
+          "ARL-KB-021 source or configuration evidence of session creation, cookie attributes, token storage, expiry, rotation and invalidation controls",
+          "ARL-KB-021 bounded positive evidence of authorised login, protected session attributes, scoped access and expected session rotation with observed authentication events",
+          "ARL-KB-021 bounded negative evidence that fixed, leaked, replayed, expired, logged-out, superseded or revoked session identifiers are rejected, including after privilege changes",
+          "ARL-KB-021 observed runtime authentication and session invalidation events tied to the tested identities and exact assessed version",
+          "ARL-KB-021 tester and reviewer identity, roles, timestamp, assessed version, scope, exception decision and evidence digest"
         ],
-        "pass_condition": "ARL-KB-021 passes only when “Session tokens are weak or mishandled” is not reproducible through the documented abuse cases, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-021 fails when predictable, long-lived, logged or broadly scoped sessions can be stolen or reused, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-021 passes only if the approved policy and privacy-safe technical evidence apply to the exact assessed version; valid sessions have bounded scope, protected issuance and transport/storage and documented lifetime; authorised tests demonstrate rotation and timely invalidation; negative tests reject fixed, expired, logged-out, revoked, superseded or privilege-mismatched sessions before protected access; and attributable events, limitations and human review support the decision.",
+        "fail_condition": "ARL-KB-021 fails or requires review if session identifiers can be fixed, predicted, exposed or reused outside approved lifetime or scope; if logout, revocation, privilege-change rotation or expiry can be bypassed; or if the policy, actual session configuration, bounded denial evidence or attributable review is missing or mismatched to the assessed version.",
         "limitations": "This bounded ARL-KB-021 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-021's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Authenticate normally and verify the session uses the documented protected transport/storage attributes, lifetime and rotation behaviour.",
-        "negative_test": "Attempt reuse of a logged-out, expired, superseded or synthetic fixed session token and verify it is rejected.",
+        "positive_test": "With written approval and synthetic accounts, verify login, secure cookie/storage attributes, correct tenant scope, rotation and expiry using privacy-safe session metadata.",
+        "negative_test": "With written approval, try synthetic fixed, replayed, expired, logged-out, revoked and privilege-superseded session identifiers and verify server-side denial, without exposing token values.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-021 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Session tokens are weak or mishandled” must be denied, quarantined or routed to explicit review before a material side effect."
+          "A valid synthetic authenticated session must only access its approved account, tenant and role scope, with bounded lifetime and documented rotation.",
+          "Synthetic fixed, replayed, expired, logged-out, revoked and privilege-superseded sessions must not regain protected access; attributable audit events must show rejection."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -4893,10 +4895,10 @@
         "monitoring": "For ARL-KB-021, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-021 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-021: “Session tokens are weak or mishandled” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-021: Authorised in-scope use completes successfully, remains within the documented asset scope for session tokens are weak or mishandled, and produces no unintended side effect.",
-          "ARL-KB-021: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-021: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-021: Exact remediated version, approved session policy, cookie/storage/expiry configuration and evidence digest are recorded.",
+          "ARL-KB-021: Authorised synthetic sessions function with documented tenant, role, lifetime and rotation behaviour.",
+          "ARL-KB-021: Fixed, replayed, expired, logged-out, revoked and privilege-superseded identifiers are rejected with version-bound server events.",
+          "ARL-KB-021: Reviewer identity, exception decisions, limitations and exact-retest evidence are recorded."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-021 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Use strong opaque tokens, secure cookies, server-side revocation, rotation after privilege change and bounded idle/absolute lifetimes. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -4909,7 +4911,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-021 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-021 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Retest the original session failure and fixation, leakage, replay, expiry, logout, revocation, cross-tenant and privilege-change variants against the exact remediated version using authorised synthetic sessions.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-021",
           "Passed retest evidence bound to ARL-KB-021 and the current knowledge digest",
@@ -4939,7 +4941,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-021 session-token, cookie, login, logout or session-storage change",
@@ -4947,7 +4949,7 @@
           "ARL-KB-021 fixation, token leakage, session theft or continued-use incident",
           "ARL-KB-021 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -5010,7 +5012,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e74238b658c662dcfcb291485d607c458d78a1cdc7a8f626dffffccbe1072114"
+      "content_digest": "1f55ed3f530b7452c0eb115f59c758bd34613251a48d7ed1c98f31812ca77220"
     },
     {
       "id": "ARL-KB-022",
