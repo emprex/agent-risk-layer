@@ -297,3 +297,21 @@ test('KB-018 environment separation keeps source evidence distinct from bounded 
   assert.ok(plan[1].collectors.includes('source_and_configuration'));
   for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-019 authentication fail-open requires active denial proof and accountable attribution', () => {
+  const requirements = [
+    'ARL-KB-019 assessed system, version, environment and scope for Authentication is missing or can fail open',
+    'ARL-KB-019 control configuration or source location showing how reduce the likelihood and impact of authentication is missing or can fail open and make the remaining risk visible.',
+    'ARL-KB-019 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions',
+    'ARL-KB-019 policy, authorization, tool or audit events proving whether the tested authentication is missing or can fail open path executed',
+    'ARL-KB-019 tester identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'machine_collectable',
+    'active_test_or_runtime', 'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[1].collectors.includes('source_and_configuration'));
+  for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
