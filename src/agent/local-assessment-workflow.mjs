@@ -35,6 +35,7 @@ import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
 import { buildPilotEvidenceGapMatrix } from './pilot-evidence-gap-matrix.mjs';
 import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage.mjs';
 import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
+import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 
 
 async function readCurrentControlQueue(options) {
@@ -79,6 +80,26 @@ async function triageAssessmentBatch(queue, options, batch) {
   return buildPilotEvidenceLineageTriage(plan, details);
 }
 
+async function readAllAssessmentTriages(options) {
+  const queue = await readCurrentControlQueue(options);
+  const index = buildAssessmentEvidenceBatchIndex(queue);
+  const triages = [];
+  for (const batch of index.batches) {
+    triages.push(await triageAssessmentBatch(queue, options, batch));
+  }
+  return { index, triages };
+}
+
+function numberedReviewPacks(review) {
+  return [
+    ...review.staticCollection,
+    ...review.humanDocumentation,
+    ...review.runtimeValidation,
+    ...review.manualReview
+  ].map((pack, index) => ({ ...pack, number: index + 1 }));
+}
+
+
 export async function runLocalAssessment(repositoryPath, request, options) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
   if (/(?:bounded test|retest)/i.test(request)) {
@@ -93,6 +114,76 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^show assessment evidence requests[.!?]*$/i.test(request.trim())) {
+    const { index, triages } = await readAllAssessmentTriages(options);
+    const review = buildAssessmentEvidenceReviewPacks(index, triages);
+    const packs = numberedReviewPacks(review);
+    const presentation = {
+      snapshotId: review.systemSnapshotId,
+      controlsReviewed: review.assessmentControls,
+      excludedControls: review.excludedControls,
+      criterionCount: review.criterionCount,
+      summary: review.summary,
+      packs: packs.map(pack => ({
+        number: pack.number,
+        theme: pack.theme,
+        taskCount: pack.taskCount,
+        controlCount: pack.controlCount
+      }))
+    };
+    return {
+      canonicalData: {
+        assessmentEvidenceRequestSummary: presentation,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Assessment evidence requests (read-only):\n' +
+        JSON.stringify(presentation, null, 2) +
+        '\nTo inspect one collection theme use Show assessment evidence request pack N. ' +
+        'No shared compliance, evidence validity, active test or deployment approval is inferred.'
+    };
+  }
+
+  if (/^show assessment evidence request pack\b/i.test(request.trim())) {
+    const match = /^show assessment evidence request pack ([1-9][0-9]*)(?: page ([1-9][0-9]*))?[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Show assessment evidence request pack N [page M].');
+    const { index, triages } = await readAllAssessmentTriages(options);
+    const review = buildAssessmentEvidenceReviewPacks(index, triages);
+    const packs = numberedReviewPacks(review);
+    const packNumber = Number(match[1]);
+    const pageNumber = Number(match[2] || 1);
+    if (!Number.isSafeInteger(packNumber) || !Number.isSafeInteger(pageNumber) ||
+        packNumber > packs.length) throw new Error('Evidence request pack or page is outside current assessment.');
+    const selected = packs[packNumber - 1];
+    const pageSize = 20;
+    const pageCount = Math.max(1, Math.ceil(selected.tasks.length / pageSize));
+    if (pageNumber > pageCount) throw new Error('Evidence request pack page is outside current assessment.');
+    const payload = {
+      snapshotId: review.systemSnapshotId,
+      packNumber,
+      packCount: packs.length,
+      theme: selected.theme,
+      taskCount: selected.taskCount,
+      pageNumber,
+      pageCount,
+      controlSpecificReviewTasks: selected.tasks.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      securityStateChanged: false,
+      deploymentDecisionWritten: false,
+      humanReviewRequired: true
+    };
+    return {
+      canonicalData: { assessmentEvidenceRequestPack: payload,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Evidence request pack ' + packNumber + '/' + packs.length +
+        ', ' + selected.theme + ', page ' + pageNumber + '/' + pageCount +
+        '. All requirements remain control-specific and require review. No test was executed or finding closed.'
+    };
+  }
+
   if (/^show assessment evidence triage[.!?]*$/i.test(request.trim())) {
     const queue = await readCurrentControlQueue(options);
     const index = buildAssessmentEvidenceBatchIndex(queue);
