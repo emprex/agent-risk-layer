@@ -3,12 +3,27 @@ export function buildControlWorkQueue(pages) {
   if (!first?.systemSnapshot?.id) throw new Error('Current authoritative snapshot required.');
   const snapshotId = first.systemSnapshot.id;
   const seen = new Map();
+  const expectedTotal = first.total;
+  if (!Number.isSafeInteger(expectedTotal) || expectedTotal < 0)
+    throw new Error('Authoritative queue requires an exact non-negative control total.');
   for (const page of pages) {
-    if (page.systemSnapshot?.id !== snapshotId) throw new Error('Snapshot changed while reading control queue.');
-    for (const item of page.items || []) {
-      if (item?.controlId && !seen.has(item.controlId)) seen.set(item.controlId, item);
+    if (page.systemSnapshot?.id !== snapshotId || page.total !== expectedTotal)
+      throw new Error('Snapshot or control count changed while reading control queue.');
+    if (!Array.isArray(page.items)) throw new Error('Authoritative page has no control list.');
+    for (const item of page.items) {
+      if (!/^ARL-KB-\\d{3}$/.test(item?.controlId || ''))
+        throw new Error('Authoritative control item has invalid identity.');
+      if (seen.has(item.controlId)) {
+        const prior = seen.get(item.controlId);
+        if (JSON.stringify(prior) !== JSON.stringify(item))
+          throw new Error('Conflicting duplicate control record across authoritative pages.');
+        continue;
+      }
+      seen.set(item.controlId, item);
     }
   }
+  if (pages.at(-1)?.hasMore === true)
+    throw new Error('Authoritative control queue pagination is incomplete.');
   const controls = [...seen.values()].sort((a,b) => a.controlId.localeCompare(b.controlId));
   const work = controls.map(item => {
     const stage = item.currentStage || null;
@@ -39,8 +54,8 @@ export function buildControlWorkQueue(pages) {
     schema: 'arl.agent.control-work-queue.v1',
     systemSnapshotId: snapshotId,
     total: work.length,
-    expectedTotal: first.total,
-    complete: work.length === first.total,
+    expectedTotal,
+    complete: work.length === expectedTotal,
     lanes,
     controlIds: work.map(item => item.controlId),
     securityStateChanged: false,
