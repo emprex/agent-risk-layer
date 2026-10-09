@@ -103,7 +103,7 @@ test('offline output is immutable, non-executable, private by filesystem permiss
     assert.equal(first.sha256,second.sha256);
     assert.equal(fs.statSync(first.path).mode & 0o777,0o600);
     assert.ok(first.path.startsWith(directory));
-    assert.ok(fs.readFileSync(first.path,'utf8').includes('Human review'));
+    assert.match(fs.readFileSync(first.path,'utf8'),/human review required/i);
     assert.equal(first.securityStateChanged,false);
     assert.equal(first.deploymentDecisionWritten,false);
   } finally {
