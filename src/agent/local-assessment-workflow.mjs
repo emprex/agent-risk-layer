@@ -34,9 +34,10 @@ import { buildControlWorkQueue } from './control-work-queue.mjs';
 import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
 import { buildPilotEvidenceGapMatrix } from './pilot-evidence-gap-matrix.mjs';
 import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage.mjs';
+import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
 
 
-async function readPilotBatch(options) {
+async function readCurrentControlQueue(options) {
   const pages = [];
   for (let offset = 0; offset < 250; offset += 50) {
     const page = await getControlIntelligence({
@@ -49,18 +50,33 @@ async function readPilotBatch(options) {
     if (!page.hasMore) break;
   }
   const queue = buildControlWorkQueue(pages);
-  if (!queue.complete) throw new Error('Pilot plan requires the complete current control queue.');
-  const controlIds = Array.from({length: 12}, (_, n) =>
-    'ARL-KB-' + String(n + 7).padStart(3, '0')
-  );
-  const details = await Promise.all(controlIds.map(controlId =>
+  if (!queue.complete) throw new Error('Complete current authoritative control queue required.');
+  return queue;
+}
+
+async function readBatchDetails(options, controlIds) {
+  return Promise.all(controlIds.map(controlId =>
     getControlIntelligenceControl({
       projectId: options.projectId,
       controlId,
       userId: options.userId
     })
   ));
+}
+
+async function readPilotBatch(options) {
+  const queue = await readCurrentControlQueue(options);
+  const controlIds = Array.from({length: 12}, (_, n) =>
+    'ARL-KB-' + String(n + 7).padStart(3, '0')
+  );
+  const details = await readBatchDetails(options, controlIds);
   return { plan: buildPilotBatchPlan(queue, details, controlIds), details };
+}
+
+async function triageAssessmentBatch(queue, options, batch) {
+  const details = await readBatchDetails(options, batch.controlIds);
+  const plan = buildPilotBatchPlan(queue, details, batch.controlIds);
+  return buildPilotEvidenceLineageTriage(plan, details);
 }
 
 export async function runLocalAssessment(repositoryPath, request, options) {
@@ -77,6 +93,63 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^show assessment evidence triage[.!?]*$/i.test(request.trim())) {
+    const queue = await readCurrentControlQueue(options);
+    const index = buildAssessmentEvidenceBatchIndex(queue);
+    const triages = [];
+    for (const batch of index.batches) {
+      triages.push(await triageAssessmentBatch(queue, options, batch));
+    }
+    const summary = summarizeAssessmentEvidenceBatches(index, triages);
+    return {
+      canonicalData: {
+        assessmentEvidenceSummary: summary,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Assessment evidence triage (read-only): ' +
+        JSON.stringify({
+          snapshotId: summary.systemSnapshotId,
+          eligibleControls: summary.eligibleControls,
+          excludedControls: summary.excludedControls,
+          batches: summary.batchCount,
+          criterionCounts: summary.totals,
+          affectedControls: summary.attentionTotal
+        }, null, 2) +
+        '\\nUse Show assessment evidence batch 1 (or another batch number) for exact criterion details. ' +
+        'No evidence accepted, tests executed, finding closed or deployment approval given.'
+    };
+  }
+
+  if (/^show assessment evidence batch\\b/i.test(request.trim())) {
+    const match = /^show assessment evidence batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Show assessment evidence batch N with positive integer N.');
+    const queue = await readCurrentControlQueue(options);
+    const index = buildAssessmentEvidenceBatchIndex(queue);
+    const batchNumber = Number(match[1]);
+    const batch = index.batches[batchNumber - 1];
+    if (!Number.isSafeInteger(batchNumber) || !batch)
+      throw new Error('Assessment evidence batch number is outside the current queue.');
+    const triage = await triageAssessmentBatch(queue, options, batch);
+    return {
+      canonicalData: {
+        assessmentEvidenceBatch: {
+          number: batch.number,
+          batchCount: index.batchCount,
+          triage
+        },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Assessment evidence batch ' + batch.number + '/' + index.batchCount +
+        ' inspected in read-only mode. ' +
+        JSON.stringify(triage.summary) +
+        '. No criterion marked satisfied, test executed or deployment decision made.'
+    };
+  }
+
   if (/^show pilot evidence triage[.!?]*$/i.test(request.trim())) {
     const { plan, details } = await readPilotBatch(options);
     const triage = buildPilotEvidenceLineageTriage(plan, details);
