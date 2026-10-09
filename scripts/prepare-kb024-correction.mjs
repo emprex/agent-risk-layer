@@ -14,6 +14,8 @@ if (fs.existsSync(migrationPath)) throw new Error('Migration 047 already exists:
 const asset = JSON.parse(fs.readFileSync(assetPath, 'utf8'));
 const entry = asset.entries.find(e => e.id === 'ARL-KB-024');
 if (!entry || entry.validation.status !== 'candidate') throw new Error('Unexpected KB024 baseline');
+if (asset.entries.length !== 108) throw new Error('Unexpected control count; review canonical asset before regeneration.');
+const otherDigests = new Map(asset.entries.filter(e => e.id !== 'ARL-KB-024').map(e => [e.id, e.content_digest]));
 const evidence = [
   'ARL-KB-024 exact assessed system, build version, environment, tenant, workspace, synthetic identities, object types and protected operation scope',
   'ARL-KB-024 organisation-approved actor, role, tenant, ownership and object-operation authorization matrix with accountable policy owner',
@@ -55,7 +57,13 @@ entry.review.change_triggers = [
 ];
 fs.writeFileSync(assetPath, JSON.stringify(asset,null,2)+'\n');
 execFileSync(process.execPath, ['scripts/build-risk-knowledge-v1-2.mjs'], {cwd:root,stdio:'inherit'});
-const updated = JSON.parse(fs.readFileSync(assetPath,'utf8')).entries.find(e=>e.id==='ARL-KB-024');
+const builtAsset = JSON.parse(fs.readFileSync(assetPath,'utf8'));
+const updated = builtAsset.entries.find(e=>e.id==='ARL-KB-024');
+for (const other of builtAsset.entries) {
+ if (other.id !== 'ARL-KB-024' && otherDigests.get(other.id) !== other.content_digest) {
+  throw new Error('Unrelated control digest changed: '+other.id);
+ }
+}
 const canonical = x => Array.isArray(x) ? '['+x.map(canonical).join(',')+']' : x && typeof x==='object' ? '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}' : JSON.stringify(x);
 const digest = x => crypto.createHash('sha256').update(canonical(x)).digest('hex');
 const q = v => "'"+String(v??'').replaceAll("'","''")+"'";
