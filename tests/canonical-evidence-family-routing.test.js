@@ -315,3 +315,21 @@ test('KB-019 authentication fail-open requires active denial proof and accountab
   assert.ok(plan[1].collectors.includes('source_and_configuration'));
   for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-024 object-level authorization keeps static scope separate from cross-tenant runtime proof', () => {
+  const requirements = [
+    'ARL-KB-024 assessed system, version, environment and scope for Object-level authorization can be bypassed',
+    'ARL-KB-024 control configuration or source location showing how reduce the likelihood and impact of object-level authorization can be bypassed and make the remaining risk visible.',
+    'ARL-KB-024 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials',
+    'ARL-KB-024 policy, authorization, tool or audit events proving whether the tested object-level authorization can be bypassed path executed',
+    'ARL-KB-024 tester identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'machine_collectable',
+    'active_test_or_runtime', 'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[1].collectors.includes('source_and_configuration'));
+  for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
