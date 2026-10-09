@@ -31,6 +31,10 @@ export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expec
   for (const [i,batch] of index.batches.entries()) {
     const dossier = dossierBatches[i];
     readOnly(dossier);
+    const {preparationDigestSha256, ...dossierPayload} = dossier || {};
+    if (!/^[a-f0-9]{64}$/.test(preparationDigestSha256 || '') ||
+        hash(JSON.stringify(dossierPayload)) !== preparationDigestSha256)
+      throw new Error('Offline review dossier content digest mismatch.');
     if (!Array.isArray(dossier?.dossiers) ||
         dossier.systemSnapshotId !== index.systemSnapshotId ||
         dossier.controlCount !== batch.controlIds.length ||
@@ -175,24 +179,63 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
     '<footer>Offline preparation artifact. Recheck the authoritative assessment before recording any decision.</footer></body></html>';
 }
 
+function assertPrivateDirectory(root) {
+  let current = root;
+  for (;;) {
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink())
+      throw new Error('Offline operator output directory cannot use symlinked ancestors.');
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  const directory = fs.statSync(root);
+  if (!directory.isDirectory() || (directory.mode & 0o077) !== 0)
+    throw new Error('Offline operator output directory must be a private real directory (0700).');
+}
+
+function unchangedArtifact(target, html) {
+  if (fs.lstatSync(target).isSymbolicLink() ||
+      !fs.lstatSync(target).isFile() ||
+      (fs.statSync(target).mode & 0o077) !== 0 ||
+      fs.readFileSync(target, 'utf8') !== html)
+    throw new Error('Conflicting or non-private immutable operator artifact.');
+  return {path:target,status:'unchanged',sha256:hash(html),bytes:Buffer.byteLength(html),
+    artifactStateChanged:false,securityStateChanged:false,deploymentDecisionWritten:false};
+}
+
 export function writeOfflineOperatorReviewDashboard({dashboard,outputDirectory}={}) {
   const html=renderOfflineOperatorReviewHtml(dashboard);
   if (!outputDirectory) throw new Error('Explicit operator artifact output directory required.');
   const root=path.resolve(outputDirectory);
   if (root===path.parse(root).root) throw new Error('Refusing filesystem root as operator artifact directory.');
   fs.mkdirSync(root,{recursive:true,mode:0o700});
-  if (!fs.statSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink())
-    throw new Error('Output must be a real directory.');
+  assertPrivateDirectory(root);
   const name='ARL-operator-review-'+hash(html).slice(0,16)+'.html';
   const target=path.join(root,name);
   if (fs.existsSync(target)) {
-    if (fs.lstatSync(target).isSymbolicLink() || !fs.lstatSync(target).isFile() ||
-        fs.readFileSync(target,'utf8')!==html)
-      throw new Error('Conflicting immutable operator artifact.');
-    return {path:target,status:'unchanged',sha256:hash(html),bytes:Buffer.byteLength(html),
-      artifactStateChanged:false,securityStateChanged:false,deploymentDecisionWritten:false};
+    return unchangedArtifact(target, html);
   }
-  fs.writeFileSync(target,html,{encoding:'utf8',mode:0o600,flag:'wx'});
+  const temporary=path.join(root,'.'+name+'.'+crypto.randomBytes(12).toString('hex')+'.tmp');
+  // Write and sync privately before linking the complete object into place.
+  // A hard-link is atomic and fails closed if the destination already exists.
+  let fd;
+  try {
+    fd=fs.openSync(temporary,'wx',0o600);
+    fs.writeFileSync(fd,html,{encoding:'utf8'});
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd=undefined;
+    try {
+      fs.linkSync(temporary,target);
+    } catch(error) {
+      if(error?.code === 'EEXIST') return unchangedArtifact(target, html);
+      throw error;
+    }
+  } finally {
+    if(fd!==undefined) fs.closeSync(fd);
+    fs.rmSync(temporary,{force:true});
+  }
   return {path:target,status:'created',sha256:hash(html),bytes:Buffer.byteLength(html),
     artifactStateChanged:true,securityStateChanged:false,deploymentDecisionWritten:false};
 }
