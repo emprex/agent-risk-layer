@@ -103,6 +103,17 @@ function numberedReviewPacks(review) {
 }
 
 
+function assertOperatorReviewFrozenBinding(dossier, frozenInspection) {
+  if (!/^[a-f0-9]{40}$/.test(dossier?.targetRevision || '') ||
+      frozenInspection?.binding?.verified !== true ||
+      frozenInspection?.target?.dirty !== false ||
+      frozenInspection?.target?.revision !== dossier.targetRevision ||
+      frozenInspection?.binding?.revisionBefore !== dossier.targetRevision ||
+      frozenInspection?.binding?.revisionAfter !== dossier.targetRevision) {
+    throw new Error('Operator review dossier does not match the current verified frozen target.');
+  }
+}
+
 export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
   if (/(?:bounded test|retest)/i.test(request)) {
@@ -129,6 +140,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     const ids = index.batches[number - 1].controlIds;
     const details = await readBatchDetails(options, ids);
     const dossier = buildAssessmentReviewDossiers({queue, details, controlIds: ids});
+    assertOperatorReviewFrozenBinding(dossier, localFrozenInspection);
     const summary = dossier.dossiers.map(item => ({
       controlId: item.controlId,
       ...item.summary
@@ -158,6 +170,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     const queue = await readCurrentControlQueue(options);
     const details = await readBatchDetails(options, [controlId]);
     const dossier = buildAssessmentReviewDossiers({queue, details, controlIds: [controlId]});
+    assertOperatorReviewFrozenBinding(dossier, localFrozenInspection);
     return {
       canonicalData: {
         assessmentReviewDossier: dossier,
