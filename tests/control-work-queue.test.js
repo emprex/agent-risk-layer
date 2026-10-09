@@ -9,7 +9,7 @@ test('read-only work queue retains held findings while surfacing independent con
       { controlId: 'ARL-KB-007', chainStatus: 'test_required', currentStage: 'test' }
     ] },
     { systemSnapshot: { id: 'snapshot-1' }, total: 3, items: [
-      { controlId: 'ARL-KB-007', currentStage: 'test' },
+      { controlId: 'ARL-KB-007', chainStatus: 'test_required', currentStage: 'test' },
       { controlId: 'ARL-KB-008', currentStage: 'evidence' }
     ] }
   ];
@@ -25,9 +25,9 @@ test('read-only work queue retains held findings while surfacing independent con
 
 test('work queue refuses mixed snapshots', () => {
   assert.throws(() => buildControlWorkQueue([
-    { systemSnapshot: { id: 'snapshot-1' }, items: [] },
-    { systemSnapshot: { id: 'snapshot-2' }, items: [] }
-  ]), /Snapshot changed/);
+    { systemSnapshot: { id: 'snapshot-1' }, total: 0, items: [] },
+    { systemSnapshot: { id: 'snapshot-2' }, total: 0, items: [] }
+  ]), /Snapshot or control count changed/);
 });
 
 test('work queue never silently claims complete coverage', () => {
@@ -35,4 +35,27 @@ test('work queue never silently claims complete coverage', () => {
     {controlId: 'ARL-KB-006', currentStage: 'remediation'}
   ]}]);
   assert.equal(queue.complete, false);
+});
+
+
+test('authoritative work queue rejects conflicting duplicate control statuses', () => {
+  assert.throws(() => buildControlWorkQueue([
+    {systemSnapshot:{id:'snap'},total:1,items:[
+      {controlId:'ARL-KB-006',currentStage:'remediation',chainStatus:'finding_open'}
+    ]},
+    {systemSnapshot:{id:'snap'},total:1,items:[
+      {controlId:'ARL-KB-006',currentStage:'deployment_decision',chainStatus:'satisfied'}
+    ]}
+  ]),/Conflicting duplicate/);
+});
+
+test('authoritative queue rejects changes in total and unfinished pagination',()=>{
+  assert.throws(()=>buildControlWorkQueue([
+    {systemSnapshot:{id:'snap'},total:1,items:[],hasMore:true},
+    {systemSnapshot:{id:'snap'},total:2,items:[],hasMore:false}
+  ]),/Snapshot or control count/);
+  assert.throws(()=>buildControlWorkQueue([
+    {systemSnapshot:{id:'snap'},total:1,items:[
+      {controlId:'ARL-KB-007',currentStage:'test'}],hasMore:true}
+  ]),/pagination is incomplete/);
 });
