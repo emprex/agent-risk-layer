@@ -129,3 +129,38 @@ test('KB-014 technical credential references remain deterministic machine eviden
     )
   );
 });
+
+test('KB-009 routes version-bound approval to human review, never static machine evidence', () => {
+  const requirements = [
+    'ARL-KB-009 exact assessed production version, environment and authoritative deployment identity',
+    'ARL-KB-009 security-relevant change classification and description',
+    'ARL-KB-009 review, threat-model or equivalent risk-analysis evidence required for the material change',
+    'ARL-KB-009 tests and approval attributable to the exact version or immutable artefact',
+    'ARL-KB-009 deployment provenance showing which reviewed version became authoritative in production',
+    'ARL-KB-009 stale-evidence, unreviewed-change or version-substitution test result',
+    'ARL-KB-009 reviewer identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.deepEqual(
+    plan.map(item => item.mode),
+    ['machine_collectable', 'human_only', 'human_only', 'human_only',
+      'human_only', 'active_test_or_runtime', 'human_only']
+  );
+  assert.deepEqual(plan[3].collectors, []);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+});
+
+test('immutable source version alone is not attributable approval', () => {
+  assert.equal(
+    classifyCanonicalEvidenceRequirement(
+      'Tests and approval attributable to the exact version or immutable artifact'
+    ).mode,
+    'human_only'
+  );
+  assert.equal(
+    classifyCanonicalEvidenceRequirement(
+      'Model versions and digests'
+    ).mode,
+    'machine_collectable'
+  );
+});
