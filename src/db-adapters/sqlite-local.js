@@ -657,7 +657,7 @@ for (const migrationName of [
   '039_risk_knowledge_kb081_090_semantic_corrections.sql',
   '040_risk_knowledge_kb091_100_semantic_corrections.sql',
   '041_risk_knowledge_kb101_108_semantic_corrections.sql',
-  '042_risk_knowledge_kb020_privileged_mfa_correction.sql',
+  '043_risk_knowledge_kb020_privileged_mfa_correction.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
