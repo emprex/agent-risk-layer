@@ -164,6 +164,7 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
     '<p>Read-only preparation only. This page is not certification, a PASS/FAIL finding or deployment approval.</p>'+
     '<p>Snapshot: <code>'+esc(dashboard.systemSnapshotId)+'</code><br>Frozen Git revision: <code>'+
     esc(dashboard.targetRevision)+'</code></p></header>'+
+    (dashboard.syntheticDemo === true ? '<div class="notice" role="status"><strong>SYNTHETIC DEMONSTRATION — NO REAL ASSESSMENT OR CUSTOMER DATA.</strong> All controls, tests, evidence IDs and results shown below are invented exclusively for a UI preview.</div>' : '')+
     '<div class="notice"><strong>Deployment HOLD / no release authority inferred.</strong> '+
     'Blocked findings and final human decisions are excluded from these independent work items, not resolved.</div>'+
     '<section class="metrics">'+[
