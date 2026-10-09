@@ -5221,12 +5221,12 @@
       "problem": {
         "statement": "Hidden buttons do not stop a low-privilege caller from invoking privileged APIs directly.",
         "customer_symptom": "A user or operator may observe hidden buttons do not stop a low-privilege caller from invoking privileged apis directly; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in hidden buttons do not stop a low-privilege caller from invoking privileged apis directly, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An authenticated low-privilege caller can bypass interface-only restrictions and invoke privileged API routes or service methods directly when server-side authorization is missing, inconsistent or fails open.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged API functions and service methods",
+          "role-to-function authorization rules",
+          "administrative resources and tenant state",
+          "audit records and downstream actions"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -5234,12 +5234,12 @@
           "multi-role platforms"
         ],
         "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between multi-role platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "The boundary between a caller's authenticated role and server-enforced permission to perform a protected function in the assessed tenant.",
         "operational_impact": "If hidden buttons do not stop a low-privilege caller from invoking privileged apis directly, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-023",
-        "objective": "Determine whether the assessed system prevents or detects: role enforcement exists only in the interface.",
+        "objective": "Determine whether every sensitive API and service function enforces the approved role-to-function authorization server-side, including direct calls, alternate methods and policy failures.",
         "method": "Replay representative privileged requests as each relevant lower-privilege role and through direct API or service calls, including alternate HTTP methods where applicable. Verify authorization is enforced server-side on every sensitive function and fails closed when policy is missing, stale or unavailable.",
         "check_types": [
           "declared-control review",
@@ -5248,14 +5248,16 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-023 assessed system, version, environment and scope for Role enforcement exists only in the interface",
-          "ARL-KB-023 control configuration or source location showing how reduce the likelihood and impact of role enforcement exists only in the interface and make the remaining risk visible.",
-          "ARL-KB-023 positive and abuse inputs with expected and observed outputs for agent and model context",
-          "ARL-KB-023 policy, authorization, tool or audit events proving whether the tested role enforcement exists only in the interface path executed",
-          "ARL-KB-023 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-023 exact assessed system, version, environment, tenant, role and protected function scope",
+          "ARL-KB-023 organisation-approved role-function authorization matrix with accountable owner and privileged operations",
+          "ARL-KB-023 source or configuration evidence of server-side authorization checks and fail-closed policy paths",
+          "ARL-KB-023 bounded positive evidence of authorised role performing the approved function with observed policy decision",
+          "ARL-KB-023 bounded negative evidence of low-privilege direct API, alternate-method and missing-policy attempts rejected before side effects",
+          "ARL-KB-023 observed runtime authorization and downstream audit events proving tested allow and deny outcomes",
+          "ARL-KB-023 tester and reviewer identity, role, timestamp, exact version and evidence digest"
         ],
-        "pass_condition": "ARL-KB-023 passes only when “Role enforcement exists only in the interface” is not reproducible through the documented abuse cases, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-023 fails when hidden buttons do not stop a low-privilege caller from invoking privileged apis directly, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "KB-023 passes only when the assessed role-function matrix and source enforcement apply to the exact version, authorised actions work within scope, low-privilege direct/alternate API calls and fail-open variants are denied before any side effect, observed authorization/audit events support each claim, and accountable human review records remaining limitations.",
+        "fail_condition": "KB-023 fails or requires review when a low-privilege identity invokes a protected function directly or through alternate routes, when server-side authorization is absent or fails open, or when required scoped policy, observed denial and human-review evidence is missing.",
         "limitations": "This bounded ARL-KB-023 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-023's relevant configuration.",
@@ -5294,10 +5296,10 @@
         "monitoring": "For ARL-KB-023, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-023 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-023: “Role enforcement exists only in the interface” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-023: Authorised in-scope use completes successfully, remains within the documented asset scope for role enforcement exists only in the interface, and produces no unintended side effect.",
-          "ARL-KB-023: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-023: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-023 exact revised role-function authorization policy, version and evidence digest recorded",
+          "ARL-KB-023 allowed synthetic role-function combinations succeed within documented tenant and function scope",
+          "ARL-KB-023 low-privilege, alternate-method and missing-policy bypass variants denied before side effects with attributable logs",
+          "ARL-KB-023 accountable human reviewer, residual exceptions and exact-retest decision recorded"
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-023 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Enforce role and object authorization server-side on every route and service method; maintain negative authorization tests. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5348,7 +5350,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-023 role, permission, route, service-method or authorization-policy change",
@@ -5356,7 +5358,7 @@
           "ARL-KB-023 function-level authorization bypass or fail-open incident",
           "ARL-KB-023 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; customer and independent practitioner validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -5412,7 +5414,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "650b26be760c6b40724f15df8ab7e0df57c864b5a90e8123ac94ac673fb31b30"
+      "content_digest": "240d7b6a270acb97cdaad7c4ac3b9d160d33e81c58e0ba2e7c06929fbcab4b82"
     },
     {
       "id": "ARL-KB-024",
