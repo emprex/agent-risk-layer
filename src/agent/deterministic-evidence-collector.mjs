@@ -40,10 +40,13 @@ function trackedFiles(repositoryPath) {
     ['ls-files', '-z']
   );
 
-  return raw
+  const allTracked = raw
     .split('\0')
-    .filter(Boolean)
-    .slice(0, MAX_FILES);
+    .filter(Boolean);
+  return {
+    files: allTracked.slice(0, MAX_FILES),
+    totalTrackedFileCount: allTracked.length
+  };
 }
 
 function refFor(relativePath) {
@@ -169,14 +172,13 @@ function collectTextSignals(
         .test(file)
     );
 
-  for (
-    const file of
-    textCandidates.slice(0, 300)
-  ) {
-    const text =
-      readText(repositoryPath, file);
+  const inspectedTextCandidates = textCandidates.slice(0, 300);
+  let readableTextFiles = 0;
 
+  for (const file of inspectedTextCandidates) {
+    const text = readText(repositoryPath, file);
     if (!text) continue;
+    readableTextFiles += 1;
 
     const ref = refFor(file);
 
@@ -236,7 +238,13 @@ function collectTextSignals(
         .slice(0, MAX_REFS),
     externalDestinationObservations:
       [...endpointHashes.values()]
-        .slice(0, 40)
+        .slice(0, 40),
+    textScanCoverage: {
+      candidatesWithinTrackedFileLimit: textCandidates.length,
+      attempted: inspectedTextCandidates.length,
+      readable: readableTextFiles,
+      capped: textCandidates.length > inspectedTextCandidates.length
+    }
   };
 }
 
@@ -244,8 +252,9 @@ function repositoryFacts({
   repositoryPath,
   frozen
 }) {
-  const files =
-    trackedFiles(repositoryPath);
+  const tracked = trackedFiles(repositoryPath);
+  const files = tracked.files;
+  const textFacts = collectTextSignals(repositoryPath, files);
 
   const revision =
     safeExec(
@@ -264,7 +273,21 @@ function repositoryFacts({
       inspection?.subject?.projectName || null,
     gitDirty:
       inspection?.subject?.gitDirty ?? null,
-    trackedFileCount: files.length,
+    trackedFileCount: tracked.totalTrackedFileCount,
+    discoveryCoverage: {
+      totalTrackedFiles: tracked.totalTrackedFileCount,
+      trackedFilesConsidered: files.length,
+      trackedFileScanCapped: tracked.totalTrackedFileCount > files.length,
+      // Counts below apply only to the bounded first MAX_FILES tracked paths.
+      textCandidatesWithinTrackedFileLimit: textFacts.textScanCoverage.candidatesWithinTrackedFileLimit,
+      textFilesAttempted: textFacts.textScanCoverage.attempted,
+      textFilesReadable: textFacts.textScanCoverage.readable,
+      textFileScanCapped: textFacts.textScanCoverage.capped,
+      completeTrackedAndTextScan:
+        tracked.totalTrackedFileCount === files.length &&
+        !textFacts.textScanCoverage.capped &&
+        textFacts.textScanCoverage.readable === textFacts.textScanCoverage.attempted
+    },
     architectureArtifacts:
       boundedRefs(
         files,
@@ -289,10 +312,7 @@ function repositoryFacts({
       repositoryPath,
       files
     ),
-    ...collectTextSignals(
-      repositoryPath,
-      files
-    ),
+    ...textFacts,
     observedTechnologies:
       Array.isArray(
         inspection?.observedTechnologies
@@ -330,7 +350,9 @@ function observationsForCollector(
         observedTechnologies:
           facts.observedTechnologies,
         trackedFileCount:
-          facts.trackedFileCount
+          facts.trackedFileCount,
+        discoveryCoverage:
+          facts.discoveryCoverage
       };
 
     case 'source_and_configuration':
