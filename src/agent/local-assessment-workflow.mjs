@@ -117,12 +117,12 @@ export async function runLocalAssessment(repositoryPath, request, options) {
           criterionCounts: summary.totals,
           affectedControls: summary.attentionTotal
         }, null, 2) +
-        '\\nUse Show assessment evidence batch 1 (or another batch number) for exact criterion details. ' +
+        '\nUse Show assessment evidence batch 1 (or another batch number) for exact criterion details. ' +
         'No evidence accepted, tests executed, finding closed or deployment approval given.'
     };
   }
 
-  if (/^show assessment evidence batch\\b/i.test(request.trim())) {
+  if (/^show assessment evidence batch\b/i.test(request.trim())) {
     const match = /^show assessment evidence batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
     if (!match) throw new Error('Use Show assessment evidence batch N with positive integer N.');
     const queue = await readCurrentControlQueue(options);
