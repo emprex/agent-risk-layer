@@ -106,3 +106,45 @@ test('fails closed for truncated JSON and historical source observation',()=>{
 test('rejects an incomplete plan instead of claiming that a missing control was analysed',()=>{
   assert.throws(()=>buildPilotEvidenceLineageTriage({...plan,controlCount:12},[detail]),/Complete snapshot-bound/);
 });
+
+test('KB-009 human approval criterion never receives a static observation candidate', () => {
+  const controlId = 'ARL-KB-009';
+  const approval = 'ARL-KB-009 tests and approval attributable to the exact version or immutable artefact';
+  const identity = 'ARL-KB-009 exact assessed production version, environment and authoritative deployment identity';
+  const sourceRef = 'arl_frozen_source_evidence_collection_v2:' + rev + ':' + controlId + ':' + 'b'.repeat(64);
+  const observations = {
+    schema: 'arl.deterministic-evidence-collection.v1',
+    targetRevision: rev,
+    requirementObservations: [
+      {requirement: approval, collectors:['dependency_and_build'], observations:{dependency_and_build:{lockfiles:['lockfile']}}},
+      {requirement: identity, collectors:['target_identity'], observations:{target_identity:{revision:rev}}}
+    ]
+  };
+  const originalTest = {
+    ...testResult,
+    controlId,
+    checkId:'check-9',
+    inputReference:sourceRef,
+    observedResult:'Requirement-specific deterministic observations:\\n' + JSON.stringify(observations) +
+      '\\nThis collection does not assert that any canonical requirement is satisfied'
+  };
+  const originalEvidence = {...evidence, controlId, sourceReference:sourceRef};
+  const targetDetail = {
+    ...detail,
+    control:{id:controlId},
+    testDefinition:{id:'check-9',digest:'check-digest',requiredEvidence:[identity,approval]},
+    tests:[originalTest],
+    testHistory:[],
+    evidence:[originalEvidence],
+    evidenceHistory:[]
+  };
+  const targetPlan = {...plan,controls:[{controlId,chainStatus:'test_inconclusive'}]};
+  const result = buildPilotEvidenceLineageTriage(targetPlan,[targetDetail]);
+  assert.equal(result.summary.staticCandidates,1);
+  assert.equal(result.summary.humanRequirements,1);
+  assert.equal(result.controls[0].criteria[0].criterionSatisfied,false);
+  assert.equal(result.controls[0].criteria[1].reviewState,'accountable_human_evidence_required');
+  assert.deepEqual(result.controls[0].criteria[1].candidateEvidenceIds,[]);
+  assert.equal(result.controls[0].passInferred,false);
+  assert.equal(result.securityStateChanged,false);
+});
