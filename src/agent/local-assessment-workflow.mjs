@@ -36,6 +36,8 @@ import { buildPilotEvidenceGapMatrix } from './pilot-evidence-gap-matrix.mjs';
 import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage.mjs';
 import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
+import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
+import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
 
 
 async function readCurrentControlQueue(options) {
@@ -100,7 +102,7 @@ function numberedReviewPacks(review) {
 }
 
 
-export async function runLocalAssessment(repositoryPath, request, options) {
+export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
   if (/(?:bounded test|retest)/i.test(request)) {
     const authorisations = await listRedTeamAuthorisations(options);
@@ -114,6 +116,67 @@ export async function runLocalAssessment(repositoryPath, request, options) {
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^preview assessment static collection[.!?]*$/i.test(request.trim())) {
+    if (!localFrozenInspection) {
+      throw new Error('Static collection preview is available only through the verified local assessment runner.');
+    }
+    const { index, triages } = await readAllAssessmentTriages(options);
+    if (index.eligibleControls === 0) {
+      throw new Error('No independent evidence controls available for static collection.');
+    }
+    const review = buildAssessmentEvidenceReviewPacks(index, triages);
+    const firstId = index.batches[0]?.controlIds[0];
+    const firstDetail = await getControlIntelligenceControl({
+      projectId: options.projectId,
+      controlId: firstId,
+      userId: options.userId
+    });
+    const snapshot = firstDetail?.systemSnapshot;
+    const targetBinding = snapshot?.assessmentConfiguration?.targetBinding;
+    const assessmentBinding = snapshot?.assessmentConfiguration?.assessmentBinding;
+    if (snapshot?.id !== review.systemSnapshotId ||
+        targetBinding?.source !== 'git' ||
+        targetBinding?.schema !== 'arl.target-binding.v1' ||
+        !/^[a-f0-9]{40}$/.test(targetBinding?.revision || '') ||
+        assessmentBinding?.assessmentId !== options.assessmentId ||
+        targetBinding.revision !== localFrozenInspection?.target?.revision) {
+      throw new Error('Static preview refuses missing or changed authoritative assessment and target bindings.');
+    }
+    const preview = await previewStaticCollection({
+      repositoryPath,
+      frozenInspection: localFrozenInspection,
+      review,
+      expectedRevision: targetBinding.revision,
+      freezeRepository: freezeLocalRepository
+    });
+    const after = await getControlIntelligenceControl({
+      projectId: options.projectId,
+      controlId: firstId,
+      userId: options.userId
+    });
+    if (after?.systemSnapshot?.id !== review.systemSnapshotId ||
+        after?.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !== targetBinding.revision ||
+        after?.systemSnapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId !== options.assessmentId) {
+      throw new Error('Authoritative assessment changed during static collection preview.');
+    }
+    return {
+      canonicalData: {
+        assessmentStaticCollectionPreview: preview,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'One-pass frozen static collection preview (read-only):\n' +
+        JSON.stringify({
+          snapshotId: preview.systemSnapshotId,
+          targetRevision: preview.targetRevision,
+          observationDigestSha256: preview.observationDigestSha256,
+          counts: preview.counts
+        }, null, 2) +
+        '\nMetadata candidates require human review. No test or evidence recorded, no PASS/FAIL, finding closure or deployment approval.'
+    };
+  }
+
   if (/^show assessment evidence requests[.!?]*$/i.test(request.trim())) {
     const { index, triages } = await readAllAssessmentTriages(options);
     const review = buildAssessmentEvidenceReviewPacks(index, triages);
