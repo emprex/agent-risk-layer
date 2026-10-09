@@ -17,9 +17,14 @@ try {
 }
 
 const repositoryArgument = String(process.argv[2] || '').trim();
-const request =
-  process.argv.slice(3).join(' ').trim() ||
-  'Assess this agent';
+const openDashboardInBrowser = process.env.ARL_OPERATOR_OPEN_DASHBOARD === '1';
+if (openDashboardInBrowser && process.argv.length !== 3) {
+  console.error('Usage: npm run operator:open -- <frozen-target-repository-path>');
+  process.exit(2);
+}
+const request = openDashboardInBrowser
+  ? 'Export assessment operator dashboard'
+  : process.argv.slice(3).join(' ').trim() || 'Assess this agent';
 
 if (!repositoryArgument) {
   console.error(
@@ -221,6 +226,25 @@ try {
       '\n=== ARL LOCAL ASSESSMENT ANSWER ===\n'
     );
     console.log(result.answer);
+
+    if (openDashboardInBrowser) {
+      const { openOperatorDashboardInBrowser } =
+        await import('./operator-dashboard-browser.mjs');
+      const outputDirectory =
+        process.env.ARL_REPORT_OUTPUT_DIR ||
+        path.join(productRoot, 'data/local-reports');
+      const browser = await openOperatorDashboardInBrowser({
+        metadata: result.canonicalData?.offlineOperatorDashboard,
+        outputDirectory
+      });
+      console.log(
+        browser.requested
+          ? '\nBrowser launch requested for the verified local dashboard.'
+          : '\nBrowser could not be launched automatically (' +
+            browser.reason +
+            '). Open the local HTML file shown above manually.'
+      );
+    }
 
     if (
       explainCurrentState &&
