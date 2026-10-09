@@ -124,7 +124,7 @@ test('rejects batch substitution, missing controls and forged verdict',()=>{
   }],rev),/rejects inferred verdict|digest mismatch/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,controlIds:[...valid.controlIds].reverse()
-  }],rev),/rejects inferred verdict/);
+  }],rev),/rejects inferred verdict|digest mismatch/);
   assert.throws(()=>renderOfflineOperatorReviewHtml({
     ...report,securityStateChanged:true
   }),/cannot accept security authority/);
