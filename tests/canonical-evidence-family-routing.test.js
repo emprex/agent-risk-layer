@@ -243,3 +243,21 @@ test('KB-015 memory and vector-store evidence requires distinct source, runtime 
   assert.ok(plan[1].collectors.includes('source_and_configuration'));
   for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-016 distinguishes model version source evidence from actual drift execution and human attribution', () => {
+  const requirements = [
+    'ARL-KB-016 assessed system, version, environment and scope for Model versions and digests are not pinned',
+    'ARL-KB-016 control configuration or source location showing how reduce the likelihood and impact of model versions and digests are not pinned and make the remaining risk visible.',
+    'ARL-KB-016 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance',
+    'ARL-KB-016 policy, authorization, tool or audit events proving whether the tested model versions and digests are not pinned path executed',
+    'ARL-KB-016 tester identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'machine_collectable',
+    'active_test_or_runtime', 'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[1].collectors.includes('source_and_configuration'));
+  for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
