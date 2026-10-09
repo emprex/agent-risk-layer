@@ -27,9 +27,16 @@ export function validateOperatorDashboardArtifact(metadata, outputDirectory) {
     throw new Error('Operator dashboard path or digest prefix is inconsistent.');
   }
 
+  let ancestor = directory;
+  for (;;) {
+    if (fs.lstatSync(ancestor).isSymbolicLink())
+      throw new Error('Operator dashboard path has a symlinked ancestor.');
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
   const dir = fs.lstatSync(directory);
-  if (!dir.isDirectory() || dir.isSymbolicLink() ||
-      (dir.mode & 0o077) !== 0) {
+  if (!dir.isDirectory() || (dir.mode & 0o077) !== 0) {
     throw new Error('Operator dashboard output directory must be private and non-symlinked.');
   }
   const stat = fs.lstatSync(file);
