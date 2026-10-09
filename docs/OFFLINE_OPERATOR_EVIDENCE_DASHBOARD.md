@@ -1,5 +1,20 @@
 # Offline operator evidence review dashboard
 
+## One command to open the real local dashboard (Debian desktop)
+
+After the canonical product repository has been updated and your existing PostgreSQL assessment is accessible:
+
+```bash
+cd ~/agent-risk-layer
+npm run operator:open -- "$HOME/arl-target-mcp-agent"
+```
+
+This explicit local command fixes the request to `Export assessment operator dashboard`. It uses the **existing** frozen-target preflight, original assessment binding, evidence-trust calculations, and read-only report preparation before asking Linux to open the verified HTML with `xdg-open` (an argument array, not a shell command). The browser does not host a service or get permission to record decisions.
+
+If the desktop opener is unavailable, the operator still receives the local HTML path. The shortcut checks the report's 64-character SHA-256 digest, filename, private file/directory permissions, and refuses symlinks. It does not bypass PostgreSQL availability, source SHA checks, authorisation or evidence review. It does not update `main` or the target automatically.
+
+For an extra explicit SHA assertion, set `ARL_EXPECTED_TARGET_SHA` to the frozen Git commit before running. **Do not** use this command against a different target or an unapproved scope.
+
 Command in the local owner-controlled AgentRiskLayer checkout:
 
 ```bash
