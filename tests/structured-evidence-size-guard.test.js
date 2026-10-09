@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
@@ -31,4 +31,33 @@ test('oversized structured evidence is rejected rather than truncated', () => {
   ]};
   assert.equal(boundedDeterministicEvidenceJson(huge), null);
   assert.deepEqual(payload.requirementObservations.length, 1);
+});
+
+test('small frozen inspection summary stays parseable', () => {
+  const text = frozenInspectionObservation({
+    frozen: {target:{revision:'a'.repeat(40)}, inspection:{schema:'v1', observedTechnologies:['python']}},
+    requirements:['system version']
+  });
+  assert.equal(JSON.parse(text).targetRevision, 'a'.repeat(40));
+});
+
+test('large frozen inspection summary is reduced without creating partial JSON', () => {
+  const text = frozenInspectionObservation({
+    frozen: {target:{revision:'a'.repeat(40)}, inspection:{
+      observedTechnologies: Array.from({length:60}, (_,i)=>({name:'provider'+i, note:'x'.repeat(150)}))
+    }},
+    requirements:[]
+  });
+  assert.equal(typeof text, 'string');
+  assert.ok(text.length <= 5000);
+  assert.deepEqual(JSON.parse(text).observedTechnologies.length, 20);
+});
+
+test('oversized fallback summary fails closed', () => {
+  const text = frozenInspectionObservation({
+    frozen: {target:{revision:'a'.repeat(40)}, inspection:{
+      observedTechnologies: Array.from({length:60}, (_,i)=>({name:'provider'+i, note:'x'.repeat(750)}))
+    }}
+  });
+  assert.equal(text, null);
 });
