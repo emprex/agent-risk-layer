@@ -193,9 +193,15 @@ export function buildAssessmentReviewDossiers({queue, details, controlIds} = {})
   const dossiers = controlIds.map(id =>
     dossierForControl(queueItems.get(id), detailById.get(id), triageById.get(id), queue.systemSnapshotId));
   const revision = details[0].systemSnapshot?.assessmentConfiguration?.targetBinding?.revision || null;
-  if (details.some(row =>
-    (row.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision || null) !== revision)) {
-    throw new Error('Review dossier target binding changed across the requested controls.');
+  if (!/^[a-f0-9]{40}$/.test(revision || '') ||
+      details.some(row => {
+        const binding = row.systemSnapshot?.assessmentConfiguration?.targetBinding;
+        const identifier = row.systemSnapshot?.versionIdentifier;
+        return binding?.source !== 'git' ||
+          binding?.revision !== revision ||
+          (/^[a-f0-9]{40}$/.test(identifier || '') && identifier !== revision);
+      })) {
+    throw new Error('Review dossier target binding changed or is not an exact authoritative Git revision.');
   }
 
   const payload = {
