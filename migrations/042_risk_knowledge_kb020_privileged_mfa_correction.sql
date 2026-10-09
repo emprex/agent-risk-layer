@@ -21,6 +21,6 @@ WHERE entry_id='ARL-KB-020';
 
 UPDATE risk_knowledge_solutions
 SET retest_acceptance_json='["ARL-KB-020: The exact remediated privileged authentication configuration, roles, approved factors and relevant identity-provider policy digest are recorded.","ARL-KB-020: Authorised synthetic privileged login and sensitive-action step-up work with a phishing-resistant factor and scoped authority.","ARL-KB-020: Password-only, downgrade, recovery, re-enrolment, break-glass and session bypass variants cannot obtain privileged authority; denial events are retained.","ARL-KB-020: Reviewer identity, assessed version, test scope, evidence digest, documented exceptions and human decision are recorded."]',
-    content_digest='PLACEHOLDER_SOLUTION_DIGEST',
+    content_digest='485677a3b4d2e0ff7aaebd124ffabebda48e060923af045a9371249a8e85e9f1',
     updated_at='2026-10-09'
 WHERE entry_id='ARL-KB-020';
