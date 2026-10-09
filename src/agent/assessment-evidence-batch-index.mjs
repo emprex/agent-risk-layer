@@ -17,7 +17,7 @@ export function buildAssessmentEvidenceBatchIndex(queue) {
   }).sort((a, b) => String(a.controlId).localeCompare(String(b.controlId)));
 
   const ids = selected.map(item => item.controlId);
-  if (ids.some(id => !/^ARL-KB-\\d{3}$/.test(id)) ||
+  if (ids.some(id => !/^ARL-KB-\d{3}$/.test(id)) ||
       new Set(ids).size !== ids.length)
     throw new Error('Control queue contains malformed or duplicate eligible identities.');
 
