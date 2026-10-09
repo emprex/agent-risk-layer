@@ -76,4 +76,12 @@ const sql = [
  `UPDATE risk_knowledge_solutions SET retest_acceptance_json=${q(JSON.stringify(updated.solution.retest_acceptance))}, content_digest=${q(digest(updated.solution))}, updated_at='2026-10-09' WHERE entry_id=${id};`
 ];
 fs.writeFileSync(migrationPath,sql.join('\n')+'\n');
-console.log('KB-024 prepared. Inspect changes, wire migration 047 into SQLite bootstrap and run complete CI before merge.');
+const sqlitePath = path.join(root, 'src/db-adapters/sqlite-local.js');
+const sqlite = fs.readFileSync(sqlitePath,'utf8');
+const prior = "  '046_risk_knowledge_kb023_function_authorization.sql',";
+const addition = "  '047_risk_knowledge_kb024_object_authorization.sql',";
+if (!sqlite.includes(prior) || sqlite.includes(addition)) {
+ throw new Error('Unexpected SQLite bootstrap state: inspect migration registration manually.');
+}
+fs.writeFileSync(sqlitePath,sqlite.replace(prior,prior+'\\n'+addition));
+console.log('KB-024 generated and migration 047 registered. Review all diffs and execute the complete tests and CI before merge.');
