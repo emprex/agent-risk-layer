@@ -661,7 +661,6 @@ for (const migrationName of [
   '044_risk_knowledge_kb021_session_assurance.sql',
   '045_risk_knowledge_kb022_account_recovery.sql',
   '046_risk_knowledge_kb023_function_authorization.sql',
-  '047_risk_knowledge_kb024_object_authorization.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
