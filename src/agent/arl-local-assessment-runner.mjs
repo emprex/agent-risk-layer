@@ -204,7 +204,8 @@ try {
       await runLocalAssessment(
         repositoryPath,
         workflowRequest,
-        options
+        options,
+        frozen
       );
 
     if (process.env.ARL_DEBUG_CANONICAL === '1') {
