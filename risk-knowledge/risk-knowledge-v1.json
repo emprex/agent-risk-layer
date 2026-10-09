@@ -4613,29 +4613,28 @@
       "title": "Administrative accounts lack phishing-resistant protection",
       "problem": {
         "statement": "A stolen password can grant control over prompts, tools, policies, approvals or evidence.",
-        "customer_symptom": "A user or operator may observe a stolen password can grant control over prompts, tools, policies, approvals or evidence; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in a stolen password can grant control over prompts, tools, policies, approvals or evidence, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A privileged administrator may obtain or recover high-impact access with a stolen password, a phishing-susceptible factor, weak recovery, or an unsafe enrolment or step-up fallback.",
+        "credible_failure_or_attack": "An attacker with a stolen password, compromised recovery channel or weaker-factor fallback can bypass phishing-resistant protection and gain privileged control of agent configuration, tool policy, approvals, deployment or assurance evidence.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "privileged administrator and break-glass identities",
+          "identity-provider authentication and recovery flows",
+          "MFA factor enrolment, reset and step-up controls",
+          "privileged sessions and administrative tool authority",
+          "agent policies, approvals, configuration and assurance evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Weak privileged authentication can allow takeover of high-impact administrative capabilities. Final severity depends on the authority of affected accounts, exposed functions, recovery controls and compensating safeguards.",
         "applicability": [
           "hosted platforms"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between hosted platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "threat_actor_or_failure_source": "credential phishing, password theft, factor downgrade, insecure recovery, privilege or session abuse, and misconfigured identity policy",
+        "trust_boundary": "The boundary between an untrusted or insufficiently authenticated caller and privileged administrative authority over the assessed system.",
         "operational_impact": "If a stolen password can grant control over prompts, tools, policies, approvals or evidence, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-020",
-        "objective": "Determine whether privileged administrative accounts use phishing-resistant authentication or an equivalent approved control and whether enrolment, recovery and sensitive-session paths preserve that protection.",
-        "method": "Review privileged authentication policy, MFA enrolment, permitted factors, recovery, reset, session lifetime, step-up requirements and recent privileged login evidence. Verify that representative privileged accounts cannot authenticate or recover access using a weaker path that bypasses the documented protection.",
+        "objective": "Determine whether every in-scope privileged account and access path enforces phishing-resistant authentication and whether enrolment, recovery, fallback, break-glass and privileged step-up prevent weaker authentication from gaining equivalent authority.",
+        "method": "Identify the exact assessed version, environment, privileged roles, identity providers and administrative actions. Review the approved privileged authentication and recovery policy, the account inventory, MFA-factor enrolment and reset settings, step-up, session lifetime and break-glass controls. Inspect privacy-safe source and IdP configuration without collecting secret values. Under separate owner authorisation, perform bounded positive and negative tests with synthetic privileged accounts for login, weaker-factor fallback, recovery, factor reset and privileged step-up; retain attributable identity-provider or application events. Reconcile observed paths, exceptions and limitations with policy and record accountable human review.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -4643,30 +4642,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-020 assessed system, version, environment and scope for Administrative accounts lack phishing-resistant protection",
-          "ARL-KB-020 control configuration or source location showing how reduce the likelihood and impact of administrative accounts lack phishing-resistant protection and make the remaining risk visible.",
-          "ARL-KB-020 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
-          "ARL-KB-020 policy, authorization, tool or audit events proving whether the tested administrative accounts lack phishing-resistant protection path executed",
-          "ARL-KB-020 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-020 exact assessed system version, environment, privileged-account and administrative-action scope",
+          "ARL-KB-020 organisation-approved privileged authentication policy for phishing-resistant MFA, enrolment, recovery, step-up and break-glass exceptions",
+          "ARL-KB-020 authoritative privileged-account inventory with roles, owners, identity providers and approved exceptions",
+          "ARL-KB-020 source or configuration evidence for IdP MFA policies, factor enrolment, recovery, session and privileged step-up settings",
+          "ARL-KB-020 bounded positive evidence of authorised phishing-resistant privileged login and step-up with observed authentication events",
+          "ARL-KB-020 bounded negative evidence of prohibited weaker-factor fallback, recovery bypass, factor reset, break-glass misuse and session bypass with denial events",
+          "ARL-KB-020 tester identity, reviewer identity, role, timestamp, assessed version and evidence digest"
         ],
-        "pass_condition": "ARL-KB-020 passes only when “Administrative accounts lack phishing-resistant protection” is not reproducible through the documented abuse cases, the valid workflow remains bounded to system prompt, retrieved context and persistent memory and source documents, messages and generated outputs, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-020 fails when a stolen password can grant control over prompts, tools, policies, approvals or evidence, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "ARL-KB-020 passes only when accountable evidence for the exact assessed version identifies the privileged accounts and approved authentication policy; authorised login and step-up enforce phishing-resistant protection; prohibited weaker-factor, enrolment, recovery, break-glass and session bypass paths cannot grant the same authority; documented exceptions and limits receive explicit human review; and all required observed tests and authentication events are attributable.",
+        "fail_condition": "ARL-KB-020 fails or requires review when a privileged account or access path permits password-only, phishing-susceptible or uncontrolled fallback authentication; when enrolment, recovery, factor reset, break-glass or step-up bypasses the required strength; or when policy, scoped inventory, source configuration, observed denial evidence or accountable review is absent or mismatched to the assessed version.",
         "limitations": "This bounded ARL-KB-020 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-020's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Authenticate with an authorised privileged test account using the documented strong factor and verify the expected administrative scope.",
-        "negative_test": "Attempt an owner-authorised privileged login or recovery flow using a prohibited weaker factor or bypass path and verify access is denied or routed to explicit secure recovery.",
+        "positive_test": "With written owner approval, use a synthetic privileged test identity to complete an authorised phishing-resistant login and the required high-impact step-up, recording privacy-safe IdP/application events.",
+        "negative_test": "With written owner approval, attempt synthetic password-only, weaker-factor fallback, recovery/reset, factor re-enrolment, break-glass and session/step-up bypass variants; verify privileged authority is denied before access, with matching identity-provider/application logs.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-020 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Administrative accounts lack phishing-resistant protection” must be denied, quarantined or routed to explicit review before a material side effect."
+          "A synthetic authorised privileged identity with an approved phishing-resistant factor must receive only the documented administrative scope and required step-up.",
+          "Synthetic stolen-password, weaker-factor, unauthorised recovery/reset, break-glass and session bypass variants must not receive equivalent privileged authority; outcomes must be attributable to exact-version authentication logs."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -4689,10 +4690,10 @@
         "monitoring": "For ARL-KB-020, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-020 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-020: “Administrative accounts lack phishing-resistant protection” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-020: Authorised in-scope use completes successfully, remains within the documented asset scope for administrative accounts lack phishing-resistant protection, and produces no unintended side effect.",
-          "ARL-KB-020: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-020: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-020: The exact remediated privileged authentication configuration, roles, approved factors and relevant identity-provider policy digest are recorded.",
+          "ARL-KB-020: Authorised synthetic privileged login and sensitive-action step-up work with a phishing-resistant factor and scoped authority.",
+          "ARL-KB-020: Password-only, downgrade, recovery, re-enrolment, break-glass and session bypass variants cannot obtain privileged authority; denial events are retained.",
+          "ARL-KB-020: Reviewer identity, assessed version, test scope, evidence digest, documented exceptions and human decision are recorded."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-020 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Require strong MFA for privileged roles, protect recovery, use step-up authentication for high-impact changes and alert on risky sessions. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -4705,7 +4706,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-020 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-020 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the original privileged authentication bypass and relevant weaker-factor, enrolment, recovery, break-glass, session and step-up variants against the exact remediated version with authorised synthetic identities and attributable IdP/application events.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-020",
           "Passed retest evidence bound to ARL-KB-020 and the current knowledge digest",
@@ -4743,7 +4744,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-020 privileged authentication, MFA, recovery, factor-enrolment or session-policy change",
@@ -4751,7 +4752,7 @@
           "ARL-KB-020 phishing, account takeover, MFA bypass, insecure recovery or privileged-session incident",
           "ARL-KB-020 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -4807,7 +4808,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c62118a61bc97d9a0f11e7bc68f31903e90d731a06cc1e02f50a122970398fdb"
+      "content_digest": "3051c836ad9f77b3c2cd06bd6dcbe075bf4b0b0e02b6f5a638bb83f9995ab4a9"
     },
     {
       "id": "ARL-KB-021",
