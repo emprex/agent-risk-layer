@@ -33,6 +33,7 @@ const HUMAN_ONLY_PATTERNS = Object.freeze([
   /\btests? and approval attributable to\b/i,
   /\bapproved provider and configuration record\b/i,
   /\bauthoritative declared inventory\b/i,
+  /\bdeclared inventory of authorised external destinations\b/i,
   /\bauthoritative .* register\b/i,
   /\bauthoritative credential or workload-identity inventory\b/i,
   /\binventory with owner, purpose, scope and lifecycle state\b/i
