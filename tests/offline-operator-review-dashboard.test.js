@@ -118,10 +118,10 @@ test('rejects batch substitution, missing controls and forged verdict',()=>{
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[],rev),/Complete authoritative/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,targetRevision:'f'.repeat(40)
-  }],rev),/target revision|changed/);
+  }],rev),/target revision|changed|digest mismatch/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,dossiers:valid.dossiers.map((d,i)=>i?d:{...d,outcome:'passed'})
-  }],rev),/rejects inferred verdict/);
+  }],rev),/rejects inferred verdict|digest mismatch/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,controlIds:[...valid.controlIds].reverse()
   }],rev),/rejects inferred verdict/);
@@ -139,8 +139,43 @@ test('refuses symlink output directory instead of following it',()=>{
     fs.symlinkSync(real,link);
     assert.throws(()=>writeOfflineOperatorReviewDashboard({
       dashboard:dashboard(),outputDirectory:link
-    }),/real directory/);
+    }),/symlinked ancestors|real directory/);
   } finally {
     fs.rmSync(base,{recursive:true,force:true});
   }
+});
+
+
+test('rejects mutated evidence trust after dossier preparation, even with unchanged control queue', () => {
+  const one=index.batches[0];
+  const before=buildAssessmentReviewDossiers({queue,controlIds:one.controlIds,details:one.controlIds.map(details)});
+  const changed=one.controlIds.map(details);
+  changed[0].evidence[0].verificationState='verified';
+  const after=buildAssessmentReviewDossiers({queue,controlIds:one.controlIds,details:changed});
+  assert.notEqual(before.preparationDigestSha256,after.preparationDigestSha256);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
+    ...before,dossiers:after.dossiers
+  }],rev),/dossier content digest mismatch/);
+});
+
+test('does not reuse a publicly readable existing export',()=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'arl-review-public-file-'));
+  try {
+    const original=writeOfflineOperatorReviewDashboard({dashboard:dashboard(),outputDirectory:directory});
+    fs.chmodSync(original.path,0o644);
+    assert.throws(()=>writeOfflineOperatorReviewDashboard({dashboard:dashboard(),outputDirectory:directory}),
+      /non-private immutable/);
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test('atomic output leaves no temporary files and rejects group-readable output directories',()=>{
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'arl-review-private-dir-'));
+  try {
+    const created=writeOfflineOperatorReviewDashboard({dashboard:dashboard(),outputDirectory:directory});
+    assert.equal(created.status,'created');
+    assert.deepEqual(fs.readdirSync(directory),[path.basename(created.path)]);
+    fs.chmodSync(directory,0o750);
+    assert.throws(()=>writeOfflineOperatorReviewDashboard({dashboard:dashboard(),outputDirectory:directory}),
+      /private real directory/);
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
 });
