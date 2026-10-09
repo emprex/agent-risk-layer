@@ -129,6 +129,20 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
       result.requirementObservations.length,
       5
     );
+    const inventory = result.requirementObservations.find(row =>
+      row.collectors.includes('architecture_and_inventory')
+    ).observations.architecture_and_inventory;
+    assert.equal(inventory.trackedFileCount, 6);
+    assert.deepEqual(inventory.discoveryCoverage, {
+      totalTrackedFiles: 6,
+      trackedFilesConsidered: 6,
+      trackedFileScanCapped: false,
+      textCandidatesWithinTrackedFileLimit: 6,
+      textFilesAttempted: 6,
+      textFilesReadable: 6,
+      textFileScanCapped: false,
+      completeTrackedAndTextScan: true
+    });
 
     const encoded =
       JSON.stringify(result);
@@ -152,5 +166,47 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
       recursive: true,
       force: true
     });
+  }
+});
+
+test('KB-011 discovery records bounded coverage rather than pretending all tracked assets were scanned', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-kb011-'));
+  try {
+    git(root, ['init']);
+    git(root, ['config', 'user.email', 'test@example.test']);
+    git(root, ['config', 'user.name', 'ARL Test']);
+    for (let n = 0; n < 510; n += 1) {
+      fs.writeFileSync(path.join(root, 'asset-' + String(n).padStart(3, '0') + '.js'),
+        'const placeholder = ' + n + ';\\n');
+    }
+    git(root, ['add', '.']);
+    git(root, ['commit', '-m', 'synthetic inventory']);
+    const revision = git(root, ['rev-parse', 'HEAD']);
+    const data = collectDeterministicEvidence({
+      repositoryPath: root,
+      frozen: {target:{revision}, inspection:{subject:{environment:'test',gitDirty:false}}},
+      requirements: [
+        'ARL-KB-011 assessed system, exact version, environment and inventory scope',
+        'Read-only discovery evidence identifying observable agents, models, prompts, tools, data stores, service identities, deployments and scheduled jobs in scope'
+      ]
+    });
+    const inventory = data.requirementObservations.find(row =>
+      row.collectors.includes('architecture_and_inventory')
+    ).observations.architecture_and_inventory;
+    assert.equal(inventory.trackedFileCount, 510);
+    assert.deepEqual(inventory.discoveryCoverage, {
+      totalTrackedFiles: 510,
+      trackedFilesConsidered: 500,
+      trackedFileScanCapped: true,
+      textCandidatesWithinTrackedFileLimit: 500,
+      textFilesAttempted: 300,
+      textFilesReadable: 300,
+      textFileScanCapped: true,
+      completeTrackedAndTextScan: false
+    });
+    assert.equal(data.targetRevision, revision);
+    assert.equal(JSON.parse(JSON.stringify(data)).targetRevision, revision);
+  } finally {
+    fs.rmSync(root, {recursive:true, force:true});
   }
 });
