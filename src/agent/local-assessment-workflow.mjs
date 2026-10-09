@@ -159,7 +159,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         queue, details, controlIds: batch.controlIds
       }));
     }
-    const dashboard = buildOfflineOperatorReviewDashboard(index, batches);
+    const dashboard = buildOfflineOperatorReviewDashboard(index, batches, localFrozenInspection.target.revision);
     const frozenAfter = await freezeLocalRepository(repositoryPath);
     if (frozenAfter.dirty ||
         frozenAfter.revision !== dashboard.targetRevision ||
@@ -169,7 +169,8 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     const queueAfter = await readCurrentControlQueue(options);
     const indexAfter = buildAssessmentEvidenceBatchIndex(queueAfter);
     if (indexAfter.systemSnapshotId !== index.systemSnapshotId ||
-        JSON.stringify(indexAfter.batches) !== JSON.stringify(index.batches)) {
+        JSON.stringify(indexAfter.batches) !== JSON.stringify(index.batches) ||
+        JSON.stringify(queueAfter.lanes) !== JSON.stringify(queue.lanes)) {
       throw new Error('Authoritative control work queue changed during offline export.');
     }
     const result = writeOfflineOperatorReviewDashboard({
