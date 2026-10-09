@@ -17,8 +17,10 @@ function readOnly(value) {
     throw new Error('Offline operator review cannot accept security authority changes.');
 }
 
-export function buildOfflineOperatorReviewDashboard(index, dossierBatches) {
+export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expectedRevision) {
   readOnly(index);
+  if (!SHA.test(expectedRevision || ''))
+    throw new Error('Exact frozen target Git revision required for offline export.');
   if (!index?.systemSnapshotId || !Array.isArray(index.batches) ||
       index.batchCount !== index.batches.length ||
       !Array.isArray(dossierBatches) ||
@@ -38,7 +40,7 @@ export function buildOfflineOperatorReviewDashboard(index, dossierBatches) {
         !SHA.test(dossier.targetRevision || ''))
       throw new Error('Offline review batch is incomplete or changed.');
     if (!revision) revision = dossier.targetRevision;
-    if (revision !== dossier.targetRevision)
+    if (revision !== dossier.targetRevision || revision !== expectedRevision)
       throw new Error('Offline review target revision changed between batches.');
     for (const [j,control] of dossier.dossiers.entries()) {
       const id = batch.controlIds[j];
