@@ -67,7 +67,7 @@ function dashboard(){
     queue,controlIds:batch.controlIds,
     details:batch.controlIds.map(details)
   });
-  return buildOfflineOperatorReviewDashboard(index,[review]);
+  return buildOfflineOperatorReviewDashboard(index,[review],rev);
 }
 
 test('real 4-control scenario renders 2 review controls and explicitly excludes held findings',()=>{
@@ -115,16 +115,16 @@ test('rejects batch substitution, missing controls and forged verdict',()=>{
   const report=dashboard();
   const one=index.batches[0];
   const valid=buildAssessmentReviewDossiers({queue,controlIds:one.controlIds,details:one.controlIds.map(details)});
-  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[]),/Complete authoritative/);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[],rev),/Complete authoritative/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,targetRevision:'f'.repeat(40)
-  }]),/target revision|changed/);
+  }],rev),/target revision|changed/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,dossiers:valid.dossiers.map((d,i)=>i?d:{...d,outcome:'passed'})
-  }]),/rejects inferred verdict/);
+  }],rev),/rejects inferred verdict/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,controlIds:[...valid.controlIds].reverse()
-  }]),/rejects inferred verdict/);
+  }],rev),/rejects inferred verdict/);
   assert.throws(()=>renderOfflineOperatorReviewHtml({
     ...report,securityStateChanged:true
   }),/cannot accept security authority/);
