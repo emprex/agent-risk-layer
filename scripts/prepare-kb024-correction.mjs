@@ -83,5 +83,5 @@ const addition = "  '047_risk_knowledge_kb024_object_authorization.sql',";
 if (!sqlite.includes(prior) || sqlite.includes(addition)) {
  throw new Error('Unexpected SQLite bootstrap state: inspect migration registration manually.');
 }
-fs.writeFileSync(sqlitePath,sqlite.replace(prior,prior+'\\n'+addition));
+fs.writeFileSync(sqlitePath,sqlite.replace(prior,prior+'\n'+addition));
 console.log('KB-024 generated and migration 047 registered. Review all diffs and execute the complete tests and CI before merge.');
