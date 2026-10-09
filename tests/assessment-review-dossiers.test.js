@@ -143,3 +143,14 @@ test('fails closed on incomplete canonical requirements', () => {
     queue,details:[altered],controlIds:[ids[0]]
   }),/complete authoritative control test definition/);
 });
+
+test('rejects cross-control evidence attribution without promoting it', () => {
+  const mixed = detail(ids[0]);
+  mixed.evidence = mixed.evidence.map(record => ({
+    ...record,
+    controlId: ids[1]
+  }));
+  assert.throws(() => buildAssessmentReviewDossiers({
+    queue,details:[mixed],controlIds:[ids[0]]
+  }),/cross-control test or evidence lineage/);
+});
