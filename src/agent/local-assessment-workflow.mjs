@@ -37,6 +37,7 @@ import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage
 import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
+import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
 
 
@@ -116,6 +117,60 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^show assessment review dossiers batch\b/i.test(request.trim())) {
+    const match = /^show assessment review dossiers batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Show assessment review dossiers batch N.');
+    const queue = await readCurrentControlQueue(options);
+    const index = buildAssessmentEvidenceBatchIndex(queue);
+    const number = Number(match[1]);
+    if (!Number.isSafeInteger(number) || !index.batches[number - 1]) {
+      throw new Error('Requested review dossier batch is outside the current work queue.');
+    }
+    const ids = index.batches[number - 1].controlIds;
+    const details = await readBatchDetails(options, ids);
+    const dossier = buildAssessmentReviewDossiers({queue, details, controlIds: ids});
+    const summary = dossier.dossiers.map(item => ({
+      controlId: item.controlId,
+      ...item.summary
+    }));
+    return {
+      canonicalData: {
+        assessmentReviewDossiers: dossier,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Assessment review dossiers, batch ' + number + '/' + index.batchCount +
+        ' (read-only, ' + ids.length + ' controls):\n' +
+        JSON.stringify({
+          snapshotId: dossier.systemSnapshotId,
+          preparationDigestSha256: dossier.preparationDigestSha256,
+          controls: summary
+        }, null, 2) +
+        '\nNo evidence promoted or control passed. For one detailed dossier use Show assessment review dossier ARL-KB-###.'
+    };
+  }
+
+  if (/^show assessment review dossier\b/i.test(request.trim())) {
+    const match = /^show assessment review dossier (ARL-KB-[0-9]{3})[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Show assessment review dossier ARL-KB-###.');
+    const controlId = match[1].toUpperCase();
+    const queue = await readCurrentControlQueue(options);
+    const details = await readBatchDetails(options, [controlId]);
+    const dossier = buildAssessmentReviewDossiers({queue, details, controlIds: [controlId]});
+    return {
+      canonicalData: {
+        assessmentReviewDossier: dossier,
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Operator review dossier ' + controlId + ' (read-only):\n' +
+        JSON.stringify(dossier.dossiers[0], null, 2) +
+        '\nRecorded evidence is not a PASS. No test, decision or finding was changed.'
+    };
+  }
+
   if (/^preview assessment static collection[.!?]*$/i.test(request.trim())) {
     if (!localFrozenInspection) {
       throw new Error('Static collection preview is available only through the verified local assessment runner.');
