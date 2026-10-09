@@ -74,7 +74,14 @@ function dossierForControl(item, detail, triage, snapshotId) {
     };
   });
 
-  const evidence = uniqueRows([...(detail.evidence || []), ...(detail.evidenceHistory || [])])
+  const allEvidenceRows = uniqueRows([...(detail.evidence || []), ...(detail.evidenceHistory || [])]);
+  const allTestRows = uniqueRows([...(detail.tests || []), ...(detail.testHistory || [])]);
+  if (allEvidenceRows.some(row => row.controlId !== item.controlId) ||
+      allTestRows.some(row => row.controlId !== item.controlId)) {
+    throw new Error('Review dossier refuses cross-control test or evidence lineage.');
+  }
+
+  const evidence = allEvidenceRows
     .map(row => ({
       id: row.id,
       controlId: row.controlId,
@@ -88,7 +95,7 @@ function dossierForControl(item, detail, triage, snapshotId) {
       isCandidateOnly: true
     }));
 
-  const tests = uniqueRows([...(detail.tests || []), ...(detail.testHistory || [])])
+  const tests = allTestRows
     .map(row => ({
       id: row.id,
       controlId: row.controlId,
