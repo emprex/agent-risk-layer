@@ -6,7 +6,7 @@ import { buildAssessmentReviewDossiers } from '../src/agent/assessment-review-do
 const sha = 'a'.repeat(40);
 const snapshot = {
   id: 'snap-1',
-  assessmentConfiguration: {targetBinding: {revision: sha}}
+  assessmentConfiguration: {targetBinding: {source:'git',revision: sha}}
 };
 const ids = ['ARL-KB-007', 'ARL-KB-008'];
 const row = (id, lane = 'test_planning') => ({
