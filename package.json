@@ -44,6 +44,7 @@
     "controls": "node scripts/control-help.mjs list",
     "control:help": "node scripts/control-help.mjs",
     "assess:local": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
+    "demo:operator": "node scripts/generate-synthetic-operator-dashboard.mjs",
     "build:toolchain-release": "node scripts/build-toolchain-release.mjs",
     "build:test-assets": "npm run build:toolchain-release && npm run build:inspector-release && npm run build:redteam-release && cp runtime/agent-risk-runtime.mjs public/downloads/agent-risk-runtime.mjs && cp runtime/runtime-policy.example.json public/downloads/runtime-policy.example.json",
     "operator": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
