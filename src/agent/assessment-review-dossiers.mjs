@@ -92,6 +92,7 @@ function dossierForControl(item, detail, triage, snapshotId) {
       trustReason: row.trustReason || null,
       retentionStatus: row.retentionStatus || null,
       snapshotCurrent: row.systemSnapshotId === snapshotId,
+      activeCurrent: row.systemSnapshotId === snapshotId && row.retentionStatus === 'active',
       isCandidateOnly: true
     }));
 
@@ -128,9 +129,9 @@ function dossierForControl(item, detail, triage, snapshotId) {
     requiresSeparateRuntimeAuthorisation: criteria.filter(row =>
       row.mode === 'active_test_or_runtime').length,
     currentUnverifiedEvidence: evidence.filter(row =>
-      row.snapshotCurrent && row.verificationState !== 'verified').length,
+      row.activeCurrent && row.verificationState !== 'verified').length,
     currentVerifiedEvidenceRecords: evidence.filter(row =>
-      row.snapshotCurrent && row.verificationState === 'verified').length,
+      row.activeCurrent && row.verificationState === 'verified').length,
     sourceLineageExceptions: sourceExceptions.length
   };
 
