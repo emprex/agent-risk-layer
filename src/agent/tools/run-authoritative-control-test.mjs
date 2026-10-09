@@ -14,7 +14,7 @@ import {
   collectDeterministicEvidence
 } from '../deterministic-evidence-collector.mjs';
 
-function frozenInspectionObservation({
+export function frozenInspectionObservation({
   frozen,
   requirements = []
 } = {}) {
@@ -81,15 +81,16 @@ function frozenInspectionObservation({
 
   const encoded = JSON.stringify(observation);
 
-  return encoded.length <= 5000
-    ? encoded
-    : JSON.stringify({
-        ...observation,
-        findings:
-          findingProjection.slice(0, 8),
-        observedTechnologies:
-          observation.observedTechnologies.slice(0, 20)
-      }).slice(0, 5000);
+  if (encoded.length <= 5000) return encoded;
+
+  // A shortened summary is still required to be valid JSON. Refuse
+  // oversized summaries instead of persisting an unparsable fragment.
+  const reduced = JSON.stringify({
+    ...observation,
+    findings: findingProjection.slice(0, 8),
+    observedTechnologies: observation.observedTechnologies.slice(0, 20)
+  });
+  return reduced.length <= 5000 ? reduced : null;
 }
 
 // Preserve the complete structured payload or refuse to persist it.
@@ -161,6 +162,14 @@ export async function runAuthoritativeControlSourceReview({
       frozen,
       requirements: normalizedRequirements
     });
+
+  if (observedFacts === null) {
+    return {
+      executed: false,
+      reason: 'frozen_source_observation_exceeds_storage_limit',
+      securityStateChanged: false
+    };
+  }
 
   const deterministicEvidence =
     collectDeterministicEvidence({
