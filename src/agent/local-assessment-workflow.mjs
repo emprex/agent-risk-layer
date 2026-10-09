@@ -38,6 +38,7 @@ import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches }
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
+import { buildOfflineOperatorReviewDashboard, writeOfflineOperatorReviewDashboard } from './offline-operator-review-dashboard.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
 
 
@@ -128,6 +129,78 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^export assessment operator dashboard[.!?]*$/i.test(request.trim())) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection.target?.revision || '')) {
+      throw new Error('Offline dashboard export needs verified clean frozen local target.');
+    }
+    const queue = await readCurrentControlQueue(options);
+    const index = buildAssessmentEvidenceBatchIndex(queue);
+    if (index.eligibleControls === 0) {
+      throw new Error('No independent controls are ready for operator review export.');
+    }
+    const batches = [];
+    for (const batch of index.batches) {
+      const details = await readBatchDetails(options, batch.controlIds);
+      for (const detail of details) {
+        const snapshot = detail?.systemSnapshot;
+        const target = snapshot?.assessmentConfiguration?.targetBinding;
+        const assessment = snapshot?.assessmentConfiguration?.assessmentBinding;
+        if (snapshot?.id !== index.systemSnapshotId ||
+            target?.schema !== 'arl.target-binding.v1' ||
+            target?.source !== 'git' ||
+            target?.revision !== localFrozenInspection.target.revision ||
+            assessment?.assessmentId !== options.assessmentId) {
+          throw new Error('Offline operator export rejects unbound or changed assessment identity.');
+        }
+      }
+      batches.push(buildAssessmentReviewDossiers({
+        queue, details, controlIds: batch.controlIds
+      }));
+    }
+    const dashboard = buildOfflineOperatorReviewDashboard(index, batches);
+    const frozenAfter = await freezeLocalRepository(repositoryPath);
+    if (frozenAfter.dirty ||
+        frozenAfter.revision !== dashboard.targetRevision ||
+        frozenAfter.repositoryPath !== localFrozenInspection.target.repositoryPath) {
+      throw new Error('Target changed during offline operator dashboard preparation.');
+    }
+    const queueAfter = await readCurrentControlQueue(options);
+    const indexAfter = buildAssessmentEvidenceBatchIndex(queueAfter);
+    if (indexAfter.systemSnapshotId !== index.systemSnapshotId ||
+        JSON.stringify(indexAfter.batches) !== JSON.stringify(index.batches)) {
+      throw new Error('Authoritative control work queue changed during offline export.');
+    }
+    const result = writeOfflineOperatorReviewDashboard({
+      dashboard,
+      outputDirectory: process.env.ARL_REPORT_OUTPUT_DIR ||
+        path.join(process.cwd(), 'data', 'local-reports')
+    });
+    return {
+      canonicalData: {
+        offlineOperatorDashboard: {
+          schema: dashboard.schema,
+          systemSnapshotId: dashboard.systemSnapshotId,
+          targetRevision: dashboard.targetRevision,
+          assessedControls: dashboard.assessedControls,
+          excludedControls: dashboard.excludedControls,
+          filePath: result.path,
+          sha256: result.sha256,
+          fileStatus: result.status
+        },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Offline operator review dashboard ' + result.status +
+        ': ' + result.path + '\nControls for human review: ' +
+        dashboard.assessedControls + '; excluded/held controls: ' +
+        dashboard.excludedControls + '.\nOpen the local HTML file in a browser. ' +
+        'No tests run, evidence verified, finding closed or deployment authorised.'
+    };
+  }
+
   if (/^show assessment review dossiers batch\b/i.test(request.trim())) {
     const match = /^show assessment review dossiers batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
     if (!match) throw new Error('Use Show assessment review dossiers batch N.');
