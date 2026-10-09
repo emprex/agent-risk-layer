@@ -11,7 +11,7 @@ export function buildControlWorkQueue(pages) {
       throw new Error('Snapshot or control count changed while reading control queue.');
     if (!Array.isArray(page.items)) throw new Error('Authoritative page has no control list.');
     for (const item of page.items) {
-      if (!/^ARL-KB-\\d{3}$/.test(item?.controlId || ''))
+      if (!/^ARL-KB-\d{3}$/.test(item?.controlId || ''))
         throw new Error('Authoritative control item has invalid identity.');
       if (seen.has(item.controlId)) {
         const prior = seen.get(item.controlId);
