@@ -92,6 +92,13 @@ function frozenInspectionObservation({
       }).slice(0, 5000);
 }
 
+// Preserve the complete structured payload or refuse to persist it.
+export function boundedDeterministicEvidenceJson(evidence, maxLength = 12000) {
+  const serialized = JSON.stringify(evidence);
+  if (typeof serialized !== 'string' || serialized.length > maxLength) return null;
+  return serialized;
+}
+
 export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
@@ -163,7 +170,17 @@ export async function runAuthoritativeControlSourceReview({
     });
 
   const deterministicEvidenceText =
-    JSON.stringify(deterministicEvidence);
+    boundedDeterministicEvidenceJson(deterministicEvidence);
+
+  // Reject oversized observations before recording a test or evidence item.
+  // A sliced JSON document cannot be parsed or independently reviewed.
+  if (deterministicEvidenceText === null) {
+    return {
+      executed: false,
+      reason: 'structured_source_observation_exceeds_storage_limit',
+      securityStateChanged: false
+    };
+  }
 
   const collectionKind =
     collectionOnly
@@ -207,9 +224,7 @@ export async function runAuthoritativeControlSourceReview({
             'Observed frozen-target facts:',
             observedFacts,
             'Requirement-specific deterministic observations:',
-            deterministicEvidenceText.length <= 12000
-              ? deterministicEvidenceText
-              : deterministicEvidenceText.slice(0, 12000),
+            deterministicEvidenceText,
             'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
           ].join('\n'),
         limitations:
