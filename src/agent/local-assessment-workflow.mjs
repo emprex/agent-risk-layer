@@ -160,18 +160,29 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       }));
     }
     const dashboard = buildOfflineOperatorReviewDashboard(index, batches, localFrozenInspection.target.revision);
-    const frozenAfter = await freezeLocalRepository(repositoryPath);
-    if (frozenAfter.dirty ||
-        frozenAfter.revision !== dashboard.targetRevision ||
-        frozenAfter.repositoryPath !== localFrozenInspection.target.repositoryPath) {
-      throw new Error('Target changed during offline operator dashboard preparation.');
-    }
     const queueAfter = await readCurrentControlQueue(options);
     const indexAfter = buildAssessmentEvidenceBatchIndex(queueAfter);
     if (indexAfter.systemSnapshotId !== index.systemSnapshotId ||
         JSON.stringify(indexAfter.batches) !== JSON.stringify(index.batches) ||
         JSON.stringify(queueAfter.lanes) !== JSON.stringify(queue.lanes)) {
       throw new Error('Authoritative control work queue changed during offline export.');
+    }
+    // Re-fetch the exact authoritative dossiers before exporting. Matching
+    // queue stages alone cannot detect evidence/test/trust changes mid-read.
+    for (const [position, batch] of index.batches.entries()) {
+      const freshDetails = await readBatchDetails(options, batch.controlIds);
+      const freshDossier = buildAssessmentReviewDossiers({
+        queue: queueAfter, details: freshDetails, controlIds: batch.controlIds
+      });
+      if (freshDossier.preparationDigestSha256 !== batches[position].preparationDigestSha256) {
+        throw new Error('Authoritative control evidence or review criteria changed during offline export.');
+      }
+    }
+    const frozenAfter = await freezeLocalRepository(repositoryPath);
+    if (frozenAfter.dirty ||
+        frozenAfter.revision !== dashboard.targetRevision ||
+        frozenAfter.repositoryPath !== localFrozenInspection.target.repositoryPath) {
+      throw new Error('Target changed during offline operator dashboard preparation.');
     }
     const result = writeOfflineOperatorReviewDashboard({
       dashboard,
