@@ -261,3 +261,21 @@ test('KB-016 distinguishes model version source evidence from actual drift execu
   assert.ok(plan[1].collectors.includes('source_and_configuration'));
   for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
 });
+
+test('KB-017 dependency bill keeps source observations separate from active verification and human attribution', () => {
+  const requirements = [
+    'ARL-KB-017 assessed system, version, environment and scope for Software and AI dependency bill is missing',
+    'ARL-KB-017 control configuration or source location showing how reduce the likelihood and impact of software and ai dependency bill is missing and make the remaining risk visible.',
+    'ARL-KB-017 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance',
+    'ARL-KB-017 policy, authorization, tool or audit events proving whether the tested software and ai dependency bill is missing path executed',
+    'ARL-KB-017 tester identity, role, timestamp and evidence digest'
+  ];
+  const plan = buildCanonicalEvidenceRequirementPlan(requirements);
+  assert.deepEqual(plan.map(item => item.mode), [
+    'machine_collectable', 'machine_collectable',
+    'active_test_or_runtime', 'active_test_or_runtime', 'human_only'
+  ]);
+  assert.ok(plan[0].collectors.includes('target_identity'));
+  assert.ok(plan[1].collectors.includes('source_and_configuration'));
+  for (const index of [2, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+});
