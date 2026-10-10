@@ -25,6 +25,10 @@ Do not probe `/api/health`, `/api/ready` or hosted Operator endpoints as checks 
 9. After remediation, require an exact affected-path retest on the changed build and attributable evidence before human finding-closure review.
 10. Export the customer report with unsupported paths, limitations and remaining HOLD explicitly shown. Only an authorised human records the final deployment decision. The export creates private, immutable Markdown/JSON/manifest files named with the assessed target revision **and a truncated SHA-256 bundle identifier**. A later evidence or review update on the *same target revision* produces a separate immutable bundle rather than overwriting an earlier report. The SHA-256 identifier proves content correspondence only; it is **not** a cryptographic signature, reviewer approval, finding closure or release authority.
 
+## Customer-facing test detail minimisation
+
+The customer report intentionally includes the outcome, method, bounded execution ID and timestamps for each test or retest, **not** the raw expected/observed outputs, error payloads or free-text test limitations. Raw fields may contain credentials, client data or untrusted agent/tool content and remain available only in the separately authorised authoritative evidence record. A placeholder in the report is **not evidence that the test passed**, and this reduction is not a full PII/secret screening of all other free-text fields. Before sharing a report externally, the accountable reviewer must inspect scope statements, findings, decisions, rationales, exclusions and all other narrative text for confidentiality and client permission.
+
 ## Independent report bundle integrity check (offline)
 
 After exporting a customer assessment, ARL writes private immutable Markdown, JSON and `.manifest.json` files with one SHA-256 content identifier. On the owner-controlled machine, run:
