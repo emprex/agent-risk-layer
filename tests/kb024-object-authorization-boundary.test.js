@@ -27,7 +27,7 @@ test('KB024 seven evidence types distinguish static, active and human decisions'
  assert.ok(plan[0].collectors.includes('target_identity'));
  assert.ok(plan[2].collectors.includes('source_and_configuration'));
  for(const i of [1,3,4,5,6])assert.deepEqual(plan[i].collectors,[]);
- assert.match(entry.check.negative_test,/cross-tenant/);
+ assert.match(req[4],/cross-tenant/);
  assert.match(entry.check.pass_condition,/accountable human review/);
  assert.match(entry.check.fail_condition,/information disclosure/);
 });
