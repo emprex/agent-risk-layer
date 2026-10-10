@@ -24,6 +24,12 @@ npm run assess:local -- "$HOME/arl-target-mcp-agent" "Export assessment operator
 
 Requires the existing local PostgreSQL assessment and frozen target. The command uses the verified local runner and the authoritative control queue. It creates a version-specific `ARL-operator-review-<digest>.html` file in `data/local-reports/` (or the existing `ARL_REPORT_OUTPUT_DIR`). The console prints its exact local path. Open the HTML file directly in a browser; **no server, login screen or new network request is needed**.
 
+## Full authoritative 108-control status register
+
+The HTML now exposes **all controls in the snapshot** in a separate expandable **Full control register** before the independent evidence work plan. Each row includes the exact control ID, its authoritative work-queue lane, current stage, chain status and deployment impact. The 98 evidence/test-planning controls still have detailed review dossiers. The 10 out-of-lane controls remain visible with their routing reason: e.g. `follow_up_blocked` (remediation/finding follow-up) or `human_decision` (separate accountable decision workflow). This is **not a PASS, decision attestation or finding-closure view**. The list never copies raw evidence, test outputs, credentials or free-text `nextAction`.
+
+The complete registry must be derived from the same frozen target, complete authoritative control queue and snapshot as the detailed dossier batches, and is checked for duplicate/missing identities and lane mismatches. The immutable HTML digest changes when the source status changes. Do **not** interpret an exclusion from the 98-control *independent evidence work plan* as an exclusion from the 108-control security assessment or proof of a signed human decision.
+
 The document is a **read-only preparation artifact**, not the authoritative security result. It displays only independently actionable test/evidence-stage controls, with current snapshot ID, frozen Git SHA, canonical criteria, source observations, recorded evidence/test metadata, and operator tasks. Blocked findings, closed/completed/human-decision controls are explicitly outside this view. Their status is not changed.
 
 
