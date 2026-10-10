@@ -1,62 +1,36 @@
-# AgentRiskLayer operations runbook
+# AgentRiskLayer operations runbook — current local product
 
-This runbook covers the public website/request service and the local assessment product.
+The public presentation/request site is **static**. Human-led security assessment, exact-SHA target binding, evidence and decisions run through the **local** canonical ARL product backed by **local PostgreSQL**.
 
-## Public service checks
+## Public static-site operations
 
-For the deployed website:
+- Check the deployed homepage, assessment, methodology, trust, privacy, terms and request pages.
+- Verify the **configured request intake** actually delivers and preserves an enquiry without requesting credentials, tokens or production secrets. Static HTML alone is not a delivery service.
+- Review the static hosting deployment state and logs; there is no ARL Render application API/database to probe or restart.
+- Verify service claims remain scope-and-quote, evidence-limited and not falsely accredited.
+- On a website incident, preserve relevant request-channel records, halt a compromised integration and republish known-good static assets as authorised.
 
-- confirm homepage, assessment, trust and request pages are reachable;
-- check `/api/health` and `/api/ready`;
-- review deployment logs and operational alerts;
-- verify assessment-request intake;
-- verify email delivery if configured;
-- review account/workspace access where authenticated surfaces are intentionally retained.
+Do not probe `/api/health`, `/api/ready` or hosted Operator endpoints as checks for the static site.
 
-## Local assessment operations
+## Local Operator operations (Debian)
 
-The canonical assessment workflow runs locally from `~/agent-risk-layer`.
+1. Work from the single canonical checkout `~/agent-risk-layer`. Pull reviewed `main` only when needed and never reset or overwrite local changes.
+2. Confirm the operator's `.env` provides the **local PostgreSQL `DATABASE_URL`**; SQLite is test-only. Never paste secrets into support messages.
+3. Establish customer agreement, exact scope, asset inventory, environment and authorised target repository separately from the ARL product checkout.
+4. Freeze the clean target Git SHA. If the target is dirty or mismatched, stop; do not edit target code to force a PASS.
+5. Open the existing offline review dossier using `npm run operator:open -- "$HOME/arl-target-mcp-agent"`. This prepares private HTML; it does not run tests, accept evidence or resolve HOLD. On a new target it can create initial local PostgreSQL assessment records.
+6. Review the source-evidence work plan, human documentation and runtime authorisation gaps. The same control may require several evidence types.
+7. For any controlled test, first obtain written Rules of Engagement, staging/synthetic scope, bounded allowed cases, tester attribution and valid window. No live external target testing by default.
+8. Record provenance and accountable decisions through the existing authoritative ARL workflow, not the offline HTML or an LLM. Maintain snapshot/digest lineage.
+9. After remediation, require an exact affected-path retest on the changed build and attributable evidence before human finding-closure review.
+10. Export the customer report with unsupported paths, limitations and remaining HOLD explicitly shown. Only an authorised human records the final deployment decision.
 
-Before starting customer work:
+## Local data recovery
 
-1. confirm `main` is the intended reviewed revision;
-2. confirm the target repository is authorised and in scope;
-3. require a clean frozen target before authoritative inspection;
-4. record scope and Rules of Engagement before controlled testing;
-5. never let an LLM decide applicability, severity, evidence validity, closure, readiness or deployment;
-6. preserve exact revision/snapshot lineage;
-7. retest the exact affected control after remediation;
-8. require the final accountable human decision.
+Use the existing `npm run db:backup`, `npm run db:verify-backup` and approved `npm run db:restore` procedures where applicable. Restore is a separately approved, potentially destructive maintenance action: validate the destination, checksum, retention and downtime plan first. Render has no current ARL product database to restore.
 
-## Incident handling
+## Commercial and authority boundaries
 
-If the public website has an operational incident:
+The offer is **request → scope → quote/agreement → human-led security assessment**. No active Stripe checkout, hosted Operator session or self-service subscription path is required.
 
-- protect assessment-request data;
-- preserve logs/evidence needed for diagnosis;
-- disable affected public functionality if integrity is uncertain;
-- rotate exposed credentials;
-- restore from an approved backup only when needed.
-
-A public-site incident does not automatically invalidate local assessment evidence unless the affected infrastructure participated in that evidence chain.
-
-## Database recovery
-
-Where PostgreSQL is used for the deployed website:
-
-- prefer the hosting provider's supported recovery capability;
-- use repository backup/restore scripts only with an approved destination and maintenance window;
-- never overwrite a live database casually;
-- verify restored data before reopening affected functionality.
-
-## Shutdown and maintenance
-
-Use normal process termination and allow the server to close connections cleanly.
-
-Do not treat deployment status as an assessment readiness decision.
-
-## Commercial operations
-
-The active commercial flow is request -> scope -> quote/agreement -> assessment.
-
-There is no active self-service Stripe checkout/subscription workflow in the current model.
+**The LLM is not the security authority.** A green CI job, a static source observation or a synthetic dashboard cannot decide applicability, severity, evidence validity, finding closure, readiness or deployment.
