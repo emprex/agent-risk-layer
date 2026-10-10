@@ -55,7 +55,7 @@
     "report:disclosure": "node scripts/review-customer-report-disclosure.mjs"
   },
   "dependencies": {
-    "pg": "8.23.0"
+    "pg": "8.23.1"
   },
   "bin": {
     "arl-operator": "bin/arl-operator.mjs"
