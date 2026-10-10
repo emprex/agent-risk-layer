@@ -41,6 +41,10 @@ This command inspects **exactly the named manifest and its two matching files** 
 
 `integrity: consistent_only` means the three files agree **with each other**. The SHA-256 digest is **not** a signature or independent provenance attestation; an actor able to replace all three files can recompute their hashes. No finding validity, review acceptance, external security outcome, readiness or deployment decision is inferred by this check. Independently protect the original digest and use the authorised human workflow for approval and report handoff.
 
+## Advisory disclosure inspection before external report handoff
+
+The optional `npm run report:disclosure -- "<absolute-private-manifest-path>"` command verifies the three exported files and returns **non-revealing location/indicator hints** for human confidentiality review. A clean heuristic scan is **not** disclosure approval. The reviewer must read the private Markdown and JSON, confirm the recipient and disclosure boundary, inspect unscanned/flagged content, and separately record the human permission. See `docs/REPORT_DISCLOSURE_REVIEW.md`.
+
 ## Local data recovery
 
 Use the existing `npm run db:backup`, `npm run db:verify-backup` and approved `npm run db:restore` procedures where applicable. Restore is a separately approved, potentially destructive maintenance action: validate the destination, checksum, retention and downtime plan first. Render has no current ARL product database to restore.
