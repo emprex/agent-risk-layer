@@ -138,3 +138,38 @@ test('output validation rejects forged digests, duplicate names, traversal and f
     /Refusing filesystem root/);
   assert.deepEqual(fs.readdirSync(root),[]);
 }));
+
+
+test('successive human evidence updates preserve independent immutable bundles on one target SHA', () =>
+  withTemp(root => {
+    const early=deliverable();
+    const laterReport=structuredClone(report);
+    laterReport.readiness.rationale=
+      'Additional synthetic evidence reviewed; release is still on HOLD.';
+    const later=buildCustomerAssessmentDeliverable(laterReport);
+    assert.equal(early.manifest.targetRevision,later.manifest.targetRevision);
+    assert.notEqual(early.bundleSha256,later.bundleSha256);
+    const earlyNames=new Set(early.files.map(f=>f.name));
+    const laterNames=new Set(later.files.map(f=>f.name));
+    assert.equal([...earlyNames].some(n=>laterNames.has(n)),false,
+      'Different report content must never collide at one frozen source SHA');
+    assert.ok(early.files.every(f=>f.name.includes(early.bundleSha256.slice(0,16))));
+    assert.ok(later.files.every(f=>f.name.includes(later.bundleSha256.slice(0,16))));
+    const first=writeCustomerAssessmentDeliverable({deliverable:early,outputDirectory:root});
+    const second=writeCustomerAssessmentDeliverable({deliverable:later,outputDirectory:root});
+    assert.equal(first.createdFiles,3);
+    assert.equal(second.createdFiles,3);
+    assert.equal(fs.readdirSync(root).length,6);
+    assert.equal(early.manifest.readinessStatus,'HOLD');
+    assert.equal(later.manifest.readinessStatus,'HOLD');
+    assert.equal(early.manifest.integrityClaim,'sha256_content_digest_only_not_signature');
+    for(const item of first.files) {
+      assert.equal(fs.readFileSync(item.path,'utf8'),
+        early.files.find(f=>f.name===item.name).content);
+    }
+    const repeat=writeCustomerAssessmentDeliverable({deliverable:early,outputDirectory:root});
+    assert.equal(repeat.unchangedFiles,3);
+    assert.equal(repeat.securityStateChanged,false);
+    assert.equal(repeat.deploymentDecisionWritten,false);
+  })
+);
