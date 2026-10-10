@@ -24,7 +24,7 @@ function ephemeralCiUrl() {
   return url;
 }
 
-test('ephemeral PostgreSQL applies real migrations idempotently and bootstraps a frozen local Operator assessment', {
+test('ephemeral PostgreSQL proves frozen assessment, offline evidence dashboard and stale-SHA rejection', {
   skip: !url && 'Only the dedicated CI PostgreSQL service is authorized.',
   timeout: 150_000
 }, async () => {
@@ -107,10 +107,90 @@ test('ephemeral PostgreSQL applies real migrations idempotently and bootstraps a
     assert.match(result.stdout,/ARL LOCAL ASSESSMENT ANSWER/);
     assert.doesNotMatch(result.stdout,/deployment (?:authorised|approved)|release approved/i);
 
+    // A second, read-only operator request must reuse the exact frozen
+    // assessment in real PostgreSQL and export one local, private HTML file.
+    const reviewDirectory=path.join(temp,'review-output');
+    fs.mkdirSync(reviewDirectory,{mode:0o700});
+    const review=spawnSync(process.execPath,[
+      'src/agent/arl-local-assessment-runner.mjs',
+      target,
+      'Export assessment operator dashboard'
+    ],{
+      cwd:root,
+      env:{
+        ...process.env,
+        NODE_ENV:'test',
+        PRODUCT_STAGE:'development',
+        ARL_LOCAL_MODE:'1',
+        ARL_AI_ADVISORY:'0',
+        ARL_OPERATOR_OPEN_DASHBOARD:'0',
+        ARL_REPORT_OUTPUT_DIR:reviewDirectory,
+        DATABASE_URL:connectionString,
+        ARL_EXPECTED_TARGET_SHA:revision
+      },
+      encoding:'utf8',
+      timeout:90_000
+    });
+    assert.equal(review.status,0,
+      'Local PostgreSQL operator dashboard export failed:\\n'+
+      review.stdout.slice(-6_000)+'\\n'+review.stderr.slice(-6_000));
+    assert.match(review.stdout,/Offline operator review dashboard created:/);
+    assert.match(review.stdout,/No tests run, evidence verified, finding closed or deployment authorised/i);
+    const artifacts=fs.readdirSync(reviewDirectory);
+    assert.equal(artifacts.length,1);
+    assert.match(artifacts[0],/^ARL-operator-review-[a-f0-9]{16}\\.html$/);
+    const htmlPath=path.join(reviewDirectory,artifacts[0]);
+    assert.equal(fs.statSync(reviewDirectory).mode & 0o777,0o700);
+    assert.equal(fs.statSync(htmlPath).mode & 0o777,0o600);
+    const html=fs.readFileSync(htmlPath,'utf8');
+    assert.match(html,/Evidence work plan/);
+    assert.match(html,/Deployment HOLD/);
+    assert.doesNotMatch(html,/<script\\b/i);
+    assert.equal(git(['status','--porcelain']).stdout.trim(),'',
+      'The exact frozen synthetic target must remain unchanged');
+
+    // A changed synthetic Git commit is a DIFFERENT target. It must never
+    // reuse the earlier authoritative revision without revalidation.
+    fs.appendFileSync(path.join(target,'README.md'),
+      '\\n# Synthetic second revision; not a customer target\\n');
+    assert.equal(git(['add','README.md']).status,0);
+    assert.equal(git(['-c','commit.gpgsign=false','commit','-qm','Changed synthetic target']).status,0);
+    const changedRevision=git(['rev-parse','HEAD']).stdout.trim();
+    assert.notEqual(changedRevision,revision);
+    const stale=spawnSync(process.execPath,[
+      'src/agent/arl-local-assessment-runner.mjs',
+      target,
+      'Export assessment operator dashboard'
+    ],{
+      cwd:root,
+      env:{
+        ...process.env,
+        NODE_ENV:'test',
+        PRODUCT_STAGE:'development',
+        ARL_LOCAL_MODE:'1',
+        ARL_AI_ADVISORY:'0',
+        ARL_OPERATOR_OPEN_DASHBOARD:'0',
+        ARL_REPORT_OUTPUT_DIR:reviewDirectory,
+        DATABASE_URL:connectionString,
+        ARL_EXPECTED_TARGET_SHA:revision
+      },
+      encoding:'utf8',
+      timeout:90_000
+    });
+    assert.equal(stale.status,2);
+    assert.match(stale.stderr,/Local assessment frozen target mismatch/);
+    assert.equal(fs.readdirSync(reviewDirectory).length,1,
+      'A changed target may not silently create a trusted old-revision dossier');
+
     const owners = await db.prepare('SELECT COUNT(*) AS count FROM users WHERE email LIKE ?').get('%@local.invalid');
     assert.equal(Number(owners.count),1);
     const snapshots = await db.prepare('SELECT COUNT(*) AS count FROM system_snapshots').get();
     assert.ok(Number(snapshots.count)>=1);
+    const activeTests = await db.prepare('SELECT COUNT(*) AS count FROM control_test_executions').get();
+    assert.equal(Number(activeTests.count),0,
+      'Review HTML and a rejected changed SHA must never execute a controlled test.');
+    const redteamRuns = await db.prepare('SELECT COUNT(*) AS count FROM redteam_runs').get();
+    assert.equal(Number(redteamRuns.count),0);
     const decisions = await db.prepare('SELECT COUNT(*) AS count FROM control_deployment_decisions').get();
     assert.equal(Number(decisions.count),0,
       'Synthetic Operator bootstrapping must not write a deployment decision.');
