@@ -17,6 +17,11 @@ function git(cwd, args) {
   ).trim();
 }
 
+// Disposable Git fixtures must not depend on a developer's commit-signing agent.
+function commitFixture(cwd, message) {
+  return git(cwd, ['-c', 'commit.gpgsign=false', 'commit', '-m', message]);
+}
+
 test('typed deterministic collector emits bounded privacy-safe observations for target, architecture, tools, credentials, network and dependencies', () => {
   const root =
     fs.mkdtempSync(
@@ -80,8 +85,10 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
     git(root, ['init']);
     git(root, ['config', 'user.email', 'test@example.test']);
     git(root, ['config', 'user.name', 'ARL Test']);
+    // Deliberately require signing locally: fixture commits must override it.
+    git(root, ['config', 'commit.gpgsign', 'true']);
     git(root, ['add', '.']);
-    git(root, ['commit', '-m', 'fixture']);
+    commitFixture(root, 'fixture');
 
     const revision =
       git(root, ['rev-parse', 'HEAD']);
@@ -180,7 +187,7 @@ test('KB-011 discovery records bounded coverage rather than pretending all track
         'const placeholder = ' + n + ';\\n');
     }
     git(root, ['add', '.']);
-    git(root, ['commit', '-m', 'synthetic inventory']);
+    commitFixture(root, 'synthetic inventory');
     const revision = git(root, ['rev-parse', 'HEAD']);
     const data = collectDeterministicEvidence({
       repositoryPath: root,
