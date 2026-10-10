@@ -2848,14 +2848,13 @@
       "problem": {
         "statement": "An agent can search, summarise, export or modify another customer's data even when the web application appears isolated.",
         "customer_symptom": "A user or operator may observe an agent can search, summarise, export or modify another customer's data even when the web application appears isolated; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in an agent can search, summarise, export or modify another customer's data even when the web application appears isolated, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "A user, compromised agent or mis-scoped service identity can exploit missing or inconsistent tenant binding across vector retrieval, persistent memory, caches, asynchronous jobs, tool calls and exports, exposing another tenant's records, metadata or actions.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions"
+          "tenant-scoped documents and vector search indexes",
+          "memory stores and cached retrieval results",
+          "background job payloads and queues",
+          "tool, API and provider service identities",
+          "exports, logs and downstream data sinks"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -2863,7 +2862,7 @@
           "multi-tenant agents"
         ],
         "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between multi-tenant agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between the authenticated tenant and the retrieval, memory, cache, asynchronous execution, tool, export and logging layers that must preserve that tenant's authority.",
         "operational_impact": "If an agent can search, summarise, export or modify another customer's data even when the web application appears isolated, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -2894,12 +2893,12 @@
         "last_reviewed": "2026-10-03",
         "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-025 tenant-identity, retrieval, memory, cache, background-job, tool or export-path change",
-          "ARL-KB-025 namespace, index, downstream-service or tenant-claim propagation change",
-          "ARL-KB-025 cross-tenant access, metadata exposure or isolation-bypass incident",
-          "ARL-KB-025 evidence expiry or material scope, architecture or assessed-version change"
+          "ARL-KB-025 tenant identity propagation, role, namespace, retrieval or vector index change",
+          "ARL-KB-025 cache partition, memory, job, tool, export or log pipeline change",
+          "ARL-KB-025 cross-tenant leak, metadata exposure, stale-claim or isolation-bypass incident",
+          "ARL-KB-025 assessed scope, build version or evidence expiry change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2934,7 +2933,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "197ba5752f39227029c46e7b4bfedeb821b66947bf4213f9e4b33484de7208eb"
+      "content_digest": "aaf52f5ff8a717836fd2de275f0ea178919799d9fab5e8800146a72aa5e9edf9"
     },
     {
       "id": "ARL-KB-026",

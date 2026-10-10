@@ -5624,14 +5624,13 @@
       "problem": {
         "statement": "An agent can search, summarise, export or modify another customer's data even when the web application appears isolated.",
         "customer_symptom": "A user or operator may observe an agent can search, summarise, export or modify another customer's data even when the web application appears isolated; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in an agent can search, summarise, export or modify another customer's data even when the web application appears isolated, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "A user, compromised agent or mis-scoped service identity can exploit missing or inconsistent tenant binding across vector retrieval, persistent memory, caches, asynchronous jobs, tool calls and exports, exposing another tenant's records, metadata or actions.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions"
+          "tenant-scoped documents and vector search indexes",
+          "memory stores and cached retrieval results",
+          "background job payloads and queues",
+          "tool, API and provider service identities",
+          "exports, logs and downstream data sinks"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -5639,13 +5638,13 @@
           "multi-tenant agents"
         ],
         "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between multi-tenant agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between the authenticated tenant and the retrieval, memory, cache, asynchronous execution, tool, export and logging layers that must preserve that tenant's authority.",
         "operational_impact": "If an agent can search, summarise, export or modify another customer's data even when the web application appears isolated, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-025",
-        "objective": "Determine whether tenant identity is enforced across direct APIs, retrieval, memory, caches, background jobs, tools, exports and logs so one tenant cannot access another tenant's data or actions.",
-        "method": "Run cross-tenant tests through direct APIs, vector retrieval, memory, caches, background jobs, tools, exports and logs. Create Tenant A and Tenant B users, roles and object IDs. Attempt direct-ID, list, search, export and tool access across tenants; expect indistinguishable authorization failures and no foreign metadata.",
+        "objective": "Determine whether authenticated tenant identity is enforced and fails closed across direct APIs, vector retrieval, memory, caches, asynchronous jobs, tools, exports and logs for the exact assessed build.",
+        "method": "Review the approved tenant-isolation matrix and version-bound source/configuration, including vector namespace filters, cache partitioning, service identities and async tenant propagation. With separately authorised staging and synthetic Tenant A/B identities and data, execute bounded positive same-tenant and negative cross-tenant scenarios through each applicable path; verify responses, retrieved provenance, downstream effects and attributable audit events.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5653,30 +5652,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-025 assessed system, version, environment and scope for Tenant isolation fails in retrieval or tools",
-          "ARL-KB-025 control configuration or source location showing how reduce the likelihood and impact of tenant isolation fails in retrieval or tools and make the remaining risk visible.",
-          "ARL-KB-025 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-025 policy, authorization, tool or audit events proving whether the tested tenant isolation fails in retrieval or tools path executed",
-          "ARL-KB-025 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-025 exact assessed system, version, environment, synthetic tenant and actor identities, retrieval collections, memory stores, cache partitions, background jobs, tools, exports and log scope",
+          "ARL-KB-025 organisation-approved tenant and operation isolation policy, permitted data-sharing matrix, identity propagation rules, exceptions and accountable owner",
+          "ARL-KB-025 source or configuration evidence for mandatory tenant-scoped retrieval filters, vector namespaces, memory/cache partitioning, job identity context, tool authorization, export/log segregation and fail-closed missing-claim paths",
+          "ARL-KB-025 bounded positive evidence of authorised synthetic Tenant A/B requests, searches, memory, cache, jobs, tool calls and exports returning only approved tenant data and state changes",
+          "ARL-KB-025 bounded negative evidence of cross-tenant IDs, vector results, memory/cache reuse, asynchronous jobs, tool execution, indirect references, exports, log access and absent-tenant-claim variants denied before data exposure or side effects",
+          "ARL-KB-025 observed runtime tenant binding, vector/retrieval filter decisions, item provenance, output, tool and downstream authorization events, before-and-after state and audit records proving allow and deny outcomes",
+          "ARL-KB-025 tester and reviewer identity, written authorisation, roles, timestamps, exact assessed version, evidence digest, unsupported paths, exceptions and accountable human decision"
         ],
-        "pass_condition": "ARL-KB-025 passes only when “Tenant isolation fails in retrieval or tools” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-025 fails when an agent can search, summarise, export or modify another customer's data even when the web application appears isolated, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "KB-025 passes only after accountable human review of exact-version source, policy, synthetic same-tenant success and observed cross-tenant denial before metadata or content disclosure or side effects across each applicable retrieval, memory, cache, asynchronous, tool, export and log path, with correlated audit evidence and explicit limits.",
+        "fail_condition": "KB-025 is a confirmed FAIL only when exact-version evidence demonstrates cross-tenant content or metadata disclosure, an unauthorized retrieval, tool, export or state-changing side effect, or an executable path that demonstrably fails open or loses tenant identity. Missing or mismatched exact-version tests, runtime observations, scope or accountable human review require INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment, but do not claim a confirmed vulnerability.",
         "limitations": "This bounded ARL-KB-025 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-025's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "With the documented control enabled for ARL-KB-025, execute an authorised in-scope request and verify only the intended identity, data and side effect are available.",
-        "negative_test": "Attempt the ARL-KB-025 failure using an unauthorised identity, boundary-crossing input, malformed variant and direct/replayed execution path; record every policy and downstream response.",
+        "positive_test": "Using synthetic Tenant A and Tenant B identities, verify each authorized direct, retrieval, memory, cache, background-job, tool and export operation returns only its approved data and produces only expected scoped side effects.",
+        "negative_test": "Attempt synthetic cross-tenant identifiers, searches, vector contexts, memory/cache reuse, job execution, tool calls, exports and omitted claims; verify denial before foreign metadata or content disclosure, state change or external action, with correlated authorization and audit records.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-025 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Tenant isolation fails in retrieval or tools” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Tenant A/B synthetic identities and records must produce only allowed tenant-filtered search, memory, cache, tool and export outputs under the documented isolation policy.",
+          "Cross-tenant, missing-claim, replay and alternate-path attempts must fail closed before foreign data exposure or side effects and leave attributable audit evidence."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -5699,10 +5700,10 @@
         "monitoring": "For ARL-KB-025, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security architect on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-025 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-025: “Tenant isolation fails in retrieval or tools” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-025: Authorised in-scope use completes successfully, remains within the documented asset scope for tenant isolation fails in retrieval or tools, and produces no unintended side effect.",
-          "ARL-KB-025: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-025: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-025: The exact remediated tenant-isolation policy, identity propagation design, affected data paths, deployed version and signed evidence digests are recorded.",
+          "ARL-KB-025: Bounded synthetic same-tenant retrieval, memory, cache, job, tool and export operations succeed with approved outputs and state changes.",
+          "ARL-KB-025: Cross-tenant and missing-claim variants are denied before foreign content, metadata or side effects across applicable retrieval, cache, memory, job, tool, export and log paths, with attributable logs.",
+          "ARL-KB-025: An accountable human reviewer records unsupported paths, residual exceptions, limitations and the exact-version retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-025 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Bind tenant identity to every request and data operation, isolate indexes and caches, propagate claims to tools and test every asynchronous path. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5715,7 +5716,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-025 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-025 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact tenant-isolation failure and relevant cross-tenant direct/retrieval, memory, cache, background-job, tool, export, log and missing-claim variants on the remediated build with synthetic identities, observed outputs and state, before human deployment review.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-025",
           "Passed retest evidence bound to ARL-KB-025 and the current knowledge digest",
@@ -5756,12 +5757,12 @@
         "last_reviewed": "2026-10-03",
         "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-025 tenant-identity, retrieval, memory, cache, background-job, tool or export-path change",
-          "ARL-KB-025 namespace, index, downstream-service or tenant-claim propagation change",
-          "ARL-KB-025 cross-tenant access, metadata exposure or isolation-bypass incident",
-          "ARL-KB-025 evidence expiry or material scope, architecture or assessed-version change"
+          "ARL-KB-025 tenant identity propagation, role, namespace, retrieval or vector index change",
+          "ARL-KB-025 cache partition, memory, job, tool, export or log pipeline change",
+          "ARL-KB-025 cross-tenant leak, metadata exposure, stale-claim or isolation-bypass incident",
+          "ARL-KB-025 assessed scope, build version or evidence expiry change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -5819,7 +5820,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "197ba5752f39227029c46e7b4bfedeb821b66947bf4213f9e4b33484de7208eb"
+      "content_digest": "aaf52f5ff8a717836fd2de275f0ea178919799d9fab5e8800146a72aa5e9edf9"
     },
     {
       "id": "ARL-KB-026",
