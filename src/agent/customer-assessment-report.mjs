@@ -70,15 +70,34 @@ function readinessLabel(decision) {
   return null;
 }
 
+const RESTRICTED_TEST_DETAIL =
+  '[omitted from customer report; inspect the authorised test record]';
+
+function customerSafeTestDetail(value) {
+  return value === null || value === undefined || value === ''
+    ? null
+    : RESTRICTED_TEST_DETAIL;
+}
+
+// Exact bounded test outputs may contain customer data, secrets, tool
+// arguments or hostile content. They remain in authoritative evidence;
+// the customer report is a deliberately reduced, read-only projection.
 function projectTest(item) {
+  const privateFields=['expectedResult','observedResult','failureReason','limitations'];
+  const withheld=privateFields.some(key =>
+    item?.[key] !== null && item?.[key] !== undefined && item?.[key] !== '');
+  const id=typeof item?.id==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(item.id)
+    ? item.id : null;
   return {
+    testExecutionId: id,
     executionKind: item?.executionKind || null,
     result: item?.result || null,
     executionMethod: item?.executionMethod || null,
-    expectedResult: item?.expectedResult || null,
-    observedResult: item?.observedResult || null,
-    failureReason: item?.failureReason || null,
-    limitations: item?.limitations || null,
+    expectedResult: customerSafeTestDetail(item?.expectedResult),
+    observedResult: customerSafeTestDetail(item?.observedResult),
+    failureReason: customerSafeTestDetail(item?.failureReason),
+    limitations: customerSafeTestDetail(item?.limitations),
+    restrictedTestDetailsOmitted: withheld,
     startedAt: item?.startedAt || null,
     completedAt: item?.completedAt || null
   };
