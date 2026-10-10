@@ -24,7 +24,7 @@ function ephemeralCiUrl() {
   return url;
 }
 
-test('ephemeral PostgreSQL proves frozen assessment, offline evidence dashboard and stale-SHA rejection', {
+test('ephemeral PostgreSQL refuses unsupported review export and stale target SHA', {
   skip: !url && 'Only the dedicated CI PostgreSQL service is authorized.',
   timeout: 150_000
 }, async () => {
@@ -131,21 +131,14 @@ test('ephemeral PostgreSQL proves frozen assessment, offline evidence dashboard 
       encoding:'utf8',
       timeout:90_000
     });
-    assert.equal(review.status,0,
-      'Local PostgreSQL operator dashboard export failed:\n'+
-      review.stdout.slice(-6_000)+'\n'+review.stderr.slice(-6_000));
-    assert.match(review.stdout,/Offline operator review dashboard created:/);
-    assert.match(review.stdout,/No tests run, evidence verified, finding closed or deployment authorised/i);
-    const artifacts=fs.readdirSync(reviewDirectory);
-    assert.equal(artifacts.length,1);
-    assert.match(artifacts[0],/^ARL-operator-review-[a-f0-9]{16}\.html$/);
-    const htmlPath=path.join(reviewDirectory,artifacts[0]);
+    // The fixture has no human-prepared evidence/application scope.
+    // A real database must not manufacture 98 eligible controls or HTML.
+    assert.equal(review.status,2);
+    assert.match(review.stderr,/No independent controls are ready for operator review export/);
+    assert.doesNotMatch(review.stdout,/Offline operator review dashboard created:/);
+    assert.equal(fs.readdirSync(reviewDirectory).length,0,
+      'No eligible controls means no HTML dashboard may be exported');
     assert.equal(fs.statSync(reviewDirectory).mode & 0o777,0o700);
-    assert.equal(fs.statSync(htmlPath).mode & 0o777,0o600);
-    const html=fs.readFileSync(htmlPath,'utf8');
-    assert.match(html,/Evidence work plan/);
-    assert.match(html,/Deployment HOLD/);
-    assert.doesNotMatch(html,/<script\b/i);
     assert.equal(git(['status','--porcelain']).stdout.trim(),'',
       'The exact frozen synthetic target must remain unchanged');
 
@@ -179,8 +172,8 @@ test('ephemeral PostgreSQL proves frozen assessment, offline evidence dashboard 
     });
     assert.equal(stale.status,2);
     assert.match(stale.stderr,/Local assessment frozen target mismatch/);
-    assert.equal(fs.readdirSync(reviewDirectory).length,1,
-      'A changed target may not silently create a trusted old-revision dossier');
+    assert.equal(fs.readdirSync(reviewDirectory).length,0,
+      'A changed target may not create a trusted old-revision dossier');
 
     const owners = await db.prepare('SELECT COUNT(*) AS count FROM users WHERE email LIKE ?').get('%@local.invalid');
     assert.equal(Number(owners.count),1);
