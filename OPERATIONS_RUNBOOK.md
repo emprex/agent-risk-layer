@@ -23,7 +23,7 @@ Do not probe `/api/health`, `/api/ready` or hosted Operator endpoints as checks 
 7. For any controlled test, first obtain written Rules of Engagement, staging/synthetic scope, bounded allowed cases, tester attribution and valid window. No live external target testing by default.
 8. Record provenance and accountable decisions through the existing authoritative ARL workflow, not the offline HTML or an LLM. Maintain snapshot/digest lineage.
 9. After remediation, require an exact affected-path retest on the changed build and attributable evidence before human finding-closure review.
-10. Export the customer report with unsupported paths, limitations and remaining HOLD explicitly shown. Only an authorised human records the final deployment decision.
+10. Export the customer report with unsupported paths, limitations and remaining HOLD explicitly shown. Only an authorised human records the final deployment decision. The export creates private, immutable Markdown/JSON/manifest files named with the assessed target revision **and a truncated SHA-256 bundle identifier**. A later evidence or review update on the *same target revision* produces a separate immutable bundle rather than overwriting an earlier report. The SHA-256 identifier proves content correspondence only; it is **not** a cryptographic signature, reviewer approval, finding closure or release authority.
 
 ## Local data recovery
 
