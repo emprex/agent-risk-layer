@@ -25,6 +25,18 @@ Do not probe `/api/health`, `/api/ready` or hosted Operator endpoints as checks 
 9. After remediation, require an exact affected-path retest on the changed build and attributable evidence before human finding-closure review.
 10. Export the customer report with unsupported paths, limitations and remaining HOLD explicitly shown. Only an authorised human records the final deployment decision. The export creates private, immutable Markdown/JSON/manifest files named with the assessed target revision **and a truncated SHA-256 bundle identifier**. A later evidence or review update on the *same target revision* produces a separate immutable bundle rather than overwriting an earlier report. The SHA-256 identifier proves content correspondence only; it is **not** a cryptographic signature, reviewer approval, finding closure or release authority.
 
+## Independent report bundle integrity check (offline)
+
+After exporting a customer assessment, ARL writes private immutable Markdown, JSON and `.manifest.json` files with one SHA-256 content identifier. On the owner-controlled machine, run:
+
+```bash
+npm run report:verify -- "/absolute/private/report/directory/arl-assessment-...manifest.json"
+```
+
+This command inspects **exactly the named manifest and its two matching files** in the same private directory. It checks safe filenames, 0600 regular/unlinked files, 0700 directory, bounded byte lengths, declared hashes, exact target/snapshot metadata, report authority fields and the recomputed bundle digest. No database, API, customer target, hosted service or active test is accessed. It is safe to run again without changing the report.
+
+`integrity: consistent_only` means the three files agree **with each other**. The SHA-256 digest is **not** a signature or independent provenance attestation; an actor able to replace all three files can recompute their hashes. No finding validity, review acceptance, external security outcome, readiness or deployment decision is inferred by this check. Independently protect the original digest and use the authorised human workflow for approval and report handoff.
+
 ## Local data recovery
 
 Use the existing `npm run db:backup`, `npm run db:verify-backup` and approved `npm run db:restore` procedures where applicable. Restore is a separately approved, potentially destructive maintenance action: validate the destination, checksum, retention and downtime plan first. Render has no current ARL product database to restore.
