@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { prepareCustomerReportDisclosurePreflight }
+  from './customer-report-disclosure-preflight.mjs';
 
 const MANIFEST_SCHEMA = 'arl.customer-assessment-deliverable-manifest.v1';
 const REPORT_SCHEMA = 'arl.customer-assessment-report.v1';
@@ -88,7 +90,7 @@ function verifyRow(row, name, mediaType, bytes) {
 
 // Purely read-only file consistency. A digest is not a signature, evidence
 // verification, audit finding or approval, even if every hash matches.
-export function verifyCustomerReportBundle(manifestPath) {
+export function verifyCustomerReportBundle(manifestPath, { disclosurePreflight=false }={}) {
   required(typeof manifestPath==='string' && manifestPath.trim().length>0,
     'provide the exact .manifest.json path');
   const filePath=path.resolve(manifestPath);
@@ -151,6 +153,9 @@ export function verifyCustomerReportBundle(manifestPath) {
     'bundle identifier is inconsistent with its Markdown, JSON or snapshot');
 
   return {
+    ...(disclosurePreflight===true ? {
+      disclosurePreflight:prepareCustomerReportDisclosurePreflight(report)
+    } : {}),
     schema:'arl.customer-report-bundle-integrity-check.v1',
     integrity:'consistent_only',
     authenticity:'not_verified_no_signature',
