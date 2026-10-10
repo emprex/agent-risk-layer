@@ -26,6 +26,18 @@ Requires the existing local PostgreSQL assessment and frozen target. The command
 
 The document is a **read-only preparation artifact**, not the authoritative security result. It displays only independently actionable test/evidence-stage controls, with current snapshot ID, frozen Git SHA, canonical criteria, source observations, recorded evidence/test metadata, and operator tasks. Blocked findings, closed/completed/human-decision controls are explicitly outside this view. Their status is not changed.
 
+
+## Work the 98-control queue without treating it as 98 verdicts
+
+The offline HTML now presents a **four-stage evidence work plan** before the complete control index:
+
+1. Missing frozen-source observations — obtain version-specific inspection metadata and assess its provenance.
+2. Human evidence and ownership — request accountable policy, scope, approval and reviewer records.
+3. Separately authorised runtime checks — plan synthetic bounded positive and negative tests **outside** the HTML; never treat a plan as execution authority.
+4. Source provenance exceptions — resolve stale or conflicting lineage before human evidence acceptance.
+
+Each group shows the count of affected controls and requirement instances, with links to the exact canonical criteria in the individual control dossier. **A control can appear in several groups**; group counts are neither distinct controls nor finding counts. The full index is available in a collapsed no-script disclosure for quick lookup. All underlying evidence inventory and test metadata remain accessible. The dashboard performs no updates, executes no tests and cannot authorize release. A newly generated report is required after a material snapshot, source or trust change.
+
 Safety requirements:
 - Reject incomplete or inconsistent 108-control queue pages.
 - Bind all dossier batches to one authoritative snapshot and exact frozen target Git revision, with original assessment binding.
