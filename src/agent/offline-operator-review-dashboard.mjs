@@ -17,7 +17,58 @@ function readOnly(value) {
     throw new Error('Offline operator review cannot accept security authority changes.');
 }
 
-export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expectedRevision) {
+const CONTROL_LANES = [
+  'follow_up_blocked', 'human_applicability', 'test_planning',
+  'evidence_collection', 'human_decision', 'review_required'
+];
+const REVIEW_LANES = new Set(['test_planning', 'evidence_collection']);
+
+// The full register is strictly the authoritative snapshot work queue.
+// A control outside the independent evidence lanes is not omitted, and its
+// queue status is NOT an approval, PASS, or completed security assessment.
+function snapshotControlRegistry(queue, index) {
+  readOnly(queue);
+  if (queue?.complete !== true ||
+      queue.systemSnapshotId !== index.systemSnapshotId ||
+      queue.total !== index.queueTotal ||
+      !Array.isArray(queue.controlIds) ||
+      !queue.lanes || typeof queue.lanes !== 'object')
+    throw new Error('Complete same-snapshot authoritative 108-control register required.');
+  const selectedIds = new Set(index.batches.flatMap(batch => batch.controlIds));
+  const registry = [];
+  for (const lane of CONTROL_LANES) {
+    if (!Array.isArray(queue.lanes[lane]))
+      throw new Error('Authoritative control register has a missing lane.');
+    for (const item of queue.lanes[lane]) {
+      if (!ID.test(item?.controlId || '') ||
+          (REVIEW_LANES.has(lane) !== selectedIds.has(item.controlId))) {
+        throw new Error('Authoritative control register contradicts the evidence work queue.');
+      }
+      // Only bounded routing metadata. Never copy private free-text nextAction,
+      // raw evidence, notes, user data, or any unreviewed test payload.
+      const field = value => typeof value === 'string' && value.length <= 80
+        ? value : null;
+      registry.push({
+        controlId:item.controlId,
+        lane,
+        currentStage:field(item.currentStage),
+        chainStatus:field(item.chainStatus),
+        deploymentImpact:field(item.deploymentImpact),
+        inEvidenceWorkplan:REVIEW_LANES.has(lane)
+      });
+    }
+  }
+  const ids=registry.map(item => item.controlId);
+  if (ids.length !== queue.total ||
+      new Set(ids).size !== ids.length ||
+      ids.slice().sort().join('|') !== queue.controlIds.slice().sort().join('|') ||
+      registry.filter(x => x.inEvidenceWorkplan).length !== index.eligibleControls ||
+      registry.filter(x => !x.inEvidenceWorkplan).length !== index.excludedControls)
+    throw new Error('Authoritative full control register is incomplete or inconsistent.');
+  return registry.sort((a,b)=>a.controlId.localeCompare(b.controlId));
+}
+
+export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expectedRevision, queue) {
   readOnly(index);
   if (!SHA.test(expectedRevision || ''))
     throw new Error('Exact frozen target Git revision required for offline export.');
@@ -71,8 +122,11 @@ export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expec
       new Set(controls.map(c=>c.controlId)).size !== controls.length ||
       index.excludedControls !== index.queueTotal-index.eligibleControls)
     throw new Error('Offline review does not cover all independent control identities.');
+  const registry=snapshotControlRegistry(queue,index);
   return {
     schema:'arl.agent.offline-operator-review-dashboard.v1',
+    controlRegistry:registry,
+    registryTotal:registry.length,
     systemSnapshotId:index.systemSnapshotId,
     targetRevision:revision,
     assessedControls:controls.length,
@@ -109,6 +163,7 @@ const css = [
   '.workstream summary,.all-controls summary{cursor:pointer;color:#18569d;font-weight:600}',
   '.workstream .links,.all-controls .links{margin:10px 0 0}.all-controls{padding:12px;background:#fff;border:1px solid #dce4ee;border-radius:12px;margin:12px 0 20px}',
   '.workstream a{overflow-wrap:anywhere}.counts{color:#50607a;font-weight:500;font-size:.9rem}',
+  '.registry table{width:100%}.registry .held{font-weight:600}.registry td code{white-space:nowrap}',
   '@media print{body{background:white}details{break-inside:avoid}}'
 ].join('');
 
@@ -235,12 +290,55 @@ function controlMarkup(d) {
     '<p class="pending">No PASS/FAIL inferred. Decisions must be recorded in ARL by the accountable human.</p></div></details>';
 }
 
+const LANE_ACTION = Object.freeze({
+  follow_up_blocked:'Separate blocked finding / remediation follow-up — not resolved here',
+  human_applicability:'Accountable human applicability decision required',
+  test_planning:'Independent test planning and evidence review only',
+  evidence_collection:'Independent evidence collection and human validation',
+  human_decision:'Human decision-stage record — not evidence of approval',
+  review_required:'Further accountable review required'
+});
+
+function fullControlRegistryMarkup(dashboard) {
+  const records=dashboard.controlRegistry;
+  return '<section class="registry"><h2>Full control register — '+esc(records.length)+
+    ' snapshot controls</h2>'+
+    '<p class="muted">Authoritative routing metadata for ALL controls, including the '+
+    esc(dashboard.excludedControls)+' outside independent evidence work. '+
+    'Excluded here never means passed, accepted, closed, or deployment-approved. '+
+    'Decision-stage labels are NOT independent evidence of a signed decision.</p>'+
+    '<details><summary>Show all '+esc(records.length)+
+    ' control states and excluded-control reasons</summary>'+
+    '<div class="table-wrap"><table><thead><tr><th>Control</th><th>Lane</th>'+
+    '<th>Current stage</th><th>Chain status</th><th>Impact</th><th>Operator routing</th>'+
+    '</tr></thead><tbody>'+
+    records.map(record => '<tr><td>'+
+      (record.inEvidenceWorkplan
+        ? '<a href="#'+esc(record.controlId)+'">'+esc(record.controlId)+'</a>'
+        : '<code>'+esc(record.controlId)+'</code>')+
+      '</td><td>'+safeLabel(record.lane)+'</td>'+
+      '<td>'+safeLabel(record.currentStage)+'</td>'+
+      '<td>'+safeLabel(record.chainStatus)+'</td>'+
+      '<td>'+safeLabel(record.deploymentImpact)+'</td>'+
+      '<td>'+esc(LANE_ACTION[record.lane])+'</td></tr>').join('')+
+    '</tbody></table></div></details></section>';
+}
+
 export function renderOfflineOperatorReviewHtml(dashboard) {
   readOnly(dashboard);
   if (!SHA.test(dashboard?.targetRevision || '') ||
       !Array.isArray(dashboard.controls) ||
       dashboard.assessedControls !== dashboard.controls.length ||
-      dashboard.controls.some(c => c.outcome !== 'operator_review_required'))
+      dashboard.controls.some(c => c.outcome !== 'operator_review_required') ||
+      !Array.isArray(dashboard.controlRegistry) ||
+      dashboard.registryTotal !== dashboard.controlRegistry.length ||
+      dashboard.registryTotal !== dashboard.assessedControls + dashboard.excludedControls ||
+      new Set(dashboard.controlRegistry.map(x=>x.controlId)).size !== dashboard.registryTotal ||
+      dashboard.controlRegistry.some(x => !ID.test(x?.controlId || '') ||
+        !CONTROL_LANES.includes(x.lane) ||
+        x.inEvidenceWorkplan !== REVIEW_LANES.has(x.lane)) ||
+      dashboard.controls.some(x => !dashboard.controlRegistry.some(row =>
+        row.controlId === x.controlId && row.inEvidenceWorkplan === true)))
     throw new Error('Validated operator dashboard required.');
   const sum=(key)=>dashboard.controls.reduce((n,c)=>n+(c.summary?.[key]||0),0);
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'+
@@ -262,6 +360,7 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
       ['Human evidence requirements',sum('requiresHumanDocuments')],
       ['Separate runtime authorisations',sum('requiresSeparateRuntimeAuthorisation')]
     ].map(([title,num])=>'<div><b>'+esc(num)+'</b><small>'+esc(title)+'</small></div>').join('')+'</section>'+
+    fullControlRegistryMarkup(dashboard)+
     '<h2>Evidence work plan</h2><p class="muted">Priority is an operator navigation aid, not a security finding or a request to execute tests. Streams overlap: one control can require source evidence, human records and authorised runtime observations. Counts are not distinct findings or approved actions.</p>'+
     '<div class="workstreams">'+buildOperatorReviewWorkplan(dashboard).map(workstreamMarkup).join('')+'</div>'+
     '<h2>All '+esc(dashboard.assessedControls)+' independent controls</h2><p class="muted">Open a control for exact-version criteria, existing evidence and recorded test metadata. No external resources or scripts are loaded.</p>'+
