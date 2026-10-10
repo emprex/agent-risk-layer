@@ -106,3 +106,52 @@ test('inventory versions follow the canonical toolchain manifest', () => {
     toolchain.runtime.version
   );
 });
+
+
+test('dated canonical inventory counts a fixed non-truncated Git tree, not an invented live total', () => {
+  assert.equal(inventory.generatedAt, '2026-10-10');
+  assert.equal(inventory.snapshot.completeTree,true);
+  assert.match(inventory.snapshot.sourceRevision,/^[a-f0-9]{40}$/);
+  assert.match(inventory.snapshot.gitTreeSha,/^[a-f0-9]{40}$/);
+  assert.equal(inventory.snapshot.countedObjects,
+    'tracked Git blobs (all paths, including archived evidence and tests)');
+  assert.equal(inventory.exactCounts.repositoryFiles,859);
+  const distribution=inventory.snapshot.approximateTopLevelDistribution;
+  assert.ok(Object.values(distribution).every(n=>Number.isSafeInteger(n)&&n>0));
+  assert.ok(Object.values(distribution).reduce((a,b)=>a+b,0)<=inventory.exactCounts.repositoryFiles);
+});
+
+test('active public intake is the static site, never the legacy hosted-request API',()=>{
+  const publicComponent=inventory.components.find(c=>c.id==='ARL-COMP-010');
+  const deployment=inventory.activeArchitecture.publicDeployment;
+  assert.equal(publicComponent.canonicalPath,'site/index.html');
+  assert.equal(deployment.root,'site');
+  assert.equal(deployment.entrypoint,'site/index.html');
+  assert.equal(deployment.requestHandler,'site/request.js');
+  assert.equal(deployment.kind,'static-site');
+  assert.equal(deployment.hostedProductDatabase,false);
+  assert.equal(deployment.hostedOperator,false);
+  assert.match(fs.readFileSync(path.join(root,deployment.entrypoint),'utf8'),
+    /action="https:\/\/formspree\.io\/f\//);
+  assert.doesNotMatch(fs.readFileSync(path.join(root,deployment.requestHandler),'utf8'),
+    /\/api\/assessment-request/);
+  for (const entry of inventory.reviewCandidates) {
+    assert.ok(fs.existsSync(path.join(root,entry.path)),
+      'Deferred legacy candidate is still present for review: '+entry.path);
+    assert.match(entry.disposition,/retain|do not remove/i);
+  }
+  assert.deepEqual(new Set(inventory.reviewCandidates.map(e=>e.path)).size,3);
+});
+
+test('active Operator inventory binds local PostgreSQL authority and no extra backend',()=>{
+  const assessment=inventory.activeArchitecture.assessment;
+  assert.equal(assessment.kind,'local-human-led');
+  assert.equal(assessment.runner,'src/agent/arl-local-assessment-runner.mjs');
+  assert.equal(assessment.cli,'bin/arl-operator.mjs');
+  assert.equal(assessment.database,'src/db.js');
+  assert.match(assessment.persistence,/PostgreSQL/);
+  assert.equal(assessment.sqlite,'test-only');
+  assert.match(inventory.activeArchitecture.humanAuthority,/never final applicability/);
+  assert.match(fs.readFileSync(path.join(root,assessment.database),'utf8'),
+    /DATABASE_URL is required/);
+});
