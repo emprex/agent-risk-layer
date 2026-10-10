@@ -48,3 +48,4 @@ Safety requirements:
 - No `PASS`, `FAIL`, applicability or evidence verification, remediation closure, active test or deployment action may be inferred or recorded by this command.
 
 The operator must conduct accountable reviews through the separately authorised ARL workflows after examining these dossiers. An old offline document must not be treated as evidence that the current system is safe to deploy.
+For final customer-report handoff, use the separate offline `npm run report:verify -- <absolute-manifest-path>` command described in `OPERATIONS_RUNBOOK.md`. It checks only the three exported file contents and their snapshot-bound SHA-256 identifier; it never judges evidence or authorises a deployment. This is independent of the Operator preparation HTML.
