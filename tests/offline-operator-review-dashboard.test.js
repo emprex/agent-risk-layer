@@ -69,7 +69,7 @@ function dashboard(){
     queue,controlIds:batch.controlIds,
     details:batch.controlIds.map(details)
   });
-  return buildOfflineOperatorReviewDashboard(index,[review],rev);
+  return buildOfflineOperatorReviewDashboard(index,[review],rev,queue);
 }
 
 test('real 4-control scenario renders 2 review controls and explicitly excludes held findings',()=>{
@@ -165,16 +165,16 @@ test('rejects batch substitution, missing controls and forged verdict',()=>{
   const report=dashboard();
   const one=index.batches[0];
   const valid=buildAssessmentReviewDossiers({queue,controlIds:one.controlIds,details:one.controlIds.map(details)});
-  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[],rev),/Complete authoritative/);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[],rev,queue),/Complete authoritative/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,targetRevision:'f'.repeat(40)
-  }],rev),/target revision|changed|digest mismatch/);
+  }],rev,queue),/target revision|changed|digest mismatch/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,dossiers:valid.dossiers.map((d,i)=>i?d:{...d,outcome:'passed'})
-  }],rev),/rejects inferred verdict|digest mismatch/);
+  }],rev,queue),/rejects inferred verdict|digest mismatch/);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...valid,controlIds:[...valid.controlIds].reverse()
-  }],rev),/rejects inferred verdict|digest mismatch/);
+  }],rev,queue),/rejects inferred verdict|digest mismatch/);
   assert.throws(()=>renderOfflineOperatorReviewHtml({
     ...report,securityStateChanged:true
   }),/cannot accept security authority/);
@@ -205,7 +205,7 @@ test('rejects mutated evidence trust after dossier preparation, even with unchan
   assert.notEqual(before.preparationDigestSha256,after.preparationDigestSha256);
   assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[{
     ...before,dossiers:after.dossiers
-  }],rev),/dossier content digest mismatch/);
+  }],rev,queue),/dossier content digest mismatch/);
 });
 
 test('does not reuse a publicly readable existing export',()=>{
