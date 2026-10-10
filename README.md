@@ -122,11 +122,11 @@ No public page should imply that ARL is UKAS accredited, that a customer receive
 
 ## Deployment
 
-The public website/request service may use the repository's web server and configured persistence/email infrastructure.
+The deployed public site is a **static website**. Render does not host an ARL application server, assessment database or Operator. Its configured enquiry-delivery integration must be verified independently; a static form is not, by itself, an intake backend.
 
-Deployment of the public site is operationally separate from local assessment execution. Local assessment must not depend on a hosted operator login, hosted orchestration service or remote ARL authority.
+Local assessment execution and **PostgreSQL product persistence via `DATABASE_URL`** stay on the owner-controlled machine. SQLite is test-only. The private offline Operator review HTML neither hosts an ARL service nor approves tests, evidence, findings or deployment.
 
-See `DEPLOYMENT.md` and `OPERATIONS_RUNBOOK.md` for the current web-service deployment boundary.
+See `DEPLOYMENT.md` and `OPERATIONS_RUNBOOK.md` for the active static-site and local Operator boundaries.
 
 ## Current commercial model
 
