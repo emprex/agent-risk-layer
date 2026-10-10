@@ -76,6 +76,16 @@ test('real 4-control scenario renders 2 review controls and explicitly excludes 
   const report=dashboard();
   assert.equal(report.assessedControls,2);
   assert.equal(report.excludedControls,2);
+  assert.equal(report.registryTotal,4);
+  assert.deepEqual(report.controlRegistry.map(x=>x.controlId),
+    ['ARL-KB-001','ARL-KB-006','ARL-KB-007','ARL-KB-008']);
+  const blocked=report.controlRegistry.find(x=>x.controlId==='ARL-KB-006');
+  assert.equal(blocked.lane,'follow_up_blocked');
+  assert.equal(blocked.chainStatus,'finding_open');
+  assert.equal(blocked.inEvidenceWorkplan,false);
+  const human=report.controlRegistry.find(x=>x.controlId==='ARL-KB-001');
+  assert.equal(human.lane,'human_decision');
+  assert.equal(human.inEvidenceWorkplan,false);
   assert.ok(report.controls.every(c => c.outcome==='operator_review_required'));
   assert.equal(report.testsExecuted,0);
   assert.equal(report.evidencePersisted,0);
@@ -86,6 +96,11 @@ test('real 4-control scenario renders 2 review controls and explicitly excludes 
   assert.match(html,/<!doctype html>/);
   assert.match(html,/Deployment HOLD/);
   assert.match(html,/ARL-KB-007/);
+  assert.match(html,/Full control register — 4 snapshot controls/);
+  assert.match(html,/Show all 4 control states and excluded-control reasons/);
+  assert.match(html,/ARL-KB-001/);
+  assert.match(html,/ARL-KB-006/);
+  assert.match(html,/Decision-stage labels are NOT independent evidence/);
   assert.doesNotMatch(html,/id="ARL-KB-006"/);
   assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html,/<script>|onerror=/);
@@ -100,6 +115,14 @@ test('full synthetic review has a usable offline work plan without increasing ev
   const streams = buildOperatorReviewWorkplan(report);
   assert.equal(report.assessedControls, 98);
   assert.equal(report.excludedControls, 10);
+  assert.equal(report.registryTotal,108);
+  assert.equal(new Set(report.controlRegistry.map(x=>x.controlId)).size,108);
+  const excluded=report.controlRegistry.filter(x=>!x.inEvidenceWorkplan);
+  assert.deepEqual(excluded.map(x=>x.controlId),
+    [1,2,3,4,5,6,46,57,90,100].map(n=>'ARL-KB-'+String(n).padStart(3,'0')));
+  assert.equal(excluded.filter(x=>x.lane==='human_decision').length,9);
+  assert.deepEqual(excluded.filter(x=>x.lane==='follow_up_blocked')
+    .map(x=>x.controlId),['ARL-KB-006']);
   assert.deepEqual(streams.map(s => s.id),
     ['frozen-source','human-records','runtime-authorisation','source-lineage']);
   for (const stream of streams) {
@@ -115,6 +138,8 @@ test('full synthetic review has a usable offline work plan without increasing ev
   assert.match(html, /Evidence work plan/);
   assert.match(html, /Streams overlap/);
   assert.match(html, /All 98 independent controls/);
+  assert.match(html, /Full control register — 108 snapshot controls/);
+  assert.match(html, /Show all 108 control states and excluded-control reasons/);
   assert.match(html, /Show all 98 control links/);
   assert.match(html, /Separately authorised runtime checks/);
   assert.match(html, /Deployment HOLD/);
@@ -228,4 +253,47 @@ test('atomic output leaves no temporary files and rejects group-readable output 
     assert.throws(()=>writeOfflineOperatorReviewDashboard({dashboard:dashboard(),outputDirectory:directory}),
       /private real directory/);
   } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test('full control register cannot come from wrong snapshot, missing lanes or forged identities',()=>{
+  const batch=index.batches[0];
+  const review=buildAssessmentReviewDossiers({
+    queue, controlIds:batch.controlIds, details:batch.controlIds.map(details)
+  });
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[review],rev),
+    /same-snapshot authoritative/);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[review],rev,{
+    ...queue,systemSnapshotId:'foreign-snapshot'
+  }), /same-snapshot authoritative/);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[review],rev,{
+    ...queue,lanes:{...queue.lanes,human_decision:[]}
+  }), /incomplete or inconsistent/);
+  assert.throws(()=>buildOfflineOperatorReviewDashboard(index,[review],rev,{
+    ...queue,lanes:{...queue.lanes,test_planning:[
+      ...queue.lanes.test_planning,{...queue.lanes.human_decision[0]}
+    ]}
+  }), /contradicts the evidence work queue/);
+  assert.throws(()=>renderOfflineOperatorReviewHtml({
+    ...dashboard(),controlRegistry:dashboard().controlRegistry.slice(1)
+  }), /Validated operator dashboard required/);
+});
+
+test('excluded-control nextAction never copies private free text into offline HTML',()=>{
+  const batch=index.batches[0];
+  const review=buildAssessmentReviewDossiers({
+    queue, controlIds:batch.controlIds, details:batch.controlIds.map(details)
+  });
+  const secret='PRIVATE-client-email-and-key-never-export-this-text';
+  const withPrivateNextAction={
+    ...queue,lanes:{
+      ...queue.lanes,
+      follow_up_blocked:queue.lanes.follow_up_blocked.map(x=>({...x,nextAction:secret})),
+      human_decision:queue.lanes.human_decision.map(x=>({...x,nextAction:secret}))
+    }
+  };
+  const result=buildOfflineOperatorReviewDashboard(index,[review],rev,withPrivateNextAction);
+  const html=renderOfflineOperatorReviewHtml(result);
+  assert.doesNotMatch(html,new RegExp(secret));
+  assert.equal(result.registryTotal,4);
+  assert.equal(result.deploymentDecisionWritten,false);
 });
