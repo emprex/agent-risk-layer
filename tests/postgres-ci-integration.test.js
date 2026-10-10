@@ -51,7 +51,7 @@ test('ephemeral PostgreSQL applies real migrations idempotently and bootstraps a
   try {
     // This is a dedicated empty CI database; never drop or reset a customer DB.
     const files = fs.readdirSync(path.join(root, 'migrations'))
-      .filter(name => /^\\d{3}_.+\\.sql$/.test(name)).sort();
+      .filter(name => /^\d{3}_.+\.sql$/.test(name)).sort();
     const first = await runMigrations(db);
     assert.deepEqual(first.applied, files);
     assert.deepEqual(first.skipped, []);
@@ -75,7 +75,7 @@ test('ephemeral PostgreSQL applies real migrations idempotently and bootstraps a
     assert.equal(git(['init', '-q']).status, 0);
     assert.equal(git(['config', 'user.email', 'synthetic-ci@example.invalid']).status, 0);
     assert.equal(git(['config', 'user.name', 'ARL Synthetic CI']).status, 0);
-    fs.writeFileSync(path.join(target,'README.md'), '# Synthetic, no customer target or credentials\\n');
+    fs.writeFileSync(path.join(target,'README.md'), '# Synthetic, no customer target or credentials\n');
     assert.equal(git(['add', '.']).status, 0);
     assert.equal(git(['-c','commit.gpgsign=false','commit','-qm','Synthetic CI target']).status, 0);
     const revision = git(['rev-parse','HEAD']).stdout.trim();
@@ -102,8 +102,8 @@ test('ephemeral PostgreSQL applies real migrations idempotently and bootstraps a
     });
 
     assert.equal(result.status,0,
-      'Local Operator PostgreSQL preflight failed:\\n' +
-      result.stdout.slice(-6_000) + '\\n' + result.stderr.slice(-6_000));
+      'Local Operator PostgreSQL preflight failed:\n' +
+      result.stdout.slice(-6_000) + '\n' + result.stderr.slice(-6_000));
     assert.match(result.stdout,/ARL LOCAL ASSESSMENT ANSWER/);
     assert.doesNotMatch(result.stdout,/deployment (?:authorised|approved)|release approved/i);
 
