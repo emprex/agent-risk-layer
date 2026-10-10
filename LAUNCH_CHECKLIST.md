@@ -31,6 +31,7 @@
 - [ ] Exact retest is required for closure where applicable.
 - [ ] Final readiness/deployment decision remains attributable to a human.
 - [ ] Final report states evidence, limitations and unresolved items clearly.
+- [ ] Exported customer report Markdown, JSON and manifest pass local `npm run report:verify` content-consistency check; manifest hash is not a signature or approval.
 
 ## Operational boundary
 
