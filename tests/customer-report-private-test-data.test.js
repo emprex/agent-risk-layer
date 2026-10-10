@@ -89,7 +89,7 @@ test('customer projection omits all raw test and retest bodies but preserves bou
   const markdown=exported.files.find(f=>f.name.endsWith('.md')).content;
   assert.equal(exported.manifest.readinessStatus,'HOLD');
   for(const secret of raw){
-    assert.doesNotMatch(JSON.stringify(projected),new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+    assert.equal(JSON.stringify(projected).includes(secret),false);
     assert.equal(json.includes(secret),false);
     assert.equal(markdown.includes(secret),false);
   }
