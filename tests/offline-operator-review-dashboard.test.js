@@ -5,10 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { buildControlWorkQueue } from '../src/agent/control-work-queue.mjs';
+import { buildSyntheticOperatorDemo } from '../scripts/generate-synthetic-operator-dashboard.mjs';
 import { buildAssessmentEvidenceBatchIndex } from '../src/agent/assessment-evidence-batch-index.mjs';
 import { buildAssessmentReviewDossiers } from '../src/agent/assessment-review-dossiers.mjs';
 import {
   buildOfflineOperatorReviewDashboard,
+  buildOperatorReviewWorkplan,
   renderOfflineOperatorReviewHtml,
   writeOfflineOperatorReviewDashboard
 } from '../src/agent/offline-operator-review-dashboard.mjs';
@@ -90,6 +92,54 @@ test('real 4-control scenario renders 2 review controls and explicitly excludes 
   assert.match(html,/default-src &#39;none&#39;/);
   assert.match(html,/No PASS\/FAIL inferred/);
   assert.doesNotMatch(html,/https?:\/\//);
+});
+
+
+test('full synthetic review has a usable offline work plan without increasing evidence authority', () => {
+  const report = buildSyntheticOperatorDemo();
+  const streams = buildOperatorReviewWorkplan(report);
+  assert.equal(report.assessedControls, 98);
+  assert.equal(report.excludedControls, 10);
+  assert.deepEqual(streams.map(s => s.id),
+    ['frozen-source','human-records','runtime-authorisation','source-lineage']);
+  for (const stream of streams) {
+    assert.equal(stream.controlCount, stream.controls.length);
+    assert.equal(stream.requirementCount,
+      stream.controls.reduce((sum, control) => sum + control.requirementCount, 0));
+    assert.ok(stream.controls.every(c => report.controls.some(d => d.controlId === c.id)));
+  }
+  assert.ok(streams[0].controlCount > 0);
+  assert.equal(streams[1].controlCount, 98);
+  assert.equal(streams[2].controlCount, 98);
+  const html = renderOfflineOperatorReviewHtml(report);
+  assert.match(html, /Evidence work plan/);
+  assert.match(html, /Streams overlap/);
+  assert.match(html, /All 98 independent controls/);
+  assert.match(html, /Show all 98 control links/);
+  assert.match(html, /Separately authorised runtime checks/);
+  assert.match(html, /Deployment HOLD/);
+  assert.match(html, /SYNTHETIC DEMONSTRATION/);
+  assert.doesNotMatch(html, /<script\\b|<form\\b|onerror=/i);
+  assert.doesNotMatch(html, /https?:\\/\\//);
+  assert.equal(report.testsExecuted, 0);
+  assert.equal(report.evidenceAutomaticallyVerified, 0);
+  assert.equal(report.deploymentDecisionWritten, false);
+});
+
+test('offline work-plan count metadata fails closed and cannot accept a forged result', () => {
+  const report = dashboard();
+  assert.throws(() => buildOperatorReviewWorkplan({
+    ...report,
+    controls: report.controls.map((c, index) => index ? c :
+      { ...c, summary: { ...c.summary, requiresHumanDocuments: -1 } })
+  }), /bounded evidence requirement counts/);
+  assert.throws(() => buildOperatorReviewWorkplan({
+    ...report,
+    controls: report.controls.map((c, index) => index ? c : { ...c, outcome:'passed' })
+  }), /foreign control or inferred result/);
+  assert.throws(() => buildOperatorReviewWorkplan({
+    ...report, targetRevision: 'not-a-sha'
+  }), /complete frozen operator dashboard/);
 });
 
 test('offline output is immutable, non-executable, private by filesystem permissions',()=>{
