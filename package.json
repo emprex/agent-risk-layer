@@ -51,7 +51,8 @@
     "operator": "node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
     "ai:smoke": "node --env-file-if-exists=.env scripts/ai-advisory-smoke.mjs",
     "adapter:mcp-agent": "python3 redteam/mcp-agent-local-adapter.py",
-    "report:verify": "node scripts/verify-customer-report-bundle.mjs"
+    "report:verify": "node scripts/verify-customer-report-bundle.mjs",
+    "report:disclosure": "node scripts/review-customer-report-disclosure.mjs"
   },
   "dependencies": {
     "pg": "8.23.0"
