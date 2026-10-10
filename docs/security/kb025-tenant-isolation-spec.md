@@ -1,6 +1,6 @@
 # KB-025 — Tenant isolation across retrieval and agent tool boundaries
 
-Tracking issue: #347. **Design proposal**, not a customer assessment or evidence of an attack.
+Tracking issue: #347. **Candidate semantic implementation for human review**, not a customer assessment or evidence of an attack.
 
 ## Failure mode
 A tenant-scoped web application may appear isolated while downstream retrieval, vector indexes, memory, caches, background jobs, tool actions, generated outputs, exports or logs omit or overwrite tenant identity. Authorization must be applied to every data access and action outside the model; a prompt instruction to respect tenant boundaries is not an enforcement point.
@@ -18,5 +18,5 @@ A tenant-scoped web application may appear isolated while downstream retrieval, 
 ## Pass/fail boundary
 **Candidate PASS only after human review** when scoped same-tenant paths work and all tested cross-tenant variants fail closed before disclosure or side effects, backed by attributable runtime evidence. **FAIL/review** on any cross-tenant access, metadata leakage, inconsistent tenant context, missing negative evidence or mismatched version. The result cannot certify untested paths.
 
-## Implementation boundary
-Add a new numbered additive migration after 047 without touching historical migrations or assessments. Protect all other 107 knowledge digests. Update canonical JSON/CSV, derived SQL/public data and 7-clause classification regression together. Require exact-head CI and separate owner authorization for any active target tests. Preserve target HOLD; no finding closure or deployment permission.
+## Implementation and acceptance boundary
+Migration 048, canonical JSON/CSV, derived SQL/public data and seven-clause regression are included in this PR. All other 107 signed control digests remain unchanged. Exact-head CI and accountable semantic review are required before merge. Active target tests still require separate written owner authorization. Preserve target HOLD; no finding closure or deployment permission.
