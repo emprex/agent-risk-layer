@@ -38,6 +38,7 @@ export function prepareCustomerReportDisclosurePreflight(report) {
   };
   const counts=Object.fromEntries(DETECTORS.map(([name])=>[name,0]));
   const flagged=[];
+  let flaggedCandidates=0;
   const stack=[{value:report,path:'report',depth:0}];
   while (stack.length) {
     if (stats.visitedNodes >= MAX_NODES) {
@@ -58,8 +59,10 @@ export function prepareCustomerReportDisclosurePreflight(report) {
           labels.push(label);
         }
       }
-      if(labels.length && flagged.length<MAX_FLAGGED_PATHS){
-        flagged.push({field:path,indicators:labels});
+      if(labels.length){
+        flaggedCandidates++;
+        if(flagged.length<MAX_FLAGGED_PATHS)
+          flagged.push({field:path,indicators:labels});
       }
     } else if (value && typeof value==='object') {
       if(depth>=MAX_DEPTH){
@@ -84,9 +87,10 @@ export function prepareCustomerReportDisclosurePreflight(report) {
     reportContentChanged:false,
     indicatorsAreOnlyHeuristics:true,
     inspectionIncomplete:stats.incompleteTraversal ||
-      stats.truncatedTextFields>0 || Object.values(counts).reduce((a,b)=>a+b,0)>flagged.length,
+      stats.truncatedTextFields>0 || flaggedCandidates>flagged.length,
     ...stats,
-    flaggedFieldCount:flagged.length,
+    flaggedFieldCount:flaggedCandidates,
+    flaggedFieldsShown:flagged.length,
     indicatorCounts:counts,
     flaggedFields:flagged,
     humanChecklist:[
