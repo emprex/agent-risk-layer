@@ -14,6 +14,19 @@ Deploy the reviewed static site from the canonical `emprex/agent-risk-layer` rep
 
 Do not assume `/api/health`, `/api/ready`, authenticated ARL routes, server-side email delivery, or a Render PostgreSQL database exists on the static deployment. Inspect the static host's own status, deployment logs and request-form integration instead.
 
+## Public enquiry delivery acceptance (Formspree)
+
+The static homepage in `site/index.html` posts to an HTTPS Formspree endpoint. Its `site/request.js` enhancement checks the configured provider before submitting, reports success only for an HTTP-accepted request and restores the button after failure. The native HTML POST remains the no-JavaScript fallback. Contact, organisation and high-level scope text may be processed by this external form service, as disclosed in `site/privacy.html`. This is **not** an ARL API or assessment backend.
+
+CI exercises the form's structure, browser success/failure handling and duplicate-submission protection **offline**, without sending a lead. To accept the *actual* production enquiry channel, the authorised form-service owner must separately:
+
+1. Confirm this Formspree form belongs to AgentRiskLayer, is enabled, and routes only to the approved receiving inbox.
+2. Send a clearly marked synthetic enquiry through the actual deployed static site, with no client secrets or sensitive customer data.
+3. Verify receipt, sender attribution, confirmation or spam-folder routing, and reply; record time and outcome internally.
+4. If delivery fails, keep `Public request intake — UNVERIFIED` in the commercial launch checklist, investigate the integration and use the public support email as a fallback.
+
+A green GitHub build or an HTTP 2xx response does **not** prove inbox delivery. Do not mark production intake accepted until the owner has seen the test message.
+
 ## Local assessment product — not deployed to Render
 
 Assessment authority and persistence stay on the operator's machine:
