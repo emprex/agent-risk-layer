@@ -119,8 +119,8 @@ test('full synthetic review has a usable offline work plan without increasing ev
   assert.match(html, /Separately authorised runtime checks/);
   assert.match(html, /Deployment HOLD/);
   assert.match(html, /SYNTHETIC DEMONSTRATION/);
-  assert.doesNotMatch(html, /<script\\b|<form\\b|onerror=/i);
-  assert.doesNotMatch(html, /https?:\\/\\//);
+  assert.doesNotMatch(html, /<script\b|<form\b|onerror=/i);
+  assert.doesNotMatch(html, /https?:\/\//);
   assert.equal(report.testsExecuted, 0);
   assert.equal(report.evidenceAutomaticallyVerified, 0);
   assert.equal(report.deploymentDecisionWritten, false);
