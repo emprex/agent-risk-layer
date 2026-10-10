@@ -1,78 +1,58 @@
 # PROJECT_STATUS.md — AgentRiskLayer Product / Authority
 
-**Snapshot:** 6 October 2026
+**Verified snapshot: 10 October 2026.** This is an operating snapshot, not a claim of customer security assurance. Check GitHub and the local PostgreSQL assessment before relying on a live revision or status.
 
-This file is intentionally short and dated. Update it when the real project state changes.
+## Canonical architecture
 
-## Canonical role
+- **One repository:** `emprex/agent-risk-layer` (`~/agent-risk-layer` on Debian).
+- **Public website:** static presentation and assessment-request pages; Render does not host an ARL application server or ARL database.
+- **Security assessment:** local, human-led Operator using the canonical repository and a separately authorised target.
+- **Persistence:** local PostgreSQL via `DATABASE_URL`; SQLite is **test-only**, not a competing product authority.
+- **Target:** separately frozen Git repository; target SHA, snapshot lineage, scope and Rules of Engagement must remain bound.
+- **Risk Knowledge:** ARL-RKA-1.2.0, 108 candidate controls. A catalogue definition, mapping or green CI does not validate an actual customer control.
+- **Authority:** the LLM does not decide applicability, evidence validity, confirmed findings, severity, closure, readiness, authorisation of active tests or deployment.
 
-Repository: `emprex/agent-risk-layer`  
-Local path: `~/agent-risk-layer`
+Do not revive sibling ARL orchestration repositories, hosted Operator sessions, Render product persistence, Stripe or subscription checkout.
 
-Current role:
-- single canonical AgentRiskLayer product / authority repository;
-- public AgentRiskLayer presentation and assessment-request site;
-- integrated local operator assessment workflow;
-- assessment evidence, remediation/retest, deterministic inspection/red-team and Control Intelligence implementation.
+## Verified development state
 
-No second ARL repository is part of the active product.
+- **KB-024 / migration 047** is merged.
+- **KB-025 / migration 048** is in PR #348 pending accountable semantic/code review. A merged migration is not evidence of target security; no tenant-isolation PASS has been established.
+- **PR #349** fixed Git fixture commits inheriting a Debian signing-agent requirement; the correction is in `main`.
+- **PR #350** introduced an offline evidence-first work plan in the Operator, keeping HTML static, no-script and non-authoritative.
+- Debian `npm run check` succeeded; after a temporary process-local signing override, `npm test` reported 861 tests, 854 passed, 0 failed, 7 skipped. The signing regression was subsequently corrected in code.
+- The local `operator:open` command generated a verified HTML preparation dossier for the existing frozen MCP-Agent target: 98 independent review controls, 10 excluded/held, 197 missing static observations, 119 human evidence requirements and 191 separately authorised runtime requirements. These numbers are **specific to that preparation snapshot**, not results or PASS/FAIL.
+- **Deployment HOLD remains in force.** No full customer A→Z security verdict or accountable final release decision has been demonstrated by the offline dashboard or synthetic CI.
 
-## Verified current repository state
+The user-controlled Debian checkout must be synchronized only after an intentional reviewed merge; GitHub CI does not automatically update Debian.
 
-Verified on 6 October 2026:
+## Commercial priority
 
-- GitHub `main` is the canonical remote source;
-- the previous local/GitHub synchronization completed cleanly before this final GitHub-side cleanup;
-- obsolete hosted assessment HTTP routes and wrappers have been removed;
-- obsolete remote operator-session modules have been removed;
-- local assessment freezes the exact clean target Git SHA automatically;
-- local self-proof is bound to `emprex/agent-risk-layer`;
-- the component inventory now describes one canonical repository;
-- the 108-control Risk Knowledge catalogue remains canonical;
-- exact-head CI for the final architecture cleanup passes syntax, focused regressions, unit/integration, scenario regression and detection regression.
+Deliver one credible, reproducible, paid, human-led agent security assessment:
 
-The next laptop synchronization should be performed once, after this GitHub cleanup is merged.
+request → agreed scope and authorisation → clean exact-SHA target freeze → deterministic inspection and evidence → applicability review → separately authorised bounded tests → human finding decisions → remediation → changed snapshot → exact retest → customer report → accountable final decision.
 
-## Active company priority
+A review dashboard is a **preparation artefact**, not the authoritative place to record human decisions. Existing PostgreSQL state, snapshot-bound tests and accountable workflows remain authoritative.
 
-1. Finish one usable local ARL product.
-2. Keep one canonical assessment workflow.
-3. Make the operator experience simple enough for real client delivery.
-4. Preserve deterministic/human authority boundaries.
-5. Continue commercial execution toward real paid assessments.
+## Remaining acceptance gates
 
-## Current product direction
+1. Validate public static pages and the **actual configured request-delivery channel** without assuming a hosted ARL API.
+2. Exercise the local Operator against an approved frozen staging scope; reconcile its missing source, human and runtime evidence before claiming coverage.
+3. Require written test Rules of Engagement; never infer permission from a synthetic demo or read-only dossier.
+4. Trace a real observed finding through human triage, remediation, exact changed-version retest and an evidence-limited customer report.
+5. Record the final human deployment decision only where all blocking criteria are satisfied; otherwise preserve HOLD.
+6. Finish issue #214's inventory, entrypoint, migration, version, release and guardrail audits with exact-head CI and human acceptance. Do not declare the product finished solely because unit tests pass.
 
-The public website is for presentation and assessment requests.
+## Routine commands (owner-controlled Debian)
 
-Assessment execution is local and operator-led:
+```bash
+# From ~/agent-risk-layer after a reviewed GitHub merge:
+git pull --ff-only origin main
+npm run check
+npm test
 
-request
--> scope
--> frozen target
--> inspection/evidence
--> applicability
--> explicitly authorised controlled tests
--> findings
--> remediation
--> changed snapshot
--> exact retest
--> report
--> human final decision.
+# Use only the existing, authorised, clean frozen target:
+npm run operator:open -- "$HOME/arl-target-mcp-agent"
+```
 
-The LLM may assist with explanation, conversation, summarisation and drafting, but it is not authoritative for applicability, evidence validity, severity, finding closure, readiness, controlled-test authorisation or deployment decisions.
-
-## Remaining product work
-
-1. The local CLI still exposes implementation-level commands. The final operator UX should hide that complexity behind one understandable local entry point.
-2. Local assessment persistence currently uses the isolated SQLite local capability. The final operator architecture must deliberately keep or replace that persistence model; it must not accidentally create two authorities.
-3. The complete customer journey still needs one final exact-head end-to-end acceptance run before calling the product finished.
-4. Historical documentation and validation archives may still describe older hosted/platform capabilities; they are historical evidence and must not override the current canonical architecture.
-
-## Next controlled steps
-
-1. Keep the public assessment-request flow intact.
-2. Preserve the 108-control Risk Knowledge unless a specific defect is demonstrated.
-3. Finish the local operator UX without creating another framework or repository.
-4. Prove the complete local customer journey with exact-head tests.
-5. Perform one final laptop synchronization after GitHub `main` is final and green.
+The Operator may create initial assessment state in local PostgreSQL when no prior binding exists. Its offline HTML review export does not run active tests or grant authority. **Do not modify the frozen MCP target merely to satisfy a test.**
