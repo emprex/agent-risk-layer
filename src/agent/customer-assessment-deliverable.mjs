@@ -119,9 +119,23 @@ export function buildCustomerAssessmentDeliverable(report) {
 
   const projectStem = cleanStem(report.assessment.projectName);
   const revision = revisionStem(report.assessment.targetRevision);
-  const baseName = `arl-assessment-${projectStem}-${revision}`;
   const markdownContent = `${renderCustomerAssessmentReport(report)}\n`;
   const jsonContent = `${JSON.stringify(report, null, 2)}\n`;
+  const markdownSha256 = sha256(markdownContent);
+  const jsonSha256 = sha256(jsonContent);
+  // Even if the assessed Git revision is unchanged, later evidence review
+  // can change the report. Keep both snapshots immutable and distinguishable.
+  // A digest is a content identifier, NOT a reviewer signature or approval.
+  const bundleDigest = sha256(canonicalJson({
+    reportSchema: report.schema,
+    targetRevision: report.assessment.targetRevision,
+    systemSnapshotVersion: report.assessment.systemSnapshotVersion,
+    controlProfileVersion: report.assessment.controlProfileVersion,
+    readinessStatus: report.readiness.status,
+    markdownSha256,
+    jsonSha256
+  }));
+  const baseName = `arl-assessment-${projectStem}-${revision}-${bundleDigest.slice(0, 16)}`;
   const markdown = fileRecord(
     `${baseName}.md`,
     'text/markdown; charset=utf-8',
@@ -132,15 +146,6 @@ export function buildCustomerAssessmentDeliverable(report) {
     'application/json',
     jsonContent
   );
-  const bundleDigest = sha256(canonicalJson({
-    reportSchema: report.schema,
-    targetRevision: report.assessment.targetRevision,
-    systemSnapshotVersion: report.assessment.systemSnapshotVersion,
-    controlProfileVersion: report.assessment.controlProfileVersion,
-    readinessStatus: report.readiness.status,
-    markdownSha256: markdown.sha256,
-    jsonSha256: json.sha256
-  }));
 
   const manifestPayload = {
     schema: CUSTOMER_ASSESSMENT_MANIFEST_SCHEMA,
