@@ -143,7 +143,7 @@ export function buildSyntheticOperatorDemo() {
     controlIds:batch.controlIds,
     details:batch.controlIds.map(detail)
   }));
-  const dashboard=buildOfflineOperatorReviewDashboard(index,batches,DEMO_REVISION);
+  const dashboard=buildOfflineOperatorReviewDashboard(index,batches,DEMO_REVISION,queue);
   return {...dashboard, syntheticDemo:true};
 }
 
