@@ -198,7 +198,39 @@ function assertOutputDirectory(outputDirectory) {
     error.code = 'CUSTOMER_ASSESSMENT_OUTPUT_DIRECTORY_REQUIRED';
     throw error;
   }
-  return path.resolve(requested);
+  const root = path.resolve(requested);
+  if (root === path.parse(root).root) {
+    throw new Error('Refusing filesystem root for customer assessment export.');
+  }
+  return root;
+}
+
+function assertPrivateOutputDirectory(root) {
+  let current = root;
+  for (;;) {
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink()) {
+      throw new Error('Customer report output cannot use symlinked ancestors.');
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  const stat = fs.statSync(root);
+  if (!stat.isDirectory() || (stat.mode & 0o077) !== 0) {
+    throw new Error('Customer report output requires a private directory (0700).');
+  }
+}
+
+function privateExistingArtifact(target, file) {
+  const stat = fs.lstatSync(target);
+  if (!stat.isFile() || stat.isSymbolicLink() ||
+      (stat.mode & 0o077) !== 0 || stat.nlink !== 1) {
+    throw new Error('Customer report artifact must be a private, regular, unlinked file (0600).');
+  }
+  if (fs.readFileSync(target, 'utf8') !== file.content) {
+    throw artifactConflict(target);
+  }
 }
 
 function assertDeliverable(deliverable) {
@@ -209,7 +241,17 @@ function assertDeliverable(deliverable) {
     deliverable?.securityStateChanged !== false ||
     deliverable?.deploymentDecisionWritten !== false ||
     !Array.isArray(deliverable?.files) ||
-    deliverable.files.length !== 3
+    deliverable.files.length !== 3 ||
+    new Set(deliverable.files.map(file => file?.name)).size !== 3 ||
+    deliverable.files.some(file =>
+      !file || typeof file.name !== 'string' ||
+      !/^arl-assessment-[a-z0-9-]+\.(?:md|json|manifest\.json)$/.test(file.name) ||
+      path.basename(file.name) !== file.name ||
+      typeof file.content !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(file.sha256 || '') ||
+      file.sha256 !== sha256(file.content) ||
+      file.bytes !== Buffer.byteLength(file.content)
+    )
   ) {
     const error = new Error('A valid customer assessment deliverable is required.');
     error.code = 'CUSTOMER_ASSESSMENT_DELIVERABLE_REQUIRED';
@@ -224,6 +266,7 @@ export function writeCustomerAssessmentDeliverable({
   assertDeliverable(deliverable);
   const root = assertOutputDirectory(outputDirectory);
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  assertPrivateOutputDirectory(root);
 
   const planned = deliverable.files.map((file) => {
     const target = path.resolve(root, file.name);
@@ -238,30 +281,44 @@ export function writeCustomerAssessmentDeliverable({
       throw error;
     }
 
-    if (fs.existsSync(target)) {
-      const existing = fs.readFileSync(target, 'utf8');
-      if (existing !== file.content) {
-        throw artifactConflict(target);
-      }
+    // lstat also catches dangling symlinks: never follow a report path.
+    try {
+      fs.lstatSync(target);
+      privateExistingArtifact(target, file);
       return { file, target, status: 'unchanged' };
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
     }
 
     return { file, target, status: 'created' };
   });
 
   for (const item of planned.filter((entry) => entry.status === 'created')) {
-    const temporary = `${item.target}.${process.pid}.tmp`;
+    const temporary = path.join(root,
+      '.' + path.basename(item.target) + '.' +
+      crypto.randomBytes(12).toString('hex') + '.tmp');
+    let fd;
     try {
-      fs.writeFileSync(temporary, item.file.content, {
-        encoding: 'utf8',
-        mode: 0o600,
-        flag: 'wx'
-      });
-      fs.renameSync(temporary, item.target);
-    } finally {
-      if (fs.existsSync(temporary)) {
-        fs.rmSync(temporary, { force: true });
+      fd = fs.openSync(temporary, 'wx', 0o600);
+      fs.writeFileSync(fd, item.file.content, { encoding: 'utf8' });
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      fd = undefined;
+      try {
+        // Atomic no-clobber publication. rename() would overwrite a file
+        // created between preflight and publication (including a symlink).
+        fs.linkSync(temporary, item.target);
+      } catch (error) {
+        if (error?.code === 'EEXIST') {
+          privateExistingArtifact(item.target, item.file);
+          item.status = 'unchanged';
+        } else {
+          throw error;
+        }
       }
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
+      fs.rmSync(temporary, { force: true });
     }
   }
 
