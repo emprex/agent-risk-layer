@@ -110,7 +110,7 @@ test('real 4-control scenario renders 2 review controls and explicitly excludes 
   assert.match(visible,/Human decision-stage record/);
   assert.match(html,/ARL-KB-001/);
   assert.match(html,/ARL-KB-006/);
-  assert.match(html,/Decision-stage labels are NOT independent evidence/);
+  assert.match(html,/Human decision stage does not prove human approval/);
   assert.doesNotMatch(html,/id="ARL-KB-006"/);
   assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html,/<script>|onerror=/);
