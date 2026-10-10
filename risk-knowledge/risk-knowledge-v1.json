@@ -5661,7 +5661,7 @@
           "ARL-KB-025 tester and reviewer identity, written authorisation, roles, timestamps, exact assessed version, evidence digest, unsupported paths, exceptions and accountable human decision"
         ],
         "pass_condition": "KB-025 passes only after accountable human review of exact-version source, policy, synthetic same-tenant success and observed cross-tenant denial before metadata or content disclosure or side effects across each applicable retrieval, memory, cache, asynchronous, tool, export and log path, with correlated audit evidence and explicit limits.",
-        "fail_condition": "KB-025 fails or requires review if tenant identity is omitted or confused, another tenant's contents or metadata are returned through any path, an unauthorised tool or export action executes, isolation fails open, or exact-version tests, runtime observations or accountable human review are missing.",
+        "fail_condition": "KB-025 is a confirmed FAIL only when exact-version evidence demonstrates cross-tenant content or metadata disclosure, an unauthorized retrieval, tool, export or state-changing side effect, or an executable path that demonstrably fails open or loses tenant identity. Missing or mismatched exact-version tests, runtime observations, scope or accountable human review require INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment, but do not claim a confirmed vulnerability.",
         "limitations": "This bounded ARL-KB-025 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-025's relevant configuration.",
@@ -5820,7 +5820,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "752f0862cf283216565c21cc7319c845a0dc1de13754c2032e502549abb84138"
+      "content_digest": "aaf52f5ff8a717836fd2de275f0ea178919799d9fab5e8800146a72aa5e9edf9"
     },
     {
       "id": "ARL-KB-026",

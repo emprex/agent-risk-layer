@@ -32,7 +32,10 @@ test('KB025 seven evidence families prevent static-only tenant isolation conclus
  assert.match(requirements[4],/cross-tenant/);
  assert.match(entry.check.objective,/vector retrieval, memory, caches, asynchronous jobs, tools, exports and logs/);
  assert.match(entry.check.pass_condition,/accountable human review/);
- assert.match(entry.check.fail_condition,/metadata/);
+ assert.match(entry.check.fail_condition,/confirmed FAIL/);
+ assert.match(entry.check.fail_condition,/INCONCLUSIVE \/ EVIDENCE GAP \/ REVIEW REQUIRED/);
+ assert.match(entry.check.fail_condition,/block PASS and deployment/);
+ assert.doesNotMatch(entry.check.fail_condition,/fails or requires review/i);
 });
 test('KB025 additive migration registered without dropping KB024',() => {
  const db=fs.readFileSync(new URL('../src/db-adapters/sqlite-local.js',import.meta.url),'utf8');
