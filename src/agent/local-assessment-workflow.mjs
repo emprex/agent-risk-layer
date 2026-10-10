@@ -159,7 +159,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         queue, details, controlIds: batch.controlIds
       }));
     }
-    const dashboard = buildOfflineOperatorReviewDashboard(index, batches, localFrozenInspection.target.revision);
+    const dashboard = buildOfflineOperatorReviewDashboard(index, batches, localFrozenInspection.target.revision, queue);
     const queueAfter = await readCurrentControlQueue(options);
     const indexAfter = buildAssessmentEvidenceBatchIndex(queueAfter);
     if (indexAfter.systemSnapshotId !== index.systemSnapshotId ||
