@@ -299,29 +299,42 @@ const LANE_ACTION = Object.freeze({
   review_required:'Further accountable review required'
 });
 
+function statusRows(records) {
+  return records.map(record => '<tr><td>'+
+    (record.inEvidenceWorkplan
+      ? '<a href="#'+esc(record.controlId)+'">'+esc(record.controlId)+'</a>'
+      : '<code>'+esc(record.controlId)+'</code>')+
+    '</td><td>'+safeLabel(record.lane)+'</td>'+
+    '<td>'+safeLabel(record.currentStage)+'</td>'+
+    '<td>'+safeLabel(record.chainStatus)+'</td>'+
+    '<td>'+safeLabel(record.deploymentImpact)+'</td>'+
+    '<td>'+esc(LANE_ACTION[record.lane])+'</td></tr>').join('');
+}
+
+function statusTable(records) {
+  return '<div class="table-wrap"><table><thead><tr>'+
+    '<th>Control</th><th>Lane</th><th>Current stage</th>'+
+    '<th>Chain status</th><th>Impact</th><th>Operator routing</th>'+
+    '</tr></thead><tbody>'+statusRows(records)+'</tbody></table></div>';
+}
+
 function fullControlRegistryMarkup(dashboard) {
   const records=dashboard.controlRegistry;
-  return '<section class="registry"><h2>Full control register — '+esc(records.length)+
-    ' snapshot controls</h2>'+
-    '<p class="muted">Authoritative routing metadata for ALL controls, including the '+
-    esc(dashboard.excludedControls)+' outside independent evidence work. '+
-    'Excluded here never means passed, accepted, closed, or deployment-approved. '+
-    'Decision-stage labels are NOT independent evidence of a signed decision.</p>'+
-    '<details><summary>Show all '+esc(records.length)+
-    ' control states and excluded-control reasons</summary>'+
-    '<div class="table-wrap"><table><thead><tr><th>Control</th><th>Lane</th>'+
-    '<th>Current stage</th><th>Chain status</th><th>Impact</th><th>Operator routing</th>'+
-    '</tr></thead><tbody>'+
-    records.map(record => '<tr><td>'+
-      (record.inEvidenceWorkplan
-        ? '<a href="#'+esc(record.controlId)+'">'+esc(record.controlId)+'</a>'
-        : '<code>'+esc(record.controlId)+'</code>')+
-      '</td><td>'+safeLabel(record.lane)+'</td>'+
-      '<td>'+safeLabel(record.currentStage)+'</td>'+
-      '<td>'+safeLabel(record.chainStatus)+'</td>'+
-      '<td>'+safeLabel(record.deploymentImpact)+'</td>'+
-      '<td>'+esc(LANE_ACTION[record.lane])+'</td></tr>').join('')+
-    '</tbody></table></div></details></section>';
+  const excluded=records.filter(record=>!record.inEvidenceWorkplan);
+  return '<section class="registry"><h2>All '+esc(records.length)+
+    ' controls — authoritative snapshot</h2>'+
+    '<p class="muted">All controls are accounted for. The independent work plan below covers '+
+    esc(dashboard.assessedControls)+' evidence/test-preparation controls. '+
+    'The '+esc(excluded.length)+' controls in other lanes are not approved or closed by this page.</p>'+
+    '<h3>Controls requiring separate follow-up — '+esc(excluded.length)+'</h3>'+
+    '<p class="muted">Visible without expanding a menu: blocked findings and '+
+    'human-decision-stage controls remain distinct from the evidence work plan. '+
+    'Human decision stage does not prove human approval. Deployment HOLD remains.</p>'+
+    statusTable(excluded)+
+    '<details><summary>Show complete '+esc(records.length)+
+    '-control status table</summary>'+
+    statusTable(records)+
+    '</details></section>';
 }
 
 export function renderOfflineOperatorReviewHtml(dashboard) {
