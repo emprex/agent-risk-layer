@@ -1,15 +1,15 @@
 {
   "schema": "arl.component-inventory.v2",
-  "generatedAt": "2026-10-06",
+  "generatedAt": "2026-10-10",
   "authorityRule": "The LLM is not the security authority.",
   "scope": {
     "repositories": [
       "emprex/agent-risk-layer"
     ],
-    "note": "Single canonical AgentRiskLayer repository. Components are responsibility surfaces inside this repository; no sibling ARL runtime or operator repository is authoritative."
+    "note": "One canonical product repository. Repository path enumeration is the exact tracked Git tree as of sourceRevision, not the historical two-repository inventory and not a promise that every tracked file is an active product surface."
   },
   "exactCounts": {
-    "repositoryFiles": 745
+    "repositoryFiles": 859
   },
   "components": [
     {
@@ -105,12 +105,71 @@
     {
       "id": "ARL-COMP-010",
       "name": "Public site and request surface",
-      "purpose": "Public presentation and assessment request intake only.",
+      "purpose": "Active static-site presentation and Formspree assessment-request surface (external intake independently verified).",
       "canonicalRepository": "emprex/agent-risk-layer",
-      "canonicalPath": "public/request-assessment.html",
+      "canonicalPath": "site/index.html",
       "classification": "public-surface",
       "kind": "website",
       "currentVersion": "10.1.1"
+    }
+  ],
+  "snapshot": {
+    "sourceRevision": "2bca75e95fe6686454464f260e4e5d37abb1501c",
+    "gitTreeSha": "a9f20d317f87270303a5a266b052e0289f9ca194",
+    "countedObjects": "tracked Git blobs (all paths, including archived evidence and tests)",
+    "countMethod": "GET /repos/emprex/agent-risk-layer/git/trees/<tree-sha>?recursive=1, count type=blob",
+    "completeTree": true,
+    "approximateTopLevelDistribution": {
+      "tests": 236,
+      "public": 189,
+      "src": 131,
+      "docs": 53,
+      "benchmarks": 52,
+      "migrations": 47,
+      "scripts": 28,
+      "validation": 27,
+      "test-artifacts": 20,
+      "site": 6
+    }
+  },
+  "activeArchitecture": {
+    "publicDeployment": {
+      "kind": "static-site",
+      "root": "site",
+      "entrypoint": "site/index.html",
+      "requestHandler": "site/request.js",
+      "requestTransport": "Formspree HTTPS; real inbox delivery must be independently validated",
+      "hostedProductDatabase": false,
+      "hostedOperator": false
+    },
+    "assessment": {
+      "kind": "local-human-led",
+      "runner": "src/agent/arl-local-assessment-runner.mjs",
+      "cli": "bin/arl-operator.mjs",
+      "database": "src/db.js",
+      "persistence": "local PostgreSQL via DATABASE_URL",
+      "sqlite": "test-only"
+    },
+    "humanAuthority": "LLM suggestions and engineering CI are never final applicability, evidence, finding, severity, closure, controlled test or deployment authority."
+  },
+  "reviewCandidates": [
+    {
+      "path": "public/request-assessment.html",
+      "classification": "legacy-server-page",
+      "disposition": "not active Render static-site request form; retain pending dependency and archive audit",
+      "risk": "references legacy server API; do not mistake it for the current public enquiry channel"
+    },
+    {
+      "path": "public/request-assessment.js",
+      "classification": "legacy-server-page-script",
+      "disposition": "not active Render static-site request script; retain pending reference audit",
+      "risk": "POSTs to /api/assessment-request, unavailable on static host"
+    },
+    {
+      "path": "server.js",
+      "classification": "local-development-or-legacy-public-server",
+      "disposition": "not a Render web service; do not remove without checking local/development and tests",
+      "risk": "local development service must not be confused with hosted Operator authority"
     }
   ]
 }
