@@ -103,8 +103,96 @@ const css = [
   '.links{display:flex;flex-wrap:wrap;gap:12px}.links a{color:#18569d}',
   'table{border-collapse:collapse;width:100%;font-size:.88rem}td,th{padding:8px;border-bottom:1px solid #e1e7ef;text-align:left}',
   '.table-wrap{overflow:auto}footer{margin-top:26px;color:#66748a}',
+  '.workstreams{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0 20px}',
+  '.workstream{background:#fff;border:1px solid #dce4ee;border-radius:12px;padding:14px;min-width:0}',
+  '.workstream h3{margin:0 0 6px}.workstream p{margin:8px 0}.workstream details{margin:10px 0 0}',
+  '.workstream summary,.all-controls summary{cursor:pointer;color:#18569d;font-weight:600}',
+  '.workstream .links,.all-controls .links{margin:10px 0 0}.all-controls{padding:12px;background:#fff;border:1px solid #dce4ee;border-radius:12px;margin:12px 0 20px}',
+  '.workstream a{overflow-wrap:anywhere}.counts{color:#50607a;font-weight:500;font-size:.9rem}',
   '@media print{body{background:white}details{break-inside:avoid}}'
 ].join('');
+
+// Presentation-only work order derived from already prepared, snapshot-bound
+// evidence metadata. A control may appear in more than one stream; these are
+// collection/review tasks, never independent PASS/FAIL or authorization claims.
+const WORKSTREAMS = Object.freeze([
+  {
+    id: 'frozen-source',
+    label: '1. Missing frozen-source observations',
+    key: 'missingStaticMetadata',
+    instruction: 'Collect or inspect missing version-bound static observations. Existing source metadata is a candidate, never accepted proof.'
+  },
+  {
+    id: 'human-records',
+    label: '2. Human evidence and ownership',
+    key: 'requiresHumanDocuments',
+    instruction: 'Obtain attributable approvals, scope decisions and owner records. Only an accountable reviewer can accept them.'
+  },
+  {
+    id: 'runtime-authorisation',
+    label: '3. Separately authorised runtime checks',
+    key: 'requiresSeparateRuntimeAuthorisation',
+    instruction: 'Plan bounded positive and negative tests with explicit owner authorisation; this offline document does not run tests.'
+  },
+  {
+    id: 'source-lineage',
+    label: '4. Source provenance exceptions',
+    key: 'sourceLineageExceptions',
+    instruction: 'Resolve ambiguous, stale or invalid source lineage before considering evidence usable for a criterion.'
+  }
+]);
+
+export function buildOperatorReviewWorkplan(dashboard) {
+  readOnly(dashboard);
+  if (!Array.isArray(dashboard?.controls) ||
+      dashboard.assessedControls !== dashboard.controls.length ||
+      !SHA.test(dashboard.targetRevision || '')) {
+    throw new Error('A complete frozen operator dashboard is required for the work plan.');
+  }
+  return WORKSTREAMS.map(stream => {
+    const controls = dashboard.controls.filter(control => {
+      if (!ID.test(control?.controlId || '') ||
+          control.outcome !== 'operator_review_required') {
+        throw new Error('The operator work plan rejects a foreign control or inferred result.');
+      }
+      const count = control.summary?.[stream.key] ?? 0;
+      if (!Number.isSafeInteger(count) || count < 0) {
+        throw new Error('The operator work plan requires bounded evidence requirement counts.');
+      }
+      return count > 0;
+    });
+    return {
+      id: stream.id,
+      label: stream.label,
+      instruction: stream.instruction,
+      countKey: stream.key,
+      controlCount: controls.length,
+      requirementCount: controls.reduce((total, control) =>
+        total + (control.summary?.[stream.key] || 0), 0),
+      controls: controls.map(control => ({
+        id: control.controlId,
+        title: control.title || control.controlId,
+        requirementCount: control.summary[stream.key]
+      }))
+    };
+  });
+}
+
+function workstreamMarkup(stream) {
+  return '<section class="workstream"><h3>'+esc(stream.label)+'</h3>'+
+    '<p class="counts">'+esc(stream.controlCount)+' controls · '+
+    esc(stream.requirementCount)+' requirements or exceptions</p>'+
+    '<p>'+esc(stream.instruction)+'</p>'+
+    (stream.controlCount
+      ? '<details><summary>Show '+esc(stream.controlCount)+
+        ' affected controls</summary><nav class="links" aria-label="'+
+        esc(stream.label)+'">'+stream.controls.map(control =>
+          '<a href="#'+esc(control.id)+'">'+esc(control.id)+
+          ' ('+esc(control.requirementCount)+')</a>'
+        ).join('')+'</nav></details>'
+      : '<p class="muted">None in this prepared snapshot.</p>')+
+    '</section>';
+}
 
 function rowsEvidence(e) {
   return '<tr><td><code>'+esc(e.id)+'</code></td><td>'+safeLabel(e.verificationState)+
@@ -174,8 +262,10 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
       ['Human evidence requirements',sum('requiresHumanDocuments')],
       ['Separate runtime authorisations',sum('requiresSeparateRuntimeAuthorisation')]
     ].map(([title,num])=>'<div><b>'+esc(num)+'</b><small>'+esc(title)+'</small></div>').join('')+'</section>'+
-    '<h2>Controls for review</h2><p class="muted">Choose a control to view criteria, test and evidence metadata. No external resources or scripts are loaded.</p>'+
-    '<nav class="links">'+dashboard.controls.map(c=>'<a href="#'+esc(c.controlId)+'">'+esc(c.controlId)+'</a>').join('')+'</nav>'+
+    '<h2>Evidence work plan</h2><p class="muted">Priority is an operator navigation aid, not a security finding or a request to execute tests. Streams overlap: one control can require source evidence, human records and authorised runtime observations. Counts are not distinct findings or approved actions.</p>'+
+    '<div class="workstreams">'+buildOperatorReviewWorkplan(dashboard).map(workstreamMarkup).join('')+'</div>'+
+    '<h2>All '+esc(dashboard.assessedControls)+' independent controls</h2><p class="muted">Open a control for exact-version criteria, existing evidence and recorded test metadata. No external resources or scripts are loaded.</p>'+
+    '<details class="all-controls"><summary>Show all '+esc(dashboard.assessedControls)+' control links</summary><nav class="links" aria-label="All independent controls">'+dashboard.controls.map(c=>'<a href="#'+esc(c.controlId)+'">'+esc(c.controlId)+'</a>').join('')+'</nav></details>'+
     '<main class="controls">'+dashboard.controls.map(controlMarkup).join('')+'</main>'+
     '<footer>Offline preparation artifact. Recheck the authoritative assessment before recording any decision.</footer></body></html>';
 }
