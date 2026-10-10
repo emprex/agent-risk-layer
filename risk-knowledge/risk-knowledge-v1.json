@@ -5426,14 +5426,12 @@
       "problem": {
         "statement": "A user can read or modify another assessment, project, runtime event, approval or report by changing an identifier.",
         "customer_symptom": "A user or operator may observe a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An authenticated actor or service identity can access another principal or tenant's object through direct or indirect identifiers, alternate routes or missing server-side object authorization.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "tenant and workspace-scoped objects",
+          "object identifiers and ownership relationships",
+          "assessment evidence, approvals and reports",
+          "service identities and authorization audit events"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -5441,13 +5439,13 @@
           "multi-user platforms"
         ],
         "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between multi-user platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between the authenticated principal and server-enforced tenant, ownership and operation-level authorization for each object access.",
         "operational_impact": "If a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-024",
-        "objective": "Determine whether object access is authorized against the authenticated principal and tenant or workspace for every read, update, export and delete operation.",
-        "method": "Using owner-authorised synthetic users and objects, test sequential and random identifiers across users, workspaces and roles for representative read, update, export and delete operations. Verify ownership and tenant scope are resolved server-side rather than trusted from caller-supplied identifiers.",
+        "objective": "Determine whether server-side object authorization denies access outside the authenticated actor, tenant, ownership and allowed operation for each read, update, export and delete path.",
+        "method": "Inspect the owner-approved role/object-operation matrix and server-side query guards. With separate written owner authorization, use synthetic staging identities and objects to exercise bounded positive operations and denied cross-user, cross-tenant, swapped-ID, alternate-route, service-identity and missing-policy variants. Correlate decisions, response payloads, object state and audit trails.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5455,30 +5453,32 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-024 assessed system, version, environment and scope for Object-level authorization can be bypassed",
-          "ARL-KB-024 control configuration or source location showing how reduce the likelihood and impact of object-level authorization can be bypassed and make the remaining risk visible.",
-          "ARL-KB-024 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-024 policy, authorization, tool or audit events proving whether the tested object-level authorization can be bypassed path executed",
-          "ARL-KB-024 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-024 exact assessed system, build version, environment, tenant, workspace, synthetic identities, object types and protected operation scope",
+          "ARL-KB-024 organisation-approved actor, role, tenant, ownership and object-operation authorization matrix with accountable policy owner",
+          "ARL-KB-024 server-side source or configuration evidence for object-scoped queries, alternate routes, service identities and fail-closed authorization checks",
+          "ARL-KB-024 bounded positive evidence of approved synthetic same-tenant object reads, changes, exports and deletes, with observed outputs and object state",
+          "ARL-KB-024 bounded negative evidence of cross-user, cross-tenant, identifier-swap, alternate-route and missing-policy requests denied before any data exposure or side effect",
+          "ARL-KB-024 observed runtime authorization decisions, response payload checks, before-and-after object state and downstream audit events proving allow and deny outcomes",
+          "ARL-KB-024 tester and reviewer identity, roles, timestamps, exact version, evidence digest, exceptions and accountable human decision"
         ],
-        "pass_condition": "ARL-KB-024 passes only when “Object-level authorization can be bypassed” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-024 fails when a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "KB-024 passes only after accountable human review establishes exact-version authorization policy and server enforcement, successful authorized object operations, denied cross-user and cross-tenant direct or alternate access before any payload leakage or side effect, and corroborating runtime/audit evidence with documented limitations.",
+        "fail_condition": "KB-024 fails or requires review if unauthorized object access, information disclosure, export or mutation occurs; if authorization is UI-only, based on caller-supplied ownership, or fails open through alternate paths; or if exact-version negative tests, runtime observations or human review are missing.",
         "limitations": "This bounded ARL-KB-024 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-024's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Access an authorised object using the legitimate owner or workspace identity and verify the expected operation succeeds.",
-        "negative_test": "Change the object identifier to another synthetic user's or workspace's object and verify access is denied without exposing foreign object metadata.",
+        "positive_test": "Using an authorized synthetic identity, verify each approved read, update, export and delete within the exact tenant and ownership scope, including expected response and final object state.",
+        "negative_test": "Using other synthetic users, tenants and service identities, swap object identifiers or use alternate methods/routes and missing-policy scenarios; verify denial before response data exposure, export or mutation, with correlated audit events.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
           "unauthorised or cross-boundary test identity where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-024 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Object-level authorization can be bypassed” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Authorized identity/object/operation combinations yield exactly approved scoped output and observable state changes.",
+          "Cross-user, cross-tenant, indirect identifier, alternate-route and missing-policy combinations are denied before data exposure or side effects."
         ],
         "safe_testing_constraints": [
           "Written owner authorization is required.",
@@ -5501,10 +5501,10 @@
         "monitoring": "For ARL-KB-024, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Application security owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-024 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-024: “Object-level authorization can be bypassed” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-024: Authorised in-scope use completes successfully, remains within the documented asset scope for object-level authorization can be bypassed, and produces no unintended side effect.",
-          "ARL-KB-024: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-024: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-024: Exact revised object-authorization policy, ownership matrix, deployed version and relevant digests are recorded.",
+          "ARL-KB-024: Synthetic in-scope object operations succeed with expected outputs and recorded before-and-after state.",
+          "ARL-KB-024: Cross-user, cross-tenant, identifier-swap, alternate-route and missing-policy attempts fail closed with no unauthorized payload or side effect and correlated audit records.",
+          "ARL-KB-024: An accountable human reviewer records test limitations, exceptions, residual risk and the exact-version retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-024 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Resolve objects through tenant-scoped queries, avoid caller-supplied ownership and deny cross-workspace references consistently. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5517,7 +5517,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-024 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-024 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact object-level failure against the remediated version, plus synthetic cross-user, cross-tenant, alternate-route, identifier-swap and missing-policy variants; confirm no disclosure or side effects and retain audit evidence before human deployment review.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-024",
           "Passed retest evidence bound to ARL-KB-024 and the current knowledge digest",
@@ -5550,12 +5550,12 @@
         "last_reviewed": "2026-10-03",
         "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-024 object model, ownership, tenant, workspace, route or authorization-query change",
-          "ARL-KB-024 new object read, update, export, delete or indirect access path",
-          "ARL-KB-024 cross-user or cross-workspace object-access incident",
-          "ARL-KB-024 evidence expiry or material scope, architecture or assessed-version change"
+          "ARL-KB-024 object ownership, tenancy, authorization policy or query change",
+          "ARL-KB-024 new direct, indirect, export or service-method object route",
+          "ARL-KB-024 cross-tenant or cross-user access or fail-open incident",
+          "ARL-KB-024 assessed build, scope or evidence expiry change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; customer and independent practitioner validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -5612,7 +5612,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "d2596bc1b0593bc6ac5ddc9e017d0163b839812bde2dbf1aae4b24f215e4a4b4"
+      "content_digest": "b87d66e149019f46359d6cc3c4c81b0c34d003e11573b8876e16d1fa178996d5"
     },
     {
       "id": "ARL-KB-025",
