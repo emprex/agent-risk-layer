@@ -27,13 +27,13 @@ const REVIEW_LANES = new Set(['test_planning', 'evidence_collection']);
 // A control outside the independent evidence lanes is not omitted, and its
 // queue status is NOT an approval, PASS, or completed security assessment.
 function snapshotControlRegistry(queue, index) {
-  readOnly(queue);
   if (queue?.complete !== true ||
       queue.systemSnapshotId !== index.systemSnapshotId ||
       queue.total !== index.queueTotal ||
       !Array.isArray(queue.controlIds) ||
       !queue.lanes || typeof queue.lanes !== 'object')
     throw new Error('Complete same-snapshot authoritative 108-control register required.');
+  readOnly(queue);
   const selectedIds = new Set(index.batches.flatMap(batch => batch.controlIds));
   const registry = [];
   for (const lane of CONTROL_LANES) {
