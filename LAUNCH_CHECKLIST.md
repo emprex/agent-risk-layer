@@ -34,6 +34,9 @@
 
 ## Operational boundary
 
+- [ ] Render hosts only the static public site: no ARL application server, ARL database or hosted Operator.
+- [ ] Static request-intake delivery is verified using the actual configured destination, without assuming a hosted ARL API.
+- [ ] Local Operator assessment uses PostgreSQL via DATABASE_URL; SQLite remains test-only.
 - [ ] Public-site deployment is operationally separate from local assessment authority.
 - [ ] Local assessment remains usable when the hosted website is unavailable.
 - [ ] Deployed secrets exist only in the deployment environment.
