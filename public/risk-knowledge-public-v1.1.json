@@ -2385,23 +2385,22 @@
       "title": "Administrative accounts lack phishing-resistant protection",
       "problem": {
         "statement": "A stolen password can grant control over prompts, tools, policies, approvals or evidence.",
-        "customer_symptom": "A user or operator may observe a stolen password can grant control over prompts, tools, policies, approvals or evidence; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in a stolen password can grant control over prompts, tools, policies, approvals or evidence, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A privileged administrator may obtain or recover high-impact access with a stolen password, a phishing-susceptible factor, weak recovery, or an unsafe enrolment or step-up fallback.",
+        "credible_failure_or_attack": "An attacker with a stolen password, compromised recovery channel or weaker-factor fallback can bypass phishing-resistant protection and gain privileged control of agent configuration, tool policy, approvals, deployment or assurance evidence.",
         "affected_assets": [
-          "system prompt, retrieved context and persistent memory",
-          "source documents, messages and generated outputs",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "privileged administrator and break-glass identities",
+          "identity-provider authentication and recovery flows",
+          "MFA factor enrolment, reset and step-up controls",
+          "privileged sessions and administrative tool authority",
+          "agent policies, approvals, configuration and assurance evidence"
         ],
         "default_severity": "high",
         "severity_rationale": "Weak privileged authentication can allow takeover of high-impact administrative capabilities. Final severity depends on the authority of affected accounts, exposed functions, recovery controls and compensating safeguards.",
         "applicability": [
           "hosted platforms"
         ],
-        "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between hosted platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "threat_actor_or_failure_source": "credential phishing, password theft, factor downgrade, insecure recovery, privilege or session abuse, and misconfigured identity policy",
+        "trust_boundary": "The boundary between an untrusted or insufficiently authenticated caller and privileged administrative authority over the assessed system.",
         "operational_impact": "If a stolen password can grant control over prompts, tools, policies, approvals or evidence, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -2429,7 +2428,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-020 privileged authentication, MFA, recovery, factor-enrolment or session-policy change",
@@ -2437,7 +2436,7 @@
           "ARL-KB-020 phishing, account takeover, MFA bypass, insecure recovery or privileged-session incident",
           "ARL-KB-020 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2472,7 +2471,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "c62118a61bc97d9a0f11e7bc68f31903e90d731a06cc1e02f50a122970398fdb"
+      "content_digest": "3051c836ad9f77b3c2cd06bd6dcbe075bf4b0b0e02b6f5a638bb83f9995ab4a9"
     },
     {
       "id": "ARL-KB-021",
@@ -2483,21 +2482,21 @@
       "title": "Session tokens are weak or mishandled",
       "problem": {
         "statement": "Predictable, long-lived, logged or broadly scoped sessions can be stolen or reused.",
-        "customer_symptom": "A user or operator may observe predictable, long-lived, logged or broadly scoped sessions can be stolen or reused; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in predictable, long-lived, logged or broadly scoped sessions can be stolen or reused, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "Users or administrators may observe sessions that remain active after logout, expire too late, survive privilege changes without rotation, or expose session identifiers in insecure storage, URLs or logs.",
+        "credible_failure_or_attack": "An attacker who predicts, fixes, obtains or reuses a session identifier can impersonate an authenticated user or retain access after logout, expiry, revocation or a privilege change.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "web control-plane user sessions",
+          "session identifiers, cookies and server-side session records",
+          "authenticated account and tenant scope",
+          "privileged administrative actions and evidence access"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "web control planes"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between web control planes and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "threat_actor_or_failure_source": "session fixation, token theft or reuse, insecure cookie or browser storage, weak expiry or invalidation, and session-policy configuration error",
+        "trust_boundary": "The boundary between an unauthenticated or superseded session identifier and currently authorised account, tenant and privilege scope on the web control plane.",
         "operational_impact": "If predictable, long-lived, logged or broadly scoped sessions can be stolen or reused, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -2517,7 +2516,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-021 session-token, cookie, login, logout or session-storage change",
@@ -2525,7 +2524,7 @@
           "ARL-KB-021 fixation, token leakage, session theft or continued-use incident",
           "ARL-KB-021 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2565,7 +2564,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e74238b658c662dcfcb291485d607c458d78a1cdc7a8f626dffffccbe1072114"
+      "content_digest": "1f55ed3f530b7452c0eb115f59c758bd34613251a48d7ed1c98f31812ca77220"
     },
     {
       "id": "ARL-KB-022",
@@ -2577,14 +2576,12 @@
       "problem": {
         "statement": "Password reset or recovery can be abused to take over a high-privilege user.",
         "customer_symptom": "A user or operator may observe password reset or recovery can be abused to take over a high-privilege user; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in password reset or recovery can be abused to take over a high-privilege user, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An attacker can use enumeration, reused recovery codes, expired or altered reset tokens or weak proofing to take over an account despite the normal authentication assurance.",
         "affected_assets": [
-          "backups, runtime state and recovery infrastructure",
-          "service availability and data integrity",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "account identity and recovery records",
+          "password-reset tokens and recovery codes",
+          "identity provider and privileged access",
+          "sessions affected by recovery"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -2612,7 +2609,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-022 recovery, reset, identity-proofing, notification or recovery-code change",
@@ -2620,7 +2617,7 @@
           "ARL-KB-022 takeover, enumeration, token-reuse or recovery-bypass incident",
           "ARL-KB-022 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; independent practitioner validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2655,7 +2652,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "74b05f86e5e4e96cd27d70c01a22f359758eb2e08bd5d350bb50b8c9b0204ec9"
+      "content_digest": "642ce68cf5a406ca7bd3af7b34b1f18b90b6f99c7402edb6225cf51c4205ebcf"
     },
     {
       "id": "ARL-KB-023",
@@ -2667,12 +2664,12 @@
       "problem": {
         "statement": "Hidden buttons do not stop a low-privilege caller from invoking privileged APIs directly.",
         "customer_symptom": "A user or operator may observe hidden buttons do not stop a low-privilege caller from invoking privileged apis directly; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in hidden buttons do not stop a low-privilege caller from invoking privileged apis directly, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An authenticated low-privilege caller can bypass interface-only restrictions and invoke privileged API routes or service methods directly when server-side authorization is missing, inconsistent or fails open.",
         "affected_assets": [
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged API functions and service methods",
+          "role-to-function authorization rules",
+          "administrative resources and tenant state",
+          "audit records and downstream actions"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -2680,7 +2677,7 @@
           "multi-role platforms"
         ],
         "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between multi-role platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "The boundary between a caller's authenticated role and server-enforced permission to perform a protected function in the assessed tenant.",
         "operational_impact": "If hidden buttons do not stop a low-privilege caller from invoking privileged apis directly, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -2708,7 +2705,7 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
+        "last_reviewed": "2026-10-09",
         "next_review_due": "2026-12-02",
         "change_triggers": [
           "ARL-KB-023 role, permission, route, service-method or authorization-policy change",
@@ -2716,7 +2713,7 @@
           "ARL-KB-023 function-level authorization bypass or fail-open incident",
           "ARL-KB-023 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "owner-approved semantic correction; customer and independent practitioner validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2751,7 +2748,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "650b26be760c6b40724f15df8ab7e0df57c864b5a90e8123ac94ac673fb31b30"
+      "content_digest": "a7e3378cd874fa79b9f231fd519c2a9344e08c2950b63a2b7d9f2d0a9fb6f467"
     },
     {
       "id": "ARL-KB-024",
@@ -2763,14 +2760,12 @@
       "problem": {
         "statement": "A user can read or modify another assessment, project, runtime event, approval or report by changing an identifier.",
         "customer_symptom": "A user or operator may observe a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An authenticated actor or service identity can access another principal or tenant's object through direct or indirect identifiers, alternate routes or missing server-side object authorization.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "tenant and workspace-scoped objects",
+          "object identifiers and ownership relationships",
+          "assessment evidence, approvals and reports",
+          "service identities and authorization audit events"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
@@ -2778,7 +2773,7 @@
           "multi-user platforms"
         ],
         "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between multi-user platforms and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between the authenticated principal and server-enforced tenant, ownership and operation-level authorization for each object access.",
         "operational_impact": "If a user can read or modify another assessment, project, runtime event, approval or report by changing an identifier, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -2801,12 +2796,12 @@
         "last_reviewed": "2026-10-03",
         "next_review_due": "2026-12-02",
         "change_triggers": [
-          "ARL-KB-024 object model, ownership, tenant, workspace, route or authorization-query change",
-          "ARL-KB-024 new object read, update, export, delete or indirect access path",
-          "ARL-KB-024 cross-user or cross-workspace object-access incident",
-          "ARL-KB-024 evidence expiry or material scope, architecture or assessed-version change"
+          "ARL-KB-024 object ownership, tenancy, authorization policy or query change",
+          "ARL-KB-024 new direct, indirect, export or service-method object route",
+          "ARL-KB-024 cross-tenant or cross-user access or fail-open incident",
+          "ARL-KB-024 assessed build, scope or evidence expiry change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; customer and independent practitioner validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2841,7 +2836,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "d2596bc1b0593bc6ac5ddc9e017d0163b839812bde2dbf1aae4b24f215e4a4b4"
+      "content_digest": "b87d66e149019f46359d6cc3c4c81b0c34d003e11573b8876e16d1fa178996d5"
     },
     {
       "id": "ARL-KB-025",
