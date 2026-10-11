@@ -162,6 +162,36 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         '\\nNo runtime test or security verdict. Existing evidence is preserved.'
     };
   }
+  if (/^Recover structured frozen source evidence ARL-KB-008[.!?]*$/i.test(request.trim())) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection?.target?.revision || '')) {
+      throw new Error('KB-008 recovery requires verified frozen target.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId, controlId:'ARL-KB-008',userId:options.userId
+    });
+    const config = detail?.systemSnapshot?.assessmentConfiguration;
+    if (config?.targetBinding?.source !== 'git' ||
+        config?.targetBinding?.revision !== localFrozenInspection.target.revision ||
+        config?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        detail?.testDefinition?.id !== 'ARL-CHK-008' ||
+        !Array.isArray(detail.testDefinition.requiredEvidence)) {
+      throw new Error('KB-008 recovery rejects unbound target or assessment.');
+    }
+    const outcome = await runAuthoritativeControlSourceReview({
+      repositoryPath,projectId:options.projectId,userId:options.userId,
+      controlId:'ARL-KB-008',requirements:detail.testDefinition.requiredEvidence,
+      collectionOnly:true,repairKb008Source:true
+    });
+    return {
+      canonicalData:{kb008SourceRecovery:outcome,
+        securityStateChanged:outcome.securityStateChanged === true,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-008 frozen source recovery: '+JSON.stringify(outcome)+
+        '\\nNo active tests or security decision; historical evidence preserved.'
+    };
+  }
   if (/^Recollect truncated frozen source evidence ARL-KB-007[.!?]*$/i.test(request.trim())) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
