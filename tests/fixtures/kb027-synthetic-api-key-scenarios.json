@@ -1,0 +1,75 @@
+{
+  "schema": "arl.kb027.synthetic-api-key-boundary-scenarios.v1",
+  "status": "design_only_not_executed",
+  "target": {
+    "repository": "arl-target-mcp-agent",
+    "frozenSha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5"
+  },
+  "guardrails": {
+    "writtenOwnerRoeRequired": true,
+    "syntheticCredentialsOnly": true,
+    "liveNetworkTestsExecuted": false,
+    "customerSecretsIncluded": false,
+    "automaticPassAllowed": false
+  },
+  "scenarios": [
+    {
+      "id": "key-valid",
+      "class": "positive",
+      "credential": "synthetic_key_project_A",
+      "context": "synthetic project A / staging / read-only tool",
+      "expected": "allow only authorized dry-run operation with correlated downstream trace"
+    },
+    {
+      "id": "key-cross-project",
+      "class": "negative",
+      "credential": "synthetic_key_project_A",
+      "context": "synthetic project B / staging / read-only tool",
+      "expected": "deny foreign project before data disclosure or downstream effect"
+    },
+    {
+      "id": "key-cross-environment",
+      "class": "negative",
+      "credential": "synthetic_key_project_A",
+      "context": "synthetic project A / production-like denied environment",
+      "expected": "deny wrong environment before effect"
+    },
+    {
+      "id": "key-privileged-action",
+      "class": "negative",
+      "credential": "synthetic_key_project_A",
+      "context": "synthetic project A / staging / admin tool",
+      "expected": "deny non-permitted high-impact operation"
+    },
+    {
+      "id": "key-expired",
+      "class": "negative",
+      "credential": "synthetic_expired_key",
+      "context": "synthetic project A / staging",
+      "expected": "deny expired credential before any execution"
+    },
+    {
+      "id": "key-revoked",
+      "class": "negative",
+      "credential": "synthetic_revoked_key",
+      "context": "synthetic project A / staging",
+      "expected": "deny revoked credential even when cached"
+    },
+    {
+      "id": "key-old-after-rotation",
+      "class": "negative",
+      "credential": "synthetic_rotated_key",
+      "context": "synthetic project A / staging",
+      "expected": "deny superseded credential after rotation cutoff"
+    }
+  ],
+  "requiredObservations": [
+    "exact build and written ROE",
+    "credential identifier only, no key value",
+    "project, environment and operation authorization",
+    "expiry, revocation and rotation timestamp and policy digest",
+    "positive and negative gateway and downstream results",
+    "identity/audit correlation and state effects",
+    "tester and reviewer identity and limitations"
+  ]
+}
