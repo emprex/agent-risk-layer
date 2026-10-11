@@ -167,13 +167,13 @@ export async function runAuthoritativeControlSourceReview({
       .map((item) => String(item || '').trim())
       .filter(Boolean);
 
-  const observedFacts =
-    frozenInspectionObservation({
-      frozen,
-      requirements: normalizedRequirements
-    });
+  // The typed collection already carries bounded deterministic observations.
+  // Keep the verbose inspector summary only for the distinct source-review mode.
+  const observedFacts = collectionOnly ? null : frozenInspectionObservation({
+    frozen, requirements: normalizedRequirements
+  });
 
-  if (observedFacts === null) {
+  if (!collectionOnly && observedFacts === null) {
     return {
       executed: false,
       reason: 'frozen_source_observation_exceeds_storage_limit',
