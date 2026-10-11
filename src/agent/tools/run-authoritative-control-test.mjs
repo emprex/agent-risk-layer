@@ -161,8 +161,8 @@ export function isLegacyTruncatedKb007Source(test, {
     test.result === 'inconclusive' &&
     test.executionKind !== 'retest' &&
     typeof test.observedResult === 'string' &&
-    (!test.observedResult.includes('Requirement-specific deterministic observations:\\n') ||
-     !test.observedResult.includes('\\nThis collection does not assert that any canonical requirement is satisfied')));
+    (!test.observedResult.includes('Requirement-specific deterministic observations:\n') ||
+     !test.observedResult.includes('\nThis collection does not assert that any canonical requirement is satisfied')));
 }
 
 export async function runAuthoritativeControlSourceReview({
