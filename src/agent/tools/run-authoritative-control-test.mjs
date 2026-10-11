@@ -147,6 +147,20 @@ export function boundedStructuredSourceProjection(collection, maxLength = 12000)
   return {text:null,limited:true};
 }
 
+export function kb007ProviderRefreshReference({revision,controlId,sourceDigest,boundedObservation} = {}) {
+  if (!/^[a-f0-9]{40}$/.test(revision || '') || controlId !== 'ARL-KB-007' ||
+      !/^[a-f0-9]{64}$/.test(sourceDigest || '') ||
+      typeof boundedObservation !== 'string' || !boundedObservation.length ||
+      boundedObservation.length > 10500) {
+    throw new Error('KB-007 refresh requires exact SHA, source lineage and bounded observations.');
+  }
+  const digest = crypto.createHash('sha256')
+    .update(JSON.stringify({sourceDigest,boundedObservation,
+      purpose:'kb007-provider-inventory-refresh-v1'}))
+    .digest('hex');
+  return `arl_frozen_source_evidence_collection_v2:${revision}:${controlId}:${digest}`;
+}
+
 export function isLegacyTruncatedKb007Source(test, {
   inputReference, snapshotId, checkDigest, targetRevision, controlId = 'ARL-KB-007'
 } = {}) {
@@ -294,12 +308,11 @@ export async function runAuthoritativeControlSourceReview({
     .digest('hex');
   // A changed, bounded collector payload gets a distinct append-only source reference.
   // Repeating the exact payload remains idempotent even when the frozen SHA is unchanged.
-  const refreshDigest = crypto.createHash('sha256')
-    .update(JSON.stringify({sourceDigest, boundedObservation:deterministicEvidenceText,
-      purpose:'kb007-provider-inventory-refresh-v1'}))
-    .digest('hex');
   const inputReference = refreshProviderSource
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${refreshDigest}`
+    ? kb007ProviderRefreshReference({
+        revision:frozen.target.revision,controlId,sourceDigest,
+        boundedObservation:deterministicEvidenceText
+      })
     : repairTruncatedSource
       ? `${collectionKind}:${frozen.target.revision}:${controlId}:${repairDigest}`
       : originalReference;
