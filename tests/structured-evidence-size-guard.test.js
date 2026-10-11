@@ -163,5 +163,5 @@ test('KB-008 missing-source recovery requires matching authoritative frozen line
   assert.equal(isMissingKb008StructuredObservations({...row,systemSnapshotId:'old'},binding),false);
   assert.equal(isMissingKb008StructuredObservations({...row,inputReference:row.inputReference.replace(':ARL-KB-008:',':ARL-KB-007:')},binding),false);
   assert.equal(isMissingKb008StructuredObservations({...row,executionKind:'retest'},binding),false);
-  assert.equal(isMissingKb008StructuredObservations({...row,observedResult:'Requirement-specific deterministic observations:\\n{}'},binding),false);
+  assert.equal(isMissingKb008StructuredObservations({...row,observedResult:'Requirement-specific deterministic observations:\n{}'},binding),false);
 });
