@@ -5831,29 +5831,29 @@
       "title": "Service-to-service identity is unauthenticated or shared",
       "problem": {
         "statement": "Internal components trust network location or a shared secret, so compromise of one service grants broad access.",
-        "customer_symptom": "A user or operator may observe internal components trust network location or a shared secret, so compromise of one service grants broad access; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in internal components trust network location or a shared secret, so compromise of one service grants broad access, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "An internal agent, MCP tool or gateway request may be authorised merely because it originates on a trusted network or presents a shared secret, allowing a compromised service to reach another service's resources or actions.",
+        "credible_failure_or_attack": "A compromised or impersonated workload, stolen shared bearer credential, wrong-audience token or forwarded service claim may cross an internal service boundary and reach tools, retrieval, jobs or evidence stores without receiving-side identity, audience and operation checks.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP/tool gateways",
+          "model and retrieval service endpoints",
+          "workload identities, issuer and audience trust policies",
+          "short-lived tokens, certificates and credential stores",
+          "background jobs and delegated user or tenant context",
+          "downstream data, tool actions and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "distributed agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between distributed agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If internal components trust network location or a shared secret, so compromise of one service grants broad access, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "compromised internal workload, impersonated service, reused credential, misconfigured receiver or unsafe delegation",
+        "trust_boundary": "Each hop between agent, orchestration, model, retrieval, MCP/tool and downstream services must authenticate the calling workload and authorize the audience, operation and delegated context at the receiver, rather than trusting a private network or model output.",
+        "operational_impact": "An unauthorized internal service hop could disclose data or trigger privileged actions across connected tools. The affected route may require immediate isolation, identity revocation, evidence preservation, remedial enforcement and an exact-version accountable human retest."
       },
       "check": {
         "id": "ARL-CHK-026",
-        "objective": "Determine whether internal services authenticate each other with distinct attributable workload identities and enforce the intended service audience and privilege boundaries.",
-        "method": "Inspect calls between orchestrator, model gateway, tool gateway, vector store, evidence service and other relevant components for mutual identity, service-specific audience and short-lived credential enforcement. Attempt a synthetic request using an absent, wrong-service or retired workload identity and verify denial.",
+        "objective": "Determine whether each applicable service hop authenticates a distinct attributable workload identity, validates intended issuer/audience and authorizes the operation and delegated context before data disclosure or downstream side effects on the exact assessed build.",
+        "method": "Document the frozen build, relevant service routes and accountable workload identity/audience policy. Inspect receiving-side authentication, audience and operation checks, credential lifetime/revocation, delegated user or tenant context and asynchronous identity propagation. With explicit written owner authorization, run bounded synthetic permitted-service requests and negative variants for absent, wrong-audience, expired/retired, replayed and confused-deputy identities; correlate authorization, response and downstream state evidence. Source hints alone are not proof of execution, and missing tests do not prove a vulnerability.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5861,56 +5861,59 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-026 assessed system, version, environment and scope for Service-to-service identity is unauthenticated or shared",
-          "ARL-KB-026 control configuration or source location showing how reduce the likelihood and impact of service-to-service identity is unauthenticated or shared and make the remaining risk visible.",
-          "ARL-KB-026 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-026 policy, authorization, tool or audit events proving whether the tested service-to-service identity is unauthenticated or shared path executed",
-          "ARL-KB-026 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-026 exact assessed system, version, environment, service-hop and applicable workload identity and action scope",
+          "ARL-KB-026 organisation-approved service identity, issuer, audience, operation and delegated-context matrix with accountable owner and exception record",
+          "ARL-KB-026 source or configuration evidence for receiving-side workload identity validation, issuer/audience policy, short credential lifetime, delegation, job propagation and fail-closed paths",
+          "ARL-KB-026 bounded positive evidence from owner-authorised synthetic requests that permitted service identities and operations complete within the documented scope",
+          "ARL-KB-026 bounded negative evidence of absent, wrong-audience, expired, retired, replayed and confused-deputy service identities denied before data disclosure or downstream side effects",
+          "ARL-KB-026 observed runtime identity subject, issuer, audience, policy decision, correlated downstream authorization, response, state and audit events",
+          "ARL-KB-026 tester and reviewer identity, written authorisation, roles, timestamps, exact assessed version, evidence digest, unsupported paths, exceptions and accountable human decision"
         ],
-        "pass_condition": "ARL-KB-026 passes only when “Service-to-service identity is unauthenticated or shared” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-026 fails when internal components trust network location or a shared secret, so compromise of one service grants broad access, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-026 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-026 passes only after accountable human review of exact-build workload identity policy, receiver-side checks, permitted synthetic positive tests, denied negative scenarios before data exposure or side effects, correlated downstream audit evidence and explicitly recorded untested paths or limitations. Source inspection and model instructions alone cannot establish PASS.",
+        "fail_condition": "KB-026 is a confirmed FAIL only when exact-version evidence reproduces an unauthorized service operation, wrong-audience or retired credential acceptance, forged or replayed identity use, disclosure, unauthorized side effect or demonstrably fail-open receiver. Missing or mismatched runtime tests, source coverage, authorization, identity policy or human review require INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment, but do not claim a confirmed vulnerability.",
+        "limitations": "A bounded KB-026 review cannot establish the security of untested service routes, runtime deployment changes, future credential rotation, unknown delegates or third-party services. Legal and certification conclusions remain outside ARL's technical authority.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-026's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Execute an authorised service-to-service request and verify the expected workload identity and audience are enforced.",
-        "negative_test": "Attempt the same request with no service identity, a shared or wrong-service identity, or an invalid audience and verify it is rejected.",
+        "positive_test": "Under written owner-authorized staging ROE, send a permitted request using a synthetic distinct workload identity, correct issuer, target audience and authorized operation; verify expected downstream action and correlated receiver policy events.",
+        "negative_test": "Under the same ROE and synthetic-only scope, test missing identity, wrong issuer/audience, expired or retired token, wrong-service identity, replay, delegated user or tenant confusion and missing identity in asynchronous jobs; verify denial before any disclosure or effect.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable system/service owner and authorised tester",
+          "synthetic permitted workload identity scoped to named service and audience",
+          "synthetic wrong-service, expired or absent identity and delegated user/tenant context where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-026 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Service-to-service identity is unauthenticated or shared” must be denied, quarantined or routed to explicit review before a material side effect."
+          "An in-scope synthetic service request with correct audience and operation produces only the expected bounded result and attributable authorization trace.",
+          "A synthetic wrong-audience, absent, retired or cross-context identity is rejected by the receiving service before tool execution, data disclosure or other material side effect."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Explicit written owner authorization (ROE) is required for every active or negative scenario.",
+          "Use exact frozen staging build, synthetic identities, synthetic data and reversible or dry-run actions only.",
+          "Do not exercise real credentials, production users, third-party services or unapproved outbound traffic.",
+          "Stop immediately if the test reaches foreign data, an irreversible action or an unexpected live target."
         ]
       },
       "solution": {
         "id": "ARL-SOL-026",
-        "control_objective": "Reduce the likelihood and impact of service-to-service identity is unauthenticated or shared and make the remaining risk visible.",
-        "recommended_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies.",
+        "control_objective": "Bind every applicable internal agent, orchestration, model, retrieval and MCP/tool hop to a distinct verified workload identity, intended audience and least-privilege operation, with explicit delegated-context authorization enforced outside the LLM.",
+        "recommended_remediation": "Replace shared secrets and trusted-network assumptions with attributable workload identities or mutually authenticated channels; verify issuer/audience and operation at each receiver, minimize credential lifetime and privilege, enforce delegation boundaries, rotate/revoke compromised credentials and preserve correlated denial evidence.",
         "default_owner": "Platform identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-026: Give services distinct workload identities rather than trusting network location or broadly shared secrets.",
-          "ARL-KB-026: Bind credentials to the intended service audience and use short lifetimes and least privilege.",
-          "ARL-KB-026: Authenticate and authorize every service hop, including internal agent and tool infrastructure."
+          "ARL-KB-026: Distinct short-lived workload identities; verify issuer, intended receiver audience and permitted operation before data access or execution.",
+          "ARL-KB-026: Do not accept LLM-generated claims, network locality or a shared secret as standalone service authorization.",
+          "ARL-KB-026: Carry separately verified delegated user/tenant context across gateway, worker and tool hops, fail closed if context is missing or invalid.",
+          "ARL-KB-026: Deny expired, revoked, wrong-audience and replayed credentials before any downstream side effect."
         ],
-        "monitoring": "For ARL-KB-026, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-026 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Record redacted workload subject, issuer, audience, policy version/digest, receiver, operation, decision and correlated downstream effects; alert on wrong audience, expired credential, missing identity and repeated denied requests without logging raw tokens.",
+        "containment": "Disable affected service/tool route or workload principal, revoke and rotate impacted identities, stop queued side effects, preserve bounded identity and audit traces, and require accountable owner approval before re-enabling.",
         "retest_acceptance": [
-          "ARL-KB-026: “Service-to-service identity is unauthenticated or shared” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-026: Authorised in-scope use completes successfully, remains within the documented asset scope for service-to-service identity is unauthenticated or shared, and produces no unintended side effect.",
-          "ARL-KB-026: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-026: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-026: The exact remediated build and workload identity, issuer/audience and operation matrix are approved and version-bound.",
+          "ARL-KB-026: Positive permitted synthetic inter-service requests succeed with recorded receiver authorization and expected downstream effects.",
+          "ARL-KB-026: Absent, wrong-service, wrong-audience, expired, retired, replayed and confused-deputy variants fail closed before data disclosure or material side effects.",
+          "ARL-KB-026: Tester and accountable reviewer record written ROE, exact SHA, evidence digests, omitted routes, residual limitations and human retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-026 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5969,7 +5972,7 @@
           "ARL-KB-026 shared-secret exposure, service impersonation or internal identity incident",
           "ARL-KB-026 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6025,7 +6028,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "a94e810240ecb11adaeb9ec4bfb757001033a4522785a2529e755f6fc704e259"
+      "content_digest": "6f81fdd9270b7dbe62e50072f599e785ea1bfa05b14062fcc643fd83ed9dcfae"
     },
     {
       "id": "ARL-KB-027",

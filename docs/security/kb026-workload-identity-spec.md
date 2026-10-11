@@ -6,7 +6,7 @@ Status: **candidate technical test design** for accountable human review. This i
 
 The assessed agent may call orchestrators, model gateways, MCP/tool gateways, vector databases, job workers or evidence services. Internal network location, a shared bearer secret, an LLM-generated authorization claim, or a successful TLS connection must **not** substitute for verifiable service identity and authorization. Every relevant hop must bind **workload identity, intended audience, allowed operation, target and context** at the receiving service, before any data disclosure or side effect. Where appropriate, use mutually authenticated channels, short-lived and revocable credentials, and deny-by-default policy. Do not confuse workload-identity authentication with application-user or tenant authorization: both may be required.
 
-## Seven evidence families — proposed for future signed migration 049
+## Seven evidence families — included in candidate signed migration 049
 
 1. **Exact target and hop scope**: frozen build SHA, deployment/environment, component map, in/out boundaries, routes and reachable tool/service actions.
 2. **Accountable declared identity policy**: approved service-identity inventory, role-to-service and audience matrix, credential issuance/expiration/revocation and explicit exceptions, owner, effective date and revision.
@@ -28,4 +28,4 @@ Use only an exact frozen **`arl-target-mcp-agent`** SHA `b3116fcfcec3bf6967773c3
 
 ## Acceptance before signed canonical correction
 
-Independent review of the seven family taxonomy, exact version and human authority, correct machine/runtime/human classification, reproducible test scenarios with expected observations, complete migration 049 and generated signed artifacts, 107 other content digests unchanged, exact-head CI with PostgreSQL, and no retroactive change to evidence or deployment HOLD. Keep this as a draft until reviewed.
+Independent review of the seven family taxonomy, exact version and human authority, correct machine/runtime/human classification, reproducible test scenarios with expected observations, validate included additive migration 049 and generated signed artifacts, 107 other content digests unchanged, exact-head CI with PostgreSQL, and no retroactive change to evidence or deployment HOLD. This signed canonical correction is a candidate implementation, not an approved security decision. Keep the PR as a draft until accountable review.

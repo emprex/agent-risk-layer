@@ -3,17 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildCanonicalEvidenceRequirementPlan } from '../src/agent/canonical-evidence-requirement-plan.mjs';
 
-const plan = [
-  'ARL-KB-026 assessed system, exact version, environment and service-hop scope',
-  'ARL-KB-026 organisation-approved workload identity, audience and operation matrix',
-  'ARL-KB-026 source or configuration evidence for receiver-side workload authentication and audience restrictions',
-  'ARL-KB-026 positive and abuse inputs with expected and observed outputs for permitted synthetic service identities',
-  'ARL-KB-026 bounded negative evidence for missing, wrong-audience, retired, replayed or confused-deputy service identities',
-  'ARL-KB-026 observed runtime correlation of subject, audience, policy, decision, authorization and downstream effects',
-  'ARL-KB-026 reviewer identity, role, timestamp and evidence digest'
-];
+const asset=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
+const control=asset.entries.find(item=>item.id==='ARL-KB-026');
+const plan=control?.check?.required_evidence || [];
 
-test('KB-026 proposed seven-clause plan keeps machine, runtime and human evidence separate', () => {
+test('KB-026 signed seven-clause plan keeps machine, runtime and human evidence separate', () => {
   const classified = buildCanonicalEvidenceRequirementPlan(plan);
   assert.equal(classified.length,7);
   assert.deepEqual(classified.map(x => x.mode), [

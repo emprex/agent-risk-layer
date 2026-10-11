@@ -2944,27 +2944,27 @@
       "title": "Service-to-service identity is unauthenticated or shared",
       "problem": {
         "statement": "Internal components trust network location or a shared secret, so compromise of one service grants broad access.",
-        "customer_symptom": "A user or operator may observe internal components trust network location or a shared secret, so compromise of one service grants broad access; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in internal components trust network location or a shared secret, so compromise of one service grants broad access, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "An internal agent, MCP tool or gateway request may be authorised merely because it originates on a trusted network or presents a shared secret, allowing a compromised service to reach another service's resources or actions.",
+        "credible_failure_or_attack": "A compromised or impersonated workload, stolen shared bearer credential, wrong-audience token or forwarded service claim may cross an internal service boundary and reach tools, retrieval, jobs or evidence stores without receiving-side identity, audience and operation checks.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP/tool gateways",
+          "model and retrieval service endpoints",
+          "workload identities, issuer and audience trust policies",
+          "short-lived tokens, certificates and credential stores",
+          "background jobs and delegated user or tenant context",
+          "downstream data, tool actions and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "distributed agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between distributed agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If internal components trust network location or a shared secret, so compromise of one service grants broad access, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "compromised internal workload, impersonated service, reused credential, misconfigured receiver or unsafe delegation",
+        "trust_boundary": "Each hop between agent, orchestration, model, retrieval, MCP/tool and downstream services must authenticate the calling workload and authorize the audience, operation and delegated context at the receiver, rather than trusting a private network or model output.",
+        "operational_impact": "An unauthorized internal service hop could disclose data or trigger privileged actions across connected tools. The affected route may require immediate isolation, identity revocation, evidence preservation, remedial enforcement and an exact-version accountable human retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies.",
+        "recommended_remediation": "Replace shared secrets and trusted-network assumptions with attributable workload identities or mutually authenticated channels; verify issuer/audience and operation at each receiver, minimize credential lifetime and privilege, enforce delegation boundaries, rotate/revoke compromised credentials and preserve correlated denial evidence.",
         "default_owner": "Platform identity owner",
         "priority": "P1"
       },
@@ -2996,7 +2996,7 @@
           "ARL-KB-026 shared-secret exposure, service impersonation or internal identity incident",
           "ARL-KB-026 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3031,7 +3031,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a94e810240ecb11adaeb9ec4bfb757001033a4522785a2529e755f6fc704e259"
+      "content_digest": "6f81fdd9270b7dbe62e50072f599e785ea1bfa05b14062fcc643fd83ed9dcfae"
     },
     {
       "id": "ARL-KB-027",
