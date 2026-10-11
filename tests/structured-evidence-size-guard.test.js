@@ -69,11 +69,22 @@ test('KB-007 recollection is eligible only for an exact-bound legacy truncated v
   const sample={
     ...expected,systemSnapshotId:expected.snapshotId,
     executionMethod:'arl_frozen_source_evidence_collection_v2',
+    controlId:'ARL-KB-007',result:'inconclusive',executionKind:'initial',
     observedResult:'Observed frozen-target facts:\n{}'
   };
   assert.equal(isLegacyTruncatedKb007Source(sample,expected),true);
   assert.equal(isLegacyTruncatedKb007Source({...sample,systemSnapshotId:'wrong'},expected),false);
   assert.equal(isLegacyTruncatedKb007Source({...sample,inputReference:'other'},expected),false);
+  const priorInspectionDigest='d'.repeat(64);
+  const historical={...sample,inputReference:
+    'arl_frozen_source_evidence_collection_v2:'+'a'.repeat(40)+':ARL-KB-007:'+priorInspectionDigest};
+  assert.equal(isLegacyTruncatedKb007Source(historical,expected),true,
+    'historical inspection digests must not prevent recovery on the same frozen SHA');
+  assert.equal(isLegacyTruncatedKb007Source({...historical,controlId:'ARL-KB-008'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...historical,result:'passed'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...historical,executionKind:'retest'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...historical,inputReference:
+    'arl_frozen_source_evidence_collection_v2:'+'c'.repeat(40)+':ARL-KB-007:'+priorInspectionDigest},expected),false);
   assert.equal(isLegacyTruncatedKb007Source({...sample,checkDigest:'stale'},expected),false);
   assert.equal(isLegacyTruncatedKb007Source({...sample,executionMethod:'manual_review'},expected),false);
   const complete={...sample,observedResult:
