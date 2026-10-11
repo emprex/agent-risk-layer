@@ -106,7 +106,8 @@ export async function runAuthoritativeControlSourceReview({
   userId,
   controlId,
   requirements = [],
-  collectionOnly = false
+  collectionOnly = false,
+  repairTruncatedSource = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -142,6 +143,15 @@ export async function runAuthoritativeControlSourceReview({
       executed: false,
       reason: 'authoritative_frozen_source_review_required'
     };
+  }
+
+  if (repairTruncatedSource) {
+    const binding = detail.systemSnapshot?.assessmentConfiguration?.targetBinding;
+    if (controlId !== 'ARL-KB-007' || collectionOnly !== true ||
+        binding?.source !== 'git' || binding.revision !== frozen.target.revision ||
+        frozen.target.dirty !== false) {
+      return {executed:false,reason:'kb007_recollection_requires_exact_frozen_snapshot',securityStateChanged:false};
+    }
   }
 
   const sourceDigest = crypto
@@ -196,8 +206,29 @@ export async function runAuthoritativeControlSourceReview({
       ? 'arl_frozen_source_evidence_collection_v2'
       : 'arl_frozen_source_review';
 
-  const inputReference =
+  const originalReference =
     `${collectionKind}:${frozen.target.revision}:${controlId}:${sourceDigest}`;
+  const knownTests = [
+    ...(Array.isArray(detail.tests) ? detail.tests : []),
+    ...(Array.isArray(detail.testHistory) ? detail.testHistory : [])
+  ];
+  const original = knownTests.find(item =>
+    item?.inputReference === originalReference &&
+    item?.systemSnapshotId === snapshotId &&
+    item?.executionMethod === collectionKind &&
+    item?.checkDigest === detail.testDefinition?.digest
+  );
+  if (repairTruncatedSource && (!original ||
+      (String(original.observedResult || '').includes('Requirement-specific deterministic observations:') &&
+       String(original.observedResult || '').includes('This collection does not assert that any canonical requirement is satisfied')))) {
+    return {executed:false,reason:'kb007_truncated_source_repair_not_required',securityStateChanged:false};
+  }
+  const repairDigest = crypto.createHash('sha256')
+    .update(sourceDigest + ':kb007-v2-bounded-storage-repair-v1')
+    .digest('hex');
+  const inputReference = repairTruncatedSource
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${repairDigest}`
+    : originalReference;
 
   const previous = [
     ...(Array.isArray(detail.tests) ? detail.tests : []),
@@ -216,6 +247,20 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
+  const observedResult = [
+    'ARL completed deterministic frozen-source inspection for this control.',
+    'Observed frozen-target facts:',
+    collectionOnly
+      ? JSON.stringify({targetRevision:frozen.target.revision,inspectionDigest:sourceDigest})
+      : observedFacts,
+    'Requirement-specific deterministic observations:',
+    deterministicEvidenceText,
+    'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
+  ].join('\\n');
+  if (collectionOnly && observedResult.length > 12000) {
+    return {executed:false,reason:'complete_structured_source_observation_exceeds_storage_limit',securityStateChanged:false};
+  }
+
   const execution =
     await recordControlTestExecution({
       projectId,
@@ -227,15 +272,7 @@ export async function runAuthoritativeControlSourceReview({
         executionMethod: collectionKind,
         result: 'inconclusive',
         inputReference,
-        observedResult:
-          [
-            'ARL completed deterministic frozen-source inspection for this control.',
-            'Observed frozen-target facts:',
-            observedFacts,
-            'Requirement-specific deterministic observations:',
-            deterministicEvidenceText,
-            'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
-          ].join('\n'),
+        observedResult,
         limitations:
           'This automatic source collection is bound to the exact frozen Git revision. It may support canonical evidence requirements but does not invent human approval, reviewer identity, organisational records, runtime effects or a conclusive control result.'
       }
