@@ -135,3 +135,16 @@ test('even a bounded projection fails closed if required values alone exceed sto
   }]};
   assert.equal(boundedStructuredSourceProjection(impossible).text,null);
 });
+
+test('KB-007 refresh reference is deterministic, source-specific and bound to exact revision',()=>{
+  const input={revision:'a'.repeat(40),controlId:'ARL-KB-007',
+    sourceDigest:'b'.repeat(64),boundedObservation:JSON.stringify(payload)};
+  const first=kb007ProviderRefreshReference(input);
+  assert.match(first,/^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-007:[a-f0-9]{64}$/);
+  assert.equal(kb007ProviderRefreshReference(input),first);
+  assert.notEqual(kb007ProviderRefreshReference({...input,boundedObservation:input.boundedObservation+' '}),first);
+  assert.notEqual(kb007ProviderRefreshReference({...input,sourceDigest:'c'.repeat(64)}),first);
+  assert.throws(()=>kb007ProviderRefreshReference({...input,revision:'c'.repeat(39)}),/exact SHA/);
+  assert.throws(()=>kb007ProviderRefreshReference({...input,controlId:'ARL-KB-008'}),/exact SHA/);
+  assert.throws(()=>kb007ProviderRefreshReference({...input,boundedObservation:'x'.repeat(10501)}),/bounded observations/);
+});
