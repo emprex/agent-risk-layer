@@ -389,6 +389,31 @@ export function operatorNextActionMarkup(dashboard) {
     '. Reopen the current authoritative assessment before recording any action. No tests or decisions can be performed here.</p></section>';
 }
 
+// Private snapshot-bound metadata only; narrative/paths are deliberately excluded.
+export function operatorScopeOverviewMarkup(dashboard) {
+  readOnly(dashboard);
+  const scope = dashboard?.scopeOverview;
+  if (!scope) return '<section class="notice"><h2>Assessment scope</h2><p>Scope metadata not included in this prepared view. Inspect the authoritative context separately.</p></section>';
+  if (scope.systemSnapshotId !== dashboard.systemSnapshotId ||
+      scope.targetRevision !== dashboard.targetRevision ||
+      !['test','development','staging','production','unknown'].includes(scope.environment) ||
+      typeof scope.architectureSummaryRecorded !== 'boolean' ||
+      typeof scope.capabilityProfileRecorded !== 'boolean' ||
+      !Number.isSafeInteger(scope.confirmedArchitectureFactCount) ||
+      scope.confirmedArchitectureFactCount < 0 ||
+      !Number.isSafeInteger(scope.manualArchitectureFactCount) ||
+      scope.manualArchitectureFactCount < 0) {
+    throw new Error('Operator scope overview does not match the frozen authoritative snapshot.');
+  }
+  return '<section class="registry"><h2>Assessment scope — read-only</h2>'+
+    '<p>Environment: <strong>'+esc(scope.environment)+'</strong> · Architecture description recorded: '+
+    (scope.architectureSummaryRecorded ? 'yes' : 'no')+
+    ' · Capability profile recorded: '+(scope.capabilityProfileRecorded ? 'yes' : 'no')+'</p>'+
+    '<p>Architecture facts recorded: '+esc(scope.confirmedArchitectureFactCount)+
+    ' · Manually declared facts: '+esc(scope.manualArchitectureFactCount)+'</p>'+
+    '<p class="muted">Same snapshot and exact Git revision shown above. Descriptions, local paths and credentials are not copied into this HTML. These recorded fields are not proof of scope authorisation, evidence acceptance or deployment approval.</p></section>';
+}
+
 export function renderOfflineOperatorReviewHtml(dashboard) {
   readOnly(dashboard);
   if (!SHA.test(dashboard?.targetRevision || '') ||
@@ -418,6 +443,7 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
     (dashboard.syntheticDemo === true ? '<div class="notice" role="status"><strong>SYNTHETIC DEMONSTRATION — NO REAL ASSESSMENT OR CUSTOMER DATA.</strong> All controls, tests, evidence IDs and results shown below are invented exclusively for a UI preview.</div>' : '')+
     '<div class="notice"><strong>Deployment HOLD / no release authority inferred.</strong> '+
     'Blocked findings and final human decisions are excluded from these independent work items, not resolved.</div>'+
+    operatorScopeOverviewMarkup(dashboard)+
     operatorNextActionMarkup(dashboard)+
     '<section class="metrics">'+[
       ['Independent controls',dashboard.assessedControls],
