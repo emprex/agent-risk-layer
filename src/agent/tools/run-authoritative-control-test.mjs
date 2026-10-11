@@ -100,6 +100,53 @@ export function boundedDeterministicEvidenceJson(evidence, maxLength = 12000) {
   return serialized;
 }
 
+// On large repositories, duplicate inventory arrays across several KB criteria
+// exceed the canonical 12k test-observation budget. Projection must remain
+// demonstrably incomplete, never silently claim exhaustive inventory coverage.
+export function boundedStructuredSourceProjection(collection, maxLength = 12000) {
+  const full = boundedDeterministicEvidenceJson(collection, maxLength);
+  if (full !== null) return {text:full, limited:false};
+  const originalDigest = crypto.createHash('sha256')
+    .update(JSON.stringify(collection)).digest('hex');
+  const project = (value, limit) => {
+    if (Array.isArray(value)) return {
+      // A typed marker distinguishes a partial inventory from an entire list.
+      items:value.slice(0,limit).map(item => project(item,limit)),
+      originalCount:value.length,
+      omittedCount:Math.max(0,value.length-limit),
+      incomplete:value.length>limit
+    };
+    if (value && typeof value === 'object') return Object.fromEntries(
+      Object.entries(value).map(([key,item])=>[key,project(item,limit)])
+    );
+    return value;
+  };
+  for (const limit of [8,4,2,1,0]) {
+    const candidate={
+      schema:collection?.schema,
+      targetRevision:collection?.targetRevision,
+      privacyBoundary:collection?.privacyBoundary,
+      projection:{
+        incomplete:true,
+        inventoryArraysTruncated:true,
+        fullCollectionSha256:originalDigest,
+        limitPerArray:limit,
+        warning:'Partial inventory metadata only; omitted records are NOT evidence that no providers or paths exist.'
+      },
+      requirementObservations:(collection?.requirementObservations||[]).map(item=>({
+        requirement:item.requirement,
+        collectors:item.collectors,
+        observations:Object.fromEntries(
+          Object.entries(item.observations||{}).map(([id,value])=>[id,project(value,limit)])
+        )
+      }))
+    };
+    const text=boundedDeterministicEvidenceJson(candidate,maxLength);
+    if (text !== null) return {text,limited:true};
+  }
+  return {text:null,limited:true};
+}
+
 export function isLegacyTruncatedKb007Source(test, {
   inputReference, snapshotId, checkDigest
 } = {}) {
@@ -201,8 +248,10 @@ export async function runAuthoritativeControlSourceReview({
       requirements: normalizedRequirements
     });
 
-  const deterministicEvidenceText =
-    boundedDeterministicEvidenceJson(deterministicEvidence);
+  const projection = collectionOnly
+    ? boundedStructuredSourceProjection(deterministicEvidence)
+    : {text:boundedDeterministicEvidenceJson(deterministicEvidence),limited:false};
+  const deterministicEvidenceText = projection.text;
 
   // Reject oversized observations before recording a test or evidence item.
   // A sliced JSON document cannot be parsed or independently reviewed.
