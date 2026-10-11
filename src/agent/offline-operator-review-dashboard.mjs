@@ -358,6 +358,36 @@ function fullControlRegistryMarkup(dashboard) {
 }
 
 // Point-in-time navigation only. This panel never executes, accepts or approves actions.
+// The excluded blocked lane is an authoritative queue routing state, not an
+// evidence dossier. Give operators a useful follow-up entry without fabricating
+// evidence, findings, owners, dates, closure or an active test.
+export function operatorBlockedFollowupMarkup(dashboard) {
+  readOnly(dashboard);
+  if (!Array.isArray(dashboard?.controlRegistry) ||
+      dashboard.registryTotal !== dashboard.controlRegistry.length ||
+      !SHA.test(dashboard.targetRevision || '') ||
+      !dashboard.systemSnapshotId ||
+      dashboard.controlRegistry.some(row => !ID.test(row?.controlId || '') ||
+        !CONTROL_LANES.includes(row.lane))) {
+    throw new Error('Validated same-snapshot control register required for blocked follow-up.');
+  }
+  const blocked = dashboard.controlRegistry.filter(row => row.lane === 'follow_up_blocked');
+  if (!blocked.length) return '';
+  return '<section class="registry" aria-label="Blocked control review">'+
+    '<h2>Blocked findings — accountable follow-up</h2>'+
+    '<p class="muted">These entries are excluded from independent evidence preparation. This offline page has no finding history, closure authority or test permission. Open the authoritative assessment to inspect the original finding and its owner before taking action.</p>'+
+    blocked.map(row => '<details><summary>'+esc(row.controlId)+
+      ' · blocked follow-up</summary><div class="body">'+
+      '<p>Current stage: '+safeLabel(registryStatus('currentStage',row.currentStage))+
+      ' · Chain status: '+safeLabel(registryStatus('chainStatus',row.chainStatus))+
+      ' · Deployment impact: '+safeLabel(registryStatus('deploymentImpact',row.deploymentImpact))+'</p>'+
+      '<p><strong>Human review required:</strong> inspect the exact finding and evidence provenance; identify the accountable owner; document remediation and a separately authorised exact-version retest before considering closure.</p>'+
+      '<p class="pending">Not resolved. No automatic severity, attribution, retest, closure or deployment decision.</p>'+
+      '</div></details>').join('')+
+    '<p class="muted">Prepared snapshot <code>'+esc(dashboard.systemSnapshotId)+
+    '</code> · Frozen SHA <code>'+esc(dashboard.targetRevision)+'</code></p></section>';
+}
+
 export function operatorNextActionMarkup(dashboard) {
   readOnly(dashboard);
   if (!Array.isArray(dashboard?.controlRegistry) ||
@@ -445,6 +475,7 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
     'Blocked findings and final human decisions are excluded from these independent work items, not resolved.</div>'+
     operatorScopeOverviewMarkup(dashboard)+
     operatorNextActionMarkup(dashboard)+
+    operatorBlockedFollowupMarkup(dashboard)+
     '<section class="metrics">'+[
       ['Independent controls',dashboard.assessedControls],
       ['Excluded controls',dashboard.excludedControls],
