@@ -34,6 +34,7 @@ function structuredObservations(test) {
     return {
       status: 'parsed',
       revision: parsed.targetRevision,
+      incompleteInventory: parsed.projection?.incomplete === true,
       observations: parsed.requirementObservations.filter(item =>
         typeof item?.requirement === 'string' &&
         Array.isArray(item?.collectors) &&
@@ -102,6 +103,7 @@ function reviewSource(evidence, tests, detail, snapshotId) {
   }
   summary.lineageStatus = 'linked_static_observation_unverified_for_criterion';
   summary.observations = parsed.observations;
+  summary.incompleteInventory = parsed.incompleteInventory;
   return summary;
 }
 
@@ -123,6 +125,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
     const criteria = requirements.map((entry, i) => {
       const candidateIds = [];
       const observedCollectorIds = new Set();
+      let incompleteInventoryCandidate = false;
       if (entry.mode === 'machine_collectable') {
         for (const source of sources) {
           if (source.lineageStatus !== 'linked_static_observation_unverified_for_criterion') continue;
@@ -132,6 +135,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
             entry.collectors.includes(id) && Object.hasOwn(record.observations, id)));
           if (present.length) {
             candidateIds.push(source.evidenceId);
+            if (source.incompleteInventory) incompleteInventoryCandidate = true;
             present.forEach(id => observedCollectorIds.add(id));
           }
         }
@@ -143,6 +147,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
         expectedCollectors: entry.collectors,
         observedCollectors: [...observedCollectorIds].sort(),
         candidateEvidenceIds: candidateIds,
+        incompleteInventoryCandidate,
         reviewState: entry.mode === 'machine_collectable'
           ? candidateIds.length ? 'static_observation_candidate_review_required' : 'static_observation_missing'
           : entry.mode === 'human_only' ? 'accountable_human_evidence_required'
@@ -163,6 +168,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
       summary: {
         staticCandidates: criteria.filter(c => c.reviewState === 'static_observation_candidate_review_required').length,
         staticMissing: criteria.filter(c => c.reviewState === 'static_observation_missing').length,
+        partialInventoryCandidates: criteria.filter(c => c.incompleteInventoryCandidate).length,
         humanRequirements: criteria.filter(c => c.mode === 'human_only').length,
         runtimeRequirements: criteria.filter(c => c.mode === 'active_test_or_runtime').length,
         sourceLineageIssues: identifiedIssues.length
@@ -175,6 +181,7 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
     controls: controls.length,
     staticCandidates: controls.reduce((n,c) => n + c.summary.staticCandidates, 0),
     staticMissing: controls.reduce((n,c) => n + c.summary.staticMissing, 0),
+    partialInventoryCandidates: controls.reduce((n,c) => n + c.summary.partialInventoryCandidates, 0),
     humanRequirements: controls.reduce((n,c) => n + c.summary.humanRequirements, 0),
     runtimeRequirements: controls.reduce((n,c) => n + c.summary.runtimeRequirements, 0),
     sourceLineageIssues: controls.reduce((n,c) => n + c.summary.sourceLineageIssues, 0)
