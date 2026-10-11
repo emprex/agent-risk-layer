@@ -256,7 +256,7 @@ export async function runAuthoritativeControlSourceReview({
     'Requirement-specific deterministic observations:',
     deterministicEvidenceText,
     'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
-  ].join('\\n');
+  ].join('\n');
   if (collectionOnly && observedResult.length > 12000) {
     return {executed:false,reason:'complete_structured_source_observation_exceeds_storage_limit',securityStateChanged:false};
   }
