@@ -39,6 +39,7 @@ import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches }
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
+import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
 import { buildOfflineOperatorReviewDashboard, writeOfflineOperatorReviewDashboard } from './offline-operator-review-dashboard.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
 
@@ -332,6 +333,25 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  if (/^show frozen provider evidence ARL-KB-007[.!?]*$/i.test(request.trim())) {
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId:'ARL-KB-007',userId:options.userId
+    });
+    const revision = localFrozenInspection?.target?.revision;
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(revision || '') ||
+        detail?.systemSnapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId !== options.assessmentId) {
+      throw new Error('KB-007 provider evidence view requires current verified frozen assessment.');
+    }
+    const report = buildKb007ProviderEvidenceView(detail,revision);
+    return {
+      canonicalData:{kb007ProviderEvidenceView:report,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-007 frozen provider evidence (read-only):\\n'+JSON.stringify(report,null,2)+
+        '\\nCandidate metadata does not prove provider approval or secure operation.'
+    };
+  }
   if (/^show assessment review dossier\b/i.test(request.trim())) {
     const match = /^show assessment review dossier (ARL-KB-[0-9]{3})[.!?]*$/i.exec(request.trim());
     if (!match) throw new Error('Use Show assessment review dossier ARL-KB-###.');
