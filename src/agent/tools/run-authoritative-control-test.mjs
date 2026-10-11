@@ -109,8 +109,8 @@ export function isLegacyTruncatedKb007Source(test, {
     test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
     test.checkDigest === checkDigest &&
     typeof test.observedResult === 'string' &&
-    (!test.observedResult.includes('Requirement-specific deterministic observations:\\n') ||
-     !test.observedResult.includes('\\nThis collection does not assert that any canonical requirement is satisfied')));
+    (!test.observedResult.includes('Requirement-specific deterministic observations:\n') ||
+     !test.observedResult.includes('\nThis collection does not assert that any canonical requirement is satisfied')));
 }
 
 export async function runAuthoritativeControlSourceReview({
