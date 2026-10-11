@@ -103,7 +103,7 @@ export function prepareCustomerReportDisclosurePreflight(report, {markdownText}=
         stats.incompleteTraversal=true;
         break;
       }
-      const lf=markdownText.indexOf('\\n',offset);
+      const lf=markdownText.indexOf('\n',offset);
       const end=lf<0 ? markdownText.length : lf;
       scanText(
         markdownText.slice(offset,Math.min(end,offset+MAX_TEXT)),
