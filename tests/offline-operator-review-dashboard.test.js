@@ -297,6 +297,47 @@ test('full control register cannot come from wrong snapshot, missing lanes or fo
   }), /Validated operator dashboard required/);
 });
 
+test('registry states only show canonical enum labels, not short injected secrets',()=>{
+  const secret='Bearer SYNTHETIC-CLIENT-SECRET-NOT-FOR-EXPORT-1234';
+  const batch=index.batches[0];
+  const review=buildAssessmentReviewDossiers({
+    queue,controlIds:batch.controlIds,details:batch.controlIds.map(details)
+  });
+  const poisoned={
+    ...queue,lanes:{
+      ...queue.lanes,
+      follow_up_blocked:queue.lanes.follow_up_blocked.map(item=>({
+        ...item,currentStage:secret,chainStatus:secret,deploymentImpact:secret
+      })),
+      human_decision:queue.lanes.human_decision.map(item=>({
+        ...item,currentStage:secret,chainStatus:secret,deploymentImpact:secret
+      }))
+    }
+  };
+  const filtered=buildOfflineOperatorReviewDashboard(index,[review],rev,poisoned);
+  for(const record of filtered.controlRegistry.filter(x=>!x.inEvidenceWorkplan)) {
+    assert.equal(record.currentStage,null);
+    assert.equal(record.chainStatus,null);
+    assert.equal(record.deploymentImpact,null);
+  }
+  const html=renderOfflineOperatorReviewHtml(filtered);
+  assert.equal(html.includes(secret),false);
+  assert.match(html,/unknown/);
+  assert.equal(filtered.humanReviewRequired,true);
+  assert.equal(filtered.deploymentDecisionWritten,false);
+
+  // Even a post-projection modified dashboard cannot bypass HTML sanitising.
+  const forged={
+    ...dashboard(),
+    controlRegistry:dashboard().controlRegistry.map((item,i)=>i ? item : ({
+      ...item,currentStage:secret,chainStatus:secret,deploymentImpact:secret
+    }))
+  };
+  const forgedHtml=renderOfflineOperatorReviewHtml(forged);
+  assert.equal(forgedHtml.includes(secret),false);
+  assert.match(forgedHtml,/Deployment HOLD/);
+});
+
 test('excluded-control nextAction never copies private free text into offline HTML',()=>{
   const batch=index.batches[0];
   const review=buildAssessmentReviewDossiers({
