@@ -247,3 +247,39 @@ test('legacy artifact-only verified retest evidence is treated as unverified and
     input: { systemSnapshotId: current.id, rationale: 'Legacy verification semantics must not support a decision.' },
   }), /legacy evidence whose stored verification is not valid/i);
 });
+
+test('typed frozen-source JSON survives persistence beyond the generic 2000-char limit', async () => {
+  const f = await fixture('typed-frozen-storage');
+  const snapshot = await snapshotWithApplicableControl(f, 'Synthetic bounded source review');
+  const structured = JSON.stringify({
+    schema: 'arl.deterministic-evidence-collection.v1',
+    targetRevision: 'a'.repeat(40),
+    requirementObservations: [{
+      requirement: 'Synthetic exact-version provider inventory',
+      collectors: ['architecture_and_inventory'],
+      observations: {architecture_and_inventory:{metadata: 'A'.repeat(2400)}}
+    }]
+  });
+  const observed = 'Requirement-specific deterministic observations:\\n' +
+    structured + '\\nThis collection does not assert that any canonical requirement is satisfied';
+  assert.ok(observed.length > 2000 && observed.length < 12000);
+  const recorded = await recordControlTestExecution({
+    projectId:f.project.id, controlId:CONTROL_ID, userId:f.userId,
+    input: {
+      systemSnapshotId:snapshot.id,
+      result:'inconclusive',
+      executionMethod:'arl_frozen_source_evidence_collection_v2',
+      inputReference:'synthetic source reference',
+      observedResult:observed
+    }
+  });
+  const stored = await db.prepare('SELECT observed_result FROM control_test_executions WHERE id=?').get(recorded.id);
+  assert.equal(stored.observed_result, observed);
+  assert.ok(stored.observed_result.includes('This collection does not assert'));
+  await assert.rejects(()=>recordControlTestExecution({
+    projectId:f.project.id,controlId:CONTROL_ID,userId:f.userId,
+    input:{systemSnapshotId:snapshot.id,result:'inconclusive',
+      executionMethod:'arl_frozen_source_evidence_collection_v2',
+      observedResult:'B'.repeat(12001)}
+  }),/exceeds the 12000-character storage limit/);
+});
