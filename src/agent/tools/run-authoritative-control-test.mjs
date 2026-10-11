@@ -100,6 +100,19 @@ export function boundedDeterministicEvidenceJson(evidence, maxLength = 12000) {
   return serialized;
 }
 
+export function isLegacyTruncatedKb007Source(test, {
+  inputReference, snapshotId, checkDigest
+} = {}) {
+  return Boolean(test &&
+    test.inputReference === inputReference &&
+    test.systemSnapshotId === snapshotId &&
+    test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
+    test.checkDigest === checkDigest &&
+    typeof test.observedResult === 'string' &&
+    (!test.observedResult.includes('Requirement-specific deterministic observations:\\n') ||
+     !test.observedResult.includes('\\nThis collection does not assert that any canonical requirement is satisfied')));
+}
+
 export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
@@ -213,14 +226,12 @@ export async function runAuthoritativeControlSourceReview({
     ...(Array.isArray(detail.testHistory) ? detail.testHistory : [])
   ];
   const original = knownTests.find(item =>
-    item?.inputReference === originalReference &&
-    item?.systemSnapshotId === snapshotId &&
-    item?.executionMethod === collectionKind &&
-    item?.checkDigest === detail.testDefinition?.digest
+    isLegacyTruncatedKb007Source(item, {
+      inputReference: originalReference, snapshotId,
+      checkDigest: detail.testDefinition?.digest
+    })
   );
-  if (repairTruncatedSource && (!original ||
-      (String(original.observedResult || '').includes('Requirement-specific deterministic observations:') &&
-       String(original.observedResult || '').includes('This collection does not assert that any canonical requirement is satisfied')))) {
+  if (repairTruncatedSource && !original) {
     return {executed:false,reason:'kb007_truncated_source_repair_not_required',securityStateChanged:false};
   }
   const repairDigest = crypto.createHash('sha256')
