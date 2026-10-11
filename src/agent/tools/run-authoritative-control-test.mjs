@@ -179,6 +179,18 @@ export function isLegacyTruncatedKb007Source(test, {
      !test.observedResult.includes('\nThis collection does not assert that any canonical requirement is satisfied')));
 }
 
+export function isMissingKb008StructuredObservations(test, {snapshotId, checkId, checkDigest, revision} = {}) {
+  return Boolean(test?.controlId === 'ARL-KB-008' &&
+    test.systemSnapshotId === snapshotId &&
+    test.checkId === checkId && test.checkDigest === checkDigest &&
+    test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
+    test.result === 'inconclusive' && test.executionKind !== 'retest' &&
+    /^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-008:[a-f0-9]{64}$/.test(test.inputReference || '') &&
+    test.inputReference.split(':')[1] === revision &&
+    typeof test.observedResult === 'string' &&
+    !test.observedResult.includes('Requirement-specific deterministic observations:\n'));
+}
+
 export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
@@ -236,18 +248,10 @@ export async function runAuthoritativeControlSourceReview({
       return {executed:false,reason:'kb008_repair_requires_exact_frozen_snapshot',securityStateChanged:false};
     }
     const records = [...(detail.tests || []),...(detail.testHistory || [])];
-    const broken = records.some(test =>
-      test.controlId === controlId &&
-      test.systemSnapshotId === snapshotId &&
-      test.checkId === detail.testDefinition?.id &&
-      test.checkDigest === detail.testDefinition?.digest &&
-      test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
-      test.result === 'inconclusive' &&
-      test.executionKind !== 'retest' &&
-      /^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-008:[a-f0-9]{64}$/.test(test.inputReference || '') &&
-      test.inputReference.split(':')[1] === frozen.target.revision &&
-      typeof test.observedResult === 'string' &&
-      !test.observedResult.includes('Requirement-specific deterministic observations:\n'));
+    const broken = records.some(test => isMissingKb008StructuredObservations(test, {
+      snapshotId,checkId:detail.testDefinition?.id,
+      checkDigest:detail.testDefinition?.digest,revision:frozen.target.revision
+    }));
     if (!broken) return {executed:false,reason:'kb008_structured_source_repair_not_required',securityStateChanged:false};
   }
   if (repairTruncatedSource || refreshProviderSource) {
