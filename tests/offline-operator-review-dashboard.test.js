@@ -357,3 +357,26 @@ test('excluded-control nextAction never copies private free text into offline HT
   assert.equal(result.registryTotal,4);
   assert.equal(result.deploymentDecisionWritten,false);
 });
+
+test('safe next-action guidance prioritises blocked findings without implying PASS or mutation',()=>{
+  const report=dashboard();
+  const html=renderOfflineOperatorReviewHtml(report);
+  const start=html.indexOf('Next operator action — review only');
+  const end=html.indexOf('class="metrics"',start);
+  assert.ok(start>0 && end>start);
+  const section=html.slice(start,end);
+  assert.match(section,/First review the blocked finding or remediation/);
+  assert.match(section,/Blocked follow-up: 1 controls/);
+  assert.match(section,/Human-decision stage: 1 controls/);
+  assert.match(section,/frozen target/);
+  assert.match(section,/No tests or decisions can be performed here/);
+  assert.doesNotMatch(section,/<form|<button|<script|fetch\(/);
+  assert.equal(report.securityStateChanged,false);
+  assert.equal(report.deploymentDecisionWritten,false);
+});
+
+test('next-action guidance refuses incomplete register before displaying status',()=>{
+  const report=dashboard();
+  report.registryTotal+=1;
+  assert.throws(()=>renderOfflineOperatorReviewHtml(report),/Validated operator dashboard required/);
+});
