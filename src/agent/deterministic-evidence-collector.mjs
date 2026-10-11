@@ -44,7 +44,12 @@ function trackedFiles(repositoryPath) {
     .split('\0')
     .filter(Boolean);
   return {
-    files: allTracked.slice(0, MAX_FILES),
+    // Executable sources first; preserve deterministic path order within tiers.
+    files: [...allTracked].sort((a,b) => {
+      const tier = value => /\.(?:py|js|mjs|cjs|ts|tsx|go|rs|java)$/i.test(value) ? 0 :
+        /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|poetry\.lock|package\.json)$/i.test(value) ? 1 : 2;
+      return tier(a)-tier(b) || a.localeCompare(b);
+    }).slice(0, MAX_FILES),
     totalTrackedFileCount: allTracked.length
   };
 }
@@ -102,6 +107,23 @@ function collectPackageFacts(
 
   const packageNames = [];
   const dependencyNames = new Set();
+  const pythonManifests = files.filter(file =>
+    /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt)$/i.test(file));
+  const pythonCandidates = new Set();
+  const providerPattern = /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp[-_]|pinecone|weaviate|qdrant|chromadb)/i;
+  for (const file of pythonManifests.slice(0,20)) {
+    const text = readText(repositoryPath,file);
+    if (!text) continue;
+    for (const line of text.split(/\r?\n/)) {
+      const candidate = line.trim().replace(/^['\"]/, '').split(/[=<>~!;\s'\",\]]/)[0];
+      if (/^[a-z0-9_.-]+$/i.test(candidate) && providerPattern.test(candidate)) {
+        pythonCandidates.add(candidate.toLowerCase());
+      }
+    }
+    for (const match of text.matchAll(/['\"]([a-z0-9_.-]+)(?:\[[^\]]+\])?(?:[<>=!~][^'\"]*)?['\"]/gi)) {
+      if (providerPattern.test(match[1])) pythonCandidates.add(match[1].toLowerCase());
+    }
+  }
 
   for (const file of manifests.slice(0, 20)) {
     const text =
@@ -146,6 +168,8 @@ function collectPackageFacts(
       packageNames.slice(0, 20),
     dependencyCount:
       dependencyNames.size,
+    pythonProviderPackageCandidates:[...pythonCandidates].sort().slice(0,20),
+    pythonManifestCount:pythonManifests.length,
     dependencyNames:
       [...dependencyNames]
         .sort()
@@ -350,9 +374,9 @@ function observationsForCollector(
         observedTechnologies:
           facts.observedTechnologies,
         providerPackageCandidates:
-          facts.dependencyNames.filter(name =>
+          [...new Set([...facts.dependencyNames.filter(name =>
             /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp[-_]|pinecone|weaviate|qdrant|chromadb)/i.test(name)
-          ).slice(0, 20),
+          ), ...facts.pythonProviderPackageCandidates])].sort().slice(0,20),
         providerPackageCandidateLimit: 20,
         dependencyCount: facts.dependencyCount,
         externalDestinationObservationCount:
