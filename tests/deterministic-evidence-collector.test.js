@@ -228,10 +228,13 @@ test('KB-007 prioritizes Python executable files and discovers provider candidat
    git(root,['init']);
    git(root,['config','user.email','test@example.test']);
    git(root,['config','user.name','ARL Test']);
-   fs.writeFileSync(path.join(root,'requirements.txt'),'openai>=1.0\\nanthropic==0.40\\nrequests==2.0\\n');
-   fs.writeFileSync(path.join(root,'pyproject.toml'),'[project]\\ndependencies = ["mcp>=1.0", "qdrant-client>=1.0"]\\n');
-   fs.writeFileSync(path.join(root,'service.py'),'import openai\\n');
-   for(let i=0;i<505;i++) fs.writeFileSync(path.join(root,'documentation-'+String(i).padStart(3,'0')+'.md'),'documentation\\n');
+   const newline = String.fromCharCode(10);
+   fs.writeFileSync(path.join(root,'requirements.txt'),
+     ['openai>=1.0','anthropic==0.40','requests==2.0'].join(newline));
+   fs.writeFileSync(path.join(root,'pyproject.toml'),
+     ['[project]','dependencies = ["mcp>=1.0", "qdrant-client>=1.0"]'].join(newline));
+   fs.writeFileSync(path.join(root,'service.py'),'import openai');
+   for(let i=0;i<505;i++) fs.writeFileSync(path.join(root,'documentation-'+String(i).padStart(3,'0')+'.md'),'documentation');
    git(root,['add','.']);commitFixture(root,'Python MCP fixture');
    const revision=git(root,['rev-parse','HEAD']);
    const result=collectDeterministicEvidence({
