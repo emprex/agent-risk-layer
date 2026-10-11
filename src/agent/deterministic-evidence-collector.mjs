@@ -110,7 +110,7 @@ function collectPackageFacts(
   const pythonManifests = files.filter(file =>
     /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt)$/i.test(file));
   const pythonCandidates = new Set();
-  const providerPattern = /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp[-_]|pinecone|weaviate|qdrant|chromadb)/i;
+  const providerPattern = /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp(?:[-_]|$)|pinecone|weaviate|qdrant|chromadb)/i;
   for (const file of pythonManifests.slice(0,20)) {
     const text = readText(repositoryPath,file);
     if (!text) continue;
@@ -375,7 +375,7 @@ function observationsForCollector(
           facts.observedTechnologies,
         providerPackageCandidates:
           [...new Set([...facts.dependencyNames.filter(name =>
-            /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp[-_]|pinecone|weaviate|qdrant|chromadb)/i.test(name)
+            /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp(?:[-_]|$)|pinecone|weaviate|qdrant|chromadb)/i.test(name)
           ), ...facts.pythonProviderPackageCandidates])].sort().slice(0,20),
         providerPackageCandidateLimit: 20,
         dependencyCount: facts.dependencyCount,
