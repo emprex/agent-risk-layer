@@ -490,6 +490,14 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
     const implementation=await db.prepare("SELECT id FROM remediation_evidence_artifacts WHERE workspace_id=? AND project_id=? AND remediation_id=? AND lifecycle_state='active' AND invalidated_at IS NULL ORDER BY created_at DESC LIMIT 1").get(access.project.workspace_id,projectId,remediation.id);
     if(!binding||!implementation)throw conflict('Retest requires the exact scoped finding binding and active remediation implementation evidence.');
   }
+  // The typed v2 frozen collector uses a structured observation envelope.
+  // Never silently slice its JSON: a truncated record cannot be traced to
+  // canonical requirements and previously appeared as missing observations.
+  // Ordinary/manual test observations retain the existing 2,000-char limit.
+  if (clean(input.executionMethod, 80) === 'arl_frozen_source_evidence_collection_v2' &&
+      String(input.observedResult ?? '').trim().length > 12000) {
+    throw badRequest('Structured frozen-source observation exceeds the 12000-character storage limit.');
+  }
   const timestamp = nowIso();
   const descriptor = { schema: 'arl.control-test-execution.v2', workspaceId:access.project.workspace_id,projectId, systemSnapshotId: snapshot.id,evaluationId:evaluation.id, entryId: controlId, checkId: check.id,
     checkDigest: check.content_digest, executionMethod: clean(input.executionMethod, 80) || 'manual_review', result,
