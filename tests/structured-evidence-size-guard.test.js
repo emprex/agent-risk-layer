@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection, kb007ProviderRefreshReference } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
