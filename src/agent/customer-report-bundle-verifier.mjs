@@ -154,7 +154,8 @@ export function verifyCustomerReportBundle(manifestPath, { disclosurePreflight=f
 
   return {
     ...(disclosurePreflight===true ? {
-      disclosurePreflight:prepareCustomerReportDisclosurePreflight(report)
+      disclosurePreflight:prepareCustomerReportDisclosurePreflight(report,
+        {markdownText:md.toString('utf8')})
     } : {}),
     schema:'arl.customer-report-bundle-integrity-check.v1',
     integrity:'consistent_only',
