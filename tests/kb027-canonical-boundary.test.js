@@ -28,7 +28,7 @@ test('KB-027 signed record and additive migration 050 agree',()=>{
 test('KB-027 requires seven evidence classes and distinct FAIL vs evidence gap',()=>{
  assert.equal(entry.check.required_evidence.length,7);
  assert.match(entry.check.fail_condition,/confirmed FAIL/);
- assert.match(entry.check.fail_condition,/INCONCLUSIVE \\/ EVIDENCE GAP \\/ REVIEW REQUIRED/);
+ assert.ok(entry.check.fail_condition.includes('INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED'));
  assert.match(entry.check.fail_condition,/block PASS and deployment/);
  assert.match(entry.check.pass_condition,/accountable human review/);
  assert.match(entry.check.method,/written owner-authorised ROE/);
