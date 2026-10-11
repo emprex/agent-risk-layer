@@ -92,7 +92,7 @@ test('KB-007 oversized observations become explicit incomplete metadata, never a
        observations:{architecture_and_inventory:{
          mcpAndToolReferenceFiles:Array.from({length:40},(_,i)=>({
            pathHash:String(i).padStart(24,'0'),
-           basename:'synthetic-file-'+i+'-'.repeat(30)
+           basename:'synthetic-file-'+i+'-'.repeat(300)
          })),
          discoveryCoverage:{completeTrackedAndTextScan:false, trackedFileScanCapped:true}
        }}}
