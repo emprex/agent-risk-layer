@@ -357,6 +357,38 @@ function fullControlRegistryMarkup(dashboard) {
     '</details></section>';
 }
 
+// Point-in-time navigation only. This panel never executes, accepts or approves actions.
+export function operatorNextActionMarkup(dashboard) {
+  readOnly(dashboard);
+  if (!Array.isArray(dashboard?.controlRegistry) ||
+      dashboard.registryTotal !== dashboard.controlRegistry.length ||
+      !SHA.test(dashboard?.targetRevision || '') ||
+      !dashboard.systemSnapshotId) {
+    throw new Error('Validated frozen Operator register required for next-action guidance.');
+  }
+  const counts = Object.fromEntries(CONTROL_LANES.map(lane => [
+    lane, dashboard.controlRegistry.filter(row => row.lane === lane).length
+  ]));
+  const blocked = counts.follow_up_blocked;
+  const human = counts.human_decision;
+  const evidence = counts.test_planning + counts.evidence_collection +
+    counts.human_applicability + counts.review_required;
+  const guidance = blocked > 0
+    ? 'First review the blocked finding or remediation in the separate accountable ARL workflow. Do not infer closure.'
+    : human > 0
+      ? 'First review pending accountable human decisions in the authoritative ARL workflow. This page cannot approve them.'
+      : evidence > 0
+        ? 'Start with the evidence work plan below, verifying provenance and required human records before any test.'
+        : 'No pending queue item is demonstrated by this snapshot. Verify the live assessment before deciding anything.';
+  return '<section class="notice" aria-label="Operator next action"><h2>Next operator action — review only</h2>'+
+    '<p><strong>'+esc(guidance)+'</strong></p>'+
+    '<p>Blocked follow-up: '+esc(blocked)+' controls · Human-decision stage: '+
+    esc(human)+' controls · Other review stages: '+esc(evidence)+' controls.</p>'+
+    '<p class="muted">Prepared snapshot '+esc(dashboard.systemSnapshotId)+
+    ', frozen target '+esc(dashboard.targetRevision)+
+    '. Reopen the current authoritative assessment before recording any action. No tests or decisions can be performed here.</p></section>';
+}
+
 export function renderOfflineOperatorReviewHtml(dashboard) {
   readOnly(dashboard);
   if (!SHA.test(dashboard?.targetRevision || '') ||
@@ -386,6 +418,7 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
     (dashboard.syntheticDemo === true ? '<div class="notice" role="status"><strong>SYNTHETIC DEMONSTRATION — NO REAL ASSESSMENT OR CUSTOMER DATA.</strong> All controls, tests, evidence IDs and results shown below are invented exclusively for a UI preview.</div>' : '')+
     '<div class="notice"><strong>Deployment HOLD / no release authority inferred.</strong> '+
     'Blocked findings and final human decisions are excluded from these independent work items, not resolved.</div>'+
+    operatorNextActionMarkup(dashboard)+
     '<section class="metrics">'+[
       ['Independent controls',dashboard.assessedControls],
       ['Excluded controls',dashboard.excludedControls],
