@@ -247,6 +247,18 @@ test('KB-007 prioritizes Python executable files and discovers provider candidat
    assert.ok(inv.providerPackageCandidates.includes('openai'));
    assert.ok(inv.providerPackageCandidates.includes('anthropic'));
    assert.ok(inv.providerPackageCandidates.includes('mcp'));
+   // The same manifest must remain visible when executable sources exceed the file cap.
+   for (let i=0;i<520;i++) fs.writeFileSync(path.join(root,'source-'+String(i).padStart(3,'0')+'.py'),'# code');
+   git(root,['add','.']);commitFixture(root,'more Python executable sources');
+   const rev2=git(root,['rev-parse','HEAD']);
+   const more=collectDeterministicEvidence({
+     repositoryPath:root,frozen:{target:{revision:rev2},inspection:{subject:{gitDirty:false}}},
+     requirements:['ARL-KB-007 observed model, MCP, plugin, API and other provider inventory']
+   });
+   const inv2=more.requirementObservations[0].observations.architecture_and_inventory;
+   assert.ok(inv2.providerPackageCandidates.includes('mcp'));
+   assert.ok(inv2.providerPackageCandidates.includes('anthropic'));
+   assert.equal(inv2.discoveryCoverage.trackedFileScanCapped,true);
    assert.ok(inv.providerPackageCandidates.includes('qdrant-client'));
    assert.ok(!inv.providerPackageCandidates.includes('requests'));
  } finally {fs.rmSync(root,{recursive:true,force:true});}
