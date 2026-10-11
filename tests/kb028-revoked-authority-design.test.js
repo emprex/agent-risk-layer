@@ -3,15 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {buildCanonicalEvidenceRequirementPlan} from '../src/agent/canonical-evidence-requirement-plan.mjs';
 
-const REQUIREMENTS = [
-  'ARL-KB-028 assessed system, exact version, environment and identity/revocation scope',
-  'ARL-KB-028 organisation-approved revocation policy, latency and accountable owner',
-  'ARL-KB-028 source or configuration evidence for session invalidation, role cache, queued jobs and approval enforcement',
-  'ARL-KB-028 bounded positive evidence of valid synthetic post-change low-privilege use',
-  'ARL-KB-028 bounded negative evidence of removed workspace users, retired sessions, revoked keys, stale approvals and queued jobs after the documented cutoff',
-  'ARL-KB-028 observed runtime correlation of revocation event, effective time, authorization at receiver and downstream effects',
-  'ARL-KB-028 reviewer identity, role, timestamp, authorized scope and evidence digest'
-];
+const asset=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
+const control=asset.entries.find(x=>x.id==='ARL-KB-028');
+const REQUIREMENTS=control.check.required_evidence;
 
 test('KB-028 separates exact scope, human policy, static evidence, runtime tests and review',()=>{
  const classified=buildCanonicalEvidenceRequirementPlan(REQUIREMENTS);

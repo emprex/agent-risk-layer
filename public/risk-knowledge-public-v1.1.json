@@ -3132,27 +3132,27 @@
       "title": "Revoked users or stale roles retain access",
       "problem": {
         "statement": "Deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions.",
-        "customer_symptom": "A user or operator may observe deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A removed workspace user or demoted role continues privileged agent, tool or queued actions with a stale session, key, cache or approval.",
+        "credible_failure_or_attack": "Previously issued sessions, delegated credentials, cached ACL decisions, approval grants or queued jobs are accepted after deprovisioning or role downgrade because receiving services fail to reauthorize current user/workspace identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "workspace membership and authoritative roles",
+          "sessions and delegated credentials",
+          "approval grants and cached authorization",
+          "queued, retried and scheduled agent/tool actions",
+          "tenant records and downstream effects",
+          "revocation propagation and audit events"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "enterprise workspaces"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between enterprise workspaces and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "removed user, stale delegated identity, revoked role, invalidation failure, cached authorization or asynchronous job worker",
+        "trust_boundary": "Between current authoritative user/workspace roles and receiving-side enforcement of each session, key, cache, approval, job or tool action. Authentication of a formerly valid token does not confer current authority.",
+        "operational_impact": "An invalidated principal may continue accessing tenant records or triggering privileged side effects. Containment requires dependent-session and approval revocation, queue isolation, correlated evidence and accountable retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Revoke dependent sessions, tokens, approvals and queued authority atomically; record deprovisioning evidence and alert on continued use.",
+        "recommended_remediation": "Bind authority to current user, workspace and role state; invalidate dependent sessions and delegated keys, withdraw approvals, expire role caches, cancel or reauthorize queued work and retry paths before executing tools. Record effective times, propagation latency and correlated denial/effect traces.",
         "default_owner": "Identity lifecycle owner",
         "priority": "P0"
       },
@@ -3176,15 +3176,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-028 user lifecycle, role, workspace-membership or deprovisioning change",
           "ARL-KB-028 session, key, approval, queue or delayed-execution revocation change",
           "ARL-KB-028 continued access after role removal or deprovisioning incident",
           "ARL-KB-028 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3219,7 +3219,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "7b118d8444fee489af94b52f1e31c6c20baef271ef5b9aa9a8ace99e27f2f7ce"
+      "content_digest": "9a239967cf149448fc09b7e5e0591c786ee34eb5edb11ce7c391ec47928b7d6b"
     },
     {
       "id": "ARL-KB-029",

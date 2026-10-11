@@ -28,4 +28,4 @@ A provider may offer bounded revocation propagation or short-lived credentials. 
 
 Frozen pilot reference `arl-target-mcp-agent` SHA `b3116fcfcec3bf6967773c3e9587c502b1fed5e5` is **read-only**. Active testing, service calls, revocation events and impersonation require separately written owner-authorized RoE and synthetic staging identities and data. Never revoke or test real customer accounts, production credentials or third-party services.
 
-This design is intended for an **additive** next semantic migration 051, with synchronized signed JSON, CSV, derived SQL and public JSON, no edits to older migrations, exactly 107 unaffected canonical digests, exact-head unit/PostgreSQL CI and accountable human semantic review. Target deployment HOLD remains unchanged.
+This candidate includes an **additive** semantic migration 051, with synchronized signed JSON, CSV, derived SQL and public JSON, no edits to older migrations, exactly 107 unaffected canonical digests, exact-head unit/PostgreSQL CI and accountable human semantic review. Target deployment HOLD remains unchanged.
