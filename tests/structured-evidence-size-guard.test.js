@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
@@ -80,4 +80,47 @@ test('KB-007 recollection is eligible only for an exact-bound legacy truncated v
     'Requirement-specific deterministic observations:\n'+JSON.stringify(payload)+
     '\nThis collection does not assert that any canonical requirement is satisfied'};
   assert.equal(isLegacyTruncatedKb007Source(complete,expected),false);
+});
+
+
+test('KB-007 oversized observations become explicit incomplete metadata, never accepted evidence',()=>{
+  const large={
+    ...payload,
+    requirementObservations:[
+      {requirement:'ARL-KB-007 observed model, MCP, plugin, API and other provider inventory',
+       collectors:['architecture_and_inventory'],
+       observations:{architecture_and_inventory:{
+         mcpAndToolReferenceFiles:Array.from({length:40},(_,i)=>({
+           pathHash:String(i).padStart(24,'0'),
+           basename:'synthetic-file-'+i+'-'.repeat(30)
+         })),
+         discoveryCoverage:{completeTrackedAndTextScan:false, trackedFileScanCapped:true}
+       }}}
+    ]
+  };
+  assert.equal(boundedDeterministicEvidenceJson(large),null);
+  const projected=boundedStructuredSourceProjection(large);
+  assert.ok(projected.text && projected.text.length<=12000);
+  assert.equal(projected.limited,true);
+  const parsed=JSON.parse(projected.text);
+  assert.equal(parsed.schema,large.schema);
+  assert.equal(parsed.targetRevision,large.targetRevision);
+  assert.equal(parsed.projection.incomplete,true);
+  assert.match(parsed.projection.warning,/NOT evidence/);
+  assert.match(parsed.projection.fullCollectionSha256,/^[0-9a-f]{64}$/);
+  const observed=parsed.requirementObservations[0].observations.architecture_and_inventory;
+  assert.equal(observed.mcpAndToolReferenceFiles.originalCount,40);
+  assert.equal(observed.mcpAndToolReferenceFiles.incomplete,true);
+  assert.equal(observed.discoveryCoverage.completeTrackedAndTextScan,false);
+  const second=boundedStructuredSourceProjection(large);
+  assert.equal(second.text,projected.text);
+  assert.deepEqual(large.requirementObservations[0].observations.architecture_and_inventory.mcpAndToolReferenceFiles.length,40);
+});
+
+test('even a bounded projection fails closed if required values alone exceed storage',()=>{
+  const impossible={...payload,requirementObservations:[{
+    requirement:'X'.repeat(15000),collectors:['target_identity'],
+    observations:{target_identity:{revision:'a'.repeat(40)}}
+  }]};
+  assert.equal(boundedStructuredSourceProjection(impossible).text,null);
 });
