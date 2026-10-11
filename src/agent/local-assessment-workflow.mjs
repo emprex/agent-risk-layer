@@ -40,6 +40,7 @@ import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
+import { buildKb008PrivacyEvidenceView } from './kb008-privacy-evidence-view.mjs';
 import { buildOfflineOperatorReviewDashboard, writeOfflineOperatorReviewDashboard } from './offline-operator-review-dashboard.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
 
@@ -380,6 +381,24 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
       answer:'KB-007 frozen provider evidence (read-only):\\n'+JSON.stringify(report,null,2)+
         '\\nCandidate metadata does not prove provider approval or secure operation.'
+    };
+  }
+  if (/^show frozen privacy evidence ARL-KB-008[.!?]*$/i.test(request.trim())) {
+    const detail=await getControlIntelligenceControl({
+      projectId:options.projectId,controlId:'ARL-KB-008',userId:options.userId
+    });
+    const revision=localFrozenInspection?.target?.revision;
+    if(localFrozenInspection?.binding?.verified!==true ||
+       localFrozenInspection?.target?.dirty!==false ||
+       detail?.systemSnapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId!==options.assessmentId) {
+      throw new Error('KB-008 frozen privacy inspection requires bound clean target and assessment.');
+    }
+    const view=buildKb008PrivacyEvidenceView(detail,revision);
+    return {
+      canonicalData:{kb008PrivacyEvidenceView:view,securityStateChanged:false,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-008 frozen privacy evidence (read-only):\\n'+JSON.stringify(view,null,2)+
+        '\\nNo privacy compliance conclusion, test execution or decision was written.'
     };
   }
   if (/^show assessment review dossier\b/i.test(request.trim())) {
