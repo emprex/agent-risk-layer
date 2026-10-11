@@ -3,15 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {buildCanonicalEvidenceRequirementPlan} from '../src/agent/canonical-evidence-requirement-plan.mjs';
 
-const requirements=[
-  'ARL-KB-027 exact assessed system, version, environment, project, service and API key use scope',
-  'ARL-KB-027 organisation-approved key owner, issuer, project/environment, action, expiration and revocation inventory',
-  'ARL-KB-027 source or configuration evidence for scope, expiry, redaction, rotation, revocation and fail-closed checks',
-  'ARL-KB-027 bounded positive evidence for owner-authorised synthetic scoped keys and expected downstream effects',
-  'ARL-KB-027 bounded negative evidence for cross-project, cross-environment, privileged, expired, revoked and old-rotated keys denied before effect',
-  'ARL-KB-027 observed runtime authorization, key identifier, policy, revocation, effect and audit correlation',
-  'ARL-KB-027 reviewer identity, written authorisation, role, timestamp, exact build and evidence digest'
-];
+const signed=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
+const control=signed.entries.find(x=>x.id==='ARL-KB-027');
+const requirements=control?.check?.required_evidence || [];
 
 test('KB-027 design distinguishes static, active and accountable human requirements',()=>{
  const classified=buildCanonicalEvidenceRequirementPlan(requirements);

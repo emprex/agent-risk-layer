@@ -3042,27 +3042,27 @@
       "title": "API keys have excessive scope and lifetime",
       "problem": {
         "statement": "One leaked key can operate every project, environment or high-impact tool indefinitely.",
-        "customer_symptom": "A user or operator may observe one leaked key can operate every project, environment or high-impact tool indefinitely; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in one leaked key can operate every project, environment or high-impact tool indefinitely, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A key intended for one project, environment or limited tool can unexpectedly access another project, production-like environment or privileged operation, including after expiry, rotation or revocation.",
+        "credible_failure_or_attack": "A leaked, shared or stale API key is accepted outside its authorized project, environment, operation or validity window because a gateway or downstream verifier omits scope, lifetime or revocation enforcement.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP tool gateways",
+          "API issuers, credentials and verifier state",
+          "provider projects and environments",
+          "privileged tool actions and downstream records",
+          "credential rotation, expiration and revocation controls",
+          "redacted authorization and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Over-scoped or long-lived API keys can amplify credential compromise. Final severity depends on reachable projects, environments, tools, data, lifetime and revocation controls.",
         "applicability": [
           "API-integrated agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between API-integrated agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If one leaked key can operate every project, environment or high-impact tool indefinitely, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "credential theft or accidental sharing, excessive issuance scope, missing verifier checks, stale revocation caches or rotation failure",
+        "trust_boundary": "Every receiving API/tool must independently bind a credential to issuer, project, environment, audience, permitted action and effective validity/revocation state before data access or side effects.",
+        "operational_impact": "Excessive or stale key authority may disclose project data or trigger unauthorized, costly or high-impact tools. Containment may require immediate revocation, route isolation, event review and exact-version retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Issue project- and purpose-scoped keys, display secrets once, store only digests, support immediate revocation and prefer short-lived credentials.",
+        "recommended_remediation": "Use project- and purpose-scoped short-lived keys with least privilege; display secrets only at issue time, store verifiers securely, rotate/revoke promptly and check audience, expiry, scope and revocation at each API or MCP tool boundary.",
         "default_owner": "Platform owner",
         "priority": "P0"
       },
@@ -3086,7 +3086,7 @@
           "ARL-KB-027 key leakage, cross-project use, excessive-scope use or revocation failure",
           "ARL-KB-027 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3121,7 +3121,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "2e8f54cc8cc000c94ff2d2bfe530ce5630412fcb10b147caaab4d3cee30295a7"
+      "content_digest": "56f0bf217306b3792d19af4c30d2d71d6d74645583cf7fbfe0d4a91a9585ffb2"
     },
     {
       "id": "ARL-KB-028",

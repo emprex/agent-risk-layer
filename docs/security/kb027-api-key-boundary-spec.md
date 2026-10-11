@@ -1,12 +1,12 @@
 # KB-027 — API key scope, lifetime and revocation
 
-Status: **candidate test design for accountable human review**. This is not a signed KB-027 semantic correction and is not a security result from the frozen MCP agent.
+Status: **candidate test design for accountable human review**. The signed KB-027 semantic correction is a candidate awaiting accountable review, not a security result from the frozen MCP agent.
 
 ## Risk boundary
 
 An agent's API key or machine credential may be accepted across projects, environments, tools or privileged operations beyond its approved purpose, remain valid after a compromise, or survive a claimed rotation/revocation. Do not confuse a credential's presence in a file with actual deployment, or a test-error response with proof of revocation. No key value, token prefix, secret hash dictionary, or third-party endpoint is needed in published evidence.
 
-## Seven separable evidence families for future additive migration 050
+## Seven separable evidence families for included candidate migration 050
 
 1. **Exact assessed scope**: immutable build SHA, environment, deployed service/tool/API routes, authorized operations, applicable projects, key issuer/verifier and side-effect boundaries.
 2. **Human-owned key inventory and policy**: organisation-approved, attributable credential inventory with owner, issuer, project/environment, roles and allowed actions, issue and expiration dates, rotation/revocation mechanism and approved exceptions. Keep actual secret values outside evidence.
@@ -26,4 +26,4 @@ Preserve `arl-target-mcp-agent` SHA `b3116fcfcec3bf6967773c3e9587c502b1fed5e5`. 
 
 ## Acceptance gates
 
-Independent security review, explicit classification of the seven requirements, exact target binding, reproducible expected allow/deny outcomes, immutable additive migration **050** following KB-026 migration 049, refreshed signed JSON/CSV/SQL/public data with all other 107 record digests unchanged, tests on exact PR head including PostgreSQL, and no modification of historic customer evidence or deployment HOLD.
+Independent security review, explicit classification of the seven requirements, exact target binding, reproducible expected allow/deny outcomes, included immutable additive candidate migration **050** following KB-026 migration 049, refreshed signed JSON/CSV/SQL/public data with all other 107 record digests unchanged, tests on exact PR head including PostgreSQL, and no modification of historic customer evidence or deployment HOLD.
