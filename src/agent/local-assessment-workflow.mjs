@@ -130,6 +130,37 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^Refresh frozen provider inventory ARL-KB-007[.!?]*$/i.test(request.trim())) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection?.target?.revision || '')) {
+      throw new Error('KB-007 provider refresh requires an exact frozen target.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId: 'ARL-KB-007', userId: options.userId
+    });
+    const binding = detail?.systemSnapshot?.assessmentConfiguration;
+    if (!detail?.systemSnapshot?.id ||
+        binding?.targetBinding?.source !== 'git' ||
+        binding?.targetBinding?.revision !== localFrozenInspection.target.revision ||
+        binding?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        detail?.testDefinition?.id !== 'ARL-CHK-007' ||
+        !Array.isArray(detail.testDefinition.requiredEvidence)) {
+      throw new Error('KB-007 provider refresh refuses mismatched assessment, check or SHA.');
+    }
+    const outcome = await runAuthoritativeControlSourceReview({
+      repositoryPath, projectId: options.projectId, userId: options.userId,
+      controlId: 'ARL-KB-007', requirements: detail.testDefinition.requiredEvidence,
+      collectionOnly: true, refreshProviderSource: true
+    });
+    return {
+      canonicalData: {kb007ProviderRefresh:outcome,
+        securityStateChanged:outcome.securityStateChanged === true,
+        humanReviewRequired:true, deploymentDecisionWritten:false},
+      answer:'KB-007 provider inventory refresh: '+JSON.stringify(outcome)+
+        '\\nNo runtime test or security verdict. Existing evidence is preserved.'
+    };
+  }
   if (/^Recollect truncated frozen source evidence ARL-KB-007[.!?]*$/i.test(request.trim())) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
