@@ -148,16 +148,21 @@ export function boundedStructuredSourceProjection(collection, maxLength = 12000)
 }
 
 export function isLegacyTruncatedKb007Source(test, {
-  inputReference, snapshotId, checkDigest
+  inputReference, snapshotId, checkDigest, targetRevision, controlId = 'ARL-KB-007'
 } = {}) {
-  return Boolean(test &&
-    test.inputReference === inputReference &&
+  const revision = targetRevision || /^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):/.exec(inputReference || '')?.[1];
+  const ref = /^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):(ARL-KB-007):([a-f0-9]{64})$/.exec(test?.inputReference || '');
+  return Boolean(ref && revision && ref[1] === revision &&
+    controlId === 'ARL-KB-007' &&
+    test.controlId === controlId &&
     test.systemSnapshotId === snapshotId &&
     test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
     test.checkDigest === checkDigest &&
+    test.result === 'inconclusive' &&
+    test.executionKind !== 'retest' &&
     typeof test.observedResult === 'string' &&
-    (!test.observedResult.includes('Requirement-specific deterministic observations:\n') ||
-     !test.observedResult.includes('\nThis collection does not assert that any canonical requirement is satisfied')));
+    (!test.observedResult.includes('Requirement-specific deterministic observations:\\n') ||
+     !test.observedResult.includes('\\nThis collection does not assert that any canonical requirement is satisfied')));
 }
 
 export async function runAuthoritativeControlSourceReview({
@@ -276,7 +281,7 @@ export async function runAuthoritativeControlSourceReview({
   ];
   const original = knownTests.find(item =>
     isLegacyTruncatedKb007Source(item, {
-      inputReference: originalReference, snapshotId,
+      targetRevision:frozen.target.revision, snapshotId,
       checkDigest: detail.testDefinition?.digest
     })
   );
