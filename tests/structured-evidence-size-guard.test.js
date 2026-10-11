@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection, kb007ProviderRefreshReference } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection, kb007ProviderRefreshReference, isMissingKb008StructuredObservations } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
@@ -147,4 +147,21 @@ test('KB-007 refresh reference is deterministic, source-specific and bound to ex
   assert.throws(()=>kb007ProviderRefreshReference({...input,revision:'c'.repeat(39)}),/exact SHA/);
   assert.throws(()=>kb007ProviderRefreshReference({...input,controlId:'ARL-KB-008'}),/exact SHA/);
   assert.throws(()=>kb007ProviderRefreshReference({...input,boundedObservation:'x'.repeat(10501)}),/bounded observations/);
+});
+
+test('KB-008 missing-source recovery requires matching authoritative frozen lineage',()=>{
+  const revision='a'.repeat(40);
+  const row={controlId:'ARL-KB-008',systemSnapshotId:'snap',
+    checkId:'ARL-CHK-008',checkDigest:'digest',
+    executionMethod:'arl_frozen_source_evidence_collection_v2',
+    result:'inconclusive',executionKind:'initial',
+    inputReference:'arl_frozen_source_evidence_collection_v2:'+revision+':ARL-KB-008:'+'b'.repeat(64),
+    observedResult:'Original source observation was truncated'};
+  const binding={snapshotId:'snap',checkId:'ARL-CHK-008',checkDigest:'digest',revision};
+  assert.equal(isMissingKb008StructuredObservations(row,binding),true);
+  assert.equal(isMissingKb008StructuredObservations({...row,checkDigest:'old'},binding),false);
+  assert.equal(isMissingKb008StructuredObservations({...row,systemSnapshotId:'old'},binding),false);
+  assert.equal(isMissingKb008StructuredObservations({...row,inputReference:row.inputReference.replace(':ARL-KB-008:',':ARL-KB-007:')},binding),false);
+  assert.equal(isMissingKb008StructuredObservations({...row,executionKind:'retest'},binding),false);
+  assert.equal(isMissingKb008StructuredObservations({...row,observedResult:'Requirement-specific deterministic observations:\\n{}'},binding),false);
 });
