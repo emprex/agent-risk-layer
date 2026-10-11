@@ -159,8 +159,8 @@ test('KB-007 partial provider inventory is surfaced without changing criterion a
     }]
   };
   const current={...testResult,observedResult:
-    'Requirement-specific deterministic observations:\\n'+JSON.stringify(partial)+
-    '\\nThis collection does not assert that any canonical requirement is satisfied'};
+    'Requirement-specific deterministic observations:\n'+JSON.stringify(partial)+
+    '\nThis collection does not assert that any canonical requirement is satisfied'};
   const result=triage({...detail,tests:[current],testHistory:[]});
   assert.equal(result.summary.staticCandidates,1);
   assert.equal(result.summary.partialInventoryCandidates,1);
