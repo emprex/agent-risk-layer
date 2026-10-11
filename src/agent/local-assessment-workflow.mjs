@@ -184,6 +184,25 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         frozenAfter.repositoryPath !== localFrozenInspection.target.repositoryPath) {
       throw new Error('Target changed during offline operator dashboard preparation.');
     }
+    // Read the authoritative scope again before exporting; never copy the
+    // free-text architecture summary, target path or secrets into HTML.
+    const scopeResult = await showLocalAssessmentContext(options);
+    const scope = scopeResult?.canonicalData;
+    if (scope?.available !== true ||
+        scope.systemSnapshotId !== dashboard.systemSnapshotId ||
+        scope.targetBinding?.revision !== dashboard.targetRevision) {
+      throw new Error('Operator export refuses missing or mismatched authoritative assessment scope.');
+    }
+    dashboard.scopeOverview = {
+      systemSnapshotId: scope.systemSnapshotId,
+      targetRevision: scope.targetBinding.revision,
+      environment: ['test','development','staging','production'].includes(scope.environment)
+        ? scope.environment : 'unknown',
+      architectureSummaryRecorded: Boolean(scope.architectureSummary),
+      capabilityProfileRecorded: Boolean(scope.capabilityProfile),
+      confirmedArchitectureFactCount: scope.confirmedArchitectureFacts?.length || 0,
+      manualArchitectureFactCount: scope.manualArchitectureFacts?.length || 0
+    };
     const result = writeOfflineOperatorReviewDashboard({
       dashboard,
       outputDirectory: process.env.ARL_REPORT_OUTPUT_DIR ||
