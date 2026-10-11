@@ -16,7 +16,9 @@ function uniqueRows(rows) {
 
 function instructionForCriterion(criterion) {
   if (criterion.mode === 'machine_collectable') {
-    return criterion.candidateEvidenceIds.length
+    return criterion.incompleteInventoryCandidate
+      ? 'PARTIAL INVENTORY: source collection omitted some inventory items. Review source coverage and omitted counts; do not infer that unlisted providers or paths are absent.'
+      : criterion.candidateEvidenceIds.length
       ? 'Verify linked source provenance, exact target and criterion coverage; the observation is not proof of compliance.'
       : 'Inspect approved frozen-source observations or request the missing version-bound source evidence.';
   }
@@ -68,6 +70,7 @@ function dossierForControl(item, detail, triage, snapshotId) {
       existingEvidenceCandidates: [...criterion.candidateEvidenceIds],
       expectedCollectors: [...criterion.expectedCollectors],
       observedCollectors: [...criterion.observedCollectors],
+      incompleteInventoryCandidate: criterion.incompleteInventoryCandidate === true,
       operatorAction: instructionForCriterion(criterion),
       criterionSatisfied: false,
       humanDecisionRequired: true
@@ -122,6 +125,7 @@ function dossierForControl(item, detail, triage, snapshotId) {
     criteria: criteria.length,
     sourceMetadataCandidates: criteria.filter(row =>
       row.reviewState === 'static_observation_candidate_review_required').length,
+    partialInventoryCandidates: criteria.filter(row => row.incompleteInventoryCandidate).length,
     missingStaticMetadata: criteria.filter(row =>
       row.reviewState === 'static_observation_missing').length,
     requiresHumanDocuments: criteria.filter(row =>
