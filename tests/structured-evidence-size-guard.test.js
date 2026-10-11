@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson, frozenInspectionObservation } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
@@ -60,4 +60,24 @@ test('oversized fallback summary fails closed', () => {
     }}
   });
   assert.equal(text, null);
+});
+
+
+test('KB-007 recollection is eligible only for an exact-bound legacy truncated v2 record',()=>{
+  const inputReference='arl_frozen_source_evidence_collection_v2:'+'a'.repeat(40)+':ARL-KB-007:'+'b'.repeat(64);
+  const expected={inputReference,snapshotId:'sys_exact',checkDigest:'digest_exact'};
+  const sample={
+    ...expected,systemSnapshotId:expected.snapshotId,
+    executionMethod:'arl_frozen_source_evidence_collection_v2',
+    observedResult:'Observed frozen-target facts:\n{}'
+  };
+  assert.equal(isLegacyTruncatedKb007Source(sample,expected),true);
+  assert.equal(isLegacyTruncatedKb007Source({...sample,systemSnapshotId:'wrong'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...sample,inputReference:'other'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...sample,checkDigest:'stale'},expected),false);
+  assert.equal(isLegacyTruncatedKb007Source({...sample,executionMethod:'manual_review'},expected),false);
+  const complete={...sample,observedResult:
+    'Requirement-specific deterministic observations:\n'+JSON.stringify(payload)+
+    '\nThis collection does not assert that any canonical requirement is satisfied'};
+  assert.equal(isLegacyTruncatedKb007Source(complete,expected),false);
 });
