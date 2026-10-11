@@ -3,7 +3,7 @@
   "status": "design_only_not_executed",
   "target": {
     "repository": "arl-target-mcp-agent",
-    "frozenSha": "b3116fcfcec3bf6967773c502b1fed5e5"
+    "frozenSha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5"
   },
   "guardrails": {
     "ownerAuthorizedRoeRequired": true,
