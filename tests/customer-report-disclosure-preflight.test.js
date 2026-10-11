@@ -115,6 +115,45 @@ test('adversarial JSON field name and oversized text never leak or assert full c
   assert.ok(review.flaggedFields.some(x=>x.field==='report.[other]'));
 });
 
+test('Markdown-only indicators are scanned by line without returning customer text',()=>{
+  const markdown=[
+    'Synthetic report without JSON-level indicators',
+    SECRETS[0],
+    'Synthetic neutral line',
+    SECRETS[2]
+  ].join('\n');
+  const review=prepareCustomerReportDisclosurePreflight(reportFixture(),{markdownText:markdown});
+  assert.equal(review.markdownArtifactScanned,true);
+  assert.equal(review.scannedMarkdownLines,4);
+  assert.equal(review.inspectionIncomplete,false);
+  assert.equal(review.flaggedFieldCount,2);
+  assert.deepEqual(review.flaggedFields.map(item=>item.field),
+    ['markdown[line:2]','markdown[line:4]']);
+  assert.equal(review.indicatorCounts.bearer_token_marker,1);
+  assert.equal(review.indicatorCounts.private_key_marker,1);
+  for(const secret of SECRETS)assert.equal(JSON.stringify(review).includes(secret),false);
+  assert.equal(review.automaticDisclosureApproval,false);
+});
+
+test('long Markdown line and excessive line count fail incomplete rather than claiming clearance',()=>{
+  const tooLong='a'.repeat(20_000)+SECRETS[0];
+  const one=prepareCustomerReportDisclosurePreflight(reportFixture(),{markdownText:tooLong});
+  assert.equal(one.truncatedTextFields,1);
+  assert.equal(one.inspectionIncomplete,true);
+  assert.equal(one.indicatorCounts.bearer_token_marker,0);
+  const many=prepareCustomerReportDisclosurePreflight(reportFixture(),{
+    markdownText:'synthetic safe line\n'.repeat(20_001)
+  });
+  assert.equal(many.scannedMarkdownLines,20_000);
+  assert.equal(many.inspectionIncomplete,true);
+  assert.equal(many.status,'HUMAN_DISCLOSURE_REVIEW_REQUIRED');
+  assert.equal(JSON.stringify(many).includes(SECRETS[0]),false);
+  assert.throws(
+    ()=>prepareCustomerReportDisclosurePreflight(reportFixture(),{markdownText:Buffer.from('bad')}),
+    /Markdown content must be text/
+  );
+});
+
 test('bounded traversal is marked incomplete rather than falsely clearing excessive arrays',()=>{
   const report=reportFixture();
   report.limitations=Array.from({length:22_000},(_,i)=>'safe synthetic '+i);
@@ -139,13 +178,18 @@ test('private manifest disclosure CLI verifies bundle first and returns no raw c
     const result=JSON.parse(command.stdout);
     assert.equal(result.integrity,'consistent_only');
     assert.equal(result.bundleSha256,bundle.bundleSha256);
-    assert.equal(result.disclosurePreflight.flaggedFieldCount,2);
+    assert.equal(result.disclosurePreflight.flaggedFieldCount,3);
+    assert.equal(result.disclosurePreflight.markdownArtifactScanned,true);
+    assert.ok(result.disclosurePreflight.scannedMarkdownLines>0);
+    assert.ok(result.disclosurePreflight.flaggedFields.some(
+      item=>item.field.startsWith('markdown[line:')
+    ));
     assert.equal(result.disclosurePreflight.automaticDisclosureApproval,false);
     assert.equal(result.disclosurePreflight.status,'HUMAN_DISCLOSURE_REVIEW_REQUIRED');
     for(const secret of SECRETS)assert.equal(command.stdout.includes(secret),false);
     assert.equal(verifyCustomerReportBundle(manifest).disclosurePreflight,undefined);
     assert.equal(verifyCustomerReportBundle(manifest,{disclosurePreflight:true})
-      .disclosurePreflight.flaggedFieldCount,2);
+      .disclosurePreflight.flaggedFieldCount,3);
   });
 });
 
