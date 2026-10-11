@@ -139,7 +139,11 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
     const inventory = result.requirementObservations.find(row =>
       row.collectors.includes('architecture_and_inventory')
     ).observations.architecture_and_inventory;
-    assert.equal(inventory.trackedFileCount, 6);
+    assert.deepEqual(inventory.providerPackageCandidates, ['@modelcontextprotocol/sdk', 'openai']);
+    assert.equal(inventory.externalDestinationObservationCount, 1);
+    assert.equal(inventory.externalDestinationObservations.length, 1);
+    assert.equal(inventory.dependencyCount, 2);
+        assert.equal(inventory.trackedFileCount, 6);
     assert.deepEqual(inventory.discoveryCoverage, {
       totalTrackedFiles: 6,
       trackedFilesConsidered: 6,
