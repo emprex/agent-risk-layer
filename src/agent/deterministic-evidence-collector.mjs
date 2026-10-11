@@ -46,8 +46,10 @@ function trackedFiles(repositoryPath) {
   return {
     // Executable sources first; preserve deterministic path order within tiers.
     files: [...allTracked].sort((a,b) => {
-      const tier = value => /\.(?:py|js|mjs|cjs|ts|tsx|go|rs|java)$/i.test(value) ? 0 :
-        /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|poetry\.lock|package\.json)$/i.test(value) ? 1 : 2;
+      // Keep provider manifests discoverable even when large repositories have
+      // hundreds of executable files before their root dependency records.
+      const tier = value => /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|poetry\.lock|package\.json)$/i.test(value) ? 0 :
+        /\.(?:py|js|mjs|cjs|ts|tsx|go|rs|java)$/i.test(value) ? 1 : 2;
       return tier(a)-tier(b) || a.localeCompare(b);
     }).slice(0, MAX_FILES),
     totalTrackedFileCount: allTracked.length
