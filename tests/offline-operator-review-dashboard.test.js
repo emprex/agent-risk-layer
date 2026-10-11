@@ -380,3 +380,34 @@ test('next-action guidance refuses incomplete register before displaying status'
   report.registryTotal+=1;
   assert.throws(()=>renderOfflineOperatorReviewHtml(report),/Validated operator dashboard required/);
 });
+
+test('assessment scope overview shows only snapshot-bound bounded metadata',()=>{
+  const report=dashboard();
+  report.scopeOverview={
+    systemSnapshotId:report.systemSnapshotId,
+    targetRevision:report.targetRevision,
+    environment:'test',
+    architectureSummaryRecorded:true,
+    capabilityProfileRecorded:true,
+    confirmedArchitectureFactCount:7,
+    manualArchitectureFactCount:3
+  };
+  const html=renderOfflineOperatorReviewHtml(report);
+  assert.match(html,/Assessment scope — read-only/);
+  assert.match(html,/Environment: <strong>test<\/strong>/);
+  assert.match(html,/Architecture facts recorded: 7/);
+  assert.match(html,/Descriptions, local paths and credentials are not copied/);
+  report.scopeOverview.targetRevision='0'.repeat(40);
+  assert.throws(()=>renderOfflineOperatorReviewHtml(report),/does not match the frozen authoritative snapshot/);
+});
+
+test('scope overview fails closed on unrecognised environment labels',()=>{
+  const report=dashboard();
+  report.scopeOverview={
+    systemSnapshotId:report.systemSnapshotId,targetRevision:report.targetRevision,
+    environment:'secret-token',architectureSummaryRecorded:false,
+    capabilityProfileRecorded:false,confirmedArchitectureFactCount:0,
+    manualArchitectureFactCount:0
+  };
+  assert.throws(()=>renderOfflineOperatorReviewHtml(report),/does not match the frozen authoritative snapshot/);
+});
