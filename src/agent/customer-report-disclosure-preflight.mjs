@@ -8,6 +8,7 @@ const MAX_NODES=20_000;
 const MAX_DEPTH=16;
 const MAX_TEXT=16_384;
 const MAX_FLAGGED_PATHS=200;
+const MAX_MARKDOWN_LINES=20_000;
 
 const DETECTORS=Object.freeze([
   ['private_key_marker', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/i],
@@ -22,23 +23,49 @@ function safeMember(name) {
   return /^[a-zA-Z][a-zA-Z0-9_]{0,64}$/.test(name) ? '.'+name : '.[other]';
 }
 
-export function prepareCustomerReportDisclosurePreflight(report) {
+export function prepareCustomerReportDisclosurePreflight(report, {markdownText}={}) {
   if (report?.schema !== REPORT_SCHEMA || report?.projection !== 'read_only' ||
       report?.available !== true || report?.securityStateChanged !== false ||
       report?.deploymentDecisionWritten !== false ||
       report?.humanReviewRequired !== true) {
     throw new Error('A verified read-only customer report is required for disclosure preflight.');
   }
+  if(markdownText!==undefined && typeof markdownText!=='string') {
+    throw new Error('Verified Markdown content must be text for disclosure preflight.');
+  }
 
   const stats={
     visitedNodes:0,
     scannedTextFields:0,
+    scannedMarkdownLines:0,
+    markdownArtifactScanned:typeof markdownText==='string',
     truncatedTextFields:0,
     incompleteTraversal:false
   };
   const counts=Object.fromEntries(DETECTORS.map(([name])=>[name,0]));
   const flagged=[];
   let flaggedCandidates=0;
+
+  // The diagnostics contain ONLY fixed labels and synthetic field/line locators,
+  // never a matched value (even for an adversarial Markdown line).
+  function scanText(sample,path,truncated=false) {
+    stats.scannedTextFields++;
+    if (truncated || sample.length>MAX_TEXT) stats.truncatedTextFields++;
+    const bounded=sample.slice(0,MAX_TEXT);
+    const labels=[];
+    for(const [label,pattern] of DETECTORS) {
+      if(pattern.test(bounded)) {
+        counts[label]++;
+        labels.push(label);
+      }
+    }
+    if(labels.length) {
+      flaggedCandidates++;
+      if(flagged.length<MAX_FLAGGED_PATHS)
+        flagged.push({field:path,indicators:labels});
+    }
+  }
+
   const stack=[{value:report,path:'report',depth:0}];
   while (stack.length) {
     if (stats.visitedNodes >= MAX_NODES) {
@@ -49,21 +76,7 @@ export function prepareCustomerReportDisclosurePreflight(report) {
     stats.visitedNodes++;
 
     if (typeof value === 'string') {
-      stats.scannedTextFields++;
-      const sample=value.length>MAX_TEXT ? value.slice(0,MAX_TEXT) : value;
-      if(value.length>MAX_TEXT)stats.truncatedTextFields++;
-      const labels=[];
-      for(const [label,pattern] of DETECTORS) {
-        if(pattern.test(sample)){
-          counts[label]++;
-          labels.push(label);
-        }
-      }
-      if(labels.length){
-        flaggedCandidates++;
-        if(flagged.length<MAX_FLAGGED_PATHS)
-          flagged.push({field:path,indicators:labels});
-      }
+      scanText(value,path);
     } else if (value && typeof value==='object') {
       if(depth>=MAX_DEPTH){
         stats.incompleteTraversal=true;
@@ -78,6 +91,32 @@ export function prepareCustomerReportDisclosurePreflight(report) {
       }
     }
   }
+
+  // JSON and Markdown are separate customer-facing files in the verified
+  // bundle. Inspect BOTH: the renderer could expose data that a JSON-only
+  // heuristic never sees. Read line slices without allocating a giant array.
+  // Long lines or too many lines are explicitly marked incomplete.
+  if(typeof markdownText==='string') {
+    let offset=0, line=1;
+    while(offset<markdownText.length) {
+      if(stats.scannedMarkdownLines>=MAX_MARKDOWN_LINES) {
+        stats.incompleteTraversal=true;
+        break;
+      }
+      const lf=markdownText.indexOf('\\n',offset);
+      const end=lf<0 ? markdownText.length : lf;
+      scanText(
+        markdownText.slice(offset,Math.min(end,offset+MAX_TEXT)),
+        'markdown[line:'+line+']',
+        end-offset>MAX_TEXT
+      );
+      stats.scannedMarkdownLines++;
+      if(lf<0)break;
+      offset=lf+1;
+      line++;
+    }
+  }
+
   return {
     schema:CUSTOMER_DISCLOSURE_PREFLIGHT_SCHEMA,
     status:'HUMAN_DISCLOSURE_REVIEW_REQUIRED',
