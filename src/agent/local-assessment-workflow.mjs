@@ -16,6 +16,7 @@ import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batc
 import { validateCanonicalManualEvidenceChecklist } from './manual-evidence-checklist.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
+import { runAuthoritativeControlSourceReview } from './tools/run-authoritative-control-test.mjs';
 import { deriveLocalOwnerApplicability } from './local-owner-applicability-policy.mjs';
 import {
   assessControlApplicability,
@@ -129,6 +130,39 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^Recollect truncated frozen source evidence ARL-KB-007[.!?]*$/i.test(request.trim())) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection?.target?.revision || '')) {
+      throw new Error('KB-007 repair requires verified frozen repository inspection.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId: 'ARL-KB-007', userId: options.userId
+    });
+    const snapshot = detail?.systemSnapshot;
+    if (!snapshot?.id ||
+        snapshot?.assessmentConfiguration?.targetBinding?.source !== 'git' ||
+        snapshot.assessmentConfiguration.targetBinding.revision !== localFrozenInspection.target.revision ||
+        snapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        !Array.isArray(detail.testDefinition?.requiredEvidence)) {
+      throw new Error('KB-007 repair refuses an unbound or changed assessment.');
+    }
+    const outcome = await runAuthoritativeControlSourceReview({
+      repositoryPath, projectId: options.projectId, userId: options.userId,
+      controlId: 'ARL-KB-007', requirements: detail.testDefinition.requiredEvidence,
+      collectionOnly: true, repairTruncatedSource: true
+    });
+    return {
+      canonicalData: {
+        kb007SourceRecollection: outcome,
+        securityStateChanged: outcome.securityStateChanged === true,
+        deploymentDecisionWritten:false, humanReviewRequired:true
+      },
+      answer: 'KB-007 bounded source recollection: ' + JSON.stringify(outcome) +
+        '\\nNo runtime tests executed; old evidence was not overwritten, verified or promoted. Reinspect the KB-007 review dossier.'
+    };
+  }
+
   if (/^export assessment operator dashboard[.!?]*$/i.test(request.trim())) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection.target?.dirty !== false ||
