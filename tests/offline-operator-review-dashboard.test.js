@@ -411,3 +411,29 @@ test('scope overview fails closed on unrecognised environment labels',()=>{
   };
   assert.throws(()=>renderOfflineOperatorReviewHtml(report),/does not match the frozen authoritative snapshot/);
 });
+
+
+test('blocked follow-up is visible, read-only and does not forge a finding decision',()=>{
+  const report=dashboard();
+  const before=JSON.stringify(report);
+  const html=renderOfflineOperatorReviewHtml(report);
+  const start=html.indexOf('Blocked findings — accountable follow-up');
+  const end=html.indexOf('Prepared snapshot',start);
+  assert.ok(start>0 && end>start);
+  const panel=html.slice(start,end);
+  assert.match(panel,/ARL-KB-006/);
+  assert.match(panel,/finding open/);
+  assert.match(panel,/Deployment impact: blocker/);
+  assert.match(panel,/No automatic severity, attribution, retest, closure or deployment decision/);
+  assert.doesNotMatch(panel,/ARL-KB-001|ARL-KB-007|ARL-KB-008/);
+  assert.doesNotMatch(panel,/<button|<form|<script|fetch\(/);
+  assert.equal(JSON.stringify(report),before);
+  assert.equal(report.deploymentDecisionWritten,false);
+  assert.equal(report.securityStateChanged,false);
+});
+
+test('blocked follow-up cannot be injected from an unsupported registry lane',()=>{
+  const report=dashboard();
+  report.controlRegistry[0].lane='unauthorised<svg>';
+  assert.throws(()=>renderOfflineOperatorReviewHtml(report),/Validated operator dashboard required/);
+});
