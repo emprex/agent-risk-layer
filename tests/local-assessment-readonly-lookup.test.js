@@ -23,7 +23,7 @@ test('existing-assessment lookup returns null without creating identity, project
       const count=async table=>Number((await db.prepare('SELECT COUNT(*) AS n FROM '+table).get()).n);
       const before=await Promise.all(['users','security_projects','assessments'].map(count));
       const result=await findExistingLocalAssessmentContext(process.env.ARL_LOOKUP_TARGET);
-      const after=await Promise.all(['users','security_projects','agent_assessments'].map(count));
+      const after=await Promise.all(['users','security_projects','assessments'].map(count));
       assert.equal(result,null);
       assert.deepEqual(after,before);
       console.log('READ_ONLY_LOOKUP_OK');
