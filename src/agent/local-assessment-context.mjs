@@ -7,6 +7,31 @@ import { createWorkspace } from '../workspaces.js';
 import { createSecurityProject } from '../control-plane-core.js';
 import { createUnknownAssessment } from './assessment-bootstrap.mjs';
 
+/**
+ * Read-only assessment lookup for the future Operator picker.
+ * Unlike resolveLocalAssessmentContext, this NEVER bootstraps an identity,
+ * workspace, project, assessment, snapshot or database migration.
+ * Call only after the application has opened its existing database.
+ */
+export async function findExistingLocalAssessmentContext(repositoryPath) {
+  if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
+  if (db.kind !== 'postgres' &&
+      !(process.env.NODE_ENV === 'test' && db.kind === 'sqlite-test')) {
+    throw new Error('Local ARL persistence must use PostgreSQL.');
+  }
+  const root = fs.realpathSync(repositoryPath);
+  const digest = crypto.createHash('sha256').update(root).digest('hex');
+  const email = `${digest}@local.invalid`;
+  const user = await db.prepare('SELECT id FROM users WHERE email=?').get(email);
+  if (!user) return null;
+  const project = await db.prepare(
+    'SELECT id,agent_assessment_id FROM security_projects WHERE created_by=? AND repository_identity_digest=?'
+  ).get(user.id, digest);
+  if (!project) return null;
+  if (!project.agent_assessment_id) throw new Error('Local assessment binding is incomplete.');
+  return { userId: user.id, projectId: project.id, assessmentId: project.agent_assessment_id };
+}
+
 export async function resolveLocalAssessmentContext(repositoryPath) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
   if (db.kind !== 'postgres' && !(process.env.NODE_ENV === 'test' && db.kind === 'sqlite-test')) {
