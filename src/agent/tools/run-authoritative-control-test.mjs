@@ -247,7 +247,7 @@ export async function runAuthoritativeControlSourceReview({
       /^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-008:[a-f0-9]{64}$/.test(test.inputReference || '') &&
       test.inputReference.split(':')[1] === frozen.target.revision &&
       typeof test.observedResult === 'string' &&
-      !test.observedResult.includes('Requirement-specific deterministic observations:\\n'));
+      !test.observedResult.includes('Requirement-specific deterministic observations:\n'));
     if (!broken) return {executed:false,reason:'kb008_structured_source_repair_not_required',securityStateChanged:false};
   }
   if (repairTruncatedSource || refreshProviderSource) {
