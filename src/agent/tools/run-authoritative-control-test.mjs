@@ -249,7 +249,7 @@ export async function runAuthoritativeControlSourceReview({
     });
 
   const projection = collectionOnly
-    ? boundedStructuredSourceProjection(deterministicEvidence)
+    ? boundedStructuredSourceProjection(deterministicEvidence, 10500)
     : {text:boundedDeterministicEvidenceJson(deterministicEvidence),limited:false};
   const deterministicEvidenceText = projection.text;
 
