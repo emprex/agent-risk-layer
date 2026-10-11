@@ -493,7 +493,7 @@ export async function recordControlTestExecution({ projectId, controlId, userId,
   const timestamp = nowIso();
   const descriptor = { schema: 'arl.control-test-execution.v2', workspaceId:access.project.workspace_id,projectId, systemSnapshotId: snapshot.id,evaluationId:evaluation.id, entryId: controlId, checkId: check.id,
     checkDigest: check.content_digest, executionMethod: clean(input.executionMethod, 80) || 'manual_review', result,
-    expectedResult: clean(input.expectedResult, 2000) || check.pass_condition, observedResult: clean(input.observedResult, 2000),
+    expectedResult: clean(input.expectedResult, 2000) || check.pass_condition, observedResult: clean(input.observedResult, clean(input.executionMethod, 80) === 'arl_frozen_source_evidence_collection_v2' ? 12000 : 2000),
     inputReference: clean(input.inputReference, 500) || null, limitations: clean(input.limitations, 2000), failureReason: clean(input.failureReason, 2000) || null,
     findingId: finding?.id || null,executionKind,retestOfExecutionId:original?.id||null,remediationId:remediation?.id||null,originalSnapshotId:original?.system_snapshot_id||null, executorId: userId, startedAt: safeTime(input.startedAt) || timestamp, completedAt: result === 'planned' ? null : timestamp };
   if (result !== 'planned' && !descriptor.observedResult) throw badRequest('A completed test requires a privacy-safe observed result.');
