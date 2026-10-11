@@ -148,3 +148,24 @@ test('KB-009 human approval criterion never receives a static observation candid
   assert.equal(result.controls[0].passInferred,false);
   assert.equal(result.securityStateChanged,false);
 });
+
+test('KB-007 partial provider inventory is surfaced without changing criterion authority',()=>{
+  const partial = {
+    ...collection,
+    projection:{incomplete:true, inventoryArraysTruncated:true, fullCollectionSha256:'e'.repeat(64)},
+    requirementObservations:[{
+      requirement:machine,collectors:['target_identity'],
+      observations:{target_identity:{revision:rev,inventory:{items:[],originalCount:12,omittedCount:12,incomplete:true}}}
+    }]
+  };
+  const current={...testResult,observedResult:
+    'Requirement-specific deterministic observations:\\n'+JSON.stringify(partial)+
+    '\\nThis collection does not assert that any canonical requirement is satisfied'};
+  const result=triage({...detail,tests:[current],testHistory:[]});
+  assert.equal(result.summary.staticCandidates,1);
+  assert.equal(result.summary.partialInventoryCandidates,1);
+  assert.equal(result.controls[0].criteria[0].incompleteInventoryCandidate,true);
+  assert.equal(result.controls[0].criteria[0].criterionSatisfied,false);
+  assert.equal(result.controls[0].passInferred,false);
+  assert.equal(result.deploymentDecisionWritten,false);
+});
