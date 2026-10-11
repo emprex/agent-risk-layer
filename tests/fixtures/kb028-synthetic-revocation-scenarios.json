@@ -1,0 +1,85 @@
+{
+  "schema": "arl.kb028.synthetic-revocation-scenarios.v1",
+  "status": "design_only_not_executed",
+  "frozenTarget": {
+    "repository": "arl-target-mcp-agent",
+    "sha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5"
+  },
+  "guardrails": {
+    "ownerWrittenRoERequired": true,
+    "syntheticStagingIdentitiesOnly": true,
+    "externalOrProductionTestsExecuted": false,
+    "credentialsIncluded": false,
+    "automaticPassAllowed": false
+  },
+  "policy": {
+    "latencyUnit": "milliseconds",
+    "maxPermittedRevocationLatency": "owner_documented_not_assumed",
+    "enforceAt": "before_downstream_side_effect"
+  },
+  "scenarios": [
+    {
+      "id": "role-current-positive",
+      "type": "positive",
+      "context": "synthetic user A with current viewer role in synthetic workspace A",
+      "expected": "allow only declared read-only scope and record receiver context"
+    },
+    {
+      "id": "role-demoted",
+      "type": "negative",
+      "context": "synthetic admin A role changed to viewer; replay former admin tool action",
+      "expected": "deny elevated action after approved cutoff before downstream state change"
+    },
+    {
+      "id": "account-removed",
+      "type": "negative",
+      "context": "synthetic user A removed from workspace A while old session remains",
+      "expected": "deny old workspace action after approved cutoff, including metadata"
+    },
+    {
+      "id": "session-replayed",
+      "type": "negative",
+      "context": "synthetic revoked session replay after disabling user A",
+      "expected": "deny stale session action even when cryptographic signature is valid"
+    },
+    {
+      "id": "delegated-key-revoked",
+      "type": "negative",
+      "context": "synthetic delegated key for user A used after issuer revocation",
+      "expected": "deny delegated tool call; no unauthorized data or side effects"
+    },
+    {
+      "id": "approval-withdrawn",
+      "type": "negative",
+      "context": "synthetic approval A withdrawn before scheduled privileged tool step",
+      "expected": "deny scheduled effect until fresh currently authorized approval"
+    },
+    {
+      "id": "queued-job-stale-role",
+      "type": "negative",
+      "context": "synthetic job queued when user A was admin; user demoted before execution",
+      "expected": "deny stale elevated job authority at execution point"
+    },
+    {
+      "id": "cache-stale-role",
+      "type": "negative",
+      "context": "synthetic cached admin role reused after role downgrade",
+      "expected": "deny cached elevated action, with measured propagation latency"
+    },
+    {
+      "id": "retry-after-revocation",
+      "type": "negative",
+      "context": "synthetic retried tool action after user A loses required membership",
+      "expected": "deny retried side effect, even if initial request was previously authorized"
+    }
+  ],
+  "requiredTrace": [
+    "exact target build and approved RoE",
+    "revocation event ID and effective timestamp",
+    "policy cutoff and measured propagation latency",
+    "identity/role/workspace at receiving service",
+    "authorization decision and policy version",
+    "downstream effects and side-effect correlation",
+    "reviewer identity, limitations and evidence digest"
+  ]
+}
