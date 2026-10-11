@@ -221,3 +221,30 @@ test('KB-011 discovery records bounded coverage rather than pretending all track
     fs.rmSync(root, {recursive:true, force:true});
   }
 });
+
+test('KB-007 prioritizes Python executable files and discovers provider candidates from Python requirements',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-python-provider-'));
+ try {
+   git(root,['init']);
+   git(root,['config','user.email','test@example.test']);
+   git(root,['config','user.name','ARL Test']);
+   fs.writeFileSync(path.join(root,'requirements.txt'),'openai>=1.0\\nanthropic==0.40\\nrequests==2.0\\n');
+   fs.writeFileSync(path.join(root,'pyproject.toml'),'[project]\\ndependencies = ["mcp>=1.0", "qdrant-client>=1.0"]\\n');
+   fs.writeFileSync(path.join(root,'service.py'),'import openai\\n');
+   for(let i=0;i<505;i++) fs.writeFileSync(path.join(root,'documentation-'+String(i).padStart(3,'0')+'.md'),'documentation\\n');
+   git(root,['add','.']);commitFixture(root,'Python MCP fixture');
+   const revision=git(root,['rev-parse','HEAD']);
+   const result=collectDeterministicEvidence({
+     repositoryPath:root,frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+     requirements:['ARL-KB-007 observed model, MCP, plugin, API and other provider inventory']
+   });
+   const inv=result.requirementObservations[0].observations.architecture_and_inventory;
+   assert.equal(inv.trackedFileCount,508);
+   assert.equal(inv.discoveryCoverage.trackedFileScanCapped,true);
+   assert.ok(inv.providerPackageCandidates.includes('openai'));
+   assert.ok(inv.providerPackageCandidates.includes('anthropic'));
+   assert.ok(inv.providerPackageCandidates.includes('mcp'));
+   assert.ok(inv.providerPackageCandidates.includes('qdrant-client'));
+   assert.ok(!inv.providerPackageCandidates.includes('requests'));
+ } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
