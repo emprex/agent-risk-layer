@@ -172,7 +172,8 @@ export async function runAuthoritativeControlSourceReview({
   controlId,
   requirements = [],
   collectionOnly = false,
-  repairTruncatedSource = false
+  repairTruncatedSource = false,
+  refreshProviderSource = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -210,7 +211,7 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
-  if (repairTruncatedSource) {
+  if (repairTruncatedSource || refreshProviderSource) {
     const binding = detail.systemSnapshot?.assessmentConfiguration?.targetBinding;
     if (controlId !== 'ARL-KB-007' || collectionOnly !== true ||
         binding?.source !== 'git' || binding.revision !== frozen.target.revision ||
@@ -291,9 +292,17 @@ export async function runAuthoritativeControlSourceReview({
   const repairDigest = crypto.createHash('sha256')
     .update(sourceDigest + ':kb007-v2-bounded-storage-repair-v1')
     .digest('hex');
-  const inputReference = repairTruncatedSource
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${repairDigest}`
-    : originalReference;
+  // A changed, bounded collector payload gets a distinct append-only source reference.
+  // Repeating the exact payload remains idempotent even when the frozen SHA is unchanged.
+  const refreshDigest = crypto.createHash('sha256')
+    .update(JSON.stringify({sourceDigest, boundedObservation:deterministicEvidenceText,
+      purpose:'kb007-provider-inventory-refresh-v1'}))
+    .digest('hex');
+  const inputReference = refreshProviderSource
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${refreshDigest}`
+    : repairTruncatedSource
+      ? `${collectionKind}:${frozen.target.revision}:${controlId}:${repairDigest}`
+      : originalReference;
 
   const previous = [
     ...(Array.isArray(detail.tests) ? detail.tests : []),
