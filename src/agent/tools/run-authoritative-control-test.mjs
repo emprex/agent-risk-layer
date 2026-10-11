@@ -187,7 +187,8 @@ export async function runAuthoritativeControlSourceReview({
   requirements = [],
   collectionOnly = false,
   repairTruncatedSource = false,
-  refreshProviderSource = false
+  refreshProviderSource = false,
+  repairKb008Source = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -225,6 +226,30 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
+  if (repairKb008Source) {
+    const config = detail.systemSnapshot?.assessmentConfiguration || {};
+    if (controlId !== 'ARL-KB-008' || collectionOnly !== true ||
+        config.targetBinding?.source !== 'git' ||
+        config.targetBinding.revision !== frozen.target.revision ||
+        frozen.target.dirty !== false ||
+        detail.testDefinition?.id !== 'ARL-CHK-008') {
+      return {executed:false,reason:'kb008_repair_requires_exact_frozen_snapshot',securityStateChanged:false};
+    }
+    const records = [...(detail.tests || []),...(detail.testHistory || [])];
+    const broken = records.some(test =>
+      test.controlId === controlId &&
+      test.systemSnapshotId === snapshotId &&
+      test.checkId === detail.testDefinition?.id &&
+      test.checkDigest === detail.testDefinition?.digest &&
+      test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
+      test.result === 'inconclusive' &&
+      test.executionKind !== 'retest' &&
+      /^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-008:[a-f0-9]{64}$/.test(test.inputReference || '') &&
+      test.inputReference.split(':')[1] === frozen.target.revision &&
+      typeof test.observedResult === 'string' &&
+      !test.observedResult.includes('Requirement-specific deterministic observations:\\n'));
+    if (!broken) return {executed:false,reason:'kb008_structured_source_repair_not_required',securityStateChanged:false};
+  }
   if (repairTruncatedSource || refreshProviderSource) {
     const binding = detail.systemSnapshot?.assessmentConfiguration?.targetBinding;
     if (controlId !== 'ARL-KB-007' || collectionOnly !== true ||
@@ -308,7 +333,15 @@ export async function runAuthoritativeControlSourceReview({
     .digest('hex');
   // A changed, bounded collector payload gets a distinct append-only source reference.
   // Repeating the exact payload remains idempotent even when the frozen SHA is unchanged.
-  const inputReference = refreshProviderSource
+  const kb008RepairDigest = crypto.createHash('sha256')
+    .update(JSON.stringify({
+      purpose:'kb008-structured-source-recovery-v1',
+      revision:frozen.target.revision,
+      sourceDigest, boundedObservation:deterministicEvidenceText
+    })).digest('hex');
+  const inputReference = repairKb008Source
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${kb008RepairDigest}`
+    : refreshProviderSource
     ? kb007ProviderRefreshReference({
         revision:frozen.target.revision,controlId,sourceDigest,
         boundedObservation:deterministicEvidenceText
