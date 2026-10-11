@@ -3,15 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {buildCanonicalEvidenceRequirementPlan} from '../src/agent/canonical-evidence-requirement-plan.mjs';
 
-const requirements=[
- 'ARL-KB-029 assessed system, exact version, environment and consequential human/workload identity scope',
- 'ARL-KB-029 organisation-approved unique-principal, delegation, emergency access and accountability policy',
- 'ARL-KB-029 source or configuration evidence for identity binding, named approvals, delegated actor provenance and audit enforcement',
- 'ARL-KB-029 bounded positive evidence of distinct synthetic humans and workload identity attribution across approved actions',
- 'ARL-KB-029 bounded negative evidence of generic shared privileged identity, unbound principal, forged delegation, conflicting approval and replayed approval denied before side effects',
- 'ARL-KB-029 observed runtime correlation across authenticated actor, delegated subject, approval, tool execution and downstream audit',
- 'ARL-KB-029 reviewer identity, role, written authorisation, timestamp, assessed version, evidence digest and accountable review'
-];
+const asset=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
+const control=asset.entries.find(x=>x.id==='ARL-KB-029');
+const requirements=control.check.required_evidence;
 
 test('KB-029 proposed evidence keeps source, synthetic runtime and human decisions separated',()=>{
  const plan=buildCanonicalEvidenceRequirementPlan(requirements);

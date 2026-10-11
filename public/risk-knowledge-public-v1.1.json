@@ -3229,28 +3229,28 @@
       "category": "Identity, access and tenant isolation",
       "title": "Shared accounts destroy accountability",
       "problem": {
-        "statement": "Multiple people or services act under one identity, making approvals and evidence non-attributable.",
-        "customer_symptom": "A user or operator may observe multiple people or services act under one identity, making approvals and evidence non-attributable; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in multiple people or services act under one identity, making approvals and evidence non-attributable, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "Multiple humans, workloads or agents share or reuse privileged identities, credentials or approvals so consequential actions cannot be reliably attributed to the accountable actor.",
+        "customer_symptom": "Audit records show a generic, shared or reused principal for privileged agent, tool, approval or evidence-signing actions, preventing independent attribution to the human, workload owner or delegated subject responsible for the action.",
+        "credible_failure_or_attack": "A shared privileged account, reusable service credential, ambiguous delegated identity, self-approval path or unattributed break-glass mechanism allows different actors to perform consequential operations while audit records collapse them into one apparently valid identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged human accounts and authenticated sessions",
+          "workload, service and agent identities",
+          "delegated user context and impersonation chains",
+          "approval and separation-of-duties records",
+          "tool calls and downstream consequential actions",
+          "security evidence, signatures and audit trails"
         ],
         "default_severity": "high",
-        "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "severity_rationale": "Default high rating reflects the loss of accountability and potential privilege abuse before customer-specific exposure, action impact, compensating controls and exception governance are verified.",
         "applicability": [
           "organisations requiring accountable decisions"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations requiring accountable decisions and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If multiple people or services act under one identity, making approvals and evidence non-attributable, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "shared privileged user, generic account, reused service credential, ambiguous workload identity, unauthorized delegation, approval conflict or unattributed emergency access",
+        "trust_boundary": "Between authenticated human/workload identity and each consequential approval, delegated agent/tool action, downstream effect and audit record that must preserve independent actor provenance.",
+        "operational_impact": "Unattributable privileged actions weaken prevention, investigation, non-repudiation and accountable human review. Containment may require disabling shared credentials, isolating affected workflows and re-establishing independently attributable identity and approval evidence."
       },
       "solution_summary": {
-        "recommended_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals.",
+        "recommended_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed.",
         "default_owner": "Identity owner",
         "priority": "P1"
       },
@@ -3266,15 +3266,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-029 identity, privileged-account, workload-identity or approval-attribution change",
           "ARL-KB-029 introduction of shared, generic, break-glass or service credentials",
           "ARL-KB-029 unattributable privileged action or shared-account incident",
           "ARL-KB-029 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3309,7 +3309,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "841a557f997753b1a56875550346c45bd5a58e0f24fcfda58dad8b9eeead29db"
+      "content_digest": "a8a4fe0c3e39694d10b3e4a48ca78d9e6230a172b42d888fbbb9b5c5b71c26ae"
     },
     {
       "id": "ARL-KB-030",
