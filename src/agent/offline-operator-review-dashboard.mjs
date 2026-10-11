@@ -23,6 +23,28 @@ const CONTROL_LANES = [
 ];
 const REVIEW_LANES = new Set(['test_planning', 'evidence_collection']);
 
+// The canonical control journey provides closed status vocabularies. Routing
+// metadata can be tainted by stale or malformed sources; a mere length limit
+// could expose a short credential in the exported, private HTML file.
+const REGISTRY_STATUS = Object.freeze({
+  currentStage:new Set([
+    'applicability','test','evidence','finding','remediation','retest',
+    'approval','deployment_decision'
+  ]),
+  chainStatus:new Set([
+    'applicable_unassessed','reassessment_required','context_required',
+    'not_applicable','runtime_regression','remediation_in_progress',
+    'finding_open','controlled_with_evidence','test_inconclusive',
+    'test_failed','test_planned'
+  ]),
+  deploymentImpact:new Set(['hold','satisfied','blocker','not_applicable'])
+});
+
+function registryStatus(field, value) {
+  return typeof value === 'string' && REGISTRY_STATUS[field]?.has(value)
+    ? value : null;
+}
+
 // The full register is strictly the authoritative snapshot work queue.
 // A control outside the independent evidence lanes is not omitted, and its
 // queue status is NOT an approval, PASS, or completed security assessment.
@@ -44,16 +66,14 @@ function snapshotControlRegistry(queue, index) {
           (REVIEW_LANES.has(lane) !== selectedIds.has(item.controlId))) {
         throw new Error('Authoritative control register contradicts the evidence work queue.');
       }
-      // Only bounded routing metadata. Never copy private free-text nextAction,
-      // raw evidence, notes, user data, or any unreviewed test payload.
-      const field = value => typeof value === 'string' && value.length <= 80
-        ? value : null;
+      // Only recognised canonical state codes. Unknown/malicious values
+      // cannot be promoted into report text, irrespective of string length.
       registry.push({
         controlId:item.controlId,
         lane,
-        currentStage:field(item.currentStage),
-        chainStatus:field(item.chainStatus),
-        deploymentImpact:field(item.deploymentImpact),
+        currentStage:registryStatus('currentStage',item.currentStage),
+        chainStatus:registryStatus('chainStatus',item.chainStatus),
+        deploymentImpact:registryStatus('deploymentImpact',item.deploymentImpact),
         inEvidenceWorkplan:REVIEW_LANES.has(lane)
       });
     }
@@ -305,9 +325,9 @@ function statusRows(records) {
       ? '<a href="#'+esc(record.controlId)+'">'+esc(record.controlId)+'</a>'
       : '<code>'+esc(record.controlId)+'</code>')+
     '</td><td>'+safeLabel(record.lane)+'</td>'+
-    '<td>'+safeLabel(record.currentStage)+'</td>'+
-    '<td>'+safeLabel(record.chainStatus)+'</td>'+
-    '<td>'+safeLabel(record.deploymentImpact)+'</td>'+
+    '<td>'+safeLabel(registryStatus('currentStage',record.currentStage))+'</td>'+
+    '<td>'+safeLabel(registryStatus('chainStatus',record.chainStatus))+'</td>'+
+    '<td>'+safeLabel(registryStatus('deploymentImpact',record.deploymentImpact))+'</td>'+
     '<td>'+esc(LANE_ACTION[record.lane])+'</td></tr>').join('');
 }
 
