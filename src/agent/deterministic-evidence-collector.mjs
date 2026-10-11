@@ -349,6 +349,16 @@ function observationsForCollector(
           facts.credentialReferenceFiles,
         observedTechnologies:
           facts.observedTechnologies,
+        providerPackageCandidates:
+          facts.dependencyNames.filter(name =>
+            /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp[-_]|pinecone|weaviate|qdrant|chromadb)/i.test(name)
+          ).slice(0, 20),
+        providerPackageCandidateLimit: 20,
+        dependencyCount: facts.dependencyCount,
+        externalDestinationObservationCount:
+          facts.externalDestinationObservations.length,
+        externalDestinationObservations:
+          facts.externalDestinationObservations.slice(0, 8),
         trackedFileCount:
           facts.trackedFileCount,
         discoveryCoverage:
