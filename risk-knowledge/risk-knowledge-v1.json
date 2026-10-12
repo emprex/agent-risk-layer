@@ -6446,30 +6446,30 @@
       "category": "Identity, access and tenant isolation",
       "title": "Shared accounts destroy accountability",
       "problem": {
-        "statement": "Multiple people or services act under one identity, making approvals and evidence non-attributable.",
-        "customer_symptom": "A user or operator may observe multiple people or services act under one identity, making approvals and evidence non-attributable; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in multiple people or services act under one identity, making approvals and evidence non-attributable, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "Multiple humans, workloads or agents share or reuse privileged identities, credentials or approvals so consequential actions cannot be reliably attributed to the accountable actor.",
+        "customer_symptom": "Audit records show a generic, shared or reused principal for privileged agent, tool, approval or evidence-signing actions, preventing independent attribution to the human, workload owner or delegated subject responsible for the action.",
+        "credible_failure_or_attack": "A shared privileged account, reusable service credential, ambiguous delegated identity, self-approval path or unattributed break-glass mechanism allows different actors to perform consequential operations while audit records collapse them into one apparently valid identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged human accounts and authenticated sessions",
+          "workload, service and agent identities",
+          "delegated user context and impersonation chains",
+          "approval and separation-of-duties records",
+          "tool calls and downstream consequential actions",
+          "security evidence, signatures and audit trails"
         ],
         "default_severity": "high",
-        "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "severity_rationale": "Default high rating reflects the loss of accountability and potential privilege abuse before customer-specific exposure, action impact, compensating controls and exception governance are verified.",
         "applicability": [
           "organisations requiring accountable decisions"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations requiring accountable decisions and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If multiple people or services act under one identity, making approvals and evidence non-attributable, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "shared privileged user, generic account, reused service credential, ambiguous workload identity, unauthorized delegation, approval conflict or unattributed emergency access",
+        "trust_boundary": "Between authenticated human/workload identity and each consequential approval, delegated agent/tool action, downstream effect and audit record that must preserve independent actor provenance.",
+        "operational_impact": "Unattributable privileged actions weaken prevention, investigation, non-repudiation and accountable human review. Containment may require disabling shared credentials, isolating affected workflows and re-establishing independently attributable identity and approval evidence."
       },
       "check": {
         "id": "ARL-CHK-029",
-        "objective": "Determine whether human and workload actions requiring accountability are attributable to distinct verified principals.",
-        "method": "Inspect identity records, privileged account assignments, workload credentials, approval records and audit trails for shared credentials, generic approver identities or ambiguous principals. Verify representative consequential actions can be traced to a distinct human or workload identity.",
+        "objective": "Determine whether every consequential human, workload, delegated agent/tool, approval and evidence-signing action is bound to a distinct verified principal or an explicitly governed, individually attributable emergency exception.",
+        "method": "Bind the exact assessed build, environment and identity scope. Inspect organisation-approved principal, workload, delegation, separation-of-duties and break-glass policy plus identity-provider, session, approval, tool and audit configuration. With separate written owner authorization and synthetic staging principals, exercise bounded positive distinct-human/workload paths and negative generic/shared identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed emergency-access cases. Correlate authenticated actor, delegated subject, approval, tool call, downstream effect and tamper-evident audit record. ARL never infers a unique human from a service principal, display name, IP address or model assertion.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6477,60 +6477,64 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-029 assessed system, version, environment and scope for Shared accounts destroy accountability",
-          "ARL-KB-029 control configuration or source location showing how reduce the likelihood and impact of shared accounts destroy accountability and make the remaining risk visible.",
-          "ARL-KB-029 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-029 policy, authorization, tool or audit events proving whether the tested shared accounts destroy accountability path executed",
-          "ARL-KB-029 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-029 assessed system, exact version, environment and consequential human, workload, agent/tool, delegated identity, approval and audit scope",
+          "ARL-KB-029 organisation-approved unique-principal, workload ownership, delegation, separation-of-duties and break-glass accountability policy with version, effective dates and accountable owner",
+          "ARL-KB-029 source or configuration evidence for identity/session binding, shared credential prevention, workload issuer and audience, delegated actor provenance, named approval attribution, audit integrity and fail-closed ambiguous-principal handling",
+          "ARL-KB-029 bounded positive evidence of distinct synthetic human and workload principals across approved authentication, delegation, approval, tool and downstream actions",
+          "ARL-KB-029 bounded negative evidence of prohibited generic or shared privileged identity, missing principal, swapped delegation, conflicting self-approval, reused approval token and unattributed emergency access denied or quarantined before material effects",
+          "ARL-KB-029 observed runtime correlation across authenticated actor, workload identity, delegated subject, approval, policy decision, tool execution, downstream effect and tamper-evident audit evidence",
+          "ARL-KB-029 reviewer identity, role, written testing authorization, policy and exception review, timestamp, assessed version, evidence digest, untested paths, limitations and accountable decision"
         ],
-        "pass_condition": "ARL-KB-029 passes only when “Shared accounts destroy accountability” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-029 fails when multiple people or services act under one identity, making approvals and evidence non-attributable, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-029 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-029 passes only after accountable human review of the exact assessed version shows distinct attributable human and workload identities on applicable consequential paths, verified delegation and approval provenance, governed emergency exceptions, bounded positive and negative synthetic evidence, denial or quarantine of prohibited ambiguous/shared authority before material effects, and independently reviewable runtime audit linkage.",
+        "fail_condition": "KB-029 is a confirmed FAIL only where reproducible exact-version evidence demonstrates accepted prohibited shared or generic privileged authority, consequential action without required independent actor provenance, unauthorized delegation or approval, or an emergency-access path that violates the approved attribution policy. Missing identity inventory, policy, active-test authorization, runtime correlation, exception evidence or reviewer decision requires INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment without inventing a confirmed vulnerability.",
+        "limitations": "This bounded test does not prove that untested accounts, external identity providers, endpoints or future versions are free from shared-identity or attribution failures. Service principals may legitimately represent workloads only where ownership, purpose, delegation and accountable review are independently established.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-029's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Use an owner-authorised non-production target matching ARL-KB-029's relevant identity and audit configuration.",
+          "Use synthetic human, workload and delegated principals with reversible or dry-run side effects; never use real customer or break-glass credentials.",
+          "Record the assessed version, approved accountability/exception policy, environment, expected identity chain and expected decision before execution."
         ],
-        "positive_test": "Perform an authorised test action and verify the resulting evidence identifies the specific human or workload principal.",
-        "negative_test": "Attempt to use a prohibited shared or generic test identity for an accountable action and verify the platform rejects it or explicitly records an approved exception with an accountable owner.",
+        "positive_test": "Perform authorised synthetic human and workload actions and verify each consequential authentication, delegation, approval, tool call and downstream effect remains attributable to the correct distinct principal and accountable owner.",
+        "negative_test": "Attempt bounded synthetic generic/shared privileged identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed break-glass variants and verify prohibited authority is denied or quarantined before material effects with correlated audit evidence.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable identity or security control owner",
+          "distinct least-privileged synthetic human principals",
+          "distinct synthetic workload or agent/tool principal with accountable service owner",
+          "synthetic delegated subject and independent reviewer/approver where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-029 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Shared accounts destroy accountability” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Approved distinct-principal and workload flows must complete only within their documented role, delegation and approval scope while preserving actor provenance end to end.",
+          "Prohibited generic/shared, ambiguous, forged-delegation, approval-conflict or unattributed emergency-access variants must be denied or quarantined before a material side effect and recorded for accountable review."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Separate written owner authorization is required for active identity or delegation tests.",
+          "Use staging, synthetic principals and data, capped values and reversible or dry-run tools.",
+          "Do not use real personal accounts, production credentials, customer identities, third-party authentication calls or actual break-glass accounts.",
+          "Stop on unexpected access, identity confusion, data exposure or uncontrolled side effects and preserve evidence for human review."
         ]
       },
       "solution": {
         "id": "ARL-SOL-029",
-        "control_objective": "Reduce the likelihood and impact of shared accounts destroy accountability and make the remaining risk visible.",
-        "recommended_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals.",
+        "control_objective": "Provide independently attributable human and workload identities and preserve actor, delegation, approval and downstream provenance for every consequential action, with tightly governed emergency exceptions.",
+        "recommended_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed.",
         "default_owner": "Identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-029: Provide distinct identities for individual humans and workloads involved in accountable actions.",
-          "ARL-KB-029: Prohibit shared privileged credentials except for documented emergency mechanisms with explicit accountability.",
-          "ARL-KB-029: Bind approvals, security decisions and audit evidence to verified principals."
+          "ARL-KB-029: Issue distinct human identities and purpose-bound workload identities with named accountable owners; never treat a generic service principal as proof of a unique human.",
+          "ARL-KB-029: Preserve authenticated actor, delegated subject, workload/tool caller, approval identity, policy version and downstream effect as separate correlated audit fields.",
+          "ARL-KB-029: Enforce separation of duties and prevent approval reuse or self-approval where the approved policy requires independent authorization.",
+          "ARL-KB-029: Permit emergency access only through individually attributable, time-bounded, specially logged mechanisms with accountable retrospective review."
         ],
-        "monitoring": "For ARL-KB-029, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-029 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor generic/shared privileged identities, concurrent or cross-user credential reuse, principal changes within delegation chains, approval reuse, self-approval conflicts, unattributed break-glass use, missing actor fields and mismatches between identity-provider, tool and downstream audit events.",
+        "containment": "Disable or rotate suspected shared privileged credentials, suspend ambiguous delegated authority, isolate affected approval/tool routes, preserve identity-provider and downstream audit evidence, and require accountable review before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-029: “Shared accounts destroy accountability” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-029: Authorised in-scope use completes successfully, remains within the documented asset scope for shared accounts destroy accountability, and produces no unintended side effect.",
-          "ARL-KB-029: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-029: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-029: Exact remediated build, approved accountability policy, principal inventory, workload owners, delegation rules and permitted emergency exceptions are recorded.",
+          "ARL-KB-029: Distinct synthetic human and workload positive paths complete within approved scope with independently correlated actor, delegation, approval, tool and downstream evidence.",
+          "ARL-KB-029: Generic/shared privileged identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed emergency-access variants are denied or quarantined before material effects with trustworthy audit evidence.",
+          "ARL-KB-029: Reviewer records written authorization, tester/reviewer roles, timestamps, evidence digests, exception handling, untested paths, residual limitations and final accountable decision."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-029 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-029 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Disable or rotate affected shared or ambiguous privileged credentials, suspend disputed delegated and approval paths, stop queued consequential actions where attribution cannot be established, and preserve identity and audit evidence.",
+        "root_cause_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed. Remove the underlying identity and accountability design defect rather than relying on prompts, display names, IP addresses or operator memory.",
+        "preventive_control": "Enforce distinct principal identity, delegation and approval policy outside the model using authoritative IAM and deterministic authorization/audit controls before consequential actions execute.",
         "accountable_owner": "Identity owner",
         "implementation_dependencies": [
           "authoritative identity and project scope",
@@ -6539,7 +6543,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-029 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-029 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact attribution failure and relevant shared/generic identity, delegation, approval-reuse, separation-of-duties and emergency-access variants against the remediated version before changing the deployment decision.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-029",
           "Passed retest evidence bound to ARL-KB-029 and the current knowledge digest",
@@ -6569,15 +6573,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-029 identity, privileged-account, workload-identity or approval-attribution change",
           "ARL-KB-029 introduction of shared, generic, break-glass or service credentials",
           "ARL-KB-029 unattributable privileged action or shared-account incident",
           "ARL-KB-029 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6633,7 +6637,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "841a557f997753b1a56875550346c45bd5a58e0f24fcfda58dad8b9eeead29db"
+      "content_digest": "1e4c103f9e99834f7e74fa2ef404543d37af3fcc9845866ed12f7a4f57ac6b79"
     },
     {
       "id": "ARL-KB-030",

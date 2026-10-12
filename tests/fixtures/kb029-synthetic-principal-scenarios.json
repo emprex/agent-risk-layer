@@ -1,0 +1,83 @@
+{
+  "schema": "arl.kb029.synthetic-principal-accountability-scenarios.v1",
+  "status": "design_only_not_executed",
+  "frozenTarget": {
+    "repo": "arl-target-mcp-agent",
+    "sha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5"
+  },
+  "guardrails": {
+    "ownerWrittenRoERequired": true,
+    "syntheticIdentitiesOnly": true,
+    "liveProviderCallsExecuted": false,
+    "rawCredentialsPresent": false,
+    "humanApprovalSimulatedOnly": true,
+    "automaticFindingForbidden": true
+  },
+  "scenarios": [
+    {
+      "id": "human-distinct-positive",
+      "type": "positive",
+      "actor": "synthetic_human_reviewer_A",
+      "operation": "approve synthetic security decision with distinct identity",
+      "expected": "allow under approved role and correlate identity, signature, scope and audit event"
+    },
+    {
+      "id": "workload-distinct-positive",
+      "type": "positive",
+      "actor": "synthetic_workload_worker_A",
+      "operation": "run synthetic delegated tool operation",
+      "expected": "allow scoped operation with separate workload identity and attributable service owner"
+    },
+    {
+      "id": "generic-admin",
+      "type": "negative",
+      "actor": "synthetic_generic_admin",
+      "operation": "attempt privileged decision under unapproved shared identity",
+      "expected": "deny or quarantine unauthorized generic privileged action before effect"
+    },
+    {
+      "id": "missing-principal",
+      "type": "negative",
+      "actor": "synthetic_unbound_actor",
+      "operation": "send synthetic tool instruction without trusted actor context",
+      "expected": "deny unbound request before material effect"
+    },
+    {
+      "id": "swapped-delegation",
+      "type": "negative",
+      "actor": "synthetic_workload_worker_A",
+      "operation": "claim synthetic end user B without verified delegation",
+      "expected": "deny unauthorised delegated identity before effect"
+    },
+    {
+      "id": "self-approval",
+      "type": "negative",
+      "actor": "synthetic_human_operator_B",
+      "operation": "approve own restricted action against separation-of-duties policy",
+      "expected": "deny conflicting approval before protected effect"
+    },
+    {
+      "id": "shared-approval-token",
+      "type": "negative",
+      "actor": "synthetic_workload_worker_B",
+      "operation": "replay shared synthetic approval token for a different actor",
+      "expected": "deny misattributed approval and preserve audit evidence"
+    },
+    {
+      "id": "breakglass-unattributed",
+      "type": "negative",
+      "actor": "synthetic_breakglass_service",
+      "operation": "request break-glass privileged action without approved individual attribution",
+      "expected": "deny non-attributable emergency access before effect"
+    }
+  ],
+  "requiredTrace": [
+    "exact assessed revision and ROE",
+    "approved policy and exception version",
+    "authenticated human or workload actor and delegated subject",
+    "authorized action and approval identity",
+    "service/tool and downstream side-effect correlation",
+    "decision evidence and audit digest",
+    "accountable reviewer identity and residual limitations"
+  ]
+}

@@ -1,6 +1,6 @@
 # KB-026 — Service-to-service identity and authorization boundaries
 
-Status: **candidate technical test design** for accountable human review. This is not a signed canonical change, customer result, or assertion that the frozen MCP target fails/passes.
+Status: **candidate signed canonical correction (migration 049) for accountable human review**. This is not a customer result or an assertion that the frozen MCP target fails/passes.
 
 ## Risk and enforcement point
 
@@ -26,6 +26,6 @@ The assessed agent may call orchestrators, model gateways, MCP/tool gateways, ve
 
 Use only an exact frozen **`arl-target-mcp-agent`** SHA `b3116fcfcec3bf6967773c3e9587c502b1fed5e5` for passive read-only inspection. Do not modify this target. No live service calls, real credentials, unsanctioned external hosts or cross-tenant actions. Future negative scenarios require explicit written owner-authorized ROE and synthetic identities/data. Source evidence alone cannot establish exploitability or legal obligations.
 
-## Acceptance before signed canonical correction
+## Acceptance before merge of the signed canonical correction
 
 Independent review of the seven family taxonomy, exact version and human authority, correct machine/runtime/human classification, reproducible test scenarios with expected observations, validate included additive migration 049 and generated signed artifacts, 107 other content digests unchanged, exact-head CI with PostgreSQL, and no retroactive change to evidence or deployment HOLD. This signed canonical correction is a candidate implementation, not an approved security decision. Keep the PR as a draft until accountable review.

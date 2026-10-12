@@ -14,7 +14,9 @@ test('KB-028 independently verifies all 108 signatures and additive migration 05
  for(const item of asset.entries){
   const {content_digest,...unsigned}=item;
   assert.equal(digest(unsigned),content_digest);
-  if(item.id!=='ARL-KB-028')assert.equal(content_digest,unchanged[item.id]);
+  // Stacked semantic migrations may change their own control only; KB-029 is independently verified by its own exact-head boundary test.
+  const laterKB029 = item.id==='ARL-KB-029' && fs.existsSync(new URL('../migrations/052_risk_knowledge_kb029_principal_accountability.sql',import.meta.url));
+  if(item.id!=='ARL-KB-028' && !laterKB029)assert.equal(content_digest,unchanged[item.id]);
  }
  assert.equal(Object.keys(unchanged).length,107);
  assert.equal(entry.content_digest,'9a239967cf149448fc09b7e5e0591c786ee34eb5edb11ce7c391ec47928b7d6b');
