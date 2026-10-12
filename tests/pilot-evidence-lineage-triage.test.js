@@ -240,3 +240,33 @@ test('KB-007 partial provider inventory is surfaced without changing criterion a
   assert.equal(result.controls[0].passInferred,false);
   assert.equal(result.deploymentDecisionWritten,false);
 });
+
+test('verified human inconclusive review is not mistaken for a frozen collector exception', () => {
+  const reference = 'human-review:ARL-KB-007';
+  const humanTest = {
+    ...testResult, id:'human-test', executionMethod:'consolidated_human_review',
+    inputReference: reference
+  };
+  const humanEvidence = {
+    ...evidence, id:'human-evidence', testExecutionId:'human-test',
+    sourceType:'consolidated_human_review', evidenceClass:'human_provided',
+    sourceReference:reference, verificationState:'verified'
+  };
+  const result = triage({
+    ...detail, tests:[testResult,humanTest], testHistory:[],
+    evidence:[evidence,humanEvidence], evidenceHistory:[]
+  });
+  assert.equal(result.summary.sourceLineageIssues, 0);
+  assert.equal(result.controls[0].sourceRecords.find(s => s.evidenceId === humanEvidence.id)
+    .lineageStatus,'linked_human_review_not_static_collector');
+  assert.equal(result.controls[0].criteria[0].criterionSatisfied,false);
+  assert.equal(result.controls[0].passInferred,false);
+
+  const broken = triage({
+    ...detail, tests:[testResult,humanTest], testHistory:[],
+    evidence:[evidence,{...humanEvidence,sourceReference:'wrong'}], evidenceHistory:[]
+  });
+  assert.equal(broken.summary.sourceLineageIssues,1);
+  assert.equal(broken.controls[0].sourceRecords.find(s => s.evidenceId === humanEvidence.id)
+    .lineageStatus,'human_review_lineage_mismatch');
+});
