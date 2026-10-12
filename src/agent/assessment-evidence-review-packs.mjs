@@ -129,6 +129,7 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
           evidenceId: source.evidenceId,
           sourceType: source.sourceType || null,
           lineageStatus: source.lineageStatus,
+          lineageMismatchReasons: source.lineageMismatchReasons || [],
           diagnosticLane: lineageDiagnosticLane(source)
         };
         if (source.lineageIssueState === 'historical_preserved_after_valid_recollection') {
