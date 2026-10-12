@@ -44,6 +44,7 @@ import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.m
 import { buildKb008PrivacyEvidenceView } from './kb008-privacy-evidence-view.mjs';
 import { buildOfflineOperatorReviewDashboard, writeOfflineOperatorReviewDashboard } from './offline-operator-review-dashboard.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
+import { assessIndependentControlTestGate } from './independent-control-test-gate.mjs';
 
 
 async function readCurrentControlQueue(options) {
@@ -1509,6 +1510,90 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       options
     );
   }
+  // Explicit selection preflight: keeps unrelated open findings and global gates unchanged.
+  // An independent test must still obtain an owner ROE and actually execute or record
+  // trustworthy observations before any conclusive decision.
+  if (/^Preflight independent control test ARL-KB-\d{3}[.!?]*$/i.test(request.trim())) {
+    const controlId = /^Preflight independent control test (ARL-KB-\d{3})/i.exec(request.trim())[1].toUpperCase();
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId, controlId, userId:options.userId
+    });
+    const state = (await runArlAgent(repositoryPath, 'Where are we?', options))
+      ?.canonicalData?.workflowState;
+    const preflight = assessIndependentControlTestGate({
+      controlId, detail, frozenInspection:localFrozenInspection,
+      assessmentId:options.assessmentId,
+      expectedSnapshotId:state?.authoritativeArtifacts?.assessmentContext?.systemSnapshotId
+    });
+    return {
+      canonicalData:{independentControlTestPreflight:preflight,
+        securityStateChanged:false, deploymentDecisionWritten:false, humanReviewRequired:true},
+      answer:'Independent control test preflight (read-only): '+JSON.stringify(preflight)+
+        '\\nNo test authorised, executed or marked passed; global remediation gate unchanged.'
+    };
+  }
+
+  // Independently scoped human test plan; unrelated open findings remain untouched.
+  if (request.startsWith('Authorise independent control test ')) {
+    const payload = JSON.parse(request.slice('Authorise independent control test '.length));
+    const controlId = String(payload?.controlId || '').trim();
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId,userId:options.userId
+    });
+    const check = assessIndependentControlTestGate({
+      controlId,detail,frozenInspection:localFrozenInspection,
+      assessmentId:options.assessmentId,expectedSnapshotId:(await readCurrentControlQueue(options)).systemSnapshotId
+    });
+    if (!check.available) throw new Error(check.reason);
+    // The operator must explicitly declare a bounded test plan, not just a control ID.
+    const plan = String(payload?.plan || '').trim();
+    if (plan.length < 40 || !Array.isArray(payload?.testCases) ||
+        !payload.testCases.length || payload.testCases.some(t =>
+          !t || String(t.expected || '').trim().length < 10 ||
+          String(t.action || '').trim().length < 10)) {
+      throw new Error('Independent authorisation requires a concrete plan (40+ characters) and testCases with action and expected observations.');
+    }
+    const origin = 'http://127.0.0.1:' + (process.env.ARL_TARGET_ADAPTER_PORT || '8787');
+    const adapter = await verifyLocalTargetAdapter({
+      repositoryPath,expectedRevision:check.targetRevision,origin
+    });
+    if (adapter.available !== true) throw new Error('Verified local target adapter required: '+(adapter.reason || 'unavailable'));
+    const now = Date.now();
+    const marker = 'ARL independent active control test '+controlId;
+    const active = (await listRedTeamAuthorisations(options)).filter(a =>
+      a.status === 'active' && a.environment === 'local' &&
+      a.endpointOrigin === origin && Date.parse(a.windowStart) <= now &&
+      Date.parse(a.windowEnd) > now && a.permittedActions?.includes(marker));
+    if (active.length > 1) throw new Error('Ambiguous active independent ROE.');
+    const roe = active[0] || await createRedTeamAuthorisation({...options,input:{
+      environment:'local',targetName:'Independent '+controlId,
+      endpointOrigin:origin,authorityBasis:'owner',authorisedBy:os.userInfo().username,
+      authorisedRole:'Local repository operator',emergencyContact:'Local terminal operator '+os.userInfo().username,
+      windowStart:new Date(now-1000).toISOString(),windowEnd:new Date(now+3600000).toISOString(),
+      permittedActions:[marker],prohibitedActions:['Production effects','External actions','Real credentials or sensitive data'],
+      dataClassification:'synthetic-only',retentionDays:30,syntheticDataOnly:true,dryRunToolsOnly:true,
+      noProductionEffects:true,confirmation:ROE_CONFIRMATION
+    }});
+    const reference = 'roe:'+roe.id+':control:'+controlId;
+    const existing = (detail.evidence || []).find(e=>e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference && e.retentionStatus==='active');
+    if (!existing) {
+      const ev = await recordControlEvidence({projectId:options.projectId,controlId,
+        userId:options.userId,input:{systemSnapshotId:check.systemSnapshotId,
+        evidenceClass:'human_provided',sourceType:'active_test_plan_authorisation',
+        sourceReference:reference,limitations:'Only bounded synthetic dry-run testing through the verified local adapter. '+plan}});
+      await verifyExplicitHumanEvidence({projectId:options.projectId,evidenceId:ev.id,
+        userId:options.userId,controlId,verificationScope:'explicit_independent_test_authorisation',
+        reason:'The local owner explicitly authorised independently bounded synthetic tests for '+controlId+' on the frozen snapshot.'});
+    }
+    return {canonicalData:{controlId,systemSnapshotId:check.systemSnapshotId,
+      authorisationReference:reference,testCases:payload.testCases,
+      status:'authorised_not_executed',securityStateChanged:true,
+      deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Independent '+controlId+' plan authorised, NOT executed. ROE '+reference+
+      '. Run actual synthetic cases through the verified local adapter and record observed results separately. KB-006 remains open; deployment HOLD.'};
+  }
+
   if (request.startsWith('Authorise active control test ')) {
     let input;
 
@@ -2034,6 +2119,82 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       'Where are we?',
       options
     );
+  }
+
+  // Independent result recording never derives success from authorisation alone.
+  if (request.startsWith('Record independent control test result ')) {
+    const payload = JSON.parse(request.slice('Record independent control test result '.length));
+    const controlId = String(payload?.controlId || '').trim();
+    const result = String(payload?.result || '').trim().toLowerCase();
+    const sourceReference = String(payload?.sourceReference || '').trim();
+    const observedResult = String(payload?.observedResult || '').trim();
+    const limitations = String(payload?.limitations || '').trim();
+    if (!['passed','failed','inconclusive'].includes(result) ||
+        observedResult.length < 30 || sourceReference.length < 10 ||
+        limitations.length < 15 || !Array.isArray(payload?.evidenceChecklist)) {
+      throw new Error('Provide actual test result, observedResult, traceable sourceReference, limitations and canonical evidenceChecklist.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId,userId:options.userId
+    });
+    const gate = assessIndependentControlTestGate({
+      controlId,detail,frozenInspection:localFrozenInspection,
+      assessmentId:options.assessmentId,expectedSnapshotId:(await readCurrentControlQueue(options)).systemSnapshotId
+    });
+    if (!gate.available) throw new Error(gate.reason);
+    const origin = 'http://127.0.0.1:' + (process.env.ARL_TARGET_ADAPTER_PORT || '8787');
+    const now = Date.now();
+    const marker = 'ARL independent active control test '+controlId;
+    const authorisations = (await listRedTeamAuthorisations(options)).filter(a =>
+      a.status==='active' && a.environment==='local' && a.endpointOrigin===origin &&
+      a.permittedActions?.includes(marker) && Date.parse(a.windowStart)<=now &&
+      Date.parse(a.windowEnd)>now);
+    if (authorisations.length !== 1) throw new Error('Exactly one active independent test ROE is required.');
+    const reference='roe:'+authorisations[0].id+':control:'+controlId;
+    const evidence=(detail.evidence || []).filter(e=>
+      e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference && e.retentionStatus==='active' &&
+      e.verificationState==='verified');
+    if(evidence.length!==1) throw new Error('Verified independent test authorisation evidence missing or ambiguous.');
+    const requirements=detail.testDefinition.requiredEvidence;
+    const entries=payload.evidenceChecklist;
+    if(entries.length!==requirements.length ||
+      new Set(entries.map(e=>String(e?.requirement || '').trim())).size!==requirements.length ||
+      requirements.some(req=>!entries.some(e=>e.requirement===req))) {
+      throw new Error('One unique observed evidence checklist entry required for every canonical criterion.');
+    }
+    if(entries.some(e=>String(e?.observation || '').trim().length<20 ||
+       String(e?.evidenceReference || '').trim().length<10)) {
+      throw new Error('Checklist requires traceable observation and evidence reference for every criterion.');
+    }
+    if(result==='passed' && entries.some(e=>e.satisfied!==true)) {
+      throw new Error('PASS requires positive human-confirmed evidence satisfaction for every criterion.');
+    }
+    if(result==='failed' && !entries.some(e=>e.satisfied===false && e.observation.length>=20)) {
+      throw new Error('FAIL requires observed unsatisfied criterion evidence.');
+    }
+    if (sourceReference===reference || sourceReference.startsWith('roe:')) {
+      throw new Error('ROE is not observed test evidence; supply an independent test artifact reference.');
+    }
+    const execution=await recordControlTestExecution({projectId:options.projectId,
+      controlId,userId:options.userId,input:{systemSnapshotId:gate.systemSnapshotId,
+      executionKind:'initial',executionMethod:'independent_owner_observed_active_test',
+      result,observedResult:observedResult+' | '+entries.map(e=>e.requirement+': '+e.observation).join(' | '),
+      inputReference:sourceReference,limitations}});
+    const ev=await recordControlEvidence({projectId:options.projectId,controlId,
+      userId:options.userId,input:{systemSnapshotId:gate.systemSnapshotId,
+      evidenceClass:'human_provided',sourceType:'authorised_active_test_result',
+      sourceReference,testExecutionId:execution.id,
+      limitations:limitations+' Authorisation: '+reference}});
+    // Conclusive findings must remain attributable to the accountable operator.
+    // Verification here is explicit human attestation supplied in the command, not LLM adjudication.
+    await verifyExplicitHumanEvidence({projectId:options.projectId,evidenceId:ev.id,
+      userId:options.userId,controlId,verificationScope:'explicit_independent_human_test_review',
+      reason:'The accountable operator explicitly attested to the independent observed test checklist for '+controlId+' on the current frozen assessment.'});
+    return {canonicalData:{controlId,testExecutionId:execution.id,evidenceId:ev.id,
+      recordedResult:result,securityStateChanged:true,deploymentDecisionWritten:false,
+      humanReviewRequired:true},answer:'Recorded independently reviewed '+controlId+
+      ' test '+result+'; unrelated findings and HOLD were not changed.'};
   }
 
   if (request.startsWith('Record active control test result ')) {
