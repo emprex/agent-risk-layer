@@ -79,7 +79,8 @@ test('cross-snapshot failure lineage remains in the unchanged core implementatio
   assert.match(controlIntelligenceCore, /const historicalTests = \(data\.testHistory \|\| data\.tests\)/);
   assert.match(controlIntelligenceCore, /const currentEvidence = data\.evidence\.filter/);
   assert.match(controlIntelligenceCore, /const historicalEvidence = \(data\.evidenceHistory \|\| data\.evidence\)/);
-  assert.match(controlIntelligenceCore, /const tests = open\.length \? historicalTests : currentTests/);
+  assert.match(controlIntelligenceCore, /const tests = \(open\.length \? historicalTests : currentTests\)/);
+  assert.match(controlIntelligenceCore, /!invalidatedFindingIds\.has\(row\.finding_id\)/);
   assert.match(controlIntelligenceCore, /row\.test_execution_id===initialFailure\?\.id/);
   assert.match(controlIntelligenceCore, /verifiedEvidence=currentEvidence\.some/);
 });
