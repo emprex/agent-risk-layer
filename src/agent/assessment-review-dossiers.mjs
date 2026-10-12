@@ -116,7 +116,8 @@ function dossierForControl(item, detail, triage, snapshotId) {
     .filter(row =>
       row.lineageIssueState !== 'historical_preserved_after_valid_recollection' &&
       row.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
-      row.lineageStatus !== 'legacy_static_collection_requires_manual_review')
+      row.lineageStatus !== 'legacy_static_collection_requires_manual_review' &&
+      row.lineageStatus !== 'linked_human_review_not_static_collector')
     .map(row => ({
       evidenceId: row.evidenceId,
       lineageStatus: row.lineageStatus
