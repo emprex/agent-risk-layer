@@ -227,6 +227,23 @@ export function isLegacyIncompleteV2Source(test, {
   }
 }
 
+// A stale check digest is historical, not current evidence. Refresh only
+// when every other test/reference identity matches the frozen snapshot.
+export function isStaleCheckDigestV2Source(test, {
+  snapshotId,checkId,checkDigest,revision,controlId
+}={}) {
+  const ref=/^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):(ARL-KB-\d{3}):([a-f0-9]{64})$/.exec(test?.inputReference || '');
+  return Boolean(ref && ref[1] === revision && ref[2] === controlId &&
+    /^ARL-KB-\d{3}$/.test(controlId || '') &&
+    /^[a-f0-9]{64}$/.test(checkDigest || '') &&
+    /^[a-f0-9]{64}$/.test(test?.checkDigest || '') &&
+    test.checkDigest !== checkDigest &&
+    test.systemSnapshotId === snapshotId && test.controlId === controlId &&
+    test.checkId === checkId &&
+    test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
+    test.result === 'inconclusive' && test.executionKind !== 'retest');
+}
+
 export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
@@ -237,7 +254,8 @@ export async function runAuthoritativeControlSourceReview({
   repairTruncatedSource = false,
   refreshProviderSource = false,
   repairKb008Source = false,
-  repairLegacyV2Source = false
+  repairLegacyV2Source = false,
+  refreshStaleCheckDigestSource = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -275,6 +293,23 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
+  if (refreshStaleCheckDigestSource) {
+    const config=detail.systemSnapshot?.assessmentConfiguration || {};
+    if (collectionOnly !== true || repairLegacyV2Source || repairTruncatedSource ||
+        refreshProviderSource || repairKb008Source ||
+        config.targetBinding?.source !== 'git' ||
+        config.targetBinding.revision !== frozen.target.revision ||
+        frozen.target.dirty !== false ||
+        detail.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3)) {
+      return {executed:false,reason:'stale_check_digest_refresh_requires_exact_frozen_snapshot',securityStateChanged:false};
+    }
+    const records=[...(detail.tests || []),...(detail.testHistory || [])];
+    if (!records.some(test=>isStaleCheckDigestV2Source(test,{
+      snapshotId,checkId:detail.testDefinition.id,
+      checkDigest:detail.testDefinition.digest,
+      revision:frozen.target.revision,controlId
+    }))) return {executed:false,reason:'stale_check_digest_refresh_not_required',securityStateChanged:false};
+  }
   if (repairLegacyV2Source) {
     const config = detail.systemSnapshot?.assessmentConfiguration || {};
     if (collectionOnly !== true || repairTruncatedSource || refreshProviderSource ||
@@ -402,7 +437,14 @@ export async function runAuthoritativeControlSourceReview({
     sourceDigest, boundedObservation:deterministicEvidenceText,
     currentCheckDigest:detail.testDefinition?.digest
   })).digest('hex');
-  const inputReference = repairLegacyV2Source
+  const staleDigestRefreshDigest=crypto.createHash('sha256').update(JSON.stringify({
+    purpose:'stale-v2-check-digest-refresh-v1',revision:frozen.target.revision,
+    controlId,sourceDigest,boundedObservation:deterministicEvidenceText,
+    currentCheckDigest:detail.testDefinition?.digest
+  })).digest('hex');
+  const inputReference = refreshStaleCheckDigestSource
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${staleDigestRefreshDigest}`
+    : repairLegacyV2Source
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${legacyRepairDigest}`
     : repairKb008Source
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${kb008RepairDigest}`
