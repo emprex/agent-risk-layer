@@ -2944,27 +2944,27 @@
       "title": "Service-to-service identity is unauthenticated or shared",
       "problem": {
         "statement": "Internal components trust network location or a shared secret, so compromise of one service grants broad access.",
-        "customer_symptom": "A user or operator may observe internal components trust network location or a shared secret, so compromise of one service grants broad access; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in internal components trust network location or a shared secret, so compromise of one service grants broad access, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "An internal agent, MCP tool or gateway request may be authorised merely because it originates on a trusted network or presents a shared secret, allowing a compromised service to reach another service's resources or actions.",
+        "credible_failure_or_attack": "A compromised or impersonated workload, stolen shared bearer credential, wrong-audience token or forwarded service claim may cross an internal service boundary and reach tools, retrieval, jobs or evidence stores without receiving-side identity, audience and operation checks.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP/tool gateways",
+          "model and retrieval service endpoints",
+          "workload identities, issuer and audience trust policies",
+          "short-lived tokens, certificates and credential stores",
+          "background jobs and delegated user or tenant context",
+          "downstream data, tool actions and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "distributed agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between distributed agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If internal components trust network location or a shared secret, so compromise of one service grants broad access, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "compromised internal workload, impersonated service, reused credential, misconfigured receiver or unsafe delegation",
+        "trust_boundary": "Each hop between agent, orchestration, model, retrieval, MCP/tool and downstream services must authenticate the calling workload and authorize the audience, operation and delegated context at the receiver, rather than trusting a private network or model output.",
+        "operational_impact": "An unauthorized internal service hop could disclose data or trigger privileged actions across connected tools. The affected route may require immediate isolation, identity revocation, evidence preservation, remedial enforcement and an exact-version accountable human retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies.",
+        "recommended_remediation": "Replace shared secrets and trusted-network assumptions with attributable workload identities or mutually authenticated channels; verify issuer/audience and operation at each receiver, minimize credential lifetime and privilege, enforce delegation boundaries, rotate/revoke compromised credentials and preserve correlated denial evidence.",
         "default_owner": "Platform identity owner",
         "priority": "P1"
       },
@@ -2996,7 +2996,7 @@
           "ARL-KB-026 shared-secret exposure, service impersonation or internal identity incident",
           "ARL-KB-026 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3031,7 +3031,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a94e810240ecb11adaeb9ec4bfb757001033a4522785a2529e755f6fc704e259"
+      "content_digest": "6f81fdd9270b7dbe62e50072f599e785ea1bfa05b14062fcc643fd83ed9dcfae"
     },
     {
       "id": "ARL-KB-027",
@@ -3042,27 +3042,27 @@
       "title": "API keys have excessive scope and lifetime",
       "problem": {
         "statement": "One leaked key can operate every project, environment or high-impact tool indefinitely.",
-        "customer_symptom": "A user or operator may observe one leaked key can operate every project, environment or high-impact tool indefinitely; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in one leaked key can operate every project, environment or high-impact tool indefinitely, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A key intended for one project, environment or limited tool can unexpectedly access another project, production-like environment or privileged operation, including after expiry, rotation or revocation.",
+        "credible_failure_or_attack": "A leaked, shared or stale API key is accepted outside its authorized project, environment, operation or validity window because a gateway or downstream verifier omits scope, lifetime or revocation enforcement.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP tool gateways",
+          "API issuers, credentials and verifier state",
+          "provider projects and environments",
+          "privileged tool actions and downstream records",
+          "credential rotation, expiration and revocation controls",
+          "redacted authorization and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Over-scoped or long-lived API keys can amplify credential compromise. Final severity depends on reachable projects, environments, tools, data, lifetime and revocation controls.",
         "applicability": [
           "API-integrated agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between API-integrated agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If one leaked key can operate every project, environment or high-impact tool indefinitely, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "credential theft or accidental sharing, excessive issuance scope, missing verifier checks, stale revocation caches or rotation failure",
+        "trust_boundary": "Every receiving API/tool must independently bind a credential to issuer, project, environment, audience, permitted action and effective validity/revocation state before data access or side effects.",
+        "operational_impact": "Excessive or stale key authority may disclose project data or trigger unauthorized, costly or high-impact tools. Containment may require immediate revocation, route isolation, event review and exact-version retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Issue project- and purpose-scoped keys, display secrets once, store only digests, support immediate revocation and prefer short-lived credentials.",
+        "recommended_remediation": "Use project- and purpose-scoped short-lived keys with least privilege; display secrets only at issue time, store verifiers securely, rotate/revoke promptly and check audience, expiry, scope and revocation at each API or MCP tool boundary.",
         "default_owner": "Platform owner",
         "priority": "P0"
       },
@@ -3086,7 +3086,7 @@
           "ARL-KB-027 key leakage, cross-project use, excessive-scope use or revocation failure",
           "ARL-KB-027 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3121,7 +3121,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "2e8f54cc8cc000c94ff2d2bfe530ce5630412fcb10b147caaab4d3cee30295a7"
+      "content_digest": "56f0bf217306b3792d19af4c30d2d71d6d74645583cf7fbfe0d4a91a9585ffb2"
     },
     {
       "id": "ARL-KB-028",
@@ -3132,27 +3132,27 @@
       "title": "Revoked users or stale roles retain access",
       "problem": {
         "statement": "Deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions.",
-        "customer_symptom": "A user or operator may observe deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A removed workspace user or demoted role continues privileged agent, tool or queued actions with a stale session, key, cache or approval.",
+        "credible_failure_or_attack": "Previously issued sessions, delegated credentials, cached ACL decisions, approval grants or queued jobs are accepted after deprovisioning or role downgrade because receiving services fail to reauthorize current user/workspace identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "workspace membership and authoritative roles",
+          "sessions and delegated credentials",
+          "approval grants and cached authorization",
+          "queued, retried and scheduled agent/tool actions",
+          "tenant records and downstream effects",
+          "revocation propagation and audit events"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "enterprise workspaces"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between enterprise workspaces and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "removed user, stale delegated identity, revoked role, invalidation failure, cached authorization or asynchronous job worker",
+        "trust_boundary": "Between current authoritative user/workspace roles and receiving-side enforcement of each session, key, cache, approval, job or tool action. Authentication of a formerly valid token does not confer current authority.",
+        "operational_impact": "An invalidated principal may continue accessing tenant records or triggering privileged side effects. Containment requires dependent-session and approval revocation, queue isolation, correlated evidence and accountable retest."
       },
       "solution_summary": {
-        "recommended_remediation": "Revoke dependent sessions, tokens, approvals and queued authority atomically; record deprovisioning evidence and alert on continued use.",
+        "recommended_remediation": "Bind authority to current user, workspace and role state; invalidate dependent sessions and delegated keys, withdraw approvals, expire role caches, cancel or reauthorize queued work and retry paths before executing tools. Record effective times, propagation latency and correlated denial/effect traces.",
         "default_owner": "Identity lifecycle owner",
         "priority": "P0"
       },
@@ -3176,15 +3176,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-028 user lifecycle, role, workspace-membership or deprovisioning change",
           "ARL-KB-028 session, key, approval, queue or delayed-execution revocation change",
           "ARL-KB-028 continued access after role removal or deprovisioning incident",
           "ARL-KB-028 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3219,7 +3219,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "7b118d8444fee489af94b52f1e31c6c20baef271ef5b9aa9a8ace99e27f2f7ce"
+      "content_digest": "9a239967cf149448fc09b7e5e0591c786ee34eb5edb11ce7c391ec47928b7d6b"
     },
     {
       "id": "ARL-KB-029",
@@ -3229,28 +3229,28 @@
       "category": "Identity, access and tenant isolation",
       "title": "Shared accounts destroy accountability",
       "problem": {
-        "statement": "Multiple people or services act under one identity, making approvals and evidence non-attributable.",
-        "customer_symptom": "A user or operator may observe multiple people or services act under one identity, making approvals and evidence non-attributable; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in multiple people or services act under one identity, making approvals and evidence non-attributable, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "Multiple humans, workloads or agents share or reuse privileged identities, credentials or approvals so consequential actions cannot be reliably attributed to the accountable actor.",
+        "customer_symptom": "Audit records show a generic, shared or reused principal for privileged agent, tool, approval or evidence-signing actions, preventing independent attribution to the human, workload owner or delegated subject responsible for the action.",
+        "credible_failure_or_attack": "A shared privileged account, reusable service credential, ambiguous delegated identity, self-approval path or unattributed break-glass mechanism allows different actors to perform consequential operations while audit records collapse them into one apparently valid identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged human accounts and authenticated sessions",
+          "workload, service and agent identities",
+          "delegated user context and impersonation chains",
+          "approval and separation-of-duties records",
+          "tool calls and downstream consequential actions",
+          "security evidence, signatures and audit trails"
         ],
         "default_severity": "high",
-        "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "severity_rationale": "Default high rating reflects the loss of accountability and potential privilege abuse before customer-specific exposure, action impact, compensating controls and exception governance are verified.",
         "applicability": [
           "organisations requiring accountable decisions"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations requiring accountable decisions and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If multiple people or services act under one identity, making approvals and evidence non-attributable, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "shared privileged user, generic account, reused service credential, ambiguous workload identity, unauthorized delegation, approval conflict or unattributed emergency access",
+        "trust_boundary": "Between authenticated human/workload identity and each consequential approval, delegated agent/tool action, downstream effect and audit record that must preserve independent actor provenance.",
+        "operational_impact": "Unattributable privileged actions weaken prevention, investigation, non-repudiation and accountable human review. Containment may require disabling shared credentials, isolating affected workflows and re-establishing independently attributable identity and approval evidence."
       },
       "solution_summary": {
-        "recommended_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals.",
+        "recommended_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed.",
         "default_owner": "Identity owner",
         "priority": "P1"
       },
@@ -3266,15 +3266,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-029 identity, privileged-account, workload-identity or approval-attribution change",
           "ARL-KB-029 introduction of shared, generic, break-glass or service credentials",
           "ARL-KB-029 unattributable privileged action or shared-account incident",
           "ARL-KB-029 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3309,7 +3309,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "841a557f997753b1a56875550346c45bd5a58e0f24fcfda58dad8b9eeead29db"
+      "content_digest": "1e4c103f9e99834f7e74fa2ef404543d37af3fcc9845866ed12f7a4f57ac6b79"
     },
     {
       "id": "ARL-KB-030",

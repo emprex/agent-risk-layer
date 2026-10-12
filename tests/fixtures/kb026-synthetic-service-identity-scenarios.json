@@ -1,0 +1,81 @@
+{
+  "schema": "arl.kb026.synthetic-service-identity-scenarios.v1",
+  "status": "design_only_not_executed",
+  "target": {
+    "repository": "arl-target-mcp-agent",
+    "frozenSha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5"
+  },
+  "guardrails": {
+    "ownerAuthorizedRoeRequired": true,
+    "syntheticIdentitiesOnly": true,
+    "activeNetworkTestsExecuted": false,
+    "automaticPassAllowed": false
+  },
+  "scenarios": [
+    {
+      "id": "svc-positive",
+      "class": "positive",
+      "actor": "synthetic_service_gateway_A",
+      "destination": "synthetic_tool_gateway",
+      "claims": "correct issuer,audience,operation and short-lived token",
+      "expected": "allow permitted synthetic action; correlate service identity and downstream outcome"
+    },
+    {
+      "id": "svc-no-identity",
+      "class": "negative",
+      "actor": "anonymous synthetic client",
+      "destination": "synthetic_tool_gateway",
+      "claims": "none",
+      "expected": "deny before tool call, data disclosure or state change"
+    },
+    {
+      "id": "svc-wrong-audience",
+      "class": "negative",
+      "actor": "synthetic_service_gateway_A",
+      "destination": "synthetic_tool_gateway",
+      "claims": "signed identity for different audience",
+      "expected": "deny; wrong audience not accepted even on internal network"
+    },
+    {
+      "id": "svc-retired-credential",
+      "class": "negative",
+      "actor": "synthetic_service_gateway_A",
+      "destination": "synthetic_tool_gateway",
+      "claims": "expired or revoked synthetic credential",
+      "expected": "deny; no downstream side effect"
+    },
+    {
+      "id": "svc-confused-deputy",
+      "class": "negative",
+      "actor": "synthetic_agent_A",
+      "destination": "synthetic_tool_gateway",
+      "claims": "valid upstream service identity but unauthorized delegated user/tenant action",
+      "expected": "deny unauthorized delegated action; service identity alone does not grant user authority"
+    },
+    {
+      "id": "svc-replay",
+      "class": "negative",
+      "actor": "synthetic_service_gateway_A",
+      "destination": "synthetic_tool_gateway",
+      "claims": "replayed synthetic one-time token",
+      "expected": "deny replay; no duplicate effect"
+    },
+    {
+      "id": "svc-async-context",
+      "class": "negative",
+      "actor": "synthetic_job_worker_B",
+      "destination": "synthetic_vector_store",
+      "claims": "inherited upstream audience or absent service identity",
+      "expected": "deny and preserve correct user/tenant service-hop context"
+    }
+  ],
+  "requiredObservations": [
+    "exact build and ROE binding",
+    "request identity and audience metadata, redacted",
+    "authorization policy digest and decision",
+    "tool or downstream effect outcome",
+    "correlation ID and trace provenance",
+    "tester and reviewer signoff",
+    "known untested paths"
+  ]
+}

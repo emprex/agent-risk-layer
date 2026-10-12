@@ -191,6 +191,17 @@ function collectTextSignals(
   const credentialRefs = new Map();
   const endpointHashes = new Map();
   const mcpToolFiles = new Map();
+  // Candidate code/config signals only; never claim authenticated enforcement.
+  const workloadIdentityRefs = new Map();
+  let workloadIdentityMatchedFileCount = 0;
+  const workloadSignals = Object.freeze({
+    audience_check_hint: /\b(?:audience|aud)\b/i,
+    issuer_check_hint: /\b(?:issuer|iss)\b/i,
+    identity_validation_hint: /\b(?:verify[_ -]?(?:jwt|token)|jwt\.decode|jwt\.verify|jwtVerify|require[_ -]?auth)\b/i,
+    mutual_tls_hint: /\b(?:mTLS|mutual[_ -]?tls|client[_ -]?cert)\b/i,
+    workload_identity_hint: /\b(?:workload[_ -]?identity|service[_ -]?account|spiffe)\b/i
+  });
+
 
   const textCandidates =
     files.filter((file) =>
@@ -226,6 +237,16 @@ function collectTextSignals(
         ref.pathHash,
         ref
       );
+    }
+
+    const tags = Object.entries(workloadSignals)
+      .filter(([,pattern]) => pattern.test(text))
+      .map(([tag]) => tag);
+    if (tags.length >= 2) {
+      workloadIdentityMatchedFileCount += 1;
+      if (workloadIdentityRefs.size < 12) {
+        workloadIdentityRefs.set(ref.pathHash, { ...ref, signalTypes: tags });
+      }
     }
 
     for (
@@ -265,6 +286,9 @@ function collectTextSignals(
     externalDestinationObservations:
       [...endpointHashes.values()]
         .slice(0, 40),
+    workloadIdentitySignalCandidates: [...workloadIdentityRefs.values()],
+    workloadIdentityCandidateCount: workloadIdentityMatchedFileCount,
+    workloadIdentityCandidateLimit: 12,
     textScanCoverage: {
       candidatesWithinTrackedFileLimit: textCandidates.length,
       attempted: inspectedTextCandidates.length,
@@ -502,6 +526,16 @@ export function collectDeterministicEvidence({
               collector,
               facts
             );
+          if (collector === 'source_and_configuration' &&
+              /\bARL-KB-026\b/i.test(text)) {
+            observations[collector].workloadIdentitySignalCandidates =
+              facts.workloadIdentitySignalCandidates;
+            observations[collector].workloadIdentityCandidateCount =
+              facts.workloadIdentityCandidateCount;
+            observations[collector].workloadIdentityCandidateLimit = 12;
+            observations[collector].workloadIdentityCoverage =
+              facts.discoveryCoverage;
+          }
         }
 
         return {
