@@ -1168,6 +1168,18 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       controlId: 'ARL-KB-006',
       systemSnapshotId: detail?.systemSnapshot?.id || null,
       findings,
+      authoritativeChain: {
+        currentStage: detail?.chain?.currentStage || null,
+        chainStatus: detail?.chain?.chainStatus || null,
+        nextAction: detail?.chain?.nextAction || null
+      },
+      currentTests: (detail?.tests || []).map(item => ({
+        id: item.id,
+        result: item.result,
+        findingId: item.findingId || null,
+        systemSnapshotId: item.systemSnapshotId || null,
+        executionKind: item.executionKind || null
+      })),
       initialFailures: failed.map(item => ({
         id: item.id,
         result: item.result,
