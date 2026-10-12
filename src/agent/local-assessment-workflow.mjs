@@ -17,6 +17,7 @@ import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLo
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
 import { validateCanonicalManualEvidenceChecklist } from './manual-evidence-checklist.mjs';
+import { requireInconclusiveReviewEvidence, isInconclusiveReviewAlreadyDocumented } from './inconclusive-review-eligibility.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import { runAuthoritativeControlSourceReview } from './tools/run-authoritative-control-test.mjs';
@@ -1139,53 +1140,19 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     const detail = await getControlIntelligenceControl({
       projectId: options.projectId, controlId, userId: options.userId
     });
-    if (!snapshotId || !revision ||
-        localFrozenInspection?.binding?.verified !== true ||
-        localFrozenInspection?.target?.dirty !== false ||
-        localFrozenInspection?.binding?.revisionBefore !== revision ||
-        localFrozenInspection?.binding?.revisionAfter !== revision ||
-        detail?.systemSnapshot?.id !== snapshotId ||
-        detail?.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !== revision ||
-        detail?.chain?.currentStage !== 'test' ||
-        detail?.chain?.status === 'passed' ||
-        detail?.chain?.status === 'failed') {
-      throw new Error('Inconclusive disposition requires the same verified frozen target, authoritative snapshot and inconclusive test-stage control.');
-    }
+    const reviewEvidence = requireInconclusiveReviewEvidence({
+      detail, snapshotId, revision, frozenInspection: localFrozenInspection, controlId
+    });
     const reviews = await db.prepare(
       "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 500"
     ).all(options.userId, 'arl.control.inconclusive_review');
-    const already = reviews.some(row => {
-      try {
-        const event = JSON.parse(row.properties_json);
-        return event.projectId === options.projectId &&
-          event.controlId === controlId &&
-          event.systemSnapshotId === snapshotId &&
-          event.disposition === 'inconclusive_documented';
-      } catch { return false; }
-    });
-    if (already) {
+    if (isInconclusiveReviewAlreadyDocumented(reviews, {
+      projectId: options.projectId, controlId, snapshotId
+    })) {
       return {
         ...current,
         answer: 'Already documented: ' + controlId + ' INCONCLUSIVE; no duplicate review written.\\n' + current.answer
       };
-    }
-    const tests = [...(detail.tests || []), ...(detail.testHistory || [])];
-    const evidence = [...(detail.evidence || []), ...(detail.evidenceHistory || [])];
-    const reviewEvidence = evidence.find(item =>
-      item.systemSnapshotId === snapshotId &&
-      item.controlId === controlId &&
-      item.retentionStatus === 'active' &&
-      item.verificationState === 'verified' &&
-      item.sourceType === 'consolidated_human_review' &&
-      tests.some(test =>
-        test.id === item.testExecutionId &&
-        test.systemSnapshotId === snapshotId &&
-        test.controlId === controlId &&
-        test.result === 'inconclusive' &&
-        test.executionMethod === 'consolidated_human_review')
-    );
-    if (!reviewEvidence) {
-      throw new Error('Inconclusive administrative disposition requires linked, current-snapshot, verified human review evidence and an inconclusive human test.');
     }
     const entry = {
       schema: 'arl.control.inconclusive-review.v1',
