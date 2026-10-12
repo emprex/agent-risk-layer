@@ -44,6 +44,7 @@ import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.m
 import { buildKb008PrivacyEvidenceView } from './kb008-privacy-evidence-view.mjs';
 import { buildOfflineOperatorReviewDashboard, writeOfflineOperatorReviewDashboard } from './offline-operator-review-dashboard.mjs';
 import { freezeLocalRepository } from './tools/freeze-local-repository.mjs';
+import { assessIndependentControlTestGate } from './independent-control-test-gate.mjs';
 
 
 async function readCurrentControlQueue(options) {
@@ -1509,6 +1510,29 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       options
     );
   }
+  // Explicit selection preflight: keeps unrelated open findings and global gates unchanged.
+  // An independent test must still obtain an owner ROE and actually execute or record
+  // trustworthy observations before any conclusive decision.
+  if (/^Preflight independent control test ARL-KB-\\d{3}[.!?]*$/i.test(request.trim())) {
+    const controlId = /^Preflight independent control test (ARL-KB-\\d{3})/i.exec(request.trim())[1].toUpperCase();
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId, controlId, userId:options.userId
+    });
+    const state = (await runArlAgent(repositoryPath, 'Where are we?', options))
+      ?.canonicalData?.workflowState;
+    const preflight = assessIndependentControlTestGate({
+      controlId, detail, frozenInspection:localFrozenInspection,
+      assessmentId:options.assessmentId,
+      expectedSnapshotId:state?.authoritativeArtifacts?.assessmentContext?.systemSnapshotId
+    });
+    return {
+      canonicalData:{independentControlTestPreflight:preflight,
+        securityStateChanged:false, deploymentDecisionWritten:false, humanReviewRequired:true},
+      answer:'Independent control test preflight (read-only): '+JSON.stringify(preflight)+
+        '\\nNo test authorised, executed or marked passed; global remediation gate unchanged.'
+    };
+  }
+
   if (request.startsWith('Authorise active control test ')) {
     let input;
 
