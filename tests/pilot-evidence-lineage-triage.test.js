@@ -103,6 +103,37 @@ test('fails closed for truncated JSON and historical source observation',()=>{
   assert.equal(historical.controls[0].sourceRecords.length,0);
 });
 
+test('preserves recovered malformed v2 history without reporting it as an active lineage issue', () => {
+  const oldRef = 'arl_frozen_source_evidence_collection_v2:' + rev + ':ARL-KB-007:' + 'c'.repeat(64);
+  const oldTest = {
+    ...testResult,
+    id: 'test-old',
+    inputReference: oldRef,
+    observedResult: 'Requirement-specific deterministic observations:\n{"truncated":'
+  };
+  const oldEvidence = {
+    ...evidence,
+    id: 'ev-old',
+    testExecutionId: 'test-old',
+    sourceReference: oldRef
+  };
+  const result = triage({
+    ...detail,
+    tests: [testResult, oldTest],
+    testHistory: [],
+    evidence: [evidence, oldEvidence],
+    evidenceHistory: []
+  });
+  assert.equal(result.summary.staticCandidates, 1);
+  assert.equal(result.summary.sourceLineageIssues, 0);
+  assert.equal(result.summary.historicalSourceLineageIssues, 1);
+  assert.equal(result.controls[0].sourceRecords.length, 2);
+  const historical = result.controls[0].sourceRecords.find(row => row.evidenceId === 'ev-old');
+  assert.equal(historical.lineageStatus, 'structured_observation_truncated');
+  assert.equal(historical.lineageIssueState, 'historical_preserved_after_valid_recollection');
+  assert.equal(result.controls[0].passInferred, false);
+});
+
 test('rejects an incomplete plan instead of claiming that a missing control was analysed',()=>{
   assert.throws(()=>buildPilotEvidenceLineageTriage({...plan,controlCount:12},[detail]),/Complete snapshot-bound/);
 });
