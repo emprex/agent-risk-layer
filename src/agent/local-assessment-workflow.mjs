@@ -1127,6 +1127,97 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  // Generic, human-directed administrative disposition. It removes an operator
+  // queue item, never resolves its security evidence gap or readiness HOLD.
+  const concludeInconclusive = /^Document inconclusive review (ARL-KB-\\d{3})$/.exec(request.trim());
+  if (concludeInconclusive) {
+    const controlId = concludeInconclusive[1];
+    const current = await runArlAgent(repositoryPath, 'Where are we?', options);
+    const state = current?.canonicalData?.workflowState || {};
+    const snapshotId = state.authoritativeArtifacts?.assessmentContext?.systemSnapshotId;
+    const revision = localFrozenInspection?.target?.revision;
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId, userId: options.userId
+    });
+    if (!snapshotId || !revision ||
+        localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.binding?.revisionBefore !== revision ||
+        localFrozenInspection?.binding?.revisionAfter !== revision ||
+        detail?.systemSnapshot?.id !== snapshotId ||
+        detail?.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !== revision ||
+        detail?.chain?.currentStage !== 'test' ||
+        detail?.chain?.status === 'passed' ||
+        detail?.chain?.status === 'failed') {
+      throw new Error('Inconclusive disposition requires the same verified frozen target, authoritative snapshot and inconclusive test-stage control.');
+    }
+    const reviews = await db.prepare(
+      "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 500"
+    ).all(options.userId, 'arl.control.inconclusive_review');
+    const already = reviews.some(row => {
+      try {
+        const event = JSON.parse(row.properties_json);
+        return event.projectId === options.projectId &&
+          event.controlId === controlId &&
+          event.systemSnapshotId === snapshotId &&
+          event.disposition === 'inconclusive_documented';
+      } catch { return false; }
+    });
+    if (already) {
+      return {
+        ...current,
+        answer: 'Already documented: ' + controlId + ' INCONCLUSIVE; no duplicate review written.\\n' + current.answer
+      };
+    }
+    const tests = [...(detail.tests || []), ...(detail.testHistory || [])];
+    const evidence = [...(detail.evidence || []), ...(detail.evidenceHistory || [])];
+    const reviewEvidence = evidence.find(item =>
+      item.systemSnapshotId === snapshotId &&
+      item.controlId === controlId &&
+      item.retentionStatus === 'active' &&
+      item.verificationState === 'verified' &&
+      item.sourceType === 'consolidated_human_review' &&
+      tests.some(test =>
+        test.id === item.testExecutionId &&
+        test.systemSnapshotId === snapshotId &&
+        test.controlId === controlId &&
+        test.result === 'inconclusive' &&
+        test.executionMethod === 'consolidated_human_review')
+    );
+    if (!reviewEvidence) {
+      throw new Error('Inconclusive administrative disposition requires linked, current-snapshot, verified human review evidence and an inconclusive human test.');
+    }
+    const entry = {
+      schema: 'arl.control.inconclusive-review.v1',
+      projectId: options.projectId, controlId, systemSnapshotId: snapshotId,
+      targetRevision: revision,
+      testExecutionId: reviewEvidence.testExecutionId,
+      evidenceId: reviewEvidence.id,
+      evidenceSourceReference: reviewEvidence.sourceReference,
+      disposition: 'inconclusive_documented',
+      conclusion: 'Human-reviewed evidence remains INCONCLUSIVE / EVIDENCE GAP. Canonical requirements and security gaps remain open.',
+      deploymentApproved: false, securityControlSatisfied: false,
+      additionalEvidenceRequired: true,
+      actorId: options.userId, recordedAt: nowIso()
+    };
+    const eventId = id('evt_');
+    await db.prepare(
+      'INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)'
+    ).run(eventId, options.userId, 'arl.control.inconclusive_review',
+      JSON.stringify(entry), entry.recordedAt);
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    return {
+      ...next,
+      canonicalData: {
+        ...next.canonicalData,
+        inconclusiveReview: { ...entry, eventId },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false
+      },
+      answer: controlId + ' operator work item documented INCONCLUSIVE / EVIDENCE GAP. Security gaps remain open; no PASS, finding closure or deployment approval.\\n' + next.answer
+    };
+  }
+
   if (request.trim() === 'Conclude KB-006 inconclusive review') {
     const current = await runArlAgent(repositoryPath, 'Where are we?', options);
     const state = current?.canonicalData?.workflowState || {};
