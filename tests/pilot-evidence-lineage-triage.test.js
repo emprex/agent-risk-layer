@@ -136,6 +136,23 @@ test('preserves recovered malformed v2 history without reporting it as an active
   assert.equal(result.controls[0].passInferred, false);
 });
 
+test('current recollection supersedes only a historical check digest and never the current test',()=>{
+  const oldRef='arl_frozen_source_evidence_collection_v2:'+rev+':ARL-KB-007:'+'c'.repeat(64);
+  const prior={...testResult,id:'old-digest-test',checkDigest:'old-digest',inputReference:oldRef};
+  const priorEvidence={...evidence,id:'old-digest-evidence',testExecutionId:prior.id,sourceReference:oldRef};
+  const result=triage({...detail,tests:[prior,testResult],testHistory:[],
+    evidence:[priorEvidence,evidence],evidenceHistory:[]});
+  assert.equal(result.summary.sourceLineageIssues,0);
+  assert.equal(result.summary.historicalSourceLineageIssues,1);
+  assert.equal(result.summary.staticCandidates,1);
+  assert.equal(result.controls[0].sourceRecords.find(x=>x.evidenceId===priorEvidence.id)
+    .lineageIssueState,'historical_preserved_after_valid_recollection');
+  const noRefresh=triage({...detail,tests:[prior],testHistory:[],
+    evidence:[priorEvidence],evidenceHistory:[]});
+  assert.equal(noRefresh.summary.sourceLineageIssues,1);
+  assert.equal(noRefresh.summary.historicalSourceLineageIssues,0);
+});
+
 test('a valid recollection never masks an independent broken source link', () => {
   const broken = {
     ...evidence,
