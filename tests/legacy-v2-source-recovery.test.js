@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isLegacyIncompleteV2Source } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { isLegacyIncompleteV2Source, isStaleCheckDigestV2Source } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const revision = 'a'.repeat(40);
 const controlId = 'ARL-KB-023';
@@ -57,4 +57,15 @@ test('reject request without valid control identity', () => {
 
 test('historical digest changes do not make complete evidence recoverable', () => {
   assert.equal(isLegacyIncompleteV2Source({...complete,checkDigest:'d'.repeat(64)},identity),false);
+});
+
+test('refreshes only a prior v2 check digest under identical snapshot, check and frozen SHA',()=>{
+  const stale={...complete,checkDigest:'d'.repeat(64)};
+  assert.equal(isStaleCheckDigestV2Source(stale,identity),true);
+  assert.equal(isStaleCheckDigestV2Source(complete,identity),false);
+  assert.equal(isStaleCheckDigestV2Source({...stale,systemSnapshotId:'other'},identity),false);
+  assert.equal(isStaleCheckDigestV2Source({...stale,checkId:'other'},identity),false);
+  assert.equal(isStaleCheckDigestV2Source({...stale,checkDigest:'bad'},identity),false);
+  assert.equal(isStaleCheckDigestV2Source({...stale,result:'passed'},identity),false);
+  assert.equal(isStaleCheckDigestV2Source({...stale,inputReference:'wrong'},identity),false);
 });
