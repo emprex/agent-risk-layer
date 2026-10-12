@@ -112,7 +112,7 @@ async function unresolvedHistoricalFailureRows(projectId, snapshotId) {
     FROM control_test_executions t
     LEFT JOIN remediation_items r ON r.id=t.finding_id AND r.project_id=t.project_id
     WHERE t.project_id=? AND t.result='failed' AND t.execution_kind='initial' AND t.system_snapshot_id<>?
-      AND (t.finding_id IS NULL OR r.id IS NULL OR r.status NOT IN ('verified_closed','accepted_risk'))
+      AND (t.finding_id IS NULL OR r.id IS NULL OR r.status NOT IN ('verified_closed','accepted_risk','invalidated_unsubstantiated'))
     ORDER BY t.completed_at ASC,t.id ASC`)
     .all(projectId, snapshotId);
 }
@@ -122,7 +122,7 @@ async function historicalOpenFindings(projectId, snapshotId) {
   return db.prepare(`SELECT DISTINCT r.id,r.title,r.severity,r.status,r.updated_at,b.entry_id,b.system_snapshot_id
     FROM remediation_items r
     JOIN control_finding_bindings b ON b.finding_id=r.id AND b.project_id=r.project_id
-    WHERE r.project_id=? AND b.system_snapshot_id<>? AND r.status NOT IN ('verified_closed','accepted_risk')
+    WHERE r.project_id=? AND b.system_snapshot_id<>? AND r.status NOT IN ('verified_closed','accepted_risk','invalidated_unsubstantiated')
     ORDER BY r.updated_at DESC,r.id DESC`)
     .all(projectId, snapshotId);
 }
