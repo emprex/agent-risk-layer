@@ -1533,6 +1533,67 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  // Independently scoped human test plan; unrelated open findings remain untouched.
+  if (request.startsWith('Authorise independent control test ')) {
+    const payload = JSON.parse(request.slice('Authorise independent control test '.length));
+    const controlId = String(payload?.controlId || '').trim();
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId,userId:options.userId
+    });
+    const check = assessIndependentControlTestGate({
+      controlId,detail,frozenInspection:localFrozenInspection,
+      assessmentId:options.assessmentId,expectedSnapshotId:detail?.systemSnapshot?.id
+    });
+    if (!check.available) throw new Error(check.reason);
+    // The operator must explicitly declare a bounded test plan, not just a control ID.
+    const plan = String(payload?.plan || '').trim();
+    if (plan.length < 40 || !Array.isArray(payload?.testCases) ||
+        !payload.testCases.length || payload.testCases.some(t =>
+          !t || String(t.expected || '').trim().length < 10 ||
+          String(t.action || '').trim().length < 10)) {
+      throw new Error('Independent authorisation requires a concrete plan (40+ characters) and testCases with action and expected observations.');
+    }
+    const origin = 'http://127.0.0.1:' + (process.env.ARL_TARGET_ADAPTER_PORT || '8787');
+    const adapter = await verifyLocalTargetAdapter({
+      repositoryPath,expectedRevision:check.targetRevision,origin
+    });
+    if (adapter.available !== true) throw new Error('Verified local target adapter required: '+(adapter.reason || 'unavailable'));
+    const now = Date.now();
+    const marker = 'ARL independent active control test '+controlId;
+    const active = (await listRedTeamAuthorisations(options)).filter(a =>
+      a.status === 'active' && a.environment === 'local' &&
+      a.endpointOrigin === origin && Date.parse(a.windowStart) <= now &&
+      Date.parse(a.windowEnd) > now && a.permittedActions?.includes(marker));
+    if (active.length > 1) throw new Error('Ambiguous active independent ROE.');
+    const roe = active[0] || await createRedTeamAuthorisation({...options,input:{
+      environment:'local',targetName:'Independent '+controlId,
+      endpointOrigin:origin,authorityBasis:'owner',authorisedBy:os.userInfo().username,
+      authorisedRole:'Local repository operator',emergencyContact:'Local terminal operator '+os.userInfo().username,
+      windowStart:new Date(now-1000).toISOString(),windowEnd:new Date(now+3600000).toISOString(),
+      permittedActions:[marker],prohibitedActions:['Production effects','External actions','Real credentials or sensitive data'],
+      dataClassification:'synthetic-only',retentionDays:30,syntheticDataOnly:true,dryRunToolsOnly:true,
+      noProductionEffects:true,confirmation:ROE_CONFIRMATION
+    }});
+    const reference = 'roe:'+roe.id+':control:'+controlId;
+    const existing = (detail.evidence || []).find(e=>e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference && e.retentionStatus==='active');
+    if (!existing) {
+      const ev = await recordControlEvidence({projectId:options.projectId,controlId,
+        userId:options.userId,input:{systemSnapshotId:check.systemSnapshotId,
+        evidenceClass:'human_provided',sourceType:'active_test_plan_authorisation',
+        sourceReference:reference,limitations:'Only bounded synthetic dry-run testing through the verified local adapter. '+plan}});
+      await verifyExplicitHumanEvidence({projectId:options.projectId,evidenceId:ev.id,
+        userId:options.userId,controlId,verificationScope:'explicit_independent_test_authorisation',
+        reason:'The local owner explicitly authorised independently bounded synthetic tests for '+controlId+' on the frozen snapshot.'});
+    }
+    return {canonicalData:{controlId,systemSnapshotId:check.systemSnapshotId,
+      authorisationReference:reference,testCases:payload.testCases,
+      status:'authorised_not_executed',securityStateChanged:true,
+      deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Independent '+controlId+' plan authorised, NOT executed. ROE '+reference+
+      '. Run actual synthetic cases through the verified local adapter and record observed results separately. KB-006 remains open; deployment HOLD.'};
+  }
+
   if (request.startsWith('Authorise active control test ')) {
     let input;
 
