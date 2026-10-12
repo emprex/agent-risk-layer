@@ -110,6 +110,38 @@ test('groups same static collector and similar human paperwork without sharing v
   assert.equal(result.deploymentDecisionWritten,false);
 });
 
+test('classifies every active lineage exception without losing historical audit records', () => {
+  const recovered = {
+    evidenceId:'e-recovered',
+    sourceType:'arl_frozen_source_evidence_collection_v2',
+    lineageStatus:'structured_observation_truncated',
+    lineageIssueState:'historical_preserved_after_valid_recollection'
+  };
+  const broken = {
+    evidenceId:'e-broken',sourceType:'arl_frozen_source_evidence_collection_v2',
+    lineageStatus:'linked_test_missing',lineageIssueState:'active'
+  };
+  const changed = controls.map((item,i) => i !== 1 ? item : ({
+    ...item,
+    sourceRecords:[...item.sourceRecords,recovered,broken],
+    summary:{...item.summary,sourceLineageIssues:2}
+  }));
+  const result=buildAssessmentEvidenceReviewPacks(index,[triage({
+    controls:changed,
+    summary:{...triage().summary,sourceLineageIssues:2}
+  })]);
+  assert.equal(result.summary.lineageExceptions,2);
+  assert.equal(result.summary.historicalLineageExceptions,1);
+  assert.deepEqual(result.summary.lineageExceptionsByStatus,{
+    invalid_or_truncated_json:1,linked_test_missing:1
+  });
+  assert.deepEqual(result.lineageExceptionsByControl,{'ARL-KB-008':2});
+  assert.equal(result.historicalLineageExceptions[0].evidenceId,'e-recovered');
+  assert.equal(result.lineageExceptions.length,2);
+  assert.equal(result.boundaries.evidenceAccepted,false);
+  assert.equal(result.securityStateChanged,false);
+});
+
 test('never treats an absent static observation as existing shared evidence', () => {
   const result = buildAssessmentEvidenceReviewPacks(index,[triage()]);
   const req = result.staticCollection.find(pack => pack.theme === 'source_and_configuration').tasks[0];
