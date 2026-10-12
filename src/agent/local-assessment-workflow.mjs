@@ -163,8 +163,8 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         '\\nNo runtime test or security verdict. Existing evidence is preserved.'
     };
   }
-  if (/^Recover legacy v2 source evidence ARL-KB-\\d{3}[.!?]*$/i.test(request.trim())) {
-    const match = /^Recover legacy v2 source evidence (ARL-KB-\\d{3})[.!?]*$/i.exec(request.trim());
+  if (/^Recover legacy v2 source evidence ARL-KB-\d{3}[.!?]*$/i.test(request.trim())) {
+    const match = /^Recover legacy v2 source evidence (ARL-KB-\d{3})[.!?]*$/i.exec(request.trim());
     const controlId = match[1].toUpperCase();
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
@@ -193,7 +193,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         securityStateChanged:outcome.securityStateChanged === true,
         deploymentDecisionWritten:false,humanReviewRequired:true},
       answer:'Legacy v2 static source recovery: '+JSON.stringify(outcome)+
-        '\\nNo active tests or security verdict; historical evidence remains preserved.'
+        '\nNo active tests or security verdict; historical evidence remains preserved.'
     };
   }
   if (/^Recover structured frozen source evidence ARL-KB-008[.!?]*$/i.test(request.trim())) {
