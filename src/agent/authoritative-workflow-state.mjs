@@ -78,7 +78,7 @@ function mapEvidencePlanControls(evidencePlan) {
     });
 }
 
-function selectScopedControlState(
+export function selectScopedControlState(
   controlIntelligence,
   planMappings,
   readiness,
