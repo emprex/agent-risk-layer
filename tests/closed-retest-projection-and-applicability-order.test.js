@@ -9,7 +9,7 @@ test('closed finding is not reopened by an older failed retest once a later exac
   );
 
   assert.match(source, /failedRetestSuperseded/);
-  assert.match(source, /\['verified_closed','accepted_risk'\]\.includes\(finding\.status\)/);
+  assert.match(source, /\['verified_closed','accepted_risk','invalidated_unsubstantiated'\]\.includes\(finding\.status\)/);
   assert.match(source, /candidate\.retest_of_execution_id!==row\.retest_of_execution_id/);
   assert.match(source, /passedAt>=failedAt/);
   assert.match(
