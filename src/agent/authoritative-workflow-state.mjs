@@ -1254,11 +1254,20 @@ export async function getAuthoritativeWorkflowState({
 
     controlIntelligence = {
       ...controlIntelligence,
-      items: enrichedItems.map((item) => ({
-        ...item,
-        authoritativeDetail:
-          detailByControl.get(item.controlId) || null
-      }))
+      items: enrichedItems.map((item) => {
+        const authoritativeDetail =
+          detailByControl.get(item.controlId) || null;
+        const detailStage =
+          authoritativeDetail?.chain?.currentStage || null;
+        return {
+          ...item,
+          // A list projection can lag a control's authoritative chain.
+          // Never offer active-test execution for a control already in
+          // remediation or another non-test stage.
+          currentStage: detailStage || item.currentStage,
+          authoritativeDetail
+        };
+      })
     };
   }
 
