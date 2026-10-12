@@ -1513,8 +1513,8 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   // Explicit selection preflight: keeps unrelated open findings and global gates unchanged.
   // An independent test must still obtain an owner ROE and actually execute or record
   // trustworthy observations before any conclusive decision.
-  if (/^Preflight independent control test ARL-KB-\\d{3}[.!?]*$/i.test(request.trim())) {
-    const controlId = /^Preflight independent control test (ARL-KB-\\d{3})/i.exec(request.trim())[1].toUpperCase();
+  if (/^Preflight independent control test ARL-KB-\d{3}[.!?]*$/i.test(request.trim())) {
+    const controlId = /^Preflight independent control test (ARL-KB-\d{3})/i.exec(request.trim())[1].toUpperCase();
     const detail = await getControlIntelligenceControl({
       projectId:options.projectId, controlId, userId:options.userId
     });
