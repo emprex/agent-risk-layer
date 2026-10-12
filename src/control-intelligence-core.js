@@ -984,11 +984,20 @@ function deriveChains(evaluations, data) {
     const controlId = evaluation.entry_id;
     const findings = data.remediations.filter((row) => row.finding_key === controlId || row.finding_key?.startsWith(`${controlId}-`));
     const open = findings.filter((row) => !['verified_closed','accepted_risk','invalidated_unsubstantiated'].includes(row.status));
-    const currentTests = data.tests.filter((row) => row.entry_id === controlId && (!row.system_snapshot_id || row.system_snapshot_id === evaluation.system_snapshot_id));
+    // Invalidation changes the security attribution, not the immutable test history.
+    // Such failed executions must not continue forcing the remediation chain.
+    const invalidatedFindingIds = new Set(findings
+      .filter((row) => row.status === 'invalidated_unsubstantiated')
+      .map((row) => row.id));
+    const currentTests = data.tests.filter((row) =>
+      row.entry_id === controlId &&
+      (!row.system_snapshot_id || row.system_snapshot_id === evaluation.system_snapshot_id) &&
+      !invalidatedFindingIds.has(row.finding_id));
     const historicalTests = (data.testHistory || data.tests).filter((row) => row.entry_id === controlId);
     const currentEvidence = data.evidence.filter((row) => row.entry_id === controlId && (!row.system_snapshot_id || row.system_snapshot_id === evaluation.system_snapshot_id));
     const historicalEvidence = (data.evidenceHistory || data.evidence).filter((row) => row.entry_id === controlId);
-    const tests = open.length ? historicalTests : currentTests;
+    const tests = (open.length ? historicalTests : currentTests)
+      .filter((row) => !invalidatedFindingIds.has(row.finding_id));
     const evidence = currentEvidence;
     const links = data.links.filter((row) => row.entry_id === controlId);
     const implementationRecorded = open.some((row) => !['open'].includes(row.status));
