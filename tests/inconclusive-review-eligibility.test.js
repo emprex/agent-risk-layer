@@ -55,7 +55,7 @@ test('rejects cross-control, unverified or broken human evidence lineage',()=>{
 });
 
 test('disposition detection is scoped to project, control and exact snapshot',()=>{
-  const event={projectId:'p1',controlId,snapshotId,disposition:'inconclusive_documented'};
+  const event={projectId:'p1',controlId,systemSnapshotId:snapshotId,disposition:'inconclusive_documented'};
   const rows=[{properties_json:JSON.stringify(event)},{properties_json:'{bad'}];
   assert.equal(isInconclusiveReviewAlreadyDocumented(rows,{projectId:'p1',controlId,snapshotId}),true);
   assert.equal(isInconclusiveReviewAlreadyDocumented(rows,{projectId:'p1',controlId,snapshotId:'other'}),false);
