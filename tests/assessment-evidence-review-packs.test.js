@@ -136,6 +136,15 @@ test('classifies every active lineage exception without losing historical audit 
     invalid_or_truncated_json:1,linked_test_missing:1
   });
   assert.deepEqual(result.lineageExceptionsByControl,{'ARL-KB-008':2});
+  assert.deepEqual(result.summary.lineageExceptionsByDiagnosticLane,{
+    bounded_recollection_candidate_manual_authorisation_required:1,
+    lineage_or_integrity_manual_investigation_required:1
+  });
+  assert.equal(result.lineageExceptions.find(item => item.evidenceId === 'e-broken').diagnosticLane,
+    'lineage_or_integrity_manual_investigation_required');
+  assert.equal(result.lineageExceptions.find(item => item.evidenceId === 'e-old').diagnosticLane,
+    'bounded_recollection_candidate_manual_authorisation_required');
+
   assert.equal(result.historicalLineageExceptions[0].evidenceId,'e-recovered');
   assert.equal(result.lineageExceptions.length,2);
   assert.equal(result.boundaries.evidenceAccepted,false);
