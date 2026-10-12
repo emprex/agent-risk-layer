@@ -1831,6 +1831,68 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  if (/^Authorise KB-027 synthetic active test[.!?]*$/i.test(request.trim())) {
+    const controlId='ARL-KB-027';
+    const detail=await getControlIntelligenceControl({projectId:options.projectId,
+      controlId,userId:options.userId});
+    const revision=localFrozenInspection?.target?.revision;
+    const snapshot=detail?.systemSnapshot;
+    if(localFrozenInspection?.binding?.verified!==true ||
+       localFrozenInspection?.target?.dirty!==false ||
+       revision!==process.env.ARL_EXPECTED_TARGET_SHA ||
+       snapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId!==options.assessmentId ||
+       snapshot?.assessmentConfiguration?.targetBinding?.revision!==revision ||
+       detail?.chain?.currentStage!=='test' ||
+       detail?.testDefinition?.id!=='ARL-CHK-027') {
+      throw new Error('KB-027 authorisation requires the exact current test stage and frozen assessment.');
+    }
+    const origin='http://127.0.0.1:'+(process.env.ARL_TARGET_ADAPTER_PORT||'8787');
+    const adapter=await verifyLocalTargetAdapter({repositoryPath,
+      expectedRevision:revision,origin});
+    if(adapter.available!==true) return blockedLocalAdapterResult(
+      await runArlAgent(repositoryPath,'Where are we?',options),adapter);
+    const marker='ARL KB-027 synthetic key-scope active test';
+    const now=Date.now();
+    const active=(await listRedTeamAuthorisations(options)).filter(x=>
+      x.status==='active' && x.environment==='local' &&
+      x.endpointOrigin===origin && x.permittedActions?.includes(marker) &&
+      Date.parse(x.windowStart)<=now && Date.parse(x.windowEnd)>now);
+    if(active.length>1)throw new Error('Duplicate KB-027 ROE; revoke ambiguous authorisations.');
+    const authorisation=active[0]||await createRedTeamAuthorisation({...options,input:{
+      environment:'local',targetName:'Local '+path.basename(repositoryPath)+' KB-027',
+      endpointOrigin:origin,authorityBasis:'owner',
+      authorisedBy:os.userInfo().username,authorisedRole:'Local repository operator',
+      emergencyContact:'Local terminal operator '+os.userInfo().username,
+      windowStart:new Date(now-1000).toISOString(),
+      windowEnd:new Date(now+3600000).toISOString(),
+      permittedActions:[marker],
+      prohibitedActions:['Production effects','External actions','Real credentials or sensitive data'],
+      dataClassification:'synthetic-only',retentionDays:30,
+      syntheticDataOnly:true,dryRunToolsOnly:true,noProductionEffects:true,
+      confirmation:ROE_CONFIRMATION
+    }});
+    const reference='roe:'+authorisation.id+':control:ARL-KB-027';
+    const existing=(detail.evidence||[]).find(e=>
+      e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference && e.retentionStatus==='active');
+    if(!existing) {
+      const evidence=await recordControlEvidence({projectId:options.projectId,
+        controlId,userId:options.userId,input:{systemSnapshotId:snapshot.id,
+        evidenceClass:'human_provided',sourceType:'active_test_plan_authorisation',
+        sourceReference:reference,limitations:'Owner-authorised local synthetic keys only. Seven bounded key-scope scenarios; no real keys, production, external effects or automatic verdict.'}});
+      await verifyExplicitHumanEvidence({projectId:options.projectId,
+        evidenceId:evidence.id,userId:options.userId,controlId,
+        verificationScope:'explicit_active_control_test_authorisation',
+        reason:'Owner explicitly authorised bounded KB-027 synthetic local key-scope cases for the frozen target.'});
+    }else if(existing.verificationState!=='verified'){
+      throw new Error('Prior KB-027 authorisation evidence must be verified before testing.');
+    }
+    return {canonicalData:{kb027Plan:{status:'authorised_not_executed',
+      controlId,systemSnapshotId:snapshot.id,reference},
+      securityStateChanged:true,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-027 synthetic active test authorised, NOT executed. Next command: Execute KB-027 synthetic active test.'};
+  }
+
   // KB-027 uses its own owner-authorised test gate, independent of the
   // other controls' remediation states. No static recollection is performed.
   if (/^Execute KB-027 synthetic active test[.!?]*$/i.test(request.trim())) {
