@@ -121,6 +121,24 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
       .filter(evidence => evidence.systemSnapshotId === plan.systemSnapshotId &&
         evidence.retentionStatus === 'active');
     const sources = evidenceRows.map(e => reviewSource(e, testRows, detail, plan.systemSnapshotId));
+
+    // Preserve malformed historical rows for audit, but do not keep reporting
+    // them as active lineage failures once a valid append-only v2 recollection
+    // exists for the same frozen snapshot/control.
+    const validStructuredSources = sources.filter(source =>
+      source.lineageStatus === 'linked_static_observation_unverified_for_criterion');
+    const hasValidStructuredRecollection = validStructuredSources.length > 0;
+    for (const source of sources) {
+      const lineageIssue =
+        source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
+        source.lineageStatus !== 'legacy_static_collection_requires_manual_review';
+      source.lineageIssueState = lineageIssue
+        ? (hasValidStructuredRecollection && source.sourceType === SOURCE_V2
+            ? 'historical_preserved_after_valid_recollection'
+            : 'active')
+        : 'none';
+    }
+
     const requirements = buildCanonicalEvidenceRequirementPlan(detail.testDefinition?.requiredEvidence || []);
     const criteria = requirements.map((entry, i) => {
       const candidateIds = [];
@@ -156,9 +174,9 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
         criterionSatisfied: false
       };
     });
-    const identifiedIssues = sources.filter(source =>
-      source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
-      source.lineageStatus !== 'legacy_static_collection_requires_manual_review');
+    const identifiedIssues = sources.filter(source => source.lineageIssueState === 'active');
+    const historicalIssues = sources.filter(source =>
+      source.lineageIssueState === 'historical_preserved_after_valid_recollection');
     return {
       controlId: item.controlId,
       chainStatus: item.chainStatus,
@@ -171,7 +189,8 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
         partialInventoryCandidates: criteria.filter(c => c.incompleteInventoryCandidate).length,
         humanRequirements: criteria.filter(c => c.mode === 'human_only').length,
         runtimeRequirements: criteria.filter(c => c.mode === 'active_test_or_runtime').length,
-        sourceLineageIssues: identifiedIssues.length
+        sourceLineageIssues: identifiedIssues.length,
+        historicalSourceLineageIssues: historicalIssues.length
       },
       passInferred: false,
       executionAuthorised: false
@@ -184,7 +203,8 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
     partialInventoryCandidates: controls.reduce((n,c) => n + c.summary.partialInventoryCandidates, 0),
     humanRequirements: controls.reduce((n,c) => n + c.summary.humanRequirements, 0),
     runtimeRequirements: controls.reduce((n,c) => n + c.summary.runtimeRequirements, 0),
-    sourceLineageIssues: controls.reduce((n,c) => n + c.summary.sourceLineageIssues, 0)
+    sourceLineageIssues: controls.reduce((n,c) => n + c.summary.sourceLineageIssues, 0),
+    historicalSourceLineageIssues: controls.reduce((n,c) => n + c.summary.historicalSourceLineageIssues, 0)
   };
   return {
     schema: 'arl.agent.pilot-evidence-lineage-triage.v1',
