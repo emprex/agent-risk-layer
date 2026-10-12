@@ -120,6 +120,66 @@ function assertOperatorReviewFrozenBinding(dossier, frozenInspection) {
 
 export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
+  const recoveryBatch = /^Recover legacy v2 source evidence batch ([1-5])$/i.exec(request.trim());
+  if (recoveryBatch) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.target?.revision !== process.env.ARL_EXPECTED_TARGET_SHA ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection.target.revision)) {
+      throw new Error('Bounded recovery requires an exact expected clean frozen Git SHA.');
+    }
+    const batchNumber = Number(recoveryBatch[1]);
+    const {index,triages} = await readAllAssessmentTriages(options);
+    const review = buildAssessmentEvidenceReviewPacks(index, triages);
+    if (review.summary.lineageExceptions !== review.lineageExceptions.length) {
+      throw new Error('Incomplete active lineage inventory.');
+    }
+    const eligible = [...new Set(review.lineageExceptions.filter(item =>
+      item.lineageStatus === 'structured_observation_missing' &&
+      item.diagnosticLane === 'bounded_recollection_candidate_manual_authorisation_required'
+    ).map(item => item.controlId))].sort();
+    const selected = eligible.slice((batchNumber - 1) * 20, batchNumber * 20);
+    const outcomes = [];
+    for (const controlId of selected) {
+      const result = await runLocalAssessment(
+        repositoryPath, 'Recover legacy v2 source evidence ' + controlId,
+        options, localFrozenInspection
+      );
+      const outcome = result.canonicalData?.legacyV2SourceRecovery;
+      if (!outcome || result.canonicalData?.controlId !== controlId ||
+          result.canonicalData?.deploymentDecisionWritten !== false) {
+        throw new Error('Recovery result lacks explicit bounded lineage identity.');
+      }
+      outcomes.push({controlId,executed:outcome.executed === true,
+        effect:outcome.effect || null,reason:outcome.reason || null});
+    }
+    const after = await readAllAssessmentTriages(options);
+    if (after.index.systemSnapshotId !== index.systemSnapshotId ||
+        JSON.stringify(after.index.batches) !== JSON.stringify(index.batches)) {
+      throw new Error('Frozen control set changed during bounded recovery.');
+    }
+    const afterReview = buildAssessmentEvidenceReviewPacks(after.index,after.triages);
+    return {
+      canonicalData:{
+        boundedLegacyV2Recovery:{
+          snapshotId:index.systemSnapshotId,
+          targetRevision:localFrozenInspection.target.revision,
+          batchNumber,eligibleControls:eligible.length,
+          selectedControls:selected,outcomes,
+          before:review.summary.lineageExceptions,
+          after:afterReview.summary.lineageExceptions,
+          remainingByStatus:afterReview.summary.lineageExceptionsByStatus
+        },
+        securityStateChanged:outcomes.some(item=>item.effect === 'authoritative_control_source_review_recorded'),
+        deploymentDecisionWritten:false,humanReviewRequired:true
+      },
+      answer:'Bounded legacy v2 recovery (append-only; no runtime tests): ' +
+        JSON.stringify({batchNumber,selectedControls:selected,outcomes,
+          before:review.summary.lineageExceptions,after:afterReview.summary.lineageExceptions,
+          remainingByStatus:afterReview.summary.lineageExceptionsByStatus},null,2) +
+        '\\nNo evidence approval, PASS/FAIL or deployment decision was inferred.'
+    };
+  }
   if (/(?:bounded test|retest)/i.test(request)) {
     const authorisations = await listRedTeamAuthorisations(options);
     const unsafe = authorisations.some(item => {
