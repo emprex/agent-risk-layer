@@ -2105,24 +2105,45 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         userId: options.userId
       });
 
-    const planEvidence =
-      (detail?.evidence || []).find(
-        (item) =>
-          item?.sourceType ===
-            'active_test_plan_authorisation' &&
-          item?.sourceReference ===
-            action.authorisationReference &&
-          item?.verificationState === 'verified' &&
-          item?.retentionStatus === 'active'
-      );
+    // Resolve the exact verified plan from the authoritative ledger, not the
+    // potentially limited control detail evidence projection.
+    const planRows = await db.prepare(`
+      SELECT id, verification_state, retention_status, system_snapshot_id
+      FROM control_evidence_items
+      WHERE project_id=?
+        AND entry_id=?
+        AND system_snapshot_id=?
+        AND source_type='active_test_plan_authorisation'
+        AND source_reference=?
+      ORDER BY created_at DESC
+    `).all(
+      options.projectId,
+      controlId,
+      systemSnapshotId,
+      action.authorisationReference
+    );
 
-    if (
-      detail?.systemSnapshot?.id !== systemSnapshotId ||
-      detail?.chain?.currentStage !== 'test' ||
-      !planEvidence
-    ) {
+    if (detail?.systemSnapshot?.id !== systemSnapshotId ||
+        detail?.chain?.currentStage !== 'test') {
       throw new Error(
-        'The verified active-test plan is not bound to the current control and snapshot.'
+        'KB-006 execution blocked: current snapshot or control test stage mismatch.'
+      );
+    }
+
+    const planEvidence = planRows.find(
+      (item) => item.verification_state === 'verified' &&
+        item.retention_status === 'active'
+    );
+    if (!planEvidence) {
+      throw new Error(
+        'KB-006 execution blocked: no active, verified plan evidence for the exact action authorisation reference and snapshot. ' +
+        (planRows.length
+          ? 'Matching records exist but their verification/retention states are: ' +
+            planRows.map(item =>
+              item.verification_state + '/' + item.retention_status
+            ).join(', ') + '.'
+          : 'No matching evidence record exists in the authoritative ledger.') +
+        ' No test was executed or security verdict changed.'
       );
     }
 
