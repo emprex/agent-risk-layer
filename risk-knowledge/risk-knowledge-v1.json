@@ -5831,29 +5831,29 @@
       "title": "Service-to-service identity is unauthenticated or shared",
       "problem": {
         "statement": "Internal components trust network location or a shared secret, so compromise of one service grants broad access.",
-        "customer_symptom": "A user or operator may observe internal components trust network location or a shared secret, so compromise of one service grants broad access; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in internal components trust network location or a shared secret, so compromise of one service grants broad access, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "An internal agent, MCP tool or gateway request may be authorised merely because it originates on a trusted network or presents a shared secret, allowing a compromised service to reach another service's resources or actions.",
+        "credible_failure_or_attack": "A compromised or impersonated workload, stolen shared bearer credential, wrong-audience token or forwarded service claim may cross an internal service boundary and reach tools, retrieval, jobs or evidence stores without receiving-side identity, audience and operation checks.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP/tool gateways",
+          "model and retrieval service endpoints",
+          "workload identities, issuer and audience trust policies",
+          "short-lived tokens, certificates and credential stores",
+          "background jobs and delegated user or tenant context",
+          "downstream data, tool actions and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "distributed agents"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between distributed agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If internal components trust network location or a shared secret, so compromise of one service grants broad access, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "compromised internal workload, impersonated service, reused credential, misconfigured receiver or unsafe delegation",
+        "trust_boundary": "Each hop between agent, orchestration, model, retrieval, MCP/tool and downstream services must authenticate the calling workload and authorize the audience, operation and delegated context at the receiver, rather than trusting a private network or model output.",
+        "operational_impact": "An unauthorized internal service hop could disclose data or trigger privileged actions across connected tools. The affected route may require immediate isolation, identity revocation, evidence preservation, remedial enforcement and an exact-version accountable human retest."
       },
       "check": {
         "id": "ARL-CHK-026",
-        "objective": "Determine whether internal services authenticate each other with distinct attributable workload identities and enforce the intended service audience and privilege boundaries.",
-        "method": "Inspect calls between orchestrator, model gateway, tool gateway, vector store, evidence service and other relevant components for mutual identity, service-specific audience and short-lived credential enforcement. Attempt a synthetic request using an absent, wrong-service or retired workload identity and verify denial.",
+        "objective": "Determine whether each applicable service hop authenticates a distinct attributable workload identity, validates intended issuer/audience and authorizes the operation and delegated context before data disclosure or downstream side effects on the exact assessed build.",
+        "method": "Document the frozen build, relevant service routes and accountable workload identity/audience policy. Inspect receiving-side authentication, audience and operation checks, credential lifetime/revocation, delegated user or tenant context and asynchronous identity propagation. With explicit written owner authorization, run bounded synthetic permitted-service requests and negative variants for absent, wrong-audience, expired/retired, replayed and confused-deputy identities; correlate authorization, response and downstream state evidence. Source hints alone are not proof of execution, and missing tests do not prove a vulnerability.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -5861,56 +5861,59 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-026 assessed system, version, environment and scope for Service-to-service identity is unauthenticated or shared",
-          "ARL-KB-026 control configuration or source location showing how reduce the likelihood and impact of service-to-service identity is unauthenticated or shared and make the remaining risk visible.",
-          "ARL-KB-026 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-026 policy, authorization, tool or audit events proving whether the tested service-to-service identity is unauthenticated or shared path executed",
-          "ARL-KB-026 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-026 exact assessed system, version, environment, service-hop and applicable workload identity and action scope",
+          "ARL-KB-026 organisation-approved service identity, issuer, audience, operation and delegated-context matrix with accountable owner and exception record",
+          "ARL-KB-026 source or configuration evidence for receiving-side workload identity validation, issuer/audience policy, short credential lifetime, delegation, job propagation and fail-closed paths",
+          "ARL-KB-026 bounded positive evidence from owner-authorised synthetic requests that permitted service identities and operations complete within the documented scope",
+          "ARL-KB-026 bounded negative evidence of absent, wrong-audience, expired, retired, replayed and confused-deputy service identities denied before data disclosure or downstream side effects",
+          "ARL-KB-026 observed runtime identity subject, issuer, audience, policy decision, correlated downstream authorization, response, state and audit events",
+          "ARL-KB-026 tester and reviewer identity, written authorisation, roles, timestamps, exact assessed version, evidence digest, unsupported paths, exceptions and accountable human decision"
         ],
-        "pass_condition": "ARL-KB-026 passes only when “Service-to-service identity is unauthenticated or shared” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-026 fails when internal components trust network location or a shared secret, so compromise of one service grants broad access, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-026 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-026 passes only after accountable human review of exact-build workload identity policy, receiver-side checks, permitted synthetic positive tests, denied negative scenarios before data exposure or side effects, correlated downstream audit evidence and explicitly recorded untested paths or limitations. Source inspection and model instructions alone cannot establish PASS.",
+        "fail_condition": "KB-026 is a confirmed FAIL only when exact-version evidence reproduces an unauthorized service operation, wrong-audience or retired credential acceptance, forged or replayed identity use, disclosure, unauthorized side effect or demonstrably fail-open receiver. Missing or mismatched runtime tests, source coverage, authorization, identity policy or human review require INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment, but do not claim a confirmed vulnerability.",
+        "limitations": "A bounded KB-026 review cannot establish the security of untested service routes, runtime deployment changes, future credential rotation, unknown delegates or third-party services. Legal and certification conclusions remain outside ARL's technical authority.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-026's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Execute an authorised service-to-service request and verify the expected workload identity and audience are enforced.",
-        "negative_test": "Attempt the same request with no service identity, a shared or wrong-service identity, or an invalid audience and verify it is rejected.",
+        "positive_test": "Under written owner-authorized staging ROE, send a permitted request using a synthetic distinct workload identity, correct issuer, target audience and authorized operation; verify expected downstream action and correlated receiver policy events.",
+        "negative_test": "Under the same ROE and synthetic-only scope, test missing identity, wrong issuer/audience, expired or retired token, wrong-service identity, replay, delegated user or tenant confusion and missing identity in asynchronous jobs; verify denial before any disclosure or effect.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable system/service owner and authorised tester",
+          "synthetic permitted workload identity scoped to named service and audience",
+          "synthetic wrong-service, expired or absent identity and delegated user/tenant context where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-026 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Service-to-service identity is unauthenticated or shared” must be denied, quarantined or routed to explicit review before a material side effect."
+          "An in-scope synthetic service request with correct audience and operation produces only the expected bounded result and attributable authorization trace.",
+          "A synthetic wrong-audience, absent, retired or cross-context identity is rejected by the receiving service before tool execution, data disclosure or other material side effect."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Explicit written owner authorization (ROE) is required for every active or negative scenario.",
+          "Use exact frozen staging build, synthetic identities, synthetic data and reversible or dry-run actions only.",
+          "Do not exercise real credentials, production users, third-party services or unapproved outbound traffic.",
+          "Stop immediately if the test reaches foreign data, an irreversible action or an unexpected live target."
         ]
       },
       "solution": {
         "id": "ARL-SOL-026",
-        "control_objective": "Reduce the likelihood and impact of service-to-service identity is unauthenticated or shared and make the remaining risk visible.",
-        "recommended_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies.",
+        "control_objective": "Bind every applicable internal agent, orchestration, model, retrieval and MCP/tool hop to a distinct verified workload identity, intended audience and least-privilege operation, with explicit delegated-context authorization enforced outside the LLM.",
+        "recommended_remediation": "Replace shared secrets and trusted-network assumptions with attributable workload identities or mutually authenticated channels; verify issuer/audience and operation at each receiver, minimize credential lifetime and privilege, enforce delegation boundaries, rotate/revoke compromised credentials and preserve correlated denial evidence.",
         "default_owner": "Platform identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-026: Give services distinct workload identities rather than trusting network location or broadly shared secrets.",
-          "ARL-KB-026: Bind credentials to the intended service audience and use short lifetimes and least privilege.",
-          "ARL-KB-026: Authenticate and authorize every service hop, including internal agent and tool infrastructure."
+          "ARL-KB-026: Distinct short-lived workload identities; verify issuer, intended receiver audience and permitted operation before data access or execution.",
+          "ARL-KB-026: Do not accept LLM-generated claims, network locality or a shared secret as standalone service authorization.",
+          "ARL-KB-026: Carry separately verified delegated user/tenant context across gateway, worker and tool hops, fail closed if context is missing or invalid.",
+          "ARL-KB-026: Deny expired, revoked, wrong-audience and replayed credentials before any downstream side effect."
         ],
-        "monitoring": "For ARL-KB-026, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-026 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Record redacted workload subject, issuer, audience, policy version/digest, receiver, operation, decision and correlated downstream effects; alert on wrong audience, expired credential, missing identity and repeated denied requests without logging raw tokens.",
+        "containment": "Disable affected service/tool route or workload principal, revoke and rotate impacted identities, stop queued side effects, preserve bounded identity and audit traces, and require accountable owner approval before re-enabling.",
         "retest_acceptance": [
-          "ARL-KB-026: “Service-to-service identity is unauthenticated or shared” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-026: Authorised in-scope use completes successfully, remains within the documented asset scope for service-to-service identity is unauthenticated or shared, and produces no unintended side effect.",
-          "ARL-KB-026: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-026: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-026: The exact remediated build and workload identity, issuer/audience and operation matrix are approved and version-bound.",
+          "ARL-KB-026: Positive permitted synthetic inter-service requests succeed with recorded receiver authorization and expected downstream effects.",
+          "ARL-KB-026: Absent, wrong-service, wrong-audience, expired, retired, replayed and confused-deputy variants fail closed before data disclosure or material side effects.",
+          "ARL-KB-026: Tester and accountable reviewer record written ROE, exact SHA, evidence digests, omitted routes, residual limitations and human retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-026 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Use workload identity or mutually authenticated channels, service-specific audiences, short lifetimes and least-privilege policies. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -5969,7 +5972,7 @@
           "ARL-KB-026 shared-secret exposure, service impersonation or internal identity incident",
           "ARL-KB-026 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6025,7 +6028,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "a94e810240ecb11adaeb9ec4bfb757001033a4522785a2529e755f6fc704e259"
+      "content_digest": "6f81fdd9270b7dbe62e50072f599e785ea1bfa05b14062fcc643fd83ed9dcfae"
     },
     {
       "id": "ARL-KB-027",
@@ -6036,29 +6039,29 @@
       "title": "API keys have excessive scope and lifetime",
       "problem": {
         "statement": "One leaked key can operate every project, environment or high-impact tool indefinitely.",
-        "customer_symptom": "A user or operator may observe one leaked key can operate every project, environment or high-impact tool indefinitely; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in one leaked key can operate every project, environment or high-impact tool indefinitely, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A key intended for one project, environment or limited tool can unexpectedly access another project, production-like environment or privileged operation, including after expiry, rotation or revocation.",
+        "credible_failure_or_attack": "A leaked, shared or stale API key is accepted outside its authorized project, environment, operation or validity window because a gateway or downstream verifier omits scope, lifetime or revocation enforcement.",
         "affected_assets": [
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "agent and MCP tool gateways",
+          "API issuers, credentials and verifier state",
+          "provider projects and environments",
+          "privileged tool actions and downstream records",
+          "credential rotation, expiration and revocation controls",
+          "redacted authorization and audit events"
         ],
         "default_severity": "high",
         "severity_rationale": "Over-scoped or long-lived API keys can amplify credential compromise. Final severity depends on reachable projects, environments, tools, data, lifetime and revocation controls.",
         "applicability": [
           "API-integrated agents"
         ],
-        "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between API-integrated agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If one leaked key can operate every project, environment or high-impact tool indefinitely, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "credential theft or accidental sharing, excessive issuance scope, missing verifier checks, stale revocation caches or rotation failure",
+        "trust_boundary": "Every receiving API/tool must independently bind a credential to issuer, project, environment, audience, permitted action and effective validity/revocation state before data access or side effects.",
+        "operational_impact": "Excessive or stale key authority may disclose project data or trigger unauthorized, costly or high-impact tools. Containment may require immediate revocation, route isolation, event review and exact-version retest."
       },
       "check": {
         "id": "ARL-CHK-027",
-        "objective": "Determine whether API keys are constrained to the minimum required project, environment, purpose and lifetime and can be promptly revoked.",
-        "method": "Review key owner, purpose, project/environment scope, permitted actions, issue time, last use, expiry, rotation and revocation. Using synthetic authorised resources, verify a key cannot be reused against unrelated projects, environments or higher-impact actions outside its documented scope.",
+        "objective": "Determine whether applicable agent API keys are constrained to attributable owner, approved project, environment, intended actions, expiration and revocation at the receiving service before disclosure or side effects.",
+        "method": "Bind the review to the exact frozen build and applicable APIs/tools. Inspect the organisation-approved secret-free key inventory and receiving-side project/environment, scope, audience, expiration, revocation, rotation and storage controls. Under separate written owner-authorised ROE, test bounded synthetic in-scope requests and negative cross-project, cross-environment, elevated-action, expired, revoked and superseded-key requests; correlate authorization decisions and actual downstream state. Do not collect raw secrets or treat file references or error codes as proof of enforcement.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6066,56 +6069,59 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-027 assessed system, version, environment and scope for API keys have excessive scope and lifetime",
-          "ARL-KB-027 control configuration or source location showing how reduce the likelihood and impact of api keys have excessive scope and lifetime and make the remaining risk visible.",
-          "ARL-KB-027 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
-          "ARL-KB-027 policy, authorization, tool or audit events proving whether the tested api keys have excessive scope and lifetime path executed",
-          "ARL-KB-027 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-027 exact assessed system, version, environment, API/tool routes, issuer and permitted project, operation and data scope",
+          "ARL-KB-027 organisation-approved secret-free key owner, project/environment, audience, scope, expiration, rotation, revocation and exception inventory",
+          "ARL-KB-027 source or configuration evidence for key issuance, scope and expiry enforcement, storage redaction, rotation, revocation and fail-closed receiving API checks",
+          "ARL-KB-027 bounded positive evidence of owner-authorised synthetic scoped keys completing permitted project, environment and tool actions with attributable results",
+          "ARL-KB-027 bounded negative evidence of wrong-project, wrong-environment, privileged, expired, revoked and superseded keys denied before data disclosure or downstream effects",
+          "ARL-KB-027 observed runtime credential reference, scope, expiry/revocation policy, API/tool authorization, correlated responses, audit events and downstream state",
+          "ARL-KB-027 tester and reviewer identity, written authorisation, roles, timestamps, assessed build, evidence digest, untested paths and accountable human decision"
         ],
-        "pass_condition": "ARL-KB-027 passes only when “API keys have excessive scope and lifetime” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tool endpoints and downstream systems and financial, administrative or state-changing actions, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-027 fails when one leaked key can operate every project, environment or high-impact tool indefinitely, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-027 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-027 passes only after accountable human review of exact-version key inventory and enforcement, successful synthetic authorised calls, denied cross-project, cross-environment, elevated, expired, revoked and superseded-key variants before disclosure/effects, and correlated downstream audit records with known limits.",
+        "fail_condition": "KB-027 is a confirmed FAIL only when reproducible exact-build evidence demonstrates a wrongly scoped, expired, revoked or superseded API key performing an unauthorized operation, disclosing data or bypassing a receiving-side policy. Missing inventory, runtime proof, negative tests, authorization or reviewer signoff requires INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment without inventing a confirmed vulnerability.",
+        "limitations": "A bounded KB-027 review cannot prove absence of unknown keys, untested API routes, later deployment drift, provider-side unknown policies or future revocation delays. Static hints do not prove runtime key enforcement.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-027's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Use a scoped test key for its intended project and operation and verify the documented bounded action succeeds.",
-        "negative_test": "Attempt the same key against an unrelated synthetic project, environment or prohibited action and verify denial; verify revocation makes the key unusable.",
+        "positive_test": "Using a written owner-authorized synthetic test key and staging data, verify permitted project, environment, action, receiving-side authorization and downstream effect.",
+        "negative_test": "With authorized synthetic-only inputs, exercise wrong-project, wrong-environment, privilege elevation, expired, revoked and old-after-rotation key requests and verify denial before any disclosure or effect.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable credential owner and authorised tester",
+          "valid synthetic least-privileged key holder",
+          "synthetic foreign-project, expired, revoked and rotated-out key holders"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-027 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “API keys have excessive scope and lifetime” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Correctly scoped synthetic key performs its bounded permitted operation with a correlated authorization and effect trace.",
+          "Out-of-scope, expired, revoked or replaced synthetic key cannot access data or cause a material side effect."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Written owner ROE required for all negative key-boundary tests.",
+          "Exact nonproduction build, synthetic keys, test-only resources and reversible/dry-run tools only.",
+          "No customer credential values, third-party providers, live customer data or unapproved outbound operations.",
+          "Retain only redacted key references and audit metadata; stop on unexpected exposure or irreversible effects."
         ]
       },
       "solution": {
         "id": "ARL-SOL-027",
-        "control_objective": "Reduce the likelihood and impact of api keys have excessive scope and lifetime and make the remaining risk visible.",
-        "recommended_remediation": "Issue project- and purpose-scoped keys, display secrets once, store only digests, support immediate revocation and prefer short-lived credentials.",
+        "control_objective": "Issue and enforce accountable minimum-scope API keys by project, environment, permitted operation and short validity, with effective receiver-side revocation and rotation before tool side effects.",
+        "recommended_remediation": "Use project- and purpose-scoped short-lived keys with least privilege; display secrets only at issue time, store verifiers securely, rotate/revoke promptly and check audience, expiry, scope and revocation at each API or MCP tool boundary.",
         "default_owner": "Platform owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-027: Issue project-, environment- and purpose-scoped credentials with the minimum required actions.",
-          "ARL-KB-027: Prefer short-lived credentials and support immediate revocation and regular rotation.",
-          "ARL-KB-027: Store secrets securely, avoid redisplay where possible and monitor use outside the expected scope."
+          "ARL-KB-027: Bind keys to accountable owner, project, environment, audience and permitted action.",
+          "ARL-KB-027: Enforce short lifetime, effective revocation and superseded-key denial at each receiving API before any effects.",
+          "ARL-KB-027: Redact all raw key values from logs/evidence and protect key material or verifiers.",
+          "ARL-KB-027: Correlate gateway decisions to downstream results and audit revocation propagation."
         ],
-        "monitoring": "For ARL-KB-027, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Platform owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-027 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Record redacted key reference, allowed project/environment, scope, issuance/expiry/revocation state, policy digest, decision, denial reason and downstream effects; alert on stale verifier acceptance or cross-scope use.",
+        "containment": "Revoke affected keys and dependent credentials, disable impacted API or tool paths, halt queued high-impact actions, preserve redacted traces and require accountable re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-027: “API keys have excessive scope and lifetime” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-027: Authorised in-scope use completes successfully, remains within the documented asset scope for api keys have excessive scope and lifetime, and produces no unintended side effect.",
-          "ARL-KB-027: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-027: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-027: Approved exact-build key inventory and lifetime, project, environment, action and revocation policies are versioned.",
+          "ARL-KB-027: Permitted synthetic scoped key calls succeed with expected downstream results.",
+          "ARL-KB-027: Cross-project, cross-environment, privileged, expired, revoked and superseded synthetic keys are denied before disclosure or material action.",
+          "ARL-KB-027: Reviewer records written ROE, exact build, evidence digests, untested paths, residual limitations and retest decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-027 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Issue project- and purpose-scoped keys, display secrets once, store only digests, support immediate revocation and prefer short-lived credentials. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -6166,7 +6172,7 @@
           "ARL-KB-027 key leakage, cross-project use, excessive-scope use or revocation failure",
           "ARL-KB-027 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6222,7 +6228,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2e8f54cc8cc000c94ff2d2bfe530ce5630412fcb10b147caaab4d3cee30295a7"
+      "content_digest": "56f0bf217306b3792d19af4c30d2d71d6d74645583cf7fbfe0d4a91a9585ffb2"
     },
     {
       "id": "ARL-KB-028",
@@ -6233,29 +6239,29 @@
       "title": "Revoked users or stale roles retain access",
       "problem": {
         "statement": "Deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions.",
-        "customer_symptom": "A user or operator may observe deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "customer_symptom": "A removed workspace user or demoted role continues privileged agent, tool or queued actions with a stale session, key, cache or approval.",
+        "credible_failure_or_attack": "Previously issued sessions, delegated credentials, cached ACL decisions, approval grants or queued jobs are accepted after deprovisioning or role downgrade because receiving services fail to reauthorize current user/workspace identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "tool endpoints and downstream systems",
-          "financial, administrative or state-changing actions",
-          "agent",
-          "model context"
+          "workspace membership and authoritative roles",
+          "sessions and delegated credentials",
+          "approval grants and cached authorization",
+          "queued, retried and scheduled agent/tool actions",
+          "tenant records and downstream effects",
+          "revocation propagation and audit events"
         ],
         "default_severity": "critical",
         "severity_rationale": "Default critical rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
         "applicability": [
           "enterprise workspaces"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between enterprise workspaces and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "removed user, stale delegated identity, revoked role, invalidation failure, cached authorization or asynchronous job worker",
+        "trust_boundary": "Between current authoritative user/workspace roles and receiving-side enforcement of each session, key, cache, approval, job or tool action. Authentication of a formerly valid token does not confer current authority.",
+        "operational_impact": "An invalidated principal may continue accessing tenant records or triggering privileged side effects. Containment requires dependent-session and approval revocation, queue isolation, correlated evidence and accountable retest."
       },
       "check": {
         "id": "ARL-CHK-028",
-        "objective": "Determine whether user removal and role reduction revoke all derived sessions, keys, approvals and queued authority quickly enough to prevent continued use.",
-        "method": "Using an owner-authorised test identity, revoke the user or reduce its role while sessions, API credentials, approvals or queued work exist. Verify each derived authority becomes unusable or is re-evaluated before execution.",
+        "objective": "Determine whether user removal, role downgrade and deprovisioning invalidate or reauthorize derived sessions, keys, cached roles, approvals and deferred agent/tool actions within a documented revocation effective time and propagation bound.",
+        "method": "Bind the exact assessed build, environment and scope. Inspect owner-approved revocation policy and receiving-side session, delegated-key, role-cache, approval and queued-work controls. With separate written owner authorization and synthetic staging identities, execute bounded positive current-role operations and negative replay after role removal, account disablement, approval withdrawal or key revocation. Correlate revocation timestamp, documented propagation cutoff, receiver decisions and downstream effects. ARL never assumes instantaneous revocation or creates a security finding from missing traces.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6263,22 +6269,24 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-028 assessed system, version, environment and scope for Revoked users or stale roles retain access",
-          "ARL-KB-028 control configuration or source location showing how reduce the likelihood and impact of revoked users or stale roles retain access and make the remaining risk visible.",
-          "ARL-KB-028 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-028 policy, authorization, tool or audit events proving whether the tested revoked users or stale roles retain access path executed",
-          "ARL-KB-028 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-028 assessed system, exact version, environment and applicable user, workspace, role, session, key, approval, cache, job and tool scope",
+          "ARL-KB-028 organisation-approved revocation policy, effective cutoff, propagation latency and accountable identity owner",
+          "ARL-KB-028 source or configuration evidence of receiving-side current-role enforcement, session and key invalidation, approval withdrawal, cached ACL freshness and job reauthorization",
+          "ARL-KB-028 bounded positive evidence of permitted current-role and post-downgrade synthetic user, agent and tool operations",
+          "ARL-KB-028 bounded negative evidence of removed members, revoked sessions or keys, stale approvals, cached elevated roles and queued or retried work denied after approved cutoff before unauthorized effects",
+          "ARL-KB-028 observed runtime correlation of revocation event, effective timestamp, propagation, identity and role at receiver, policy decision and downstream side effects",
+          "ARL-KB-028 reviewer identity, written testing authorization, roles, timestamp, assessed version, evidence digest, untested paths, grace periods and accountable decision"
         ],
-        "pass_condition": "ARL-KB-028 passes only when “Revoked users or stale roles retain access” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-028 fails when deprovisioning, role changes or workspace removal do not terminate active sessions, keys, approvals or queued actions, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-028 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-028 passes only after accountable human review of the exact assessed version, current-role positive paths, synthetic negative replays of stale sessions, keys, roles, approvals and jobs, observed denial before unauthorized effects after the owner-approved revocation cutoff, measured propagation and corroborated downstream traces across applicable paths.",
+        "fail_condition": "KB-028 is a confirmed FAIL only where reproducible exact-version evidence demonstrates unauthorized disclosure, tool execution or state change after the approved revocation cutoff, or receiver-side acceptance of explicitly invalidated authority. Missing source, policy, approved cutoff, negative tests, runtime observations, assessed-version binding or reviewer decision requires INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment without inventing a confirmed vulnerability.",
+        "limitations": "This bounded test does not prove absence of undiscovered paths or future regressions. Document owner-approved revocation grace period, measured propagation and untested downstream surfaces; no legal conclusion or deployment permission is inferred.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-028's relevant configuration.",
           "Use synthetic data and reversible or dry-run side effects.",
           "Record the assessed version, environment, control configuration and expected decision before execution."
         ],
-        "positive_test": "Verify the active test identity can perform only the actions allowed by its current role before deprovisioning.",
-        "negative_test": "After role reduction or deprovisioning, reuse the prior session, credential, approval or queued action and verify the former authority is rejected or re-authorized under current state.",
+        "positive_test": "In owner-authorized synthetic staging, show that current-role requests work and a demoted user retains only newly permitted low-privilege actions.",
+        "negative_test": "After synthetic user removal, downgrade or key/session/approval revocation, replay old sessions, approvals, role caches, delegated tools, queued jobs and retries; require denial after the approved cutoff before unauthorized effects and record receiver traces.",
         "required_identities": [
           "control owner or authorised tester",
           "least-privileged legitimate test identity",
@@ -6297,26 +6305,27 @@
       },
       "solution": {
         "id": "ARL-SOL-028",
-        "control_objective": "Reduce the likelihood and impact of revoked users or stale roles retain access and make the remaining risk visible.",
-        "recommended_remediation": "Revoke dependent sessions, tokens, approvals and queued authority atomically; record deprovisioning evidence and alert on continued use.",
+        "control_objective": "Invalidate or reauthorize all derived user/workspace authority at sessions, delegated keys, approval caches, background workers and downstream tools within a documented revocation propagation bound.",
+        "recommended_remediation": "Bind authority to current user, workspace and role state; invalidate dependent sessions and delegated keys, withdraw approvals, expire role caches, cancel or reauthorize queued work and retry paths before executing tools. Record effective times, propagation latency and correlated denial/effect traces.",
         "default_owner": "Identity lifecycle owner",
         "priority": "P0",
         "implementation_principles": [
-          "ARL-KB-028: Propagate identity and role revocation to sessions, API credentials, approvals and queued authority.",
-          "ARL-KB-028: Re-check current authorization before delayed or asynchronous execution.",
-          "ARL-KB-028: Record attributable deprovisioning evidence and alert on continued use after revocation."
+          "ARL-KB-028: Bind active sessions, delegated keys and approvals to current authoritative workspace membership and role.",
+          "ARL-KB-028: Track effective revocation timestamp and owner-approved propagation bound; invalidate caches and tokens within that bound.",
+          "ARL-KB-028: Reauthorize queued and retried high-impact operations at the receiving service immediately before their side effects.",
+          "ARL-KB-028: Preserve redacted correlated identity, revocation, receiver decisions and downstream effects; never rely on model instructions for enforcement."
         ],
-        "monitoring": "For ARL-KB-028, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity lifecycle owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-028 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor revocation timestamp, propagated identity/session/key/role cache/approval/job invalidation, delayed action attempts, policy digest, receiver authorization and downstream side effects. Alert on authorization after approved cutoff.",
+        "containment": "Suspend affected user/delegated identities, revoke sessions and keys, withdraw approvals, isolate privileged tool queues, preserve exact-version traces and require accountable verification before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-028: “Revoked users or stale roles retain access” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-028: Authorised in-scope use completes successfully, remains within the documented asset scope for revoked users or stale roles retain access, and produces no unintended side effect.",
-          "ARL-KB-028: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-028: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-028: Versioned owner-approved revocation policy, identity routes, approved propagation latency and exact remediated build are recorded.",
+          "ARL-KB-028: Synthetic current-role and post-downgrade permitted actions complete with expected authorized outputs.",
+          "ARL-KB-028: Old sessions, keys, cached roles, approvals, retries and queued jobs are denied after approved cutoff before unauthorized data or effects with correlated receiver/downstream audit evidence.",
+          "ARL-KB-028: Reviewer records authorized scope, tester roles, timestamps, observed propagation, evidence digests, unsupported paths and final accountable decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-028 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Revoke dependent sessions, tokens, approvals and queued authority atomically; record deprovisioning evidence and alert on continued use. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-028 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "root_cause_remediation": "Bind authority to current user, workspace and role state; invalidate dependent sessions and delegated keys, withdraw approvals, expire role caches, cancel or reauthorize queued work and retry paths before executing tools. Record effective times, propagation latency and correlated denial/effect traces.",
+        "preventive_control": "Enforce current user/workspace/role authorization outside the model at each receiving API, approval service, job executor and privileged tool; deny invalidated claims.",
         "accountable_owner": "Identity lifecycle owner",
         "implementation_dependencies": [
           "authoritative identity and project scope",
@@ -6363,15 +6372,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-028 user lifecycle, role, workspace-membership or deprovisioning change",
           "ARL-KB-028 session, key, approval, queue or delayed-execution revocation change",
           "ARL-KB-028 continued access after role removal or deprovisioning incident",
           "ARL-KB-028 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6427,7 +6436,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "7b118d8444fee489af94b52f1e31c6c20baef271ef5b9aa9a8ace99e27f2f7ce"
+      "content_digest": "9a239967cf149448fc09b7e5e0591c786ee34eb5edb11ce7c391ec47928b7d6b"
     },
     {
       "id": "ARL-KB-029",
@@ -6437,30 +6446,30 @@
       "category": "Identity, access and tenant isolation",
       "title": "Shared accounts destroy accountability",
       "problem": {
-        "statement": "Multiple people or services act under one identity, making approvals and evidence non-attributable.",
-        "customer_symptom": "A user or operator may observe multiple people or services act under one identity, making approvals and evidence non-attributable; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect can exploit or trigger the condition in multiple people or services act under one identity, making approvals and evidence non-attributable, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "statement": "Multiple humans, workloads or agents share or reuse privileged identities, credentials or approvals so consequential actions cannot be reliably attributed to the accountable actor.",
+        "customer_symptom": "Audit records show a generic, shared or reused principal for privileged agent, tool, approval or evidence-signing actions, preventing independent attribution to the human, workload owner or delegated subject responsible for the action.",
+        "credible_failure_or_attack": "A shared privileged account, reusable service credential, ambiguous delegated identity, self-approval path or unattributed break-glass mechanism allows different actors to perform consequential operations while audit records collapse them into one apparently valid identity.",
         "affected_assets": [
-          "tenant-scoped records and object identifiers",
-          "service identities, roles and credentials",
-          "agent",
-          "model context",
-          "tools or downstream systems",
-          "customer evidence"
+          "privileged human accounts and authenticated sessions",
+          "workload, service and agent identities",
+          "delegated user context and impersonation chains",
+          "approval and separation-of-duties records",
+          "tool calls and downstream consequential actions",
+          "security evidence, signatures and audit trails"
         ],
         "default_severity": "high",
-        "severity_rationale": "Default high rating reflects the potential impact before customer-specific exposure, likelihood, reversibility and compensating controls are verified.",
+        "severity_rationale": "Default high rating reflects the loss of accountability and potential privilege abuse before customer-specific exposure, action impact, compensating controls and exception governance are verified.",
         "applicability": [
           "organisations requiring accountable decisions"
         ],
-        "threat_actor_or_failure_source": "a malicious or mistaken authenticated user, compromised agent identity, or authorization defect",
-        "trust_boundary": "The test crosses the boundary between organisations requiring accountable decisions and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
-        "operational_impact": "If multiple people or services act under one identity, making approvals and evidence non-attributable, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
+        "threat_actor_or_failure_source": "shared privileged user, generic account, reused service credential, ambiguous workload identity, unauthorized delegation, approval conflict or unattributed emergency access",
+        "trust_boundary": "Between authenticated human/workload identity and each consequential approval, delegated agent/tool action, downstream effect and audit record that must preserve independent actor provenance.",
+        "operational_impact": "Unattributable privileged actions weaken prevention, investigation, non-repudiation and accountable human review. Containment may require disabling shared credentials, isolating affected workflows and re-establishing independently attributable identity and approval evidence."
       },
       "check": {
         "id": "ARL-CHK-029",
-        "objective": "Determine whether human and workload actions requiring accountability are attributable to distinct verified principals.",
-        "method": "Inspect identity records, privileged account assignments, workload credentials, approval records and audit trails for shared credentials, generic approver identities or ambiguous principals. Verify representative consequential actions can be traced to a distinct human or workload identity.",
+        "objective": "Determine whether every consequential human, workload, delegated agent/tool, approval and evidence-signing action is bound to a distinct verified principal or an explicitly governed, individually attributable emergency exception.",
+        "method": "Bind the exact assessed build, environment and identity scope. Inspect organisation-approved principal, workload, delegation, separation-of-duties and break-glass policy plus identity-provider, session, approval, tool and audit configuration. With separate written owner authorization and synthetic staging principals, exercise bounded positive distinct-human/workload paths and negative generic/shared identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed emergency-access cases. Correlate authenticated actor, delegated subject, approval, tool call, downstream effect and tamper-evident audit record. ARL never infers a unique human from a service principal, display name, IP address or model assertion.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6468,60 +6477,64 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-029 assessed system, version, environment and scope for Shared accounts destroy accountability",
-          "ARL-KB-029 control configuration or source location showing how reduce the likelihood and impact of shared accounts destroy accountability and make the remaining risk visible.",
-          "ARL-KB-029 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
-          "ARL-KB-029 policy, authorization, tool or audit events proving whether the tested shared accounts destroy accountability path executed",
-          "ARL-KB-029 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-029 assessed system, exact version, environment and consequential human, workload, agent/tool, delegated identity, approval and audit scope",
+          "ARL-KB-029 organisation-approved unique-principal, workload ownership, delegation, separation-of-duties and break-glass accountability policy with version, effective dates and accountable owner",
+          "ARL-KB-029 source or configuration evidence for identity/session binding, shared credential prevention, workload issuer and audience, delegated actor provenance, named approval attribution, audit integrity and fail-closed ambiguous-principal handling",
+          "ARL-KB-029 bounded positive evidence of distinct synthetic human and workload principals across approved authentication, delegation, approval, tool and downstream actions",
+          "ARL-KB-029 bounded negative evidence of prohibited generic or shared privileged identity, missing principal, swapped delegation, conflicting self-approval, reused approval token and unattributed emergency access denied or quarantined before material effects",
+          "ARL-KB-029 observed runtime correlation across authenticated actor, workload identity, delegated subject, approval, policy decision, tool execution, downstream effect and tamper-evident audit evidence",
+          "ARL-KB-029 reviewer identity, role, written testing authorization, policy and exception review, timestamp, assessed version, evidence digest, untested paths, limitations and accountable decision"
         ],
-        "pass_condition": "ARL-KB-029 passes only when “Shared accounts destroy accountability” is not reproducible through the documented abuse cases, the valid workflow remains bounded to tenant-scoped records and object identifiers and service identities, roles and credentials, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-029 fails when multiple people or services act under one identity, making approvals and evidence non-attributable, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
-        "limitations": "This bounded ARL-KB-029 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
+        "pass_condition": "KB-029 passes only after accountable human review of the exact assessed version shows distinct attributable human and workload identities on applicable consequential paths, verified delegation and approval provenance, governed emergency exceptions, bounded positive and negative synthetic evidence, denial or quarantine of prohibited ambiguous/shared authority before material effects, and independently reviewable runtime audit linkage.",
+        "fail_condition": "KB-029 is a confirmed FAIL only where reproducible exact-version evidence demonstrates accepted prohibited shared or generic privileged authority, consequential action without required independent actor provenance, unauthorized delegation or approval, or an emergency-access path that violates the approved attribution policy. Missing identity inventory, policy, active-test authorization, runtime correlation, exception evidence or reviewer decision requires INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment without inventing a confirmed vulnerability.",
+        "limitations": "This bounded test does not prove that untested accounts, external identity providers, endpoints or future versions are free from shared-identity or attribution failures. Service principals may legitimately represent workloads only where ownership, purpose, delegation and accountable review are independently established.",
         "preconditions": [
-          "Use an owner-authorised non-production target matching ARL-KB-029's relevant configuration.",
-          "Use synthetic data and reversible or dry-run side effects.",
-          "Record the assessed version, environment, control configuration and expected decision before execution."
+          "Use an owner-authorised non-production target matching ARL-KB-029's relevant identity and audit configuration.",
+          "Use synthetic human, workload and delegated principals with reversible or dry-run side effects; never use real customer or break-glass credentials.",
+          "Record the assessed version, approved accountability/exception policy, environment, expected identity chain and expected decision before execution."
         ],
-        "positive_test": "Perform an authorised test action and verify the resulting evidence identifies the specific human or workload principal.",
-        "negative_test": "Attempt to use a prohibited shared or generic test identity for an accountable action and verify the platform rejects it or explicitly records an approved exception with an accountable owner.",
+        "positive_test": "Perform authorised synthetic human and workload actions and verify each consequential authentication, delegation, approval, tool call and downstream effect remains attributable to the correct distinct principal and accountable owner.",
+        "negative_test": "Attempt bounded synthetic generic/shared privileged identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed break-glass variants and verify prohibited authority is denied or quarantined before material effects with correlated audit evidence.",
         "required_identities": [
-          "control owner or authorised tester",
-          "least-privileged legitimate test identity",
-          "unauthorised or cross-boundary test identity where applicable"
+          "accountable identity or security control owner",
+          "distinct least-privileged synthetic human principals",
+          "distinct synthetic workload or agent/tool principal with accountable service owner",
+          "synthetic delegated subject and independent reviewer/approver where applicable"
         ],
         "required_inputs_and_expected_outputs": [
-          "A valid ARL-KB-029 test input with the minimum required scope must produce the documented bounded result.",
-          "An abuse input targeting “Shared accounts destroy accountability” must be denied, quarantined or routed to explicit review before a material side effect."
+          "Approved distinct-principal and workload flows must complete only within their documented role, delegation and approval scope while preserving actor provenance end to end.",
+          "Prohibited generic/shared, ambiguous, forged-delegation, approval-conflict or unattributed emergency-access variants must be denied or quarantined before a material side effect and recorded for accountable review."
         ],
         "safe_testing_constraints": [
-          "Written owner authorization is required.",
-          "Use staging, synthetic records, capped values and dry-run tools.",
-          "Do not target third parties, production customers or irreversible actions.",
-          "Stop on unexpected access, data exposure or uncontrolled side effects."
+          "Separate written owner authorization is required for active identity or delegation tests.",
+          "Use staging, synthetic principals and data, capped values and reversible or dry-run tools.",
+          "Do not use real personal accounts, production credentials, customer identities, third-party authentication calls or actual break-glass accounts.",
+          "Stop on unexpected access, identity confusion, data exposure or uncontrolled side effects and preserve evidence for human review."
         ]
       },
       "solution": {
         "id": "ARL-SOL-029",
-        "control_objective": "Reduce the likelihood and impact of shared accounts destroy accountability and make the remaining risk visible.",
-        "recommended_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals.",
+        "control_objective": "Provide independently attributable human and workload identities and preserve actor, delegation, approval and downstream provenance for every consequential action, with tightly governed emergency exceptions.",
+        "recommended_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed.",
         "default_owner": "Identity owner",
         "priority": "P1",
         "implementation_principles": [
-          "ARL-KB-029: Provide distinct identities for individual humans and workloads involved in accountable actions.",
-          "ARL-KB-029: Prohibit shared privileged credentials except for documented emergency mechanisms with explicit accountability.",
-          "ARL-KB-029: Bind approvals, security decisions and audit evidence to verified principals."
+          "ARL-KB-029: Issue distinct human identities and purpose-bound workload identities with named accountable owners; never treat a generic service principal as proof of a unique human.",
+          "ARL-KB-029: Preserve authenticated actor, delegated subject, workload/tool caller, approval identity, policy version and downstream effect as separate correlated audit fields.",
+          "ARL-KB-029: Enforce separation of duties and prevent approval reuse or self-approval where the approved policy requires independent authorization.",
+          "ARL-KB-029: Permit emergency access only through individually attributable, time-bounded, specially logged mechanisms with accountable retrospective review."
         ],
-        "monitoring": "For ARL-KB-029, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Identity owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
-        "containment": "Contain ARL-KB-029 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
+        "monitoring": "Monitor generic/shared privileged identities, concurrent or cross-user credential reuse, principal changes within delegation chains, approval reuse, self-approval conflicts, unattributed break-glass use, missing actor fields and mismatches between identity-provider, tool and downstream audit events.",
+        "containment": "Disable or rotate suspected shared privileged credentials, suspend ambiguous delegated authority, isolate affected approval/tool routes, preserve identity-provider and downstream audit evidence, and require accountable review before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-029: “Shared accounts destroy accountability” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-029: Authorised in-scope use completes successfully, remains within the documented asset scope for shared accounts destroy accountability, and produces no unintended side effect.",
-          "ARL-KB-029: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-029: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-029: Exact remediated build, approved accountability policy, principal inventory, workload owners, delegation rules and permitted emergency exceptions are recorded.",
+          "ARL-KB-029: Distinct synthetic human and workload positive paths complete within approved scope with independently correlated actor, delegation, approval, tool and downstream evidence.",
+          "ARL-KB-029: Generic/shared privileged identity, missing-principal, swapped-delegation, self-approval, reused-approval and unattributed emergency-access variants are denied or quarantined before material effects with trustworthy audit evidence.",
+          "ARL-KB-029: Reviewer records written authorization, tester/reviewer roles, timestamps, evidence digests, exception handling, untested paths, residual limitations and final accountable decision."
         ],
-        "immediate_containment": "Immediately disable or isolate the ARL-KB-029 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
-        "root_cause_remediation": "Provide individual and workload identities, prohibit shared privileged accounts and bind audit records to verified principals. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
-        "preventive_control": "Enforce ARL-KB-029 outside the model using deny-by-default identity, authorization, input and output boundaries tied to the exact action and environment.",
+        "immediate_containment": "Disable or rotate affected shared or ambiguous privileged credentials, suspend disputed delegated and approval paths, stop queued consequential actions where attribution cannot be established, and preserve identity and audit evidence.",
+        "root_cause_remediation": "Eliminate shared privileged credentials; issue distinct human and workload identities, preserve original delegated user context, separate requester and approver where required, bind approvals and tool actions to verified principals, and make break-glass access individually attributable, time-bounded and retrospectively reviewed. Remove the underlying identity and accountability design defect rather than relying on prompts, display names, IP addresses or operator memory.",
+        "preventive_control": "Enforce distinct principal identity, delegation and approval policy outside the model using authoritative IAM and deterministic authorization/audit controls before consequential actions execute.",
         "accountable_owner": "Identity owner",
         "implementation_dependencies": [
           "authoritative identity and project scope",
@@ -6530,7 +6543,7 @@
           "reversible deployment and test environment"
         ],
         "rollback_considerations": "Keep the prior known-good ARL-KB-029 configuration and its digest; rollback must not restore over-broad credentials, stale approvals or incompatible evidence links.",
-        "retest_requirements": "Repeat the exact ARL-KB-029 failure and its identity, malformed-input, replay and bypass variants against the remediated version before changing the deployment decision.",
+        "retest_requirements": "Repeat the exact attribution failure and relevant shared/generic identity, delegation, approval-reuse, separation-of-duties and emergency-access variants against the remediated version before changing the deployment decision.",
         "evidence_required_to_close": [
           "Approved remediation change and exact deployed version for ARL-KB-029",
           "Passed retest evidence bound to ARL-KB-029 and the current knowledge digest",
@@ -6560,15 +6573,15 @@
       ],
       "review": {
         "human_review_required": true,
-        "last_reviewed": "2026-10-03",
-        "next_review_due": "2026-12-02",
+        "last_reviewed": "2026-10-11",
+        "next_review_due": "2026-12-10",
         "change_triggers": [
           "ARL-KB-029 identity, privileged-account, workload-identity or approval-attribution change",
           "ARL-KB-029 introduction of shared, generic, break-glass or service credentials",
           "ARL-KB-029 unattributable privileged action or shared-account incident",
           "ARL-KB-029 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6624,7 +6637,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "841a557f997753b1a56875550346c45bd5a58e0f24fcfda58dad8b9eeead29db"
+      "content_digest": "1e4c103f9e99834f7e74fa2ef404543d37af3fcc9845866ed12f7a4f57ac6b79"
     },
     {
       "id": "ARL-KB-030",
