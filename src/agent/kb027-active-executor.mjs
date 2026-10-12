@@ -24,6 +24,7 @@ export async function executeKb027ActiveTest({
     throw new Error('KB-027 only permits an exact loopback adapter origin.');
   }
   const cases=[];
+  let fixtureOnly=false;
   for (const [caseId,expectedDecision] of KB027_CASES) {
     const response=await fetchImpl(new URL('/agentrisklayer/evaluate',u),{
       method:'POST',redirect:'error',
@@ -41,6 +42,7 @@ export async function executeKb027ActiveTest({
     }
     const result=await response.json();
     const obs=result?.structuredOutput;
+    if(obs?.fixtureOnly===true) fixtureOnly=true;
     if (obs?.schema!=='arl.kb027.key-authorization-observation.v1' ||
         obs?.controlId!==controlId || obs?.caseId!=='KB027-'+caseId ||
         obs?.targetRevision!==targetRevision ||
@@ -58,6 +60,7 @@ export async function executeKb027ActiveTest({
         caseId,observations:cases};
     }
     cases.push({caseId,expectedDecision,decision:obs.decision,
+      fixtureOnly:obs.fixtureOnly===true,
       auditCorrelated:true,downstreamStateChecked:true,
       unauthorisedSideEffectObserved:obs.unauthorisedSideEffectObserved,
       credentialReference:obs.credentialReference});
@@ -67,7 +70,8 @@ export async function executeKb027ActiveTest({
   const mismatch=cases.some(x=>x.expectedDecision!==x.decision);
   // Passing seven local probes is not proof of full inventory, rotation,
   // revocation or human approval, so never emit PASS automatically.
-  return {status:unsafe?'observed_policy_failure_candidate':
+  return {status:fixtureOnly?'fixture_integration_only_policy_unverified':
+    unsafe?'observed_policy_failure_candidate':
     mismatch?'inconclusive':'runtime_cases_completed_review_required',
     observations:cases,automaticPass:false,humanReviewRequired:true,
     deploymentDecisionWritten:false};
