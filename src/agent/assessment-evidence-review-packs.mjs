@@ -55,6 +55,7 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
   const runtimeGroups = new Map();
   const otherGroups = new Map();
   const exceptions = [];
+  const historicalExceptions = [];
   const observed = new Set();
   let criterionCount = 0;
 
@@ -108,18 +109,32 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
       }
 
       for (const source of control.sourceRecords) {
-        if (source.lineageIssueState !== 'historical_preserved_after_valid_recollection' &&
-            source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
-            source.lineageStatus !== 'legacy_static_collection_requires_manual_review') {
-          exceptions.push({
-            controlId: control.controlId,
-            evidenceId: source.evidenceId,
-            lineageStatus: source.lineageStatus
-          });
+        const record = {
+          controlId: control.controlId,
+          evidenceId: source.evidenceId,
+          sourceType: source.sourceType || null,
+          lineageStatus: source.lineageStatus
+        };
+        if (source.lineageIssueState === 'historical_preserved_after_valid_recollection') {
+          historicalExceptions.push(record);
+        } else if (source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
+                   source.lineageStatus !== 'legacy_static_collection_requires_manual_review') {
+          exceptions.push(record);
         }
       }
     }
   }
+
+  // Complete, read-only diagnostic inventory. Group statuses rather than
+  // guessing which anomalies are eligible for automatic repair.
+  const lineageExceptionsByStatus = Object.fromEntries(
+    [...new Set(exceptions.map(row => row.lineageStatus))].sort()
+      .map(status => [status, exceptions.filter(row => row.lineageStatus === status).length])
+  );
+  const lineageExceptionsByControl = Object.fromEntries(
+    [...new Set(exceptions.map(row => row.controlId))].sort()
+      .map(id => [id, exceptions.filter(row => row.controlId === id).length])
+  );
 
   const staticCollection = packetsFromGroups(staticGroups, 'static-source');
   const humanDocumentation = packetsFromGroups(humanGroups, 'human-documentation');
@@ -138,13 +153,17 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
       humanDocumentPackets: humanDocumentation.length,
       runtimeValidationPackets: runtimeValidation.length,
       manualReviewPackets: manualReview.length,
-      lineageExceptions: exceptions.length
+      lineageExceptions: exceptions.length,
+      historicalLineageExceptions: historicalExceptions.length,
+      lineageExceptionsByStatus
     },
     staticCollection,
     humanDocumentation,
     runtimeValidation,
     manualReview,
     lineageExceptions: exceptions,
+    lineageExceptionsByControl,
+    historicalLineageExceptions: historicalExceptions,
     boundaries: {
       sharedPacketDoesNotImplySharedEvidenceValidity: true,
       criteriaRemainControlSpecific: true,
