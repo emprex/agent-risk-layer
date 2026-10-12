@@ -32,7 +32,8 @@ const complete = {
 test('recover missing structured observation only on exact frozen control/check/snapshot', () => {
   assert.equal(isLegacyIncompleteV2Source(record,identity),true);
   assert.equal(isLegacyIncompleteV2Source({...record,systemSnapshotId:'different'},identity),false);
-  assert.equal(isLegacyIncompleteV2Source({...record,checkDigest:'stale'},identity),false);
+  assert.equal(isLegacyIncompleteV2Source({...record,checkDigest:'d'.repeat(64)},identity),true);
+  assert.equal(isLegacyIncompleteV2Source({...record,checkDigest:'invalid'},identity),false);
   assert.equal(isLegacyIncompleteV2Source({...record,checkId:'different'},identity),false);
   assert.equal(isLegacyIncompleteV2Source({...record,result:'passed'},identity),false);
   assert.equal(isLegacyIncompleteV2Source({...record,executionKind:'retest'},identity),false);
@@ -52,4 +53,8 @@ test('truncated or malformed structured payload remains recoverable', () => {
 test('reject request without valid control identity', () => {
   assert.equal(isLegacyIncompleteV2Source(record,{...identity,controlId:'KB-023'}),false);
   assert.equal(isLegacyIncompleteV2Source(record,{...identity,revision:'bad'}),false);
+});
+
+test('historical digest changes do not make complete evidence recoverable', () => {
+  assert.equal(isLegacyIncompleteV2Source({...complete,checkDigest:'d'.repeat(64)},identity),false);
 });
