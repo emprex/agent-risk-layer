@@ -8,7 +8,7 @@ export function selectNextLegacyV2RecoveryBatch(review, limit = 20) {
   const eligible = [...new Set(review.lineageExceptions.filter(item =>
     item.lineageStatus === 'structured_observation_missing' &&
     item.diagnosticLane === 'bounded_recollection_candidate_manual_authorisation_required' &&
-    /^ARL-KB-\\d{3}$/.test(item.controlId || '')
+    /^ARL-KB-\d{3}$/.test(item.controlId || '')
   ).map(item => item.controlId))].sort();
   return {eligibleControls:eligible.length,selectedControls:eligible.slice(0,limit)};
 }
