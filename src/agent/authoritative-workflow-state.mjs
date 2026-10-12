@@ -660,6 +660,45 @@ function stateFromScopedControl({
         verifiedActiveTestPlan(scopedControl);
 
       if (activeTestPlan) {
+        // Do not demand an identical already-executed active test forever.
+        // Require a linked persisted observation and evidence, scoped to the
+        // same current snapshot. Inconclusive remains a human evidence gap.
+        const detail = scopedControl.authoritativeDetail || {};
+        const currentSnapshotId =
+          detail.systemSnapshot?.id || null;
+        const recordedExecution =
+          (detail.tests || []).find((item) =>
+            item.executionMethod === 'authorised_local_active_test' &&
+            item.result === 'inconclusive' &&
+            item.systemSnapshotId === currentSnapshotId &&
+            (detail.evidence || []).some((evidence) =>
+              evidence.testExecutionId === item.id &&
+              evidence.sourceType === 'authorised_local_active_test' &&
+              evidence.retentionStatus === 'active'
+            )
+          );
+        if (recordedExecution) {
+          return stateResult({
+            ...common,
+            stage: 'active_test_evidence_review_required',
+            blockers: [{
+              code: 'active_test_inconclusive_evidence_gap',
+              source: 'authoritative_control_test',
+              userActionRequired: true
+            }],
+            nextAllowedAction: action({
+              name: 'review_inconclusive_control_evidence',
+              actor: 'human',
+              requiresUserInput: true,
+              reason: 'The authorised local active test has been executed and its evidence recorded, but the observation is inconclusive. Review the remaining canonical requirements; do not rerun the same probe or infer PASS.',
+              controlId: scopedControl.controlId,
+              caseId: null,
+              requirements: queueItem.activeTestRequirements || [],
+              testMethod: queueItem.method || null,
+              authorisationReference: activeTestPlan.sourceReference || null
+            })
+          });
+        }
         return stateResult({
           ...common,
           stage:
