@@ -995,6 +995,60 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  // Human-directed invalidation of the unsubstantiated historical RT-DATA-001
+  // attribution. This is not a PASS, retest, remediation or deployment approval.
+  if (/^Invalidate disputed KB-006 finding[.!?]*$/i.test(request.trim())) {
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId:'ARL-KB-006',userId:options.userId
+    });
+    const snapshot = detail?.systemSnapshot;
+    if (!snapshot?.id ||
+        snapshot?.assessmentConfiguration?.targetBinding?.revision !== localFrozenInspection?.target?.revision ||
+        localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false) {
+      throw new Error('KB-006 disposition requires exact current frozen assessment and clean target.');
+    }
+    const finding = (detail.findings || []).find(f => f.id === 'rem_2cf233241c6b4e9ebe042f1f3e0ae6ee' && f.status === 'open');
+    const tests = [...(detail.tests || []),...(detail.testHistory || [])];
+    const failed = tests.find(t => t.id === 'ctx_227999ad26614dccb4c610f2efc25d74' &&
+      t.result === 'failed' && t.findingId === finding?.id &&
+      t.systemSnapshotId === snapshot.id);
+    const reviews = await db.prepare(
+      "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 200"
+    ).all(options.userId,'arl.kb006.attribution_human_review');
+    const attested = reviews.map(r=>{try{return JSON.parse(r.properties_json)}catch{return null}})
+      .filter(v=>v && v.projectId===options.projectId &&
+        v.systemSnapshotId===snapshot.id && v.findingId===finding?.id &&
+        v.testExecutionId===failed?.id && v.disposition==='attribution_disputed');
+    if (!finding || !failed || !attested.length) {
+      throw new Error('The exact open KB-006 finding, failed test, and prior accountable disputed-attribution review are required.');
+    }
+    const now = nowIso();
+    const disposition = {
+      schema:'arl.agent.finding-invalidated-unsubstantiated.v1',
+      controlId:'ARL-KB-006',findingId:finding.id,testExecutionId:failed.id,
+      systemSnapshotId:snapshot.id,targetRevision:localFrozenInspection.target.revision,
+      actorId:options.userId,recordedAt:now,
+      rationale:'The historical synthetic in-memory forwarding probe did not demonstrate an explicitly configured receiving-tool data policy, an unauthorised recipient or a bypass. Earlier human attribution reviews disputed the failure. The current KB-006 check requires policyConfigured and observed bypass before FAIL. Historical failed execution is retained but its finding attribution is invalidated; KB-006 is not asserted PASS.',
+      deploymentDecisionWritten:false
+    };
+    await db.transaction(async()=>{
+      const updated = await db.prepare(
+        "UPDATE remediation_items SET status=?, verification_json=?, updated_at=? WHERE id=? AND project_id=? AND status='open'"
+      ).run('invalidated_unsubstantiated',JSON.stringify({attributionDisposition:disposition}),now,finding.id,options.projectId);
+      // The update is optimistic and auditable; never silently claim success.
+      if (Number(updated?.changes ?? updated?.rowCount ?? 0)!==1) throw new Error('KB-006 status changed concurrently or not updated.');
+      await db.prepare(
+        "INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)"
+      ).run(id('evt_'),options.userId,'arl.kb006.finding_invalidated',JSON.stringify(disposition),now);
+    });
+    return {
+      canonicalData:{kb006Disposition:disposition,securityStateChanged:true,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-006 unsubstantiated historical finding invalidated (not PASS). Original failed test and human review remain in history. Deployment remains HOLD.'
+    };
+  }
+
   if (/^review kb-006 finding[.!?]*$/i.test(request.trim())) {
     // Read-only human triage: the original test, evidence, and finding must
     // remain authoritative until a separately reviewed disposition exists.
