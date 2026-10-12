@@ -1542,7 +1542,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     const check = assessIndependentControlTestGate({
       controlId,detail,frozenInspection:localFrozenInspection,
-      assessmentId:options.assessmentId,expectedSnapshotId:detail?.systemSnapshot?.id
+      assessmentId:options.assessmentId,expectedSnapshotId:(await readCurrentControlQueue(options)).systemSnapshotId
     });
     if (!check.available) throw new Error(check.reason);
     // The operator must explicitly declare a bounded test plan, not just a control ID.
@@ -2139,7 +2139,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     const gate = assessIndependentControlTestGate({
       controlId,detail,frozenInspection:localFrozenInspection,
-      assessmentId:options.assessmentId,expectedSnapshotId:detail?.systemSnapshot?.id
+      assessmentId:options.assessmentId,expectedSnapshotId:(await readCurrentControlQueue(options)).systemSnapshotId
     });
     if (!gate.available) throw new Error(gate.reason);
     const origin = 'http://127.0.0.1:' + (process.env.ARL_TARGET_ADAPTER_PORT || '8787');
