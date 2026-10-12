@@ -191,6 +191,40 @@ export function isMissingKb008StructuredObservations(test, {snapshotId, checkId,
     !test.observedResult.includes('Requirement-specific deterministic observations:\n'));
 }
 
+// Recovery eligibility is deliberately snapshot/check/SHA-bound and never trusts
+// the caller's claim that a prior observation is malformed.
+export function isLegacyIncompleteV2Source(test, {
+  snapshotId, checkId, checkDigest, revision, controlId
+} = {}) {
+  if (!/^ARL-KB-\\d{3}$/.test(controlId || '') ||
+      !/^[a-f0-9]{40}$/.test(revision || '')) return false;
+  const ref = /^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):(ARL-KB-\\d{3}):([a-f0-9]{64})$/
+    .exec(test?.inputReference || '');
+  if (!ref || ref[1] !== revision || ref[2] !== controlId ||
+      test?.controlId !== controlId ||
+      test?.systemSnapshotId !== snapshotId ||
+      test?.checkId !== checkId ||
+      test?.checkDigest !== checkDigest ||
+      test?.executionMethod !== 'arl_frozen_source_evidence_collection_v2' ||
+      test?.result !== 'inconclusive' ||
+      test?.executionKind === 'retest' ||
+      typeof test?.observedResult !== 'string') return false;
+  const start = 'Requirement-specific deterministic observations:\\n';
+  const end = '\\nThis collection does not assert that any canonical requirement is satisfied';
+  const text = test.observedResult;
+  const a = text.indexOf(start);
+  const b = a < 0 ? -1 : text.indexOf(end, a + start.length);
+  if (a < 0 || b < 0) return true;
+  try {
+    const payload = JSON.parse(text.slice(a + start.length, b).trim());
+    return payload?.schema !== 'arl.deterministic-evidence-collection.v1' ||
+      payload?.targetRevision !== revision ||
+      !Array.isArray(payload?.requirementObservations);
+  } catch {
+    return true;
+  }
+}
+
 export async function runAuthoritativeControlSourceReview({
   repositoryPath,
   projectId,
@@ -200,7 +234,8 @@ export async function runAuthoritativeControlSourceReview({
   collectionOnly = false,
   repairTruncatedSource = false,
   refreshProviderSource = false,
-  repairKb008Source = false
+  repairKb008Source = false,
+  repairLegacyV2Source = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
@@ -238,6 +273,22 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
+  if (repairLegacyV2Source) {
+    const config = detail.systemSnapshot?.assessmentConfiguration || {};
+    if (collectionOnly !== true || repairTruncatedSource || refreshProviderSource ||
+        repairKb008Source || config.targetBinding?.source !== 'git' ||
+        config.targetBinding.revision !== frozen.target.revision ||
+        frozen.target.dirty !== false ||
+        detail.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3)) {
+      return {executed:false,reason:'legacy_v2_recovery_requires_exact_frozen_snapshot',securityStateChanged:false};
+    }
+    const records = [...(detail.tests || []), ...(detail.testHistory || [])];
+    const eligible = records.some(test => isLegacyIncompleteV2Source(test, {
+      snapshotId, checkId:detail.testDefinition.id,
+      checkDigest:detail.testDefinition.digest, revision:frozen.target.revision, controlId
+    }));
+    if (!eligible) return {executed:false,reason:'legacy_v2_recovery_not_required',securityStateChanged:false};
+  }
   if (repairKb008Source) {
     const config = detail.systemSnapshot?.assessmentConfiguration || {};
     if (controlId !== 'ARL-KB-008' || collectionOnly !== true ||
@@ -343,7 +394,14 @@ export async function runAuthoritativeControlSourceReview({
       revision:frozen.target.revision,
       sourceDigest, boundedObservation:deterministicEvidenceText
     })).digest('hex');
-  const inputReference = repairKb008Source
+  const legacyRepairDigest = crypto.createHash('sha256').update(JSON.stringify({
+    purpose:'legacy-v2-structured-source-recovery-v1',
+    revision:frozen.target.revision, controlId,
+    sourceDigest, boundedObservation:deterministicEvidenceText
+  })).digest('hex');
+  const inputReference = repairLegacyV2Source
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${legacyRepairDigest}`
+    : repairKb008Source
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${kb008RepairDigest}`
     : refreshProviderSource
     ? kb007ProviderRefreshReference({
