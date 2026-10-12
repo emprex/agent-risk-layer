@@ -31,8 +31,8 @@ export function assessIndependentControlTestGate({
     return deny('Control is not at the authoritative test stage.');
   }
   if (detail?.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3) ||
-      !SHA.test(detail?.testDefinition?.digest || '') && !/^[0-9a-f]{64}$/.test(detail?.testDefinition?.digest || '') ||
-      !Array.isArray(detail?.testDefinition?.requiredEvidence)) {
+      !/^[0-9a-f]{64}$/.test(detail?.testDefinition?.digest || '') ||
+      (!Array.isArray(detail?.testDefinition?.requiredEvidence) || !detail.testDefinition.requiredEvidence.length)) {
     return deny('Missing or mismatched canonical current test definition.');
   }
   return {
