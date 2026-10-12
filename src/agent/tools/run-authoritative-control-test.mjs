@@ -204,7 +204,9 @@ export function isLegacyIncompleteV2Source(test, {
       test?.controlId !== controlId ||
       test?.systemSnapshotId !== snapshotId ||
       test?.checkId !== checkId ||
-      test?.checkDigest !== checkDigest ||
+      // A historical check digest may differ after a canonical KB update.
+      // It identifies a stale *historical* record, never current coverage.
+      !/^[a-f0-9]{64}$/.test(test?.checkDigest || '') ||
       test?.executionMethod !== 'arl_frozen_source_evidence_collection_v2' ||
       test?.result !== 'inconclusive' ||
       test?.executionKind === 'retest' ||
@@ -397,7 +399,8 @@ export async function runAuthoritativeControlSourceReview({
   const legacyRepairDigest = crypto.createHash('sha256').update(JSON.stringify({
     purpose:'legacy-v2-structured-source-recovery-v1',
     revision:frozen.target.revision, controlId,
-    sourceDigest, boundedObservation:deterministicEvidenceText
+    sourceDigest, boundedObservation:deterministicEvidenceText,
+    currentCheckDigest:detail.testDefinition?.digest
   })).digest('hex');
   const inputReference = repairLegacyV2Source
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${legacyRepairDigest}`
