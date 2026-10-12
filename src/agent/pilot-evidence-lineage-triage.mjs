@@ -67,18 +67,26 @@ function reviewSource(evidence, tests, detail, snapshotId) {
     summary.lineageStatus = 'linked_test_missing';
     return summary;
   }
-  if (evidence.systemSnapshotId !== snapshotId ||
-      test.systemSnapshotId !== snapshotId ||
-      evidence.controlId !== detail.control.id ||
-      test.controlId !== detail.control.id ||
-      test.checkId !== detail.testDefinition?.id ||
-      !test.checkDigest ||
-      test.checkDigest !== detail.testDefinition?.digest ||
-      test.executionMethod !== SOURCE_V2 ||
-      test.result !== 'inconclusive' ||
-      test.executionKind === 'retest' ||
-      evidence.sourceReference !== test.inputReference) {
+  // Preserve a stable public category while exposing the exact violated
+  // invariant. Never silently reinterpret mismatched evidence as valid.
+  const mismatchChecks = [
+    ['evidence_snapshot_mismatch', evidence.systemSnapshotId !== snapshotId],
+    ['test_snapshot_mismatch', test.systemSnapshotId !== snapshotId],
+    ['evidence_control_mismatch', evidence.controlId !== detail.control.id],
+    ['test_control_mismatch', test.controlId !== detail.control.id],
+    ['check_identity_mismatch', test.checkId !== detail.testDefinition?.id],
+    ['check_digest_missing', !test.checkDigest],
+    ['check_digest_mismatch', Boolean(test.checkDigest) &&
+      test.checkDigest !== detail.testDefinition?.digest],
+    ['execution_method_mismatch', test.executionMethod !== SOURCE_V2],
+    ['test_result_mismatch', test.result !== 'inconclusive'],
+    ['retest_disallowed_for_static_source', test.executionKind === 'retest'],
+    ['source_reference_mismatch', evidence.sourceReference !== test.inputReference]
+  ];
+  const mismatchReasons = mismatchChecks.filter(([, failed]) => failed).map(([reason]) => reason);
+  if (mismatchReasons.length) {
     summary.lineageStatus = 'source_test_or_check_lineage_mismatch';
+    summary.lineageMismatchReasons = mismatchReasons;
     return summary;
   }
   const reference = REF_PATTERN.exec(test.inputReference || '');
