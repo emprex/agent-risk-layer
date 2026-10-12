@@ -114,6 +114,7 @@ function dossierForControl(item, detail, triage, snapshotId) {
 
   const sourceExceptions = triage.sourceRecords
     .filter(row =>
+      row.lineageIssueState !== 'historical_preserved_after_valid_recollection' &&
       row.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
       row.lineageStatus !== 'legacy_static_collection_requires_manual_review')
     .map(row => ({
