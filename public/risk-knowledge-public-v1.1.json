@@ -3321,7 +3321,7 @@
       "problem": {
         "statement": "Support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit.",
         "customer_symptom": "A user or operator may observe support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An operator, service or compromised AI agent may assume another subject identity or forward a delegated authorization outside its approved actor, tenant, resource, operation, purpose, privilege ceiling or validity window, allowing unauthorized downstream action or disclosure.",
         "affected_assets": [
           "agent",
           "model context",
@@ -3334,7 +3334,7 @@
           "platforms with support or delegation"
         ],
         "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between platforms with support or delegation and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between initiating actor, delegated subject and each service, MCP/tool, job, API and audit enforcement point that must independently verify authority before effect.",
         "operational_impact": "If support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -3370,7 +3370,7 @@
           "ARL-KB-030 delegation abuse, impersonation bypass or unattributable support-action incident",
           "ARL-KB-030 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3405,7 +3405,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "520554bd344c8ee338c95b605c995ca07d069a3ab31dda141ba7ee6874cade26"
+      "content_digest": "aea8e4ac84e8caddc74039f0a983177a470dbb0dd4572d12c6a854a571a49872"
     },
     {
       "id": "ARL-KB-031",

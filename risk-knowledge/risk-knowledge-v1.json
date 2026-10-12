@@ -6649,7 +6649,7 @@
       "problem": {
         "statement": "Support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit.",
         "customer_symptom": "A user or operator may observe support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "a malicious user, compromised dependency, unsafe model behaviour, or operator error can exploit or trigger the condition in support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An operator, service or compromised AI agent may assume another subject identity or forward a delegated authorization outside its approved actor, tenant, resource, operation, purpose, privilege ceiling or validity window, allowing unauthorized downstream action or disclosure.",
         "affected_assets": [
           "agent",
           "model context",
@@ -6662,13 +6662,13 @@
           "platforms with support or delegation"
         ],
         "threat_actor_or_failure_source": "a malicious user, compromised dependency, unsafe model behaviour, or operator error",
-        "trust_boundary": "The test crosses the boundary between platforms with support or delegation and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Between initiating actor, delegated subject and each service, MCP/tool, job, API and audit enforcement point that must independently verify authority before effect.",
         "operational_impact": "If support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "check": {
         "id": "ARL-CHK-030",
-        "objective": "Determine whether impersonation and delegated authority are explicitly scoped to a principal, purpose, target, privilege ceiling and expiry and remain attributable throughout the delegated session.",
-        "method": "Test impersonation or delegation entry, authorizing principal, reason, target identity, privilege ceiling, session visibility, expiry and termination. Attempt to exceed the delegated scope, change target or continue after termination and verify denial with attributable audit evidence.",
+        "objective": "Determine whether impersonation and delegated authority remain explicitly approved, scoped, time-bounded, independently enforced, revocable and attributable on the exact assessed build.",
+        "method": "Review owner-approved impersonation and delegation policy and version-bound enforcement. With separate written owner authorization, run bounded synthetic same-tenant allowed scenarios plus wrong-actor, wrong-subject, cross-tenant, privilege escalation, missing approval, replay, expired/revoked and queued-work scenarios. Correlate responses, tool/job effects and audit lineage.",
         "check_types": [
           "declared-control review",
           "observed-control inspection",
@@ -6676,14 +6676,16 @@
           "evidence review"
         ],
         "required_evidence": [
-          "ARL-KB-030 assessed system, version, environment and scope for Impersonation and delegation are uncontrolled",
-          "ARL-KB-030 control configuration or source location showing how reduce the likelihood and impact of impersonation and delegation are uncontrolled and make the remaining risk visible.",
-          "ARL-KB-030 positive and abuse inputs with expected and observed outputs for agent and model context",
-          "ARL-KB-030 policy, authorization, tool or audit events proving whether the tested impersonation and delegation are uncontrolled path executed",
-          "ARL-KB-030 tester identity, role, timestamp and evidence digest"
+          "ARL-KB-030 exact frozen build SHA, deployed environment, identity and tenant scope, delegated endpoints, agent/tool/MCP gateways, queues, jobs and audit sinks",
+          "ARL-KB-030 approved actor/delegate/subject, tenant, operation and resource policy with purpose, consent or authorised exception as applicable, privilege ceiling, expiry, revocation and accountable policy owner",
+          "ARL-KB-030 version-bound source and configuration of independent actor and subject identity, receiving-end authorization, approval binding, scoped delegation, session visibility, replay prevention, worker enforcement and fail-closed expiry",
+          "ARL-KB-030 bounded positive synthetic staging evidence of owner-authorised delegation and termination, approved scope, expected outputs and downstream changes",
+          "ARL-KB-030 bounded negative synthetic staging evidence of missing approval, wrong actor or subject, wrong tenant, scope escalation, self-approval, expired or revoked delegation, replay, queued job and direct gateway bypass denied before disclosure or effects",
+          "ARL-KB-030 correlated runtime evidence of initiator, subject, purpose, policy digest, approval, tenant, authorization decision, tool/worker execution, relevant response and before/after state with attributable audit records",
+          "ARL-KB-030 written owner authorisation, tester and independent reviewer role, exact version and evidence digest, exceptions, unsupported paths, limitations and accountable human conclusion"
         ],
-        "pass_condition": "ARL-KB-030 passes only when “Impersonation and delegation are uncontrolled” is not reproducible through the documented abuse cases, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches the expected decision.",
-        "fail_condition": "ARL-KB-030 fails when support staff, administrators or agents can impersonate users without scoped purpose, consent, expiry or audit, or when the relevant control is declaration-only, bypassable, fail-open, applied after a side effect, evaluated under the wrong identity or tenant, or unsupported by reproducible evidence.",
+        "pass_condition": "KB-030 passes only after accountable human review of the exact build, approved actor/subject delegation and privilege ceiling, bounded synthetic allowed and denied scenarios, expiration and revocation, and correlated runtime evidence showing no unauthorized data disclosure or downstream effect on applicable scoped paths.",
+        "fail_condition": "KB-030 is a confirmed FAIL only when exact-version corroborated evidence demonstrates unauthorized impersonation, cross-tenant delegation, scope escalation, forbidden disclosure or downstream effect, or an executable delegation path that demonstrably fails open. Missing owner policy, exact-version tests, runtime correlation or accountable signoff require INCONCLUSIVE / EVIDENCE GAP / REVIEW REQUIRED: block PASS and deployment without claiming a confirmed vulnerability.",
         "limitations": "This bounded ARL-KB-030 test does not prove absence of undiscovered paths, future regressions or risks outside the stated identities, inputs, environment and version.",
         "preconditions": [
           "Use an owner-authorised non-production target matching ARL-KB-030's relevant configuration.",
@@ -6722,10 +6724,10 @@
         "monitoring": "For ARL-KB-030, record policy version and digest, actor, target, decision, denial reason and side-effect outcome; alert the Security and support owner on bypass attempts, configuration drift, repeated denials and missing decision evidence.",
         "containment": "Contain ARL-KB-030 by disabling the affected capability or route, revoking scoped authority, isolating impacted identities and data, preserving versioned evidence, and requiring owner approval before re-enablement.",
         "retest_acceptance": [
-          "ARL-KB-030: “Impersonation and delegation are uncontrolled” is no longer reproducible against the exact remediated version.",
-          "ARL-KB-030: Authorised in-scope use completes successfully, remains within the documented asset scope for impersonation and delegation are uncontrolled, and produces no unintended side effect.",
-          "ARL-KB-030: Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution, with the expected policy and downstream events recorded.",
-          "ARL-KB-030: Reviewer identity, timestamp, deployed version, evidence digest, known limitations and rollback decision are recorded."
+          "ARL-KB-030: Exact remediated build, delegated actor/subject policy, scope, tenant, exception conditions and digests are recorded.",
+          "ARL-KB-030: Written owner-authorized synthetic permitted impersonation and delegation actions remain within scope with expected response and attributable downstream audit.",
+          "ARL-KB-030: Synthetic wrong actor, subject, tenant, privilege, approval, replay, revoked and expired variants fail closed before disclosure or side effect across applicable service and queued paths.",
+          "ARL-KB-030: Accountable human reviewer records exact-version retest evidence, exceptional modes, unsupported paths, limitations and final decision."
         ],
         "immediate_containment": "Immediately disable or isolate the ARL-KB-030 capability or route, revoke affected credentials, stop queued side effects, and preserve relevant policy, identity and downstream evidence.",
         "root_cause_remediation": "Use explicit delegated authority with reason, target, scope, expiry, step-up authentication, bannered sessions and immutable audit evidence. Remove the enabling trust-boundary defect rather than relying on prompt wording or operator vigilance.",
@@ -6784,7 +6786,7 @@
           "ARL-KB-030 delegation abuse, impersonation bypass or unattributable support-action incident",
           "ARL-KB-030 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -6840,7 +6842,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "520554bd344c8ee338c95b605c995ca07d069a3ab31dda141ba7ee6874cade26"
+      "content_digest": "aea8e4ac84e8caddc74039f0a983177a470dbb0dd4572d12c6a854a571a49872"
     },
     {
       "id": "ARL-KB-031",
