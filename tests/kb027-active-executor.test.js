@@ -50,3 +50,22 @@ test('observed prohibited access is candidate finding, not automatic FAIL',async
  assert.equal(out.status,'observed_policy_failure_candidate');
  assert.equal(out.automaticPass,false);
 });
+
+test('synthetic receiving-policy fixture is integration-only, never KB-027 PASS', async()=>{
+  let index=0;
+  const out=await executeKb027ActiveTest({...base,fetchImpl:async(_url,req)=>{
+    const p=JSON.parse(req.body);const [caseId,decision]=KB027_CASES[index++];
+    return {ok:true,json:async()=>({structuredOutput:{
+      schema:'arl.kb027.key-authorization-observation.v1',controlId:'ARL-KB-027',
+      caseId:p.caseId,targetRevision:REV,systemSnapshotId:SNAP,
+      targetObserved:true,dryRun:true,syntheticOnly:true,
+      fixtureOnly:true,decision,auditCorrelated:false,
+      downstreamStateChecked:true,unauthorisedSideEffectObserved:false,
+      credentialReference:'synthetic:'+caseId.toLowerCase()
+    }})};
+  }});
+  assert.equal(index,7);
+  assert.equal(out.status,'fixture_integration_only_policy_unverified');
+  assert.equal(out.automaticPass,false);
+  assert.equal(out.observations.every(x=>x.fixtureOnly),true);
+});
