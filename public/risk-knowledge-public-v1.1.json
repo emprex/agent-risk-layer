@@ -3515,7 +3515,7 @@
       "problem": {
         "statement": "Email, documents, websites, tickets or retrieved text contain instructions that the agent treats as authority.",
         "customer_symptom": "A user or operator may observe email, documents, websites, tickets or retrieved text contain instructions that the agent treats as authority; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in email, documents, websites, tickets or retrieved text contain instructions that the agent treats as authority, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "An adversary embeds instructions in lower-trust email, documents, web pages, retrieved text, tickets or tool responses. An agent mistakes that material for higher-priority direction, which may cause unauthorized tool actions, information disclosure or goal changes. Textual compliance alone does not establish a downstream authorization bypass.",
         "affected_assets": [
           "tenant-scoped records and object identifiers",
           "service identities, roles and credentials",
@@ -3530,7 +3530,7 @@
           "agents processing external content"
         ],
         "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between agents processing external content and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Untrusted external content across ingestion, retrieval and model context versus separately authenticated actor authority, tool/API access policy, tenant data boundaries and side-effect controls.",
         "operational_impact": "If email, documents, websites, tickets or retrieved text contain instructions that the agent treats as authority, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -3566,7 +3566,7 @@
           "ARL-KB-032 new indirect prompt-injection or retrieved-content compromise evidence",
           "ARL-KB-032 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3601,7 +3601,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "44bc90f6d8a9ab2be8149720ca7493eaf7384aacc0eb94feb620c33499525a38"
+      "content_digest": "4451321052265c4cac2a7f015ef88878dee8ba8a06b275cb0e68be6ae74c0f62"
     },
     {
       "id": "ARL-KB-033",
