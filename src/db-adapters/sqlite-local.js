@@ -669,6 +669,7 @@ for (const migrationName of [
   '052_risk_knowledge_kb029_principal_accountability.sql',
   '053_risk_knowledge_kb030_impersonation_delegation.sql',
   '054_risk_knowledge_kb031_direct_prompt_injection.sql',
+  '055_risk_knowledge_kb032_indirect_prompt_injection.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
