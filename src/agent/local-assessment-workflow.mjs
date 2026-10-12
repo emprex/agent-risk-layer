@@ -22,6 +22,7 @@ import {
   assessControlApplicability,
   assessControlApplicabilityFromLocalOwnerAttestation,
   closeControlFinding,
+  invalidateUnsubstantiatedControlFinding,
   getControlIntelligenceControl,
   getControlIntelligence,
   recordControlEvidence,
@@ -1032,18 +1033,15 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       rationale:'The historical synthetic in-memory forwarding probe did not demonstrate an explicitly configured receiving-tool data policy, an unauthorised recipient or a bypass. Earlier human attribution reviews disputed the failure. The current KB-006 check requires policyConfigured and observed bypass before FAIL. Historical failed execution is retained but its finding attribution is invalidated; KB-006 is not asserted PASS.',
       deploymentDecisionWritten:false
     };
-    await db.transaction(async()=>{
-      const updated = await db.prepare(
-        "UPDATE remediation_items SET status=?, verification_json=?, updated_at=? WHERE id=? AND project_id=? AND status='open'"
-      ).run('invalidated_unsubstantiated',JSON.stringify({attributionDisposition:disposition}),now,finding.id,options.projectId);
-      // The update is optimistic and auditable; never silently claim success.
-      if (Number(updated?.changes ?? updated?.rowCount ?? 0)!==1) throw new Error('KB-006 status changed concurrently or not updated.');
-      await db.prepare(
-        "INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)"
-      ).run(id('evt_'),options.userId,'arl.kb006.finding_invalidated',JSON.stringify(disposition),now);
+    const record = await invalidateUnsubstantiatedControlFinding({
+      projectId:options.projectId,controlId:'ARL-KB-006',
+      findingId:finding.id,userId:options.userId,input:{
+        systemSnapshotId:snapshot.id,testExecutionId:failed.id,
+        expectedUpdatedAt:finding.updatedAt,reason:disposition.rationale
+      }
     });
     return {
-      canonicalData:{kb006Disposition:disposition,securityStateChanged:true,
+      canonicalData:{kb006Disposition:record,securityStateChanged:true,
         deploymentDecisionWritten:false,humanReviewRequired:true},
       answer:'KB-006 unsubstantiated historical finding invalidated (not PASS). Original failed test and human review remain in history. Deployment remains HOLD.'
     };
