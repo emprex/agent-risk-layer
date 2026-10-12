@@ -38,6 +38,7 @@ import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage
 import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
+import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
 import { buildKb008PrivacyEvidenceView } from './kb008-privacy-evidence-view.mjs';
@@ -130,14 +131,8 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     }
     const {index,triages} = await readAllAssessmentTriages(options);
     const review = buildAssessmentEvidenceReviewPacks(index, triages);
-    if (review.summary.lineageExceptions !== review.lineageExceptions.length) {
-      throw new Error('Incomplete active lineage inventory.');
-    }
-    const eligible = [...new Set(review.lineageExceptions.filter(item =>
-      item.lineageStatus === 'structured_observation_missing' &&
-      item.diagnosticLane === 'bounded_recollection_candidate_manual_authorisation_required'
-    ).map(item => item.controlId))].sort();
-    const selected = eligible.slice(0,20);
+    const {eligibleControls,selectedControls:selected} =
+      selectNextLegacyV2RecoveryBatch(review);
     const outcomes = [];
     for (const controlId of selected) {
       const result = await runLocalAssessment(
@@ -163,7 +158,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         boundedLegacyV2Recovery:{
           snapshotId:index.systemSnapshotId,
           targetRevision:localFrozenInspection.target.revision,
-          eligibleControls:eligible.length,
+          eligibleControls,
           selectedControls:selected,outcomes,
           before:review.summary.lineageExceptions,
           after:afterReview.summary.lineageExceptions,
