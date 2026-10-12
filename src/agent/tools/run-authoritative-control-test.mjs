@@ -196,9 +196,9 @@ export function isMissingKb008StructuredObservations(test, {snapshotId, checkId,
 export function isLegacyIncompleteV2Source(test, {
   snapshotId, checkId, checkDigest, revision, controlId
 } = {}) {
-  if (!/^ARL-KB-\\d{3}$/.test(controlId || '') ||
+  if (!/^ARL-KB-\d{3}$/.test(controlId || '') ||
       !/^[a-f0-9]{40}$/.test(revision || '')) return false;
-  const ref = /^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):(ARL-KB-\\d{3}):([a-f0-9]{64})$/
+  const ref = /^arl_frozen_source_evidence_collection_v2:([a-f0-9]{40}):(ARL-KB-\d{3}):([a-f0-9]{64})$/
     .exec(test?.inputReference || '');
   if (!ref || ref[1] !== revision || ref[2] !== controlId ||
       test?.controlId !== controlId ||
@@ -209,8 +209,8 @@ export function isLegacyIncompleteV2Source(test, {
       test?.result !== 'inconclusive' ||
       test?.executionKind === 'retest' ||
       typeof test?.observedResult !== 'string') return false;
-  const start = 'Requirement-specific deterministic observations:\\n';
-  const end = '\\nThis collection does not assert that any canonical requirement is satisfied';
+  const start = 'Requirement-specific deterministic observations:\n';
+  const end = '\nThis collection does not assert that any canonical requirement is satisfied';
   const text = test.observedResult;
   const a = text.indexOf(start);
   const b = a < 0 ? -1 : text.indexOf(end, a + start.length);
