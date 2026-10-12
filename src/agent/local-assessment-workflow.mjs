@@ -10,6 +10,7 @@ import { createRedTeamAuthorisation, listRedTeamAuthorisations, listRedTeamRunsF
 import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
+import { executeKb027ActiveTest } from './kb027-active-executor.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
@@ -1828,6 +1829,65 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         humanReviewRequired: true
       }
     };
+  }
+
+  // KB-027 uses its own owner-authorised test gate, independent of the
+  // other controls' remediation states. No static recollection is performed.
+  if (/^Execute KB-027 synthetic active test[.!?]*$/i.test(request.trim())) {
+    const controlId='ARL-KB-027';
+    const detail=await getControlIntelligenceControl({
+      projectId:options.projectId,controlId,userId:options.userId
+    });
+    const revision=localFrozenInspection?.target?.revision;
+    const snapshot=detail?.systemSnapshot;
+    const binding=snapshot?.assessmentConfiguration;
+    if (localFrozenInspection?.binding?.verified!==true ||
+        localFrozenInspection?.target?.dirty!==false ||
+        revision!==process.env.ARL_EXPECTED_TARGET_SHA ||
+        !/^[a-f0-9]{40}$/.test(revision||'') ||
+        detail?.chain?.currentStage!=='test' ||
+        detail?.testDefinition?.id!=='ARL-CHK-027' ||
+        binding?.assessmentBinding?.assessmentId!==options.assessmentId ||
+        binding?.targetBinding?.revision!==revision ||
+        !snapshot?.id) {
+      throw new Error('KB-027 requires the exact clean frozen target, assessment, current snapshot and canonical test stage.');
+    }
+    const origin='http://127.0.0.1:'+(process.env.ARL_TARGET_ADAPTER_PORT||'8787');
+    const adapter=await verifyLocalTargetAdapter({
+      repositoryPath,expectedRevision:revision,origin
+    });
+    if (adapter.available!==true) {
+      return {canonicalData:{kb027ActiveTest:{status:'blocked',reason:adapter.reason},
+        securityStateChanged:false,deploymentDecisionWritten:false},
+        answer:'KB-027 active test blocked: '+adapter.reason+
+          '. No API-key cases were executed, no PASS or FAIL recorded.'};
+    }
+    const now=Date.now();
+    const marker='ARL KB-027 synthetic key-scope active test';
+    const active=(await listRedTeamAuthorisations(options)).filter(x=>
+      x.status==='active' && x.environment==='local' &&
+      x.endpointOrigin===origin && Array.isArray(x.permittedActions) &&
+      x.permittedActions.includes(marker) &&
+      Date.parse(x.windowStart)<=now && Date.parse(x.windowEnd)>now);
+    if(active.length!==1) throw new Error('KB-027 requires exactly one current explicit owner ROE for synthetic key-scope active testing.');
+    const reference='roe:'+active[0].id+':control:ARL-KB-027';
+    const authorised=(detail.evidence||[]).some(e=>
+      e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference &&
+      e.verificationState==='verified' && e.retentionStatus==='active');
+    if(!authorised) throw new Error('Verified KB-027 active test authorisation evidence is required.');
+    const token=String(process.env.ARL_TARGET_TOKEN||'').trim();
+    if(!token) throw new Error('ARL_TARGET_TOKEN required for the loopback adapter.');
+    const outcome=await executeKb027ActiveTest({
+      origin,token,targetRevision:revision,snapshotId:snapshot.id
+    });
+    // Never promote adapter self assertions to verified evidence or automatically
+    // close a finding. Human review and source provenance verification follow.
+    return {canonicalData:{kb027ActiveTest:outcome,
+      securityStateChanged:false,deploymentDecisionWritten:false,
+      humanReviewRequired:true},
+      answer:'KB-027 bounded active test: '+JSON.stringify(outcome)+
+        '\\nNo automatic PASS, FAIL, evidence verification or deployment decision.'};
   }
 
   if (request.startsWith('Execute authorised active control test ')) {
