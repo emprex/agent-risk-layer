@@ -57,7 +57,19 @@ function reviewSource(evidence, tests, detail, snapshotId) {
     observations: []
   };
   if (evidence.sourceType !== SOURCE_V2) {
-    if (evidence.sourceType === 'arl_frozen_source_evidence_collection') {
+    if (evidence.sourceType === 'consolidated_human_review' &&
+        evidence.evidenceClass === 'human_provided') {
+      const linked = tests.find(test => test.id === evidence.testExecutionId);
+      summary.lineageStatus =
+        linked && linked.systemSnapshotId === snapshotId &&
+        linked.controlId === detail.control.id &&
+        evidence.controlId === detail.control.id &&
+        linked.executionMethod === 'consolidated_human_review' &&
+        linked.result === 'inconclusive' &&
+        evidence.sourceReference === linked.inputReference
+          ? 'linked_human_review_not_static_collector'
+          : 'human_review_lineage_mismatch';
+    } else if (evidence.sourceType === 'arl_frozen_source_evidence_collection') {
       summary.lineageStatus = 'legacy_static_collection_requires_manual_review';
     }
     return summary;
@@ -149,7 +161,8 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
     for (const source of sources) {
       const lineageIssue =
         source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
-        source.lineageStatus !== 'legacy_static_collection_requires_manual_review';
+        source.lineageStatus !== 'legacy_static_collection_requires_manual_review' &&
+        source.lineageStatus !== 'linked_human_review_not_static_collector';
       source.lineageIssueState = lineageIssue
         ? (hasValidStructuredRecollection && source.sourceType === SOURCE_V2 &&
             (recoverableObservationStates.has(source.lineageStatus) ||
