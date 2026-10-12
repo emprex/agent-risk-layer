@@ -8,7 +8,7 @@ Multiple people, automation workers or agents may act using one generic privileg
 
 Distinguish a non-human workload identity tied to an accountable service owner from a human account and any delegated end-user context. Record handoffs and impersonation/delegation separately; never infer a unique human merely from a service principal. Break-glass exception credentials require time-bounded policy, individual attributable access, special logging and retrospective accountable review.
 
-## Seven proposed evidence families — future candidate migration 052
+## Seven evidence families — included in candidate migration 052
 
 1. **Exact assessed scope**: frozen commit/deployment version and environment; privileged accounts, service principals, agent/tool callers, delegated user identities, approval, change and evidence-signing actions, audit sinks and identity providers within scope.
 2. **Approved accountability policy**: current organisation-approved inventory linking each named human, workload, owner, role, permitted delegation and exceptional break-glass arrangement to accountable identity records; policy version, effective dates and reviewer.
@@ -28,4 +28,4 @@ Distinguish a non-human workload identity tied to an accountable service owner f
 
 Preserve the exact frozen `arl-target-mcp-agent` SHA `b3116fcfcec3bf6967773c3e9587c502b1fed5e5` for passive, read-only review only. Use no real personal accounts, real tokens, customer credentials or unapproved external authentication calls. Active tests require separate owner-written RoE and synthetic staging principals, events and reversible/dry-run effects. Do not test actual break-glass accounts or alter customers' access.
 
-This specification precedes additive candidate migration 052 and signed JSON, CSV, public and generated SQL updates. Earlier migrations and all other control digests must be retained; exact-head CI and accountable semantic review remain mandatory.
+This candidate includes additive migration 052 and synchronized signed JSON, CSV, public and generated SQL updates. Earlier migrations and all other control digests must be retained; exact-head CI and accountable semantic review remain mandatory.
