@@ -152,7 +152,10 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
         source.lineageStatus !== 'legacy_static_collection_requires_manual_review';
       source.lineageIssueState = lineageIssue
         ? (hasValidStructuredRecollection && source.sourceType === SOURCE_V2 &&
-            recoverableObservationStates.has(source.lineageStatus)
+            (recoverableObservationStates.has(source.lineageStatus) ||
+             (source.lineageStatus === 'source_test_or_check_lineage_mismatch' &&
+              source.lineageMismatchReasons?.length === 1 &&
+              source.lineageMismatchReasons[0] === 'check_digest_mismatch'))
             ? 'historical_preserved_after_valid_recollection'
             : 'active')
         : 'none';
