@@ -134,6 +134,27 @@ test('preserves recovered malformed v2 history without reporting it as an active
   assert.equal(result.controls[0].passInferred, false);
 });
 
+test('a valid recollection never masks an independent broken source link', () => {
+  const broken = {
+    ...evidence,
+    id: 'ev-broken',
+    testExecutionId: 'missing-test',
+    sourceReference: 'missing'
+  };
+  const result = triage({
+    ...detail,
+    evidence: [evidence, broken],
+    evidenceHistory: []
+  });
+  assert.equal(result.summary.staticCandidates, 1);
+  assert.equal(result.summary.sourceLineageIssues, 1);
+  assert.equal(result.summary.historicalSourceLineageIssues, 0);
+  const issue = result.controls[0].sourceRecords.find(row => row.evidenceId === 'ev-broken');
+  assert.equal(issue.lineageStatus, 'linked_test_missing');
+  assert.equal(issue.lineageIssueState, 'active');
+  assert.equal(result.controls[0].passInferred, false);
+});
+
 test('rejects an incomplete plan instead of claiming that a missing control was analysed',()=>{
   assert.throws(()=>buildPilotEvidenceLineageTriage({...plan,controlCount:12},[detail]),/Complete snapshot-bound/);
 });
