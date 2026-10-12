@@ -3417,7 +3417,7 @@
       "problem": {
         "statement": "A user instruction causes the model to ignore system rules, reveal data or call forbidden tools.",
         "customer_symptom": "A user or operator may observe a user instruction causes the model to ignore system rules, reveal data or call forbidden tools; the resulting symptom can include an unauthorized action, incorrect output, unavailable service, data exposure or an evidence gap within this control's stated scope.",
-        "credible_failure_or_attack": "an external content author, compromised source, malicious user, or unsafe model output can exploit or trigger the condition in a user instruction causes the model to ignore system rules, reveal data or call forbidden tools, crossing the assessed trust boundary before an external enforcement point detects or blocks it.",
+        "credible_failure_or_attack": "A direct user message attempts to spoof a higher authority, override operating constraints, expose protected data or induce forbidden tool actions. A model-generated claim is not authorization; impact depends on observable downstream policy enforcement or unauthorized disclosure.",
         "affected_assets": [
           "tenant-scoped records and object identifiers",
           "service identities, roles and credentials",
@@ -3432,7 +3432,7 @@
           "interactive agents"
         ],
         "threat_actor_or_failure_source": "an external content author, compromised source, malicious user, or unsafe model output",
-        "trust_boundary": "The test crosses the boundary between interactive agents and the identities, data sources, tools, providers or operators that can influence or receive its actions.",
+        "trust_boundary": "Untrusted natural-language user input and model output versus authenticated application policy, tenant-scoped data access, tool/API authorization and external side-effect enforcement.",
         "operational_impact": "If a user instruction causes the model to ignore system rules, reveal data or call forbidden tools, accountable operators may need to stop affected actions, investigate scoped data and identities, restore integrity, notify stakeholders where required, and hold deployment until retest evidence exists."
       },
       "solution_summary": {
@@ -3468,7 +3468,7 @@
           "ARL-KB-031 new direct prompt-injection bypass or protected-context disclosure evidence",
           "ARL-KB-031 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "candidate semantic correction; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3503,7 +3503,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "26c35a21faab06d992a018ddca3107725f18e40c2e749ceb0652862825f643c1"
+      "content_digest": "8744f619f86527499db6b576607efcd2a41bd592399ed31d4edd35e77e929032"
     },
     {
       "id": "ARL-KB-032",
