@@ -612,6 +612,60 @@ export async function recordDeploymentDecision({ projectId, userId, input = {} }
   return output;
 }
 
+export async function invalidateUnsubstantiatedControlFinding({
+  projectId, controlId, findingId, userId, input={}
+}) {
+  return db.transaction(async()=>{
+    const access=await requireAccess(projectId,userId,DECISION_ROLES,true);
+    const snapshot=await requireCurrentSnapshot(access,input.systemSnapshotId);
+    const finding=await db.prepare(`SELECT r.*, b.system_snapshot_id AS binding_snapshot
+      FROM remediation_items r JOIN control_finding_bindings b
+        ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.entry_id=?
+      WHERE r.id=? AND r.project_id=?`).get(
+      access.project.workspace_id,projectId,controlId,findingId,projectId);
+    if (!finding || finding.status!=='open' || finding.binding_snapshot!==snapshot.id) {
+      throw conflict('Exact open finding not bound to the current control snapshot.');
+    }
+    if (input.expectedUpdatedAt && finding.updated_at!==input.expectedUpdatedAt)
+      throw conflict('Finding changed since review.');
+    const failed=await db.prepare(`SELECT * FROM control_test_executions
+      WHERE id=? AND workspace_id=? AND project_id=? AND system_snapshot_id=?
+        AND entry_id=? AND finding_id=? AND execution_kind='initial' AND result='failed'`).get(
+      input.testExecutionId,access.project.workspace_id,projectId,snapshot.id,controlId,findingId);
+    if (!failed) throw conflict('Original historical failed test not found.');
+    await verifyRows([failed],'content_digest','test');
+    const prior=await db.prepare(`SELECT properties_json FROM events
+      WHERE user_id=? AND name='arl.kb006.attribution_human_review'
+      ORDER BY created_at DESC LIMIT 200`).all(userId);
+    const reviews=prior.map(r=>parseJson(r.properties_json,null)).filter(x=>
+      x && x.projectId===projectId && x.controlId===controlId &&
+      x.systemSnapshotId===snapshot.id && x.findingId===findingId &&
+      x.testExecutionId===failed.id && x.disposition==='attribution_disputed');
+    if (!reviews.length) throw conflict('Prior accountable disputed-attribution review is required.');
+    if (String(input.reason||'').trim().length<80)
+      throw badRequest('Detailed operator reason required to invalidate attribution.');
+    const timestamp=nowIso();
+    const disposition={schema:'arl.finding-attribution-disposition.v1',
+      reviewerId:userId,reviewerRole:access.role,systemSnapshotId:snapshot.id,
+      controlId,findingId,testExecutionId:failed.id,
+      priorReviewCount:reviews.length,reason:String(input.reason).trim(),
+      decision:'invalidated_unsubstantiated',reviewedAt:timestamp,
+      passInferred:false,deploymentApproved:false};
+    disposition.digest=intelligenceDigest(disposition);
+    const original=parseJson(finding.verification_json,{});
+    const update=await db.prepare(`UPDATE remediation_items SET
+      status='invalidated_unsubstantiated', verification_json=?, updated_at=?
+      WHERE id=? AND project_id=? AND status='open'`).run(
+      JSON.stringify({...original,attributionDisposition:disposition}),
+      timestamp,findingId,projectId);
+    if (Number(update?.changes??update?.rowCount??0)!==1)
+      throw conflict('Finding concurrent change, no disposition written.');
+    await audit(access,userId,'control_intelligence.finding_invalidated_unsubstantiated',
+      'remediation',findingId,disposition);
+    return {id:findingId,status:'invalidated_unsubstantiated',dispositionDigest:disposition.digest};
+  });
+}
+
 export async function closeControlFinding({projectId,controlId,findingId,userId,input={}}){
   let result;
   await db.transaction(async()=>{
