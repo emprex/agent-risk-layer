@@ -89,3 +89,90 @@ test('authorised plan evidence advances the workflow to execution', () => {
   );
   assert.equal(state.deploymentDecisionWritten, false);
 });
+
+test('recorded inconclusive active test advances to evidence review', () => {
+  const state = deriveAuthoritativeWorkflowState({
+    projectId: 'prj_test',
+    userId: 'usr_test',
+    assessmentId: 'asm_test',
+    preparation: {
+      target: { revision: 'abc' },
+      inspectorBinding: { verified: true },
+      assessmentContext: {
+        available: true,
+        projectId: 'prj_test',
+        systemSnapshotId: 'sys_test',
+        systemSnapshotStatus: 'current'
+      },
+      authoritativeAssessment: {
+        available: true,
+        assessmentId: 'asm_test'
+      },
+      targetContextBinding: { verified: true },
+      assessmentContextBinding: { verified: true },
+      evidencePlan: {
+        available: true,
+        state: 'manual-evidence-required',
+        checks: [],
+        manual: []
+      }
+    },
+    controlIntelligence: {
+      systemSnapshot: { id: 'sys_test' },
+      items: [{
+        controlId: 'ARL-KB-006',
+        currentStage: 'test',
+        chainStatus: 'test_inconclusive',
+        nextAction: 'Continue.',
+        deploymentImpact: 'hold',
+        testMode: 'manual',
+        automationStatus: 'unsupported',
+        authoritativeDetail: {
+          systemSnapshot: { id: 'sys_test' },
+          tests: [{ id: 'ctx_test', systemSnapshotId: 'sys_test', executionMethod: 'authorised_local_active_test', result: 'inconclusive' }],
+          evidence: [{ id: 'cei_test', systemSnapshotId: 'sys_test', testExecutionId: 'ctx_test', sourceType: 'authorised_local_active_test', retentionStatus: 'active' }, {
+            sourceType: 'active_test_plan_authorisation',
+            sourceReference: 'roe:example',
+            verificationState: 'verified',
+            retentionStatus: 'active'
+          }]
+        }
+      }]
+    },
+    readiness: {
+      available: true,
+      decision: 'hold',
+      systemSnapshotId: 'sys_test',
+      summary: {
+        profileControls: 108,
+        applicableControls: 105,
+        controlsMissingEvidence: 99
+      }
+    },
+    evidenceWorkQueue: {
+      available: true,
+      items: [{
+        controlId: 'ARL-KB-006',
+        classification: 'active_test_required',
+        classificationReason: 'Observed execution evidence is required.',
+        activeTestRequirements: ['runtime observation'],
+        method: 'Use the approved local test method.'
+      }],
+      humanReviewBatches: []
+    }
+  });
+
+  assert.equal(
+    state.stage,
+    'active_test_evidence_review_required'
+  );
+  assert.equal(
+    state.nextAllowedAction.name,
+    'review_inconclusive_control_evidence'
+  );
+  assert.equal(
+    state.nextAllowedAction.authorisationReference,
+    'roe:example'
+  );
+  assert.equal(state.deploymentDecisionWritten, false);
+});
