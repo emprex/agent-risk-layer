@@ -1,0 +1,105 @@
+{
+  "schema": "arl.kb030.synthetic-delegation-design.v1",
+  "status": "design_only_not_executed",
+  "frozenTarget": {
+    "sha": "b3116fcfcec3bf6967773c3e9587c502b1fed5e5",
+    "inspection": "passive_read_only"
+  },
+  "guardrails": {
+    "ownerWrittenRoERequired": true,
+    "liveProviderCallsExecuted": false,
+    "rawCredentialsPresent": false,
+    "automaticFindingForbidden": true,
+    "customerSecurityDecision": "HOLD"
+  },
+  "scenarios": [
+    {
+      "id": "valid-delegation",
+      "type": "positive",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_a",
+      "operation": "read_approved_record",
+      "expected": "allow only within approved tenant, time window, purpose and resource"
+    },
+    {
+      "id": "valid-termination",
+      "type": "positive",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_a",
+      "operation": "terminate_delegation",
+      "expected": "allow termination with attributable audit correlation"
+    },
+    {
+      "id": "missing-approval",
+      "type": "negative",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_a",
+      "operation": "read_without_approval",
+      "expected": "deny before disclosure or tool action"
+    },
+    {
+      "id": "wrong-tenant",
+      "type": "negative",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_b",
+      "operation": "read_cross_tenant_record",
+      "expected": "deny before foreign metadata or side effects"
+    },
+    {
+      "id": "privilege-escalation",
+      "type": "negative",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_a",
+      "operation": "export_outside_ceiling",
+      "expected": "deny before export or downstream effect"
+    },
+    {
+      "id": "forged-subject",
+      "type": "negative",
+      "actor": "synthetic_agent_a",
+      "subject": "synthetic_user_b",
+      "operation": "change_subject_claim",
+      "expected": "deny before execution"
+    },
+    {
+      "id": "expired-or-revoked",
+      "type": "negative",
+      "actor": "synthetic_support_a",
+      "subject": "synthetic_user_a",
+      "operation": "use_terminated_delegation",
+      "expected": "deny before execution after policy cutoff"
+    },
+    {
+      "id": "replayed-approval",
+      "type": "negative",
+      "actor": "synthetic_agent_a",
+      "subject": "synthetic_user_a",
+      "operation": "reuse_approval_token",
+      "expected": "deny replay before any state change"
+    },
+    {
+      "id": "queued-job",
+      "type": "negative",
+      "actor": "synthetic_worker_a",
+      "subject": "synthetic_user_a",
+      "operation": "execute_after_revocation",
+      "expected": "deny after policy cutoff before asynchronous effect"
+    },
+    {
+      "id": "unapproved-breakglass",
+      "type": "negative",
+      "actor": "synthetic_admin_a",
+      "subject": "synthetic_user_a",
+      "operation": "assume_emergency_role",
+      "expected": "deny without approved exception and independent attribution"
+    },
+    {
+      "id": "self-approval",
+      "type": "negative",
+      "actor": "synthetic_admin_a",
+      "subject": "synthetic_user_a",
+      "operation": "approve_own_delegation",
+      "expected": "deny if policy prohibits self-approval"
+    }
+  ]
+}
