@@ -580,6 +580,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       excludedControls: review.excludedControls,
       criterionCount: review.criterionCount,
       summary: review.summary,
+      activeLineageExceptions: review.lineageExceptions,
       packs: packs.map(pack => ({
         number: pack.number,
         theme: pack.theme,
