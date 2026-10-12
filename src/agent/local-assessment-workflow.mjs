@@ -163,6 +163,39 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         '\\nNo runtime test or security verdict. Existing evidence is preserved.'
     };
   }
+  if (/^Recover legacy v2 source evidence ARL-KB-\\d{3}[.!?]*$/i.test(request.trim())) {
+    const match = /^Recover legacy v2 source evidence (ARL-KB-\\d{3})[.!?]*$/i.exec(request.trim());
+    const controlId = match[1].toUpperCase();
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection?.target?.revision || '')) {
+      throw new Error('Legacy v2 recovery requires verified clean frozen target.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId, controlId, userId:options.userId
+    });
+    const config = detail?.systemSnapshot?.assessmentConfiguration;
+    if (!detail?.systemSnapshot?.id ||
+        config?.targetBinding?.source !== 'git' ||
+        config?.targetBinding?.revision !== localFrozenInspection.target.revision ||
+        config?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        detail?.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3) ||
+        !Array.isArray(detail.testDefinition.requiredEvidence)) {
+      throw new Error('Legacy v2 recovery refuses changed or unbound assessment/check.');
+    }
+    const outcome = await runAuthoritativeControlSourceReview({
+      repositoryPath, projectId:options.projectId, userId:options.userId,
+      controlId, requirements:detail.testDefinition.requiredEvidence,
+      collectionOnly:true, repairLegacyV2Source:true
+    });
+    return {
+      canonicalData:{legacyV2SourceRecovery:outcome,controlId,
+        securityStateChanged:outcome.securityStateChanged === true,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Legacy v2 static source recovery: '+JSON.stringify(outcome)+
+        '\\nNo active tests or security verdict; historical evidence remains preserved.'
+    };
+  }
   if (/^Recover structured frozen source evidence ARL-KB-008[.!?]*$/i.test(request.trim())) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
