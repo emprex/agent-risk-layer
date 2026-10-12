@@ -56,7 +56,7 @@ const controls = [
       criterion(2, 'human_only', 'Accountable reviewer identity for 008')
     ],
     sourceRecords: [{
-      evidenceId: 'e-old', lineageStatus: 'invalid_or_truncated_json'
+      evidenceId: 'e-old', sourceType: 'arl_frozen_source_evidence_collection_v2', lineageStatus: 'invalid_or_truncated_json'
     }],
     summary: {staticMissing:0, sourceLineageIssues:1}
   },
