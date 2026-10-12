@@ -82,6 +82,7 @@ test('rejects a source reference mismatch without accepting a machine candidate'
   assert.equal(result.summary.staticMissing,1);
   assert.equal(result.summary.sourceLineageIssues,1);
   assert.equal(result.controls[0].sourceRecords[0].lineageStatus,'source_test_or_check_lineage_mismatch');
+  assert.deepEqual(result.controls[0].sourceRecords[0].lineageMismatchReasons,['source_reference_mismatch']);
 });
 
 test('rejects stale snapshot, check digest or wrong target revision', () => {
@@ -89,6 +90,7 @@ test('rejects stale snapshot, check digest or wrong target revision', () => {
   const mismatch = triage({...detail,tests:[{...testResult,checkDigest:'old'}],testHistory:[]});
   assert.equal(mismatch.summary.staticCandidates,0);
   assert.equal(mismatch.summary.sourceLineageIssues,1);
+  assert.deepEqual(mismatch.controls[0].sourceRecords[0].lineageMismatchReasons,['check_digest_mismatch']);
   const wrongRev = triage({...detail,systemSnapshot:{id:'snap',versionIdentifier:'c'.repeat(40)}});
   assert.equal(wrongRev.controls[0].sourceRecords[0].lineageStatus,'target_revision_mismatch');
 });
