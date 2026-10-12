@@ -128,12 +128,23 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
     const validStructuredSources = sources.filter(source =>
       source.lineageStatus === 'linked_static_observation_unverified_for_criterion');
     const hasValidStructuredRecollection = validStructuredSources.length > 0;
+    // Only the known incomplete-observation states qualify as recovered
+    // history. A broken link, wrong target, or mismatched check remains active
+    // regardless of any other valid record for this control.
+    const recoverableObservationStates = new Set([
+      'structured_observation_missing',
+      'structured_observation_truncated',
+      'invalid_structured_observation',
+      'invalid_or_truncated_json',
+      'observation_revision_mismatch'
+    ]);
     for (const source of sources) {
       const lineageIssue =
         source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
         source.lineageStatus !== 'legacy_static_collection_requires_manual_review';
       source.lineageIssueState = lineageIssue
-        ? (hasValidStructuredRecollection && source.sourceType === SOURCE_V2
+        ? (hasValidStructuredRecollection && source.sourceType === SOURCE_V2 &&
+            recoverableObservationStates.has(source.lineageStatus)
             ? 'historical_preserved_after_valid_recollection'
             : 'active')
         : 'none';
