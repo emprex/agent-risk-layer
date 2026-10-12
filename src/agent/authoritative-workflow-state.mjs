@@ -120,6 +120,9 @@ function selectScopedControlState(
 
   const candidates =
     controlIntelligence.items
+      .filter((item) =>
+        item.operationalReviewDisposition !== 'inconclusive_documented'
+      )
       .map((item) => {
         let workflowPriority =
           (fullProfile
@@ -1291,6 +1294,23 @@ export async function getAuthoritativeWorkflowState({
     const detailByControl =
       new Map(detailPairs);
 
+    // Explicit human review closes the operator work item, not the security
+    // evidence gap or the control's readiness decision.
+    const { db } = await import('../db.js');
+    const reviewRows = await db.prepare(
+      "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 500"
+    ).all(userId, 'arl.control.inconclusive_review');
+    const reviewsByControl = new Map();
+    for (const row of reviewRows) {
+      let entry;
+      try { entry = JSON.parse(row.properties_json); } catch { continue; }
+      if (entry?.projectId !== projectId ||
+          entry?.systemSnapshotId !== preparation?.assessmentContext?.systemSnapshotId ||
+          entry?.disposition !== 'inconclusive_documented' ||
+          reviewsByControl.has(entry.controlId)) continue;
+      reviewsByControl.set(entry.controlId, entry);
+    }
+
     controlIntelligence = {
       ...controlIntelligence,
       items: enrichedItems.map((item) => {
@@ -1304,6 +1324,8 @@ export async function getAuthoritativeWorkflowState({
           // Never offer active-test execution for a control already in
           // remediation or another non-test stage.
           currentStage: detailStage || item.currentStage,
+          operationalReviewDisposition:
+            reviewsByControl.get(item.controlId)?.disposition || null,
           authoritativeDetail
         };
       })
