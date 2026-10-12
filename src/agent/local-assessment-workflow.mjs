@@ -174,6 +174,63 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         '\\nNo evidence approval, PASS/FAIL or deployment decision was inferred.'
     };
   }
+  if (/^Refresh stale v2 check digests$/i.test(request.trim())) {
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.target?.revision !== process.env.ARL_EXPECTED_TARGET_SHA ||
+        !/^[a-f0-9]{40}$/.test(localFrozenInspection.target.revision)) {
+      throw new Error('Stale digest refresh requires exact expected clean frozen Git revision.');
+    }
+    const {index,triages}=await readAllAssessmentTriages(options);
+    const review=buildAssessmentEvidenceReviewPacks(index,triages);
+    const candidateIds=[...new Set(review.lineageExceptions.filter(item=>
+      item.lineageStatus === 'source_test_or_check_lineage_mismatch' &&
+      item.lineageMismatchReasons?.length === 1 &&
+      item.lineageMismatchReasons[0] === 'check_digest_mismatch' &&
+      item.sourceType === 'arl_frozen_source_evidence_collection_v2'
+    ).map(item=>item.controlId))].sort();
+    if (candidateIds.length > 20) throw new Error('Stale digest refresh exceeds bounded 20-control limit.');
+    const outcomes=[];
+    for (const controlId of candidateIds) {
+      const detail=await getControlIntelligenceControl({
+        projectId:options.projectId,controlId,userId:options.userId
+      });
+      const config=detail?.systemSnapshot?.assessmentConfiguration;
+      if (detail?.systemSnapshot?.id !== index.systemSnapshotId ||
+          config?.targetBinding?.source !== 'git' ||
+          config.targetBinding.revision !== localFrozenInspection.target.revision ||
+          config?.assessmentBinding?.assessmentId !== options.assessmentId ||
+          detail?.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3) ||
+          !Array.isArray(detail.testDefinition.requiredEvidence)) {
+        throw new Error('Stale digest refresh refuses changed or unbound assessment/check.');
+      }
+      const outcome=await runAuthoritativeControlSourceReview({
+        repositoryPath,projectId:options.projectId,userId:options.userId,
+        controlId,requirements:detail.testDefinition.requiredEvidence,
+        collectionOnly:true,refreshStaleCheckDigestSource:true
+      });
+      outcomes.push({controlId,executed:outcome.executed === true,
+        effect:outcome.effect || null,reason:outcome.reason || null});
+    }
+    const after=await readAllAssessmentTriages(options);
+    if (after.index.systemSnapshotId !== index.systemSnapshotId ||
+        JSON.stringify(after.index.batches) !== JSON.stringify(index.batches)) {
+      throw new Error('Frozen assessment changed during stale digest refresh.');
+    }
+    const updated=buildAssessmentEvidenceReviewPacks(after.index,after.triages);
+    return {
+      canonicalData:{staleV2CheckDigestRefresh:{
+        snapshotId:index.systemSnapshotId,selectedControls:candidateIds,outcomes,
+        before:review.summary.lineageExceptions,after:updated.summary.lineageExceptions,
+        remainingByStatus:updated.summary.lineageExceptionsByStatus
+      },securityStateChanged:outcomes.some(x=>x.effect === 'authoritative_control_source_review_recorded'),
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Stale v2 check digest refresh (append-only): '+
+        JSON.stringify({selectedControls:candidateIds,outcomes,before:review.summary.lineageExceptions,
+          after:updated.summary.lineageExceptions,remainingByStatus:updated.summary.lineageExceptionsByStatus},null,2)+
+        '\\nHistorical records retained; no security verdict or active test.'
+    };
+  }
   if (/(?:bounded test|retest)/i.test(request)) {
     const authorisations = await listRedTeamAuthorisations(options);
     const unsafe = authorisations.some(item => {
