@@ -10,7 +10,7 @@ import {
 
 export * from './control-intelligence-core.js';
 
-const CLOSED_FINDING_STATES = new Set(['verified_closed', 'accepted_risk']);
+const CLOSED_FINDING_STATES = new Set(['verified_closed', 'accepted_risk', 'invalidated_unsubstantiated']);
 const STAGES = ['applicability', 'test', 'evidence', 'finding', 'remediation', 'retest', 'approval', 'deployment_decision'];
 const IMPLEMENTATION_TRUST_LIMIT = 'A remediation implementation artifact proves that a change artifact exists; it does not verify the observed test or retest outcome.';
 const APPROVAL_TRUST_LIMIT = 'An approval record verifies the approval event; by itself it does not verify the observed test or retest outcome.';
