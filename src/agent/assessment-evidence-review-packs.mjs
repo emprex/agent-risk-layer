@@ -35,6 +35,21 @@ function packetsFromGroups(map, prefix) {
     }));
 }
 
+// These are diagnostic lanes only. No lane confers execution permission.
+const RECOVERABLE_CONTENT_STATES = new Set([
+  'structured_observation_missing',
+  'structured_observation_truncated',
+  'invalid_structured_observation',
+  'invalid_or_truncated_json'
+]);
+function lineageDiagnosticLane(record) {
+  if (record.sourceType === 'arl_frozen_source_evidence_collection_v2' &&
+      RECOVERABLE_CONTENT_STATES.has(record.lineageStatus)) {
+    return 'bounded_recollection_candidate_manual_authorisation_required';
+  }
+  return 'lineage_or_integrity_manual_investigation_required';
+}
+
 function referenceTask(controlId, criterion) {
   return {
     controlId,
@@ -113,7 +128,8 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
           controlId: control.controlId,
           evidenceId: source.evidenceId,
           sourceType: source.sourceType || null,
-          lineageStatus: source.lineageStatus
+          lineageStatus: source.lineageStatus,
+          diagnosticLane: lineageDiagnosticLane(source)
         };
         if (source.lineageIssueState === 'historical_preserved_after_valid_recollection') {
           historicalExceptions.push(record);
@@ -130,6 +146,10 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
   const lineageExceptionsByStatus = Object.fromEntries(
     [...new Set(exceptions.map(row => row.lineageStatus))].sort()
       .map(status => [status, exceptions.filter(row => row.lineageStatus === status).length])
+  );
+  const lineageExceptionsByDiagnosticLane = Object.fromEntries(
+    [...new Set(exceptions.map(row => row.diagnosticLane))].sort()
+      .map(lane => [lane, exceptions.filter(row => row.diagnosticLane === lane).length])
   );
   const lineageExceptionsByControl = Object.fromEntries(
     [...new Set(exceptions.map(row => row.controlId))].sort()
@@ -155,7 +175,8 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
       manualReviewPackets: manualReview.length,
       lineageExceptions: exceptions.length,
       historicalLineageExceptions: historicalExceptions.length,
-      lineageExceptionsByStatus
+      lineageExceptionsByStatus,
+      lineageExceptionsByDiagnosticLane
     },
     staticCollection,
     humanDocumentation,
