@@ -258,9 +258,6 @@ test('reviewed inconclusive control is no longer selected as active work', () =>
     state.nextAllowedAction.name,
     'provide_required_manual_evidence'
   );
-  assert.equal(
-    state.nextAllowedAction.authorisationReference,
-    'roe:example'
-  );
+  assert.equal(state.scopedControl, null);
   assert.equal(state.deploymentDecisionWritten, false);
 });
