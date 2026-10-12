@@ -1130,7 +1130,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
 
   // Generic, human-directed administrative disposition. It removes an operator
   // queue item, never resolves its security evidence gap or readiness HOLD.
-  const concludeInconclusive = /^Document inconclusive review (ARL-KB-\\d{3})$/.exec(request.trim());
+  const concludeInconclusive = /^Document inconclusive review (ARL-KB-\d{3})$/.exec(request.trim());
   if (concludeInconclusive) {
     const controlId = concludeInconclusive[1];
     const current = await runArlAgent(repositoryPath, 'Where are we?', options);
