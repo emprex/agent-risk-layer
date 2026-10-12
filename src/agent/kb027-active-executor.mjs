@@ -51,7 +51,7 @@ export async function executeKb027ActiveTest({
         obs?.dryRun!==true ||
         obs?.syntheticOnly!==true ||
         !['permitted','denied'].includes(obs?.decision) ||
-        obs?.auditCorrelated!==true ||
+        (obs?.fixtureOnly!==true && obs?.auditCorrelated!==true) ||
         obs?.downstreamStateChecked!==true ||
         typeof obs?.unauthorisedSideEffectObserved!=='boolean' ||
         typeof obs?.credentialReference!=='string' ||
@@ -61,7 +61,7 @@ export async function executeKb027ActiveTest({
     }
     cases.push({caseId,expectedDecision,decision:obs.decision,
       fixtureOnly:obs.fixtureOnly===true,
-      auditCorrelated:true,downstreamStateChecked:true,
+      auditCorrelated:obs.auditCorrelated===true,downstreamStateChecked:true,
       unauthorisedSideEffectObserved:obs.unauthorisedSideEffectObserved,
       credentialReference:obs.credentialReference});
   }
