@@ -120,7 +120,7 @@ function assertOperatorReviewFrozenBinding(dossier, frozenInspection) {
 
 export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
-  const recoveryBatch = /^Recover legacy v2 source evidence batch ([1-5])$/i.exec(request.trim());
+  const recoveryBatch = /^Recover next legacy v2 source evidence batch$/i.exec(request.trim());
   if (recoveryBatch) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
@@ -128,7 +128,6 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         !/^[a-f0-9]{40}$/.test(localFrozenInspection.target.revision)) {
       throw new Error('Bounded recovery requires an exact expected clean frozen Git SHA.');
     }
-    const batchNumber = Number(recoveryBatch[1]);
     const {index,triages} = await readAllAssessmentTriages(options);
     const review = buildAssessmentEvidenceReviewPacks(index, triages);
     if (review.summary.lineageExceptions !== review.lineageExceptions.length) {
@@ -138,7 +137,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       item.lineageStatus === 'structured_observation_missing' &&
       item.diagnosticLane === 'bounded_recollection_candidate_manual_authorisation_required'
     ).map(item => item.controlId))].sort();
-    const selected = eligible.slice((batchNumber - 1) * 20, batchNumber * 20);
+    const selected = eligible.slice(0,20);
     const outcomes = [];
     for (const controlId of selected) {
       const result = await runLocalAssessment(
@@ -164,7 +163,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         boundedLegacyV2Recovery:{
           snapshotId:index.systemSnapshotId,
           targetRevision:localFrozenInspection.target.revision,
-          batchNumber,eligibleControls:eligible.length,
+          eligibleControls:eligible.length,
           selectedControls:selected,outcomes,
           before:review.summary.lineageExceptions,
           after:afterReview.summary.lineageExceptions,
@@ -174,7 +173,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         deploymentDecisionWritten:false,humanReviewRequired:true
       },
       answer:'Bounded legacy v2 recovery (append-only; no runtime tests): ' +
-        JSON.stringify({batchNumber,selectedControls:selected,outcomes,
+        JSON.stringify({selectedControls:selected,outcomes,
           before:review.summary.lineageExceptions,after:afterReview.summary.lineageExceptions,
           remainingByStatus:afterReview.summary.lineageExceptionsByStatus},null,2) +
         '\\nNo evidence approval, PASS/FAIL or deployment decision was inferred.'
