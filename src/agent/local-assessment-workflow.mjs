@@ -1,5 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { inspectFrozenRepository } from './tools/inspect-frozen-repository.mjs';
 import { buildFrozenInspectionTransport } from './frozen-inspection-transport.mjs';
 import { recordDeclaredAssessmentContext } from './assessment-context-authority.mjs';
@@ -123,6 +125,83 @@ function assertOperatorReviewFrozenBinding(dossier, frozenInspection) {
 
 export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
+  if (/^Import KB-028 local observation[.!?]*$/i.test(request.trim())) {
+    // Candidate-only import: no tests, trust promotion, findings or readiness changes.
+    const filePath = path.join(process.cwd(), 'data', 'local-reports',
+      'KB-028-cache-observation-2026-10-12.json');
+    const bytes = await readFile(filePath);
+    if (bytes.length > 65536) throw new Error('KB-028 observation exceeds the candidate size limit.');
+    const observation = JSON.parse(bytes.toString('utf8'));
+    const revision = localFrozenInspection?.target?.revision;
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !revision || observation?.target?.commit !== revision ||
+        observation?.target?.repository !== 'arl-target-mcp-agent') {
+      throw new Error('KB-028 candidate target does not match the verified frozen assessment target.');
+    }
+    if (observation?.schema !== 'arl.operator-observation-candidate.v1' ||
+        observation?.controlId !== 'ARL-KB-028' ||
+        observation?.recordType !== 'synthetic_component_characterization' ||
+        observation?.recordStatus !== 'candidate_unverified_not_imported' ||
+        observation?.result !== 'inconclusive' ||
+        observation?.securityDecision !== 'none' ||
+        observation?.deploymentImpact !== 'hold' ||
+        !Array.isArray(observation?.observations) ||
+        observation.observations.length !== 2 ||
+        observation.observations.some(item =>
+          ![0, 300].includes(item?.configuredTtlSeconds) ||
+          item?.initialTokenAccepted !== true ||
+          item?.revokedTokenAcceptedWhileCached !== true ||
+          item?.revokedTokenAcceptedAfterCacheClear !== false) ||
+        typeof observation?.limitations !== 'string' ||
+        observation.limitations.length < 30) {
+      throw new Error('KB-028 candidate schema, outcome or synthetic limitations are invalid.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId: 'ARL-KB-028', userId: options.userId
+    });
+    const snapshot = detail?.systemSnapshot;
+    if (!snapshot?.id ||
+        snapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        snapshot?.assessmentConfiguration?.targetBinding?.revision !== revision ||
+        detail?.chain?.currentStage !== 'test') {
+      throw new Error('KB-028 is not on the active authoritative snapshot at the test stage.');
+    }
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const sourceReference =
+      'data/local-reports/KB-028-cache-observation-2026-10-12.json#sha256=' + digest;
+    const prior = (detail?.evidence || []).find(item =>
+      item?.sourceReference === sourceReference &&
+      item?.retentionStatus === 'active');
+    if (prior) {
+      return {
+        answer: 'KB-028 synthetic candidate already imported: ' + prior.id +
+          '. Still unverified; no control outcome changed.',
+        canonicalData: { evidenceId: prior.id, alreadyRecorded: true, securityStateChanged: false }
+      };
+    }
+    const evidence = await recordControlEvidence({
+      projectId: options.projectId, controlId: 'ARL-KB-028', userId: options.userId,
+      input: {
+        systemSnapshotId: snapshot.id,
+        evidenceClass: 'observed',
+        sourceType: 'operator_synthetic_observation',
+        sourceReference,
+        limitations: 'Synthetic component-only characterization: mocked OAuth introspection, no real revocation policy or downstream authorization effects. Not an active test or verified security finding. ' + observation.limitations
+      }
+    });
+    if (evidence.verificationState !== 'unverified') {
+      throw new Error('Unexpected KB-028 candidate trust state; stop for review.');
+    }
+    return {
+      answer: 'KB-028 synthetic observation imported as unverified evidence ' +
+        evidence.id + '. No PASS/FAIL, finding, or deployment decision changed.',
+      canonicalData: {
+        evidenceId: evidence.id, sourceDigest: digest,
+        verificationState: evidence.verificationState, securityStateChanged: false
+      }
+    };
+  }
   const recoveryBatch = /^Recover next legacy v2 source evidence batch$/i.exec(request.trim());
   if (recoveryBatch) {
     if (localFrozenInspection?.binding?.verified !== true ||
