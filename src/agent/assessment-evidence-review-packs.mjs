@@ -108,7 +108,8 @@ export function buildAssessmentEvidenceReviewPacks(index, triages) {
       }
 
       for (const source of control.sourceRecords) {
-        if (source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
+        if (source.lineageIssueState !== 'historical_preserved_after_valid_recollection' &&
+            source.lineageStatus !== 'linked_static_observation_unverified_for_criterion' &&
             source.lineageStatus !== 'legacy_static_collection_requires_manual_review') {
           exceptions.push({
             controlId: control.controlId,
