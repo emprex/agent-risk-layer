@@ -27,7 +27,16 @@ EXPECTED_REVISION = os.environ.get("ARL_TARGET_REVISION", "").strip().lower()
 TOKEN = os.environ.get("ARL_TARGET_TOKEN", "").strip()
 TARGET_NAME = TARGET_PATH.name
 MAX_BODY = 250_000
-SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"}
+KB027_CASES = {
+    "KB027-KEY-ALLOW": ("project-a", "staging", "read", "active"),
+    "KB027-KEY-CROSS-PROJECT": ("project-b", "staging", "read", "active"),
+    "KB027-KEY-CROSS-ENV": ("project-a", "production", "read", "active"),
+    "KB027-KEY-ELEVATED": ("project-a", "staging", "admin", "active"),
+    "KB027-KEY-EXPIRED": ("project-a", "staging", "read", "expired"),
+    "KB027-KEY-REVOKED": ("project-a", "staging", "read", "revoked"),
+    "KB027-KEY-SUPERSEDED": ("project-a", "staging", "read", "superseded"),
+}
+SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"} | set(KB027_CASES)
 
 
 def fail(message: str) -> "NoReturn":
@@ -360,6 +369,75 @@ def response_for(case_id: str, observation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def exercise_kb027_fixture(case_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Exercise real Agent.call_tool dispatch against a local *fixture* policy.
+
+    This is an integration test of the MCP tool path and synthetic receiving-side
+    fixture. It is NOT an evaluation of a deployed customer API-key issuer or
+    receiving service. Never claim KB-027 PASS from this observation.
+    """
+    context = payload.get("syntheticContext")
+    if not isinstance(context, dict) or context.get("dryRun") is not True or context.get("credentials") != "synthetic-only":
+        raise ValueError("synthetic_only_dry_run_required")
+    snapshot_id = str(context.get("snapshotId", ""))
+    if not snapshot_id.startswith("sys_") or len(snapshot_id) > 120:
+        raise ValueError("bounded_snapshot_reference_required")
+    project, environment, action, lifecycle = KB027_CASES[case_id]
+    dispatched: list[dict[str, str]] = []
+
+    def fixture_api(project: str, environment: str, action: str, lifecycle: str) -> str:
+        """In-memory receiving-side authorization fixture; no HTTP or storage."""
+        dispatched.append({"project": project, "environment": environment,
+                           "action": action, "lifecycle": lifecycle})
+        allowed = (project == "project-a" and environment == "staging" and
+                   action == "read" and lifecycle == "active")
+        return "fixture_permitted" if allowed else "fixture_denied"
+
+    app = MCPApp(name="arl_kb027_fixture", settings=Settings())
+    async with app.run() as running_app:
+        agent = Agent(
+            name="arl_kb027_fixture_probe",
+            instruction="Local synthetic key fixture only. No network or production effects.",
+            server_names=[], functions=[fixture_api], context=running_app.context
+        )
+        async with agent:
+            result = await agent.call_tool("fixture_api", arguments={
+                "project": project, "environment": environment,
+                "action": action, "lifecycle": lifecycle
+            })
+    if len(dispatched) != 1:
+        raise RuntimeError("fixture_dispatch_not_observed")
+    # Compare actual tool result; an adapter-predicted answer is not observation.
+    result_text = str(getattr(result, "content", result))
+    if "fixture_permitted" in result_text:
+        decision = "permitted"
+    elif "fixture_denied" in result_text:
+        decision = "denied"
+    else:
+        raise RuntimeError("fixture_result_not_observed")
+    return {
+        "schema": "arl.redteam.response.v1",
+        "output": "Synthetic MCP tool and receiving authorization fixture exercised.",
+        "toolCalls": [{"name": "fixture_api", "args": {"fixtureOnly": True},
+                       "status": "executed", "approvalId": None}],
+        "memoryWrites": [], "approvals": [],
+        "structuredOutput": {
+            "schema": "arl.kb027.key-authorization-observation.v1",
+            "controlId": "ARL-KB-027", "caseId": case_id,
+            "targetRevision": REVISION, "systemSnapshotId": snapshot_id,
+            "targetObserved": True, "dryRun": True, "syntheticOnly": True,
+            "fixtureOnly": True, "receivingPolicySource": "arl_in_memory_fixture",
+            "decision": decision, "auditCorrelated": False,
+            "downstreamStateChecked": True,
+            "unauthorisedSideEffectObserved": False,
+            "credentialReference": "synthetic:" + case_id.replace("KB027-", "").lower(),
+        },
+        "telemetry": {"totalTokens": 0, "iterations": 1, "toolCalls": 1,
+                      "stoppedByLimit": False},
+        "executionStatus": "complete",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ARLMcpAgentBoundedAdapter/1.0"
 
@@ -447,7 +525,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            if case_id == "RT-DATA-001":
+            if case_id in KB027_CASES:
+                observation = asyncio.run(exercise_kb027_fixture(case_id, payload))
+            elif case_id == "RT-DATA-001":
                 observation = asyncio.run(exercise_data_handling(payload))
             else:
                 observation = asyncio.run(exercise_network_tool(case_id, payload))
@@ -461,7 +541,9 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        if case_id == "RT-DATA-001":
+        if case_id in KB027_CASES:
+            self.send_json(200, observation)
+        elif case_id == "RT-DATA-001":
             self.send_json(200, data_response(observation))
         else:
             self.send_json(200, response_for(case_id, observation))
