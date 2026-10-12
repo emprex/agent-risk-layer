@@ -1127,6 +1127,69 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  if (request.trim() === 'Conclude KB-006 inconclusive review') {
+    const current = await runArlAgent(repositoryPath, 'Where are we?', options);
+    const state = current?.canonicalData?.workflowState || {};
+    const action = state.nextAllowedAction || {};
+    if (state.stage !== 'active_test_evidence_review_required' ||
+        action.name !== 'review_inconclusive_control_evidence' ||
+        action.controlId !== 'ARL-KB-006' ||
+        action.actor !== 'human') {
+      throw new Error('KB-006 inconclusive review is only permitted at its current authoritative human-review gate.');
+    }
+    const snapshotId = state.authoritativeArtifacts?.assessmentContext?.systemSnapshotId;
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId: 'ARL-KB-006', userId: options.userId
+    });
+    const reviewedTest = (detail.tests || []).find(test =>
+      test.result === 'inconclusive' &&
+      test.executionMethod === 'authorised_local_active_test' &&
+      test.systemSnapshotId === snapshotId &&
+      (detail.evidence || []).some(evidence =>
+        evidence.testExecutionId === test.id &&
+        evidence.sourceType === 'authorised_local_active_test' &&
+        evidence.retentionStatus === 'active'
+      )
+    );
+    if (!snapshotId || detail.systemSnapshot?.id !== snapshotId ||
+        detail.chain?.currentStage !== 'test' || !reviewedTest) {
+      throw new Error('KB-006 review requires a matching current-snapshot inconclusive test and persisted evidence.');
+    }
+    const entry = {
+      schema: 'arl.control.inconclusive-review.v1',
+      projectId: options.projectId,
+      controlId: 'ARL-KB-006',
+      systemSnapshotId: snapshotId,
+      testExecutionId: reviewedTest.id,
+      disposition: 'inconclusive_documented',
+      findingDisposition: 'historical_finding_invalidated_unsubstantiated',
+      outstandingRequirements: action.requirements || [],
+      conclusion: 'Insufficient evidence of classification and restricted-data handling across the canonical model, tool, log, persistence and export paths. Local dry-run without an owner tool-data policy does not establish an unauthorised disclosure or policy bypass. No PASS or FAIL inferred.',
+      deploymentApproved: false,
+      securityControlSatisfied: false,
+      additionalEvidenceRequired: true,
+      actorId: options.userId,
+      recordedAt: nowIso()
+    };
+    const eventId = id('evt_');
+    await db.prepare(
+      'INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)'
+    ).run(eventId, options.userId, 'arl.control.inconclusive_review',
+      JSON.stringify(entry), entry.recordedAt);
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    return {
+      ...next,
+      canonicalData: {
+        ...next.canonicalData,
+        inconclusiveReview: { ...entry, eventId },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false
+      },
+      answer: 'KB-006 operator review recorded as INCONCLUSIVE / EVIDENCE GAP / HUMAN REVIEW DOCUMENTED. No control PASS, finding closure, or deployment approval.\\n' +
+        (next.answer || '')
+    };
+  }
+
   if (/^review kb-006 finding[.!?]*$/i.test(request.trim())) {
     // Read-only human triage: the original test, evidence, and finding must
     // remain authoritative until a separately reviewed disposition exists.
