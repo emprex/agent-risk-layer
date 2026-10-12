@@ -11,7 +11,7 @@ import {
 
 export * from './control-intelligence-service.js';
 
-const CLOSED_FINDING_STATES = new Set(['verified_closed', 'accepted_risk']);
+const CLOSED_FINDING_STATES = new Set(['verified_closed', 'accepted_risk', 'invalidated_unsubstantiated']);
 const STAGES = ['applicability', 'test', 'evidence', 'finding', 'remediation', 'retest', 'approval', 'deployment_decision'];
 
 function parseJson(value, fallback = null) {
