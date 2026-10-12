@@ -2125,8 +2125,13 @@ export async function runLocalAssessment(repositoryPath, request, options, local
 
     if (detail?.systemSnapshot?.id !== systemSnapshotId ||
         detail?.chain?.currentStage !== 'test') {
+      const actualSnapshot = String(detail?.systemSnapshot?.id || 'missing');
+      const actualStage = String(detail?.chain?.currentStage || 'missing');
       throw new Error(
-        'KB-006 execution blocked: current snapshot or control test stage mismatch.'
+        'KB-006 execution blocked: authoritative workflow snapshot=' +
+        systemSnapshotId + ', control snapshot=' + actualSnapshot +
+        '; required control stage=test, actual control stage=' + actualStage +
+        '. No test was executed or security verdict changed.'
       );
     }
 
