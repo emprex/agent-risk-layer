@@ -18,6 +18,7 @@ import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
 import { validateCanonicalManualEvidenceChecklist } from './manual-evidence-checklist.mjs';
 import { requireInconclusiveReviewEvidence, isInconclusiveReviewAlreadyDocumented } from './inconclusive-review-eligibility.mjs';
+import { requireAuthorisedTestNonExecution } from './authorised-test-non-execution.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import { runAuthoritativeControlSourceReview } from './tools/run-authoritative-control-test.mjs';
@@ -2446,6 +2447,75 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       'Where are we?',
       options
     );
+  }
+
+
+  // Explicit human administrative disposition, NOT a test execution or test
+  // evidence. Never call recordControlTestExecution or verify human test evidence.
+  if (request.startsWith('Document authorised test not executed ')) {
+    let input;
+    try {
+      input = JSON.parse(request.slice(
+        'Document authorised test not executed '.length
+      ));
+    } catch {
+      throw new Error('Non-execution disposition requires a valid JSON object.');
+    }
+    const controlId = String(input?.controlId || '').trim();
+    const reason = String(input?.reason || '').trim();
+    const sourceReference = String(input?.sourceReference || '').trim();
+    const current = await runArlAgent(repositoryPath, 'Where are we?', options);
+    const state = current?.canonicalData?.workflowState || {};
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId, userId: options.userId
+    });
+    const binding = requireAuthorisedTestNonExecution({
+      state, detail, frozenInspection: localFrozenInspection,
+      controlId, reason, sourceReference
+    });
+    const reviews = await db.prepare(
+      "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 500"
+    ).all(options.userId, 'arl.control.inconclusive_review');
+    if (isInconclusiveReviewAlreadyDocumented(reviews, {
+      projectId: options.projectId, controlId, snapshotId: binding.snapshotId
+    })) {
+      return { ...current, answer: 'Non-execution review already documented; no duplicate created.\n' + current.answer };
+    }
+    const recordedAt = nowIso();
+    const entry = {
+      schema: 'arl.control.inconclusive-review.v1',
+      projectId: options.projectId, controlId,
+      systemSnapshotId: binding.snapshotId,
+      targetRevision: binding.revision,
+      disposition: 'inconclusive_documented',
+      dispositionBasis: 'authorised_test_not_executed',
+      executionStatus: 'test_not_executed',
+      testExecutionId: null,
+      evidenceId: null,
+      authorisationReference: binding.authorisationReference,
+      sourceReference, reason,
+      conclusion: 'Authorised active test NOT EXECUTED. Human operator documented an evidence gap; no test outcome, PASS, FAIL or verified test evidence.',
+      deploymentApproved: false,
+      securityControlSatisfied: false,
+      additionalEvidenceRequired: true,
+      actorId: options.userId, recordedAt
+    };
+    const eventId = id('evt_');
+    await db.prepare(
+      'INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)'
+    ).run(eventId, options.userId, 'arl.control.inconclusive_review',
+      JSON.stringify(entry), recordedAt);
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    return {
+      ...next,
+      canonicalData: {
+        ...next.canonicalData,
+        nonExecutionDisposition: { ...entry, eventId },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false
+      },
+      answer: controlId + ' authorised test NOT EXECUTED; administratively documented INCONCLUSIVE / EVIDENCE GAP. No test or security approval asserted.\n' + next.answer
+    };
   }
 
   if (request.startsWith('Record active control test result ')) {
