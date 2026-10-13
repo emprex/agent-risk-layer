@@ -19,6 +19,7 @@ import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batc
 import { validateCanonicalManualEvidenceChecklist } from './manual-evidence-checklist.mjs';
 import { requireInconclusiveReviewEvidence, isInconclusiveReviewAlreadyDocumented } from './inconclusive-review-eligibility.mjs';
 import { requireAuthorisedTestNonExecution } from './authorised-test-non-execution.mjs';
+import { requireUnauthorisedTestNonExecution } from './unauthorised-test-non-execution.mjs';
 import { verifyExplicitHumanEvidence } from './verify-explicit-human-evidence.mjs';
 import { showLocalAssessmentContext } from './local-assessment-context-view.mjs';
 import { runAuthoritativeControlSourceReview } from './tools/run-authoritative-control-test.mjs';
@@ -2449,6 +2450,71 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     );
   }
 
+
+  // Human-declined active test at the planning gate: append-only administrative
+  // review; no authorisation, execution, evidence promotion or security verdict.
+  if (request.startsWith('Document unapproved test not executed ')) {
+    let input;
+    try {
+      input = JSON.parse(request.slice('Document unapproved test not executed '.length));
+    } catch {
+      throw new Error('Unapproved test non-execution requires a valid JSON object.');
+    }
+    const controlId = String(input?.controlId || '').trim();
+    const reason = String(input?.reason || '').trim();
+    const sourceReference = String(input?.sourceReference || '').trim();
+    const current = await runArlAgent(repositoryPath, 'Where are we?', options);
+    const state = current?.canonicalData?.workflowState || {};
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId, userId: options.userId
+    });
+    const binding = requireUnauthorisedTestNonExecution({
+      state, detail, frozenInspection: localFrozenInspection,
+      controlId, reason, sourceReference
+    });
+    const reviews = await db.prepare(
+      "SELECT properties_json FROM events WHERE user_id=? AND name=? ORDER BY created_at DESC LIMIT 500"
+    ).all(options.userId, 'arl.control.inconclusive_review');
+    if (isInconclusiveReviewAlreadyDocumented(reviews, {
+      projectId: options.projectId, controlId, snapshotId: binding.snapshotId
+    })) {
+      return { ...current, answer: 'Unapproved non-execution already documented; no duplicate created.\n' + current.answer };
+    }
+    const recordedAt = nowIso();
+    const entry = {
+      schema: 'arl.control.inconclusive-review.v1',
+      projectId: options.projectId, controlId,
+      systemSnapshotId: binding.snapshotId,
+      targetRevision: binding.revision,
+      disposition: 'inconclusive_documented',
+      dispositionBasis: 'human_declined_test_authorisation',
+      executionStatus: 'test_not_authorised_not_executed',
+      testExecutionId: null, evidenceId: null,
+      authorisationReference: null,
+      sourceReference, reason,
+      conclusion: 'Human operator declined active-test authorisation; test NOT EXECUTED. Evidence gaps remain open and compliance is unproven.',
+      deploymentApproved: false,
+      securityControlSatisfied: false,
+      additionalEvidenceRequired: true,
+      actorId: options.userId, recordedAt
+    };
+    const eventId = id('evt_');
+    await db.prepare(
+      'INSERT INTO events (id,user_id,name,properties_json,created_at) VALUES (?,?,?,?,?)'
+    ).run(eventId, options.userId, 'arl.control.inconclusive_review',
+      JSON.stringify(entry), recordedAt);
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    return {
+      ...next,
+      canonicalData: {
+        ...next.canonicalData,
+        unapprovedNonExecutionDisposition: { ...entry, eventId },
+        securityStateChanged: false,
+        deploymentDecisionWritten: false
+      },
+      answer: controlId + ' active test NOT AUTHORISED / NOT EXECUTED; administratively documented INCONCLUSIVE / EVIDENCE GAP. No security approval asserted.\n' + next.answer
+    };
+  }
 
   // Explicit human administrative disposition, NOT a test execution or test
   // evidence. Never call recordControlTestExecution or verify human test evidence.
