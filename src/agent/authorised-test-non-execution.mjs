@@ -7,7 +7,7 @@ export function requireAuthorisedTestNonExecution({
   const snapshotId =
     state?.authoritativeArtifacts?.assessmentContext?.systemSnapshotId;
   const revision = frozenInspection?.target?.revision;
-  if (!/^ARL-KB-\\d{3}$/.test(controlId || '') ||
+  if (!/^ARL-KB-\d{3}$/.test(controlId || '') ||
       typeof reason !== 'string' || reason.trim().length < 20 ||
       typeof sourceReference !== 'string' || !sourceReference.trim()) {
     throw new Error('Non-execution disposition requires controlId, a specific reason (20+ characters), and sourceReference.');
