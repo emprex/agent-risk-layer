@@ -23,14 +23,14 @@ export function requireInconclusiveReviewEvidence({
     item.controlId === controlId &&
     item.retentionStatus === 'active' &&
     item.verificationState === 'verified' &&
-    item.sourceType === 'consolidated_human_review' &&
+    ['consolidated_human_review', 'manual_review'].includes(item.sourceType) &&
     item.evidenceClass === 'human_provided' &&
     tests.some(test =>
       test.id === item.testExecutionId &&
       test.systemSnapshotId === snapshotId &&
       test.controlId === controlId &&
       test.result === 'inconclusive' &&
-      test.executionMethod === 'consolidated_human_review' &&
+      test.executionMethod === item.sourceType &&
       test.inputReference === item.sourceReference)
   );
   if (!reviewed) {
