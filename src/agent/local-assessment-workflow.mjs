@@ -2924,11 +2924,23 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       });
     }
 
-    return runArlAgent(
-      repositoryPath,
-      'Where are we?',
-      options
-    );
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    const inconclusive = humanEvidenceBatch.controls.filter(item => item.result === 'inconclusive');
+    return {
+      ...next,
+      answer: [
+        'Human evidence batch RECORDED: ' + humanEvidenceBatch.batchId +
+          ' (' + humanEvidenceBatch.controls.length + ' controls).',
+        'Inconclusive reviews recorded: ' + inconclusive.map(item => item.controlId).join(', '),
+        'The evidence gaps remain open. No PASS, finding closure or deployment approval is implied.',
+        ...inconclusive.map(item =>
+          'To document the administrative disposition for ' + item.controlId +
+          ', run: Document inconclusive review ' + item.controlId
+        ),
+        '',
+        next.answer
+      ].join('\n')
+    };
   }
 
   const manualEvidence =
@@ -3211,11 +3223,21 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       });
     }
 
-    return runArlAgent(
-      repositoryPath,
-      'Where are we?',
-      options
-    );
+    const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+    return {
+      ...next,
+      answer: [
+        'Manual control review RECORDED: ' + scopedControlId + ' — ' +
+          manualEvidence.result.toUpperCase() + '.',
+        'Test execution: ' + execution.id + '; evidence: ' + evidence.id + '.',
+        manualEvidence.result === 'inconclusive'
+          ? 'Evidence gap remains open. To document the administrative disposition, run: Document inconclusive review ' + scopedControlId
+          : 'Conclusive evidence is subject to the canonical checklist and independent security gates.',
+        'No deployment approval or finding closure is implied.',
+        '',
+        next.answer
+      ].join('\n')
+    };
   }
 
   if (/^i authorise the bounded test[.!?]*$/i.test(request.trim())) {
