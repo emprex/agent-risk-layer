@@ -226,7 +226,7 @@ function scalar(value) {
   if (value === null) return 'null';
   if (typeof value === 'boolean' || typeof value === 'number') return String(value);
   const s = String(value);
-  return /^[A-Za-z0-9_.\/-]+$/.test(s) ? s : JSON.stringify(s);
+  return /^[A-Za-z0-9_.\x2F-]+$/.test(s) ? s : JSON.stringify(s);
 }
 
 export function toYaml(value, indent = 0) {
