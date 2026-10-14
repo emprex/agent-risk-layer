@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { storeSourceCollectionArtifact } from './source-collection-artifacts.mjs';
 
 import {
   getControlIntelligenceControl,
@@ -486,6 +487,20 @@ export async function runAuthoritativeControlSourceReview({
   ].join('\n');
   if (collectionOnly && observedResult.length > 12000) {
     return {executed:false,reason:'complete_structured_source_observation_exceeds_storage_limit',securityStateChanged:false};
+  }
+
+  // Complete metadata must be durable before the bounded observation becomes evidence.
+  // Do not re-collect or repair previously recorded partial observations.
+  if (collectionOnly) {
+    await storeSourceCollectionArtifact({
+      projectId, snapshotId, controlId,
+      targetRevision:frozen.target.revision,
+      inputReference,
+      collection:deterministicEvidence,
+      projectionDigest:projection.limited
+        ? JSON.parse(deterministicEvidenceText).projection?.fullCollectionSha256
+        : null
+    });
   }
 
   const execution =
