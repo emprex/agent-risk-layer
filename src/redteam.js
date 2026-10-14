@@ -110,7 +110,7 @@ export async function createRedTeamToken({ userId, assessmentId, mode = 'simulat
     if (!['simulation', 'staging'].includes(requestedMode))
         throw new Error('Campaign mode must be simulation or staging.');
     let authorisation = null;
-    let recoveryValidation = null;
+    let recoveryValidation;
     if (requestedMode === 'staging') {
         if (recoveryBundle) {
             recoveryValidation = validateRedTeamBundle(recoveryBundle);
