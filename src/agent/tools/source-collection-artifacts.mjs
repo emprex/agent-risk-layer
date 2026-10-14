@@ -64,7 +64,7 @@ export async function readSourceCollectionArtifact(scope, userId) {
 export async function storeSourceCollectionArtifact({projectId,snapshotId,controlId,targetRevision,inputReference,collection,projectionDigest}) {
   const {json,digest} = serializeSourceCollection(collection,{targetRevision,projectionDigest});
   const current = await db.prepare(
-    "SELECT s.workspace_id, s.assessment_configuration_json FROM system_snapshots s JOIN security_projects p ON p.id=s.project_id AND p.workspace_id=s.workspace_id WHERE s.project_id=? AND s.id=? AND s.status='current'"
+    "SELECT s.workspace_id, s.assessment_configuration_json, p.retention_days FROM system_snapshots s JOIN security_projects p ON p.id=s.project_id AND p.workspace_id=s.workspace_id WHERE s.project_id=? AND s.id=? AND s.status='current'"
   ).get(projectId,snapshotId);
   if (!current) throw new Error('Current assessment snapshot is required for collection persistence.');
   const configuration = JSON.parse(current.assessment_configuration_json || '{}');
@@ -75,9 +75,12 @@ export async function storeSourceCollectionArtifact({projectId,snapshotId,contro
   }
   const scope={workspaceId:current.workspace_id,projectId,snapshotId,controlId,targetRevision,inputReference};
   const id='sca_'+crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+  const createdAt = new Date();
+  const days = Math.max(1, Number(current.retention_days || 30));
+  const expiresAt = new Date(createdAt.getTime() + days * 86400000).toISOString();
   await db.prepare(
-    'INSERT INTO control_source_collection_artifacts (id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,collection_sha256,collection_json,collector_schema,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING'
-  ).run(id,scope.workspaceId,projectId,snapshotId,controlId,targetRevision,inputReference,digest,json,collection.schema,new Date().toISOString());
+    'INSERT INTO control_source_collection_artifacts (id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,collection_sha256,collection_json,collector_schema,retention_expires_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING'
+  ).run(id,scope.workspaceId,projectId,snapshotId,controlId,targetRevision,inputReference,digest,json,collection.schema,expiresAt,createdAt.toISOString());
   const row=await db.prepare('SELECT * FROM control_source_collection_artifacts WHERE id=?').get(id);
   verifySourceCollectionArtifact(row,scope);
   if (row.collection_sha256 !== digest) throw new Error('Existing artifact does not match repeated collection.');
