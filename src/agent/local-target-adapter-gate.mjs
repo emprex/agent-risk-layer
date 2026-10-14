@@ -73,7 +73,7 @@ export async function verifyLocalTargetAdapter({
     response = await fetchImpl(healthUrl, {
       method: 'GET',
       redirect: 'error',
-      signal: AbortSignal.timeout(
+      signal: globalThis.AbortSignal.timeout(
         Math.max(250, Math.min(10_000, Number(timeoutMs) || 2_000))
       )
     });
