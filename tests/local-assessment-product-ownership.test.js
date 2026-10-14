@@ -198,7 +198,9 @@ test('product-owned local CLI prepares a frozen assessment without hosted author
           NODE_ENV: 'test',
           PRODUCT_STAGE: 'development',
           DATABASE_URL: '',
-          DATABASE_PATH: path.join(temp, 'assessment.sqlite')
+          DATABASE_PATH: path.join(temp, 'assessment.sqlite'),
+          // Synthetic targets have their own SHA; do not inherit a local .env pin.
+          ARL_EXPECTED_TARGET_SHA: ''
         },
         encoding: 'utf8',
         timeout: 90_000
