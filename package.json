@@ -11,6 +11,7 @@
     "dev": "node --env-file-if-exists=.env --watch server.js",
     "start": "node --env-file-if-exists=.env server.js",
     "test": "NODE_ENV=test node --test $(find tests -maxdepth 1 -name '*.test.js' -print | sort)",
+    "lint": "npx --yes eslint@10.12.0 'src/**/*.{js,mjs}'",
     "test:arl17k": "node --test benchmarks/arl17k/tests/*.test.mjs",
     "arl17k:phase2": "node benchmarks/arl17k/run-phase2.mjs",
     "arl17k:phase3": "node benchmarks/arl17k/run-phase3.mjs",
