@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 export const CONTENT_EVENT_SCHEMA = 'arl.content.event.v1';
 const INPUT_RULES = [
     ['ARL-IN-001', 'high', /(?:ignore|disregard|override).{0,50}(?:previous|prior|system|developer).{0,30}(?:instruction|prompt|message)/is, 'Instruction hierarchy manipulation'],
