@@ -121,7 +121,7 @@ async function deliverSecurityEventInternal({ workspaceId, event, fetchImpl }) {
         };
         try {
             const response = fetchImpl
-                ? await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(INTEGRATION_TIMEOUT_MS), headers, body: signed.body })
+                ? await fetchImpl(integration.endpoint, { method: 'POST', redirect: 'error', signal: globalThis.AbortSignal.timeout(INTEGRATION_TIMEOUT_MS), headers, body: signed.body })
                 : await postJsonPinned(integration.endpoint, { headers, body: signed.body, timeoutMs: INTEGRATION_TIMEOUT_MS });
             if (!response.ok)
                 throw new Error(`HTTP ${response.status}`);
