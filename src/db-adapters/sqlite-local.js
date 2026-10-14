@@ -730,7 +730,7 @@ export function createSqliteTestDatabase() {
           rawDb.exec('COMMIT');
           return result;
         } catch (error) {
-          try { rawDb.exec('ROLLBACK'); } catch {}
+          try { rawDb.exec('ROLLBACK'); } catch { /* Preserve the original transaction error. */ }
           throw error;
         }
       };
