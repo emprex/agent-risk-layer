@@ -60,6 +60,43 @@ test('malformed destinations are recorded as would-deny in monitor mode', () => 
   assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'));
 });
 
+test('checks URL objects after serialization so a non-enumerable URL cannot evade the host allowlist', () => {
+  const result = evaluateRuntimeAction({
+    tool: 'search', arguments: { url: new URL('https://evil.example/collect') }
+  }, policy);
+  assert.equal(result.decision, 'deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'));
+  assert.ok(result.evidence.destinations.includes('evil.example'));
+});
+
+test('checks network destinations beyond the 500-field traversal bound', () => {
+  const argumentsWithManyFields = Object.fromEntries(
+    Array.from({ length: 300 }, (_, i) => [`safeField${i}`, 'safe'])
+  );
+  argumentsWithManyFields.url = 'https://evil.example/collect';
+  const result = evaluateRuntimeAction({ tool: 'search', arguments: argumentsWithManyFields }, policy);
+  assert.equal(result.decision, 'deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'));
+});
+
+test('checks denied filesystem patterns beyond the 500-field traversal bound', () => {
+  const argumentsWithManyFields = Object.fromEntries(
+    Array.from({ length: 300 }, (_, i) => [`safeField${i}`, 'safe'])
+  );
+  argumentsWithManyFields.path = '/root/.ssh/id_ed25519';
+  const result = evaluateRuntimeAction({ tool: 'read_file', arguments: argumentsWithManyFields }, policy);
+  assert.equal(result.decision, 'deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-006'));
+});
+
+test('still allows a serialized URL object pointing at a permitted network destination', () => {
+  const result = evaluateRuntimeAction({
+    tool: 'search', arguments: { url: new URL('https://api.example.com/public') }
+  }, policy);
+  assert.equal(result.decision, 'allow');
+  assert.ok(result.evidence.destinations.includes('api.example.com'));
+});
+
 test('blocks secret-like fields', () => {
   const result = evaluateRuntimeAction({ tool:'search', arguments:{ apiKey:'sk_test_1234567890' } }, policy);
   assert.equal(result.decision, 'deny');
