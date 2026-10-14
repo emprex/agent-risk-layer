@@ -15,6 +15,7 @@ const MAX_DEPENDENCY_MANIFEST_READS = 128;
 const MAX_BILL_FILES = 150;
 const MAX_BILL_FILE_BYTES = 4_000_000;
 const MAX_BILL_TOTAL_BYTES = 12_000_000;
+const MAX_BILL_PARSER_OUTPUT_BYTES = 6_000_000; // bounded 6000-entry inventory
 const PARSER_PATH = fileURLToPath(new URL('./parse-dependency-metadata.py', import.meta.url));
 
 function sha(value) {
@@ -149,7 +150,7 @@ function candidateDependencyInventory(repositoryPath, files) {
   let parsed = null;
   if (Buffer.byteLength(input) <= 16_000_000) {
     const result = spawnSync('python3', ['-I', PARSER_PATH], {
-      input, encoding:'utf8', timeout:8000, maxBuffer:3_000_000,
+      input, encoding:'utf8', timeout:8000, maxBuffer:MAX_BILL_PARSER_OUTPUT_BYTES,
       cwd: '/', env:{PATH:'/usr/bin:/bin'}
     });
     if (!result.error && result.status === 0) {
@@ -173,6 +174,11 @@ function candidateDependencyInventory(repositoryPath, files) {
     skippedForBudget,
     parserStatus: parsed ? 'completed' : 'unavailable_or_failed',
     parsed: parsed || null,
+    // Entry retention is distinct from manifest parsing and from build provenance.
+    componentEntriesTotal: parsed ? parsed.declaredCount + parsed.lockedCount : null,
+    componentEntriesRetained: parsed ? parsed.components.length : null,
+    componentRetentionComplete: Boolean(parsed && parsed.omittedComponents === 0 &&
+      parsed.components.length === parsed.declaredCount + parsed.lockedCount),
     buildArtifactVerified: false,
     deployedArtifactVerified: false,
     modelProvenanceVerified: false,
