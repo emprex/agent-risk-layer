@@ -83,7 +83,7 @@ function decodeSuspiciousLayers(text) {
                 if (value && printableRatio(value) > 0.8 && !decoded.some((item) => item.value === value))
                     decoded.push({ encoding, value: value.slice(0, 32768) });
             }
-            catch { }
+            catch { /* Invalid encoded layer is deliberately skipped. */ }
             if (decoded.length >= 5)
                 return decoded;
         }
