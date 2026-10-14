@@ -998,7 +998,6 @@ function deriveChains(evaluations, data) {
     const historicalEvidence = (data.evidenceHistory || data.evidence).filter((row) => row.entry_id === controlId);
     const tests = (open.length ? historicalTests : currentTests)
       .filter((row) => !invalidatedFindingIds.has(row.finding_id));
-    const evidence = currentEvidence;
     const links = data.links.filter((row) => row.entry_id === controlId);
     const implementationRecorded = open.some((row) => !['open'].includes(row.status));
     const openFailureIds = new Set(open.map((row) => parseJson(row.verification_json, {})?.failedExecutionId).filter(Boolean));
@@ -1015,7 +1014,7 @@ function deriveChains(evaluations, data) {
     const activeEvidence = currentEvidence.some((row) => row.retention_status === 'active' && row.verification_state === 'verified');
     const runtimeRegression = links.some((row) => row.subject_type === 'runtime_event') && data.runtime.some((row) => row.decision === 'deny' && links.some((link) => link.subject_id === row.id));
     const approvalRequired=(data.requirements||[]).some(row=>row.entry_id===controlId);
-    const executed=tests.filter(row=>row.result!=='planned');const latest=currentTests[0]||tests[0];const verifiedEvidence=currentEvidence.some(row=>row.retention_status==='active'&&row.verification_state==='verified');
+    const latest=currentTests[0]||tests[0];const verifiedEvidence=currentEvidence.some(row=>row.retention_status==='active'&&row.verification_state==='verified');
     const failureEvidence=(open.length?historicalEvidence:currentEvidence).some(row=>row.retention_status==='active'&&['unverified','verified'].includes(row.verification_state)&&row.test_execution_id&&row.test_execution_id===initialFailure?.id);
     let chainStatus = 'applicable_unassessed';
     if (evaluation.stale_at) chainStatus = 'reassessment_required';
@@ -1027,7 +1026,7 @@ function deriveChains(evaluations, data) {
     else if (passed && activeEvidence) chainStatus = 'controlled_with_evidence';
     else if (latest?.result === 'inconclusive') chainStatus = 'test_inconclusive';
     else if (tests.length) chainStatus = failed ? 'test_failed' : 'test_planned';
-    const reviewed=['guided_customer_review','local_owner_attestation'].includes(evaluation.decision_method);const completedStages=[];const notRequiredStages=[];let currentStage='applicability';let nextAction='Review whether this control applies to this agent.';let deploymentImpact='no_impact_yet';
+    const reviewed=['guided_customer_review','local_owner_attestation'].includes(evaluation.decision_method);const completedStages=[];const notRequiredStages=[];let currentStage='applicability';let nextAction;let deploymentImpact;
     if(reviewed)completedStages.push('applicability');
     if(evaluation.applicability_status==='not_applicable'&&reviewed){notRequiredStages.push('test','evidence','finding','remediation','retest','approval');currentStage='deployment_decision';nextAction='Review the project deployment decision.';deploymentImpact='not_applicable';}
     else if(evaluation.applicability_status==='unknown'||!reviewed){currentStage='applicability';nextAction='Provide missing architecture information and confirm applicability.';notRequiredStages.push('finding','remediation','retest','approval');deploymentImpact='hold';}
