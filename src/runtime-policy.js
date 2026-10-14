@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 export const RUNTIME_POLICY_SCHEMA = 'arl.runtime.policy.v1';
 export const RUNTIME_EVENT_SCHEMA = 'arl.runtime.event.v1';
 const DEFAULT_DENIED_TOOLS = ['shell', 'exec', 'terminal', 'delete', 'drop_database'];
