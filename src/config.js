@@ -19,6 +19,7 @@ export function parseBindHost(value) {
         return defaultBindHost;
     if (typeof value !== 'string' || !value.length)
         throw new Error('Invalid HOST: expected an IP address or DNS hostname');
+    // eslint-disable-next-line no-control-regex -- reject ASCII control characters in the host
     if (value !== value.trim() || /[\u0000-\u0020\u007f]/.test(value))
         throw new Error('Invalid HOST: whitespace and control characters are not permitted');
     if (isIP(value))
