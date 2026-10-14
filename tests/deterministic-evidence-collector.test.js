@@ -418,7 +418,8 @@ test('KB-017 binds Python and npm declared and locked metadata to hashed file ev
     assert.equal(inventory.buildArtifactVerified,false);
     assert.equal(inventory.modelProvenanceVerified,false);
     assert.equal(inventory.sbomComplete,false);
-    assert.equal(dep.lockfiles.length,2);
+    // The legacy lockfile-ref family also classifies requirements*.txt as candidates.
+    assert.equal(dep.lockfiles.length,3);
     assert.ok(!JSON.stringify(result).includes('https://token:secret@'));
     assert.ok(!JSON.stringify(result).includes(root));
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
