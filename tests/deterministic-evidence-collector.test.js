@@ -346,3 +346,37 @@ test('KB-017 discovers late dependency manifests outside generic 500-file source
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('KB-017 scans all 65 Python manifests and reports unreadable files separately', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-kb017-python-'));
+  try {
+    git(root, ['init']);
+    git(root, ['config', 'user.email', 'test@example.test']);
+    git(root, ['config', 'user.name', 'ARL Test']);
+    for (let i = 0; i < 65; i++) {
+      const dir = path.join(root, 'pkg-' + String(i).padStart(3, '0'));
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'requirements.txt'),
+        i === 64 ? 'openai==1.0.0\n' : 'requests==2.0.0\n');
+    }
+    git(root, ['add', '.']);
+    commitFixture(root, '65 Python manifests');
+    const revision = git(root, ['rev-parse', 'HEAD']);
+    const result = collectDeterministicEvidence({
+      repositoryPath: root,
+      frozen: {target: {revision}, inspection: {subject: {gitDirty: false}}},
+      requirements: ['ARL-KB-017 dependency and version inventory']
+    });
+    const dependency = result.requirementObservations[0].observations.dependency_and_build;
+    assert.equal(dependency.dependencyPathDiscovery.pythonManifestsFound, 65);
+    assert.equal(dependency.dependencyPathDiscovery.pythonManifestsReadable, 65);
+    assert.equal(dependency.dependencyPathDiscovery.pythonManifestsUnreadable, 0);
+    assert.equal(dependency.dependencyPathDiscovery.completeManifestRead, true);
+    assert.equal(dependency.dependencyPathDiscovery.manifestsBeyondReadLimit, false);
+    assert.equal(dependency.lockfiles.length, 20);
+    assert.ok(dependency.pythonManifestCount === 65);
+    assert.ok(!JSON.stringify(result).includes('pkg-064/requirements.txt'));
+  } finally {
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+});
