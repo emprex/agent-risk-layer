@@ -10,6 +10,7 @@ import {
 const MAX_FILES = 500;
 const MAX_TEXT_BYTES = 256_000;
 const MAX_REFS = 20;
+const MAX_DEPENDENCY_MANIFEST_READS = 128;
 
 function sha(value) {
   return crypto
@@ -115,10 +116,13 @@ function collectPackageFacts(
   const pythonManifests = files.filter(file =>
     /(?:^|\/)(?:pyproject\.toml|requirements(?:-[^/]+)?\.txt)$/i.test(file));
   const pythonCandidates = new Set();
+  let pythonManifestsReadable = 0;
+  let pythonManifestsUnreadable = 0;
   const providerPattern = /(?:openai|anthropic|cohere|mistral|huggingface|langchain|llamaindex|vertex|bedrock|azure[-_]?ai|google[-_]?generative|modelcontextprotocol|mcp(?:[-_]|$)|pinecone|weaviate|qdrant|chromadb)/i;
-  for (const file of pythonManifests.slice(0,20)) {
+  for (const file of pythonManifests.slice(0, MAX_DEPENDENCY_MANIFEST_READS)) {
     const text = readText(repositoryPath,file);
-    if (!text) continue;
+    if (text === null) { pythonManifestsUnreadable += 1; continue; }
+    pythonManifestsReadable += 1;
     for (const line of text.split(/\r?\n/)) {
       const candidate = line.trim().replace(/^['\"]/, '').split(/[=<>~!;\s'\",\]]/)[0];
       if (/^[a-z0-9_.-]+$/i.test(candidate) && providerPattern.test(candidate)) {
@@ -130,14 +134,17 @@ function collectPackageFacts(
     }
   }
 
-  for (const file of manifests.slice(0, 20)) {
+  let packageManifestsReadable = 0;
+  let packageManifestsUnreadable = 0;
+  for (const file of manifests.slice(0, MAX_DEPENDENCY_MANIFEST_READS)) {
     const text =
       readText(repositoryPath, file);
 
-    if (!text) continue;
+    if (text === null) { packageManifestsUnreadable += 1; continue; }
 
     try {
       const parsed = JSON.parse(text);
+      packageManifestsReadable += 1;
 
       if (parsed?.name) {
         packageNames.push(
@@ -162,6 +169,7 @@ function collectPackageFacts(
         }
       }
     } catch {
+      packageManifestsUnreadable += 1;
       // Invalid manifests remain visible through artifact refs.
     }
   }
@@ -179,11 +187,16 @@ function collectPackageFacts(
       trackedTreeComplete: true,
       candidatePaths: files.length,
       packageManifestsFound: manifests.length,
-      packageManifestsReadLimit: 20,
+      packageManifestsReadLimit: MAX_DEPENDENCY_MANIFEST_READS,
+      packageManifestsReadable,
+      packageManifestsUnreadable,
       pythonManifestsFound: pythonManifests.length,
-      pythonManifestsReadLimit: 20,
+      pythonManifestsReadLimit: MAX_DEPENDENCY_MANIFEST_READS,
+      pythonManifestsReadable,
+      pythonManifestsUnreadable,
       reportedReferenceLimit: MAX_REFS,
-      manifestsBeyondReadLimit: manifests.length > 20 || pythonManifests.length > 20,
+      manifestsBeyondReadLimit: manifests.length > MAX_DEPENDENCY_MANIFEST_READS || pythonManifests.length > MAX_DEPENDENCY_MANIFEST_READS,
+      completeManifestRead: manifests.length <= MAX_DEPENDENCY_MANIFEST_READS && pythonManifests.length <= MAX_DEPENDENCY_MANIFEST_READS && packageManifestsUnreadable === 0 && pythonManifestsUnreadable === 0,
       referencesBeyondLimit: files.length > MAX_REFS
     },
     dependencyNames:
