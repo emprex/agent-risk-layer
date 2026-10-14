@@ -2333,7 +2333,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
               dryRun: true
             }
           }),
-          signal: AbortSignal.timeout(15000)
+          signal: globalThis.AbortSignal.timeout(15000)
         }
       );
 
