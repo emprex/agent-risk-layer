@@ -343,7 +343,7 @@ function verifyTotp(secret, code, now = Date.now()) {
                 return true;
         }
     }
-    catch { }
+    catch { /* Malformed TOTP material must fail closed. */ }
     return false;
 }
 function encrypt(value) {
