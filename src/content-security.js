@@ -93,6 +93,7 @@ function decodeSuspiciousLayers(text) {
 function printableRatio(value) {
     if (!value.length)
         return 0;
+    // eslint-disable-next-line no-control-regex -- intentional printable ASCII allowlist
     return [...value].filter((char) => /[\x09\x0A\x0D\x20-\x7E]/.test(char)).length / value.length;
 }
 function flatten(value, out = [], depth = 0) {
