@@ -32,7 +32,7 @@ def main():
 
     def component(kind, ecosystem, name, requested, file):
         name = str(name or "")[:120]
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@/-]*", name):
+        if not re.fullmatch(r"(?:@[A-Za-z0-9_.-]+/)?[A-Za-z0-9][A-Za-z0-9_.-]*", name):
             output["unresolvedDirectives"] += 1
             return
         field = "lockedCount" if kind == "locked" else "declaredCount"
