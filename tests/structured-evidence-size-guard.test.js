@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection, kb007ProviderRefreshReference, isMissingKb008StructuredObservations } from '../src/agent/tools/run-authoritative-control-test.mjs';
+import { boundedDeterministicEvidenceJson, frozenInspectionObservation, isLegacyTruncatedKb007Source, boundedStructuredSourceProjection, kb007ProviderRefreshReference, kb017DependencyRefreshReference, isMissingKb008StructuredObservations } from '../src/agent/tools/run-authoritative-control-test.mjs';
 
 const payload = {
   schema: 'arl.deterministic-evidence-collection.v1',
@@ -164,4 +164,60 @@ test('KB-008 missing-source recovery requires matching authoritative frozen line
   assert.equal(isMissingKb008StructuredObservations({...row,inputReference:row.inputReference.replace(':ARL-KB-008:',':ARL-KB-007:')},binding),false);
   assert.equal(isMissingKb008StructuredObservations({...row,executionKind:'retest'},binding),false);
   assert.equal(isMissingKb008StructuredObservations({...row,observedResult:'Requirement-specific deterministic observations:\n{}'},binding),false);
+});
+
+
+test('KB-017 exact source-refresh key is content-bound, deterministic and preserves inconclusive guarantees', () => {
+  const revision='a'.repeat(40), sourceDigest='b'.repeat(64), checkDigest='c'.repeat(64);
+  const component={kind:'locked',ecosystem:'npm',name:'example',versionOrConstraint:'1.2.3',
+    sourcePathHash:'d'.repeat(24),sourceContentSha256:'e'.repeat(64)};
+  const dependencyInventory={
+    parserStatus:'completed',sourceCandidates:1,filesSentToParser:1,
+    skippedForBudget:0,unreadableFiles:0,
+    componentRetentionComplete:true,
+    parsed:{filesParsed:1,filesInvalid:0,filesUnsupported:0,omittedComponents:0,
+      components:[component],declaredCount:0,lockedCount:1},
+    buildArtifactVerified:false,deployedArtifactVerified:false,
+    modelProvenanceVerified:false,sbomComplete:false
+  };
+  const collection={
+    schema:'arl.deterministic-evidence-collection.v1',targetRevision:revision,
+    privacyBoundary:'No source code, secret values in observations',
+    requirementObservations:[{
+      requirement:'Software and AI dependency bill',
+      collectors:['dependency_and_build'],
+      observations:{dependency_and_build:{dependencyInventory}}
+    }]
+  };
+  const make=(patch={})=>kb017DependencyRefreshReference({
+    revision,controlId:'ARL-KB-017',sourceDigest,checkDigest,collection,...patch
+  });
+  const baseline=make();
+  assert.match(baseline,/^arl_frozen_source_evidence_collection_v2:[a-f0-9]{40}:ARL-KB-017:[a-f0-9]{64}$/);
+  assert.equal(make(),baseline,'unchanged refresh is idempotent');
+  assert.notEqual(make({checkDigest:'f'.repeat(64)}),baseline);
+  assert.notEqual(make({collection:{...collection,requirementObservations:[
+    {...collection.requirementObservations[0],observations:{
+      dependency_and_build:{dependencyInventory:{...dependencyInventory,
+        parsed:{...dependencyInventory.parsed,components:[{
+          ...component,versionOrConstraint:'1.2.4'
+        }]}}}
+    }}
+  ]}}),baseline,'new source candidate version gets new append-only key');
+  assert.throws(()=>make({controlId:'ARL-KB-007'}));
+  assert.throws(()=>make({revision:'f'.repeat(40)}));
+  assert.throws(()=>make({collection:{...collection,targetRevision:'f'.repeat(40)}}));
+  assert.throws(()=>make({collection:{...collection,requirementObservations:[{
+    ...collection.requirementObservations[0],
+    observations:{dependency_and_build:{dependencyInventory:{
+      ...dependencyInventory,componentRetentionComplete:false,
+      parsed:{...dependencyInventory.parsed,omittedComponents:1}
+    }}}
+  }]}}),'source truncation must fail closed');
+  assert.throws(()=>make({collection:{...collection,requirementObservations:[{
+    ...collection.requirementObservations[0],
+    observations:{dependency_and_build:{dependencyInventory:{
+      ...dependencyInventory,buildArtifactVerified:true
+    }}}
+  }]}}),'refresh is only for static evidence and must not claim build verification');
 });
