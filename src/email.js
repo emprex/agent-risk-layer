@@ -73,7 +73,7 @@ async function sendEmail({ userId, to, subject, html, attachments }) {
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             redirect: 'error',
-            signal: AbortSignal.timeout(EMAIL_TIMEOUT_MS),
+            signal: globalThis.AbortSignal.timeout(EMAIL_TIMEOUT_MS),
             headers: { Authorization: `Bearer ${config.resendApiKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ from: config.emailFrom, to: [to], subject, html, attachments }),
         });
