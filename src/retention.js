@@ -45,7 +45,7 @@ export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
     await db.prepare('DELETE FROM inspection_tokens WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
     await db.prepare('DELETE FROM email_verification_tokens WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
     await db.prepare('DELETE FROM mfa_login_challenges WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
-    const projects = await db.prepare(`SELECT id,retention_days FROM security_projects`).all();
+    const projects = await db.prepare(`SELECT id,retention_days FROM security_projects WHERE status!='archived'`).all();
     for (const project of projects) {
         const cutoff = new Date(now.getTime() - Math.max(1, Number(project.retention_days || 30)) * 86400000).toISOString();
         await db.transaction(async () => {
