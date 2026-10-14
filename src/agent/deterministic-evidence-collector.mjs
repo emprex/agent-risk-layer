@@ -124,12 +124,12 @@ function collectPackageFacts(
     if (text === null) { pythonManifestsUnreadable += 1; continue; }
     pythonManifestsReadable += 1;
     for (const line of text.split(/\r?\n/)) {
-      const candidate = line.trim().replace(/^['\"]/, '').split(/[=<>~!;\s'\",\]]/)[0];
+      const candidate = line.trim().replace(/^['"]/, '').split(/[=<>~!;\s'",\]]/)[0];
       if (/^[a-z0-9_.-]+$/i.test(candidate) && providerPattern.test(candidate)) {
         pythonCandidates.add(candidate.toLowerCase());
       }
     }
-    for (const match of text.matchAll(/['\"]([a-z0-9_.-]+)(?:\[[^\]]+\])?(?:[<>=!~][^'\"]*)?['\"]/gi)) {
+    for (const match of text.matchAll(/['"]([a-z0-9_.-]+)(?:\[[^\]]+\])?(?:[<>=!~][^'"]*)?['"]/gi)) {
       if (providerPattern.test(match[1])) pythonCandidates.add(match[1].toLowerCase());
     }
   }
