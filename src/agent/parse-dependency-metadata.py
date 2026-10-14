@@ -5,7 +5,7 @@ import re
 import sys
 import tomllib
 
-MAX_COMPONENTS = 500
+MAX_COMPONENTS = 6000  # bounded source entries; keep explicit omission if exceeded
 NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^]]+\])?\s*(.*)$")
 
 
@@ -72,6 +72,7 @@ def main():
         "unresolvedDirectives": 0, "declaredCount": 0, "lockedCount": 0,
         "components": [],
         "omittedComponents": 0,
+        "componentLimit": MAX_COMPONENTS,
         "unresolvedByReason": {},
         "unsupportedByFormat": {},
         "yarnFormats": {"classic": 0, "berry": 0},
