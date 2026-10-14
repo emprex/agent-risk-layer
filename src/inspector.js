@@ -374,6 +374,7 @@ function safeEqual(a, b) {
     const right = Buffer.from(String(b));
     return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
+// eslint-disable-next-line no-control-regex -- sanitize control characters in inspection text
 function clean(value, max) { return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 function clampInt(value, min, max) { const num = Math.round(Number(value)); return Number.isFinite(num) ? Math.max(min, Math.min(max, num)) : min; }
 function invalid(error) { return { valid: false, error }; }
