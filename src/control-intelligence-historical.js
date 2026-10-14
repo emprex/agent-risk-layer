@@ -4,7 +4,7 @@ import { canonicalJson, intelligenceDigest } from './control-intelligence-core.j
 const RECORD_ROLES = new Set(['analyst', 'developer', 'admin', 'owner']);
 const SENSITIVITY = new Set(['public', 'internal', 'confidential', 'restricted']);
 const SECRET_KEY = /(?:password|secret|token|api.?key|private.?key|credential)/i;
-const SECRET_VALUE = /(?:arl_live_[a-z0-9_\-]{12,}|\bBearer\s+[A-Za-z0-9._~+\/-]{16,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{12,})/i;
+const SECRET_VALUE = /(?:arl_live_[a-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+\x2F-]{16,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{12,})/i;
 
 function error(message, statusCode = 409) {
   return Object.assign(new Error(message), { statusCode });
