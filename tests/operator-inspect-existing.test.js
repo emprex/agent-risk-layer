@@ -14,7 +14,9 @@ test('inspect-existing does not bootstrap a missing frozen assessment',()=>{
   fs.mkdirSync(target);
   const git=args=>spawnSync('git',args,{cwd:target,encoding:'utf8'});
   const env={...process.env,NODE_ENV:'test',PRODUCT_STAGE:'development',
-    DATABASE_URL:'',DATABASE_PATH:database};
+    DATABASE_URL:'',DATABASE_PATH:database,
+    // Never bind this synthetic fixture to the operator's real frozen target.
+    ARL_EXPECTED_TARGET_SHA:''};
   try {
     for(const args of [
       ['init','-q'],['config','user.name','ARL Test'],['config','user.email','arl@example.test'],
