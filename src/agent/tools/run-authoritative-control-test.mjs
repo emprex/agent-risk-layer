@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { db } from '../../db.js';
 import { storeSourceCollectionArtifact } from './source-collection-artifacts.mjs';
 
 import {
@@ -489,50 +490,54 @@ export async function runAuthoritativeControlSourceReview({
     return {executed:false,reason:'complete_structured_source_observation_exceeds_storage_limit',securityStateChanged:false};
   }
 
-  // Complete metadata must be durable before the bounded observation becomes evidence.
-  // Do not re-collect or repair previously recorded partial observations.
-  if (collectionOnly) {
-    await storeSourceCollectionArtifact({
-      projectId, snapshotId, controlId,
-      targetRevision:frozen.target.revision,
-      inputReference,
-      collection:deterministicEvidence,
-      projectionDigest:projection.limited
-        ? JSON.parse(deterministicEvidenceText).projection?.fullCollectionSha256
-        : null
-    });
-  }
-
-  const execution =
-    await recordControlTestExecution({
+  // The artifact, test and evidence must either all persist or all roll back.
+  await db.transaction(async () => {
+    // Complete metadata must be durable before the bounded observation becomes evidence.
+    // Do not re-collect or repair previously recorded partial observations.
+    if (collectionOnly) {
+      await storeSourceCollectionArtifact({
+        projectId, snapshotId, controlId,
+        targetRevision:frozen.target.revision,
+        inputReference,
+        collection:deterministicEvidence,
+        projectionDigest:projection.limited
+          ? JSON.parse(deterministicEvidenceText).projection?.fullCollectionSha256
+          : null
+      });
+    }
+  
+    const execution =
+      await recordControlTestExecution({
+        projectId,
+        controlId,
+        userId,
+        input: {
+          systemSnapshotId: snapshotId,
+          executionKind: 'initial',
+          executionMethod: collectionKind,
+          result: 'inconclusive',
+          inputReference,
+          observedResult,
+          limitations:
+            'This automatic source collection is bound to the exact frozen Git revision. It may support canonical evidence requirements but does not invent human approval, reviewer identity, organisational records, runtime effects or a conclusive control result.'
+        }
+      });
+  
+    await recordControlEvidence({
       projectId,
       controlId,
       userId,
       input: {
         systemSnapshotId: snapshotId,
-        executionKind: 'initial',
-        executionMethod: collectionKind,
-        result: 'inconclusive',
-        inputReference,
-        observedResult,
+        evidenceClass: 'observed',
+        sourceType: collectionKind,
+        sourceReference: inputReference,
+        testExecutionId: execution.id,
         limitations:
-          'This automatic source collection is bound to the exact frozen Git revision. It may support canonical evidence requirements but does not invent human approval, reviewer identity, organisational records, runtime effects or a conclusive control result.'
+          'Observed evidence is limited to deterministic frozen-source inspection and typed repository collectors. Human governance decisions, legal-basis conclusions, runtime effects and active-test outcomes remain separate and must not be inferred by ARL.'
       }
     });
-
-  await recordControlEvidence({
-    projectId,
-    controlId,
-    userId,
-    input: {
-      systemSnapshotId: snapshotId,
-      evidenceClass: 'observed',
-      sourceType: collectionKind,
-      sourceReference: inputReference,
-      testExecutionId: execution.id,
-      limitations:
-        'Observed evidence is limited to deterministic frozen-source inspection and typed repository collectors. Human governance decisions, legal-basis conclusions, runtime effects and active-test outcomes remain separate and must not be inferred by ARL.'
-    }
+  
   });
 
   return {
