@@ -341,7 +341,7 @@ test('KB-017 discovers late dependency manifests outside generic 500-file source
     assert.equal(dependency.dependencyPathDiscovery.trackedTreeComplete, true);
     assert.equal(dependency.dependencyPathDiscovery.candidatePaths, 2);
     assert.equal(dependency.dependencyPathDiscovery.manifestsBeyondReadLimit, false);
-    assert.doesNotMatch(JSON.stringify(collection), /zz-late\\/package.json/);
+    assert.equal(JSON.stringify(collection).includes('zz-late/package.json'), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
