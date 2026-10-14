@@ -6,13 +6,13 @@ import sys
 import tomllib
 
 MAX_COMPONENTS = 500
-NAME = re.compile(r"^\\s*([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\\[[^]]+\\])?\\s*(.*)$")
+NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^]]+\])?\s*(.*)$")
 
 
 def safe_spec(value):
     value = str(value or "").strip()
     # Do not retain URLs, credentials, or command snippets from source files.
-    if len(value) > 100 or "://" in value or "@" in value or "\\n" in value:
+    if len(value) > 100 or "://" in value or "@" in value or "\n" in value:
         return "non_registry_or_unresolved"
     return value[:80]
 
