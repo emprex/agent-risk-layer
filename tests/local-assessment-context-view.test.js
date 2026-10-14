@@ -8,6 +8,7 @@ import {
 test('local assessment context view exposes confirmed context without internal secrets', () => {
   const view = projectLocalAssessmentContext({
     available: true,
+    projectId: 'prj_confirmed',
     systemSnapshotId: 'snap_123',
     architecture: {
       summary: 'Local cloned MCP agent repository under development assessment.',
@@ -54,6 +55,7 @@ test('local assessment context view exposes confirmed context without internal s
   });
 
   assert.equal(view.available, true);
+  assert.equal(view.projectId, 'prj_confirmed');
   assert.equal(view.environment, 'development');
   assert.equal(
     view.targetBinding.revision,
@@ -90,4 +92,16 @@ test('local assessment context view fails closed when context is unavailable', (
       humanReviewRequired: true
     }
   );
+});
+
+
+test('read-only assessment context does not invent a project ID when absent', () => {
+  const view = projectLocalAssessmentContext({
+    available: true,
+    systemSnapshotId: 'snap_known',
+    assessmentConfiguration: { targetBinding: { revision: 'a'.repeat(40) } }
+  });
+  assert.equal(view.projectId, null);
+  assert.equal(view.securityStateChanged, false);
+  assert.equal(view.deploymentDecisionWritten, false);
 });
