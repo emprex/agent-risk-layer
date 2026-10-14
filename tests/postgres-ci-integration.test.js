@@ -212,6 +212,36 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     assert.equal(Number(owners.count),1);
     const snapshots = await db.prepare('SELECT COUNT(*) AS count FROM system_snapshots').get();
     assert.ok(Number(snapshots.count)>=1);
+    // Retention lifecycle uses the real worker and isolated PostgreSQL fixture.
+    const project = await db.prepare("SELECT id,workspace_id FROM security_projects WHERE status!='archived' LIMIT 1").get();
+    assert.ok(project, 'synthetic Operator creates a project for retention coverage');
+    const old = '2020-01-01T00:00:00.000Z';
+    const revised = 'c'.repeat(40);
+    const retainedJson = JSON.stringify({
+      schema:'arl.deterministic-evidence-collection.v1',targetRevision:revised,
+      privacyBoundary:'No source code, secret values, credential values or raw external destination names are included.',
+      requirementObservations:[]
+    });
+    const retainedDigest = crypto.createHash('sha256').update(retainedJson).digest('hex');
+    for (const [key,status] of [['purge','active'],['hold','retained_hold']]) {
+      await db.prepare(
+        'INSERT INTO control_source_collection_artifacts '+
+        '(id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,'+
+        'collection_sha256,collection_json,collector_schema,retention_status,retention_expires_at,created_at) '+
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).run('sca_ci_'+key,project.workspace_id,project.id,'sys_synthetic','ARL-KB-016',revised,
+        'ci-retention-'+key,retainedDigest,retainedJson,'arl.deterministic-evidence-collection.v1',
+        status,old,old);
+    }
+    const retention = spawnSync(process.execPath,[
+      '--input-type=module','--eval',
+      "import { enforceRetention } from './src/retention.js'; import { db } from './src/db.js'; try { const x = await enforceRetention(); console.log(JSON.stringify({sourceCollectionArtifactsPurged:x.sourceCollectionArtifactsPurged})); } finally { await db.close(); }"
+    ],{cwd:root,env:{...process.env,NODE_ENV:'test',DATABASE_URL:connectionString},
+      encoding:'utf8',timeout:60_000});
+    assert.equal(retention.status,0,'Synthetic retention worker failed: '+retention.stderr.slice(-1500));
+    assert.ok(JSON.parse(retention.stdout.trim()).sourceCollectionArtifactsPurged>=1);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM control_source_collection_artifacts WHERE id=?').get('sca_ci_purge')).count,0);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM control_source_collection_artifacts WHERE id=?').get('sca_ci_hold')).count,1);
     const activeTests = await db.prepare('SELECT COUNT(*) AS count FROM control_test_executions').get();
     assert.equal(Number(activeTests.count),0,
       'Review HTML and a rejected changed SHA must never execute a controlled test.');
