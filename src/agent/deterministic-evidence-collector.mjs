@@ -428,7 +428,9 @@ function observationsForCollector(
         externalDestinationObservations:
           facts.externalDestinationObservations,
         sourceCoverage:
-          facts.sourceCoverage
+          facts.sourceCoverage,
+        discoveryCoverage:
+          facts.discoveryCoverage
       };
 
     case 'policy_and_documentation':
@@ -452,7 +454,10 @@ function observationsForCollector(
         lockfiles:
           facts.lockfiles,
         ciCdArtifacts:
-          facts.ciCdArtifacts
+          facts.ciCdArtifacts,
+        // A bounded file scan cannot establish a complete dependency bill.
+        discoveryCoverage:
+          facts.discoveryCoverage
       };
 
     case 'network_and_egress':
