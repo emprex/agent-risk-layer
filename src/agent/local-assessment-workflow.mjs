@@ -736,7 +736,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
-  if (/^Persist assessment static batch\\b/i.test(request.trim())) {
+  if (/^Persist assessment static batch\b/i.test(request.trim())) {
     const match=/^Persist assessment static batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
     if (!match) throw new Error('Use Persist assessment static batch N (positive integer).');
     const expected=String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
