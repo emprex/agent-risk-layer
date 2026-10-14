@@ -820,7 +820,7 @@ async function createRetestEvidenceArtifact({ access, criteria, userId }) {
     policy_published_at,retest_criteria_id,remediation_id,retest_criteria_digest,retest_satisfied,created_at
     FROM runtime_events WHERE id=? AND project_id=?`).get(criteria.runtime_event_id, criteria.project_id);
   if (!source || source.retest_criteria_id !== criteria.id || source.remediation_id !== criteria.remediation_id
-    || !safeEqualDigest(source.retest_criteria_digest, criteria.criteria_digest) || !Boolean(source.retest_satisfied))
+    || !safeEqualDigest(source.retest_criteria_digest, criteria.criteria_digest) || !source.retest_satisfied)
     throw badRequest('Bound retest runtime evidence is missing or invalid.');
   const canonical = canonicalJson(source);
   const artifactId = id('rea_');
