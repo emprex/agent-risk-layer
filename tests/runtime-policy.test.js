@@ -103,6 +103,40 @@ test('blocks secret-like fields', () => {
   assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-008'));
 });
 
+test('blocks secret fields introduced by JSON serialization', () => {
+  const result = evaluateRuntimeAction({
+    tool: 'search',
+    arguments: { toJSON() { return { apiKey: 'synthetic-testing-key-123456' }; } }
+  }, policy);
+  assert.equal(result.decision, 'deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-008'));
+});
+
+test('blocks nested secrets introduced by JSON serialization', () => {
+  const result = evaluateRuntimeAction({
+    tool: 'search',
+    arguments: { toJSON() { return { payload: { token: 'synthetic-testing-token-123456' } }; } }
+  }, policy);
+  assert.equal(result.decision, 'deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-008'));
+});
+
+test('non-JSON argument values fail closed as a policy event instead of throwing', () => {
+  for (const value of [() => 'not-json', Symbol('not-json')]) {
+    const result = evaluateRuntimeAction({ tool: 'search', arguments: value }, policy);
+    assert.equal(result.decision, 'deny');
+    assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-004'));
+  }
+});
+
+test('benign serialized object remains allowed without a secret-like field', () => {
+  const result = evaluateRuntimeAction({
+    tool: 'search',
+    arguments: { toJSON() { return { request: 'public documentation' }; } }
+  }, policy);
+  assert.equal(result.decision, 'allow');
+});
+
 test('requires server-verified approval for material actions and ignores caller assertions', () => {
   assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' } }, policy).decision, 'deny');
   assert.equal(evaluateRuntimeAction({ tool:'send_email', arguments:{ to:'person@example.com' }, context:{ humanApproved:true, productionApproved:true } }, policy).decision, 'deny');
