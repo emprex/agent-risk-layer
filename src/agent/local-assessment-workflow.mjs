@@ -327,6 +327,43 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     if (unsafe) throw new Error('Local mode refuses non-local adapter authorizations.');
   }
+  if (/^Refresh frozen dependency inventory ARL-KB-017[.!?]*$/i.test(request.trim())) {
+    const expected = String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        !/^[a-f0-9]{40}$/.test(expected) ||
+        localFrozenInspection.target.revision !== expected) {
+      throw new Error('KB-017 refresh requires the exact expected clean frozen Git target.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId:options.projectId, controlId:'ARL-KB-017', userId:options.userId
+    });
+    const config = detail?.systemSnapshot?.assessmentConfiguration;
+    if (detail?.systemSnapshot?.id == null ||
+        detail.systemSnapshot.id !== 'sys_3ab269f861d04cea98f84b9b0ba26290' ||
+        config?.targetBinding?.source !== 'git' ||
+        config.targetBinding.revision !== expected ||
+        config?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        detail.testDefinition?.id !== 'ARL-CHK-017' ||
+        !Array.isArray(detail.testDefinition.requiredEvidence)) {
+      throw new Error('KB-017 refresh refuses a changed snapshot, assessment, control or Git target.');
+    }
+    const outcome=await runAuthoritativeControlSourceReview({
+      repositoryPath,projectId:options.projectId,userId:options.userId,
+      controlId:'ARL-KB-017',requirements:detail.testDefinition.requiredEvidence,
+      collectionOnly:true,refreshKb017DependencySource:true
+    });
+    return {
+      canonicalData:{
+        kb017DependencyRefresh:outcome,
+        securityStateChanged:outcome.securityStateChanged === true,
+        deploymentDecisionWritten:false,humanReviewRequired:true
+      },
+      answer:'KB-017 append-only static dependency evidence refresh: ' +
+        JSON.stringify(outcome) +
+        '\\nNo active tests, source approval, PASS/FAIL, or deployment decision. Historic evidence preserved.'
+    };
+  }
   if (/^Refresh frozen provider inventory ARL-KB-007[.!?]*$/i.test(request.trim())) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
