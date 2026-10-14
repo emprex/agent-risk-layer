@@ -33,6 +33,33 @@ test('blocks destinations outside the network allowlist', () => {
   assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'));
 });
 
+test('rejects a malformed configured network allowlist instead of disabling it', () => {
+  assert.throws(() => compileRuntimePolicy({
+    version: 'bad-hosts', allowedTools: ['search'], allowedHosts: ['%invalid-host']
+  }), /Invalid allowedHosts/);
+});
+
+test('blocks malformed HTTP destinations when a network allowlist is active', () => {
+  for (const url of ['https://bad%host/collect', 'https:///']) {
+    const result = evaluateRuntimeAction({ tool: 'search', arguments: { url } }, policy);
+    assert.equal(result.decision, 'deny', url);
+    assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'), url);
+  }
+});
+
+test('malformed destinations are recorded as would-deny in monitor mode', () => {
+  const monitor = compileRuntimePolicy({
+    version: 'bad-host-monitor', mode: 'monitor', allowedTools: ['search'],
+    allowedHosts: ['api.example.com']
+  });
+  const result = evaluateRuntimeAction({
+    tool: 'search', arguments: { url: 'https://bad%host/collect' }
+  }, monitor);
+  assert.equal(result.decision, 'allow');
+  assert.equal(result.observedDecision, 'would-deny');
+  assert.ok(result.reasons.some((item) => item.ruleId === 'ARL-RUN-007'));
+});
+
 test('blocks secret-like fields', () => {
   const result = evaluateRuntimeAction({ tool:'search', arguments:{ apiKey:'sk_test_1234567890' } }, policy);
   assert.equal(result.decision, 'deny');
