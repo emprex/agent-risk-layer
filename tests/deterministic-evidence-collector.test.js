@@ -513,7 +513,8 @@ test('KB-017 explicitly counts unsupported formats and unresolved requirements d
     assert.equal(parsed.filesUnsupported,1);
     assert.equal(parsed.unsupportedByFormat['pnpm-lock.yaml'],1);
     assert.equal(parsed.unresolvedDirectives,2);
-    assert.equal(parsed.unresolvedByReason.requires_directive_or_external_resolution,2);
+    assert.equal(parsed.unresolvedByReason.requirements_include,1);
+    assert.equal(parsed.unresolvedByReason.registry_configuration,1);
     assert.equal(parsed.declaredCount,1);
     assert.equal(JSON.stringify(parsed).includes('https://token:secret@'),false);
   } finally {fs.rmSync(root,{recursive:true,force:true});}
@@ -579,5 +580,46 @@ test('KB-017 still explicitly discloses omissions after the bounded 6000-entry l
     assert.equal(bill.parsed.omittedComponents,13);
     assert.equal(bill.componentRetentionComplete,false);
     assert.equal(bill.sbomComplete,false);
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('KB-017 distinguishes external requirements and editable installations without disclosing secrets', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-directive-kinds-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    const directives=[
+      ...Array.from({length:47}, (_,i)=>
+        'external'+i+' @ https://user:supersecret@example.invalid/dist'+i+'.whl'),
+      '-e ./private-agent',
+      '--editable=git+https://user:topsecret@example.invalid/agent.git#egg=private'
+    ];
+    fs.writeFileSync(path.join(root,'requirements.txt'),
+      ['requests==2.0.0',...directives].join('\n'));
+    git(root,['add','.']);commitFixture(root,'classification fixture');
+    const revision=git(root,['rev-parse','HEAD']);
+    const collected=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const bill=collected.requirementObservations[0].observations.dependency_and_build.dependencyInventory;
+    assert.equal(bill.parserStatus,'completed');
+    assert.equal(bill.parsed.unresolvedDirectives,49);
+    assert.deepEqual(bill.parsed.unresolvedByReason, {
+      external_reference:47,
+      editable_install:2
+    });
+    assert.equal(bill.parsed.declaredCount,1);
+    assert.equal(bill.sbomComplete,false);
+    assert.equal(bill.modelProvenanceVerified,false);
+    const output=JSON.stringify(collected);
+    assert.ok(!output.includes('supersecret'));
+    assert.ok(!output.includes('topsecret'));
+    assert.ok(!output.includes('example.invalid'));
+    assert.ok(!output.includes('private-agent'));
+    assert.ok(!output.includes(root));
   } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
