@@ -57,7 +57,7 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
         rules.push(block('ARL-RUN-002', `Tool "${tool}" is denied by policy.`));
     if (policy.allowedTools.length && !policy.allowedTools.some((value) => matchesTool(tool, value)))
         rules.push(block('ARL-RUN-003', `Tool "${tool}" is not allowlisted.`));
-    let serialised = '';
+    let serialised;
     try {
         serialised = JSON.stringify(args ?? {});
         if (typeof serialised !== 'string')
