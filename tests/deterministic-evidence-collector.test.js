@@ -379,3 +379,71 @@ test('KB-017 scans all 65 Python manifests and reports unreadable files separate
     fs.rmSync(root, {recursive: true, force: true});
   }
 });
+
+test('KB-017 binds Python and npm declared and locked metadata to hashed file evidence', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-bill-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    fs.writeFileSync(path.join(root,'pyproject.toml'),
+      '[project]\\ndependencies = ["openai>=1.58.0", "httpx==0.28.1"]\\n');
+    fs.writeFileSync(path.join(root,'uv.lock'),
+      'version = 1\\n[[package]]\\nname = "openai"\\nversion = "1.58.1"\\n[[package]]\\nname = "httpx"\\nversion = "0.28.1"\\n');
+    fs.writeFileSync(path.join(root,'requirements-dev.txt'),'anthropic==0.47.0\\n--index-url https://token:secret@example.invalid/simple\\n');
+    fs.writeFileSync(path.join(root,'package.json'), JSON.stringify({
+      name:'fixture-agent',dependencies:{'@modelcontextprotocol/sdk':'^1.0.0'}
+    }));
+    fs.writeFileSync(path.join(root,'package-lock.json'),JSON.stringify({
+      lockfileVersion:3,packages:{'':{},'node_modules/@modelcontextprotocol/sdk':{version:'1.1.0'}}
+    }));
+    git(root,['add','.']);commitFixture(root,'inert version metadata');
+    const revision=git(root,['rev-parse','HEAD']);
+    const result=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const dep=result.requirementObservations[0].observations.dependency_and_build;
+    const inventory=dep.dependencyInventory;
+    assert.equal(inventory.parserStatus,'completed');
+    assert.equal(inventory.sourceCandidates,5);
+    assert.equal(inventory.parsed.filesParsed,5);
+    assert.equal(inventory.parsed.filesInvalid,0);
+    assert.ok(inventory.parsed.declaredCount>=4);
+    assert.ok(inventory.parsed.lockedCount>=3);
+    assert.ok(inventory.parsed.components.some(p=>p.kind==='locked'&&p.name==='openai'&&p.versionOrConstraint==='1.58.1'));
+    assert.ok(inventory.parsed.components.some(p=>p.kind==='declared'&&p.name==='anthropic'&&p.versionOrConstraint==='==0.47.0'));
+    assert.ok(inventory.parsed.components.some(p=>p.kind==='locked'&&p.name==='@modelcontextprotocol/sdk'));
+    assert.equal(inventory.buildArtifactVerified,false);
+    assert.equal(inventory.modelProvenanceVerified,false);
+    assert.equal(inventory.sbomComplete,false);
+    assert.equal(dep.lockfiles.length,2);
+    assert.ok(!JSON.stringify(result).includes('https://token:secret@'));
+    assert.ok(!JSON.stringify(result).includes(root));
+  } finally { fs.rmSync(root,{recursive:true,force:true}); }
+});
+
+test('KB-017 discloses unsupported lockfile formats and never claims complete SBOM', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-unsupported-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    fs.writeFileSync(path.join(root,'pnpm-lock.yaml'),'lockfileVersion: 9.0\\n');
+    fs.writeFileSync(path.join(root,'pyproject.toml'),'[broken\\n');
+    git(root,['add','.']);commitFixture(root,'unparsed lock');
+    const revision=git(root,['rev-parse','HEAD']);
+    const result=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const inv=result.requirementObservations[0].observations.dependency_and_build.dependencyInventory;
+    assert.equal(inv.parserStatus,'completed');
+    assert.equal(inv.parsed.filesUnsupported,1);
+    assert.equal(inv.parsed.filesInvalid,1);
+    assert.equal(inv.sbomComplete,false);
+    assert.equal(inv.deployedArtifactVerified,false);
+  } finally { fs.rmSync(root,{recursive:true,force:true}); }
+});
