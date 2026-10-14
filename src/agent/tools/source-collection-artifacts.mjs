@@ -31,6 +31,10 @@ export function verifySourceCollectionArtifact(row, scope) {
       row.input_reference !== scope.inputReference) {
     throw new Error('Full collection artifact is missing or outside exact assessment scope.');
   }
+  if (!['active','retained_hold'].includes(row.retention_status)) throw new Error('Full collection artifact is not retained for use.');
+  if (row.retention_status !== 'retained_hold' && row.retention_expires_at && Date.parse(row.retention_expires_at) <= Date.now()) {
+    throw new Error('Full collection artifact retention has expired.');
+  }
   const digest = crypto.createHash('sha256').update(row.collection_json).digest('hex');
   if (digest !== row.collection_sha256) throw new Error('Full collection artifact integrity mismatch.');
   const parsed = JSON.parse(row.collection_json);
