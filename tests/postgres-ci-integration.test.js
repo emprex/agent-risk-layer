@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -63,6 +64,38 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     assert.equal(Number(migrations.count), files.length);
     const catalogue = await db.prepare('SELECT COUNT(*) AS count FROM risk_knowledge_entries').get();
     assert.equal(Number(catalogue.count), 108);
+
+    // Real PostgreSQL: complete artifact round-trip, immutable idempotency and
+    // failed transaction rollback on a disposable CI database only.
+    const collection = JSON.stringify({
+      schema:'arl.deterministic-evidence-collection.v1',
+      targetRevision:'a'.repeat(40),
+      privacyBoundary:'No source code, secret values, credential values or raw external destination names are included.',
+      requirementObservations:[{requirement:'KB-016',collectors:['target_identity'],
+        observations:{target_identity:{revision:'a'.repeat(40)}}}]
+    });
+    const digest = crypto.createHash('sha256').update(collection).digest('hex');
+    const ref='arl_frozen_source_evidence_collection_v2:'+'a'.repeat(40)+':ARL-KB-016:'+'b'.repeat(64);
+    const args=['sca_ci_1','ws_ci','prj_ci','sys_ci','ARL-KB-016','a'.repeat(40),ref,
+      digest,collection,'arl.deterministic-evidence-collection.v1',new Date().toISOString()];
+    const insert='INSERT INTO control_source_collection_artifacts '+
+      '(id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,'+
+      'collection_sha256,collection_json,collector_schema,created_at) '+
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING';
+    await db.prepare(insert).run(...args);
+    await db.prepare(insert).run(...args);
+    const stored = await db.prepare('SELECT * FROM control_source_collection_artifacts WHERE id=?').get(args[0]);
+    assert.equal(stored.collection_json,collection);
+    assert.equal(stored.collection_sha256,digest);
+    assert.equal(stored.retention_status,'active');
+    assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM control_source_collection_artifacts').get()).count,1);
+    await assert.rejects(db.transaction(async()=>{
+      await db.prepare(insert).run('sca_ci_rollback',...args.slice(1));
+      throw new Error('synthetic rollback');
+    }),/synthetic rollback/);
+    assert.equal((await db.prepare('SELECT COUNT(*) AS count FROM control_source_collection_artifacts').get()).count,1);
+    await db.prepare("UPDATE control_source_collection_artifacts SET retention_status='expired' WHERE id=?").run(args[0]);
+    assert.equal((await db.prepare('SELECT retention_status FROM control_source_collection_artifacts WHERE id=?').get(args[0])).retention_status,'expired');
 
     // The retired hosted billing tables must not survive the full migration chain.
     const retired = await db.prepare(
