@@ -15,6 +15,6 @@ test('persist batch routing matches the actual CLI request and rejects lookalike
   assert.equal(route.test('Persist assessment static batch 1'),true);
   assert.equal(route.test('Persist assessment static batch 5'),true);
   assert.equal(route.test('Persist assessment static batch 1.'),true);
-  assert.equal(route.test('Persist assessment static batch\\b 1'),false);
+  assert.equal(route.test('Persist assessment static batching 1'),false);
   assert.equal(route.test('Inspect frozen target'),false);
 });
