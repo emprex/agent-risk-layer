@@ -58,7 +58,7 @@ export async function rateLimitAllowed(req, { windowMs = 60000, max = 180, bucke
             const rowSql = `SELECT count, reset_at, blocked_until FROM rate_limit_buckets WHERE bucket_key = ?${db.kind === 'postgres' ? ' FOR UPDATE' : ''}`;
             const row = await db.prepare(rowSql).get(key);
             const blockedUntil = row?.blocked_until ? Date.parse(row.blocked_until) : 0;
-            let allowed = false;
+            let allowed;
             if (blockedUntil > now) {
                 allowed = false;
             }
