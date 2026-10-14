@@ -5,7 +5,7 @@ let timer = null;
 let running = false;
 export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
     const nowValue = now.toISOString();
-    const summary = { authorisationsExpired: 0, campaignsPurged: 0, recordsDeleted: 0, tokensDeleted: 0, runtimeEventsPurged: 0 };
+    const summary = { authorisationsExpired: 0, campaignsPurged: 0, recordsDeleted: 0, tokensDeleted: 0, runtimeEventsPurged: 0, sourceCollectionArtifactsPurged: 0 };
     summary.authorisationsExpired = (await db.prepare(`UPDATE redteam_authorisations SET status='expired'
     WHERE status='active' AND window_end<?`).run(nowValue)).changes;
     const groups = await db.prepare(`SELECT r.authorisation_id, r.user_id, r.assessment_id, a.retention_days,
@@ -45,7 +45,7 @@ export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
     await db.prepare('DELETE FROM inspection_tokens WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
     await db.prepare('DELETE FROM email_verification_tokens WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
     await db.prepare('DELETE FROM mfa_login_challenges WHERE expires_at<=? OR used_at IS NOT NULL').run(nowValue);
-    const projects = await db.prepare(`SELECT id,retention_days FROM security_projects WHERE status!='archived'`).all();
+    const projects = await db.prepare(`SELECT id,retention_days FROM security_projects`).all();
     for (const project of projects) {
         const cutoff = new Date(now.getTime() - Math.max(1, Number(project.retention_days || 30)) * 86400000).toISOString();
         await db.transaction(async () => {
@@ -53,6 +53,11 @@ export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
             await prepareRiskKnowledgeRuntimeEvidencePurge({ projectId: project.id, eventIds: events.map((row) => row.id),
                 reason: 'runtime event retention expired', timestamp: nowValue });
             summary.runtimeEventsPurged += Number((await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff)).changes || 0);
+            // Complete source inventories follow project retention, except explicit holds.
+            // A projection may remain in the historical dossier, but is not a full artifact.
+            summary.sourceCollectionArtifactsPurged += Number((await db.prepare(
+                "DELETE FROM control_source_collection_artifacts WHERE project_id=? AND retention_status!='retained_hold' AND (created_at<? OR (retention_expires_at IS NOT NULL AND retention_expires_at<=?))"
+            ).run(project.id, cutoff, nowValue)).changes || 0);
         });
     }
     return summary;
