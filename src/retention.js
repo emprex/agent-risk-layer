@@ -55,9 +55,11 @@ export async function enforceRetention({ now = new Date(), limit = 100 } = {}) {
             summary.runtimeEventsPurged += Number((await db.prepare('DELETE FROM runtime_events WHERE project_id=? AND created_at<?').run(project.id, cutoff)).changes || 0);
             // Complete source inventories follow project retention, except explicit holds.
             // A projection may remain in the historical dossier, but is not a full artifact.
-            summary.sourceCollectionArtifactsPurged += Number((await db.prepare(
-                "DELETE FROM control_source_collection_artifacts WHERE project_id=? AND retention_status!='retained_hold' AND (created_at<? OR (retention_expires_at IS NOT NULL AND retention_expires_at<=?))"
-            ).run(project.id, cutoff, nowValue)).changes || 0);
+            if (db.kind === 'postgres') {
+                summary.sourceCollectionArtifactsPurged += Number((await db.prepare(
+                    "DELETE FROM control_source_collection_artifacts WHERE project_id=? AND retention_status!='retained_hold' AND (created_at<? OR (retention_expires_at IS NOT NULL AND retention_expires_at<=?))"
+                ).run(project.id, cutoff, nowValue)).changes || 0);
+            }
         });
     }
     return summary;
