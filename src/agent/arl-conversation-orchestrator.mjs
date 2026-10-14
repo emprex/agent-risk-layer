@@ -132,7 +132,7 @@ function successfulApplicabilityResponse({
   };
 }
 
-function blockedBaselineApplicabilityResponse(handoff) {
+function blockedBaselineApplicabilityResponse() {
   return {
     type: 'conversation_response',
     schema: CONVERSATION_RESPONSE_SCHEMA,
