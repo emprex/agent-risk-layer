@@ -49,7 +49,7 @@ async function githubJson(url) {
   const response = await fetch(url, {
     headers: githubHeaders(),
     redirect: 'follow',
-    signal: AbortSignal.timeout(20_000),
+    signal: globalThis.AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
     const reason = response.status === 404
@@ -81,7 +81,7 @@ async function fetchArchive(target) {
   const response = await fetch(`https://api.github.com/repos/${target.repository}/tarball/${target.revision}`, {
     headers: githubHeaders(),
     redirect: 'follow',
-    signal: AbortSignal.timeout(30_000),
+    signal: globalThis.AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw Object.assign(new Error(`GitHub source archive download failed with HTTP ${response.status}.`), { statusCode: 502 });
   const contentLength = Number(response.headers.get('content-length') || 0);
