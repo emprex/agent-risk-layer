@@ -410,7 +410,7 @@ test('KB-017 binds Python and npm declared and locked metadata to hashed file ev
     assert.equal(inventory.sourceCandidates,5, 'tracked files: '+git(root,['ls-files']));
     assert.equal(inventory.parsed.filesParsed,5);
     assert.equal(inventory.parsed.filesInvalid,0);
-    assert.ok(inventory.parsed.declaredCount>=4);
+    assert.ok(inventory.parsed.declaredCount>=4, JSON.stringify(inventory.parsed.components));
     assert.ok(inventory.parsed.lockedCount>=3);
     assert.ok(inventory.parsed.components.some(p=>p.kind==='locked'&&p.name==='openai'&&p.versionOrConstraint==='1.58.1'));
     assert.ok(inventory.parsed.components.some(p=>p.kind==='declared'&&p.name==='anthropic'&&p.versionOrConstraint==='==0.47.0'));
