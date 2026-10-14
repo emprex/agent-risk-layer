@@ -448,3 +448,73 @@ test('KB-017 discloses unsupported lockfile formats and never claims complete SB
     assert.equal(inv.deployedArtifactVerified,false);
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });
+
+test('KB-017 parses Yarn Classic and Berry lockfile versions without exposing resolved URLs', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-yarn-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    fs.mkdirSync(path.join(root,'classic'));
+    fs.mkdirSync(path.join(root,'berry'));
+    fs.writeFileSync(path.join(root,'classic/yarn.lock'),
+      '# yarn lockfile v1\n\n' +
+      '"left-pad@^1.0.0", "left-pad@~1.0.1":\n' +
+      '  version "1.0.2"\n' +
+      '  resolved "https://token:secret@example.invalid/x"\n\n' +
+      '"@scope/sdk@^2.0.0":\n' +
+      '  version "2.1.0"\n');
+    fs.writeFileSync(path.join(root,'berry/yarn.lock'),
+      '__metadata:\n  version: 8\n\n' +
+      '"@scope/sdk@npm:^3.0.0":\n' +
+      '  version: 3.1.4\n  resolution: "@scope/sdk@npm:3.1.4"\n\n' +
+      '"foo@npm:~2.0.0":\n  version: 2.0.1\n');
+    git(root,['add','.']);commitFixture(root,'Yarn lock metadata');
+    const revision=git(root,['rev-parse','HEAD']);
+    const result=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const inv=result.requirementObservations[0].observations.dependency_and_build.dependencyInventory;
+    assert.equal(inv.parserStatus,'completed');
+    assert.equal(inv.parsed.filesParsed,2);
+    assert.equal(inv.parsed.filesUnsupported,0);
+    assert.equal(inv.parsed.filesInvalid,0);
+    assert.equal(inv.parsed.lockedCount,4);
+    assert.deepEqual(inv.parsed.yarnFormats,{classic:1,berry:1});
+    assert.equal(inv.parsed.yarnStanzasResolved,4);
+    assert.ok(inv.parsed.components.some(p=>p.name==='left-pad' && p.versionOrConstraint==='1.0.2'));
+    assert.ok(inv.parsed.components.some(p=>p.name==='@scope/sdk' && p.versionOrConstraint==='3.1.4'));
+    assert.equal(inv.sbomComplete,false);
+    const encoded=JSON.stringify(result);
+    assert.equal(encoded.includes('https://token:secret@'),false);
+    assert.equal(encoded.includes(root),false);
+  } finally { fs.rmSync(root,{recursive:true,force:true}); }
+});
+
+test('KB-017 explicitly counts unsupported formats and unresolved requirements directives', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-reasons-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    fs.writeFileSync(path.join(root,'pnpm-lock.yaml'),'lockfileVersion: 9.0\n');
+    fs.writeFileSync(path.join(root,'requirements.txt'),
+      'requests==2.32.0\n-r private.txt\n--index-url https://token:secret@example.invalid/simple\n');
+    git(root,['add','.']);commitFixture(root,'unsupported and directives');
+    const revision=git(root,['rev-parse','HEAD']);
+    const result=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const parsed=result.requirementObservations[0].observations.dependency_and_build.dependencyInventory.parsed;
+    assert.equal(parsed.filesUnsupported,1);
+    assert.equal(parsed.unsupportedByFormat['pnpm-lock.yaml'],1);
+    assert.equal(parsed.unresolvedDirectives,2);
+    assert.equal(parsed.unresolvedByReason.requires_directive_or_external_resolution,2);
+    assert.equal(parsed.declaredCount,1);
+    assert.equal(JSON.stringify(parsed).includes('https://token:secret@'),false);
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
