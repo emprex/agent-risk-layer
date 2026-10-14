@@ -55,16 +55,6 @@ export function detectRemediationApplicabilityCommand(
   return null;
 }
 
-function parseJson(value, fallback = {}) {
-  try {
-    return value && typeof value === 'object'
-      ? value
-      : JSON.parse(value || '{}');
-  } catch {
-    return fallback;
-  }
-}
-
 function unavailable(reason) {
   return {
     type: 'remediation_applicability_handoff',
