@@ -100,13 +100,34 @@ def main():
             "sourceContentSha256": file["contentSha256"]
         })
 
+    def classify_unresolved_requirement(line):
+        # Only fixed category labels leave the isolated parser. Raw directives,
+        # URLs, tokens, hosts and local paths must never enter the evidence.
+        lower = line.lower()
+        if re.match(r"^(?:-e(?:\\s|$)|--editable(?:\\s|=|$))", lower):
+            return "editable_install"
+        if re.match(r"^(?:-r(?:\\s|$)|--requirement(?:\\s|=|$))", lower):
+            return "requirements_include"
+        if re.match(r"^(?:-c(?:\\s|$)|--constraint(?:\\s|=|$))", lower):
+            return "constraints_include"
+        if re.match(r"^(?:--index-url|--extra-index-url|--find-links|--trusted-host)(?:\\s|=|$)", lower):
+            return "registry_configuration"
+        if re.match(r"^--hash(?:\\s|=|$)", lower):
+            return "hash_option"
+        if line.startswith("-"):
+            return "other_pip_option"
+        if "://" in lower or lower.startswith(("git+", "hg+", "svn+", "bzr+")):
+            return "external_reference"
+        return None
+
     def requirements(lines, file):
         for line in lines.splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            if line.startswith("-") or "://" in line or line.startswith("git+"):
-                unresolved("requires_directive_or_external_resolution")
+            reason = classify_unresolved_requirement(line)
+            if reason:
+                unresolved(reason)
                 continue
             match = NAME.match(line.split("#", 1)[0])
             if not match:
