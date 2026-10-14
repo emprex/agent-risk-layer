@@ -81,7 +81,7 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     const insert='INSERT INTO control_source_collection_artifacts '+
       '(id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,'+
       'collection_sha256,collection_json,collector_schema,created_at) '+
-      'VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING';
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING';
     await db.prepare(insert).run(...args);
     await db.prepare(insert).run(...args);
     const stored = await db.prepare('SELECT * FROM control_source_collection_artifacts WHERE id=?').get(args[0]);
