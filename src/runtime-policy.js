@@ -60,8 +60,11 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
     let serialised = '';
     try {
         serialised = JSON.stringify(args ?? {});
+        if (typeof serialised !== 'string')
+            throw new TypeError('Tool arguments are not JSON serialisable.');
     }
     catch {
+        serialised = '';
         rules.push(block('ARL-RUN-004', 'Tool arguments cannot be safely serialised.'));
     }
     const argumentBytes = Buffer.byteLength(serialised);
@@ -86,8 +89,13 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
         if (denied)
             rules.push(block('ARL-RUN-007', `Network destination "${denied}" is not allowlisted.`));
     }
-    if (policy.blockSecretLikeValues && containsSecretLikeMaterial(args)) {
-        rules.push(block('ARL-RUN-008', 'Arguments contain secret-like material.'));
+    if (policy.blockSecretLikeValues) {
+        // A custom toJSON() can introduce sensitive fields unseen in the raw object.
+        // Scan the same serialised form used for forwarding and evidence hashing.
+        const jsonArgs = serialised && argumentBytes <= policy.maxArgumentBytes
+            ? JSON.parse(serialised) : null;
+        if (containsSecretLikeMaterial(args) || containsSecretLikeMaterial(jsonArgs))
+            rules.push(block('ARL-RUN-008', 'Arguments contain secret-like material.'));
     }
     const needsApproval = runtimeActionRequiresApproval(tool, context, policy);
     if (needsApproval && approval.valid !== true) {
