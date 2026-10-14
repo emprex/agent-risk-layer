@@ -126,7 +126,7 @@ export async function createPostgresDatabase(config, dependencies = {}) {
         await client.query('COMMIT');
         return result;
       } catch (error) {
-        try { await client.query('ROLLBACK'); } catch {}
+        try { await client.query('ROLLBACK'); } catch { /* Preserve the original transaction error. */ }
         throw error;
       } finally {
         client.release();
