@@ -52,7 +52,10 @@ function trackedFiles(repositoryPath) {
         /\.(?:py|js|mjs|cjs|ts|tsx|go|rs|java)$/i.test(value) ? 1 : 2;
       return tier(a)-tier(b) || a.localeCompare(b);
     }).slice(0, MAX_FILES),
-    totalTrackedFileCount: allTracked.length
+    totalTrackedFileCount: allTracked.length,
+    // Enumerate dependency filenames across the full tracked tree, independent
+    // of the bounded generic source scan. No source contents are exposed.
+    dependencyPaths: allTracked.filter(file => /(?:^|\/)(?:package\.json|pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|poetry\.lock|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Pipfile\.lock|Cargo\.lock|go\.sum)$/i.test(file)).sort()
   };
 }
 
@@ -172,6 +175,17 @@ function collectPackageFacts(
       dependencyNames.size,
     pythonProviderPackageCandidates:[...pythonCandidates].sort().slice(0,20),
     pythonManifestCount:pythonManifests.length,
+    dependencyPathDiscovery: {
+      trackedTreeComplete: true,
+      candidatePaths: files.length,
+      packageManifestsFound: manifests.length,
+      packageManifestsReadLimit: 20,
+      pythonManifestsFound: pythonManifests.length,
+      pythonManifestsReadLimit: 20,
+      reportedReferenceLimit: MAX_REFS,
+      manifestsBeyondReadLimit: manifests.length > 20 || pythonManifests.length > 20,
+      referencesBeyondLimit: files.length > MAX_REFS
+    },
     dependencyNames:
       [...dependencyNames]
         .sort()
@@ -360,7 +374,7 @@ function repositoryFacts({
       ),
     ...collectPackageFacts(
       repositoryPath,
-      files
+      tracked.dependencyPaths
     ),
     ...textFacts,
     observedTechnologies:
@@ -451,6 +465,8 @@ function observationsForCollector(
           facts.dependencyCount,
         dependencyNames:
           facts.dependencyNames,
+        dependencyPathDiscovery:
+          facts.dependencyPathDiscovery,
         lockfiles:
           facts.lockfiles,
         ciCdArtifacts:
