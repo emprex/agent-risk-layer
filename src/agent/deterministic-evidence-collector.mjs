@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   classifyCanonicalEvidenceRequirement
@@ -11,6 +12,10 @@ const MAX_FILES = 500;
 const MAX_TEXT_BYTES = 256_000;
 const MAX_REFS = 20;
 const MAX_DEPENDENCY_MANIFEST_READS = 128;
+const MAX_BILL_FILES = 150;
+const MAX_BILL_FILE_BYTES = 4_000_000;
+const MAX_BILL_TOTAL_BYTES = 12_000_000;
+const PARSER_PATH = fileURLToPath(new URL('./parse-dependency-metadata.py', import.meta.url));
 
 function sha(value) {
   return crypto
@@ -56,7 +61,7 @@ function trackedFiles(repositoryPath) {
     totalTrackedFileCount: allTracked.length,
     // Enumerate dependency filenames across the full tracked tree, independent
     // of the bounded generic source scan. No source contents are exposed.
-    dependencyPaths: allTracked.filter(file => /(?:^|\/)(?:package\.json|pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|poetry\.lock|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Pipfile\.lock|Cargo\.lock|go\.sum)$/i.test(file)).sort()
+    dependencyPaths: allTracked.filter(file => /(?:^|\/)(?:package\.json|pyproject\.toml|requirements(?:-[^/]+)?\.txt|Pipfile|uv\.lock|pdm\.lock|poetry\.lock|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Pipfile\.lock|Cargo\.lock|go\.sum)$/i.test(file)).sort()
   };
 }
 
@@ -100,6 +105,79 @@ function readText(repositoryPath, relativePath) {
   } catch {
     return null;
   }
+}
+
+function candidateDependencyInventory(repositoryPath, files) {
+  // No target source executes: an isolated Python stdlib parser receives only
+  // bounded file contents from Git-tracked paths and emits source-bound facts.
+  const sources = [];
+  let unreadable = 0;
+  let skippedForBudget = 0;
+  let usedBytes = 0;
+  for (const relative of files) {
+    if (sources.length >= MAX_BILL_FILES) {
+      skippedForBudget += 1;
+      continue;
+    }
+    let text;
+    try {
+      const full = path.resolve(repositoryPath, relative);
+      const root = path.resolve(repositoryPath) + path.sep;
+      if (!full.startsWith(root)) throw new Error('outside repository');
+      const stat = fs.lstatSync(full);
+      if (!stat.isFile() || stat.size > MAX_BILL_FILE_BYTES ||
+          usedBytes + stat.size > MAX_BILL_TOTAL_BYTES) {
+        skippedForBudget += 1;
+        continue;
+      }
+      const buffer = fs.readFileSync(full);
+      if (buffer.includes(0)) throw new Error('binary file');
+      usedBytes += buffer.length;
+      text = buffer.toString('utf8');
+    } catch {
+      unreadable += 1;
+      continue;
+    }
+    sources.push({
+      basename: path.basename(relative).slice(0, 120),
+      pathHash: sha(relative).slice(0, 24),
+      contentSha256: sha(text),
+      text
+    });
+  }
+  const input = JSON.stringify({files:sources});
+  let parsed = null;
+  if (Buffer.byteLength(input) <= 16_000_000) {
+    const result = spawnSync('python3', ['-I', PARSER_PATH], {
+      input, encoding:'utf8', timeout:8000, maxBuffer:3_000_000,
+      cwd: '/', env:{PATH:'/usr/bin:/bin'}
+    });
+    if (!result.error && result.status === 0) {
+      try {
+        const candidate = JSON.parse(result.stdout);
+        if (candidate.schema === 'arl.dependency-inventory.candidate.v1' &&
+            Array.isArray(candidate.components)) parsed = candidate;
+      } catch {
+        // Explicitly report parser failure; never create false completeness.
+      }
+    }
+  }
+  return {
+    schema: 'arl.dependency-bill.source-candidate.v1',
+    targetExecution: 'none',
+    provenance: 'tracked working-tree files; requires clean frozen-Git binding',
+    scope: 'static source declarations and supported lockfile metadata only',
+    sourceCandidates: files.length,
+    filesSentToParser: sources.length,
+    unreadableFiles: unreadable,
+    skippedForBudget,
+    parserStatus: parsed ? 'completed' : 'unavailable_or_failed',
+    parsed: parsed || null,
+    buildArtifactVerified: false,
+    deployedArtifactVerified: false,
+    modelProvenanceVerified: false,
+    sbomComplete: false
+  };
 }
 
 function collectPackageFacts(
@@ -199,6 +277,7 @@ function collectPackageFacts(
       completeManifestRead: manifests.length <= MAX_DEPENDENCY_MANIFEST_READS && pythonManifests.length <= MAX_DEPENDENCY_MANIFEST_READS && packageManifestsUnreadable === 0 && pythonManifestsUnreadable === 0,
       referencesBeyondLimit: files.length > MAX_REFS
     },
+    dependencyInventory: candidateDependencyInventory(repositoryPath, files),
     dependencyNames:
       [...dependencyNames]
         .sort()
@@ -206,7 +285,7 @@ function collectPackageFacts(
     lockfiles:
       boundedRefs(
         files,
-        /(^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|requirements(?:-[^/]+)?\.txt|poetry\.lock|Pipfile\.lock|Cargo\.lock|go\.sum)$/i
+        /(^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|pdm\.lock|requirements(?:-[^/]+)?\.txt|poetry\.lock|Pipfile\.lock|Cargo\.lock|go\.sum)$/i
       )
   };
 }
@@ -480,6 +559,8 @@ function observationsForCollector(
           facts.dependencyNames,
         dependencyPathDiscovery:
           facts.dependencyPathDiscovery,
+        dependencyInventory:
+          facts.dependencyInventory,
         lockfiles:
           facts.lockfiles,
         ciCdArtifacts:
