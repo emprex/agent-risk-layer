@@ -36,7 +36,6 @@ export function buildReport(assessment, tier = 'basic', inspection = null, redTe
     const result = parseResult(assessment) || {};
     const declaredConcerns = result.findings || [];
     const unresolvedItems = result.unresolvedItems || [];
-    const attackPaths = result.attackPaths || [];
     const evidenceWeak = (result.responses || []).filter(x => !x.unknown && (x.evidenceScore ?? 35) < 70);
     const verifiedControls = (result.controls || []).filter(x => x.status === 'verified').length;
     const redTeamIsTarget = redTeam?.campaign?.target?.mode === 'staging-adapter';
