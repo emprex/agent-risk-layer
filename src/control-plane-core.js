@@ -1328,6 +1328,8 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 function policyIdentityDigest(policy, projectId) {
+  // The version must not enter this identity digest; rest destructuring intentionally omits it.
+  // eslint-disable-next-line no-unused-vars -- intentional version exclusion
   const { version: _version, ...securityPolicy } = policy || {};
   return digest(canonicalJson({ projectId, policy: securityPolicy }));
 }
