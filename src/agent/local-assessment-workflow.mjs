@@ -45,6 +45,7 @@ import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage
 import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches } from './assessment-evidence-batch-index.mjs';
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
+import { buildAssessmentBatchRunSummary } from './assessment-batch-run-summary.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -732,6 +733,62 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     };
   }
 
+  // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Run assessment batch preview[.!?]*$/i.test(request.trim())) {
+    const expected = String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
+    const expectedProject = String(process.env.ARL_EXPECTED_PROJECT_ID || '').trim();
+    const expectedSnapshot = String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim();
+    if (!/^[a-f0-9]{40}$/.test(expected) ||
+        expectedProject !== options.projectId || !expectedSnapshot ||
+        localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.target?.revision !== expected) {
+      throw new Error('Assessment batch preview requires exact expected project, snapshot and clean frozen target.');
+    }
+    const queue = await readCurrentControlQueue(options);
+    if (queue.systemSnapshotId !== expectedSnapshot) {
+      throw new Error('Assessment batch snapshot mismatch.');
+    }
+    const {index,triages} = await readAllAssessmentTriages(options);
+    const review = buildAssessmentEvidenceReviewPacks(index,triages);
+    const firstId = queue.controlIds[0];
+    const before = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId:firstId,userId:options.userId
+    });
+    const config = before?.systemSnapshot?.assessmentConfiguration;
+    if (before?.systemSnapshot?.id !== expectedSnapshot ||
+        config?.targetBinding?.source !== 'git' ||
+        config.targetBinding.revision !== expected ||
+        config?.assessmentBinding?.assessmentId !== options.assessmentId) {
+      throw new Error('Assessment batch refuses a changed authoritative assessment binding.');
+    }
+    const preview = await previewStaticCollection({
+      repositoryPath,frozenInspection:localFrozenInspection,review,
+      expectedRevision:expected,freezeRepository:freezeLocalRepository
+    });
+    const after = await getControlIntelligenceControl({
+      projectId:options.projectId,controlId:firstId,userId:options.userId
+    });
+    if (after?.systemSnapshot?.id !== expectedSnapshot ||
+        after?.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !== expected ||
+        after?.systemSnapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId !== options.assessmentId) {
+      throw new Error('Assessment changed during batch preview.');
+    }
+    const summary = buildAssessmentBatchRunSummary({queue,index,review,preview});
+    return {
+      canonicalData:{assessmentBatchRun:summary,securityStateChanged:false,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Full 108-control assessment batch preview (read-only):\\n' +
+        JSON.stringify({
+          snapshotId:summary.systemSnapshotId,targetRevision:summary.targetRevision,
+          observationDigestSha256:summary.observationDigestSha256,
+          controlsTotal:summary.controlsTotal,eligibleControls:summary.eligibleControls,
+          excludedControls:summary.excludedControls,lanes:summary.lanes,
+          staticCriteria:summary.staticCriteria
+        },null,2) +
+        '\\nNo tests, evidence writes, PASS/FAIL, applicability or deployment decision.'
+    };
+  }
   if (/^preview assessment static collection[.!?]*$/i.test(request.trim())) {
     if (!localFrozenInspection) {
       throw new Error('Static collection preview is available only through the verified local assessment runner.');
