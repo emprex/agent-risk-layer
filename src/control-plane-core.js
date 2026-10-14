@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { db, id, nowIso } from './db.js';
 import { config } from './config.js';
 import { approvalTokenDigest, issueApproval, runtimeApprovalActionDigest, verifyApproval } from './access-control.js';
