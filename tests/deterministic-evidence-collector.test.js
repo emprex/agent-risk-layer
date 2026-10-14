@@ -518,3 +518,66 @@ test('KB-017 explicitly counts unsupported formats and unresolved requirements d
     assert.equal(JSON.stringify(parsed).includes('https://token:secret@'),false);
   } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('KB-017 retains more than 4000 source-bound entries without claiming a verified SBOM', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-large-bill-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    const yarn=['# yarn lockfile v1'];
+    for(let i=0;i<4200;i++) {
+      yarn.push('"pkg-'+String(i).padStart(5,'0')+'@^1.0.0":');
+      yarn.push('  version "1.2.3"');
+      yarn.push('');
+    }
+    fs.writeFileSync(path.join(root,'yarn.lock'),yarn.join('\n'));
+    fs.writeFileSync(path.join(root,'requirements.txt'),
+      Array.from({length:218},(_,i)=>'python-'+String(i).padStart(4,'0')+'==2.0.0').join('\n'));
+    git(root,['add','.']);commitFixture(root,'large but bounded locked dependency sources');
+    const revision=git(root,['rev-parse','HEAD']);
+    const collection=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const bill=collection.requirementObservations[0].observations.dependency_and_build.dependencyInventory;
+    assert.equal(bill.parserStatus,'completed');
+    assert.equal(bill.componentEntriesTotal,4418);
+    assert.equal(bill.componentEntriesRetained,4418);
+    assert.equal(bill.componentRetentionComplete,true);
+    assert.equal(bill.parsed.omittedComponents,0);
+    assert.equal(bill.parsed.components.length,4418);
+    assert.equal(bill.parsed.yarnStanzasResolved,4200);
+    assert.equal(bill.sbomComplete,false);
+    assert.equal(bill.buildArtifactVerified,false);
+    assert.ok(!JSON.stringify(collection).includes(root));
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('KB-017 still explicitly discloses omissions after the bounded 6000-entry limit', () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-kb017-bounded-bill-'));
+  try {
+    git(root,['init']);
+    git(root,['config','user.email','test@example.test']);
+    git(root,['config','user.name','ARL Test']);
+    fs.writeFileSync(path.join(root,'requirements.txt'),
+      Array.from({length:6013},(_,i)=>'pkg'+String(i).padStart(5,'0')+'==1.0.0').join('\n'));
+    git(root,['add','.']);commitFixture(root,'component cap fixture');
+    const revision=git(root,['rev-parse','HEAD']);
+    const collection=collectDeterministicEvidence({
+      repositoryPath:root,
+      frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+      requirements:['ARL-KB-017 dependency and version inventory']
+    });
+    const bill=collection.requirementObservations[0].observations.dependency_and_build.dependencyInventory;
+    assert.equal(bill.parserStatus,'completed');
+    assert.equal(bill.parsed.componentLimit,6000);
+    assert.equal(bill.componentEntriesTotal,6013);
+    assert.equal(bill.componentEntriesRetained,6000);
+    assert.equal(bill.parsed.omittedComponents,13);
+    assert.equal(bill.componentRetentionComplete,false);
+    assert.equal(bill.sbomComplete,false);
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
