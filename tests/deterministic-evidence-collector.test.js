@@ -310,3 +310,39 @@ test('KB-017 reports incomplete discovery coverage instead of implying a complet
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('KB-017 discovers late dependency manifests outside generic 500-file source scan', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-kb017-late-'));
+  try {
+    git(root, ['init']);
+    git(root, ['config', 'user.email', 'test@example.test']);
+    git(root, ['config', 'user.name', 'ARL Test']);
+    for (let i = 0; i < 510; i++) {
+      fs.writeFileSync(path.join(root, 'source-' + String(i).padStart(3, '0') + '.js'), 'const marker = 1;');
+    }
+    fs.mkdirSync(path.join(root, 'zz-late'));
+    fs.writeFileSync(path.join(root, 'zz-late/package.json'),
+      JSON.stringify({ name: 'late', dependencies: { 'late-agent-sdk': '1.2.3' } }));
+    fs.writeFileSync(path.join(root, 'zz-late/package-lock.json'),
+      JSON.stringify({ name: 'late', lockfileVersion: 3, packages: {} }));
+    git(root, ['add', '.']);
+    commitFixture(root, 'late dependency files');
+    const revision = git(root, ['rev-parse', 'HEAD']);
+    const collection = collectDeterministicEvidence({
+      repositoryPath: root,
+      frozen: { target: { revision }, inspection: { subject: { gitDirty: false } } },
+      requirements: ['ARL-KB-017 dependency and version inventory']
+    });
+    const dependency = collection.requirementObservations[0].observations.dependency_and_build;
+    assert.equal(dependency.discoveryCoverage.trackedFileScanCapped, true);
+    assert.equal(dependency.dependencyCount, 1);
+    assert.deepEqual(dependency.dependencyNames, ['late-agent-sdk']);
+    assert.equal(dependency.lockfiles.length, 1);
+    assert.equal(dependency.dependencyPathDiscovery.trackedTreeComplete, true);
+    assert.equal(dependency.dependencyPathDiscovery.candidatePaths, 2);
+    assert.equal(dependency.dependencyPathDiscovery.manifestsBeyondReadLimit, false);
+    assert.doesNotMatch(JSON.stringify(collection), /zz-late\\/package.json/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
