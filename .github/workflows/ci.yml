@@ -33,7 +33,7 @@ jobs:
         run: npm run check
 
       - name: ESLint regression — original 56 candidate rules
-        run: npx --yes eslint@10.12.0 'src/**/*.{js,mjs}'
+        run: npm run lint
 
       - name: Focused Fix → Prove regressions
         run: >-
