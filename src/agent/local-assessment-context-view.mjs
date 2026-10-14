@@ -90,6 +90,8 @@ export function projectLocalAssessmentContext(context) {
   return {
     schema: LOCAL_ASSESSMENT_CONTEXT_VIEW_SCHEMA,
     available: true,
+    projectId:
+      clean(context.projectId),
     systemSnapshotId:
       clean(context.systemSnapshotId),
     architectureSummary:
@@ -135,7 +137,10 @@ export async function showLocalAssessmentContext({
     });
 
   const view =
-    projectLocalAssessmentContext(context);
+    projectLocalAssessmentContext({
+      ...context,
+      projectId
+    });
 
   if (!view.available) {
     return {
@@ -151,6 +156,7 @@ export async function showLocalAssessmentContext({
   const lines = [
     'AUTHORITATIVE ASSESSMENT CONTEXT',
     '',
+    `Project: ${view.projectId || 'not recorded'}`,
     `System snapshot: ${view.systemSnapshotId || 'not recorded'}`,
     `Target revision: ${view.targetBinding.revision || 'not recorded'}`,
     `Target repository: ${view.targetBinding.repository || 'not recorded'}`,
