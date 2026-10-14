@@ -64,9 +64,14 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
     catch {
         rules.push(block('ARL-RUN-004', 'Tool arguments cannot be safely serialised.'));
     }
-    if (Buffer.byteLength(serialised) > policy.maxArgumentBytes)
+    const argumentBytes = Buffer.byteLength(serialised);
+    if (argumentBytes > policy.maxArgumentBytes)
         rules.push(block('ARL-RUN-005', 'Tool arguments exceed the configured size limit.'));
     const strings = collectStrings(args);
+    // Inspection must cover the exact serialised arguments, not only the first 500
+    // recursively collected fields. This also handles objects with toJSON().
+    if (serialised && argumentBytes <= policy.maxArgumentBytes)
+        strings.push(serialised);
     for (const pattern of policy.deniedPathPatterns) {
         if (strings.some((value) => value.toLowerCase().includes(pattern.toLowerCase()))) {
             rules.push(block('ARL-RUN-006', `Arguments match denied path pattern "${pattern}".`));
@@ -116,7 +121,7 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
         evidence: {
             tool: tool || 'unknown',
             argumentDigest: crypto.createHash('sha256').update(serialised).digest('hex'),
-            argumentBytes: Buffer.byteLength(serialised),
+            argumentBytes,
             rawArgumentsRetained: false,
             destinations: hosts,
             approvalRequired: needsApproval,
