@@ -7,6 +7,9 @@ const SECRET_KEYS = /(?:secret|password|passwd|token|api[_-]?key|private[_-]?key
 const WRITE_ACTION = /(?:write|create|update|delete|remove|send|publish|deploy|execute|exec|shell|transfer|payment|refund)/i;
 
 export function compileRuntimePolicy(input = {}) {
+    const configuredAllowedHosts = list(input.allowedHosts, 100).map(normaliseHost);
+    if (configuredAllowedHosts.some((host) => !host))
+        throw new Error('Invalid allowedHosts: every configured network destination must be a valid hostname.');
     const policy = {
         schema: RUNTIME_POLICY_SCHEMA,
         version: clean(input.version || '1', 40),
@@ -14,7 +17,7 @@ export function compileRuntimePolicy(input = {}) {
         failMode: 'closed',
         allowedTools: list(input.allowedTools, 100),
         deniedTools: list(input.deniedTools?.length ? input.deniedTools : DEFAULT_DENIED_TOOLS, 100),
-        allowedHosts: list(input.allowedHosts, 100).map(normaliseHost).filter(Boolean),
+        allowedHosts: configuredAllowedHosts,
         deniedPathPatterns: list(input.deniedPathPatterns?.length ? input.deniedPathPatterns : [
             '..', '/etc/', '/proc/', '/root/', '.ssh/', '.env', 'credentials',
         ], 100),
@@ -70,7 +73,9 @@ export function evaluateRuntimeAction(action, policyInput = {}) {
             break;
         }
     }
-    const hosts = extractHosts(strings);
+    const { hosts, malformed } = extractHosts(strings);
+    if (malformed && policy.allowedHosts.length)
+        rules.push(block('ARL-RUN-007', 'Network destination cannot be parsed safely.'));
     if (hosts.length && policy.allowedHosts.length) {
         const denied = hosts.find((host) => !policy.allowedHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`)));
         if (denied)
@@ -146,15 +151,21 @@ function collectStrings(value, output = [], depth = 0) {
 }
 function extractHosts(strings) {
     const hosts = [];
+    let malformed = false;
     for (const value of strings) {
-        for (const match of value.matchAll(/https?:\/\/([^/\s"'<>]+)/gi)) {
+        for (const match of value.matchAll(/https?:\/\/([^/\s"'<>]*)/gi)) {
             try {
-                hosts.push(new URL(`https://${match[1]}`).hostname.toLowerCase());
+                const host = new URL(`https://${match[1]}`).hostname.toLowerCase();
+                if (!host) malformed = true;
+                else hosts.push(host);
             }
-            catch { /* Invalid URL candidates are not added as hosts. */ }
+            catch {
+                // A malformed candidate must not silently bypass an active network allowlist.
+                malformed = true;
+            }
         }
     }
-    return [...new Set(hosts)];
+    return { hosts: [...new Set(hosts)], malformed };
 }
 function containsSecretLikeMaterial(value, depth = 0) {
     if (depth > 8 || !value || typeof value !== 'object')
