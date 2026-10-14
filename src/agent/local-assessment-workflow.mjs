@@ -47,6 +47,7 @@ import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
 import { buildAssessmentBatchRunSummary } from './assessment-batch-run-summary.mjs';
 import { buildAssessmentBatchReviewDossier } from './assessment-batch-review-dossier.mjs';
+import { planStaticEvidenceBatch } from './bounded-static-evidence-batch.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -735,6 +736,70 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Persist assessment static batch\\b/i.test(request.trim())) {
+    const match=/^Persist assessment static batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Persist assessment static batch N (positive integer).');
+    const expected=String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
+    const expectedProject=String(process.env.ARL_EXPECTED_PROJECT_ID || '').trim();
+    const expectedSnapshot=String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim();
+    if (!/^[a-f0-9]{40}$/.test(expected) ||
+        options.projectId !== expectedProject || !expectedSnapshot ||
+        localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.target?.revision !== expected) {
+      throw new Error('Static batch persistence requires exact project, snapshot and clean frozen Git target.');
+    }
+    const queue=await readCurrentControlQueue(options);
+    if (queue.systemSnapshotId !== expectedSnapshot || !queue.complete ||
+        queue.total !== 108 || queue.expectedTotal !== 108) {
+      throw new Error('Static batch persistence requires complete 108-control current snapshot.');
+    }
+    const index=buildAssessmentEvidenceBatchIndex(queue);
+    const plan=planStaticEvidenceBatch(index,Number(match[1]),expectedSnapshot);
+    const outcomes=[];
+    // Sequential, fail-closed and resumable. Each control uses the existing
+    // transactionally persisted artifact + execution + evidence ledger.
+    // Prior successful controls remain append-only if a later control fails.
+    for (const controlId of plan.controlIds) {
+      const detail=await getControlIntelligenceControl({
+        projectId:options.projectId,controlId,userId:options.userId
+      });
+      const config=detail?.systemSnapshot?.assessmentConfiguration;
+      if (detail?.systemSnapshot?.id !== expectedSnapshot ||
+          detail.chain?.currentStage !== 'test' ||
+          config?.targetBinding?.source !== 'git' ||
+          config.targetBinding.revision !== expected ||
+          config?.assessmentBinding?.assessmentId !== options.assessmentId ||
+          detail.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3) ||
+          !Array.isArray(detail.testDefinition.requiredEvidence)) {
+        throw new Error('Static batch stopped at '+controlId+': authoritative stage or binding changed.');
+      }
+      const outcome=await runAuthoritativeControlSourceReview({
+        repositoryPath,projectId:options.projectId,userId:options.userId,
+        controlId,requirements:detail.testDefinition.requiredEvidence,
+        collectionOnly:true
+      });
+      if (outcome?.executed !== true ||
+          !['authoritative_control_source_review_recorded',
+            'authoritative_control_source_review_already_recorded'].includes(outcome.effect)) {
+        throw new Error('Static batch stopped at '+controlId+': '+String(outcome?.reason || 'unpersisted outcome'));
+      }
+      outcomes.push({controlId,effect:outcome.effect});
+    }
+    return {
+      canonicalData:{
+        boundedStaticEvidenceBatch:{plan,completed:outcomes.length,outcomes,
+          securityStateChanged:outcomes.some(x=>x.effect==='authoritative_control_source_review_recorded'),
+          deploymentDecisionWritten:false,humanReviewRequired:true},
+        deploymentDecisionWritten:false,humanReviewRequired:true
+      },
+      answer:'Bounded static evidence batch '+plan.batchNumber+' completed: '+
+        JSON.stringify({snapshotId:plan.systemSnapshotId,requested:plan.requested,
+          recorded:outcomes.filter(x=>x.effect==='authoritative_control_source_review_recorded').length,
+          alreadyRecorded:outcomes.filter(x=>x.effect==='authoritative_control_source_review_already_recorded').length})+
+        '\\nCandidate evidence only. No active tests, PASS/FAIL or deployment decisions.'
+    };
+  }
   if (/^Build assessment batch review dossier[.!?]*$/i.test(request.trim())) {
     // Same trusted checks as preview; no second source collection or persistence path.
     // Reuse the existing preview command and authoritative read-only packets.
