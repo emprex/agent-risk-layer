@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS control_source_collection_artifacts (
   collection_sha256 TEXT NOT NULL,
   collection_json TEXT NOT NULL,
   collector_schema TEXT NOT NULL,
+  retention_status TEXT NOT NULL DEFAULT 'active' CHECK (retention_status IN ('active','retained_hold','expired')),
+  retention_expires_at TEXT,
   created_at TEXT NOT NULL,
   UNIQUE (workspace_id, project_id, system_snapshot_id, entry_id, target_revision, input_reference)
 );
