@@ -15,6 +15,7 @@ const FORBIDDEN_ASSURANCE = /\b(?:fully secure|risk[- ]free|certified|production
 const THIRD_PARTY_INDEPENDENCE = /\bindependent\s+(?:audit|security assessment|penetration test|re-?scan)\b/i;
 
 function clean(value, max = 500) {
+  // eslint-disable-next-line no-control-regex -- remove untrusted control characters
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
