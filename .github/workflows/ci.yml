@@ -43,6 +43,15 @@ jobs:
           --rule 'no-empty:error'
           --rule 'preserve-caught-error:error'
           --rule 'no-extra-boolean-cast:error'
+          --global 'Buffer:readonly'
+          --global 'process:readonly'
+          --global 'AbortController:readonly'
+          --global 'setTimeout:readonly'
+          --global 'clearTimeout:readonly'
+          --global 'setInterval:readonly'
+          --global 'console:readonly'
+          --global 'URL:readonly'
+          --global 'fetch:readonly'
           'src/**/*.{js,mjs}'
 
       - name: Focused Fix → Prove regressions
