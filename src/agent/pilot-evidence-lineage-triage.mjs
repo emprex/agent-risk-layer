@@ -217,6 +217,8 @@ export function buildPilotEvidenceLineageTriage(plan, details) {
       chainStatus: item.chainStatus,
       requirementCount: criteria.length,
       criteria,
+      // Explicitly omit observations from exposed source records.
+      // eslint-disable-next-line no-unused-vars -- destructured field is intentionally stripped
       sourceRecords: sources.map(({observations, ...record}) => record),
       summary: {
         staticCandidates: criteria.filter(c => c.reviewState === 'static_observation_candidate_review_required').length,
