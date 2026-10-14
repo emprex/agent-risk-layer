@@ -16,7 +16,7 @@ function rowFor(collection=base) {
   const {json,digest}=serializeSourceCollection(collection,{targetRevision:revision});
   return {workspace_id:scope.workspaceId,project_id:scope.projectId,
     system_snapshot_id:scope.snapshotId,entry_id:scope.controlId,target_revision:revision,
-    input_reference:scope.inputReference,collection_json:json,collection_sha256:digest};
+    input_reference:scope.inputReference,collection_json:json,collection_sha256:digest,retention_status:'active',retention_expires_at:null};
 }
 test('complete source collection has stable SHA-256 and retains every inventory member',()=>{
   const complete={...base,requirementObservations:[{requirement:'KB-016',
@@ -45,4 +45,11 @@ test('changed payload, digest and malformed payload fail integrity validation',(
 test('reject wrong frozen revision and missing privacy-boundary declaration',()=>{
   assert.throws(()=>serializeSourceCollection({...base,targetRevision:'b'.repeat(40)},{targetRevision:revision}),/identity/);
   assert.throws(()=>serializeSourceCollection({...base,privacyBoundary:''},{targetRevision:revision}),/privacy/);
+});
+
+test('expired artifacts are unavailable; explicit retention hold preserves review access',()=>{
+  const row=rowFor();
+  assert.throws(()=>verifySourceCollectionArtifact({...row,retention_status:'expired'},scope),/retained/);
+  assert.throws(()=>verifySourceCollectionArtifact({...row,retention_expires_at:'2020-01-01T00:00:00Z'},scope),/expired/);
+  assert.deepEqual(verifySourceCollectionArtifact({...row,retention_status:'retained_hold',retention_expires_at:'2020-01-01T00:00:00Z'},scope),base);
 });
