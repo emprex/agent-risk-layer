@@ -51,7 +51,6 @@ export async function renderReportPdf(report) {
     };
     const pageBreak = () => blocks.push({ pageBreak: true });
     const bullet = (text) => add(`- ${text}`, 9, false, 12, 3);
-    const label = (name, value) => { add(name.toUpperCase(), 8, true, 0, 1, 'muted'); add(value, 11, true, 0, 7, 'body'); };
     const cover = () => blocks.push({ type: 'cover', height: 248, title: report.title, reportClass: report.reportClass || 'AI Agent Security Review', evidenceLine: reportCoverEvidenceLine(report), decision: report.decision || report.executiveBrief?.deploymentDecision || 'REVIEW REQUIRED', score: report.score, riskBand: report.riskBand });
     const metricRow = (items) => blocks.push({ type: 'metrics', height: 80, items });
     const riskBar = (labelText, value, tone = 'accent') => blocks.push({ type: 'bar', height: 38, label: labelText, value: Math.max(0, Math.min(100, Number(value) || 0)), tone });
