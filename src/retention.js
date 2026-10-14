@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { db, id, insertEvent, nowIso } from './db.js';
+import { db, id, insertEvent } from './db.js';
 import { prepareRiskKnowledgeRuntimeEvidencePurge } from './risk-knowledge.js';
 let timer = null;
 let running = false;
