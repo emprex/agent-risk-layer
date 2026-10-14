@@ -76,7 +76,7 @@ export async function storeSourceCollectionArtifact({projectId,snapshotId,contro
   const scope={workspaceId:current.workspace_id,projectId,snapshotId,controlId,targetRevision,inputReference};
   const id='sca_'+crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex');
   await db.prepare(
-    'INSERT INTO control_source_collection_artifacts (id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,collection_sha256,collection_json,collector_schema,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO NOTHING'
+    'INSERT INTO control_source_collection_artifacts (id,workspace_id,project_id,system_snapshot_id,entry_id,target_revision,input_reference,collection_sha256,collection_json,collector_schema,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING'
   ).run(id,scope.workspaceId,projectId,snapshotId,controlId,targetRevision,inputReference,digest,json,collection.schema,new Date().toISOString());
   const row=await db.prepare('SELECT * FROM control_source_collection_artifacts WHERE id=?').get(id);
   verifySourceCollectionArtifact(row,scope);
