@@ -151,7 +151,7 @@ function extractHosts(strings) {
             try {
                 hosts.push(new URL(`https://${match[1]}`).hostname.toLowerCase());
             }
-            catch { }
+            catch { /* Invalid URL candidates are not added as hosts. */ }
         }
     }
     return [...new Set(hosts)];
