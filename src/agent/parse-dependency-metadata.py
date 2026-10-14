@@ -104,15 +104,15 @@ def main():
         # Only fixed category labels leave the isolated parser. Raw directives,
         # URLs, tokens, hosts and local paths must never enter the evidence.
         lower = line.lower()
-        if re.match(r"^(?:-e(?:\\s|$)|--editable(?:\\s|=|$))", lower):
+        if re.match(r"^(?:-e(?:\s|$)|--editable(?:\s|=|$))", lower):
             return "editable_install"
-        if re.match(r"^(?:-r(?:\\s|$)|--requirement(?:\\s|=|$))", lower):
+        if re.match(r"^(?:-r(?:\s|$)|--requirement(?:\s|=|$))", lower):
             return "requirements_include"
-        if re.match(r"^(?:-c(?:\\s|$)|--constraint(?:\\s|=|$))", lower):
+        if re.match(r"^(?:-c(?:\s|$)|--constraint(?:\s|=|$))", lower):
             return "constraints_include"
-        if re.match(r"^(?:--index-url|--extra-index-url|--find-links|--trusted-host)(?:\\s|=|$)", lower):
+        if re.match(r"^(?:--index-url|--extra-index-url|--find-links|--trusted-host)(?:\s|=|$)", lower):
             return "registry_configuration"
-        if re.match(r"^--hash(?:\\s|=|$)", lower):
+        if re.match(r"^--hash(?:\s|=|$)", lower):
             return "hash_option"
         if line.startswith("-"):
             return "other_pip_option"
