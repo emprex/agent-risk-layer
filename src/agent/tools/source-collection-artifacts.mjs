@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { db } from '../../db.js';
+import { getControlIntelligenceControl } from '../../control-intelligence.js';
 
 const SHA40 = /^[a-f0-9]{40}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -37,9 +38,17 @@ export function verifySourceCollectionArtifact(row, scope) {
   return parsed;
 }
 
-// Internal-only read: callers must have authenticated and authorised project access.
+// Internal-only read; require the same authenticated control access as the dossier.
 // Deliberately no public URL or API route for full artifacts.
-export async function readSourceCollectionArtifact(scope) {
+export async function readSourceCollectionArtifact(scope, userId) {
+  if (!userId) throw new Error('Authenticated evidence reader required.');
+  const detail = await getControlIntelligenceControl({
+    projectId:scope.projectId,controlId:scope.controlId,userId
+  });
+  if (detail.systemSnapshot?.id !== scope.snapshotId ||
+      detail.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !== scope.targetRevision) {
+    throw new Error('Full collection access requires matching current assessment scope.');
+  }
   const row = await db.prepare(
     'SELECT * FROM control_source_collection_artifacts WHERE workspace_id=? AND project_id=? AND system_snapshot_id=? AND entry_id=? AND target_revision=? AND input_reference=?'
   ).get(scope.workspaceId,scope.projectId,scope.snapshotId,scope.controlId,scope.targetRevision,scope.inputReference);
