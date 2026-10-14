@@ -340,7 +340,10 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     const config = detail?.systemSnapshot?.assessmentConfiguration;
     if (detail?.systemSnapshot?.id == null ||
-        detail.systemSnapshot.id !== 'sys_3ab269f861d04cea98f84b9b0ba26290' ||
+        !String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim() ||
+        detail.systemSnapshot.id !== process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID ||
+        !String(process.env.ARL_EXPECTED_PROJECT_ID || '').trim() ||
+        options.projectId !== process.env.ARL_EXPECTED_PROJECT_ID ||
         config?.targetBinding?.source !== 'git' ||
         config.targetBinding.revision !== expected ||
         config?.assessmentBinding?.assessmentId !== options.assessmentId ||
