@@ -99,6 +99,7 @@ export async function rateLimitSnapshot({ limit = 100 } = {}) {
     FROM rate_limit_buckets ORDER BY updated_at DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit)));
 }
 export function cleanText(value, max = 120) {
+    // eslint-disable-next-line no-control-regex -- remove unsafe ASCII control characters
     return String(value || '').trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, max);
 }
 export function parseCookies(header = '') {
