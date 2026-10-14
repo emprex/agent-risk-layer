@@ -185,18 +185,18 @@ export function kb017DependencyRefreshReference({
       dep.buildArtifactVerified !== false ||
       dep.deployedArtifactVerified !== false ||
       dep.modelProvenanceVerified !== false || dep.sbomComplete !== false) {
-    throw new Error('KB-017 refresh requires a complete bounded source candidate inventory and exact frozen source identity, not deployment certification.');
+    throw new Error('KB-017 refresh requires complete static source candidates and exact frozen identity, not deployment certification.');
   }
-  // Same frozen SHA + same collected content + same canonical check = idempotent.
-  // Content changes under the same SHA create an append-only source reference.
   const digest = crypto.createHash('sha256').update(JSON.stringify({
     purpose:'kb017-dependency-source-refresh-v1',revision,controlId,
     sourceDigest,checkDigest,
     fullCollectionSha256:crypto.createHash('sha256')
       .update(JSON.stringify(collection)).digest('hex')
   })).digest('hex');
-  return `arl_frozen_source_evidence_collection_v2:${revision}:${controlId}:${digest}`;
+  return 'arl_frozen_source_evidence_collection_v2:' + revision + ':' +
+    controlId + ':' + digest;
 }
+
 
 export function isLegacyTruncatedKb007Source(test, {
   inputReference, snapshotId, checkDigest, targetRevision, controlId = 'ARL-KB-007'
@@ -331,9 +331,13 @@ export async function runAuthoritativeControlSourceReview({
     };
   }
 
+
   if (refreshKb017DependencySource) {
     const binding = detail.systemSnapshot?.assessmentConfiguration?.targetBinding;
     const known = [...(detail.tests || []), ...(detail.testHistory || [])];
+    const requiredPrefix =
+      'arl_frozen_source_evidence_collection_v2:' +
+      frozen.target.revision + ':ARL-KB-017:';
     if (controlId !== 'ARL-KB-017' || collectionOnly !== true ||
         refreshStaleCheckDigestSource || refreshProviderSource ||
         repairKb008Source || repairLegacyV2Source || repairTruncatedSource ||
@@ -350,8 +354,17 @@ export async function runAuthoritativeControlSourceReview({
           test.executionMethod === 'arl_frozen_source_evidence_collection_v2' &&
           test.result === 'inconclusive' &&
           test.executionKind !== 'retest' &&
-          new RegExp('^arl_frozen_source_evidence_collection_v2:' +
-            frozen.target.revision + ':ARL-KB-017:[a-f0-9]{64}    const config=detail.systemSnapshot?.assessmentConfiguration || {};
+          typeof test.inputReference === 'string' &&
+          test.inputReference.startsWith(requiredPrefix) &&
+          /^[a-f0-9]{64}$/.test(test.inputReference.slice(requiredPrefix.length)))) {
+      return {
+        executed:false,reason:'kb017_refresh_requires_prior_source_and_exact_current_frozen_assessment',
+        securityStateChanged:false
+      };
+    }
+  }
+  if (refreshStaleCheckDigestSource) {
+    const config=detail.systemSnapshot?.assessmentConfiguration || {};
     if (collectionOnly !== true || repairLegacyV2Source || repairTruncatedSource ||
         refreshProviderSource || repairKb008Source ||
         config.targetBinding?.source !== 'git' ||
@@ -506,266 +519,6 @@ export async function runAuthoritativeControlSourceReview({
         collection:deterministicEvidence
       })
     : refreshStaleCheckDigestSource
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${staleDigestRefreshDigest}`
-    : repairLegacyV2Source
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${legacyRepairDigest}`
-    : repairKb008Source
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${kb008RepairDigest}`
-    : refreshProviderSource
-    ? kb007ProviderRefreshReference({
-        revision:frozen.target.revision,controlId,sourceDigest,
-        boundedObservation:deterministicEvidenceText
-      })
-    : repairTruncatedSource
-      ? `${collectionKind}:${frozen.target.revision}:${controlId}:${repairDigest}`
-      : originalReference;
-
-  const previous = [
-    ...(Array.isArray(detail.tests) ? detail.tests : []),
-    ...(Array.isArray(detail.testHistory) ? detail.testHistory : [])
-  ].find(
-    (item) =>
-      item?.inputReference === inputReference &&
-      item?.systemSnapshotId === snapshotId
-  );
-
-  if (previous) {
-    return {
-      executed: true,
-      effect: 'authoritative_control_source_review_already_recorded',
-      securityStateChanged: false
-    };
-  }
-
-  const observedResult = [
-    'ARL completed deterministic frozen-source inspection for this control.',
-    'Observed frozen-target facts:',
-    collectionOnly
-      ? JSON.stringify({targetRevision:frozen.target.revision,inspectionDigest:sourceDigest})
-      : observedFacts,
-    'Requirement-specific deterministic observations:',
-    deterministicEvidenceText,
-    'This collection does not assert that any canonical requirement is satisfied and does not infer PASS/FAIL.'
-  ].join('\n');
-  if (collectionOnly && observedResult.length > 12000) {
-    return {executed:false,reason:'complete_structured_source_observation_exceeds_storage_limit',securityStateChanged:false};
-  }
-
-  // The artifact, test and evidence must either all persist or all roll back.
-  await db.transaction(async () => {
-    // Complete metadata must be durable before the bounded observation becomes evidence.
-    // Do not re-collect or repair previously recorded partial observations.
-    if (collectionOnly) {
-      await storeSourceCollectionArtifact({
-        projectId, snapshotId, controlId,
-        targetRevision:frozen.target.revision,
-        inputReference,
-        collection:deterministicEvidence,
-        projectionDigest:projection.limited
-          ? JSON.parse(deterministicEvidenceText).projection?.fullCollectionSha256
-          : null
-      });
-    }
-  
-    const execution =
-      await recordControlTestExecution({
-        projectId,
-        controlId,
-        userId,
-        input: {
-          systemSnapshotId: snapshotId,
-          executionKind: 'initial',
-          executionMethod: collectionKind,
-          result: 'inconclusive',
-          inputReference,
-          observedResult,
-          limitations:
-            'This automatic source collection is bound to the exact frozen Git revision. It may support canonical evidence requirements but does not invent human approval, reviewer identity, organisational records, runtime effects or a conclusive control result.'
-        }
-      });
-  
-    await recordControlEvidence({
-      projectId,
-      controlId,
-      userId,
-      input: {
-        systemSnapshotId: snapshotId,
-        evidenceClass: 'observed',
-        sourceType: collectionKind,
-        sourceReference: inputReference,
-        testExecutionId: execution.id,
-        limitations:
-          'Observed evidence is limited to deterministic frozen-source inspection and typed repository collectors. Human governance decisions, legal-basis conclusions, runtime effects and active-test outcomes remain separate and must not be inferred by ARL.'
-      }
-    });
-  
-  });
-
-  return {
-    executed: true,
-    effect: 'authoritative_control_source_review_recorded',
-    securityStateChanged: true
-  };
-}
-)
-            .test(test.inputReference || ''))) {
-      return {
-        executed:false,reason:'kb017_refresh_requires_prior_source_and_exact_current_frozen_assessment',
-        securityStateChanged:false
-      };
-    }
-  }
-
-  if (refreshStaleCheckDigestSource) {
-    const config=detail.systemSnapshot?.assessmentConfiguration || {};
-    if (collectionOnly !== true || repairLegacyV2Source || repairTruncatedSource ||
-        refreshProviderSource || repairKb008Source ||
-        config.targetBinding?.source !== 'git' ||
-        config.targetBinding.revision !== frozen.target.revision ||
-        frozen.target.dirty !== false ||
-        detail.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3)) {
-      return {executed:false,reason:'stale_check_digest_refresh_requires_exact_frozen_snapshot',securityStateChanged:false};
-    }
-    const records=[...(detail.tests || []),...(detail.testHistory || [])];
-    if (!records.some(test=>isStaleCheckDigestV2Source(test,{
-      snapshotId,checkId:detail.testDefinition.id,
-      checkDigest:detail.testDefinition.digest,
-      revision:frozen.target.revision,controlId
-    }))) return {executed:false,reason:'stale_check_digest_refresh_not_required',securityStateChanged:false};
-  }
-  if (repairLegacyV2Source) {
-    const config = detail.systemSnapshot?.assessmentConfiguration || {};
-    if (collectionOnly !== true || repairTruncatedSource || refreshProviderSource ||
-        repairKb008Source || config.targetBinding?.source !== 'git' ||
-        config.targetBinding.revision !== frozen.target.revision ||
-        frozen.target.dirty !== false ||
-        detail.testDefinition?.id !== 'ARL-CHK-' + controlId.slice(-3)) {
-      return {executed:false,reason:'legacy_v2_recovery_requires_exact_frozen_snapshot',securityStateChanged:false};
-    }
-    const records = [...(detail.tests || []), ...(detail.testHistory || [])];
-    const eligible = records.some(test => isLegacyIncompleteV2Source(test, {
-      snapshotId, checkId:detail.testDefinition.id,
-      checkDigest:detail.testDefinition.digest, revision:frozen.target.revision, controlId
-    }));
-    if (!eligible) return {executed:false,reason:'legacy_v2_recovery_not_required',securityStateChanged:false};
-  }
-  if (repairKb008Source) {
-    const config = detail.systemSnapshot?.assessmentConfiguration || {};
-    if (controlId !== 'ARL-KB-008' || collectionOnly !== true ||
-        config.targetBinding?.source !== 'git' ||
-        config.targetBinding.revision !== frozen.target.revision ||
-        frozen.target.dirty !== false ||
-        detail.testDefinition?.id !== 'ARL-CHK-008') {
-      return {executed:false,reason:'kb008_repair_requires_exact_frozen_snapshot',securityStateChanged:false};
-    }
-    const records = [...(detail.tests || []),...(detail.testHistory || [])];
-    const broken = records.some(test => isMissingKb008StructuredObservations(test, {
-      snapshotId,checkId:detail.testDefinition?.id,
-      checkDigest:detail.testDefinition?.digest,revision:frozen.target.revision
-    }));
-    if (!broken) return {executed:false,reason:'kb008_structured_source_repair_not_required',securityStateChanged:false};
-  }
-  if (repairTruncatedSource || refreshProviderSource) {
-    const binding = detail.systemSnapshot?.assessmentConfiguration?.targetBinding;
-    if (controlId !== 'ARL-KB-007' || collectionOnly !== true ||
-        binding?.source !== 'git' || binding.revision !== frozen.target.revision ||
-        frozen.target.dirty !== false) {
-      return {executed:false,reason:'kb007_recollection_requires_exact_frozen_snapshot',securityStateChanged:false};
-    }
-  }
-
-  const sourceDigest = crypto
-    .createHash('sha256')
-    .update(JSON.stringify({
-      revision: frozen.target.revision,
-      inspection: frozen.inspection
-    }))
-    .digest('hex');
-
-  const normalizedRequirements =
-    (Array.isArray(requirements) ? requirements : [])
-      .map((item) => String(item || '').trim())
-      .filter(Boolean);
-
-  // The typed collection already carries bounded deterministic observations.
-  // Keep the verbose inspector summary only for the distinct source-review mode.
-  const observedFacts = collectionOnly ? null : frozenInspectionObservation({
-    frozen, requirements: normalizedRequirements
-  });
-
-  if (!collectionOnly && observedFacts === null) {
-    return {
-      executed: false,
-      reason: 'frozen_source_observation_exceeds_storage_limit',
-      securityStateChanged: false
-    };
-  }
-
-  const deterministicEvidence =
-    collectDeterministicEvidence({
-      repositoryPath,
-      frozen,
-      requirements: normalizedRequirements
-    });
-
-  const projection = collectionOnly
-    ? boundedStructuredSourceProjection(deterministicEvidence, 10500)
-    : {text:boundedDeterministicEvidenceJson(deterministicEvidence),limited:false};
-  const deterministicEvidenceText = projection.text;
-
-  // Reject oversized observations before recording a test or evidence item.
-  // A sliced JSON document cannot be parsed or independently reviewed.
-  if (deterministicEvidenceText === null) {
-    return {
-      executed: false,
-      reason: 'structured_source_observation_exceeds_storage_limit',
-      securityStateChanged: false
-    };
-  }
-
-  const collectionKind =
-    collectionOnly
-      ? 'arl_frozen_source_evidence_collection_v2'
-      : 'arl_frozen_source_review';
-
-  const originalReference =
-    `${collectionKind}:${frozen.target.revision}:${controlId}:${sourceDigest}`;
-  const knownTests = [
-    ...(Array.isArray(detail.tests) ? detail.tests : []),
-    ...(Array.isArray(detail.testHistory) ? detail.testHistory : [])
-  ];
-  const original = knownTests.find(item =>
-    isLegacyTruncatedKb007Source(item, {
-      targetRevision:frozen.target.revision, snapshotId,
-      checkDigest: detail.testDefinition?.digest
-    })
-  );
-  if (repairTruncatedSource && !original) {
-    return {executed:false,reason:'kb007_truncated_source_repair_not_required',securityStateChanged:false};
-  }
-  const repairDigest = crypto.createHash('sha256')
-    .update(sourceDigest + ':kb007-v2-bounded-storage-repair-v1')
-    .digest('hex');
-  // A changed, bounded collector payload gets a distinct append-only source reference.
-  // Repeating the exact payload remains idempotent even when the frozen SHA is unchanged.
-  const kb008RepairDigest = crypto.createHash('sha256')
-    .update(JSON.stringify({
-      purpose:'kb008-structured-source-recovery-v1',
-      revision:frozen.target.revision,
-      sourceDigest, boundedObservation:deterministicEvidenceText
-    })).digest('hex');
-  const legacyRepairDigest = crypto.createHash('sha256').update(JSON.stringify({
-    purpose:'legacy-v2-structured-source-recovery-v1',
-    revision:frozen.target.revision, controlId,
-    sourceDigest, boundedObservation:deterministicEvidenceText,
-    currentCheckDigest:detail.testDefinition?.digest
-  })).digest('hex');
-  const staleDigestRefreshDigest=crypto.createHash('sha256').update(JSON.stringify({
-    purpose:'stale-v2-check-digest-refresh-v1',revision:frozen.target.revision,
-    controlId,sourceDigest,boundedObservation:deterministicEvidenceText,
-    currentCheckDigest:detail.testDefinition?.digest
-  })).digest('hex');
-  const inputReference = refreshStaleCheckDigestSource
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${staleDigestRefreshDigest}`
     : repairLegacyV2Source
     ? `${collectionKind}:${frozen.target.revision}:${controlId}:${legacyRepairDigest}`
