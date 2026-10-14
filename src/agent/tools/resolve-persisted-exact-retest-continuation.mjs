@@ -155,7 +155,7 @@ export function selectPersistedExactRetestContinuation({
   }
 
   let baseline;
-  let equivalentBaselineRunIds = [];
+  let equivalentBaselineRunIds;
 
   if (baselines.length === 1) {
     baseline = baselines[0];
