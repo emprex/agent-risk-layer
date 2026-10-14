@@ -34,7 +34,7 @@ export async function executeKb027ActiveTest({
         targetRevision,caseId:'KB027-'+caseId,
         syntheticContext:{dryRun:true,credentials:'synthetic-only',snapshotId}
       }),
-      signal:AbortSignal.timeout(15_000)
+      signal:globalThis.AbortSignal.timeout(15_000)
     });
     if(!response.ok) {
       return {status:'blocked',reason:'adapter_case_unavailable_or_rejected',caseId,
