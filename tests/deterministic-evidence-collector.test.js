@@ -143,6 +143,14 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
     assert.equal(inventory.externalDestinationObservationCount, 1);
     assert.equal(inventory.externalDestinationObservations.length, 1);
     assert.equal(inventory.dependencyCount, 2);
+    const deps = result.requirementObservations.find(row =>
+      row.collectors.includes('dependency_and_build')
+    ).observations.dependency_and_build;
+    assert.equal(deps.discoveryCoverage.completeTrackedAndTextScan, true);
+    const config = result.requirementObservations.find(row =>
+      row.collectors.includes('source_and_configuration')
+    ).observations.source_and_configuration;
+    assert.equal(config.discoveryCoverage.completeTrackedAndTextScan, true);
         assert.equal(inventory.trackedFileCount, 6);
     assert.deepEqual(inventory.discoveryCoverage, {
       totalTrackedFiles: 6,
@@ -262,4 +270,43 @@ test('KB-007 prioritizes Python executable files and discovers provider candidat
    assert.ok(inv.providerPackageCandidates.includes('qdrant-client'));
    assert.ok(!inv.providerPackageCandidates.includes('requests'));
  } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('KB-017 reports incomplete discovery coverage instead of implying a complete bill', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-kb017-coverage-'));
+  try {
+    git(root, ['init']);
+    git(root, ['config', 'user.email', 'test@example.test']);
+    git(root, ['config', 'user.name', 'ARL Test']);
+    fs.writeFileSync(path.join(root, 'package.json'),
+      JSON.stringify({ name: 'bounded-agent', dependencies: { openai: '1.0.0' } }));
+    for (let i = 0; i < 510; i++) {
+      fs.writeFileSync(path.join(root, 'source-' + String(i).padStart(3, '0') + '.js'),
+        'const value = ' + i + ';');
+    }
+    git(root, ['add', '.']);
+    commitFixture(root, 'fixture');
+    const revision = git(root, ['rev-parse', 'HEAD']);
+    const result = collectDeterministicEvidence({
+      repositoryPath: root,
+      frozen: { target: { revision }, inspection: { subject: { environment: 'test' } } },
+      requirements: [
+        'ARL-KB-017 dependency and version inventory',
+        'ARL-KB-017 control configuration or source location showing the dependency provenance boundary'
+      ]
+    });
+    const rows = result.requirementObservations;
+    const dep = rows[0].observations.dependency_and_build;
+    const source = rows[1].observations.source_and_configuration;
+    assert.equal(dep.dependencyCount, 1);
+    for (const view of [dep, source]) {
+      assert.equal(view.discoveryCoverage.totalTrackedFiles, 511);
+      assert.equal(view.discoveryCoverage.trackedFileScanCapped, true);
+      assert.equal(view.discoveryCoverage.textFileScanCapped, true);
+      assert.equal(view.discoveryCoverage.completeTrackedAndTextScan, false);
+    }
+    assert.doesNotMatch(JSON.stringify(result), /source-000\\.js/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
