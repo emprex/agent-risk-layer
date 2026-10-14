@@ -101,7 +101,7 @@ export async function registerUser(email, password, termsAccepted = false) {
     }
     catch (error) {
         if (String(error.message).includes('UNIQUE'))
-            throw new Error('An account with that email already exists.');
+            throw new Error('An account with that email already exists.', { cause: error });
         throw error;
     }
     return publicUser(user);
