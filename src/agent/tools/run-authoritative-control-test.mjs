@@ -196,7 +196,7 @@ export function isMissingKb008StructuredObservations(test, {snapshotId, checkId,
 // Recovery eligibility is deliberately snapshot/check/SHA-bound and never trusts
 // the caller's claim that a prior observation is malformed.
 export function isLegacyIncompleteV2Source(test, {
-  snapshotId, checkId, checkDigest, revision, controlId
+  snapshotId, checkId, revision, controlId
 } = {}) {
   if (!/^ARL-KB-\d{3}$/.test(controlId || '') ||
       !/^[a-f0-9]{40}$/.test(revision || '')) return false;
