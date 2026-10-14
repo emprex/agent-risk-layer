@@ -655,6 +655,7 @@ function officialRunnerDigest() {
 function hashToken(token) { return crypto.createHmac('sha256', config.sessionSecret).update(token).digest('hex'); }
 function sha256(value) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function safeEqual(a, b) { const left = Buffer.from(String(a)), right = Buffer.from(String(b)); return left.length === right.length && crypto.timingSafeEqual(left, right); }
+// eslint-disable-next-line no-control-regex -- sanitize control characters in red-team text
 function clean(value, max) { return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); }
 function clampInt(value, min, max) { const number = Math.round(Number(value)); return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : min; }
 function parse(value, fallback) {
