@@ -7,7 +7,7 @@ const item = (controlId)=>({controlId});
 const snapshot = 'sys_test_108';
 function fixture() {
   const queue = {
-    complete:true,total:108,expectedTotal:108,controlIds:ids,
+    complete:true,total:108,expectedTotal:108,controlIds:[...ids],
     systemSnapshotId:snapshot,securityStateChanged:false,
     deploymentDecisionWritten:false,humanReviewRequired:true,
     lanes:{
