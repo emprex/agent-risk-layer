@@ -46,6 +46,7 @@ import { buildAssessmentEvidenceBatchIndex, summarizeAssessmentEvidenceBatches }
 import { buildAssessmentEvidenceReviewPacks } from './assessment-evidence-review-packs.mjs';
 import { previewStaticCollection } from './assessment-static-collection-preview.mjs';
 import { buildAssessmentBatchRunSummary } from './assessment-batch-run-summary.mjs';
+import { buildAssessmentBatchReviewDossier } from './assessment-batch-review-dossier.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -734,6 +735,34 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Build assessment batch review dossier[.!?]*$/i.test(request.trim())) {
+    // Same trusted checks as preview; no second source collection or persistence path.
+    // Reuse the existing preview command and authoritative read-only packets.
+    const base = await runLocalAssessment(repositoryPath,'Run assessment batch preview',options,localFrozenInspection);
+    if (base.canonicalData?.assessmentBatchRun?.controls?.length !== 108 ||
+        base.canonicalData?.securityStateChanged !== false) {
+      throw new Error('Batch review requires verified complete preview.');
+    }
+    const {index,triages}=await readAllAssessmentTriages(options);
+    const review=buildAssessmentEvidenceReviewPacks(index,triages);
+    const summary=base.canonicalData.assessmentBatchRun;
+    // Reconstitute only candidate metadata from the same authoritative frozen target.
+    // A second preview must match the exact digest to reject drift.
+    const preview=await previewStaticCollection({
+      repositoryPath,frozenInspection:localFrozenInspection,review,
+      expectedRevision:summary.targetRevision,freezeRepository:freezeLocalRepository
+    });
+    const dossier=buildAssessmentBatchReviewDossier({summary,review,preview});
+    return {
+      canonicalData:{assessmentBatchReviewDossier:dossier,securityStateChanged:false,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'108-control human review dossier (read-only):\\n'+
+        JSON.stringify({snapshotId:dossier.systemSnapshotId,
+          targetRevision:dossier.targetRevision,controls:dossier.scope,
+          criteria:dossier.criteria,limitations:dossier.limitations},null,2)+
+        '\\nFor full bounded dossier use ARL_DEBUG_CANONICAL=1. No evidence or security decision written.'
+    };
+  }
   if (/^Run assessment batch preview[.!?]*$/i.test(request.trim())) {
     const expected = String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
     const expectedProject = String(process.env.ARL_EXPECTED_PROJECT_ID || '').trim();
