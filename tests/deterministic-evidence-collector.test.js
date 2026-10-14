@@ -407,7 +407,7 @@ test('KB-017 binds Python and npm declared and locked metadata to hashed file ev
     const dep=result.requirementObservations[0].observations.dependency_and_build;
     const inventory=dep.dependencyInventory;
     assert.equal(inventory.parserStatus,'completed');
-    assert.equal(inventory.sourceCandidates,5);
+    assert.equal(inventory.sourceCandidates,5, 'tracked files: '+git(root,['ls-files']));
     assert.equal(inventory.parsed.filesParsed,5);
     assert.equal(inventory.parsed.filesInvalid,0);
     assert.ok(inventory.parsed.declaredCount>=4);
