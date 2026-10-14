@@ -61,7 +61,7 @@ export async function getAuthoritativeAssessment({
     };
   }
 
-  let result = {};
+  let result;
 
   try {
     result = JSON.parse(row.result_json || '{}');
@@ -74,7 +74,7 @@ export async function getAuthoritativeAssessment({
     };
   }
 
-  let answers = {};
+  let answers;
 
   try {
     answers = JSON.parse(row.answers_json || '{}');
