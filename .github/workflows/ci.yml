@@ -35,6 +35,14 @@ jobs:
       - name: ESLint regression — original 56 candidate rules
         run: npm run lint
 
+      - name: Local synthetic test fixtures reject inherited target pins
+        env:
+          ARL_EXPECTED_TARGET_SHA: '0000000000000000000000000000000000000000'
+        run: >-
+          NODE_ENV=test node --test
+          tests/local-assessment-product-ownership.test.js
+          tests/operator-inspect-existing.test.js
+
       - name: Focused Fix → Prove regressions
         run: >-
           node --test
