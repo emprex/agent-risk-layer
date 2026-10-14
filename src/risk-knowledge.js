@@ -11,7 +11,6 @@ import {
   summarizeEvidenceReadiness,
   toYaml,
   assertRegoExportAllowed,
-  validateArchitectureFacts,
 } from './risk-knowledge-core.js';
 
 const knowledgeAsset = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'risk-knowledge/risk-knowledge-v1.json'), 'utf8'));
