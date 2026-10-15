@@ -36,7 +36,7 @@ const METHODS=[
 // tests just because their text mentions identity, role, version or a tool.
 // These hints do not accept evidence, decide applicability or trigger execution.
 const DOCUMENTARY_REQUIREMENTS=[
- {kind:'incident_exercise_record',pattern:/^(?:dated\\s+|signed\\s+|approved\\s+)?incident(?:[\\s-]+response)?[\\s-]+(?:tabletop|exercise|simulation|drill)(?:[\\s-]+|$)/i,
+ {kind:'incident_exercise_record',pattern:/^(?:dated\s+|signed\s+|approved\s+)?incident(?:[\s-]+response)?[\s-]+(?:tabletop|exercise|simulation|drill)(?:[\s-]+|$)/i,
   primary:'Dated incident exercise plan, participant and scenario record, observed actions, lessons learned and accountable sign-off.',
   technical:'Inspect the actual exercise artefacts against the incident-response objective, check roles, timeline, scope, observed gaps, corrective actions and dated accountable approval; do not infer successful response from the existence of a plan.',
   scenario:null},
