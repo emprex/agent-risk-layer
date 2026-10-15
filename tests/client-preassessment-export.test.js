@@ -40,7 +40,8 @@ test('rejects security-authority escalation',()=>{
 test('renders isolated AI advisory annex with escaped content and retains strict authority',()=>{
  const d=fixture();
  const digest='f'.repeat(64);
- const a={controlId:'ARL-KB-010',advisoryOnly:true,humanReviewRequired:true,
+ d.controls[9].reviewRequirements[0].boundedSourceFacts=[{collector:'source_and_configuration',artifactSha256:digest,values:{dependencyCount:2}}];
+ const a={controlId:'ARL-KB-010',projectId:d.projectId,snapshotId:d.snapshotId,targetRevision:d.targetRevision,advisoryOnly:true,humanReviewRequired:true,
  confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,
  deploymentDecisionWritten:false,structuredItems:[{type:'observation',
  text:'Candidate <script>alert(1)</script> metadata only',factIds:['O1_1'],artifactSha256:[digest]}]};
@@ -51,4 +52,18 @@ test('renders isolated AI advisory annex with escaped content and retains strict
  assert.doesNotMatch(report,/<script>alert/);
  const bad={...a,confirmedFinding:true};
  assert.throws(()=>renderClientPreassessment(d,{advisories:[bad]}),/AI advisory annex/);
+});
+
+test('rejects stale snapshot, foreign project and injected source digest in AI report annex',()=>{
+ const d=fixture();
+ const digest='f'.repeat(64);
+ d.controls[9].reviewRequirements[0].boundedSourceFacts=[{collector:'source_and_configuration',artifactSha256:digest,values:{dependencyCount:2}}];
+ const item={type:'observation',text:'Two dependency metadata references were recorded.',factIds:['O1_1'],artifactSha256:[digest]};
+ const a={controlId:'ARL-KB-010',projectId:d.projectId,snapshotId:d.snapshotId,targetRevision:d.targetRevision,
+ advisoryOnly:true,humanReviewRequired:true,confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,deploymentDecisionWritten:false,structuredItems:[item]};
+ assert.match(renderClientPreassessment(d,{advisories:[a]}),/Two dependency metadata references/);
+ assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,snapshotId:'sys_old'}]}),/AI advisory annex/);
+ assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,projectId:'prj_foreign'}]}),/AI advisory annex/);
+ assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,targetRevision:'b'.repeat(40)}]}),/AI advisory annex/);
+ assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,structuredItems:[{...item,artifactSha256:['a'.repeat(64)]}]}]}),/AI advisory annex/);
 });
