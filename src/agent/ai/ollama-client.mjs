@@ -77,6 +77,10 @@ export async function askLocalOllama({
       payload?.message?.content || ''
     ).trim();
 
+    if (jsonMode && payload?.done_reason === 'length') {
+      return {available:false,reason:'ollama_output_truncated'};
+    }
+
     if (!content) {
       return {
         available: false,
@@ -87,7 +91,8 @@ export async function askLocalOllama({
     return {
       available: true,
       model,
-      content
+      content,
+      ...(jsonMode ? {completionReason:payload?.done_reason || null} : {})
     };
   } catch (error) {
     return {
