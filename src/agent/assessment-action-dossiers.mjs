@@ -36,6 +36,7 @@ export function buildAssessmentActionDossiers({mapping,inventory}) {
           : 'No exact match in the bounded static collection; external or human evidence may still exist',
         artifactDigests:r.sourceArtifactSha256,
         collectorTypes:r.observedCollectorTypes,
+        boundedSourceFacts:r.boundedSourceFacts||[],
         proofStatus:'not_validated',
         actionType:c.workflowLane==='human_decision'?'accountable_human_review':
           hasCandidate?'inspect_candidate_and_validate_source':'request_evidence_or_authorised_verification',
