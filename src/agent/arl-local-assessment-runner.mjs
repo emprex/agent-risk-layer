@@ -226,23 +226,22 @@ try {
       const dossierResult=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
       const dossier=dossierResult.canonicalData?.assessmentActionDossiers;
-      const {explainControlObservation}=await import('./ai/control-observation-analyst.mjs');
-      const {writeClientPreassessment}=await import('./client-preassessment-export.mjs');
-      const advisories=[];
-      const failures=[];
-      for(const controlId of ['ARL-KB-007','ARL-KB-031','ARL-KB-053']){
-        const a=await explainControlObservation({dossier,controlId});
-        if(a.available===true)advisories.push(a);
-        else failures.push(controlId+': '+a.reason);
-      }
-      const exported=writeClientPreassessment({dossier,advisories,
+      const {buildAiAssistedPreassessment}=await import('./ai-assisted-preassessment.mjs');
+      const exported=await buildAiAssistedPreassessment({dossier,
         outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
           path.join(productRoot,'data/local-reports')});
-      console.log('\\n=== ARL AI-ASSISTED PREASSESSMENT DRAFT ===\\n');
-      console.log('Report: '+exported.file+'\\nSHA-256: '+exported.sha256+
-        '\\nStructured AI briefs included: '+advisories.length+
-        '\\nUnsuccessful analyses: '+(failures.join('; ')||'none')+
-        '\\nOperator review only; no security finding, evidence acceptance or deployment decision.');
+      console.log('\n=== ARL AI-ASSISTED PREASSESSMENT DRAFT ===\n');
+      if(!exported.available){
+        console.log('No AI-assisted report issued: '+exported.reason);
+        console.log('Analysis failures: '+exported.failures.map(f=>
+          f.controlId+': '+f.reason).join('; '));
+        console.log('Existing plain preassessment export remains available.');
+      } else {
+        console.log('Report: '+exported.file+'\nSHA-256: '+exported.sha256+
+          '\nStructured AI briefs included: '+exported.advisoryControlIds.join(', ')+
+          '\nUnsuccessful analyses: '+(exported.failures.map(f=>f.controlId+': '+f.reason).join('; ')||'none'));
+      }
+      console.log('Operator review only; no security finding, evidence acceptance or deployment decision.');
       process.exit(0);
     }
     if (/^Export client preassessment[.!?]*$/i.test(request)) {
