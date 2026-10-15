@@ -26,6 +26,11 @@ const GENERIC_PASS_FAIL = [
  /valid workflow remains bounded to .*denial occurs before side effects/i,
  /or when the relevant control is declaration-only, bypassable, fail-open/i
 ];
+const GENERIC_RETEST = [
+ /Authorised in-scope use completes successfully, remains within the documented asset scope/i,
+ /Unauthorised identity, boundary-crossing, malformed-input, replay and relevant bypass variants are denied before execution/i,
+ /is no longer reproducible against the exact remediated version/i
+];
 const GENERIC_REQUIRED_EVIDENCE = [
   /showing how reduce the likelihood and impact/i,
   /control configuration or source location showing how/i,
@@ -60,6 +65,12 @@ export function auditRiskKnowledge(asset) {
       if (orphanedLowercase(value)) findings.push({ id: entry.id, field, issue: 'orphaned_lowercase_fragment', value });
       if (MALFORMED.some((pattern) => pattern.test(String(value)))) findings.push({ id: entry.id, field, issue: 'known_malformed_combination', value });
       if (PLACEHOLDER.test(String(value))) findings.push({ id: entry.id, field, issue: 'unresolved_placeholder', value });
+    }
+    for(const [index,retest] of (entry.solution?.retest_acceptance||[]).entries()){
+      if(GENERIC_RETEST.some(pattern=>pattern.test(retest))){
+        findings.push({id:entry.id,field:'solution.retest_acceptance['+index+']',
+          issue:'generic_or_mismatched_retest',value:retest});
+      }
     }
     // Candidate evidence text is part of the trust boundary. A duplicated
     // boilerplate sentence can cause irrelevant files to appear as candidate
