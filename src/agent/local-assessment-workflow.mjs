@@ -48,6 +48,7 @@ import { previewStaticCollection } from './assessment-static-collection-preview.
 import { buildAssessmentBatchRunSummary } from './assessment-batch-run-summary.mjs';
 import { buildAssessmentBatchReviewDossier } from './assessment-batch-review-dossier.mjs';
 import { planStaticEvidenceBatch } from './bounded-static-evidence-batch.mjs';
+import { auditAssessmentStaticArtifacts } from './assessment-static-integrity-audit.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -736,6 +737,36 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Audit assessment static integrity[.!?]*$/i.test(request.trim())) {
+    const expected=String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
+    const snapshotId=String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim();
+    if (options.projectId !== process.env.ARL_EXPECTED_PROJECT_ID ||
+        !snapshotId || !/^[a-f0-9]{40}$/.test(expected) ||
+        localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection?.target?.revision !== expected) {
+      throw new Error('Global artifact audit requires exact frozen project, snapshot and target SHA.');
+    }
+    const queue=await readCurrentControlQueue(options);
+    const audit=await auditAssessmentStaticArtifacts({
+      projectId:options.projectId,userId:options.userId,
+      snapshotId,targetRevision:expected,queue
+    });
+    return {
+      canonicalData:{assessmentStaticIntegrityAudit:audit,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Read-only global static artifact integrity audit:\n'+JSON.stringify({
+        snapshotId:audit.snapshotId,targetRevision:audit.targetRevision,
+        controlsTotal:audit.controlsTotal,eligibleControls:audit.eligibleControls,
+        storedArtifactCount:audit.storedArtifactCount,
+        eligibleWithArtifacts:audit.eligibleWithArtifacts,
+        missing:audit.eligibleMissingArtifacts,
+        failed:audit.controlsWithIntegrityFailures,
+        excluded:audit.excludedControls,
+        artifactIntegrityVerified:audit.artifactIntegrityVerified
+      },null,2)+'\nNo evidence accepted, security verdict or deployment decision.'
+    };
+  }
   if (/^Persist assessment static batch\b/i.test(request.trim())) {
     const match=/^Persist assessment static batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
     if (!match) throw new Error('Use Persist assessment static batch N (positive integer).');
