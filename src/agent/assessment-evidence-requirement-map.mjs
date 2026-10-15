@@ -1,3 +1,4 @@
+import {extractSourceObservationFacts} from './ai/source-observation-facts.mjs';
 import {db} from '../db.js';
 import {verifySourceCollectionArtifact} from './tools/source-collection-artifacts.mjs';
 
@@ -40,12 +41,13 @@ export async function mapAssessmentEvidenceToRequirements({inventory,projectId,s
     const requirements=c.requiredEvidence.map((requirement,i)=>{
       const matched=artifacts.flatMap(a=>a.observations.filter(o=>norm(o.requirement)===norm(requirement))
         .map(o=>({artifactSha256:a.digest,collectors:(o.collectors||[]).filter(k=>
-          Object.hasOwn(o.observations||{},k))})));
+          Object.hasOwn(o.observations||{},k)),facts:extractSourceObservationFacts(o.observations)})));
       const distinct=[...new Set(matched.flatMap(x=>x.collectors))].sort();
       return {
         requirementIndex:i+1,requirement,
         sourceArtifactSha256:[...new Set(matched.map(m=>m.artifactSha256))],
         observedCollectorTypes:distinct,
+        boundedSourceFacts:matched.flatMap(m=>m.facts.map(f=>({...f,artifactSha256:m.artifactSha256}))).slice(0,18),
         observationState:matched.length?'static_metadata_candidate':'no_exact_static_metadata_match',
         evidenceValidated:false,requirementSatisfied:false,
         nextAction:matched.length?'Human review of matching metadata and source material':
