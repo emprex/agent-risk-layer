@@ -52,6 +52,7 @@ import { auditAssessmentStaticArtifacts } from './assessment-static-integrity-au
 import { buildAssessmentClientReport } from './assessment-client-report.mjs';
 import { buildAssessmentBusinessContentInventory } from './assessment-business-content-inventory.mjs';
 import { mapAssessmentEvidenceToRequirements } from './assessment-evidence-requirement-map.mjs';
+import { buildAssessmentActionDossiers } from './assessment-action-dossiers.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -740,6 +741,34 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Build assessment action dossiers[.!?]*$/i.test(request.trim())) {
+    const prior=await runLocalAssessment(repositoryPath,
+      'Map assessment evidence requirements',options,localFrozenInspection);
+    const content=await runLocalAssessment(repositoryPath,
+      'Inspect assessment report content v7',options,localFrozenInspection);
+    const mapping=prior.canonicalData?.assessmentEvidenceRequirementMap;
+    const inventory=content.canonicalData?.assessmentBusinessContentInventory;
+    const dossiers=buildAssessmentActionDossiers({mapping,inventory});
+    return {
+      canonicalData:{assessmentActionDossiers:dossiers,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Assessment review and action dossiers (not findings):\\n'+JSON.stringify({
+        controlsTotal:dossiers.controlsTotal,requirementsTotal:dossiers.requirementsTotal,
+        candidateRequirementCount:dossiers.candidateRequirementCount,
+        requiresEvidenceOrReviewCount:dossiers.requiresEvidenceOrReviewCount,
+        confirmedFindings:dossiers.confirmedFindings,
+        remediationPlansIssued:dossiers.remediationPlansIssued,
+        examples:dossiers.controls.filter(c=>c.workflowLane!=='human_decision').slice(0,3).map(c=>({
+          controlId:c.controlId,title:c.title,purpose:c.purpose,
+          reviewRequirements:c.reviewRequirements.slice(0,2).map(r=>({
+            expectedEvidence:r.expectedEvidence,availableObservation:r.availableObservation,
+            action:r.action,acceptanceCriterion:r.acceptanceCriterion
+          }))
+        })),
+        note:dossiers.note
+      },null,2)+'\\nNo automated finding, severity, evidence approval or release decision.'
+    };
+  }
   if (/^Map assessment evidence requirements[.!?]*$/i.test(request.trim())) {
     // Run the complete current authoritative v7 control-scoped read first.
     const prior=await runLocalAssessment(repositoryPath,
