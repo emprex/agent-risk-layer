@@ -21,6 +21,11 @@ const MALFORMED = [
 ];
 const PLACEHOLDER = /\$\{[^}]*\}|\{\{[^}]+\}\}|<<[^>]+>>|\b(?:TODO|TBD|FIXME)\b/i;
 const MID_WORD_END = /\b[a-z]{1,2}[.!?]$/i;
+const GENERIC_REQUIRED_EVIDENCE = [
+  /showing how reduce the likelihood and impact/i,
+  /control configuration or source location showing how/i,
+  /\b(?:evidence|configuration)\s+(?:for|to)\s+this control\s*[.!?]$/i
+];
 
 function completeSentence(value) {
   return typeof value === 'string' && value.trim().length >= 35 && /[.!?…”]$/.test(value.trim());
@@ -50,6 +55,16 @@ export function auditRiskKnowledge(asset) {
       if (orphanedLowercase(value)) findings.push({ id: entry.id, field, issue: 'orphaned_lowercase_fragment', value });
       if (MALFORMED.some((pattern) => pattern.test(String(value)))) findings.push({ id: entry.id, field, issue: 'known_malformed_combination', value });
       if (PLACEHOLDER.test(String(value))) findings.push({ id: entry.id, field, issue: 'unresolved_placeholder', value });
+    }
+    // Candidate evidence text is part of the trust boundary. A duplicated
+    // boilerplate sentence can cause irrelevant files to appear as candidate
+    // evidence for an unrelated control; reject that language at its source.
+    for(const [index,evidence] of (entry.check?.required_evidence||[]).entries()){
+      if(typeof evidence!=='string' || evidence.trim().length<35 ||
+         GENERIC_REQUIRED_EVIDENCE.some(pattern=>pattern.test(evidence))){
+        findings.push({id:entry.id,field:'check.required_evidence['+index+']',
+          issue:'generic_or_malformed_required_evidence',value:evidence});
+      }
     }
     // Retest acceptance criteria are control-specific.
     // Structural quality is enforced above (complete sentence, no truncation,
