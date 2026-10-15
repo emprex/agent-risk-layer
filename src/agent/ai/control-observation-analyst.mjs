@@ -1,3 +1,4 @@
+import {screenAdvisoryClaims} from './advisory-claim-guard.mjs';
 import {askLocalOllama} from './ollama-client.mjs';
 
 // Advisory text cannot become a finding or mutate authoritative ARL state.
@@ -26,17 +27,17 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
    'Explain concrete evidence signals and their limitations. Distinguish observed metadata from a security finding.',
    'Only cite supplied facts by their exact identifiers in square brackets. Do not invent files, endpoints, failures, providers or attack results.',
    'No PASS/FAIL, applicability, severity, risk acceptance, readiness, validated finding or remediation closure decision.',
+   'Never say an objective is met or not met. Missing evidence is not a failed control. Do not claim missing configuration, policy, providers or enforcement from bounded source metadata.',
+   'Only describe metadata as observed, and make the next verification step specific to the cited requirement.',
    'Propose actionable evidence checks and conditional technical remediation only when explicitly marked as hypothetical.',
    'Plain English, at most 240 words. No generic filler. If the data lacks technical observations, state that clearly.'
  ].join(' ')},{role:'user',content:'Provide a factual assessment briefing for human review using ONLY these fact records:\n'+facts.map(f=>'['+f.id+'] '+f.text).join('\n')}];
  const result=await ask({messages});
  if(result?.available!==true)return {available:false,reason:result?.reason||'ai_unavailable',controlId,facts,advisoryOnly:true};
  const answer=String(result.content||'').trim();
- // A citation check limits unsourced free-form narratives; review is still mandatory.
- const citations=[...answer.matchAll(/\[([A-Z][A-Z0-9_]*)\]/g)].map(x=>x[1]);
- const known=new Set(facts.map(f=>f.id));
- if(!answer||answer.length>3000||citations.length===0||citations.some(x=>!known.has(x)))
-   return {available:false,reason:'unsupported_or_uncited_model_output',controlId,facts,advisoryOnly:true};
+ // Syntactic fail-closed checks cannot semantically prove model claims.
+ const screened=screenAdvisoryClaims(answer,facts);
+ if(!screened.ok)return {available:false,reason:screened.reason,controlId,facts,advisoryOnly:true};
  return {available:true,controlId,model:result.model||null,analysis:answer,facts,advisoryOnly:true,
    confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,deploymentDecisionWritten:false,
    humanReviewRequired:true};
