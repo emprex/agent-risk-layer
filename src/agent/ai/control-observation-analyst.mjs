@@ -18,7 +18,7 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
  for(const r of c.reviewRequirements){
    const n=r.requirementIndex;
    facts.push({id:'R'+n,text:'Required evidence: '+r.expectedEvidence+'; status: '+(r.artifactDigests.length?'static metadata candidate, not validated':'no static metadata match, not validated')});
-   for(const [i,f] of (r.boundedSourceFacts||[]).entries()){
+   for(const [i,f] of (r.boundedSourceFacts||[]).slice(0,4).entries()){
      facts.push({id:'O'+n+'_'+(i+1),artifactSha256:f.artifactSha256,text:'Unvalidated source metadata collected by '+f.collector+'; SHA256 '+f.artifactSha256+'; bounded fields: '+JSON.stringify(f.values)});
    }
  }
@@ -30,7 +30,7 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
    'Every item must be supported by its factIds. Hypotheses are explicitly conditional; never assert a risk was reproduced.',
    'Use concise, client-readable English. Return no markdown or prose outside the JSON.'
  ].join(' ')},{role:'user',content:'Produce a structured HUMAN-REVIEW-ONLY evidence briefing for this scoped control. Facts:\\n'+facts.map(f=>'['+f.id+'] '+f.text).join('\\n')}];
- const result=await ask({messages});
+ const result=await ask({messages,jsonMode:true,maxOutputTokens:768,timeoutMs:120000});
  if(result?.available!==true)return {available:false,reason:result?.reason||'ai_unavailable',controlId,facts,advisoryOnly:true};
  const answer=String(result.content||'').trim();
  const checked=validateStructuredAdvisory(answer,facts);
