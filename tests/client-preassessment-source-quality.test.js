@@ -34,6 +34,11 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
   values:{mcpAndToolReferenceFilesCount:2,
    referenceSamples:[{kind:'mcp_tool',hash:'b'.repeat(24)}]}
  }];
+ // Three synthetic requirements isolate documentary and technical plan routing
+ // in the actual customer-visible HTML. They do not change canonical KB.
+ controls[10].reviewRequirements[0].expectedEvidence='Signed risk exception approval with scope, owner and expiry';
+ controls[11].reviewRequirements[0].expectedEvidence='Incident response tabletop record with participants and observations';
+ controls[12].reviewRequirements[0].expectedEvidence='Effective IAM permissions and token revocation';
  const d={schema:'arl.agent.assessment-action-dossiers.v1',
   projectId:'prj_synthetic',snapshotId:'sys_synthetic',
   targetRevision:'c'.repeat(40),controlsTotal:108,requirementsTotal:575,
@@ -53,6 +58,27 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
  assert.match(html,/mcp_tool/);
  assert.match(html,/bbbbbbbbbbbbbbbbbbbbbbbb/);
  assert.doesNotMatch(html,/confirmed exploitation|automatically validated as secure/i);
+ // Report copy must not quietly turn documentary evidence into an active
+ // technical test merely because the record mentions a risky operation.
+ function sectionFor(controlId){
+  const start=html.indexOf('<article class="control" id="'+controlId+'">');
+  assert.ok(start>=0,controlId);
+  const end=html.indexOf('</article>',start);
+  assert.ok(end>start,controlId);
+  return html.slice(start,end);
+ }
+ const exception=sectionFor(controls[10].controlId);
+ const exercise=sectionFor(controls[11].controlId);
+ const permissions=sectionFor(controls[12].controlId);
+ for(const documentary of [exception,exercise]){
+  assert.match(documentary,/No active test proposed for this documentary or governance requirement/);
+  assert.doesNotMatch(documentary,/A synthetic event with expected detection|A narrowly scoped, synthetic least-privilege/);
+  assert.match(documentary,/not validated/);
+ }
+ assert.match(exception,/scope, accountable approver, rationale, expiry/);
+ assert.match(exercise,/roles, timeline, scope, observed gaps/);
+ assert.match(permissions,/narrowly scoped, synthetic least-privilege/);
+ assert.match(permissions,/blocked_no_verified_rules_of_engagement/);
  // Every requirement still has a human conclusion gate.
  assert.equal((html.match(/<strong>Human conclusion gate:<\/strong>/g)||[]).length,575);
 });
