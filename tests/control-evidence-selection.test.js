@@ -27,3 +27,24 @@ test('unverified source facts cannot gain lineage through another requirement',(
  assert.deepEqual(r.facts,[]);
  assert.equal(r.candidateRequirements,1);
 });
+
+test('collection limits and completeness signals do not cross requirement boundaries',()=>{
+ const capped='a'.repeat(64),complete='b'.repeat(64);
+ const evidence=collectControlEvidence({controls:[{controlId:'ARL-KB-099',reviewRequirements:[
+  {artifactDigests:[capped],boundedSourceFacts:[
+   {artifactSha256:capped,values:{discoveryCoverage:{trackedFileScanCapped:true}}}]},
+  {artifactDigests:[complete],boundedSourceFacts:[
+   {artifactSha256:complete,values:{discoveryCoverage:{completeTrackedAndTextScan:true}}}]},
+  {artifactDigests:[],boundedSourceFacts:[
+   {artifactSha256:capped,values:{discoveryCoverage:{textFileScanCapped:true}}}]},
+  {artifactDigests:[complete],boundedSourceFacts:[
+   {artifactSha256:'c'.repeat(64),values:{discoveryCoverage:{textFileScanCapped:true}}}]}
+ ]}]},'ARL-KB-099');
+ assert.equal(evidence.limitedCoverage,true);
+ assert.equal(evidence.requirements[0].boundedScanCoverageState,'limited_bounded_scan');
+ assert.equal(evidence.requirements[1].boundedScanCoverageState,'reported_complete_bounded_scan');
+ assert.equal(evidence.requirements[1].limitedCoverage,false);
+ assert.equal(evidence.requirements[2].boundedScanCoverageState,'unknown');
+ assert.equal(evidence.requirements[3].boundedScanCoverageState,'unknown');
+ assert.equal(evidence.requirements[3].limitedCoverage,false);
+});
