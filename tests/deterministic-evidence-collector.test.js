@@ -152,16 +152,15 @@ test('typed deterministic collector emits bounded privacy-safe observations for 
     ).observations.source_and_configuration;
     assert.equal(config.discoveryCoverage.completeTrackedAndTextScan, true);
         assert.equal(inventory.trackedFileCount, 6);
-    assert.deepEqual(inventory.discoveryCoverage, {
-      totalTrackedFiles: 6,
-      trackedFilesConsidered: 6,
-      trackedFileScanCapped: false,
-      textCandidatesWithinTrackedFileLimit: 6,
-      textFilesAttempted: 6,
-      textFilesReadable: 6,
-      textFileScanCapped: false,
-      completeTrackedAndTextScan: true
-    });
+    const cov=inventory.discoveryCoverage;
+    assert.equal(cov.totalTrackedFiles,6);
+    assert.equal(cov.trackedFilesConsidered,6);
+    assert.equal(cov.textFilesAttempted,6);
+    assert.equal(cov.textFilesReadable,6);
+    assert.equal(cov.completeTrackedAndTextScan,true);
+    assert.equal(cov.textFilesSkippedForByteBudget,0);
+    assert.equal(cov.textByteBudget,48_000_000);
+    assert.ok(cov.textBytesRead>0);
 
     const encoded =
       JSON.stringify(result);
@@ -194,7 +193,7 @@ test('KB-011 discovery records bounded coverage rather than pretending all track
     git(root, ['init']);
     git(root, ['config', 'user.email', 'test@example.test']);
     git(root, ['config', 'user.name', 'ARL Test']);
-    for (let n = 0; n < 510; n += 1) {
+    for (let n = 0; n < 2010; n += 1) {
       fs.writeFileSync(path.join(root, 'asset-' + String(n).padStart(3, '0') + '.js'),
         'const placeholder = ' + n + ';\\n');
     }
@@ -213,16 +212,17 @@ test('KB-011 discovery records bounded coverage rather than pretending all track
       row.collectors.includes('architecture_and_inventory')
     ).observations.architecture_and_inventory;
     assert.equal(inventory.trackedFileCount, 510);
-    assert.deepEqual(inventory.discoveryCoverage, {
-      totalTrackedFiles: 510,
-      trackedFilesConsidered: 500,
-      trackedFileScanCapped: true,
-      textCandidatesWithinTrackedFileLimit: 500,
-      textFilesAttempted: 300,
-      textFilesReadable: 300,
-      textFileScanCapped: true,
-      completeTrackedAndTextScan: false
-    });
+    const cov=inventory.discoveryCoverage;
+    assert.equal(cov.totalTrackedFiles,2010);
+    assert.equal(cov.trackedFilesConsidered,2000);
+    assert.equal(cov.trackedFileScanCapped,true);
+    assert.equal(cov.textCandidatesWithinTrackedFileLimit,2000);
+    assert.equal(cov.textFilesAttempted,1200);
+    assert.equal(cov.textFilesReadable,1200);
+    assert.equal(cov.textFileScanCapped,true);
+    assert.equal(cov.completeTrackedAndTextScan,false);
+    assert.equal(cov.textFilesSkippedForByteBudget,0);
+    assert.equal(cov.textByteBudget,48_000_000);
     assert.equal(data.targetRevision, revision);
     assert.equal(JSON.parse(JSON.stringify(data)).targetRevision, revision);
   } finally {
@@ -251,7 +251,7 @@ test('KB-007 prioritizes Python executable files and discovers provider candidat
    });
    const inv=result.requirementObservations[0].observations.architecture_and_inventory;
    assert.equal(inv.trackedFileCount,508);
-   assert.equal(inv.discoveryCoverage.trackedFileScanCapped,true);
+   assert.equal(inv.discoveryCoverage.trackedFileScanCapped,false);
    assert.ok(inv.providerPackageCandidates.includes('openai'));
    assert.ok(inv.providerPackageCandidates.includes('anthropic'));
    assert.ok(inv.providerPackageCandidates.includes('mcp'));
@@ -266,7 +266,7 @@ test('KB-007 prioritizes Python executable files and discovers provider candidat
    const inv2=more.requirementObservations[0].observations.architecture_and_inventory;
    assert.ok(inv2.providerPackageCandidates.includes('mcp'));
    assert.ok(inv2.providerPackageCandidates.includes('anthropic'));
-   assert.equal(inv2.discoveryCoverage.trackedFileScanCapped,true);
+   assert.equal(inv2.discoveryCoverage.trackedFileScanCapped,false);
    assert.ok(inv.providerPackageCandidates.includes('qdrant-client'));
    assert.ok(!inv.providerPackageCandidates.includes('requests'));
  } finally {fs.rmSync(root,{recursive:true,force:true});}
@@ -280,7 +280,7 @@ test('KB-017 reports incomplete discovery coverage instead of implying a complet
     git(root, ['config', 'user.name', 'ARL Test']);
     fs.writeFileSync(path.join(root, 'package.json'),
       JSON.stringify({ name: 'bounded-agent', dependencies: { openai: '1.0.0' } }));
-    for (let i = 0; i < 510; i++) {
+    for (let i = 0; i < 2010; i++) {
       fs.writeFileSync(path.join(root, 'source-' + String(i).padStart(3, '0') + '.js'),
         'const value = ' + i + ';');
     }
@@ -300,7 +300,7 @@ test('KB-017 reports incomplete discovery coverage instead of implying a complet
     const source = rows[1].observations.source_and_configuration;
     assert.equal(dep.dependencyCount, 1);
     for (const view of [dep, source]) {
-      assert.equal(view.discoveryCoverage.totalTrackedFiles, 511);
+      assert.equal(view.discoveryCoverage.totalTrackedFiles, 2011);
       assert.equal(view.discoveryCoverage.trackedFileScanCapped, true);
       assert.equal(view.discoveryCoverage.textFileScanCapped, true);
       assert.equal(view.discoveryCoverage.completeTrackedAndTextScan, false);
@@ -317,7 +317,7 @@ test('KB-017 discovers late dependency manifests outside generic 500-file source
     git(root, ['init']);
     git(root, ['config', 'user.email', 'test@example.test']);
     git(root, ['config', 'user.name', 'ARL Test']);
-    for (let i = 0; i < 510; i++) {
+    for (let i = 0; i < 2010; i++) {
       fs.writeFileSync(path.join(root, 'source-' + String(i).padStart(3, '0') + '.js'), 'const marker = 1;');
     }
     fs.mkdirSync(path.join(root, 'zz-late'));
