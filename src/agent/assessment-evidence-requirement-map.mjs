@@ -3,6 +3,15 @@ import {db} from '../db.js';
 import {verifySourceCollectionArtifact} from './tools/source-collection-artifacts.mjs';
 
 const norm=s=>String(s||'').trim().replace(/\s+/g,' ').toLowerCase();
+const CURRENT_SOURCE_PROJECTION='arl.source-collection-projection.v2';
+// Historical collections remain immutable but never supplement or override a
+// current collection for the same exact control, target and snapshot.
+export function selectCurrentSourceProjectionArtifacts(artifacts){
+ if(!Array.isArray(artifacts))throw new Error('Source projections must be an array.');
+ const current=artifacts.filter(a=>a?.sourceProjectionRevision===CURRENT_SOURCE_PROJECTION);
+ return current.length?current:artifacts;
+}
+
 
 // Reads already-persisted bounded metadata. Never treats collected signals as proof of control effectiveness.
 export async function mapAssessmentEvidenceToRequirements({inventory,projectId,snapshotId,targetRevision}) {
@@ -39,7 +48,7 @@ export async function mapAssessmentEvidenceToRequirements({inventory,projectId,s
       observations:collection.requirementObservations});
   }
   const controls=inventory.controls.map(c=>{
-    const artifacts=byId.get(c.controlId);
+    const artifacts=selectCurrentSourceProjectionArtifacts(byId.get(c.controlId));
     const requirements=c.requiredEvidence.map((requirement,i)=>{
       const matched=artifacts.flatMap(a=>a.observations.filter(o=>norm(o.requirement)===norm(requirement))
         .map(o=>({artifactSha256:a.digest,sourceProjectionRevision:a.sourceProjectionRevision,
