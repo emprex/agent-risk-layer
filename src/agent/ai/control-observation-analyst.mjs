@@ -30,10 +30,11 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
    'Every item must be supported by its factIds. Hypotheses are explicitly conditional; never assert a risk was reproduced.',
    'Use concise, client-readable English. Return no markdown or prose outside the JSON.'
  ].join(' ')},{role:'user',content:'Produce a structured HUMAN-REVIEW-ONLY evidence briefing for this scoped control. Facts:\\n'+facts.map(f=>'['+f.id+'] '+f.text).join('\\n')}];
- const result=await ask({messages,jsonMode:true,maxOutputTokens:768,timeoutMs:120000});
+ const result=await ask({messages,jsonMode:true,maxOutputTokens:1536,timeoutMs:120000});
  if(result?.available!==true)return {available:false,reason:result?.reason||'ai_unavailable',controlId,facts,advisoryOnly:true};
  const answer=String(result.content||'').trim();
  const checked=validateStructuredAdvisory(answer,facts);
+ if(!checked.ok && checked.reason==='invalid_json')return {available:false,reason:'ollama_invalid_json_response',controlId,facts,advisoryOnly:true};
  if(!checked.ok)return {available:false,reason:checked.reason,controlId,facts,advisoryOnly:true};
  return {available:true,controlId,projectId:dossier.projectId,snapshotId:dossier.snapshotId,targetRevision:dossier.targetRevision,model:result.model||null,analysis:renderStructuredAdvisory(checked.items),structuredItems:checked.items,facts,advisoryOnly:true,
    confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,deploymentDecisionWritten:false,
