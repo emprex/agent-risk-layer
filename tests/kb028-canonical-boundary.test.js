@@ -7,6 +7,8 @@ const entry=asset.entries.find(x=>x.id==='ARL-KB-028');
 const pub=JSON.parse(fs.readFileSync(new URL('../public/risk-knowledge-public-v1.1.json',import.meta.url),'utf8'));
 const migration=fs.readFileSync(new URL('../migrations/051_risk_knowledge_kb028_revoked_authority.sql',import.meta.url),'utf8');
 const unchanged=JSON.parse(fs.readFileSync(new URL('./fixtures/kb028-unchanged-control-digests.json',import.meta.url),'utf8'));
+const revised=new Set(Object.keys(JSON.parse(fs.readFileSync(new URL('../docs/KB_EVIDENCE_REVIEW_MANIFEST_2026-10-15.json',import.meta.url),'utf8')).required_evidence_replacements).map(s=>'ARL-KB-'+s));
+const revisionMigration=fs.readFileSync(new URL('../migrations/057_canonical_evidence_review_81.sql',import.meta.url),'utf8');
 const canonical=v=>Array.isArray(v)?'['+v.map(canonical).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}':JSON.stringify(v);
 const digest=v=>crypto.createHash('sha256').update(canonical(v)).digest('hex');
 test('KB-028 independently verifies all 108 signatures and additive migration 051',()=>{
@@ -16,7 +18,8 @@ test('KB-028 independently verifies all 108 signatures and additive migration 05
   assert.equal(digest(unsigned),content_digest);
   // Stacked semantic migrations may change their own control only; KB-029 is independently verified by its own exact-head boundary test.
   const laterKB029 = item.id==='ARL-KB-029' && fs.existsSync(new URL('../migrations/052_risk_knowledge_kb029_principal_accountability.sql',import.meta.url));
-  if(item.id!=='ARL-KB-028' && !laterKB029)assert.equal(content_digest,unchanged[item.id]);
+  if(item.id!=='ARL-KB-028' && !laterKB029 && !revised.has(item.id))assert.equal(content_digest,unchanged[item.id]);
+  if(revised.has(item.id))assert.ok(revisionMigration.includes("content_digest='"+content_digest+"'"),item.id);
  }
  assert.equal(Object.keys(unchanged).length,107);
  assert.equal(entry.content_digest,'9a239967cf149448fc09b7e5e0591c786ee34eb5edb11ce7c391ec47928b7d6b');
