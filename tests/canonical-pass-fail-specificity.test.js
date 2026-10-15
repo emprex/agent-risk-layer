@@ -6,6 +6,8 @@ import {auditRiskKnowledge,digestRecord} from '../scripts/risk-knowledge-quality
 const asset=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
 const manifest=JSON.parse(fs.readFileSync(new URL('../docs/KB_PASS_FAIL_SPECIFICITY_2026-10-15.json',import.meta.url),'utf8'));
 const migration=fs.readFileSync(new URL('../migrations/058_canonical_pass_fail_specificity_78.sql',import.meta.url),'utf8');
+const retestRevision=new Set(JSON.parse(fs.readFileSync(new URL('../docs/KB_RETEST_REVIEW_MANIFEST_2026-10-15.json',import.meta.url),'utf8')).revised_controls.map(x=>x.id));
+const retestMigration=fs.readFileSync(new URL('../migrations/059_canonical_retest_acceptance_82.sql',import.meta.url),'utf8');
 const publicAsset=JSON.parse(fs.readFileSync(new URL('../public/risk-knowledge-public-v1.1.json',import.meta.url),'utf8'));
 
 test('all 78 affected controls have scope-specific success and concrete failure conditions',()=>{
@@ -49,7 +51,7 @@ test('migration 058 updates only canonical criteria and digests without changing
   const id='ARL-KB-'+suffix,e=asset.entries.find(x=>x.id===id);
   assert.ok(migration.includes("WHERE entry_id='"+id+"';"),id);
   assert.ok(migration.includes("WHERE id='"+id+"';"),id);
-  assert.ok(migration.includes("content_digest='"+e.content_digest+"'"),id);
+  assert.ok((retestRevision.has(id)?retestMigration:migration).includes("content_digest='"+e.content_digest+"'"),id);
   assert.ok(migration.includes("pass_condition='"+e.check.pass_condition.replaceAll("'","''")+"'"),id);
   assert.ok(migration.includes("fail_condition='"+e.check.fail_condition.replaceAll("'","''")+"'"),id);
   assert.equal(publicAsset.entries.find(x=>x.id===id)?.content_digest,e.content_digest,id);
