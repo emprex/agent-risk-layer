@@ -8,7 +8,11 @@ import {
   classifyCanonicalEvidenceRequirement
 } from './canonical-evidence-requirement-plan.mjs';
 
-const MAX_FILES = 500;
+// Fixed upper bounds preserve deterministic resource use. The first scan covers
+// all 1,177 files in the frozen MCP lab without silently truncating to 500.
+const MAX_FILES = 2000;
+const MAX_TEXT_FILES = 1200;
+const MAX_TEXT_SCAN_BYTES = 48_000_000;
 const MAX_TEXT_BYTES = 256_000;
 const MAX_REFS = 20;
 const MAX_DEPENDENCY_MANIFEST_READS = 128;
@@ -18,6 +22,7 @@ const MAX_BILL_TOTAL_BYTES = 12_000_000;
 const MAX_BILL_PARSER_OUTPUT_BYTES = 6_000_000; // bounded 6000-entry inventory
 const PARSER_PATH = fileURLToPath(new URL('./parse-dependency-metadata.py', import.meta.url));
 
+let cachedFrozenFacts=null; // one clean, SHA-bound source inventory per process
 function sha(value) {
   return crypto
     .createHash('sha256')
@@ -321,12 +326,24 @@ function collectTextSignals(
         .test(file)
     );
 
-  const inspectedTextCandidates = textCandidates.slice(0, 300);
+  const inspectedTextCandidates = textCandidates.slice(0, MAX_TEXT_FILES);
   let readableTextFiles = 0;
+  let readableBytes = 0;
+  let skippedForTextByteBudget = 0;
 
   for (const file of inspectedTextCandidates) {
+    if (readableBytes >= MAX_TEXT_SCAN_BYTES) {
+      skippedForTextByteBudget += 1;
+      continue;
+    }
     const text = readText(repositoryPath, file);
     if (!text) continue;
+    const length = Buffer.byteLength(text);
+    if (readableBytes + length > MAX_TEXT_SCAN_BYTES) {
+      skippedForTextByteBudget += 1;
+      continue;
+    }
+    readableBytes += length;
     readableTextFiles += 1;
 
     const ref = refFor(file);
@@ -405,7 +422,10 @@ function collectTextSignals(
       candidatesWithinTrackedFileLimit: textCandidates.length,
       attempted: inspectedTextCandidates.length,
       readable: readableTextFiles,
-      capped: textCandidates.length > inspectedTextCandidates.length
+      capped: textCandidates.length > inspectedTextCandidates.length || skippedForTextByteBudget>0,
+      bytesRead:readableBytes,
+      byteBudget:MAX_TEXT_SCAN_BYTES,
+      skippedForTextByteBudget
     }
   };
 }
@@ -414,20 +434,23 @@ function repositoryFacts({
   repositoryPath,
   frozen
 }) {
+  const revision=safeExec(repositoryPath,['rev-parse','HEAD']);
+  // Cache only clean, exact-SHA working trees. A changed working tree is never
+  // treated as cached frozen evidence, even if a stale caller says "clean".
+  const clean=Boolean(revision && frozen?.target?.dirty===false &&
+    frozen.target.revision===revision &&
+    safeExec(repositoryPath,['status','--porcelain'])==='');
+  const cacheKey=clean?path.resolve(repositoryPath)+'|'+revision+'|'+
+    sha(JSON.stringify(frozen?.inspection||{})):null;
+  if(clean && cachedFrozenFacts?.key===cacheKey)return cachedFrozenFacts.facts;
   const tracked = trackedFiles(repositoryPath);
   const files = tracked.files;
   const textFacts = collectTextSignals(repositoryPath, files);
 
-  const revision =
-    safeExec(
-      repositoryPath,
-      ['rev-parse', 'HEAD']
-    ) || frozen?.target?.revision || null;
-
   const inspection =
     frozen?.inspection || {};
 
-  return {
+  const result = {
     revision,
     environment:
       inspection?.subject?.environment || null,
@@ -445,10 +468,14 @@ function repositoryFacts({
       textFilesAttempted: textFacts.textScanCoverage.attempted,
       textFilesReadable: textFacts.textScanCoverage.readable,
       textFileScanCapped: textFacts.textScanCoverage.capped,
+      textFilesSkippedForByteBudget:textFacts.textScanCoverage.skippedForTextByteBudget,
+      textBytesRead:textFacts.textScanCoverage.bytesRead,
+      textByteBudget:textFacts.textScanCoverage.byteBudget,
       completeTrackedAndTextScan:
         tracked.totalTrackedFileCount === files.length &&
         !textFacts.textScanCoverage.capped &&
-        textFacts.textScanCoverage.readable === textFacts.textScanCoverage.attempted
+        textFacts.textScanCoverage.readable === textFacts.textScanCoverage.attempted &&
+        textFacts.textScanCoverage.skippedForTextByteBudget === 0
     },
     architectureArtifacts:
       boundedRefs(
@@ -486,6 +513,8 @@ function repositoryFacts({
     sourceCoverage:
       inspection?.scope?.sourceCoverage || null
   };
+  if(clean)cachedFrozenFacts={key:cacheKey,facts:result};
+  return result;
 }
 
 function observationsForCollector(
