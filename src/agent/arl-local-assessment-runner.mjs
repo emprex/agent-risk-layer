@@ -222,12 +222,14 @@ try {
       console.log('\\nHuman review required. No validated finding or change of security authority.');
       process.exit(0);
     }
-    if (/^Export AI-assisted preassessment[.!?]*$/i.test(request)) {
+    const scopedAiExport=/^Export AI-assisted preassessment (ARL-KB-\d{3})[.!?]*$/i.exec(request);
+    if (/^Export AI-assisted preassessment[.!?]*$/i.test(request) || scopedAiExport) {
       const dossierResult=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
       const dossier=dossierResult.canonicalData?.assessmentActionDossiers;
       const {buildAiAssistedPreassessment}=await import('./ai-assisted-preassessment.mjs');
       const exported=await buildAiAssistedPreassessment({dossier,
+        ...(scopedAiExport?{controlIds:[scopedAiExport[1].toUpperCase()]}:{}),
         outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
           path.join(productRoot,'data/local-reports')});
       console.log('\n=== ARL AI-ASSISTED PREASSESSMENT DRAFT ===\n');
