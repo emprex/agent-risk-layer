@@ -154,3 +154,21 @@ test('invalid artifact digest is not counted or rendered as collected evidence',
  assert.match(html,/<b>10<\/b>Requirements needing more evidence or review/);
  assert.match(html,/No exact static metadata match/);
 });
+
+test('report shows capped bounded-scan warning only for its own requirement',()=>{
+ const d=fixture(), c=d.controls[9],digest='f'.repeat(64);
+ c.reviewRequirements[0].boundedSourceFacts=[{
+  collector:'architecture_and_inventory',artifactSha256:digest,
+  values:{discoveryCoverage:{trackedFileScanCapped:true}}
+ }];
+ c.reviewRequirements.push({
+  requirementIndex:2,expectedEvidence:'Separate decision record',
+  artifactDigests:[],boundedSourceFacts:[],
+  proofStatus:'not_validated',requiresHumanDecision:true,
+  acceptanceCriterion:'Accountable reviewer decision'
+ });
+ const html=renderClientPreassessment(d);
+ assert.equal((html.match(/Coverage limitation:<\/strong> The bounded source scan/g)||[]).length,1);
+ assert.match(html,/Separate decision record/);
+ assert.match(html,/No exact static metadata match/);
+});
