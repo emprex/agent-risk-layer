@@ -30,3 +30,15 @@ test('uncited, unknown references and missing Ollama fail closed',async()=>{
  const c=await explainControlObservation({dossier:dossier(),controlId:'ARL-KB-001',ask:async()=>({available:false,reason:'ollama_unavailable'})});
  assert.equal(c.reason,'ollama_unavailable');
 });
+
+test('compact model prompt omits SHA digests, limits output and reconstructs provenance',async()=>{
+ let request;
+ const content=JSON.stringify({items:[{type:'observation',text:'Static dependency count is seven.',factIds:['O1_1']},{type:'verification',text:'Review versioned primary evidence.',factIds:['R1']}]});
+ const result=await explainControlObservation({dossier:dossier(),controlId:'ARL-KB-001',ask:async input=>{request=input;return {available:true,content};}});
+ assert.equal(result.available,true);
+ assert.equal(result.structuredItems[0].artifactSha256[0],'a'.repeat(64));
+ assert.equal(request.maxOutputTokens,320);
+ assert.equal(request.jsonMode,true);
+ assert.equal(request.messages[1].content.includes('a'.repeat(64)),false);
+ assert.match(request.messages[1].content,/dependencyCount/);
+});
