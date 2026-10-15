@@ -38,7 +38,7 @@ test('quality gate rejects reverted generic PASS and FAIL even if digest is reco
  e.check.pass_condition='ARL-KB-101 passes only when “Generic test” is not reproducible, the valid workflow remains bounded to agent and model context, denial occurs before side effects, and version-bound observed evidence matches expected decision.';
  e.check.fail_condition='ARL-KB-101 fails when the reviewer is absent, or when the relevant control is declaration-only, bypassable, fail-open.';
  e.content_digest=digestRecord(e);
- const findings=auditRiskKnowledge(testAsset);
+ const findings=auditRiskKnowledge(testAsset).findings;
  assert.ok(findings.some(x=>x.id===e.id&&x.field==='check.pass_condition'&&x.issue==='generic_or_mismatched_pass_fail'));
  assert.ok(findings.some(x=>x.id===e.id&&x.field==='check.fail_condition'&&x.issue==='generic_or_mismatched_pass_fail'));
 });
