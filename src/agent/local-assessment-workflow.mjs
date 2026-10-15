@@ -51,6 +51,7 @@ import { planStaticEvidenceBatch } from './bounded-static-evidence-batch.mjs';
 import { auditAssessmentStaticArtifacts } from './assessment-static-integrity-audit.mjs';
 import { buildAssessmentClientReport } from './assessment-client-report.mjs';
 import { buildAssessmentBusinessContentInventory } from './assessment-business-content-inventory.mjs';
+import { mapAssessmentEvidenceToRequirements } from './assessment-evidence-requirement-map.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -739,6 +740,34 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Map assessment evidence requirements[.!?]*$/i.test(request.trim())) {
+    // Run the complete current authoritative v7 control-scoped read first.
+    const prior=await runLocalAssessment(repositoryPath,
+      'Inspect assessment report content v7',options,localFrozenInspection);
+    const inventory=prior.canonicalData?.assessmentBusinessContentInventory;
+    const mapped=await mapAssessmentEvidenceToRequirements({
+      inventory,projectId:options.projectId,
+      snapshotId:String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID||''),
+      targetRevision:String(process.env.ARL_EXPECTED_TARGET_SHA||'')
+    });
+    return {
+      canonicalData:{assessmentEvidenceRequirementMap:mapped,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Evidence-to-requirement mapping (candidate only):\n'+JSON.stringify({
+        controlsTotal:mapped.controlsTotal,storedArtifactCount:mapped.storedArtifactCount,
+        requirementsTotal:mapped.requirementsTotal,matchedRequirements:mapped.matchedRequirements,
+        unmatchedRequirements:mapped.unmatchedRequirements,
+        sample:mapped.controls.slice(0,5).map(c=>({
+          controlId:c.controlId,title:c.title,
+          requirements:c.requirements.slice(0,3).map(r=>({
+            requirement:r.requirement,observationState:r.observationState,
+            observedCollectorTypes:r.observedCollectorTypes,
+            evidenceValidated:r.evidenceValidated
+          }))
+        })),note:mapped.note
+      },null,2)+'\nHuman review required. No verified finding, security verdict or deployment decision.'
+    };
+  }
   if (/^Inspect assessment report content v7[.!?]*$/i.test(request.trim())) {
     const prior=await runLocalAssessment(repositoryPath,
       'Build assessment client report draft',options,localFrozenInspection);
