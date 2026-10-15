@@ -182,6 +182,11 @@ test('executive report exposes genuine collection caps without implying a findin
    trackedFileScanCapped:true,textFileScanCapped:true,
    completeTrackedAndTextScan:false}}
  }];
+ d.controls[9].reviewRequirements.push({
+  requirementIndex:2,expectedEvidence:'Independent primary evidence record',
+  artifactDigests:[],boundedSourceFacts:[],proofStatus:'not_validated',
+  requiresHumanDecision:true,acceptanceCriterion:'Human review required'
+ });
  const html=renderClientPreassessment(d);
  assert.match(html,/Incomplete source inventory/);
  assert.match(html,/scanning 500 of 1177 tracked files/);
