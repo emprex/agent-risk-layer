@@ -35,7 +35,7 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
  const answer=String(result.content||'').trim();
  const checked=validateStructuredAdvisory(answer,facts);
  if(!checked.ok)return {available:false,reason:checked.reason,controlId,facts,advisoryOnly:true};
- return {available:true,controlId,model:result.model||null,analysis:renderStructuredAdvisory(checked.items),structuredItems:checked.items,facts,advisoryOnly:true,
+ return {available:true,controlId,projectId:dossier.projectId,snapshotId:dossier.snapshotId,targetRevision:dossier.targetRevision,model:result.model||null,analysis:renderStructuredAdvisory(checked.items),structuredItems:checked.items,facts,advisoryOnly:true,
    confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,deploymentDecisionWritten:false,
    humanReviewRequired:true};
 }
