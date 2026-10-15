@@ -1,3 +1,4 @@
+import {buildClientEvidenceSummary} from './client-evidence-summary.mjs';
 import {verifyReportAdvisory} from './ai/report-advisory-lineage.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,6 +55,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
      a.structuredItems.length<1||a.structuredItems.length>12))
    throw new Error('AI advisory annex requires bounded non-authoritative analysis.');
  const candidate=d.candidateRequirementCount,remaining=d.requiresEvidenceOrReviewCount;
+ const briefing=buildClientEvidenceSummary(d);
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
  const categories=[...grouped.entries()].map(([cat,cs])=>{
@@ -73,6 +75,10 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  <p class="small muted">This is not a completed penetration test, vulnerability assessment verdict, compliance certification or deployment approval. It is a structured pre-assessment requiring accountable human review.</p>
  <div class="metrics"><div class="metric"><b>108</b>Controls in scope</div><div class="metric"><b>${escape(candidate)}</b>Requirements with candidate metadata</div><div class="metric"><b>${escape(remaining)}</b>Requirements needing more evidence or review</div><div class="metric"><b>0</b>Confirmed findings in this export</div></div>
  <div class="notice"><strong>What the results mean.</strong> An observed metadata match means only that relevant static source material was collected and integrity checked. It does not mean a safeguard works. The absence of a metadata match is not a vulnerability. No active test, risk severity determination or final evidence acceptance is claimed by this report.</div>
+ <h2>Evidence-led review starting points</h2>
+ <p class="small muted">${escape(briefing.method)}</p>
+ ${briefing.technical.map(item=>`<div class="categoryblock"><a href="#${escape(item.controlId)}"><b>${escape(item.controlId)} — ${escape(item.title)}</b></a><p class="small">Static metadata candidates: ${item.candidateCount}; requirements requiring other evidence: ${item.missingCount}.</p>${item.sourceFacts.map(f=>`<p class="small"><strong>Collected metadata:</strong> ${escape(f.collector)} — ${escape(JSON.stringify(f.values))} · <strong>Source SHA-256:</strong> <code>${escape(f.digest)}</code></p>`).join('')}<p class="small"><strong>Next evidence check:</strong> ${escape(item.verification||'Confirm the current requirement and assessment scope.')}</p></div>`).join('')}
+ ${briefing.governance.length?`<h3>Governance records requiring human review</h3>${briefing.governance.map(item=>`<p class="small"><a href="#${escape(item.controlId)}">${escape(item.controlId)} — ${escape(item.title)}</a>: ${escape(item.verification||'Record accountable scope decision.')}</p>`).join('')}`:''}
  <h2>1. What has been done</h2><p>The frozen Git revision and current assessment snapshot are used to bind a read-only inventory of control definitions, expected evidence and cryptographically checked deterministic collection artifacts. ${escape(d.requirementsTotal)} individual evidence requirements are listed below. ${escape(d.controlsTotal)} control review dossiers are assembled for accountable assessment.</p>
  <h2>2. What the client should do next</h2>
  <p><strong>Confirm governance.</strong> Supply approved scope, business purpose, risk ownership, trust-boundary diagrams, data-handling policies and relevant decision records. The decision-stage controls need named human validation, not a code-only inference.</p>
