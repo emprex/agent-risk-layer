@@ -246,6 +246,32 @@ try {
       console.log('Operator review only; no security finding, evidence acceptance or deployment decision.');
       process.exit(0);
     }
+    if (/^Refresh source projections and export client preassessment[.!?]*$/i.test(request)) {
+      // Explicit operator-requested write: immutable source candidate recollection.
+      // The authoritative workflow enforces project/snapshot/clean frozen SHA,
+      // current test stage, and its own 20-control resumable batches.
+      const refreshed=await runLocalAssessment(repositoryPath,
+        'Refresh assessment source projections v2 all batches',options,frozen);
+      const summary=refreshed.canonicalData?.sourceProjectionRefresh;
+      if(!summary || summary.targetRevision!==frozen?.target?.revision ||
+         summary.snapshotId!==process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID ||
+         summary.batches?.reduce((n,b)=>n+b.completed,0)!==summary.controlCount)
+        throw new Error('Projection refresh was incomplete; refusing misleading export.');
+      const assessment=await runLocalAssessment(repositoryPath,
+        'Build assessment action dossiers',options,frozen);
+      const dossier=assessment.canonicalData?.assessmentActionDossiers;
+      const {writeClientPreassessment}=await import('./client-preassessment-export.mjs');
+      const exported=writeClientPreassessment({dossier,
+        outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
+          path.join(productRoot,'data/local-reports')});
+      console.log('\\n=== ARL REFRESHED PREASSESSMENT ===\\n');
+      console.log('Candidate source collection refreshed: '+summary.controlCount+
+        ' eligible controls; '+summary.excluded+' non-eligible controls.');
+      console.log('Report: '+exported.file+'\\nFile SHA-256: '+exported.sha256+
+        '\\nStatus: '+exported.status);
+      console.log('Human-review draft only. No active tests, findings, risk decisions or evidence acceptance.');
+      process.exit(0);
+    }
     if (/^Export client preassessment[.!?]*$/i.test(request)) {
       const dossierResult=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
