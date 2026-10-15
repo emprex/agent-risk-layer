@@ -205,6 +205,20 @@ try {
         ? 'Where are we?'
         : request;
 
+    if (/^Export client preassessment[.!?]*$/i.test(request)) {
+      const dossierResult=await runLocalAssessment(repositoryPath,
+        'Build assessment action dossiers',options,frozen);
+      const dossier=dossierResult.canonicalData?.assessmentActionDossiers;
+      const {writeClientPreassessment}=await import('./client-preassessment-export.mjs');
+      const exported=writeClientPreassessment({dossier,
+        outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
+          path.join(productRoot,'data/local-reports')});
+      console.log('\n=== ARL LOCAL ASSESSMENT ANSWER ===\n');
+      console.log('CLIENT EVIDENCE PRE-ASSESSMENT\n'+exported.file+
+        '\nFile SHA-256: '+exported.sha256+'\nStatus: '+exported.status+
+        '\nHuman-review draft, not a validated vulnerability report.');
+      process.exit(0);
+    }
     if (/^Export assessment client HTML draft[.!?]*$/i.test(request)) {
       // Fetch canonical in-memory draft using existing complete scoped gates.
       const draftResult = await runLocalAssessment(repositoryPath,
