@@ -27,7 +27,9 @@ export async function askLocalOllama({
   model =
     process.env.ARL_AI_MODEL ||
     DEFAULT_MODEL,
-  timeoutMs
+  timeoutMs,
+  jsonMode = false,
+  maxOutputTokens
 } = {}) {
   const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
   if (typeof fetchImpl !== 'function') {
@@ -54,7 +56,10 @@ export async function askLocalOllama({
         body: JSON.stringify({
           model,
           stream: false,
-          messages
+          messages,
+          ...(jsonMode ? {format:'json'} : {}),
+          ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens >= 128 && maxOutputTokens <= 2048
+            ? {options:{num_predict:maxOutputTokens}} : {})
         }),
         signal: controller.signal
       }
