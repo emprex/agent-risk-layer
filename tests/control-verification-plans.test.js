@@ -21,7 +21,7 @@ function makeDossier(projectId='prj_one',snapshotId='sys_one',targetRevision='d'
     requirement(2,'Effective permission grants',[],[{collector:'unbound',
      artifactSha256:A,values:{workloadIdentityCandidateCount:777}}])
    ]},
-  {controlId:'ARL-KB-082',title:'Audit evidence',purpose:'Review telemetry',
+  {controlId:'ARL-KB-082',title:'Audit evidence',category:'Governance and scope',purpose:'Review telemetry',
    assessmentMethod:'Correlate audit events',workflowLane:'human_decision',
    result:'undetermined',confirmedFinding:false,humanReviewRequired:true,
    reviewRequirements:[requirement(1,'Timestamped audit record',[C],
@@ -157,4 +157,19 @@ test('every control needs an affirmative human review gate',()=>{
  const d=makeDossier();
  delete d.controls[0].humanReviewRequired;
  assert.throws(()=>buildControlVerificationPlan(d,'ARL-KB-021'),/non-authoritative/);
+});
+
+test('human-decision workflow is not incorrectly treated as a ban on technical verification planning',()=>{
+ const d=makeDossier();
+ const control=d.controls[1];
+ control.category='Tools, MCP and agent authority';
+ control.title='Network egress constraints';
+ control.assessmentMethod='Inspect egress policy and network destinations';
+ control.reviewRequirements[0].expectedEvidence='Network egress policy and destination allowlist';
+ const r=buildControlVerificationPlan(d,'ARL-KB-082').requirements[0];
+ assert.equal(r.verification.type,'network_and_data_flow');
+ assert.match(r.activeTest.proposedScenario,/staging-only denied-destination/);
+ assert.equal(r.activeTest.state,'blocked_no_verified_rules_of_engagement');
+ assert.equal(r.activeTest.executionAllowed,false);
+ assert.equal(r.conclusionGate.requiresHumanDecision,true);
 });
