@@ -208,3 +208,29 @@ test('non-governance human-decision lane is labelled as technical review, not go
  assert.match(section,/blocked_no_verified_rules_of_engagement/);
  assert.doesNotMatch(section,/Review accountable human decision records before concluding/);
 });
+
+test('distinguishes digest-only static candidates from bounded observed facts',()=>{
+ const d=fixture(),digest='f'.repeat(64);
+ d.controls[9].reviewRequirements[0].boundedSourceFacts=[
+  {collector:'source_and_configuration',artifactSha256:digest,
+   values:{configurationArtifactsCount:1}}
+ ];
+ const html=renderClientPreassessment(d);
+ assert.match(html,/98 of 99 metadata-candidate requirements/);
+ assert.match(html,/Static metadata candidate — artifact digest only; no bounded observation facts/);
+ assert.match(html,/Static metadata candidate with bounded observation facts/);
+ assert.match(html,/a digest alone does not establish the content or sufficiency/);
+ assert.doesNotMatch(html,/<strong>Completion condition:<\/strong>/);
+ assert.match(html,/Human conclusion gate/);
+ assert.match(html,/No confirmed security findings/);
+});
+test('scope-only documentary requirements do not propose a tool invocation',()=>{
+ const d=fixture();
+ d.controls[9].reviewRequirements[0].expectedEvidence=
+  'ARL-KB-010 assessed system, version, environment and scope';
+ const html=renderClientPreassessment(d);
+ const section=html.split('id="ARL-KB-010"')[1].split('</article>')[0];
+ assert.match(section,/frozen target revision/);
+ assert.match(section,/No active test proposed for this documentary or governance requirement/);
+ assert.match(section,/blocked_no_verified_rules_of_engagement/);
+});
