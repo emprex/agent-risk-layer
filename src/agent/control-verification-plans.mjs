@@ -85,6 +85,7 @@ function requirementPlan(control,selected){
   requirementIndex,expectedEvidence:requirement.expectedEvidence,
   evidenceState:hasCandidates?'static_metadata_candidate_unvalidated':'no_matching_static_metadata',
   observed:{artifactSha256:artifactDigests,
+   sourceProjectionRevisions:(Array.isArray(requirement.sourceProjectionRevisions)?requirement.sourceProjectionRevisions:[]).filter(v=>typeof v==='string').slice(0,4),
    boundedScanCoverageState:selected.boundedScanCoverageState,
    boundedSourceFacts:facts.map(f=>({collector:f.collector,artifactSha256:f.artifactSha256,values:f.values})),
    description:hasCandidates?'Integrity-bound collection metadata candidate only; primary evidence not accepted.':
