@@ -72,8 +72,5 @@ test('one-control pilot performs only KB-007 inference and never calls the other
   assert.equal(calls,1);
   assert.equal(result.available,true);
   assert.deepEqual(result.advisoryControlIds,['ARL-KB-007']);
- }catch(error){
-  if(error?.message==='Missing expected exception.')throw error;
-  throw error;
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
