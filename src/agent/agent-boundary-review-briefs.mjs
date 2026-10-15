@@ -1,3 +1,4 @@
+import {collectControlEvidence} from './control-evidence-selection.mjs';
 const DEFINITIONS={
  'ARL-KB-031':{
   title:'Direct prompt-injection boundary',
@@ -17,17 +18,16 @@ const DEFINITIONS={
 export function buildAgentBoundaryBriefs(dossier){
  const result=[];
  for(const [controlId,definition] of Object.entries(DEFINITIONS)){
-  const control=dossier?.controls?.find(c=>c.controlId===controlId);
-  if(!control)continue;
-  const facts=control.reviewRequirements.flatMap(r=>
-   (r.boundedSourceFacts||[]).filter(f=>r.artifactDigests.includes(f.artifactSha256)));
+  const evidence=collectControlEvidence(dossier,controlId);
+  if(!evidence)continue;
+  const facts=evidence.facts;
   const count=Math.max(0,...facts.map(f=>Number.isSafeInteger(f.values?.mcpAndToolReferenceFilesCount)?
    f.values.mcpAndToolReferenceFilesCount:0));
   const references=facts.filter(f=>Number.isSafeInteger(f.values?.mcpAndToolReferenceFilesCount)).length;
-  const capped=facts.some(f=>f.values?.discoveryCoverage?.completeTrackedAndTextScan===false);
+  const capped=evidence.limitedCoverage;
   result.push({controlId,...definition,
-   candidateRequirements:control.reviewRequirements.filter(r=>r.artifactDigests.length).length,
-   totalRequirements:control.reviewRequirements.length,toolReferenceCount:count,
+   candidateRequirements:evidence.candidateRequirements,
+   totalRequirements:evidence.totalRequirements,toolReferenceCount:count,
    observedToolReferenceMetadata:references>0,limitedCoverage:capped,
    interpretation:'Static metadata indicates collection candidates only; it does not demonstrate runtime policy enforcement, exploitable prompt injection or excessive authority.'});
  }
