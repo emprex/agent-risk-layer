@@ -1,6 +1,7 @@
 import {buildAgentBoundaryBriefs} from './agent-boundary-review-briefs.mjs';
 import {buildKb007Brief} from './kb007-evidence-intelligence.mjs';
 import {buildClientEvidenceSummary} from './client-evidence-summary.mjs';
+import {buildControlVerificationPlan} from './control-verification-plans.mjs';
 import {verifyReportAdvisory} from './ai/report-advisory-lineage.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,7 +30,7 @@ function actionText(r,lane){
     return 'Open the referenced collected metadata and underlying primary source; compare it to the exact requirement; record what is observed, what is not established and whether an authorised runtime test is needed.';
   return 'Request the specified primary evidence from the system owner. Confirm applicability and scope. Where static evidence cannot settle the question, obtain written authorisation before testing.';
 }
-function controlCard(c){
+function controlCard(c,plan){
   const candidate=c.reviewRequirements.filter(r=>r.artifactDigests.length).length;
   const outstanding=c.reviewRequirements.length-candidate;
   return `<article class="control" id="${escape(c.controlId)}"><div class="controlhead"><h3>${escape(c.title)}</h3><code>${escape(c.controlId)}</code></div>
@@ -39,11 +40,15 @@ function controlCard(c){
   <p><strong>Evidence state.</strong> ${candidate} requirement(s) have matching static metadata; ${outstanding} have no matching static metadata in the bounded collection. These counts are not compliance results.</p>
   <p><strong>Next accountable action.</strong> ${escape(c.nextStep)}</p>
   <details><summary>Evidence requirements, traceability and verification steps (${c.reviewRequirements.length})</summary>
-  <div class="reqs">${c.reviewRequirements.map(r=>`<div class="req"><p><strong>Required:</strong> ${escape(r.expectedEvidence)}</p>
+  <div class="reqs">${c.reviewRequirements.map((r,i)=>`<div class="req"><p><strong>Required:</strong> ${escape(r.expectedEvidence)}</p>
   <p><strong>Current state:</strong> ${r.artifactDigests.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
   ${r.artifactDigests.length?`<p><strong>Artifact SHA-256:</strong> <code>${r.artifactDigests.map(escape).join(', ')}</code></p>`:''}
   ${ (r.boundedSourceFacts||[]).length ? `<p><strong>Observed bounded metadata (not validated):</strong></p><ul>${r.boundedSourceFacts.map(f=>`<li><strong>${escape(f.collector)}</strong>: <code>${escape(JSON.stringify(f.values))}</code></li>`).join('')}</ul>` : '' }
   <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane))}</p>
+  <p><strong>Verification plan (not a test result):</strong> ${escape(plan.requirements[i].verification.technical)}</p>
+  <p><strong>Primary evidence to obtain:</strong> ${escape(plan.requirements[i].primaryEvidenceNeeded)}</p>
+  <p><strong>Active testing:</strong> ${escape(plan.requirements[i].activeTest.state)}; no execution by this planner. ${escape(plan.requirements[i].activeTest.proposedScenario||"No active test proposed for this human-decision lane.")}</p>
+  <p><strong>Human conclusion gate:</strong> ${escape(plan.requirements[i].conclusionGate.condition)} No automatic finding, acceptance or closure.</p>
   <p><strong>Completion condition:</strong> ${escape(r.acceptanceCriterion)}</p></div>`).join('')}</div></details></article>`;
 }
 export function renderClientPreassessment(d,{advisories=[]}={}){
@@ -60,6 +65,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  const briefing=buildClientEvidenceSummary(d);
  const providerBrief=buildKb007Brief(d);
  const boundaryBriefs=buildAgentBoundaryBriefs(d);
+ const verificationPlans=new Map(d.controls.map(c=>[c.controlId,buildControlVerificationPlan(d,c.controlId)]));
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
  const categories=[...grouped.entries()].map(([cat,cs])=>{
@@ -107,7 +113,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  ${advisories.map(a=>`<article class="control"><h3>${escape(a.controlId)}</h3>${a.structuredItems.map(item=>`<div class="req"><p><strong>${escape(item.type)} (AI proposal):</strong> ${escape(item.text)}</p><p class="small">Fact references: ${item.factIds.map(escape).join(', ')}${item.artifactSha256.length?' · Artifact digests: '+item.artifactSha256.map(escape).join(', '):''}</p></div>`).join('')}</article>`).join('')}`:''}
  <h2>4. Findings and remediation status</h2><div class="outline"><strong>No confirmed security findings are represented in this assessment export.</strong> The worklist below is for evidence validation and further assessment, not vulnerability remediation. Generating a list of patches without validated causes and impacts would be misleading.</div>
  <h2>5. Detailed evidence and action register</h2>
- ${categories.map((g,i)=>`<section id="area-${i}" class="anchor"><h2>${escape(g.cat)}</h2><p class="small muted">${g.cs.length} controls · ${g.observed} candidate evidence requirements · ${g.unmet} without matching metadata</p>${g.cs.map(controlCard).join('')}</section>`).join('')}
+ ${categories.map((g,i)=>`<section id="area-${i}" class="anchor"><h2>${escape(g.cat)}</h2><p class="small muted">${g.cs.length} controls · ${g.observed} candidate evidence requirements · ${g.unmet} without matching metadata</p>${g.cs.map(c=>controlCard(c,verificationPlans.get(c.controlId))).join('')}</section>`).join('')}
  <h2>6. Scope and verification references</h2><p class="small"><strong>Project:</strong> ${escape(d.projectId)}<br><strong>Snapshot:</strong> ${escape(d.snapshotId)}<br><strong>Frozen target Git SHA:</strong> <code>${escape(d.targetRevision)}</code></p>
  <p class="small">Cryptographic digests in the register bind stored bytes to the assessed scope; they do not certify the accuracy, completeness or security effect of the content. Human validation and separately authorised execution remain required. This document makes no OWASP certification, UKAS accreditation, readiness or compliance claim.</p>
  <p class="foot small">AgentRiskLayer · Pre-assessment draft · Not approved for external release without accountable reviewer sign-off.</p>
