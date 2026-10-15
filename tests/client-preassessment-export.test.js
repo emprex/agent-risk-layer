@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {renderClientPreassessment,writeClientPreassessment} from '../src/agent/client-preassessment-export.mjs';
+import {buildClientEvidenceSummary} from '../src/agent/client-evidence-summary.mjs';
 function fixture(){
  const controls=Array.from({length:108},(_,i)=>({controlId:'ARL-KB-'+String(i+1).padStart(3,'0'),title:'Review <policy> '+i,category:'Governance',purpose:'Verify authority '+i,assessmentMethod:'Compare approved evidence with configuration',workflowLane:i<9?'human_decision':'test_planning',result:'undetermined',confirmedFinding:false,nextStep:'Review source and scope',reviewRequirements:[{expectedEvidence:'Risk owner record '+i,artifactDigests:i<9?[]:['f'.repeat(64)],collectorTypes:['source_and_configuration'],proofStatus:'not_validated',requiresHumanDecision:true,acceptanceCriterion:'Recorded accountable review'}]}));
  return {schema:'arl.agent.assessment-action-dossiers.v1',projectId:'prj_demo',snapshotId:'sys_demo',targetRevision:'a'.repeat(40),controlsTotal:108,requirementsTotal:108,candidateRequirementCount:99,requiresEvidenceOrReviewCount:9,confirmedFindings:0,remediationPlansIssued:0,controls,humanReviewRequired:true,passFailInferred:false,evidenceAccepted:false,deploymentDecisionWritten:false,securityStateChanged:false};
@@ -111,4 +112,45 @@ test('focused review separates evidence, uncertainty and next verification',()=>
  assert.match(html,/No verified MCP\/tool-reference count is available/);
  assert.match(html,/The inventory scan was capped or incomplete/);
  assert.match(html,/they do not imply any successful attack or confirmed policy failure/i);
+});
+
+test('preassessment and executive summary exclude foreign and unbound source facts',()=>{
+ const d=fixture(),digest='f'.repeat(64),foreign='a'.repeat(64);
+ const control=d.controls[9],first=control.reviewRequirements[0];
+ first.boundedSourceFacts=[
+  {collector:'approved_candidate',artifactSha256:digest,values:{dependencyCount:2}},
+  {collector:'foreign_digest',artifactSha256:foreign,values:{dependencyCount:999}}
+ ];
+ control.reviewRequirements.push({
+  requirementIndex:2,expectedEvidence:'Unmatched independent requirement',
+  artifactDigests:[],boundedSourceFacts:[
+   {collector:'unbound_sibling',artifactSha256:digest,values:{dependencyCount:888}}
+  ],proofStatus:'not_validated',requiresHumanDecision:true,
+  acceptanceCriterion:'Human independent decision'
+ });
+ const html=renderClientPreassessment(d);
+ assert.match(html,/approved_candidate/);
+ assert.match(html,/dependencyCount.*2/);
+ assert.doesNotMatch(html,/foreign_digest|unbound_sibling|dependencyCount.*999|dependencyCount.*888/);
+ assert.match(html,/Unmatched independent requirement/);
+ assert.match(html,/blocked_no_verified_rules_of_engagement/);
+ assert.match(html,/No confirmed security findings/);
+ const summary=buildClientEvidenceSummary(d);
+ const focused=summary.technical.find(x=>x.controlId==='ARL-KB-010');
+ assert.equal(focused.sourceFacts.length,1);
+ assert.deepEqual(focused.sourceFacts[0].digest,digest);
+ assert.equal(focused.missingCount,1);
+});
+test('invalid artifact digest is not counted or rendered as collected evidence',()=>{
+ const d=fixture();
+ const requirement=d.controls[9].reviewRequirements[0];
+ requirement.artifactDigests=['not-a-sha256'];
+ requirement.boundedSourceFacts=[{
+  collector:'invalid_fact',artifactSha256:'not-a-sha256',values:{dependencyCount:1234}
+ }];
+ const html=renderClientPreassessment(d);
+ assert.doesNotMatch(html,/invalid_fact|not-a-sha256|dependencyCount.*1234/);
+ assert.match(html,/<b>98<\/b>Requirements with candidate metadata/);
+ assert.match(html,/<b>10<\/b>Requirements needing more evidence or review/);
+ assert.match(html,/No exact static metadata match/);
 });
