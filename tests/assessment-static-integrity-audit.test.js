@@ -6,7 +6,7 @@ test('integrity audit is a function and routes through the frozen authoritative 
   assert.equal(typeof auditAssessmentStaticArtifacts,'function');
   const source=readFileSync(new URL('../src/agent/local-assessment-workflow.mjs',import.meta.url),'utf8');
   const i=source.indexOf('if (/^Audit assessment static integrity');
-  const j=source.indexOf('if (/^Persist assessment static batch',i);
+  const j=source.indexOf('if (/^Refresh assessment source projections v2 all batches',i);
   assert.ok(i>0&&j>i);
   const block=source.slice(i,j);
   for(const part of ['ARL_EXPECTED_TARGET_SHA','ARL_EXPECTED_PROJECT_ID',
