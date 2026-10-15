@@ -44,6 +44,7 @@ function controlCard(c,plan){
   <p><strong>Current state:</strong> ${plan.requirements[i].observed.artifactSha256.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
   ${plan.requirements[i].observed.artifactSha256.length?`<p><strong>Artifact SHA-256:</strong> <code>${plan.requirements[i].observed.artifactSha256.map(escape).join(', ')}</code></p>`:''}
   ${plan.requirements[i].observed.boundedSourceFacts.length ? `<p><strong>Observed bounded metadata (not validated):</strong></p><ul>${plan.requirements[i].observed.boundedSourceFacts.map(f=>`<li><strong>${escape(f.collector)}</strong>: <code>${escape(JSON.stringify(f.values))}</code></li>`).join('')}</ul>` : '' }
+  ${plan.requirements[i].observed.boundedScanCoverageState==='limited_bounded_scan'?'<p><strong>Coverage limitation:</strong> The bounded source scan for this requirement was incomplete or capped; further evidence may exist.</p>':''}
   <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane,plan.requirements[i].observed.artifactSha256.length>0))}</p>
   <p><strong>Verification plan (not a test result):</strong> ${escape(plan.requirements[i].verification.technical)}</p>
   <p><strong>Primary evidence to obtain:</strong> ${escape(plan.requirements[i].primaryEvidenceNeeded)}</p>
