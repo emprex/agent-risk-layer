@@ -34,19 +34,23 @@ export async function mapAssessmentEvidenceToRequirements({inventory,projectId,s
     if(!row.input_reference.startsWith('arl_frozen_source_evidence_collection_v2:'+targetRevision+':'+row.entry_id+':'))
       throw new Error('Artifact has invalid control-specific source reference.');
     if(!Array.isArray(collection.requirementObservations)) throw new Error('Artifact missing canonical observations.');
-    byId.get(row.entry_id).push({digest:row.collection_sha256,observations:collection.requirementObservations});
+    byId.get(row.entry_id).push({digest:row.collection_sha256,
+      sourceProjectionRevision:collection.sourceProjectionRevision||'legacy_unversioned',
+      observations:collection.requirementObservations});
   }
   const controls=inventory.controls.map(c=>{
     const artifacts=byId.get(c.controlId);
     const requirements=c.requiredEvidence.map((requirement,i)=>{
       const matched=artifacts.flatMap(a=>a.observations.filter(o=>norm(o.requirement)===norm(requirement))
-        .map(o=>({artifactSha256:a.digest,collectors:(o.collectors||[]).filter(k=>
+        .map(o=>({artifactSha256:a.digest,sourceProjectionRevision:a.sourceProjectionRevision,
+          collectors:(o.collectors||[]).filter(k=>
           Object.hasOwn(o.observations||{},k)),facts:extractSourceObservationFacts(o.observations)})));
       const distinct=[...new Set(matched.flatMap(x=>x.collectors))].sort();
       return {
         requirementIndex:i+1,requirement,
         sourceArtifactSha256:[...new Set(matched.map(m=>m.artifactSha256))],
         observedCollectorTypes:distinct,
+        sourceProjectionRevisions:[...new Set(matched.map(m=>m.sourceProjectionRevision))].sort(),
         boundedSourceFacts:matched.flatMap(m=>m.facts.map(f=>({...f,artifactSha256:m.artifactSha256}))).slice(0,18),
         observationState:matched.length?'static_metadata_candidate':'no_exact_static_metadata_match',
         evidenceValidated:false,requirementSatisfied:false,
