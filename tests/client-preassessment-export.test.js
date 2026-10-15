@@ -89,7 +89,7 @@ test('KB-007 shows concrete provider candidates but never asserts activation',()
    discoveryCoverage:{completeTrackedAndTextScan:false}}
  }];
  const html=renderClientPreassessment(d);
- assert.match(html,/Concrete provider signals/);
+ assert.match(html,/ARL-KB-007 — Third-party providers/);
  assert.match(html,/anthropic, fastmcp, langchain/);
  assert.match(html,/runtime use or approval/);
  assert.match(html,/inventory scan was capped or incomplete/);
@@ -110,5 +110,5 @@ test('focused review separates evidence, uncertainty and next verification',()=>
  assert.match(html,/do not prove runtime use, approval, data transfer/);
  assert.match(html,/No verified MCP\/tool-reference count is available/);
  assert.match(html,/The inventory scan was capped or incomplete/);
- assert.match(html,/no successful attack or confirmed policy failure/i);
+ assert.match(html,/they do not imply any successful attack or confirmed policy failure/i);
 });
