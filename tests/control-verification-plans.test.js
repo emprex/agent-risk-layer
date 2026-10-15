@@ -115,3 +115,46 @@ test('cannot smuggle authority through a forged dossier or requirement',()=>{
  d.controls[0].reviewRequirements[1].requirementIndex=1;
  assert.throws(()=>buildControlVerificationPlan(d,'ARL-KB-021'),/Duplicate requirement/);
 });
+
+test('one capped requirement cannot contaminate another requirement verification plan',()=>{
+ const d=makeDossier();
+ d.controls[0].reviewRequirements[1].artifactDigests=[B];
+ d.controls[0].reviewRequirements[1].boundedSourceFacts=[{
+  collector:'source_and_configuration',artifactSha256:B,
+  values:{discoveryCoverage:{completeTrackedAndTextScan:true}}
+ }];
+ const p=buildControlVerificationPlan(d,'ARL-KB-021');
+ assert.equal(p.coverage.limitedCoverage,true);
+ assert.equal(p.requirements[0].observed.boundedScanCoverageState,'limited_bounded_scan');
+ assert.equal(p.requirements[1].observed.boundedScanCoverageState,'reported_complete_bounded_scan');
+ assert.ok(p.requirements[0].unresolved.some(x=>/capped/.test(x)));
+ assert.ok(!p.requirements[1].unresolved.some(x=>/capped/.test(x)));
+});
+test('method hints avoid substring matches and generic model or token assumptions',()=>{
+ const cases=[
+  ['Versioned MCP tool catalog','tool_and_protocol'],
+  ['Effective permission grants','identity_and_permissions'],
+  ['Bearer token revocation','identity_and_permissions'],
+  ['Token budget exhaustion','source_and_configuration'],
+  ['Model output accuracy evaluation','source_and_configuration'],
+  ['Catalog of internal assets','source_and_configuration'],
+  ['Audit log events','audit_and_monitoring'],
+  ['Network egress allowlist','network_and_data_flow'],
+  ['Supplier model artifact provenance','supplier_and_dependency'],
+  ['Prompt memory boundary','instruction_and_context'],
+  ['Risk owner approval record','governance_and_approval']
+ ];
+ for(const [requirement,expectedMethod] of cases){
+  const d=makeDossier();
+  d.controls[0].purpose='Review general requirements';
+  d.controls[0].assessmentMethod='Compare source evidence';
+  d.controls[0].reviewRequirements[0].expectedEvidence=requirement;
+  const plan=buildControlVerificationPlan(d,'ARL-KB-021');
+  assert.equal(plan.requirements[0].verification.type,expectedMethod,requirement);
+ }
+});
+test('every control needs an affirmative human review gate',()=>{
+ const d=makeDossier();
+ delete d.controls[0].humanReviewRequired;
+ assert.throws(()=>buildControlVerificationPlan(d,'ARL-KB-021'),/non-authoritative/);
+});
