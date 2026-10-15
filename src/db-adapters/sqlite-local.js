@@ -672,6 +672,7 @@ for (const migrationName of [
   '055_risk_knowledge_kb032_indirect_prompt_injection.sql',
   // Test-only SQLite must match the PostgreSQL canonical content revision.
   '057_canonical_evidence_review_81.sql',
+  '058_canonical_pass_fail_specificity_78.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
