@@ -3,31 +3,31 @@ import {collectControlEvidence} from './control-evidence-selection.mjs';
 // Method hints are review procedures, not applicability decisions or attack
 // results. Match the requirement and documented method, never a KB identifier.
 const METHODS=[
- {kind:'identity_and_permissions',pattern:/permission|privilege|credential|identity|access control|oauth|token|iam|role|scope/i,
+ {kind:'identity_and_permissions',pattern:/\b(?:permissions?|privileges?|privileged|credentials?|identit(?:y|ies)|access[\s-]+controls?|oauth|api[\s-]+keys?|bearer[\s-]+tokens?|access[\s-]+tokens?|iam|roles?)\b/i,
   primary:'Versioned effective permission grants, identities, policies and approval records.',
   technical:'Reconcile principal, operation, resource and duration with the actual effective grants; check delegation and revocation against the approved task.',
   scenario:'A narrowly scoped, synthetic least-privilege or denied-action check in an authorised isolated environment.'},
- {kind:'tool_and_protocol',pattern:/mcp|tool|function call|agent.to.agent|a2a|protocol|descriptor/i,
+ {kind:'tool_and_protocol',pattern:/\b(?:mcp|tools?|function[\s-]+calls?|agent[\s-]+to[\s-]+agent|a2a|protocols?|descriptors?|registr(?:y|ies))\b/i,
   primary:'Versioned runtime tool catalogue, interface schemas, allowlists and execution policy.',
   technical:'Reconcile declared tool names, arguments and destinations with the deployed registry and independent pre-execution enforcement.',
   scenario:'A bounded synthetic tool invocation comparing policy decision, attempted invocation and observed effect.'},
- {kind:'instruction_and_context',pattern:/prompt|injection|memory|retriev|rag|context|instruction/i,
+ {kind:'instruction_and_context',pattern:/\b(?:prompts?|injections?|memory|memories|retriev\w*|rag|contexts?|instructions?)\b/i,
   primary:'Versioned instruction hierarchy, data trust-boundary map and independent action policy.',
   technical:'Trace untrusted input or stored context to the action boundary; review how policy and human gates mediate a proposed action.',
   scenario:'An isolated synthetic untrusted-input case with recorded proposed action, gate decision and actual downstream effect.'},
- {kind:'supplier_and_dependency',pattern:/dependenc|supplier|provider|package|model|sbom|aibom|supply.chain|lockfile/i,
+ {kind:'supplier_and_dependency',pattern:/\b(?:dependenc(?:y|ies)|suppliers?|providers?|packages?|sbom|aibom|supply[\s-]+chain|lockfiles?|model[\s-]+(?:artifacts?|weights?|provenance|versions?))\b/i,
   primary:'Versioned dependency inventory, supplier approval, provenance and runtime component records.',
   technical:'Reconcile manifests and pinned artifacts against active components, approved providers, update paths and data destinations.',
   scenario:'An authorised staging-only component-integrity or change-detection exercise with rollback.'},
- {kind:'audit_and_monitoring',pattern:/log|audit|telemetr|monitor|alert|incident|trace/i,
+ {kind:'audit_and_monitoring',pattern:/\b(?:logs?|audits?|auditing|telemetry|monitoring|monitors?|alerts?|incidents?|traces?)\b/i,
   primary:'Timestamped policy, execution and monitoring records with retention and access rules.',
   technical:'Correlate attributable policy decisions, tool calls and actual results; identify gaps in event capture and retention.',
   scenario:'A synthetic event with expected detection, auditable timestamps and a documented observation window.'},
- {kind:'network_and_data_flow',pattern:/network|egress|destination|api|exfiltrat|data flow|endpoint/i,
+ {kind:'network_and_data_flow',pattern:/\b(?:networks?|egress|destinations?|exfiltrat\w*|data[\s-]+flows?|endpoints?|outbound)\b/i,
   primary:'Approved data-flow diagram, destination allowlist, network policy and scoped execution traces.',
   technical:'Reconcile configured destinations and data classifications against effective routing, outbound permissions and recorded transfers.',
   scenario:'A staging-only denied-destination or synthetic data-flow check using non-sensitive test data.'},
- {kind:'governance_and_approval',pattern:/approv|governance|human|risk owner|decision|policy|authoris/i,
+ {kind:'governance_and_approval',pattern:/\b(?:approvals?|approved|governance|human|risk[\s-]+owners?|decisions?|polic(?:y|ies)|authori[sz]\w*)\b/i,
   primary:'Dated authoritative policy, accountable approval and change-control record for the exact system version.',
   technical:'Validate ownership, scope, approval provenance, segregation of duties and whether the approved boundary matches the deployment.',
   scenario:'An isolated approval-gate workflow exercise only after written scope and consent.'}
@@ -47,7 +47,7 @@ function assertDossier(d){
   d.evidenceAccepted!==false||d.securityStateChanged!==false||
   d.deploymentDecisionWritten!==false||d.confirmedFindings!==0||
   d.controls.some(c=>c.result!=='undetermined'||c.confirmedFinding!==false||
-   c.humanReviewRequired===false||!Array.isArray(c.reviewRequirements)||
+   c.humanReviewRequired!==true||!Array.isArray(c.reviewRequirements)||
    c.reviewRequirements.some(r=>r.proofStatus!=='not_validated'||
     r.requiresHumanDecision!==true)))
   throw new Error('Verification plans require a same-scope non-authoritative dossier.');
@@ -58,7 +58,7 @@ function methodFor(control,requirement){
  return METHODS.find(m=>m.pattern.test(primary))||
   METHODS.find(m=>m.pattern.test(fallbackContext))||FALLBACK;
 }
-function requirementPlan(control,selected,limitedCoverage){
+function requirementPlan(control,selected){
  const {requirement,requirementIndex,artifactDigests,facts}=selected;
  if(!Number.isSafeInteger(requirementIndex)||requirementIndex<1||
   !String(requirement.expectedEvidence||'').trim())
@@ -69,13 +69,14 @@ function requirementPlan(control,selected,limitedCoverage){
   requirementIndex,expectedEvidence:requirement.expectedEvidence,
   evidenceState:hasCandidates?'static_metadata_candidate_unvalidated':'no_matching_static_metadata',
   observed:{artifactSha256:artifactDigests,
+   boundedScanCoverageState:selected.boundedScanCoverageState,
    boundedSourceFacts:facts.map(f=>({collector:f.collector,artifactSha256:f.artifactSha256,values:f.values})),
    description:hasCandidates?'Integrity-bound collection metadata candidate only; primary evidence not accepted.':
     'No matching metadata in this bounded collection; absence is not evidence of a control failure.'},
   unresolved:[
    'Applicability, primary-source authenticity and evidence sufficiency require accountable review.',
    'Effective deployed behaviour is not established by static metadata.',
-   ...(limitedCoverage?['Collection coverage is incomplete or capped.']:[])
+   ...(selected.limitedCoverage?['This requirement has an incomplete or capped bounded source scan.']:[])
   ],
   primaryEvidenceNeeded:requirement.expectedEvidence,
   supportingEvidenceExample:method.primary,
@@ -117,7 +118,7 @@ export function buildControlVerificationPlan(dossier,controlId){
  const control=selection.control;
  const indices=selection.requirements.map(r=>r.requirementIndex);
  if(new Set(indices).size!==indices.length)throw new Error('Duplicate requirement index.');
- const requirements=selection.requirements.map(r=>requirementPlan(control,r,selection.limitedCoverage));
+ const requirements=selection.requirements.map(r=>requirementPlan(control,r));
  return {
   schema:'arl.agent.control-verification-plan.v1',
   projectId:dossier.projectId,snapshotId:dossier.snapshotId,targetRevision:dossier.targetRevision,
