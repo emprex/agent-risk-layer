@@ -78,3 +78,20 @@ test('executive summary surfaces only collected bounded facts and evidence tasks
  assert.match(html,/Governance records requiring human review/);
  assert.doesNotMatch(html,/high-risk vulnerability/i);
 });
+
+test('KB-007 shows concrete provider candidates but never asserts activation',()=>{
+ const d=fixture();
+ const control=d.controls[6];
+ control.reviewRequirements[0].artifactDigests=['a'.repeat(64)];
+ control.reviewRequirements[0].boundedSourceFacts=[{
+  collector:'architecture_and_inventory',artifactSha256:'a'.repeat(64),
+  values:{providerPackageCandidates:['anthropic','langchain','fastmcp'],
+   discoveryCoverage:{completeTrackedAndTextScan:false}}
+ }];
+ const html=renderClientPreassessment(d);
+ assert.match(html,/Concrete provider signals/);
+ assert.match(html,/anthropic, fastmcp, langchain/);
+ assert.match(html,/runtime use or approval/);
+ assert.match(html,/inventory scan was capped or incomplete/);
+ assert.match(html,/Reconcile candidate packages against active runtime providers/);
+});
