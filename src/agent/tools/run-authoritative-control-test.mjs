@@ -494,7 +494,7 @@ export async function runAuthoritativeControlSourceReview({
       purpose:'arl.source-collection-projection.v2',
       targetRevision:frozen.target.revision,controlId,
       currentCheckDigest:detail.testDefinition?.digest,
-      sourceDigest,collectionSha256:crypto.createHash('sha256')
+      collectionSha256:crypto.createHash('sha256')
         .update(JSON.stringify(deterministicEvidence)).digest('hex')
     })).digest('hex'):null;
   const originalReference =
