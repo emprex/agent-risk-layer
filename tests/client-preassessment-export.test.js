@@ -75,7 +75,7 @@ test('executive summary surfaces only collected bounded facts and evidence tasks
  const html=renderClientPreassessment(d);
  assert.match(html,/Evidence-led review starting points/);
  assert.match(html,/dependencyCount/);
- assert.match(html,/Next evidence check/);
+ assert.match(html,/Next assessor procedure/);
  assert.match(html,/Governance records requiring human review/);
  assert.doesNotMatch(html,/high-risk vulnerability/i);
 });
@@ -171,4 +171,35 @@ test('report shows capped bounded-scan warning only for its own requirement',()=
  assert.equal((html.match(/Coverage limitation:<\/strong> The bounded source scan/g)||[]).length,1);
  assert.match(html,/Separate decision record/);
  assert.match(html,/No exact static metadata match/);
+});
+
+test('executive report exposes genuine collection caps without implying a finding',()=>{
+ const d=fixture();
+ d.controls[9].reviewRequirements[0].boundedSourceFacts=[{
+  collector:'architecture_and_inventory',artifactSha256:'f'.repeat(64),
+  values:{discoveryCoverage:{totalTrackedFiles:1177,trackedFilesConsidered:500,
+   textFilesAttempted:300,textFilesReadable:295,
+   trackedFileScanCapped:true,textFileScanCapped:true,
+   completeTrackedAndTextScan:false}}
+ }];
+ const html=renderClientPreassessment(d);
+ assert.match(html,/Incomplete source inventory/);
+ assert.match(html,/scanning 500 of 1177 tracked files/);
+ assert.match(html,/reading 295 of 300 attempted text files/);
+ assert.match(html,/unscanned material may hold additional evidence/);
+ assert.match(html,/First primary evidence to request/);
+ assert.match(html,/No confirmed security findings/);
+});
+test('non-governance human-decision lane is labelled as technical review, not governance-only',()=>{
+ const d=fixture(),control=d.controls[56];
+ control.category='Tools, MCP and agent authority';
+ control.workflowLane='human_decision';
+ control.assessmentMethod='Verify scoped denied egress routes';
+ control.reviewRequirements[0].expectedEvidence='Network egress allowlist';
+ const html=renderClientPreassessment(d);
+ const section=html.split('id="ARL-KB-057"')[1].split('</article>')[0];
+ assert.match(section,/Human-led technical verification/);
+ assert.match(section,/seek separate owner approval for any necessary technical test/);
+ assert.match(section,/blocked_no_verified_rules_of_engagement/);
+ assert.doesNotMatch(section,/Review accountable human decision records before concluding/);
 });
