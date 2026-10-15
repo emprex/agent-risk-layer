@@ -7,6 +7,8 @@ const canonical=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowl
 const revision=JSON.parse(fs.readFileSync(new URL('../docs/KB_EVIDENCE_REVIEW_MANIFEST_2026-10-15.json',import.meta.url),'utf8'));
 const migration=fs.readFileSync(new URL('../migrations/057_canonical_evidence_review_81.sql',import.meta.url),'utf8');
 const publicAsset=JSON.parse(fs.readFileSync(new URL('../public/risk-knowledge-public-v1.1.json',import.meta.url),'utf8'));
+const latestCriteria=new Set(Object.keys(JSON.parse(fs.readFileSync(new URL('../docs/KB_PASS_FAIL_SPECIFICITY_2026-10-15.json',import.meta.url),'utf8')).pass_conditions).map(s=>'ARL-KB-'+s));
+const latestMigration=fs.readFileSync(new URL('../migrations/058_canonical_pass_fail_specificity_78.sql',import.meta.url),'utf8');
 
 test('all 81 canonical evidence requests are individually reviewed candidates, not boilerplate',()=>{
  assert.equal(canonical.entries.length,108);
@@ -54,7 +56,7 @@ test('generated public claims and immutable migration preserve 81 source-bound r
   assert.ok(migration.includes("required_evidence_json='"+escaped+"'"),id+' SQL evidence');
   assert.ok(migration.includes("WHERE entry_id='"+id+"';"),id);
   assert.ok(migration.includes("WHERE id='"+id+"';"),id);
-  assert.ok(migration.includes("content_digest='"+entry.content_digest+"'"),id);
+  assert.ok((latestCriteria.has(id)?latestMigration:migration).includes("content_digest='"+entry.content_digest+"'"),id);
  }
  for(const fragment of ['DELETE FROM','TRUNCATE','UPDATE findings','UPDATE control_tests','UPDATE control_evidence'])
   assert.ok(!migration.includes(fragment),fragment);
