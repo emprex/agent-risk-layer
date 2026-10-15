@@ -205,13 +205,22 @@ try {
         ? 'Where are we?'
         : request;
 
-    const result =
-      await runLocalAssessment(
-        repositoryPath,
-        workflowRequest,
-        options,
-        frozen
-      );
+    if (/^Export assessment client HTML draft[.!?]*$/i.test(request)) {
+      // Fetch canonical in-memory draft using existing complete scoped gates.
+      const draftResult = await runLocalAssessment(repositoryPath,
+        'Build assessment client report draft',options,frozen);
+      const report=draftResult.canonicalData?.assessmentClientReport;
+      const {writeAssessmentClientHtml}=await import('./assessment-client-html-export.mjs');
+      const write=writeAssessmentClientHtml({report,
+        outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
+          path.join(productRoot,'data/local-reports')});
+      console.log('\n=== ARL LOCAL ASSESSMENT ANSWER ===\n');
+      console.log('LOCAL ASSESSMENT HTML DRAFT\n'+write.file+
+        '\nFile SHA-256: '+write.sha256+'\nStatus: '+write.status+
+        '\nHuman review required. No security verdict or deployment decision.');
+      process.exit(0);
+    }
+    const result = await runLocalAssessment(repositoryPath, workflowRequest, options, frozen);
 
     if (process.env.ARL_DEBUG_CANONICAL === '1') {
       console.log(
