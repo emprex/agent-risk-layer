@@ -38,6 +38,7 @@ function controlCard(c){
   <div class="reqs">${c.reviewRequirements.map(r=>`<div class="req"><p><strong>Required:</strong> ${escape(r.expectedEvidence)}</p>
   <p><strong>Current state:</strong> ${r.artifactDigests.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
   ${r.artifactDigests.length?`<p><strong>Artifact SHA-256:</strong> <code>${r.artifactDigests.map(escape).join(', ')}</code></p>`:''}
+  \${(r.boundedSourceFacts||[]).length?\`<p><strong>Observed bounded metadata (not validated):</strong></p><ul>\${r.boundedSourceFacts.map(f=>\`<li><strong>\${escape(f.collector)}</strong>: <code>\${escape(JSON.stringify(f.values))}</code></li>\`).join('')}</ul>\`:''}
   <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane))}</p>
   <p><strong>Completion condition:</strong> ${escape(r.acceptanceCriterion)}</p></div>`).join('')}</div></details></article>`;
 }
