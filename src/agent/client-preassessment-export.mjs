@@ -1,3 +1,4 @@
+import {verifyReportAdvisory} from './ai/report-advisory-lineage.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -46,7 +47,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  validate(d);
  const permitted=new Set(d.controls.map(c=>c.controlId));
  if(!Array.isArray(advisories)||advisories.length>3||new Set(advisories.map(a=>a.controlId)).size!==advisories.length||
-   advisories.some(a=>!permitted.has(a.controlId)||a.advisoryOnly!==true||
+   advisories.some(a=>!permitted.has(a.controlId)||!verifyReportAdvisory(d,a)||a.advisoryOnly!==true||
      a.humanReviewRequired!==true||a.confirmedFinding!==false||
      a.evidenceAccepted!==false||a.securityStateChanged!==false||
      a.deploymentDecisionWritten!==false||!Array.isArray(a.structuredItems)||
