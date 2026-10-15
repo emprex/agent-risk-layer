@@ -32,6 +32,19 @@ const METHODS=[
   technical:'Validate ownership, scope, approval provenance, segregation of duties and whether the approved boundary matches the deployment.',
   scenario:'An isolated approval-gate workflow exercise only after written scope and consent.'}
 ];
+// Cross-cutting documentary records are not authentication or tool-execution
+// tests just because their text mentions identity, role, version or a tool.
+// These hints do not accept evidence, decide applicability or trigger execution.
+const DOCUMENTARY_REQUIREMENTS=[
+ {kind:'assessment_scope_and_version',pattern:/^(?:exact\\s+)?assessed\\s+(?:system|production|version)\\b/i,
+  primary:'Authoritative, version-bound system and assessment scope record.',
+  technical:'Reconcile the project, system snapshot, frozen target revision, environment and declared scope with the actual version being reviewed; record any mismatch or unverified deployment identity.',
+  scenario:null},
+ {kind:'reviewer_record_provenance',pattern:/^(?:(?:accountable\\s+human\\s+)?reviewer|tester)\\s+identity\\b/i,
+  primary:'Attributable human reviewer or tester record with role, timestamp and scope-bound evidence reference.',
+  technical:'Verify reviewer or tester identity and role against the accountable record, confirm review time, scope and target revision, and reconcile the cited evidence digest without treating an assertion of identity as authentication.',
+  scenario:null}
+];
 const FALLBACK={
  kind:'source_and_configuration',
  primary:'The versioned primary artifact specified in this requirement, including its owner and deployment context.',
@@ -54,6 +67,9 @@ function assertDossier(d){
 }
 function methodFor(control,requirement){
  const primary=String(requirement.expectedEvidence||'');
+ const normalized=primary.replace(/^ARL-KB-\\d{3}\\s+/i,'');
+ const documentary=DOCUMENTARY_REQUIREMENTS.find(m=>m.pattern.test(normalized));
+ if(documentary)return documentary;
  const fallbackContext=[control.assessmentMethod,control.purpose].filter(Boolean).join(' ');
  return METHODS.find(m=>m.pattern.test(primary))||
   METHODS.find(m=>m.pattern.test(fallbackContext))||FALLBACK;
