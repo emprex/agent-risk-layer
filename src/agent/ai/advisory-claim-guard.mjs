@@ -1,7 +1,7 @@
 // Fail-closed screening for unsupported security conclusions in untrusted LLM prose.
 // This is a lexical safety boundary, not semantic verification or evidence acceptance.
 const PROHIBITED=[
-  /\b(?:assessment|control|security)\s+(?:objective|requirement|condition)\s+(?:is\s+)?(?:not\s+met|met|failed|passed|satisfied|unsatisfied)\b/i,
+  /\b(?:assessment|control|security)\s+(?:objective|requirement|condition)(?:\s+\[[A-Z][A-Z0-9_]*\])?\s+(?:is\s+)?(?:not\s+met|met|failed|passed|satisfied|unsatisfied)\b/i,
   /\b(?:fails?|passes?)\s+(?:the\s+)?(?:assessment|control|security|requirement|test)\b/i,
   /\b(?:non[- ]compliant|compliant|vulnerab(?:le|ility)|exploitable|secure|insecure)\b/i,
   /\b(?:no|missing|absent|lacks?)\s+(?:evidence\s+of\s+)?(?:approval|authori[sz]ation|enforcement|protection|configuration|policy|controls?)\b/i,
