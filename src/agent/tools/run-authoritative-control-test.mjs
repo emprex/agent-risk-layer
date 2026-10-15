@@ -1,3 +1,4 @@
+import {buildSourceProjectionRefreshReference} from '../source-projection-reference.mjs';
 import crypto from 'node:crypto';
 import { db } from '../../db.js';
 import { storeSourceCollectionArtifact } from './source-collection-artifacts.mjs';
@@ -489,14 +490,6 @@ export async function runAuthoritativeControlSourceReview({
        frozen.target.revision)) {
     return {executed:false,reason:'projection_refresh_requires_exact_current_frozen_snapshot',securityStateChanged:false};
   }
-  const refreshProjectionDigest=refreshProjectionV2?crypto.createHash('sha256')
-    .update(JSON.stringify({
-      purpose:'arl.source-collection-projection.v2',
-      targetRevision:frozen.target.revision,controlId,
-      currentCheckDigest:detail.testDefinition?.digest,
-      collectionSha256:crypto.createHash('sha256')
-        .update(JSON.stringify(deterministicEvidence)).digest('hex')
-    })).digest('hex'):null;
   const originalReference =
     `${collectionKind}:${frozen.target.revision}:${controlId}:${sourceDigest}`;
   const knownTests = [
@@ -535,7 +528,10 @@ export async function runAuthoritativeControlSourceReview({
     currentCheckDigest:detail.testDefinition?.digest
   })).digest('hex');
   const inputReference = refreshProjectionV2
-    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${refreshProjectionDigest}`
+    ? buildSourceProjectionRefreshReference({
+        targetRevision:frozen.target.revision,controlId,
+        checkDigest:detail.testDefinition?.digest,collection:deterministicEvidence
+      })
     : refreshKb017DependencySource
     ? kb017DependencyRefreshReference({
         revision:frozen.target.revision, controlId, sourceDigest,
