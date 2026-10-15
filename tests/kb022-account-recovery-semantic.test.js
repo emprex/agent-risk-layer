@@ -15,7 +15,6 @@ test('KB022 signed canonical record and migration digests align', () => {
   assert.ok(latestRetest.includes("content_digest='"+content_digest+"'"));
   assert.ok(migration.includes(digest(entry.check)));
   assert.ok(latestRetest.includes("WHERE entry_id='ARL-KB-022';"));
-  assert.ok(migration.includes(digest(entry.check)));
 });
 test('KB022 recovery evidence keeps source, active proof and human review separate', () => {
   const evidence = entry.check.required_evidence;
