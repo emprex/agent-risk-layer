@@ -18,6 +18,12 @@ test('produces human-readable evidence report with 108 detailed review items and
  assert.doesNotMatch(html,/Review <policy>/);
  assert.equal((html.match(/class="control" id=/g)||[]).length,108);
 });
+test('client report never claims cryptographic integrity verification from a digest reference alone',()=>{
+ const html=renderClientPreassessment(fixture());
+ assert.match(html,/does not independently retrieve or recompute source-artifact hashes/);
+ assert.match(html,/not an integrity attestation/);
+ assert.doesNotMatch(html,/cryptographically checked deterministic collection artifacts/);
+});
 test('exports immutable, private, digest-named files and preserves prior bytes',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-client-'));
  try{
