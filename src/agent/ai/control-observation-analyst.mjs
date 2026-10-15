@@ -36,7 +36,7 @@ export async function explainControlObservation({dossier,controlId,ask=askLocalO
  const result=await ask({messages,jsonMode:true,maxOutputTokens:320,timeoutMs:90000});
  if(result?.available!==true)return {available:false,reason:result?.reason||'ai_unavailable',controlId,facts,advisoryOnly:true};
  const answer=String(result.content||'').trim();
- const checked=validateStructuredAdvisory(answer,facts);
+ const checked=validateStructuredAdvisory(answer,compact.map(f=>({...f,artifactSha256:facts.find(x=>x.id===f.id)?.artifactSha256})));
  if(!checked.ok && checked.reason==='invalid_json')return {available:false,reason:'ollama_invalid_json_response',controlId,facts,advisoryOnly:true};
  if(!checked.ok)return {available:false,reason:checked.reason,controlId,facts,advisoryOnly:true};
  return {available:true,controlId,projectId:dossier.projectId,snapshotId:dossier.snapshotId,targetRevision:dossier.targetRevision,model:result.model||null,analysis:renderStructuredAdvisory(checked.items),structuredItems:checked.items,facts,advisoryOnly:true,
