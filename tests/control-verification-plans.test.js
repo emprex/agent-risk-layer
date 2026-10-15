@@ -173,3 +173,29 @@ test('human-decision workflow is not incorrectly treated as a ban on technical v
  assert.equal(r.activeTest.executionAllowed,false);
  assert.equal(r.conclusionGate.requiresHumanDecision,true);
 });
+
+test('cross-cutting scope records do not imply tool execution tests',()=>{
+ const d=makeDossier();
+ d.controls[0].reviewRequirements[0].expectedEvidence=
+   'ARL-KB-021 assessed system, version, environment and tool scope';
+ const p=buildControlVerificationPlan(d,'ARL-KB-021');
+ const r=p.requirements[0];
+ assert.equal(r.verification.type,'assessment_scope_and_version');
+ assert.match(r.verification.technical,/frozen target revision/);
+ assert.equal(r.activeTest.proposedScenario,null);
+ assert.equal(r.activeTest.executionAllowed,false);
+ assert.equal(r.conclusionGate.requiresHumanDecision,true);
+});
+test('reviewer attestations are evidence provenance, never least-privilege test prompts',()=>{
+ const d=makeDossier();
+ d.controls[0].reviewRequirements[0].expectedEvidence=
+  'ARL-KB-021 reviewer identity, role, timestamp and evidence digest';
+ const r=buildControlVerificationPlan(d,'ARL-KB-021').requirements[0];
+ assert.equal(r.verification.type,'reviewer_record_provenance');
+ assert.match(r.verification.technical,/reconcile the cited evidence digest/);
+ assert.equal(r.activeTest.proposedScenario,null);
+ assert.equal(r.activeTest.executionAllowed,false);
+ const permission=buildControlVerificationPlan(d,'ARL-KB-021').requirements[1];
+ assert.equal(permission.verification.type,'identity_and_permissions');
+ assert.notEqual(permission.activeTest.proposedScenario,null);
+});
