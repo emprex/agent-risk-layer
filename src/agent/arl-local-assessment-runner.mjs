@@ -205,7 +205,7 @@ try {
         ? 'Where are we?'
         : request;
 
-    const analyseMatch=/^Analyse collected evidence (ARL-KB-\\d{3})[.!?]*$/i.exec(request);
+    const analyseMatch=/^Analyse collected evidence (ARL-KB-\d{3})[.!?]*$/i.exec(request);
     if(analyseMatch){
       const prior=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
