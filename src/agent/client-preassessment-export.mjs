@@ -23,11 +23,13 @@ function validate(d){
       c.reviewRequirements.some(r=>r.proofStatus!=='not_validated'||r.requiresHumanDecision!==true)))
     throw new Error('Client pre-assessment requires complete, non-authoritative 108-control dossier.');
 }
-function actionText(r,lane,hasCandidate,category){
+function actionText(r,lane,hasCandidate,category,hasBoundedFacts){
   if(lane==='human_decision'&&category==='Governance and scope')
     return 'Obtain the authoritative, dated governance or approval record; check who approved it, for which scope and version, and record the accountable decision.';
   if(lane==='human_decision')
     return 'Obtain the primary technical and operational evidence for this exact scope; plan separately authorised synthetic checks where needed and preserve the accountable human conclusion.';
+  if(hasCandidate&&!hasBoundedFacts)
+    return 'Inspect the integrity-bound collection artifact and underlying primary source. No bounded observation facts are exposed for this requirement; a digest alone does not establish the content or sufficiency of evidence.';
   if(hasCandidate)
     return 'Open the referenced collected metadata and underlying primary source; compare it to the exact requirement; record what is observed, what is not established and whether an authorised runtime test is needed.';
   return 'Request the specified primary evidence from the system owner. Confirm applicability and scope. Where static evidence cannot settle the question, obtain written authorisation before testing.';
@@ -43,16 +45,16 @@ function controlCard(c,plan){
   <p><strong>Next accountable action.</strong> ${escape(c.workflowLane==='human_decision'&&c.category!=='Governance and scope'?'Obtain scoped primary evidence and seek separate owner approval for any necessary technical test before human review.':c.nextStep)}</p>
   <details><summary>Evidence requirements, traceability and verification steps (${c.reviewRequirements.length})</summary>
   <div class="reqs">${c.reviewRequirements.map((r,i)=>`<div class="req"><p><strong>Required:</strong> ${escape(r.expectedEvidence)}</p>
-  <p><strong>Current state:</strong> ${plan.requirements[i].observed.artifactSha256.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
+  <p><strong>Current state:</strong> ${plan.requirements[i].observed.artifactSha256.length?(plan.requirements[i].observed.boundedSourceFacts.length?'Static metadata candidate with bounded observation facts':'Static metadata candidate — artifact digest only; no bounded observation facts in this report'):'No exact static metadata match'}; not validated.</p>
   ${plan.requirements[i].observed.artifactSha256.length?`<p><strong>Artifact SHA-256:</strong> <code>${plan.requirements[i].observed.artifactSha256.map(escape).join(', ')}</code></p>`:''}
   ${plan.requirements[i].observed.boundedSourceFacts.length ? `<p><strong>Observed bounded metadata (not validated):</strong></p><ul>${plan.requirements[i].observed.boundedSourceFacts.map(f=>`<li><strong>${escape(f.collector)}</strong>: <code>${escape(JSON.stringify(f.values))}</code></li>`).join('')}</ul>` : '' }
   ${plan.requirements[i].observed.boundedScanCoverageState==='limited_bounded_scan'?'<p><strong>Coverage limitation:</strong> The bounded source scan for this requirement was incomplete or capped; further evidence may exist.</p>':''}
-  <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane,plan.requirements[i].observed.artifactSha256.length>0,c.category))}</p>
+  <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane,plan.requirements[i].observed.artifactSha256.length>0,c.category,plan.requirements[i].observed.boundedSourceFacts.length>0))}</p>
   <p><strong>Verification plan (not a test result):</strong> ${escape(plan.requirements[i].verification.technical)}</p>
   <p><strong>Primary evidence to obtain:</strong> ${escape(plan.requirements[i].primaryEvidenceNeeded)}</p>
-  <p><strong>Active testing:</strong> ${escape(plan.requirements[i].activeTest.state)}; no execution by this planner. ${escape(plan.requirements[i].activeTest.proposedScenario||"No active test proposed for this human-decision lane.")}</p>
+  <p><strong>Active testing:</strong> ${escape(plan.requirements[i].activeTest.state)}; no execution by this planner. ${escape(plan.requirements[i].activeTest.proposedScenario||"No active test proposed for this documentary or governance requirement.")}</p>
   <p><strong>Human conclusion gate:</strong> ${escape(plan.requirements[i].conclusionGate.condition)} No automatic finding, acceptance or closure.</p>
-  <p><strong>Completion condition:</strong> ${escape(r.acceptanceCriterion)}</p></div>`).join('')}</div></details></article>`;
+  ${r.acceptanceCriterion&&r.acceptanceCriterion!==plan.requirements[i].conclusionGate.condition?`<p><strong>Additional completion condition:</strong> ${escape(r.acceptanceCriterion)}</p>`:''}</div>`).join('')}</div></details></article>`;
 }
 export function renderClientPreassessment(d,{advisories=[]}={}){
  validate(d);
@@ -70,6 +72,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  const verificationPlans=new Map(d.controls.map(c=>[c.controlId,buildControlVerificationPlan(d,c.controlId)]));
  const candidate=[...verificationPlans.values()].reduce((n,p)=>n+p.coverage.candidateRequirements,0);
  const remaining=[...verificationPlans.values()].reduce((n,p)=>n+p.coverage.totalRequirements-p.coverage.candidateRequirements,0);
+ const digestOnly=[...verificationPlans.values()].reduce((n,p)=>n+p.requirements.filter(r=>r.observed.artifactSha256.length>0&&r.observed.boundedSourceFacts.length===0).length,0);
  const scans=[...verificationPlans.values()].flatMap(p=>p.requirements.flatMap(r=>
   r.observed.boundedSourceFacts.map(f=>f.values?.discoveryCoverage).filter(Boolean)));
  const boundedScan=scans.find(c=>Number.isSafeInteger(c.totalTrackedFiles)&&c.totalTrackedFiles>0&&
@@ -103,6 +106,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  <p class="small muted">This is not a completed penetration test, vulnerability assessment verdict, compliance certification or deployment approval. It is a structured pre-assessment requiring accountable human review.</p>
  <div class="metrics"><div class="metric"><b>108</b>Controls in scope</div><div class="metric"><b>${escape(candidate)}</b>Requirements with candidate metadata</div><div class="metric"><b>${escape(remaining)}</b>Requirements needing more evidence or review</div><div class="metric"><b>0</b>Confirmed findings in this export</div></div>
  ${boundedScan?`<div class="notice"><strong>Incomplete source inventory.</strong> The bounded collector reported scanning ${escape(boundedScan.trackedFilesConsidered)} of ${escape(boundedScan.totalTrackedFiles)} tracked files, and successfully reading ${escape(boundedScan.textFilesReadable)} of ${escape(boundedScan.textFilesAttempted)} attempted text files. Findings and control effectiveness cannot be inferred from these sampling counts; unscanned material may hold additional evidence.</div>`:''}
+ <div class="notice"><strong>Candidate detail levels.</strong> ${escape(digestOnly)} of ${escape(candidate)} metadata-candidate requirements have an integrity-bound artifact reference but no bounded observation facts in this report. They must not be interpreted as a demonstrated implementation or validated evidence.</div>
  <div class="notice"><strong>What the results mean.</strong> An observed metadata match means only that relevant static source material was collected and integrity checked. It does not mean a safeguard works. The absence of a metadata match is not a vulnerability. No active test, risk severity determination or final evidence acceptance is claimed by this report.</div>
  ${providerBrief&&providerBrief.providers.length?`<h2>ARL-KB-007 — Third-party providers</h2><p class="category">Focused evidence review · Human validation required</p><h3>Observed — static collection</h3>
  <p><strong>Candidate package references:</strong> ${providerBrief.providers.map(escape).join(', ')}.</p>
