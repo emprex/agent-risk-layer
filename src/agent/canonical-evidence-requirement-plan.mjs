@@ -1,3 +1,37 @@
+import fs from 'node:fs';
+import {digestRecord} from '../../scripts/risk-knowledge-quality.mjs';
+
+// Explicit control-scoped routing for the independently described second
+// evidence requirement of the 81 revised KB controls. Text must exactly match
+// the signed canonical asset; a similar external/user-provided phrase does not
+// inherit this source collector mapping. This only selects CANDIDATE metadata.
+const REVIEWED_COLLECTOR_FAMILIES=Object.freeze({
+  architecture_and_inventory:'015 053',
+  source_and_configuration:'018 019 033 034 035 036 037 038 039 040 041 043 044 045 046 047 048 049 051 052 054 055 056 058 059 061 062 063 064 065 066 067 068 069 070 071 072 074 080 081 082 083 084 085 087 088 089 090 091 093 095 096 097 098 099 100 102',
+  policy_and_documentation:'042 050 078 079 086 092 094 101 103 105 106 107 108',
+  dependency_and_build:'016 017 060 073 075 076 077 104',
+  network_and_egress:'057'
+});
+const REVIEWED_ROUTES=new Map();
+for(const [collector,suffixes] of Object.entries(REVIEWED_COLLECTOR_FAMILIES)){
+ for(const suffix of suffixes.split(' ')){
+  const id='ARL-KB-'+suffix;
+  if(REVIEWED_ROUTES.has(id))throw new Error('Duplicate reviewed collector family: '+id);
+  REVIEWED_ROUTES.set(id,[collector]);
+ }
+}
+const KNOWLEDGE=JSON.parse(fs.readFileSync(
+ new URL('../../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
+const REVIEWED_EVIDENCE=new Map();
+for(const entry of KNOWLEDGE.entries){
+ if(!REVIEWED_ROUTES.has(entry.id))continue;
+ if(digestRecord(entry)!==entry.content_digest)
+  throw new Error('Cannot route evidence from a corrupted canonical KB: '+entry.id);
+ REVIEWED_EVIDENCE.set(entry.check.required_evidence[1],REVIEWED_ROUTES.get(entry.id));
+}
+if(REVIEWED_ROUTES.size!==81||REVIEWED_EVIDENCE.size!==81)
+ throw new Error('Reviewed collector routing must cover exactly 81 canonical evidence statements.');
+
 const ACTIVE_TEST_PATTERNS = Object.freeze([
   /\bpositive and abuse inputs\b/i,
   /\bbounded (?:positive|negative) evidence\b/i,
@@ -166,7 +200,7 @@ export function classifyCanonicalEvidenceRequirement(requirement) {
     };
   }
 
-  const collectors = matchingMachineFamilies(text);
+  const collectors = REVIEWED_EVIDENCE.get(text) || matchingMachineFamilies(text);
 
   if (collectors.length > 0) {
     return {
