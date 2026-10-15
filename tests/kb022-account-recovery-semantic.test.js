@@ -6,12 +6,15 @@ import { buildCanonicalEvidenceRequirementPlan } from '../src/agent/canonical-ev
 const asset = JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json', import.meta.url), 'utf8'));
 const entry = asset.entries.find(item => item.id === 'ARL-KB-022');
 const migration = fs.readFileSync(new URL('../migrations/045_risk_knowledge_kb022_account_recovery.sql', import.meta.url), 'utf8');
+const latestRetest=fs.readFileSync(new URL('../migrations/059_canonical_retest_acceptance_82.sql',import.meta.url),'utf8');
 const canonical = x => Array.isArray(x) ? '['+x.map(canonical).join(',')+']' : x && typeof x === 'object' ? '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}' : JSON.stringify(x);
 const digest = x => crypto.createHash('sha256').update(canonical(x)).digest('hex');
 test('KB022 signed canonical record and migration digests align', () => {
   const {content_digest,...unsigned} = entry;
   assert.equal(content_digest,digest(unsigned));
-  assert.ok(migration.includes(content_digest));
+  assert.ok(latestRetest.includes("content_digest='"+content_digest+"'"));
+  assert.ok(migration.includes(digest(entry.check)));
+  assert.ok(latestRetest.includes("WHERE entry_id='ARL-KB-022';"));
   assert.ok(migration.includes(digest(entry.check)));
 });
 test('KB022 recovery evidence keeps source, active proof and human review separate', () => {
