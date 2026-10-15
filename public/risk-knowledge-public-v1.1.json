@@ -1937,7 +1937,7 @@
           "ARL-KB-015 cross-environment, cross-tenant, stale-store or unexpected persistence evidence",
           "ARL-KB-015 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -1977,7 +1977,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f03641d30b0632d23a7744e5ee60c39a8441502e3ca9a9166c6c1494569da833"
+      "content_digest": "31e7e25a5192f5820920b21d76eb5774c51f37424767b7197308abe61e33c004"
     },
     {
       "id": "ARL-KB-016",
@@ -2040,7 +2040,7 @@
           "ARL-KB-016 provenance failure, unexpected model drift or mutable-alias resolution change",
           "ARL-KB-016 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2075,7 +2075,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "80a2c8c534ddea9298576895e3bdee96bd9ba07ab2987e7bdcb65150a4d144f5"
+      "content_digest": "579461e7b755ba0bf0ea86b035d8dc58a4a61dc420594783429a59e7cfc1046f"
     },
     {
       "id": "ARL-KB-017",
@@ -2138,7 +2138,7 @@
           "ARL-KB-017 new vulnerability advisory, compromised dependency or supply-chain incident",
           "ARL-KB-017 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2173,7 +2173,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f5077e2db08f28aa7349e6385a4626eb8b83338d0d1f2d8621d98ea6b84392da"
+      "content_digest": "898e3e61872519390fd84bb3ef3c4c149c8b667a0c70c476ef93e2273ba2dc44"
     },
     {
       "id": "ARL-KB-018",
@@ -2236,7 +2236,7 @@
           "ARL-KB-018 environment-boundary bypass, drift or incident evidence",
           "ARL-KB-018 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2271,7 +2271,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e3f3b63ec2bde4a88cdc23a4b940942ef85fa555964fa0d81cf2ffd7b5ca5c63"
+      "content_digest": "c0d5acd778498a28b63f6133e7d596f60e0b0f47eacce0f83303fdb74977eeaa"
     },
     {
       "id": "ARL-KB-019",
@@ -2334,7 +2334,7 @@
           "ARL-KB-019 authentication bypass, fail-open behaviour, credential-verification incident or session anomaly",
           "ARL-KB-019 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2374,7 +2374,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "135b0d68b58a025557e19e729e13280a7e30438624d0879924721a67033c6f81"
+      "content_digest": "68a4f14a88ec2481ff5ae73f34bc6bcea86dc320e44685ffde67775b25459886"
     },
     {
       "id": "ARL-KB-020",
@@ -2617,7 +2617,7 @@
           "ARL-KB-022 takeover, enumeration, token-reuse or recovery-bypass incident",
           "ARL-KB-022 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "owner-approved semantic correction; independent practitioner validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -2652,7 +2652,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "642ce68cf5a406ca7bd3af7b34b1f18b90b6f99c7402edb6225cf51c4205ebcf"
+      "content_digest": "f1f20d0956a89558bd325ce7e6639d34a6dbd16d5a966d0231fc02020c7e1930"
     },
     {
       "id": "ARL-KB-023",
@@ -3656,7 +3656,7 @@
           "ARL-KB-033 goal-drift, plan-hijack or unauthorised multi-step outcome evidence",
           "ARL-KB-033 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3691,7 +3691,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "08a043fde30f79b20c27af026a0c793420c7b611678f42f148eb7e43d9ee5c5b"
+      "content_digest": "633cf9a95f7c9616ff5da435340e314d2cea90a05806dafdd597e889a521e12b"
     },
     {
       "id": "ARL-KB-034",
@@ -3746,7 +3746,7 @@
           "ARL-KB-034 prompt leakage, diagnostic exposure or protected-context incident",
           "ARL-KB-034 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3781,7 +3781,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "67935d459540c133d1ea85b18ec46590aec9167559f996b4597227cd93cd1180"
+      "content_digest": "7e49d48e8a6f42ab018367e29cb7dad5ce8643982603314ba77c1697c42a3a82"
     },
     {
       "id": "ARL-KB-035",
@@ -3844,7 +3844,7 @@
           "ARL-KB-035 role-spoofing, precedence-confusion or provenance-loss evidence",
           "ARL-KB-035 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3879,7 +3879,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e1556e3507bf07e594a377c01a083b6a5971c47fe94fe85bfed8c61f72d27f1b"
+      "content_digest": "c102c05b85182d6f4e4d184481b738b7fcaf60b139dba7f3e698ec390fe73b73"
     },
     {
       "id": "ARL-KB-036",
@@ -3942,7 +3942,7 @@
           "ARL-KB-036 malicious-document, message-based authority confusion or parser-bypass evidence",
           "ARL-KB-036 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -3977,7 +3977,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "2582aab50b701632bc773dd10a900f68283949042a7c6b9bbf927d6642bb3d70"
+      "content_digest": "5ff236fa719a3f409807bf1b52136dde036687b6b7471e757851806a32e3c46b"
     },
     {
       "id": "ARL-KB-037",
@@ -4040,7 +4040,7 @@
           "ARL-KB-037 canonicalisation bypass, homoglyph or alternate-encoding attack evidence",
           "ARL-KB-037 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4075,7 +4075,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "47ea26acfd37cf8a7ec51a1bf11760fc6b6cf0a20fb6338396dcaf631c87095c"
+      "content_digest": "9c13a5f8c399bee5a2b0ec5984466b5bfe93885f1b52724dd9b60cfda24fe624"
     },
     {
       "id": "ARL-KB-038",
@@ -4136,7 +4136,7 @@
           "ARL-KB-038 hidden multimodal instruction or cross-modal policy-bypass evidence",
           "ARL-KB-038 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4171,7 +4171,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "236fc168ed42ab2ea4d0262b2bdc32e709024a4830f81e2138eccfdefb72a503"
+      "content_digest": "d32b18e1d42ae035848e4b392d1b1da197f20e44428c726d3624873a6aa59be4"
     },
     {
       "id": "ARL-KB-039",
@@ -4234,7 +4234,7 @@
           "ARL-KB-039 delimiter escape, role injection or structural prompt-bypass evidence",
           "ARL-KB-039 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4269,7 +4269,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f1f418ad0f4e387d681f9aa3703664704535c9faca4b1f90cf89b54f1a4e3366"
+      "content_digest": "56d7b16e7320d2b13d93156e9d5c98c937f25a0619b13dde504e2cbddbdb8e7e"
     },
     {
       "id": "ARL-KB-040",
@@ -4324,7 +4324,7 @@
           "ARL-KB-040 long-context smuggling, truncation bypass or hidden-instruction evidence",
           "ARL-KB-040 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4359,7 +4359,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ad686604b56285f17997c9f1514ee1704764857ac786221abe8c70fb4ad9ff5e"
+      "content_digest": "eae48f7b034900102f47f25e8bf90bbb23b6b2428d0464970648f0d5c4fc822d"
     },
     {
       "id": "ARL-KB-041",
@@ -4422,7 +4422,7 @@
           "ARL-KB-041 sensitive-data disclosure or unexpected provider-retention evidence",
           "ARL-KB-041 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4457,7 +4457,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "1619848bf6431a9d6f3becfa20f9b3eb74565272c8fb291df6d64393360d583b"
+      "content_digest": "7f566d32a9180c88aa5afd9bda7cc97fffc302a726513da1a8307246c9ec35bc"
     },
     {
       "id": "ARL-KB-042",
@@ -4520,7 +4520,7 @@
           "ARL-KB-042 unexpected collection, excessive retention or privacy incident",
           "ARL-KB-042 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4555,7 +4555,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a7df3362970912a1638d4bc5e30f012b9ac3d03b78319d3fff355679a7f9c11e"
+      "content_digest": "c16841d315886939875ef0f4baf8573b84d9b4ff5038fd701533d29ba1450807"
     },
     {
       "id": "ARL-KB-043",
@@ -4618,7 +4618,7 @@
           "ARL-KB-043 cross-tenant retrieval or unauthorized-document exposure evidence",
           "ARL-KB-043 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4653,7 +4653,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "cff9903744c9280099c645e1edba788e59f9fde1fe258cd3a6b7cf079e0a8ea5"
+      "content_digest": "db4b5de7381775894ef814ed89929d98e3e3db30f85297e1a71d7a0dad234243"
     },
     {
       "id": "ARL-KB-044",
@@ -4716,7 +4716,7 @@
           "ARL-KB-044 poisoned-content, compromised-source or anomalous-ranking evidence",
           "ARL-KB-044 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4751,7 +4751,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "b82a4ddbcd5997da9838c5dc340cd182866274e9582a2e5edf67d6754f4073c9"
+      "content_digest": "67b4481122ab2414b958ce82e094c3b63ee4d745e4d7f1bd5fce0287a9f57eef"
     },
     {
       "id": "ARL-KB-045",
@@ -4814,7 +4814,7 @@
           "ARL-KB-045 enumeration, membership-inference, cross-namespace or data-exposure evidence",
           "ARL-KB-045 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4849,7 +4849,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "dd7d4681a1f11b6948b884b98563a52bf53ddafa6eccd57a190b6de07ef6d684"
+      "content_digest": "424dd196ca15612066803db6b7bcb1248b8fff6b07167c8d04badebdceeb1800"
     },
     {
       "id": "ARL-KB-046",
@@ -4904,7 +4904,7 @@
           "ARL-KB-046 memory-poisoning, false-identity or persistent-instruction evidence",
           "ARL-KB-046 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -4939,7 +4939,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e91618edb24340e373dec9caeda14237da3d54b5ca1a5726fda1c31e5342f5b1"
+      "content_digest": "976ccd7281b240b14517abb23f794d38a637f2b59977ebe2316b1d859b9b3ca3"
     },
     {
       "id": "ARL-KB-047",
@@ -5002,7 +5002,7 @@
           "ARL-KB-047 stale-permission, stale-price, stale-policy or outdated-fact incident",
           "ARL-KB-047 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5037,7 +5037,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9cf7db5e5633e1e706ea8b200e9733f7a93490d7266f2f108090e36152b37901"
+      "content_digest": "462b8d7c955c0045aa0d251e6c09e967915c4b0e960e151c8bc6b681a2a34488"
     },
     {
       "id": "ARL-KB-048",
@@ -5100,7 +5100,7 @@
           "ARL-KB-048 deletion failure, retained-derived-data or rights-request incident",
           "ARL-KB-048 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5135,7 +5135,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "8fa5aee0bbeaa8722a65ea7090f5e9c55795a1596abb3210d060016b919081c6"
+      "content_digest": "e9760ccc1434bafbc384ed4c131f441ca79e0693fbf85c973b8c6e7b8287baae"
     },
     {
       "id": "ARL-KB-049",
@@ -5198,7 +5198,7 @@
           "ARL-KB-049 extraction, reconstruction, encoded-disclosure or exfiltration evidence",
           "ARL-KB-049 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5233,7 +5233,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9fdbc071fc7871b161e0400910d3350b1bac09067be0f8a414d0fef2224031ed"
+      "content_digest": "ba3a416c09c77a0a4ae2ae8a3b840046943ff29cffb713c58e525e1eb3afe9ac"
     },
     {
       "id": "ARL-KB-050",
@@ -5296,7 +5296,7 @@
           "ARL-KB-050 extraction, memorisation or membership-inference evidence",
           "ARL-KB-050 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5331,7 +5331,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "3cdd126c777e3bcea837785c968afc4fdacb6db185417db854653b07440433d1"
+      "content_digest": "5ef8b154269fe8962076af385dc454465cccaae510b4f1592943ab54438f2f8e"
     },
     {
       "id": "ARL-KB-051",
@@ -5392,7 +5392,7 @@
           "ARL-KB-051 fabricated citation, unsupported claim or provenance-loss evidence",
           "ARL-KB-051 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5427,7 +5427,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e2c01269a2f42943126b14b3bed314cbe65654410fc71df9ff7b0f85bbcbc78f"
+      "content_digest": "b45ee48417bb7bc167325627f1aa4b0de4880e063bd99544303d8b75de7b8ae2"
     },
     {
       "id": "ARL-KB-052",
@@ -5488,7 +5488,7 @@
           "ARL-KB-052 reconstruction, differencing, membership-inference or re-identification evidence",
           "ARL-KB-052 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5523,7 +5523,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "d0864cff739897c3e2d5ac53d8b85d5c538e70ba164c858f16b25ff0eed63a0a"
+      "content_digest": "7ffb2ffcbae24a4c4c6cc89ea5c0c636b3d1bb54009002663cb5ec785a80142d"
     },
     {
       "id": "ARL-KB-053",
@@ -5586,7 +5586,7 @@
           "ARL-KB-053 excessive-authority, unused-capability or privilege-abuse evidence",
           "ARL-KB-053 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5621,7 +5621,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "aa17c684dbc9b0b5c4a19292b067d31cd3f1c21d26ca227332a55e35ba04d485"
+      "content_digest": "c7bbec3deb353911f5f83ab2bb28d339dc0746367b3fb3fcbcdffa1107b9e0bd"
     },
     {
       "id": "ARL-KB-054",
@@ -5676,7 +5676,7 @@
           "ARL-KB-054 unknown-tool execution, catalogue drift or cross-environment access evidence",
           "ARL-KB-054 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5711,7 +5711,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "5e694fd73f918a4abacbd7b6d60da0deca35c0712fa9f47313b8120543c77e30"
+      "content_digest": "49faccf9bd7bc73bb43ce490d8998f43b0cab221b05a66a0dc5e82ba64836238"
     },
     {
       "id": "ARL-KB-055",
@@ -5774,7 +5774,7 @@
           "ARL-KB-055 malformed-parameter, ownership-bypass or business-rule abuse evidence",
           "ARL-KB-055 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5809,7 +5809,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fb397c7232f046de3cace4334e6bc70e7fa0f4147b48771ad9504ea99940cd95"
+      "content_digest": "ebf0b3539b1bacb11700f2583bdf4c7c5413be4965e2e9374873ea83be3b0b45"
     },
     {
       "id": "ARL-KB-056",
@@ -5872,7 +5872,7 @@
           "ARL-KB-056 command injection, template injection or arbitrary-code execution evidence",
           "ARL-KB-056 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -5912,7 +5912,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "169790a6b44097d3bb081b7817c05b9f75cab8c136bd1217dbffd92d3a2bbd1d"
+      "content_digest": "df7cbd8d097a5760e4e19bbe2133359490e4bc0d521cf9ece2664d8961c95637"
     },
     {
       "id": "ARL-KB-057",
@@ -5975,7 +5975,7 @@
           "ARL-KB-057 SSRF, metadata access, DNS rebinding or egress-bypass evidence",
           "ARL-KB-057 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6010,7 +6010,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9ac7d6f236fa462aa1dd167e127a590029f95d8f20563b165afa5d4850feecf6"
+      "content_digest": "38ee8b60cc36891a5df3692425d96fb1d0c2b7884044b629bab7b75abf2b65c4"
     },
     {
       "id": "ARL-KB-058",
@@ -6073,7 +6073,7 @@
           "ARL-KB-058 traversal, link escape, race-condition or archive-breakout evidence",
           "ARL-KB-058 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6108,7 +6108,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f4f83ee3f6e206d6dc3109dc8ffc2448c0030610c8c3bb5707e8771777658bbf"
+      "content_digest": "b5856497bbb976482fe825902aa4c2d4ea8c7ad88a4cd0c5164f257c2570c783"
     },
     {
       "id": "ARL-KB-059",
@@ -6171,7 +6171,7 @@
           "ARL-KB-059 sandbox escape, ambient-secret access or uncontrolled execution evidence",
           "ARL-KB-059 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6206,7 +6206,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e84fe55790f1727e964a7f702979e9e0fd20214ce7b050e95a0a691ad3538075"
+      "content_digest": "ae86f247fea02e87f4a6ad25a91ab8533668ce24e0244249f075bf60ea207f02"
     },
     {
       "id": "ARL-KB-060",
@@ -6269,7 +6269,7 @@
           "ARL-KB-060 server replacement, provenance failure or unexpected catalogue-drift evidence",
           "ARL-KB-060 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6304,7 +6304,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "492811b5c50b6d7753f9434fdd69c3d2eeb6f8352b565f61e6a5c5905dd933c3"
+      "content_digest": "0c59e18a02b2931f852326f789eb0d2758ffb5ba9cd658ef0efb0b896c765489"
     },
     {
       "id": "ARL-KB-061",
@@ -6359,7 +6359,7 @@
           "ARL-KB-061 hostile-tool-output, plan-redirection or authority-confusion evidence",
           "ARL-KB-061 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6399,7 +6399,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "58693adbaa4e665cbd74ed5502c97a293b14a3467b1b13acf07e3bcb4056113b"
+      "content_digest": "e61376801b2b600b79be52dc78ed2e5000da3c032357dfda27a8a93380f1c34b"
     },
     {
       "id": "ARL-KB-062",
@@ -6454,7 +6454,7 @@
           "ARL-KB-062 tool spoofing, schema collision or mistaken-tool-selection evidence",
           "ARL-KB-062 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6489,7 +6489,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "501ba9ae09aabbcdf8fb8565097dbbc56bd986e73f9607ff673a9134c371d8c1"
+      "content_digest": "704437a0a64376344ff1b551c237eb8c9225994137bc03f437401639917dcf57"
     },
     {
       "id": "ARL-KB-063",
@@ -6552,7 +6552,7 @@
           "ARL-KB-063 duplicate transaction, race-condition or replay incident",
           "ARL-KB-063 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6587,7 +6587,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fd082e7cba6a16b2b7143e1da7183cf63d24160b29f0bd7a08bab4a23d7bf92c"
+      "content_digest": "aacd50706d7a03db4b1d3ec137201ab1514bf6ba7a69b7336d16b20f1d82b097"
     },
     {
       "id": "ARL-KB-064",
@@ -6640,7 +6640,7 @@
           "ARL-KB-064 forged message, replay, cross-tenant delivery or delegation-escalation evidence",
           "ARL-KB-064 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6675,7 +6675,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "1667b2eaf3c70bb5287b77b6fee5586625daa8465247f3e47820d3c614eba042"
+      "content_digest": "20d82cfa3e2749adb22a3d151f8a0035b462084e56c2b16cf7baeaba0610aa8f"
     },
     {
       "id": "ARL-KB-065",
@@ -6738,7 +6738,7 @@
           "ARL-KB-065 approval-bypass or self-asserted-approval evidence",
           "ARL-KB-065 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6773,7 +6773,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "99b4fbd5e14eb3da0e7a1ffa4ad9c58051c6526a9c7cc60b740145425165bdae"
+      "content_digest": "c7fefd8316cd31994608b79f25fc5299ffc14d34ed383f53105607a1d811d50c"
     },
     {
       "id": "ARL-KB-066",
@@ -6828,7 +6828,7 @@
           "ARL-KB-066 approval-substitution, parameter-mutation or binding-bypass evidence",
           "ARL-KB-066 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6863,7 +6863,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "647c44435e75d5a9ef6583667c11e55d07fdd14349077133a769d4ae037b4cd9"
+      "content_digest": "21966777f887bf969a5326474de0f6f0f7b4eab9be01b9af4132b4df9bf587a3"
     },
     {
       "id": "ARL-KB-067",
@@ -6926,7 +6926,7 @@
           "ARL-KB-067 replay, duplicate-consumption or expired-approval execution evidence",
           "ARL-KB-067 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -6961,7 +6961,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f282066b666162a6e524d39309ec7ea512a18c39bd7391abc4bfecf4fbe93518"
+      "content_digest": "93070c8c31bf006f304abc9e7faa8d0f829948feb560b3c67ff3409704fb58c6"
     },
     {
       "id": "ARL-KB-068",
@@ -7016,7 +7016,7 @@
           "ARL-KB-068 self-asserted approver, cross-tenant approval or identity-spoofing evidence",
           "ARL-KB-068 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7051,7 +7051,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "8aa53e28bd72c133dc5cd68960adc7e50726a73a509af71921601ce1982786a4"
+      "content_digest": "892f16947153ec8a03789af75078458c487c26341e7b0e435084628d254b51af"
     },
     {
       "id": "ARL-KB-069",
@@ -7114,7 +7114,7 @@
           "ARL-KB-069 self-approval, collocated approval or separation-of-duties bypass evidence",
           "ARL-KB-069 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7149,7 +7149,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "fb71e4f6447c0c4bb1076b2762d54aedf1e2a97a9518c6846431f564e05d3c77"
+      "content_digest": "ae8e57e49eff30bca3ee8001181d048220cfabcfa035547b67c23d844248d06e"
     },
     {
       "id": "ARL-KB-070",
@@ -7204,7 +7204,7 @@
           "ARL-KB-070 stale-approval execution after user, role or policy change",
           "ARL-KB-070 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7239,7 +7239,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "485f594cd7334f534c4d1e8dad7775b37555138f266618400a3b2596c39c8bf3"
+      "content_digest": "921b868a7d630d2150c807f2392ff6a31a80f58763495eab7e543741a0ee6c2e"
     },
     {
       "id": "ARL-KB-071",
@@ -7302,7 +7302,7 @@
           "ARL-KB-071 threshold bypass, transaction splitting or missing dual-control evidence",
           "ARL-KB-071 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7337,7 +7337,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4e626007e9bf43ad4d7f8b251ed902594bfc4b8d48fb9c301e6ba516a2f51202"
+      "content_digest": "371e8aa96a47cd128a2e4a1758845b234598e17ddb3d30e5942b0caaf7578c4e"
     },
     {
       "id": "ARL-KB-072",
@@ -7392,7 +7392,7 @@
           "ARL-KB-072 misleading approval display, confusable value or post-approval mutation evidence",
           "ARL-KB-072 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7427,7 +7427,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "df7f7d9be4333e17a7836c21c8d03fd9b9aaaa08a46bbe108e8a9fe579b80424"
+      "content_digest": "39016611e4ef8015639222d23bddc2ed570946bef39abd0aa1171c84062e6c8c"
     },
     {
       "id": "ARL-KB-073",
@@ -7490,7 +7490,7 @@
           "ARL-KB-073 digest mismatch, substituted model or provenance-failure evidence",
           "ARL-KB-073 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7525,7 +7525,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "58c0cd57f918d0df065c16379b39e198528250926735400a861cbc8eff711d65"
+      "content_digest": "eec7877e5f9d00eddb54ae0786895dd9e9a4bed9348000493e87b673035401fb"
     },
     {
       "id": "ARL-KB-074",
@@ -7588,7 +7588,7 @@
           "ARL-KB-074 unsafe deserialisation or model-load code-execution evidence",
           "ARL-KB-074 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7623,7 +7623,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4ec10acd266a4ffd8883c7569ee034497a36bb0becf6609bc405e3a17777e659"
+      "content_digest": "620d55e9d85eef786c953e999b00cac568d0fbe7392d228ea1c23d770f497c56"
     },
     {
       "id": "ARL-KB-075",
@@ -7684,7 +7684,7 @@
           "ARL-KB-075 mutable-tag drift or deployed-image mismatch evidence",
           "ARL-KB-075 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7719,7 +7719,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "b28820115672746553a5e011d0d9891cdad42c7a57442ffb305d8e121b417401"
+      "content_digest": "465fafa47c8a4912736a3b93519f1cba4974ede83f591dee0ec571b463609e67"
     },
     {
       "id": "ARL-KB-076",
@@ -7782,7 +7782,7 @@
           "ARL-KB-076 reachable vulnerable path, exploit evidence or compensating-control failure",
           "ARL-KB-076 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7817,7 +7817,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "ae12f4badba407eab092e485bfb3fe3b9540ee4321365674dc73d7385164dc1a"
+      "content_digest": "0b21e363d5e186afce33b4240a8d32f039fc50044dc618ef4888223d8af09f3b"
     },
     {
       "id": "ARL-KB-077",
@@ -7880,7 +7880,7 @@
           "ARL-KB-077 malicious dependency, typosquat, publisher compromise or integrity-failure evidence",
           "ARL-KB-077 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -7915,7 +7915,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "b8913abac3da1fb1080ea3da69d022d858a430003c5edf9453064a914744523c"
+      "content_digest": "83004ceb0bddaf4f29f744f344004bd44d1fd57ba2f8378a23ae96a3255cea47"
     },
     {
       "id": "ARL-KB-078",
@@ -7978,7 +7978,7 @@
           "ARL-KB-078 behavioural drift, refusal regression, tool-selection change or leakage evidence",
           "ARL-KB-078 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8013,7 +8013,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "5a77732375e863506e0b7e763b436273d2b5ac7b82b5bcc62e281d9729f5daed"
+      "content_digest": "66b32eeee49fef197ecec82faa21e25a1f330ead3e61d1cc765e807295b91f2c"
     },
     {
       "id": "ARL-KB-079",
@@ -8076,7 +8076,7 @@
           "ARL-KB-079 poisoning indicator, backdoor trigger or targeted unsafe-behaviour evidence",
           "ARL-KB-079 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8111,7 +8111,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "6bb8fa6f9cf3fe56bf37b3c2d4a23ba625cab74edc6913bc3e1c3ccbad035a98"
+      "content_digest": "d69177acd45d1f8c642e621ef3fcb383c9be926880e09f033330cc104b6dbd10"
     },
     {
       "id": "ARL-KB-080",
@@ -8174,7 +8174,7 @@
           "ARL-KB-080 silent weaker-provider fallback or security-property regression evidence",
           "ARL-KB-080 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8209,7 +8209,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "11353e7dafff92116e33be3f946a44932312d6c06bc3aeb1b612939e0a235941"
+      "content_digest": "893b8488797e37f9a5aac4402c5c8ad253fefb51e6dcbdec4897a1a0f1764438"
     },
     {
       "id": "ARL-KB-081",
@@ -8272,7 +8272,7 @@
           "ARL-KB-081 output-injection or unintended downstream-execution evidence",
           "ARL-KB-081 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8307,7 +8307,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "1cffbe275157f09fe2b4e83f47c22ba26e77b1ea1943b3a2d71a25119177a833"
+      "content_digest": "f537850d1da10c040f3925b2f48a9e5935030bb34157bd2c95d42aababb1f480"
     },
     {
       "id": "ARL-KB-082",
@@ -8368,7 +8368,7 @@
           "ARL-KB-082 stored, reflected or DOM execution evidence from agent content",
           "ARL-KB-082 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8403,7 +8403,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "e5281fc822e39a300ba161e8245f144cbf8227e29564efebdec5011b08266037"
+      "content_digest": "3b796d1696eaa0830ad5ffc63dba560a68c6735d2305ec70b1d1f925719afb1e"
     },
     {
       "id": "ARL-KB-083",
@@ -8466,7 +8466,7 @@
           "ARL-KB-083 SQL, NoSQL, LDAP, search or analytics injection evidence",
           "ARL-KB-083 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8501,7 +8501,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "52158fa781c8f2fe07924c8ec07d9177bf2c91b0f301cd3cdb3f5de6e3a9ceca"
+      "content_digest": "75754a3fc4c57c9de5cf0ccb1c54eb9eb0045cd37f3d1662d7065b6603058701"
     },
     {
       "id": "ARL-KB-084",
@@ -8564,7 +8564,7 @@
           "ARL-KB-084 CRLF, log-forging or protocol-splitting evidence",
           "ARL-KB-084 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8599,7 +8599,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "969c0010aaefa0234054bae16bb858ec8216b47f241dc17e350ce2dd5e272b20"
+      "content_digest": "9032d81a3d58ca84e4455314136c5093e499d77c370a45deb995ea5a800ba351"
     },
     {
       "id": "ARL-KB-085",
@@ -8662,7 +8662,7 @@
           "ARL-KB-085 formula injection, macro, embedded payload or archive traversal evidence",
           "ARL-KB-085 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8697,7 +8697,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "9ba0bdc53350a11a4c96a2bc8060aa8568b43cf159990d1dfc94ae8112e18f8a"
+      "content_digest": "f997c54cd98ccdd89a81fa555d592677b1e0f948d7331cc0a874fc04c8a2f113"
     },
     {
       "id": "ARL-KB-086",
@@ -8768,7 +8768,7 @@
           "ARL-KB-086 harmful misinformation, unsupported recommendation or reviewer-bypass evidence",
           "ARL-KB-086 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8803,7 +8803,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "999d11f746fadb8386c31c4fae59ea4c953287aa36b228f3b165d228a0a0ca5e"
+      "content_digest": "c680f5c129e43ea4269f0b572e685893edf19bf5dcfb05b8ee5295a83febd6e2"
     },
     {
       "id": "ARL-KB-087",
@@ -8866,7 +8866,7 @@
           "ARL-KB-087 policy bypass or unmediated consequential execution evidence",
           "ARL-KB-087 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -8906,7 +8906,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "235aef6e777779579aeb8eb84bb460824320b26880e4024f8287b9ca3a89ecc7"
+      "content_digest": "9524a7a382d7a485955ac23e4f2b69669c9c8079b3192048ba295c79cb4d4512"
     },
     {
       "id": "ARL-KB-088",
@@ -8969,7 +8969,7 @@
           "ARL-KB-088 fail-open execution, stale-policy use or policy-outage bypass evidence",
           "ARL-KB-088 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9004,7 +9004,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "afce8ae06e037e773c66cb2eaf7be6b95b5365ef247eedd9a662ae762d5d9de2"
+      "content_digest": "42fefd6df2dcf92cccd059e50a8a703c8d15bdaea22faa9797c42cb7870a2c5a"
     },
     {
       "id": "ARL-KB-089",
@@ -9067,7 +9067,7 @@
           "ARL-KB-089 secret, credential or personal-data leakage into observability evidence",
           "ARL-KB-089 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9102,7 +9102,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "af1574d7030f22795f8f5ed57b00cf23705f717503c2a064888fd05b4d52d4bc"
+      "content_digest": "0408b71915f96c64f32d233f51a122fb01a9ecb4aabe5ad6f07fc988ed177808"
     },
     {
       "id": "ARL-KB-090",
@@ -9165,7 +9165,7 @@
           "ARL-KB-090 missing, inconsistent or tampered decision-chain evidence",
           "ARL-KB-090 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9200,7 +9200,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "77d335029e5998cfb5f8cf869f6f9f3475c89199ce830a6179508330ca1171ad"
+      "content_digest": "c1410e2bc8d6fda5b54eb6ed7681f058e9d5a5503321486ca6e7e0339f25887a"
     },
     {
       "id": "ARL-KB-091",
@@ -9261,7 +9261,7 @@
           "ARL-KB-091 tampering, deletion, replacement or integrity-verification failure",
           "ARL-KB-091 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9296,7 +9296,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4249d3941a16286a3de06a88f3c635c748e91a0cd6af666d4dd55cb754897933"
+      "content_digest": "2b283b988929638c6b9f9dcc0063a39c9dbe1a8f63c0f4f64b902cfccab5f7da"
     },
     {
       "id": "ARL-KB-092",
@@ -9357,7 +9357,7 @@
           "ARL-KB-092 missed, delayed or unowned security-alert evidence",
           "ARL-KB-092 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9392,7 +9392,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "02889cdd50f4959d8bdd8e160c9b213e65b264dad23293f89ca1a6ab669d1bd8"
+      "content_digest": "337329baf223ef14d46d43f4927fffa1ab359a7ac3f20604437a4797449f4e58"
     },
     {
       "id": "ARL-KB-093",
@@ -9455,7 +9455,7 @@
           "ARL-KB-093 credential abuse, anomalous sequence, volume or value-splitting evidence",
           "ARL-KB-093 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9495,7 +9495,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "c1bd66f68e9c67840299e45ecfe8a8f2c163ad53c7a6b44180d6aa52fc91f241"
+      "content_digest": "ae369fec3d2cdd3b9a80901366773aa50d85ae1e157f787fd92f1e1945ce5c1a"
     },
     {
       "id": "ARL-KB-094",
@@ -9556,7 +9556,7 @@
           "ARL-KB-094 unnecessary sensitive telemetry or excessive-retention evidence",
           "ARL-KB-094 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9591,7 +9591,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "638791dfce60e92d7539939f55d0873a5649c4a75ff0db3cc0127f0dc8871466"
+      "content_digest": "772a24fb3f5e20120857c8d105ab87e24a63bbbcf32352b24a2d54fa190a8b92"
     },
     {
       "id": "ARL-KB-095",
@@ -9654,7 +9654,7 @@
           "ARL-KB-095 runaway usage, resource exhaustion or unexpected cost evidence",
           "ARL-KB-095 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9694,7 +9694,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "99be4278ed76fc5140c2535bcdc14522bd69ef7b3763f79859a8b0f3a4974c02"
+      "content_digest": "9251a5a31789994ec4b0833341b20588053d1c8cd996db47559460dbec48648c"
     },
     {
       "id": "ARL-KB-096",
@@ -9757,7 +9757,7 @@
           "ARL-KB-096 infinite loop, repeated-state or duplicate-side-effect evidence",
           "ARL-KB-096 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9797,7 +9797,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "4a4405d96184ffc644aaf680ab5dc25c879746772728971bb06c4efb346eb22f"
+      "content_digest": "d3827a7c22cf4e30026c71ab51b300fde8f8a836222f900fe71df75531f02875"
     },
     {
       "id": "ARL-KB-097",
@@ -9860,7 +9860,7 @@
           "ARL-KB-097 unsafe fallback, corrupted recovery or prolonged-outage evidence",
           "ARL-KB-097 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9895,7 +9895,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "39da228c0eb6cfb24a889f1bd35476e97d8b1d30177d8bc0a7fadf25cd7b0276"
+      "content_digest": "b5492e23f0ef0910b483fa950b40f019fc6402e06e20713436cb75a6a75fc3e6"
     },
     {
       "id": "ARL-KB-098",
@@ -9948,7 +9948,7 @@
           "ARL-KB-098 race condition, stale-write, duplicate-effect or quota-bypass evidence",
           "ARL-KB-098 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -9983,7 +9983,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "b54edc5005aabb45095391029ad15fe97c2372604e2ccc06073cb9c752c64a0d"
+      "content_digest": "de93fe5bd2639c8c4af7c1a5eeca3a0aac45be340fd41f500a9faceb53b818fb"
     },
     {
       "id": "ARL-KB-099",
@@ -10044,7 +10044,7 @@
           "ARL-KB-099 unmetered usage, quota bypass or billing reconciliation mismatch",
           "ARL-KB-099 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10084,7 +10084,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "f0bcb9f785aa1dfc6436b85cfe4cbd7a06bc6c9a136038b8471106add2a91600"
+      "content_digest": "5899f24038f2fe768a051aa823299c332f0b0869c7253a868a36c914a1825539"
     },
     {
       "id": "ARL-KB-100",
@@ -10147,7 +10147,7 @@
           "ARL-KB-100 containment bypass, delayed shutdown or evidence-loss incident",
           "ARL-KB-100 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10182,7 +10182,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "bac0b8fea28a5d09c53d769f74b580600ecd7aba607d42cbb19391d50fdb6450"
+      "content_digest": "fe6b6da603cefc401dd752ec0371a60ba962d3992c14f4186ca7c6ba1dfea5ae"
     },
     {
       "id": "ARL-KB-101",
@@ -10245,7 +10245,7 @@
           "ARL-KB-101 prompt-injection, rogue-tool, poisoned-memory, drift or evidence-compromise incident",
           "ARL-KB-101 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10280,7 +10280,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "59dbba54fcdbad8f18f68452541f87014f2a2dd69709ec707a70d113da565229"
+      "content_digest": "18f22605f619d79f5af22f4e38d8c162fd2a1df8a532d93779f08da4d259a999"
     },
     {
       "id": "ARL-KB-102",
@@ -10343,7 +10343,7 @@
           "ARL-KB-102 delayed revocation, stale session or residual-authority evidence",
           "ARL-KB-102 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10378,7 +10378,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a80278a493e3fcb831ea4e92b677d041670c6c2084feba6a41a05d4eae2f6e09"
+      "content_digest": "91320dfb07edc129f387e58b794befa8e0ff51b4e965d331449debe7e78f4175"
     },
     {
       "id": "ARL-KB-103",
@@ -10441,7 +10441,7 @@
           "ARL-KB-103 backup integrity, incomplete restore or recovery-consistency failure",
           "ARL-KB-103 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10481,7 +10481,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "04075ee621fd5149d8b869bb5af2c8db55e40d34427a449a6c9aea520e69efe9"
+      "content_digest": "5023b9537aa68bf8f0db36d8e392c41c2919c7b282a097c933e2ec2b12501498"
     },
     {
       "id": "ARL-KB-104",
@@ -10544,7 +10544,7 @@
           "ARL-KB-104 failed rollback, unidentified release or rollback-data-loss evidence",
           "ARL-KB-104 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10579,7 +10579,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "26167f315ed3db07e35410c98e423c1e0005cb21e986c73120a034bf118c64a9"
+      "content_digest": "15ae71d8cb1250653504a3093df1e9fa4ea1fc049a2d26b895c0a9e76a0b3836"
     },
     {
       "id": "ARL-KB-105",
@@ -10640,7 +10640,7 @@
           "ARL-KB-105 unowned, overdue or evidence-free finding-closure evidence",
           "ARL-KB-105 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10675,7 +10675,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "bb588a60332fa027fb74ac177ec22ee1f80f8680f8a33cc7fce815eb14b7db57"
+      "content_digest": "22381ef0c05c7386e24bcae15d774aa7b6b90007a7ba4078bd07db5a82faa943"
     },
     {
       "id": "ARL-KB-106",
@@ -10738,7 +10738,7 @@
           "ARL-KB-106 failed retest, residual exploit or unsupported closure evidence",
           "ARL-KB-106 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10773,7 +10773,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "0b8bc34923ae76ee4800c03621692af6be5b18493a9c72f11140fa881f70dbf0"
+      "content_digest": "a36fb32acc5a38502e469d1e32f420d36b29be71357e1a636155c2e8c4026302"
     },
     {
       "id": "ARL-KB-107",
@@ -10836,7 +10836,7 @@
           "ARL-KB-107 broken evidence chain, unsupported readiness or missing risk-acceptance evidence",
           "ARL-KB-107 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10871,7 +10871,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "6a857f7db7d50b25985e896d2e878ff3630b8eb0eef83b2e32163c9a460188bc"
+      "content_digest": "0f6968a33f6a9a14ba7914e217718060d837b4aa4103a7dd6b5a41e874f04531"
     },
     {
       "id": "ARL-KB-108",
@@ -10934,7 +10934,7 @@
           "ARL-KB-108 material drift, incident or stale-assurance evidence",
           "ARL-KB-108 material scope, architecture or assessed-version change"
         ],
-        "review_status": "Evidence and decision-criterion wording revised; independent practitioner and customer validation required"
+        "review_status": "Evidence, decision criteria and retest wording revised; independent practitioner and customer validation required"
       },
       "validation": {
         "status": "candidate",
@@ -10969,7 +10969,7 @@
         "automation_status": "candidate",
         "customer_validation_status": "unvalidated"
       },
-      "content_digest": "a629b1343b7717f699dd3d1894aaac4975439ecc153ef3a5c5d14daf4421545e"
+      "content_digest": "9b62b90f0e6fa769031539e8704cd2b4ae467f63ca59ce70d5fdf36199759e58"
     }
   ]
 }
