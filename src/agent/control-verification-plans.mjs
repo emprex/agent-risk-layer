@@ -36,6 +36,10 @@ const METHODS=[
 // tests just because their text mentions identity, role, version or a tool.
 // These hints do not accept evidence, decide applicability or trigger execution.
 const DOCUMENTARY_REQUIREMENTS=[
+ {kind:'risk_acceptance_record',pattern:/^(?:(?:dated|signed|approved|documented)\s+)?(?:risk\s+(?:acceptance|exception|waiver)|(?:security|policy)\s+exception)(?:\s+(?:record|register|decision|approval|with|for|including)|\b)/i,
+  primary:'Version-bound risk or exception record identifying owner, affected control, rationale, duration, compensating measures and accountable approval.',
+  technical:'Inspect the authoritative exception or acceptance decision, its scope, accountable approver, rationale, expiry and compensating measures; reconcile the current deployment and follow-up review without treating an approval record as proof of technical control effectiveness.',
+  scenario:null},
  {kind:'incident_exercise_record',pattern:/^(?:dated\s+|signed\s+|approved\s+)?incident(?:[\s-]+response)?[\s-]+(?:tabletop|exercise|simulation|drill)(?:[\s-]+|$)/i,
   primary:'Dated incident exercise plan, participant and scenario record, observed actions, lessons learned and accountable sign-off.',
   technical:'Inspect the actual exercise artefacts against the incident-response objective, check roles, timeline, scope, observed gaps, corrective actions and dated accountable approval; do not infer successful response from the existence of a plan.',
