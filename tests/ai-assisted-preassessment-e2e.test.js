@@ -10,7 +10,7 @@ function dossier(){
   const controlId='ARL-KB-'+String(i+1).padStart(3,'0');
   return {controlId,title:'Scope '+i,category:'Tools',purpose:'Review tool boundaries',
    assessmentMethod:'Inspect scoped evidence',workflowLane:'test_planning',
-   result:'undetermined',confirmedFinding:false,nextStep:'Review',reviewRequirements:[{
+   result:'undetermined',confirmedFinding:false,humanReviewRequired:true,nextStep:'Review',reviewRequirements:[{
     requirementIndex:1,expectedEvidence:'Approved tool source',
     artifactDigests:[digest],collectorTypes:['architecture_and_inventory'],
     boundedSourceFacts:[{collector:'architecture_and_inventory',artifactSha256:digest,values:{dependencyCount:3}}],
