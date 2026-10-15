@@ -293,13 +293,20 @@ export async function runAuthoritativeControlSourceReview({
   refreshKb017DependencySource = false,
   repairKb008Source = false,
   repairLegacyV2Source = false,
-  refreshStaleCheckDigestSource = false
+  refreshStaleCheckDigestSource = false,
+  refreshProjectionV2 = false
 } = {}) {
   if (!repositoryPath || !projectId || !userId || !controlId) {
     return {
       executed: false,
       reason: 'authoritative_control_source_review_context_required'
     };
+  }
+
+  if(refreshProjectionV2 && (!collectionOnly || refreshStaleCheckDigestSource ||
+      refreshProviderSource || refreshKb017DependencySource || repairKb008Source ||
+      repairLegacyV2Source || repairTruncatedSource)) {
+    return {executed:false,reason:'projection_refresh_must_be_isolated_collection_only',securityStateChanged:false};
   }
 
   const detail =
@@ -475,6 +482,21 @@ export async function runAuthoritativeControlSourceReview({
       ? 'arl_frozen_source_evidence_collection_v2'
       : 'arl_frozen_source_review';
 
+  if (refreshProjectionV2 && (deterministicEvidence.sourceProjectionRevision !==
+      'arl.source-collection-projection.v2' ||
+      frozen.target.dirty !== false ||
+      detail.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision !==
+       frozen.target.revision)) {
+    return {executed:false,reason:'projection_refresh_requires_exact_current_frozen_snapshot',securityStateChanged:false};
+  }
+  const refreshProjectionDigest=refreshProjectionV2?crypto.createHash('sha256')
+    .update(JSON.stringify({
+      purpose:'arl.source-collection-projection.v2',
+      targetRevision:frozen.target.revision,controlId,
+      currentCheckDigest:detail.testDefinition?.digest,
+      sourceDigest,collectionSha256:crypto.createHash('sha256')
+        .update(JSON.stringify(deterministicEvidence)).digest('hex')
+    })).digest('hex'):null;
   const originalReference =
     `${collectionKind}:${frozen.target.revision}:${controlId}:${sourceDigest}`;
   const knownTests = [
@@ -512,7 +534,9 @@ export async function runAuthoritativeControlSourceReview({
     controlId,sourceDigest,boundedObservation:deterministicEvidenceText,
     currentCheckDigest:detail.testDefinition?.digest
   })).digest('hex');
-  const inputReference = refreshKb017DependencySource
+  const inputReference = refreshProjectionV2
+    ? `${collectionKind}:${frozen.target.revision}:${controlId}:${refreshProjectionDigest}`
+    : refreshKb017DependencySource
     ? kb017DependencyRefreshReference({
         revision:frozen.target.revision, controlId, sourceDigest,
         checkDigest:detail.testDefinition?.digest,
