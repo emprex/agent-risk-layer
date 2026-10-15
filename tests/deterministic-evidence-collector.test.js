@@ -623,3 +623,25 @@ test('KB-017 distinguishes external requirements and editable installations with
     assert.ok(!output.includes(root));
   } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('new deterministic collection declares projection revision without security authority',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'arl-projection-v2-'));
+ try{
+  git(root,['init']);
+  git(root,['config','user.email','test@example.test']);
+  git(root,['config','user.name','ARL Test']);
+  fs.writeFileSync(path.join(root,'model.json'),'{"name":"synthetic"}');
+  git(root,['add','.']);commitFixture(root,'projection revision fixture');
+  const revision=git(root,['rev-parse','HEAD']);
+  const collection=collectDeterministicEvidence({
+   repositoryPath:root,
+   frozen:{target:{revision},inspection:{subject:{gitDirty:false}}},
+   requirements:['ARL-KB-011 read-only discovery evidence identifying observable agents, models, prompts, tools, data stores, service identities, deployments and scheduled jobs in scope']
+  });
+  assert.equal(collection.sourceProjectionRevision,'arl.source-collection-projection.v2');
+  assert.equal(collection.targetRevision,revision);
+  assert.match(collection.privacyBoundary,/No source code/);
+  assert.equal(collection.requirementObservations.length,1);
+ } finally {fs.rmSync(root,{recursive:true,force:true});}
+});
