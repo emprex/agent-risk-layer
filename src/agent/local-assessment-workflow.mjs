@@ -877,9 +877,55 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       },null,2)+'\nNo evidence accepted, security verdict or deployment decision.'
     };
   }
-  if (/^Persist assessment static batch\b/i.test(request.trim())) {
-    const match=/^Persist assessment static batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
-    if (!match) throw new Error('Use Persist assessment static batch N (positive integer).');
+  if (/^Refresh assessment source projections v2 all batches[.!?]*$/i.test(request.trim())) {
+    const expected=String(process.env.ARL_EXPECTED_TARGET_SHA||'').trim();
+    const expectedProject=String(process.env.ARL_EXPECTED_PROJECT_ID||'').trim();
+    const expectedSnapshot=String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID||'').trim();
+    if (!/^[a-f0-9]{40}$/.test(expected) || options.projectId!==expectedProject ||
+        !expectedSnapshot || localFrozenInspection?.binding?.verified!==true ||
+        localFrozenInspection?.target?.dirty!==false ||
+        localFrozenInspection?.target?.revision!==expected)
+      throw new Error('Projection refresh requires exact project, snapshot and clean frozen SHA.');
+    const queue=await readCurrentControlQueue(options);
+    if(queue.systemSnapshotId!==expectedSnapshot || !queue.complete ||
+       queue.total!==108 || queue.expectedTotal!==108)
+      throw new Error('Projection refresh requires a complete 108-control current snapshot.');
+    const index=buildAssessmentEvidenceBatchIndex(queue);
+    if(!index.batchCount || index.eligibleControls<1)
+      throw new Error('Projection refresh has no eligible control batches.');
+    const results=[];
+    for(const batch of index.batches){
+      const run=await runLocalAssessment(repositoryPath,
+        'Refresh assessment source projections v2 batch '+batch.number,
+        options,localFrozenInspection);
+      const output=run.canonicalData?.boundedStaticEvidenceBatch;
+      if(output?.plan?.batchNumber!==batch.number ||
+         output?.completed!==batch.controlIds.length ||
+         output.outcomes?.some(x=>![
+          'authoritative_control_source_review_recorded',
+          'authoritative_control_source_review_already_recorded'
+         ].includes(x.effect)))
+        throw new Error('Projection refresh interrupted in batch '+batch.number);
+      results.push({batch:batch.number,completed:output.completed,
+        recorded:output.outcomes.filter(x=>
+          x.effect==='authoritative_control_source_review_recorded').length});
+    }
+    return {canonicalData:{
+      sourceProjectionRefresh:{targetRevision:expected,snapshotId:expectedSnapshot,
+       controlCount:index.eligibleControls,excluded:index.excludedControls,batches:results,
+       humanReviewRequired:true,deploymentDecisionWritten:false},
+      securityStateChanged:results.some(x=>x.recorded>0),
+      deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Source projection v2 refresh (append-only): '+
+        JSON.stringify({targetRevision:expected,completedControls:index.eligibleControls,
+          excludedControls:index.excludedControls,batches:results})+
+        '\\nNo active security tests, evidence acceptance, finding or final decision.'
+    };
+  }
+  if (/^(?:Persist assessment static batch|Refresh assessment source projections v2 batch)\b/i.test(request.trim())) {
+    const refreshMatch=/^Refresh assessment source projections v2 batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
+    const match=refreshMatch||/^Persist assessment static batch ([1-9][0-9]*)[.!?]*$/i.exec(request.trim());
+    if (!match) throw new Error('Use Persist assessment static batch N or Refresh assessment source projections v2 batch N.');
     const expected=String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
     const expectedProject=String(process.env.ARL_EXPECTED_PROJECT_ID || '').trim();
     const expectedSnapshot=String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim();
@@ -918,7 +964,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       const outcome=await runAuthoritativeControlSourceReview({
         repositoryPath,projectId:options.projectId,userId:options.userId,
         controlId,requirements:detail.testDefinition.requiredEvidence,
-        collectionOnly:true
+        collectionOnly:true,refreshProjectionV2:Boolean(refreshMatch)
       });
       if (outcome?.executed !== true ||
           !['authoritative_control_source_review_recorded',
@@ -934,7 +980,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
           deploymentDecisionWritten:false,humanReviewRequired:true},
         deploymentDecisionWritten:false,humanReviewRequired:true
       },
-      answer:'Bounded static evidence batch '+plan.batchNumber+' completed: '+
+      answer:(refreshMatch?'Versioned source projection refresh batch ':'Bounded static evidence batch ')+plan.batchNumber+' completed: '+
         JSON.stringify({snapshotId:plan.systemSnapshotId,requested:plan.requested,
           recorded:outcomes.filter(x=>x.effect==='authoritative_control_source_review_recorded').length,
           alreadyRecorded:outcomes.filter(x=>x.effect==='authoritative_control_source_review_already_recorded').length})+
