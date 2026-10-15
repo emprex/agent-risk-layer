@@ -20,8 +20,8 @@ export function buildClientEvidenceSummary(dossier,{limit=5}={}){
    return {controlId:control.controlId,title:control.title,category:control.category,
      candidateCount:candidate.length,missingCount:missing.length,
      sourceFacts:sourceFacts.slice(0,3),
-     verification:missing[0]?.requirement.expectedEvidence||
-       candidate[0]?.requirement.expectedEvidence||null,
+     verification:control.assessmentMethod||null,
+     outstandingEvidence:missing[0]?.requirement.expectedEvidence||null,
      decisionStage:control.workflowLane==='human_decision'};
  }).filter(x=>x.sourceFacts.length||x.missingCount);
  const technical=items.filter(x=>x.sourceFacts.length).sort((a,b)=>b.sourceFacts.length-a.sourceFacts.length||
