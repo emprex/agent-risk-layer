@@ -222,6 +222,29 @@ try {
       console.log('\\nHuman review required. No validated finding or change of security authority.');
       process.exit(0);
     }
+    if (/^Export AI-assisted preassessment[.!?]*$/i.test(request)) {
+      const dossierResult=await runLocalAssessment(repositoryPath,
+        'Build assessment action dossiers',options,frozen);
+      const dossier=dossierResult.canonicalData?.assessmentActionDossiers;
+      const {explainControlObservation}=await import('./ai/control-observation-analyst.mjs');
+      const {writeClientPreassessment}=await import('./client-preassessment-export.mjs');
+      const advisories=[];
+      const failures=[];
+      for(const controlId of ['ARL-KB-007','ARL-KB-031','ARL-KB-053']){
+        const a=await explainControlObservation({dossier,controlId});
+        if(a.available===true)advisories.push(a);
+        else failures.push(controlId+': '+a.reason);
+      }
+      const exported=writeClientPreassessment({dossier,advisories,
+        outputDirectory:process.env.ARL_REPORT_OUTPUT_DIR ||
+          path.join(productRoot,'data/local-reports')});
+      console.log('\\n=== ARL AI-ASSISTED PREASSESSMENT DRAFT ===\\n');
+      console.log('Report: '+exported.file+'\\nSHA-256: '+exported.sha256+
+        '\\nStructured AI briefs included: '+advisories.length+
+        '\\nUnsuccessful analyses: '+(failures.join('; ')||'none')+
+        '\\nOperator review only; no security finding, evidence acceptance or deployment decision.');
+      process.exit(0);
+    }
     if (/^Export client preassessment[.!?]*$/i.test(request)) {
       const dossierResult=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
