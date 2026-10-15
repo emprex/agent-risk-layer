@@ -53,8 +53,10 @@ function assertDossier(d){
   throw new Error('Verification plans require a same-scope non-authoritative dossier.');
 }
 function methodFor(control,requirement){
- const context=[requirement.expectedEvidence,control.assessmentMethod,control.purpose].filter(Boolean).join(' ');
- return METHODS.find(m=>m.pattern.test(context))||FALLBACK;
+ const primary=String(requirement.expectedEvidence||'');
+ const fallbackContext=[control.assessmentMethod,control.purpose].filter(Boolean).join(' ');
+ return METHODS.find(m=>m.pattern.test(primary))||
+  METHODS.find(m=>m.pattern.test(fallbackContext))||FALLBACK;
 }
 function requirementPlan(control,selected,limitedCoverage){
  const {requirement,requirementIndex,artifactDigests,facts}=selected;
