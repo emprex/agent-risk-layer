@@ -91,7 +91,7 @@ test('KB-007 shows concrete provider candidates but never asserts activation',()
  const html=renderClientPreassessment(d);
  assert.match(html,/ARL-KB-007 — Third-party providers/);
  assert.match(html,/anthropic, fastmcp, langchain/);
- assert.match(html,/runtime use or approval/);
+ assert.match(html,/do not prove runtime use, approval/);
  assert.match(html,/inventory scan was capped or incomplete/);
  assert.match(html,/Reconcile candidate packages against active runtime providers/);
 });
