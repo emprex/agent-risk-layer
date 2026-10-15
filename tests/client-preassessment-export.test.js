@@ -67,3 +67,14 @@ test('rejects stale snapshot, foreign project and injected source digest in AI r
  assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,targetRevision:'b'.repeat(40)}]}),/AI advisory annex/);
  assert.throws(()=>renderClientPreassessment(d,{advisories:[{...a,structuredItems:[{...item,artifactSha256:['a'.repeat(64)]}]}]}),/AI advisory annex/);
 });
+
+test('executive summary surfaces only collected bounded facts and evidence tasks',()=>{
+ const d=fixture();
+ d.controls[9].reviewRequirements[0].boundedSourceFacts=[{collector:'architecture_and_inventory',artifactSha256:'f'.repeat(64),values:{dependencyCount:13,observedTechnologies:['node']}}];
+ const html=renderClientPreassessment(d);
+ assert.match(html,/Evidence-led review starting points/);
+ assert.match(html,/dependencyCount/);
+ assert.match(html,/Next evidence check/);
+ assert.match(html,/Governance records requiring human review/);
+ assert.doesNotMatch(html,/high-risk vulnerability/i);
+});
