@@ -31,7 +31,7 @@ function boundedReferenceSamples(record){
  }
  return results;
 }
-const coverageKeys=['totalTrackedFiles','trackedFilesConsidered','textFilesAttempted','textFilesReadable','trackedFileScanCapped','textFileScanCapped','completeTrackedAndTextScan'];
+const coverageKeys=['totalTrackedFiles','trackedFilesConsidered','textFilesAttempted','textFilesReadable','trackedFileScanCapped','textFileScanCapped','textFilesSkippedForByteBudget','textBytesRead','textByteBudget','completeTrackedAndTextScan'];
 export function extractSourceObservationFacts(observations){
   const facts=[];
   if(!observations||typeof observations!=='object'||Array.isArray(observations))return facts;
