@@ -50,6 +50,7 @@ import { buildAssessmentBatchReviewDossier } from './assessment-batch-review-dos
 import { planStaticEvidenceBatch } from './bounded-static-evidence-batch.mjs';
 import { auditAssessmentStaticArtifacts } from './assessment-static-integrity-audit.mjs';
 import { buildAssessmentClientReport } from './assessment-client-report.mjs';
+import { buildAssessmentBusinessContentInventory } from './assessment-business-content-inventory.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -738,6 +739,34 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Inspect assessment report content v7[.!?]*$/i.test(request.trim())) {
+    const prior=await runLocalAssessment(repositoryPath,
+      'Build assessment client report draft',options,localFrozenInspection);
+    const report=prior.canonicalData?.assessmentClientReport;
+    if(report?.controls?.length!==108) throw new Error('Complete scoped 108-control report required.');
+    const details=[];
+    for(const row of report.controls) {
+      details.push(await getControlIntelligenceControl({
+        projectId:options.projectId,userId:options.userId,controlId:row.controlId
+      }));
+    }
+    const inventory=buildAssessmentBusinessContentInventory({report,details});
+    return {
+      canonicalData:{assessmentBusinessContentInventory:inventory,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'ARL v7 read-only content inventory:\\n'+JSON.stringify({
+        controlsTotal:inventory.controlsTotal,
+        missingByField:Object.fromEntries(Object.entries(inventory.missingByField)
+          .map(([k,ids])=>[k,{count:ids.length,examples:ids.slice(0,5)}])),
+        sample:inventory.controls.slice(0,5).map(c=>({
+          controlId:c.controlId,title:c.title,category:c.category,
+          objective:c.objective,method:c.method,
+          requiredEvidence:c.requiredEvidence.slice(0,3),
+          workflowLane:c.workflowLane
+        })),note:inventory.note
+      },null,2)+'\\nRead-only inventory. Not a client report or security verdict.'
+    };
+  }
   if (/^Build assessment client report draft[.!?]*$/i.test(request.trim())) {
     // Reuse existing frozen-source gates, full review dossier, and digest audit.
     // Do not persist or promote any evidence and never infer a security verdict.
