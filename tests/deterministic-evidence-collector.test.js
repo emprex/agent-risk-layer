@@ -211,7 +211,7 @@ test('KB-011 discovery records bounded coverage rather than pretending all track
     const inventory = data.requirementObservations.find(row =>
       row.collectors.includes('architecture_and_inventory')
     ).observations.architecture_and_inventory;
-    assert.equal(inventory.trackedFileCount, 510);
+    assert.equal(inventory.trackedFileCount, 2010);
     const cov=inventory.discoveryCoverage;
     assert.equal(cov.totalTrackedFiles,2010);
     assert.equal(cov.trackedFilesConsidered,2000);
