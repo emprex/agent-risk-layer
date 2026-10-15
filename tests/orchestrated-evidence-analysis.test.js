@@ -16,7 +16,7 @@ function dossier(){
 }
 test('AI analysis gets bounded facts, does not create verdicts',async()=>{
  let observed;
- const result=await explainControlObservation({dossier:dossier(),controlId:'ARL-KB-001',ask:async q=>(observed=q,{available:true,model:'fixture',content:'Candidate dependency count recorded [O1_1]. Human verification required [R1].'})});
+ const result=await explainControlObservation({dossier:dossier(),controlId:'ARL-KB-001',ask:async q=>(observed=q,{available:true,model:'fixture',content:"{\"schema\":\"arl.ai.evidence-brief.v1\",\"items\":[{\"type\":\"observation\",\"text\":\"Metadata includes a dependency count of seven.\",\"factIds\":[\"O1_1\"],\"artifactSha256\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}]}"})});
  assert.equal(result.available,true);
  assert.equal(result.confirmedFinding,false);
  assert.equal(result.advisoryOnly,true);
