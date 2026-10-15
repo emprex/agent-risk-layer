@@ -28,7 +28,7 @@ test('bounded plan fails closed on overlapping controls or corrupted coverage',(
 });
 test('persistence command checks exact frozen scope and delegates to existing append-only ledger',()=>{
   const source=readFileSync(new URL('../src/agent/local-assessment-workflow.mjs',import.meta.url),'utf8');
-  const start=source.indexOf('if (/^Persist assessment static batch');
+  const start=source.indexOf('if (/^(?:Persist assessment static batch');
   const end=source.indexOf('if (/^Build assessment batch review dossier',start);
   assert.ok(start>0&&end>start);
   const block=source.slice(start,end);
@@ -38,4 +38,23 @@ test('persistence command checks exact frozen scope and delegates to existing ap
     'collectionOnly:true','deploymentDecisionWritten:false'])
     assert.ok(block.includes(token),token);
   assert.ok(!block.includes('recordDeploymentDecision('));
+});
+
+test('recollection is a single command bound to current snapshot and resumable existing batches',()=>{
+ const source=readFileSync(new URL('../src/agent/local-assessment-workflow.mjs',import.meta.url),'utf8');
+ const a=source.indexOf('if (/^Refresh assessment source projections v2 all batches');
+ const b=source.indexOf('if (/^(?:Persist assessment static batch',a);
+ assert.ok(a>0&&b>a);
+ const block=source.slice(a,b);
+ for(const marker of ['ARL_EXPECTED_PROJECT_ID','ARL_EXPECTED_SYSTEM_SNAPSHOT_ID',
+  'ARL_EXPECTED_TARGET_SHA','queue.total!==108','index.batches',
+  'runLocalAssessment(repositoryPath','Refresh assessment source projections v2 batch',
+  'deploymentDecisionWritten:false'])
+  assert.ok(block.includes(marker),marker);
+ assert.ok(!block.includes('recordControlEvidence('));
+ assert.ok(!block.includes('recordDeploymentDecision('));
+ const persisted=source.slice(b,source.indexOf('if (/^Build assessment batch review dossier',b));
+ assert.ok(persisted.includes('refreshProjectionV2:Boolean(refreshMatch)'));
+ assert.ok(persisted.includes("detail.chain?.currentStage !== 'test'"));
+ assert.ok(persisted.includes('runAuthoritativeControlSourceReview'));
 });
