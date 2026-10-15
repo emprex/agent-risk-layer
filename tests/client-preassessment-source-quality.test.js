@@ -67,9 +67,18 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
   assert.ok(end>start,controlId);
   return html.slice(start,end);
  }
- const exception=sectionFor(controls[10].controlId);
- const exercise=sectionFor(controls[11].controlId);
- const permissions=sectionFor(controls[12].controlId);
+ function requirementFor(controlId,expectedEvidence){
+  const section=sectionFor(controlId);
+  const needle='<p><strong>Required:</strong> '+expectedEvidence+'</p>';
+  const start=section.indexOf(needle);
+  assert.ok(start>=0,controlId+' requirement missing');
+  const end=section.indexOf('</div>',start);
+  assert.ok(end>start,controlId+' requirement boundary missing');
+  return section.slice(start,end);
+ }
+ const exception=requirementFor(controls[10].controlId,'Signed risk exception approval with scope, owner and expiry');
+ const exercise=requirementFor(controls[11].controlId,'Incident response tabletop record with participants and observations');
+ const permissions=requirementFor(controls[12].controlId,'Effective IAM permissions and token revocation');
  for(const documentary of [exception,exercise]){
   assert.match(documentary,/No active test proposed for this documentary or governance requirement/);
   assert.doesNotMatch(documentary,/A synthetic event with expected detection|A narrowly scoped, synthetic least-privilege/);
