@@ -1,3 +1,4 @@
+import {buildKb007Brief} from './kb007-evidence-intelligence.mjs';
 import {buildClientEvidenceSummary} from './client-evidence-summary.mjs';
 import {verifyReportAdvisory} from './ai/report-advisory-lineage.mjs';
 import fs from 'node:fs';
@@ -56,6 +57,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
    throw new Error('AI advisory annex requires bounded non-authoritative analysis.');
  const candidate=d.candidateRequirementCount,remaining=d.requiresEvidenceOrReviewCount;
  const briefing=buildClientEvidenceSummary(d);
+ const providerBrief=buildKb007Brief(d);
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
  const categories=[...grouped.entries()].map(([cat,cs])=>{
@@ -75,6 +77,11 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  <p class="small muted">This is not a completed penetration test, vulnerability assessment verdict, compliance certification or deployment approval. It is a structured pre-assessment requiring accountable human review.</p>
  <div class="metrics"><div class="metric"><b>108</b>Controls in scope</div><div class="metric"><b>${escape(candidate)}</b>Requirements with candidate metadata</div><div class="metric"><b>${escape(remaining)}</b>Requirements needing more evidence or review</div><div class="metric"><b>0</b>Confirmed findings in this export</div></div>
  <div class="notice"><strong>What the results mean.</strong> An observed metadata match means only that relevant static source material was collected and integrity checked. It does not mean a safeguard works. The absence of a metadata match is not a vulnerability. No active test, risk severity determination or final evidence acceptance is claimed by this report.</div>
+ ${providerBrief&&providerBrief.providers.length?`<h2>Concrete provider signals — KB-007</h2>
+ <p><strong>Candidate package references:</strong> ${providerBrief.providers.map(escape).join(', ')}.</p>
+ <p class="small muted">These names came from bounded static collection and do not prove runtime use or approval. ${providerBrief.limitedCoverage?'The inventory scan was capped or incomplete.':''}</p>
+ <p><strong>Targeted review:</strong></p><ol>${providerBrief.checks.map(c=>`<li>${escape(c)}</li>`).join('')}</ol>
+ <p class="small">Trace to <a href="#ARL-KB-007">ARL-KB-007</a> and its candidate evidence digests; accountable human validation remains required.</p>`:''}
  <h2>Evidence-led review starting points</h2>
  <p class="small muted">${escape(briefing.method)}</p>
  ${briefing.technical.map(item=>`<div class="categoryblock"><a href="#${escape(item.controlId)}"><b>${escape(item.controlId)} — ${escape(item.title)}</b></a><p class="small">Static metadata candidates: ${item.candidateCount}; requirements requiring other evidence: ${item.missingCount}.</p>${item.sourceFacts.map(f=>`<p class="small"><strong>Collected metadata:</strong> ${escape(f.collector)} — ${escape(JSON.stringify(f.values))} · <strong>Source SHA-256:</strong> <code>${escape(f.digest)}</code></p>`).join('')}<p class="small"><strong>Next evidence check:</strong> ${escape(item.verification||'Confirm the current requirement and assessment scope.')}</p></div>`).join('')}
