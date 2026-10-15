@@ -21,6 +21,11 @@ const MALFORMED = [
 ];
 const PLACEHOLDER = /\$\{[^}]*\}|\{\{[^}]+\}\}|<<[^>]+>>|\b(?:TODO|TBD|FIXME)\b/i;
 const MID_WORD_END = /\b[a-z]{1,2}[.!?]$/i;
+const GENERIC_PASS_FAIL = [
+ /passes only when [“"][^\\n]+?denial occurs before side effects/i,
+ /valid workflow remains bounded to .*denial occurs before side effects/i,
+ /or when the relevant control is declaration-only, bypassable, fail-open/i
+];
 const GENERIC_REQUIRED_EVIDENCE = [
   /showing how reduce the likelihood and impact/i,
   /control configuration or source location showing how/i,
@@ -64,6 +69,13 @@ export function auditRiskKnowledge(asset) {
          GENERIC_REQUIRED_EVIDENCE.some(pattern=>pattern.test(evidence))){
         findings.push({id:entry.id,field:'check.required_evidence['+index+']',
           issue:'generic_or_malformed_required_evidence',value:evidence});
+      }
+    }
+    for(const field of ['pass_condition','fail_condition']){
+      const value=entry.check?.[field]||'';
+      if(GENERIC_PASS_FAIL.some(pattern=>pattern.test(value))){
+        findings.push({id:entry.id,field:'check.'+field,
+         issue:'generic_or_mismatched_pass_fail',value});
       }
     }
     // Retest acceptance criteria are control-specific.
