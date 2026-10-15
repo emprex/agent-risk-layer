@@ -23,16 +23,16 @@ function validate(d){
       c.reviewRequirements.some(r=>r.proofStatus!=='not_validated'||r.requiresHumanDecision!==true)))
     throw new Error('Client pre-assessment requires complete, non-authoritative 108-control dossier.');
 }
-function actionText(r,lane){
+function actionText(r,lane,hasCandidate){
   if(lane==='human_decision')
     return 'Obtain the authoritative, dated governance or approval record; check who approved it, for which scope and version, and record the accountable decision.';
-  if(r.artifactDigests.length)
+  if(hasCandidate)
     return 'Open the referenced collected metadata and underlying primary source; compare it to the exact requirement; record what is observed, what is not established and whether an authorised runtime test is needed.';
   return 'Request the specified primary evidence from the system owner. Confirm applicability and scope. Where static evidence cannot settle the question, obtain written authorisation before testing.';
 }
 function controlCard(c,plan){
-  const candidate=c.reviewRequirements.filter(r=>r.artifactDigests.length).length;
-  const outstanding=c.reviewRequirements.length-candidate;
+  const candidate=plan.coverage.candidateRequirements;
+  const outstanding=plan.coverage.totalRequirements-candidate;
   return `<article class="control" id="${escape(c.controlId)}"><div class="controlhead"><h3>${escape(c.title)}</h3><code>${escape(c.controlId)}</code></div>
   <p class="category">${escape(c.category)} · ${c.workflowLane==='human_decision'?'Decision-stage review':'Technical evidence review'}</p>
   <p><strong>What this checks.</strong> ${escape(c.purpose)}</p>
@@ -41,10 +41,10 @@ function controlCard(c,plan){
   <p><strong>Next accountable action.</strong> ${escape(c.nextStep)}</p>
   <details><summary>Evidence requirements, traceability and verification steps (${c.reviewRequirements.length})</summary>
   <div class="reqs">${c.reviewRequirements.map((r,i)=>`<div class="req"><p><strong>Required:</strong> ${escape(r.expectedEvidence)}</p>
-  <p><strong>Current state:</strong> ${r.artifactDigests.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
-  ${r.artifactDigests.length?`<p><strong>Artifact SHA-256:</strong> <code>${r.artifactDigests.map(escape).join(', ')}</code></p>`:''}
-  ${ (r.boundedSourceFacts||[]).length ? `<p><strong>Observed bounded metadata (not validated):</strong></p><ul>${r.boundedSourceFacts.map(f=>`<li><strong>${escape(f.collector)}</strong>: <code>${escape(JSON.stringify(f.values))}</code></li>`).join('')}</ul>` : '' }
-  <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane))}</p>
+  <p><strong>Current state:</strong> ${plan.requirements[i].observed.artifactSha256.length?'Static metadata candidate':'No exact static metadata match'}; not validated.</p>
+  ${plan.requirements[i].observed.artifactSha256.length?`<p><strong>Artifact SHA-256:</strong> <code>${plan.requirements[i].observed.artifactSha256.map(escape).join(', ')}</code></p>`:''}
+  ${plan.requirements[i].observed.boundedSourceFacts.length ? `<p><strong>Observed bounded metadata (not validated):</strong></p><ul>${plan.requirements[i].observed.boundedSourceFacts.map(f=>`<li><strong>${escape(f.collector)}</strong>: <code>${escape(JSON.stringify(f.values))}</code></li>`).join('')}</ul>` : '' }
+  <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane,plan.requirements[i].observed.artifactSha256.length>0))}</p>
   <p><strong>Verification plan (not a test result):</strong> ${escape(plan.requirements[i].verification.technical)}</p>
   <p><strong>Primary evidence to obtain:</strong> ${escape(plan.requirements[i].primaryEvidenceNeeded)}</p>
   <p><strong>Active testing:</strong> ${escape(plan.requirements[i].activeTest.state)}; no execution by this planner. ${escape(plan.requirements[i].activeTest.proposedScenario||"No active test proposed for this human-decision lane.")}</p>
@@ -61,16 +61,17 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
      a.deploymentDecisionWritten!==false||!Array.isArray(a.structuredItems)||
      a.structuredItems.length<1||a.structuredItems.length>12))
    throw new Error('AI advisory annex requires bounded non-authoritative analysis.');
- const candidate=d.candidateRequirementCount,remaining=d.requiresEvidenceOrReviewCount;
  const briefing=buildClientEvidenceSummary(d);
  const providerBrief=buildKb007Brief(d);
  const boundaryBriefs=buildAgentBoundaryBriefs(d);
  const verificationPlans=new Map(d.controls.map(c=>[c.controlId,buildControlVerificationPlan(d,c.controlId)]));
+ const candidate=[...verificationPlans.values()].reduce((n,p)=>n+p.coverage.candidateRequirements,0);
+ const remaining=[...verificationPlans.values()].reduce((n,p)=>n+p.coverage.totalRequirements-p.coverage.candidateRequirements,0);
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
  const categories=[...grouped.entries()].map(([cat,cs])=>{
-   const unmet=cs.reduce((n,c)=>n+c.reviewRequirements.filter(r=>!r.artifactDigests.length).length,0);
-   const observed=cs.reduce((n,c)=>n+c.reviewRequirements.filter(r=>r.artifactDigests.length).length,0);
+   const observed=cs.reduce((n,c)=>n+verificationPlans.get(c.controlId).coverage.candidateRequirements,0);
+   const unmet=cs.reduce((n,c)=>n+verificationPlans.get(c.controlId).coverage.totalRequirements-verificationPlans.get(c.controlId).coverage.candidateRequirements,0);
    return {cat,cs,unmet,observed};
  });
  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
