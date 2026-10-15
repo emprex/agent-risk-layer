@@ -49,6 +49,7 @@ import { buildAssessmentBatchRunSummary } from './assessment-batch-run-summary.m
 import { buildAssessmentBatchReviewDossier } from './assessment-batch-review-dossier.mjs';
 import { planStaticEvidenceBatch } from './bounded-static-evidence-batch.mjs';
 import { auditAssessmentStaticArtifacts } from './assessment-static-integrity-audit.mjs';
+import { buildAssessmentClientReport } from './assessment-client-report.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
@@ -737,6 +738,28 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   // One-pass assessment-wide preparation. No evidence persistence or test execution.
+  if (/^Build assessment client report draft[.!?]*$/i.test(request.trim())) {
+    // Reuse existing frozen-source gates, full review dossier, and digest audit.
+    // Do not persist or promote any evidence and never infer a security verdict.
+    const reviewResult=await runLocalAssessment(repositoryPath,
+      'Build assessment batch review dossier',options,localFrozenInspection);
+    const auditResult=await runLocalAssessment(repositoryPath,
+      'Audit assessment static integrity',options,localFrozenInspection);
+    const dossier=reviewResult.canonicalData?.assessmentBatchReviewDossier;
+    const audit=auditResult.canonicalData?.assessmentStaticIntegrityAudit;
+    const report=buildAssessmentClientReport({dossier,audit});
+    return {
+      canonicalData:{assessmentClientReport:report,securityStateChanged:false,
+        deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'Client-facing assessment draft (human review required):\\n'+
+        JSON.stringify({reportStatus:report.reportStatus,
+          snapshotId:report.systemSnapshotId,targetRevision:report.targetRevision,
+          summary:report.summary,decisionStageControls:report.controls
+            .filter(c=>c.workflowLane==='human_decision').map(c=>c.controlId),
+          limitations:report.limitations},null,2)+
+        '\\nFull structured draft is available in canonical output; no certification, PASS/FAIL or approval.'
+    };
+  }
   if (/^Audit assessment static integrity[.!?]*$/i.test(request.trim())) {
     const expected=String(process.env.ARL_EXPECTED_TARGET_SHA || '').trim();
     const snapshotId=String(process.env.ARL_EXPECTED_SYSTEM_SNAPSHOT_ID || '').trim();
