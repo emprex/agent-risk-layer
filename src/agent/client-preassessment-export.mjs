@@ -1,3 +1,4 @@
+import {buildAgentBoundaryBriefs} from './agent-boundary-review-briefs.mjs';
 import {buildKb007Brief} from './kb007-evidence-intelligence.mjs';
 import {buildClientEvidenceSummary} from './client-evidence-summary.mjs';
 import {verifyReportAdvisory} from './ai/report-advisory-lineage.mjs';
@@ -58,6 +59,7 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  const candidate=d.candidateRequirementCount,remaining=d.requiresEvidenceOrReviewCount;
  const briefing=buildClientEvidenceSummary(d);
  const providerBrief=buildKb007Brief(d);
+ const boundaryBriefs=buildAgentBoundaryBriefs(d);
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
  const categories=[...grouped.entries()].map(([cat,cs])=>{
@@ -82,6 +84,11 @@ export function renderClientPreassessment(d,{advisories=[]}={}){
  <p class="small muted">These names came from bounded static collection and do not prove runtime use or approval. ${providerBrief.limitedCoverage?'The inventory scan was capped or incomplete.':''}</p>
  <p><strong>Targeted review:</strong></p><ol>${providerBrief.checks.map(c=>`<li>${escape(c)}</li>`).join('')}</ol>
  <p class="small">Trace to <a href="#ARL-KB-007">ARL-KB-007</a> and its candidate evidence digests; accountable human validation remains required.</p>`:''}
+ <h2>Prompt and tool security — focused reviews</h2>
+ <p class="small muted">These review plans are bounded by current static collection; they do not imply any successful attack or confirmed policy failure.</p>
+ ${boundaryBriefs.map(b=>`<div class="categoryblock"><a href="#${escape(b.controlId)}"><b>${escape(b.controlId)} — ${escape(b.title)}</b></a>
+ <p class="small">Metadata candidate requirements: ${b.candidateRequirements} of ${b.totalRequirements}. ${b.observedToolReferenceMetadata?`Source collection referenced ${b.toolReferenceCount} MCP/tool-related files; these are not validated active tools.`:'No verified MCP/tool-reference count is available for this control.'} ${b.limitedCoverage?'The text inventory scan was incomplete.':''}</p>
+ <p class="small">${escape(b.interpretation)}</p><ol>${b.checks.map(c=>`<li>${escape(c)}</li>`).join('')}</ol></div>`).join('')}
  <h2>Evidence-led review starting points</h2>
  <p class="small muted">${escape(briefing.method)}</p>
  ${briefing.technical.map(item=>`<div class="categoryblock"><a href="#${escape(item.controlId)}"><b>${escape(item.controlId)} — ${escape(item.title)}</b></a><p class="small">Static metadata candidates: ${item.candidateCount}; requirements requiring other evidence: ${item.missingCount}.</p>${item.sourceFacts.map(f=>`<p class="small"><strong>Collected metadata:</strong> ${escape(f.collector)} — ${escape(JSON.stringify(f.values))} · <strong>Source SHA-256:</strong> <code>${escape(f.digest)}</code></p>`).join('')}<p class="small"><strong>Next evidence check:</strong> ${escape(item.verification||'Confirm the current requirement and assessment scope.')}</p></div>`).join('')}
