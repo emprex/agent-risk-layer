@@ -87,7 +87,11 @@ function requirementPlan(control,selected){
    record:'Preserve reviewer, date, target revision, method, observations, artefacts, limitations and any independent test result.'
   },
   activeTest:{
-   proposedScenario:control.workflowLane==='human_decision'?null:method.scenario,
+// The human_decision lane can also contain technical controls whose static
+   // collector is ineligible (e.g. SSRF or containment drills). Only the
+   // governance-only category omits illustrative active verification.
+   proposedScenario:control.workflowLane==='human_decision'&&
+    control.category==='Governance and scope'?null:method.scenario,
    necessity:'analyst_to_determine',
    state:'blocked_no_verified_rules_of_engagement',
    executionAllowed:false,
