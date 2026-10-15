@@ -36,3 +36,19 @@ test('rejects security-authority escalation',()=>{
  const b=fixture();b.controls[0].confirmedFinding=true;
  assert.throws(()=>renderClientPreassessment(b),/requires complete/);
 });
+
+test('renders isolated AI advisory annex with escaped content and retains strict authority',()=>{
+ const d=fixture();
+ const digest='f'.repeat(64);
+ const a={controlId:'ARL-KB-010',advisoryOnly:true,humanReviewRequired:true,
+ confirmedFinding:false,evidenceAccepted:false,securityStateChanged:false,
+ deploymentDecisionWritten:false,structuredItems:[{type:'observation',
+ text:'Candidate <script>alert(1)</script> metadata only',factIds:['O1_1'],artifactSha256:[digest]}]};
+ const report=renderClientPreassessment(d,{advisories:[a]});
+ assert.match(report,/AI-assisted evidence review/);
+ assert.match(report,/Operator review only/);
+ assert.match(report,/&lt;script&gt;/);
+ assert.doesNotMatch(report,/<script>alert/);
+ const bad={...a,confirmedFinding:true};
+ assert.throws(()=>renderClientPreassessment(d,{advisories:[bad]}),/AI advisory annex/);
+});
