@@ -1,16 +1,25 @@
-// Shared, read-only evidence selection for any control and any assessment dossier.
-// A source fact is eligible only when its digest belongs to its own requirement.
-export function collectControlEvidence(dossier, controlId) {
+// Shared, read-only evidence selection for any control and assessment dossier.
+// Selection is per requirement: a digest in a different requirement never
+// legitimises a source fact, even within the same control.
+const isDigest = v => typeof v==='string' && /^[a-f0-9]{64}$/.test(v);
+export function collectControlEvidence(dossier,controlId){
  const control=dossier?.controls?.find(c=>c.controlId===controlId);
  if(!control||!Array.isArray(control.reviewRequirements))return null;
- const facts=control.reviewRequirements.flatMap(r=>
-  (r.boundedSourceFacts||[]).filter(f=>
-   typeof f.artifactSha256==='string'&&
-   Array.isArray(r.artifactDigests)&&r.artifactDigests.includes(f.artifactSha256)));
+ const requirements=control.reviewRequirements.map((requirement,index)=>{
+  const artifactDigests=[...new Set((Array.isArray(requirement.artifactDigests)?
+   requirement.artifactDigests:[]).filter(isDigest))];
+  const eligible=new Set(artifactDigests);
+  const facts=(Array.isArray(requirement.boundedSourceFacts)?
+   requirement.boundedSourceFacts:[]).filter(f=>f&&
+    isDigest(f.artifactSha256)&&eligible.has(f.artifactSha256));
+  return {requirementIndex:requirement.requirementIndex??index+1,
+   requirement,artifactDigests,facts};
+ });
+ const facts=requirements.flatMap(r=>r.facts);
  const coverages=facts.map(f=>f.values?.discoveryCoverage).filter(Boolean);
- return {controlId,control,facts,
-  candidateRequirements:control.reviewRequirements.filter(r=>Array.isArray(r.artifactDigests)&&r.artifactDigests.length>0).length,
-  totalRequirements:control.reviewRequirements.length,
+ return {controlId,control,requirements,facts,
+  candidateRequirements:requirements.filter(r=>r.artifactDigests.length>0).length,
+  totalRequirements:requirements.length,
   limitedCoverage:coverages.some(c=>c.completeTrackedAndTextScan===false||
    c.trackedFileScanCapped===true||c.textFileScanCapped===true)};
 }
