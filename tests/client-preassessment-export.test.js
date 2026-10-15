@@ -234,3 +234,16 @@ test('scope-only documentary requirements do not propose a tool invocation',()=>
  assert.match(section,/No active test proposed for this documentary or governance requirement/);
  assert.match(section,/blocked_no_verified_rules_of_engagement/);
 });
+
+
+test('client report flags historical source evidence instead of implying a fresh run',()=>{
+ const d=fixture();
+ d.controls[9].reviewRequirements[0].sourceProjectionRevisions=['legacy_unversioned'];
+ const html=renderClientPreassessment(d);
+ assert.match(html,/Historical source-collection format/);
+ assert.match(html,/1 candidate requirements reference legacy/);
+ assert.match(html,/Exporting this HTML does not re-inspect the frozen target/);
+ assert.match(html,/Collection provenance:.*Legacy unversioned source projection/s);
+ assert.match(html,/Reference privacy/);
+ assert.match(html,/No confirmed security findings/);
+});
