@@ -95,3 +95,20 @@ test('KB-007 shows concrete provider candidates but never asserts activation',()
  assert.match(html,/inventory scan was capped or incomplete/);
  assert.match(html,/Reconcile candidate packages against active runtime providers/);
 });
+
+test('focused review separates evidence, uncertainty and next verification',()=>{
+ const d=fixture();
+ d.controls[6].reviewRequirements[0].artifactDigests=['a'.repeat(64)];
+ d.controls[6].reviewRequirements[0].boundedSourceFacts=[{
+  artifactSha256:'a'.repeat(64),collector:'architecture_and_inventory',
+  values:{providerPackageCandidates:['anthropic'],discoveryCoverage:{completeTrackedAndTextScan:false}}
+ }];
+ const html=renderClientPreassessment(d);
+ assert.equal((html.match(/Observed — static collection/g)||[]).length,3);
+ assert.equal((html.match(/Unverified — evidence limits/g)||[]).length,3);
+ assert.equal((html.match(/Next security verification — evidence or authorised tests/g)||[]).length,3);
+ assert.match(html,/do not prove runtime use, approval, data transfer/);
+ assert.match(html,/No verified MCP\/tool-reference count is available/);
+ assert.match(html,/The inventory scan was capped or incomplete/);
+ assert.match(html,/no successful attack or confirmed policy failure/i);
+});
