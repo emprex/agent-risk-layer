@@ -3606,7 +3606,7 @@
         ],
         "required_evidence": [
           "ARL-KB-015 assessed system, version, environment and scope for Memory and vector stores are untracked",
-          "ARL-KB-015 control configuration or source location showing how reduce the likelihood and impact of memory and vector stores are untracked and make the remaining risk visible.",
+          "ARL-KB-015 Versioned memory/vector-store inventory, namespace and tenant bindings, read/write principals, backup copies, retention and deletion paths, with linked source or configuration evidence.",
           "ARL-KB-015 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-015 policy, authorization, tool or audit events proving whether the tested memory and vector stores are untracked path executed",
           "ARL-KB-015 tester identity, role, timestamp and evidence digest"
@@ -3713,7 +3713,7 @@
           "ARL-KB-015 cross-environment, cross-tenant, stale-store or unexpected persistence evidence",
           "ARL-KB-015 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -3775,7 +3775,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c477e354d0ad83803c0eae3d001cfae1c5c615d64ff90ac777e5ce61275404fb"
+      "content_digest": "f03641d30b0632d23a7744e5ee60c39a8441502e3ca9a9166c6c1494569da833"
     },
     {
       "id": "ARL-KB-016",
@@ -3817,7 +3817,7 @@
         ],
         "required_evidence": [
           "ARL-KB-016 assessed system, version, environment and scope for Model versions and digests are not pinned",
-          "ARL-KB-016 control configuration or source location showing how reduce the likelihood and impact of model versions and digests are not pinned and make the remaining risk visible.",
+          "ARL-KB-016 Exact model-provider and deployed-model inventory with immutable model revision or digest, prompt/configuration revision, inference settings and documented drift-triggered reassessment evidence.",
           "ARL-KB-016 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-016 policy, authorization, tool or audit events proving whether the tested model versions and digests are not pinned path executed",
           "ARL-KB-016 tester identity, role, timestamp and evidence digest"
@@ -3924,7 +3924,7 @@
           "ARL-KB-016 provenance failure, unexpected model drift or mutable-alias resolution change",
           "ARL-KB-016 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -3980,7 +3980,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f17308b95ec1df9dfc20ea4173bfc1c73b46b5c3e9f71715d075226cdc3f637f"
+      "content_digest": "80a2c8c534ddea9298576895e3bdee96bd9ba07ab2987e7bdcb65150a4d144f5"
     },
     {
       "id": "ARL-KB-017",
@@ -4022,7 +4022,7 @@
         ],
         "required_evidence": [
           "ARL-KB-017 assessed system, version, environment and scope for Software and AI dependency bill is missing",
-          "ARL-KB-017 control configuration or source location showing how reduce the likelihood and impact of software and ai dependency bill is missing and make the remaining risk visible.",
+          "ARL-KB-017 Exact-build software and AI dependency inventory or SBOM with package and model versions, lockfiles, registry provenance, container digest references and links to deployed artefacts.",
           "ARL-KB-017 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-017 policy, authorization, tool or audit events proving whether the tested software and ai dependency bill is missing path executed",
           "ARL-KB-017 tester identity, role, timestamp and evidence digest"
@@ -4129,7 +4129,7 @@
           "ARL-KB-017 new vulnerability advisory, compromised dependency or supply-chain incident",
           "ARL-KB-017 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -4186,7 +4186,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "757ab40fc3c8ff934197a48c12a798821a71268e440ccbf1d0c1e0bc41fe213b"
+      "content_digest": "10ae787c99e70cdf2307fd527ffa41837b4363abc7c7b103428eb607f6950e98"
     },
     {
       "id": "ARL-KB-018",
@@ -4228,7 +4228,7 @@
         ],
         "required_evidence": [
           "ARL-KB-018 assessed system, version, environment and scope for Environment separation is weak",
-          "ARL-KB-018 control configuration or source location showing how reduce the likelihood and impact of environment separation is weak and make the remaining risk visible.",
+          "ARL-KB-018 Environment-by-environment configuration inventory for accounts, credentials, networks, queues, data stores and tool endpoints, identifying prohibited cross-environment routes.",
           "ARL-KB-018 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-018 policy, authorization, tool or audit events proving whether the tested environment separation is weak path executed",
           "ARL-KB-018 tester identity, role, timestamp and evidence digest"
@@ -4335,7 +4335,7 @@
           "ARL-KB-018 environment-boundary bypass, drift or incident evidence",
           "ARL-KB-018 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -4391,7 +4391,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e96c3e00269f9e34a86463a2f77a778dbad427f5b180ba7bf87b537cf846adf9"
+      "content_digest": "e3f3b63ec2bde4a88cdc23a4b940942ef85fa555964fa0d81cf2ffd7b5ca5c63"
     },
     {
       "id": "ARL-KB-019",
@@ -4433,7 +4433,7 @@
         ],
         "required_evidence": [
           "ARL-KB-019 assessed system, version, environment and scope for Authentication is missing or can fail open",
-          "ARL-KB-019 control configuration or source location showing how reduce the likelihood and impact of authentication is missing or can fail open and make the remaining risk visible.",
+          "ARL-KB-019 Server-side authentication middleware and route configuration for each sensitive operation, including identity-provider failure behaviour and credential/session verification policy.",
           "ARL-KB-019 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-019 policy, authorization, tool or audit events proving whether the tested authentication is missing or can fail open path executed",
           "ARL-KB-019 tester identity, role, timestamp and evidence digest"
@@ -4540,7 +4540,7 @@
           "ARL-KB-019 authentication bypass, fail-open behaviour, credential-verification incident or session anomaly",
           "ARL-KB-019 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -4602,7 +4602,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "a37481c06db1aa4dcdfe6a1139f9e291109d58ede832bc9ec2d0203d0e18138d"
+      "content_digest": "07886353f8ce0ccab6d2c9b40a9a19bdd7602556fd277934d76af044e675a9fc"
     },
     {
       "id": "ARL-KB-020",
@@ -7302,7 +7302,7 @@
         ],
         "required_evidence": [
           "ARL-KB-033 assessed system, version, environment and scope for Agent goal is hijacked across multiple steps",
-          "ARL-KB-033 control configuration or source location showing how reduce the likelihood and impact of agent goal is hijacked across multiple steps and make the remaining risk visible.",
+          "ARL-KB-033 Versioned agent goal and task-scope definition with per-step policy or planner configuration showing where deviations are detected, stopped or explicitly escalated.",
           "ARL-KB-033 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-033 policy, authorization, tool or audit events proving whether the tested agent goal is hijacked across multiple steps path executed",
           "ARL-KB-033 tester identity, role, timestamp and evidence digest"
@@ -7401,7 +7401,7 @@
           "ARL-KB-033 goal-drift, plan-hijack or unauthorised multi-step outcome evidence",
           "ARL-KB-033 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -7457,7 +7457,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f01fc9a625a0c290a65261c56da5abc25527c3b5dbf21a7df601d2fa69a7a9aa"
+      "content_digest": "cec4226f871971b6b4f153ce6e8c465fc8ce20c6c7c75179ad80237ab322a274"
     },
     {
       "id": "ARL-KB-034",
@@ -7499,7 +7499,7 @@
         ],
         "required_evidence": [
           "ARL-KB-034 assessed system, version, environment and scope for System prompt or hidden policy leaks",
-          "ARL-KB-034 control configuration or source location showing how reduce the likelihood and impact of system prompt or hidden policy leaks and make the remaining risk visible.",
+          "ARL-KB-034 System-prompt confidentiality policy and output/logging configuration identifying protected prompt material, permitted disclosure and redaction boundaries.",
           "ARL-KB-034 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-034 policy, authorization, tool or audit events proving whether the tested system prompt or hidden policy leaks path executed",
           "ARL-KB-034 tester identity, role, timestamp and evidence digest"
@@ -7598,7 +7598,7 @@
           "ARL-KB-034 prompt leakage, diagnostic exposure or protected-context incident",
           "ARL-KB-034 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -7654,7 +7654,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9129857a61c08135a23f6b9b7486ad0f585f95afe121d3582cf6a0a89be96b46"
+      "content_digest": "22478a0b662784cd578350f33efb9a02336259d24878e2b51bb47a3db9828a88"
     },
     {
       "id": "ARL-KB-035",
@@ -7696,7 +7696,7 @@
         ],
         "required_evidence": [
           "ARL-KB-035 assessed system, version, environment and scope for Instruction priority is ambiguous",
-          "ARL-KB-035 control configuration or source location showing how reduce the likelihood and impact of instruction priority is ambiguous and make the remaining risk visible.",
+          "ARL-KB-035 Message assembly and instruction-precedence source or configuration evidence identifying system, developer, user, retrieved and tool-originated content trust levels.",
           "ARL-KB-035 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-035 policy, authorization, tool or audit events proving whether the tested instruction priority is ambiguous path executed",
           "ARL-KB-035 tester identity, role, timestamp and evidence digest"
@@ -7803,7 +7803,7 @@
           "ARL-KB-035 role-spoofing, precedence-confusion or provenance-loss evidence",
           "ARL-KB-035 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -7859,7 +7859,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "7a5d87706fa26cae4c2787552f3ba35954d563ffb9efb8266df8f1e35c537525"
+      "content_digest": "d889ca73b38086b97c5c68a79194d5efe1f501fcb9cb495ee191c55edc7b1401"
     },
     {
       "id": "ARL-KB-036",
@@ -7901,7 +7901,7 @@
         ],
         "required_evidence": [
           "ARL-KB-036 assessed system, version, environment and scope for Files and messages are accepted as trusted commands",
-          "ARL-KB-036 control configuration or source location showing how reduce the likelihood and impact of files and messages are accepted as trusted commands and make the remaining risk visible.",
+          "ARL-KB-036 File, message and browser-input parser and authorization configuration distinguishing untrusted extracted content from authenticated tool or action commands.",
           "ARL-KB-036 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-036 policy, authorization, tool or audit events proving whether the tested files and messages are accepted as trusted commands path executed",
           "ARL-KB-036 tester identity, role, timestamp and evidence digest"
@@ -8008,7 +8008,7 @@
           "ARL-KB-036 malicious-document, message-based authority confusion or parser-bypass evidence",
           "ARL-KB-036 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -8065,7 +8065,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "fd042ed1b670b231205cf7d55477ba123d30bd0294a0e1570754171ca49ff4c1"
+      "content_digest": "0b7719eb7ace9c981894a4a80c6f3af2005d6f105758cbe7ce610aac67dadcb5"
     },
     {
       "id": "ARL-KB-037",
@@ -8107,7 +8107,7 @@
         ],
         "required_evidence": [
           "ARL-KB-037 assessed system, version, environment and scope for Encoding and canonicalisation bypass controls",
-          "ARL-KB-037 control configuration or source location showing how reduce the likelihood and impact of encoding and canonicalisation bypass controls and make the remaining risk visible.",
+          "ARL-KB-037 Input decoding, Unicode canonicalisation and policy-evaluation source or configuration evidence showing the normalization order before security checks.",
           "ARL-KB-037 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-037 policy, authorization, tool or audit events proving whether the tested encoding and canonicalisation bypass controls path executed",
           "ARL-KB-037 tester identity, role, timestamp and evidence digest"
@@ -8214,7 +8214,7 @@
           "ARL-KB-037 canonicalisation bypass, homoglyph or alternate-encoding attack evidence",
           "ARL-KB-037 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -8270,7 +8270,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9aa61a32c182328d0f19f86d73bde054c30254746f553b096f1dd13d7262f6f3"
+      "content_digest": "2f4258805632eed9826153ec3a2b90eddfdbab3e320904ceaeda299ac3265921"
     },
     {
       "id": "ARL-KB-038",
@@ -8310,7 +8310,7 @@
         ],
         "required_evidence": [
           "ARL-KB-038 assessed system, version, environment and scope for Multimodal content hides instructions",
-          "ARL-KB-038 control configuration or source location showing how reduce the likelihood and impact of multimodal content hides instructions and make the remaining risk visible.",
+          "ARL-KB-038 Multimodal ingestion and extraction configuration covering OCR, embedded metadata, audio, video and image-to-text trust boundaries and downstream tool permissions.",
           "ARL-KB-038 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-038 policy, authorization, tool or audit events proving whether the tested multimodal content hides instructions path executed",
           "ARL-KB-038 tester identity, role, timestamp and evidence digest"
@@ -8417,7 +8417,7 @@
           "ARL-KB-038 hidden multimodal instruction or cross-modal policy-bypass evidence",
           "ARL-KB-038 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -8473,7 +8473,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "cf75f7c2e07758dfee0af7adf5d81d2ab6c1e5c7896117f93d0505d227e128fe"
+      "content_digest": "5a2c20ef00fcba608d22419afee3127cebf8a5e0d23cc5bc63a8fea152df844c"
     },
     {
       "id": "ARL-KB-039",
@@ -8515,7 +8515,7 @@
         ],
         "required_evidence": [
           "ARL-KB-039 assessed system, version, environment and scope for Prompt templates allow structural injection",
-          "ARL-KB-039 control configuration or source location showing how reduce the likelihood and impact of prompt templates allow structural injection and make the remaining risk visible.",
+          "ARL-KB-039 Dynamic prompt-template construction, escaping and structured-message configuration identifying interpolated fields and role or delimiter injection boundaries.",
           "ARL-KB-039 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-039 policy, authorization, tool or audit events proving whether the tested prompt templates allow structural injection path executed",
           "ARL-KB-039 tester identity, role, timestamp and evidence digest"
@@ -8622,7 +8622,7 @@
           "ARL-KB-039 delimiter escape, role injection or structural prompt-bypass evidence",
           "ARL-KB-039 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -8679,7 +8679,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "57b04b55be47cf43bc72084346cfa87ff170c5615dc2c39ec928396a02d12a47"
+      "content_digest": "ca6617bfac5fdb87a143234c022259a4244bb77f24abe5c3a080f2697429a179"
     },
     {
       "id": "ARL-KB-040",
@@ -8721,7 +8721,7 @@
         ],
         "required_evidence": [
           "ARL-KB-040 assessed system, version, environment and scope for Long-context smuggling bypasses review",
-          "ARL-KB-040 control configuration or source location showing how reduce the likelihood and impact of long-context smuggling bypasses review and make the remaining risk visible.",
+          "ARL-KB-040 Long-context assembly and truncation configuration identifying safety-control placement, instruction precedence and review of omitted or low-salience content.",
           "ARL-KB-040 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-040 policy, authorization, tool or audit events proving whether the tested long-context smuggling bypasses review path executed",
           "ARL-KB-040 tester identity, role, timestamp and evidence digest"
@@ -8820,7 +8820,7 @@
           "ARL-KB-040 long-context smuggling, truncation bypass or hidden-instruction evidence",
           "ARL-KB-040 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -8876,7 +8876,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e0c8ed7907f37a78599a1cf6e4327fe9e97f5ba30ab0416e0223c3d0d2c49f5d"
+      "content_digest": "7046de3e7f3f9933b9950012f1e6b30eecf2ab2736633970b73681b5ff4b498f"
     },
     {
       "id": "ARL-KB-041",
@@ -8918,7 +8918,7 @@
         ],
         "required_evidence": [
           "ARL-KB-041 assessed system, version, environment and scope for Sensitive data is sent to the model unnecessarily",
-          "ARL-KB-041 control configuration or source location showing how reduce the likelihood and impact of sensitive data is sent to the model unnecessarily and make the remaining risk visible.",
+          "ARL-KB-041 Versioned model-payload schema and preprocessing or redaction configuration mapping each transmitted sensitive field to a documented processing purpose.",
           "ARL-KB-041 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-041 policy, authorization, tool or audit events proving whether the tested sensitive data is sent to the model unnecessarily path executed",
           "ARL-KB-041 tester identity, role, timestamp and evidence digest"
@@ -9025,7 +9025,7 @@
           "ARL-KB-041 sensitive-data disclosure or unexpected provider-retention evidence",
           "ARL-KB-041 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -9081,7 +9081,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "1fdbc653ad439b76db2c1621fefd9d1714836f93e438442bfc84962e1c5c2668"
+      "content_digest": "e1cba660063e7eb2f5db102133fba7b5a904a42510124e339d6492f2c8465aa3"
     },
     {
       "id": "ARL-KB-042",
@@ -9123,7 +9123,7 @@
         ],
         "required_evidence": [
           "ARL-KB-042 assessed system, version, environment and scope for Data collection exceeds the declared purpose",
-          "ARL-KB-042 control configuration or source location showing how reduce the likelihood and impact of data collection exceeds the declared purpose and make the remaining risk visible.",
+          "ARL-KB-042 Data intake, user-notice and processing-purpose inventory linked to collection, logging, feature use, storage and retention configuration for each personal-data field.",
           "ARL-KB-042 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-042 policy, authorization, tool or audit events proving whether the tested data collection exceeds the declared purpose path executed",
           "ARL-KB-042 tester identity, role, timestamp and evidence digest"
@@ -9230,7 +9230,7 @@
           "ARL-KB-042 unexpected collection, excessive retention or privacy incident",
           "ARL-KB-042 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -9286,7 +9286,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "09075da3021c787b91965bd5b5bdcd0d28307e4588b896bfcafe3f3aa5d78cdc"
+      "content_digest": "d81afdd0d1dc0ab0f3611da67a1f46f0ef88ce4fe9842a705cb30a3d250fa02c"
     },
     {
       "id": "ARL-KB-043",
@@ -9328,7 +9328,7 @@
         ],
         "required_evidence": [
           "ARL-KB-043 assessed system, version, environment and scope for Retrieval crosses tenant or authorization boundaries",
-          "ARL-KB-043 control configuration or source location showing how reduce the likelihood and impact of retrieval crosses tenant or authorization boundaries and make the remaining risk visible.",
+          "ARL-KB-043 Retrieval identity propagation, tenant-scoping and document authorization configuration linked to index namespaces, prefilter rules and source-level ACL enforcement.",
           "ARL-KB-043 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-043 policy, authorization, tool or audit events proving whether the tested retrieval crosses tenant or authorization boundaries path executed",
           "ARL-KB-043 tester identity, role, timestamp and evidence digest"
@@ -9435,7 +9435,7 @@
           "ARL-KB-043 cross-tenant retrieval or unauthorized-document exposure evidence",
           "ARL-KB-043 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -9494,7 +9494,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "07dd810c60d6bd9591a333d14f2117070906b838f0acb54af3e0089fccfa6296"
+      "content_digest": "d2c36e14c6707ba7b5cc7e00e90a4dafd1df80fef38b7acbc30c36eeef3eed18"
     },
     {
       "id": "ARL-KB-044",
@@ -9536,7 +9536,7 @@
         ],
         "required_evidence": [
           "ARL-KB-044 assessed system, version, environment and scope for Knowledge base content is poisoned",
-          "ARL-KB-044 control configuration or source location showing how reduce the likelihood and impact of knowledge base content is poisoned and make the remaining risk visible.",
+          "ARL-KB-044 Knowledge ingestion source provenance, signer or publisher trust, write permissions, approval and index-version configuration for reviewed source documents.",
           "ARL-KB-044 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-044 policy, authorization, tool or audit events proving whether the tested knowledge base content is poisoned path executed",
           "ARL-KB-044 tester identity, role, timestamp and evidence digest"
@@ -9643,7 +9643,7 @@
           "ARL-KB-044 poisoned-content, compromised-source or anomalous-ranking evidence",
           "ARL-KB-044 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -9699,7 +9699,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "a46608a90c81d268b06ff109e17ebf59143425aba25d60a5a47877bec418e66d"
+      "content_digest": "7ecf7c9cfe7edb4df49a8427fb9f1280be83fb5e0fe6517035fc93ffdb137e5b"
     },
     {
       "id": "ARL-KB-045",
@@ -9741,7 +9741,7 @@
         ],
         "required_evidence": [
           "ARL-KB-045 assessed system, version, environment and scope for Vector and embedding services expose raw or inferable data",
-          "ARL-KB-045 control configuration or source location showing how reduce the likelihood and impact of vector and embedding services expose raw or inferable data and make the remaining risk visible.",
+          "ARL-KB-045 Vector-service endpoint, namespace and metadata-filter configuration linked to access principals, isolation policies and privacy-preserving query controls.",
           "ARL-KB-045 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-045 policy, authorization, tool or audit events proving whether the tested vector and embedding services expose raw or inferable data path executed",
           "ARL-KB-045 tester identity, role, timestamp and evidence digest"
@@ -9848,7 +9848,7 @@
           "ARL-KB-045 enumeration, membership-inference, cross-namespace or data-exposure evidence",
           "ARL-KB-045 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -9904,7 +9904,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "5c82d9991745ea68ff0d0ebe89e154a074db9263b00d26b43a6647f0ee32c883"
+      "content_digest": "1d466bc891415c7d24f59c43ed7ffe8fbe0550db647fe00cc60c69eea25dedf9"
     },
     {
       "id": "ARL-KB-046",
@@ -9946,7 +9946,7 @@
         ],
         "required_evidence": [
           "ARL-KB-046 assessed system, version, environment and scope for Persistent memory can be poisoned",
-          "ARL-KB-046 control configuration or source location showing how reduce the likelihood and impact of persistent memory can be poisoned and make the remaining risk visible.",
+          "ARL-KB-046 Persistent-memory write and approval configuration including authorized identities, stored claim provenance, promotion criteria and correction or deletion routes.",
           "ARL-KB-046 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-046 policy, authorization, tool or audit events proving whether the tested persistent memory can be poisoned path executed",
           "ARL-KB-046 tester identity, role, timestamp and evidence digest"
@@ -10045,7 +10045,7 @@
           "ARL-KB-046 memory-poisoning, false-identity or persistent-instruction evidence",
           "ARL-KB-046 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -10102,7 +10102,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c17edce79f3ec8a2997335d6708bb8886a11abfdc0fcb42da91a9639bacb1968"
+      "content_digest": "dc723de32d2ec2f82f5b5761f0aefdc6c7c404678a57be787be3890be7c7fce2"
     },
     {
       "id": "ARL-KB-047",
@@ -10144,7 +10144,7 @@
         ],
         "required_evidence": [
           "ARL-KB-047 assessed system, version, environment and scope for Stale memory overrides current truth",
-          "ARL-KB-047 control configuration or source location showing how reduce the likelihood and impact of stale memory overrides current truth and make the remaining risk visible.",
+          "ARL-KB-047 Memory/cache invalidation, source-version binding and precedence configuration identifying expiry, supersession and removal of stale stored facts.",
           "ARL-KB-047 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-047 policy, authorization, tool or audit events proving whether the tested stale memory overrides current truth path executed",
           "ARL-KB-047 tester identity, role, timestamp and evidence digest"
@@ -10251,7 +10251,7 @@
           "ARL-KB-047 stale-permission, stale-price, stale-policy or outdated-fact incident",
           "ARL-KB-047 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -10308,7 +10308,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "b91f8cef888993fb7e6459386fed8e7d567d079335526cc8bdfb1c3c9a0aedb6"
+      "content_digest": "a74a7e1a9d2b09122876a22c419f030e385ea3041421eb3020586c07354ed6da"
     },
     {
       "id": "ARL-KB-048",
@@ -10350,7 +10350,7 @@
         ],
         "required_evidence": [
           "ARL-KB-048 assessed system, version, environment and scope for Retention and deletion do not cover derived AI data",
-          "ARL-KB-048 control configuration or source location showing how reduce the likelihood and impact of retention and deletion do not cover derived ai data and make the remaining risk visible.",
+          "ARL-KB-048 Retention/deletion inventory and implementation configuration for primary records, vectors, embeddings, caches, logs, backups and derived AI artefacts.",
           "ARL-KB-048 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-048 policy, authorization, tool or audit events proving whether the tested retention and deletion do not cover derived ai data path executed",
           "ARL-KB-048 tester identity, role, timestamp and evidence digest"
@@ -10457,7 +10457,7 @@
           "ARL-KB-048 deletion failure, retained-derived-data or rights-request incident",
           "ARL-KB-048 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -10513,7 +10513,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "4693772a0f2f243eb3771f6798cc6f7ff6e9f697b1d2c3f22d9c0d319cacfea2"
+      "content_digest": "b1df9d6ecf2de4306e24d07230eba34f23dbae12d4ec06874b99676dab1bc330"
     },
     {
       "id": "ARL-KB-049",
@@ -10555,7 +10555,7 @@
         ],
         "required_evidence": [
           "ARL-KB-049 assessed system, version, environment and scope for The agent exfiltrates data through normal output",
-          "ARL-KB-049 control configuration or source location showing how reduce the likelihood and impact of the agent exfiltrates data through normal output and make the remaining risk visible.",
+          "ARL-KB-049 Response serialization, output filtering and authorization configuration that identifies confidential-data exposure checks across direct and transformed outputs.",
           "ARL-KB-049 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-049 policy, authorization, tool or audit events proving whether the tested the agent exfiltrates data through normal output path executed",
           "ARL-KB-049 tester identity, role, timestamp and evidence digest"
@@ -10662,7 +10662,7 @@
           "ARL-KB-049 extraction, reconstruction, encoded-disclosure or exfiltration evidence",
           "ARL-KB-049 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -10718,7 +10718,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "aa1bfdc838930097edd4026aa5d6d21599eaae11e6f5e3ea18619d4021b16348"
+      "content_digest": "40cb81dbed0e0a4f4547dff238eebb4fd05295054068b9270485769bd6d5b5ed"
     },
     {
       "id": "ARL-KB-050",
@@ -10760,7 +10760,7 @@
         ],
         "required_evidence": [
           "ARL-KB-050 assessed system, version, environment and scope for Model or fine-tune memorises sensitive records",
-          "ARL-KB-050 control configuration or source location showing how reduce the likelihood and impact of model or fine-tune memorises sensitive records and make the remaining risk visible.",
+          "ARL-KB-050 Training and fine-tuning dataset lineage and privacy-control records linked to record minimisation, cohort restrictions and memorisation-test design.",
           "ARL-KB-050 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-050 policy, authorization, tool or audit events proving whether the tested model or fine-tune memorises sensitive records path executed",
           "ARL-KB-050 tester identity, role, timestamp and evidence digest"
@@ -10867,7 +10867,7 @@
           "ARL-KB-050 extraction, memorisation or membership-inference evidence",
           "ARL-KB-050 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -10923,7 +10923,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "635012a115c0f0ccf4eb648b002ce3f905af3eff7ae2ccb5cc17b15da35274bb"
+      "content_digest": "de9df08a86a906f63635fd8c24be876da9b9a099764bd06c53213785aedef17d"
     },
     {
       "id": "ARL-KB-051",
@@ -10963,7 +10963,7 @@
         ],
         "required_evidence": [
           "ARL-KB-051 assessed system, version, environment and scope for Answers lack verifiable provenance",
-          "ARL-KB-051 control configuration or source location showing how reduce the likelihood and impact of answers lack verifiable provenance and make the remaining risk visible.",
+          "ARL-KB-051 Answer-to-source provenance design including passage-level citations, source identifiers, content digests, freshness and access-control verification.",
           "ARL-KB-051 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-051 policy, authorization, tool or audit events proving whether the tested answers lack verifiable provenance path executed",
           "ARL-KB-051 tester identity, role, timestamp and evidence digest"
@@ -11070,7 +11070,7 @@
           "ARL-KB-051 fabricated citation, unsupported claim or provenance-loss evidence",
           "ARL-KB-051 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -11126,7 +11126,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "7e54217f2d43eed5f1fc019822593744b308ecf36ec7b539b07301b496f193c9"
+      "content_digest": "735daddad3682ae48ee7df9f8dfea217c9972350bab91b20980e51b4c641cd53"
     },
     {
       "id": "ARL-KB-052",
@@ -11166,7 +11166,7 @@
         ],
         "required_evidence": [
           "ARL-KB-052 assessed system, version, environment and scope for Aggregates enable re-identification or inference",
-          "ARL-KB-052 control configuration or source location showing how reduce the likelihood and impact of aggregates enable re-identification or inference and make the remaining risk visible.",
+          "ARL-KB-052 Aggregate-query access policy and disclosure-control configuration including minimum cohort sizes, query budgets and protections against overlapping-query inference.",
           "ARL-KB-052 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-052 policy, authorization, tool or audit events proving whether the tested aggregates enable re-identification or inference path executed",
           "ARL-KB-052 tester identity, role, timestamp and evidence digest"
@@ -11273,7 +11273,7 @@
           "ARL-KB-052 reconstruction, differencing, membership-inference or re-identification evidence",
           "ARL-KB-052 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -11329,7 +11329,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2d305b99d1cfc867255cb2c0cad06994f2ff8af3584bf512ead5a05fab09034a"
+      "content_digest": "e58e0a944d6644c3ddabccc0a2f101c0b8efedad263c355da78e5282842eeb74"
     },
     {
       "id": "ARL-KB-053",
@@ -11371,7 +11371,7 @@
         ],
         "required_evidence": [
           "ARL-KB-053 assessed system, version, environment and scope for Agent has more authority than the task requires",
-          "ARL-KB-053 control configuration or source location showing how reduce the likelihood and impact of agent has more authority than the task requires and make the remaining risk visible.",
+          "ARL-KB-053 Versioned tool capability and credential-scope inventory tied to approved tasks, principal identities, available operations and least-privilege configuration.",
           "ARL-KB-053 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-053 policy, authorization, tool or audit events proving whether the tested agent has more authority than the task requires path executed",
           "ARL-KB-053 tester identity, role, timestamp and evidence digest"
@@ -11478,7 +11478,7 @@
           "ARL-KB-053 excessive-authority, unused-capability or privilege-abuse evidence",
           "ARL-KB-053 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -11534,7 +11534,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "e5b8d061f02047ccc03965fb8eb9008cba5dd1963cf27cf00cc8a10c9aaffd38"
+      "content_digest": "1dc26e2959ecf28e1e82f92e996cd74706f8ef9d5459677208a2a0a0b45ef76e"
     },
     {
       "id": "ARL-KB-054",
@@ -11576,7 +11576,7 @@
         ],
         "required_evidence": [
           "ARL-KB-054 assessed system, version, environment and scope for Tool allowlist and environment boundaries are absent",
-          "ARL-KB-054 control configuration or source location showing how reduce the likelihood and impact of tool allowlist and environment boundaries are absent and make the remaining risk visible.",
+          "ARL-KB-054 Runtime tool catalogue and allowlist configuration tied to tool identity, environment, publisher and binding rules for unrecognised or cross-environment tools.",
           "ARL-KB-054 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-054 policy, authorization, tool or audit events proving whether the tested tool allowlist and environment boundaries are absent path executed",
           "ARL-KB-054 tester identity, role, timestamp and evidence digest"
@@ -11675,7 +11675,7 @@
           "ARL-KB-054 unknown-tool execution, catalogue drift or cross-environment access evidence",
           "ARL-KB-054 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -11731,7 +11731,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ec9ebcd50b865622f0eab7d43c0138645895433705f6bfb413589c6e4e1c518f"
+      "content_digest": "862cb0be3fc0ee5974bf3d2be9b640bd3ed7623b9a8bbb83d0f733b4ed1adcf5"
     },
     {
       "id": "ARL-KB-055",
@@ -11773,7 +11773,7 @@
         ],
         "required_evidence": [
           "ARL-KB-055 assessed system, version, environment and scope for Tool parameters are not independently validated",
-          "ARL-KB-055 control configuration or source location showing how reduce the likelihood and impact of tool parameters are not independently validated and make the remaining risk visible.",
+          "ARL-KB-055 Independent tool-argument schema and server-side authorization validation configuration for missing, malformed, out-of-range and cross-tenant parameter values.",
           "ARL-KB-055 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-055 policy, authorization, tool or audit events proving whether the tested tool parameters are not independently validated path executed",
           "ARL-KB-055 tester identity, role, timestamp and evidence digest"
@@ -11880,7 +11880,7 @@
           "ARL-KB-055 malformed-parameter, ownership-bypass or business-rule abuse evidence",
           "ARL-KB-055 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -11936,7 +11936,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "4e76d79a9a2e9e777b2cf45ff8ce67c4970c2b01bd70c02f91003618592f7340"
+      "content_digest": "a76b1f875e375e784c30c34fc5a36f32622cadc6ddb62c5b9b64cdf6b3d165a0"
     },
     {
       "id": "ARL-KB-056",
@@ -11978,7 +11978,7 @@
         ],
         "required_evidence": [
           "ARL-KB-056 assessed system, version, environment and scope for Tool input reaches command or code interpreters",
-          "ARL-KB-056 control configuration or source location showing how reduce the likelihood and impact of tool input reaches command or code interpreters and make the remaining risk visible.",
+          "ARL-KB-056 Tool-command construction and interpreter boundary source evidence identifying escaped arguments, parameterization, process privileges and prohibited dynamic execution sinks.",
           "ARL-KB-056 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-056 policy, authorization, tool or audit events proving whether the tested tool input reaches command or code interpreters path executed",
           "ARL-KB-056 tester identity, role, timestamp and evidence digest"
@@ -12085,7 +12085,7 @@
           "ARL-KB-056 command injection, template injection or arbitrary-code execution evidence",
           "ARL-KB-056 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -12147,7 +12147,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "69cafca2ad089d310cf8ad892a923b93e170608f514aa301b5be587c9ede9eb3"
+      "content_digest": "5785b9f388a7e27e7febcfbbb2b284099e8f65240dd6be0436b3cbe8fbcdd0e9"
     },
     {
       "id": "ARL-KB-057",
@@ -12189,7 +12189,7 @@
         ],
         "required_evidence": [
           "ARL-KB-057 assessed system, version, environment and scope for Network tools permit SSRF and unsafe egress",
-          "ARL-KB-057 control configuration or source location showing how reduce the likelihood and impact of network tools permit ssrf and unsafe egress and make the remaining risk visible.",
+          "ARL-KB-057 Relevant source, proxy, DNS, firewall, allowlist or tool configuration showing outbound destination validation, redirect rechecks and isolation of private or metadata addresses.",
           "ARL-KB-057 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-057 policy, authorization, tool or audit events proving whether the tested network tools permit ssrf and unsafe egress path executed",
           "ARL-KB-057 tester identity, role, timestamp and evidence digest"
@@ -12296,7 +12296,7 @@
           "ARL-KB-057 SSRF, metadata access, DNS rebinding or egress-bypass evidence",
           "ARL-KB-057 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -12353,7 +12353,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "63bf921461839b9edd151019af4b76a4767a3d29851f24e98a1da5cbd7403e2a"
+      "content_digest": "c38598a9be04a2630c54209148a6a823c0d260a167b49101b39efa6247f4353d"
     },
     {
       "id": "ARL-KB-058",
@@ -12395,7 +12395,7 @@
         ],
         "required_evidence": [
           "ARL-KB-058 assessed system, version, environment and scope for File tools escape approved paths",
-          "ARL-KB-058 control configuration or source location showing how reduce the likelihood and impact of file tools escape approved paths and make the remaining risk visible.",
+          "ARL-KB-058 File-tool root-path, filesystem authorization and path-resolution configuration showing containment of traversal, symlinks, archives and race-sensitive operations.",
           "ARL-KB-058 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-058 policy, authorization, tool or audit events proving whether the tested file tools escape approved paths path executed",
           "ARL-KB-058 tester identity, role, timestamp and evidence digest"
@@ -12502,7 +12502,7 @@
           "ARL-KB-058 traversal, link escape, race-condition or archive-breakout evidence",
           "ARL-KB-058 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -12559,7 +12559,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "025e5b00ba4f910174c983df5b17c59603f03cfcfa52507f0dac386692eede46"
+      "content_digest": "92478b9bff873c14be8abbe2db67336b194258350304cd90f27514b415c77d2c"
     },
     {
       "id": "ARL-KB-059",
@@ -12601,7 +12601,7 @@
         ],
         "required_evidence": [
           "ARL-KB-059 assessed system, version, environment and scope for Generated code executes without containment",
-          "ARL-KB-059 control configuration or source location showing how reduce the likelihood and impact of generated code executes without containment and make the remaining risk visible.",
+          "ARL-KB-059 Code-execution sandbox configuration for filesystem, process, network, secret, resource and persistence containment, including container/runtime escape boundaries.",
           "ARL-KB-059 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-059 policy, authorization, tool or audit events proving whether the tested generated code executes without containment path executed",
           "ARL-KB-059 tester identity, role, timestamp and evidence digest"
@@ -12708,7 +12708,7 @@
           "ARL-KB-059 sandbox escape, ambient-secret access or uncontrolled execution evidence",
           "ARL-KB-059 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -12764,7 +12764,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "470b27d5980fff9a5eb706a3da5ad9174141acb4c70710c4fb874f181c1e837d"
+      "content_digest": "7fb8282f25aa43f2c06918458488221bd6f0905a7345009c9bdcbea7175949f0"
     },
     {
       "id": "ARL-KB-060",
@@ -12806,7 +12806,7 @@
         ],
         "required_evidence": [
           "ARL-KB-060 assessed system, version, environment and scope for MCP server identity and provenance are unverified",
-          "ARL-KB-060 control configuration or source location showing how reduce the likelihood and impact of mcp server identity and provenance are unverified and make the remaining risk visible.",
+          "ARL-KB-060 MCP server publisher, package digest, transport identity, deployment version, tool-schema catalogue and signed-change provenance records.",
           "ARL-KB-060 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-060 policy, authorization, tool or audit events proving whether the tested mcp server identity and provenance are unverified path executed",
           "ARL-KB-060 tester identity, role, timestamp and evidence digest"
@@ -12913,7 +12913,7 @@
           "ARL-KB-060 server replacement, provenance failure or unexpected catalogue-drift evidence",
           "ARL-KB-060 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -12970,7 +12970,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f21ef447f50971edc2d4fe611b85d7a38b11bb75cb19bc0472dbdeeabbdb9a36"
+      "content_digest": "63de7109f2c9c28eb1e97c09f88cbdcc17fea010d209f9cb04fd70bb6b7f6c31"
     },
     {
       "id": "ARL-KB-061",
@@ -13012,7 +13012,7 @@
         ],
         "required_evidence": [
           "ARL-KB-061 assessed system, version, environment and scope for Tool results are treated as trusted instructions",
-          "ARL-KB-061 control configuration or source location showing how reduce the likelihood and impact of tool results are treated as trusted instructions and make the remaining risk visible.",
+          "ARL-KB-061 Tool-result ingestion and prompt-construction configuration distinguishing untrusted tool output from privileged instructions or future tool authorizations.",
           "ARL-KB-061 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-061 policy, authorization, tool or audit events proving whether the tested tool results are treated as trusted instructions path executed",
           "ARL-KB-061 tester identity, role, timestamp and evidence digest"
@@ -13111,7 +13111,7 @@
           "ARL-KB-061 hostile-tool-output, plan-redirection or authority-confusion evidence",
           "ARL-KB-061 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -13172,7 +13172,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0b3ab6bbe16fd0b8a228586d11d64f22925724f0d028e35c9da71f0f19bec2fa"
+      "content_digest": "4f9a8599426128f2cd1543b3422ff1dd327a978e417426818ea2a71401b0de3c"
     },
     {
       "id": "ARL-KB-062",
@@ -13214,7 +13214,7 @@
         ],
         "required_evidence": [
           "ARL-KB-062 assessed system, version, environment and scope for Tool names or schemas collide",
-          "ARL-KB-062 control configuration or source location showing how reduce the likelihood and impact of tool names or schemas collide and make the remaining risk visible.",
+          "ARL-KB-062 MCP/tool namespace registry and immutable tool-identity configuration documenting publisher qualification, schema collision detection and explicit selection.",
           "ARL-KB-062 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-062 policy, authorization, tool or audit events proving whether the tested tool names or schemas collide path executed",
           "ARL-KB-062 tester identity, role, timestamp and evidence digest"
@@ -13313,7 +13313,7 @@
           "ARL-KB-062 tool spoofing, schema collision or mistaken-tool-selection evidence",
           "ARL-KB-062 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -13369,7 +13369,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9d346b7c8295983cda4a5dd47b54c620d25a71fa981ecbe1d3ab8a31689fc919"
+      "content_digest": "3b0f508f2d63f160e15734b9b6eeae94654907c819cc53fa45e2fd14d26d58fd"
     },
     {
       "id": "ARL-KB-063",
@@ -13411,7 +13411,7 @@
         ],
         "required_evidence": [
           "ARL-KB-063 assessed system, version, environment and scope for Retries, races or replay duplicate side effects",
-          "ARL-KB-063 control configuration or source location showing how reduce the likelihood and impact of retries, races or replay duplicate side effects and make the remaining risk visible.",
+          "ARL-KB-063 Idempotency-key issuance, side-effect deduplication, retry and transaction/locking configuration covering concurrent and replayed tool operations.",
           "ARL-KB-063 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-063 policy, authorization, tool or audit events proving whether the tested retries, races or replay duplicate side effects path executed",
           "ARL-KB-063 tester identity, role, timestamp and evidence digest"
@@ -13518,7 +13518,7 @@
           "ARL-KB-063 duplicate transaction, race-condition or replay incident",
           "ARL-KB-063 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -13576,7 +13576,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "89b683f46bd94b6a0ccdeee8424bc88bfd3fd9a8e3d94564eee23ef10e26a12c"
+      "content_digest": "722057f7bf0dbedfea739bbd4256440e41f1a2e0661259844811d479a784acb0"
     },
     {
       "id": "ARL-KB-064",
@@ -13616,7 +13616,7 @@
         ],
         "required_evidence": [
           "ARL-KB-064 assessed system, version, environment and scope for Inter-agent messages can be forged or over-trusted",
-          "ARL-KB-064 control configuration or source location showing how reduce the likelihood and impact of inter-agent messages can be forged or over-trusted and make the remaining risk visible.",
+          "ARL-KB-064 Inter-agent message authentication and authorization configuration covering sender identity, audience, tenant boundary, replay protection and delegated authority.",
           "ARL-KB-064 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-064 policy, authorization, tool or audit events proving whether the tested inter-agent messages can be forged or over-trusted path executed",
           "ARL-KB-064 tester identity, role, timestamp and evidence digest"
@@ -13715,7 +13715,7 @@
           "ARL-KB-064 forged message, replay, cross-tenant delivery or delegation-escalation evidence",
           "ARL-KB-064 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -13771,7 +13771,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "3ae8f33e03d5c1c95999cd211a6002b09d939290e7a7dc9e2bf74b928f7279cd"
+      "content_digest": "2c3f593fa3b3ccc987275791d82dda261ce8dfaec5177e8c2afa2c3ecf768254"
     },
     {
       "id": "ARL-KB-065",
@@ -13813,7 +13813,7 @@
         ],
         "required_evidence": [
           "ARL-KB-065 assessed system, version, environment and scope for Caller-controlled approval flags bypass humans",
-          "ARL-KB-065 control configuration or source location showing how reduce the likelihood and impact of caller-controlled approval flags bypass humans and make the remaining risk visible.",
+          "ARL-KB-065 Server-side approval enforcement configuration demonstrating that caller-supplied flags and free-text approver names have no decision authority.",
           "ARL-KB-065 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-065 policy, authorization, tool or audit events proving whether the tested caller-controlled approval flags bypass humans path executed",
           "ARL-KB-065 tester identity, role, timestamp and evidence digest"
@@ -13920,7 +13920,7 @@
           "ARL-KB-065 approval-bypass or self-asserted-approval evidence",
           "ARL-KB-065 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -13977,7 +13977,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9ad6c7bfcf8c78a154b7c93b58cba1f50e0ff2153535a83a30373a19468ca958"
+      "content_digest": "a13a09826f1c578837ebcf71320eb6e24118389280e1eb82eff3be73bf6df1c7"
     },
     {
       "id": "ARL-KB-066",
@@ -14019,7 +14019,7 @@
         ],
         "required_evidence": [
           "ARL-KB-066 assessed system, version, environment and scope for Approval is not bound to the exact action",
-          "ARL-KB-066 control configuration or source location showing how reduce the likelihood and impact of approval is not bound to the exact action and make the remaining risk visible.",
+          "ARL-KB-066 Canonical action-digest and approval binding schema covering tool, target, environment, amount, arguments, recipient, actor and expiry.",
           "ARL-KB-066 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-066 policy, authorization, tool or audit events proving whether the tested approval is not bound to the exact action path executed",
           "ARL-KB-066 tester identity, role, timestamp and evidence digest"
@@ -14118,7 +14118,7 @@
           "ARL-KB-066 approval-substitution, parameter-mutation or binding-bypass evidence",
           "ARL-KB-066 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -14175,7 +14175,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "6091a0c302629b5f17efda7daaf6bcbccc8f8ee482ad81f23d3c69b440b99575"
+      "content_digest": "918ad27d374f36f5d3f0c1b14d0737687e1feb76c3b0082328cd916bc9a149ce"
     },
     {
       "id": "ARL-KB-067",
@@ -14217,7 +14217,7 @@
         ],
         "required_evidence": [
           "ARL-KB-067 assessed system, version, environment and scope for Approval can be replayed",
-          "ARL-KB-067 control configuration or source location showing how reduce the likelihood and impact of approval can be replayed and make the remaining risk visible.",
+          "ARL-KB-067 One-time approval-token storage, expiry, revocation and atomic consumption configuration protecting against sequential and concurrent replay.",
           "ARL-KB-067 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-067 policy, authorization, tool or audit events proving whether the tested approval can be replayed path executed",
           "ARL-KB-067 tester identity, role, timestamp and evidence digest"
@@ -14324,7 +14324,7 @@
           "ARL-KB-067 replay, duplicate-consumption or expired-approval execution evidence",
           "ARL-KB-067 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -14382,7 +14382,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c71c19f075c609d1504a2f6759549b7a91cc893ba523e4298eec0c9430034abf"
+      "content_digest": "d5d65604049302656c3d446b4dcdcd1998921c8e428ec18b6011710a29e2a050"
     },
     {
       "id": "ARL-KB-068",
@@ -14424,7 +14424,7 @@
         ],
         "required_evidence": [
           "ARL-KB-068 assessed system, version, environment and scope for Approver identity is self-asserted",
-          "ARL-KB-068 control configuration or source location showing how reduce the likelihood and impact of approver identity is self-asserted and make the remaining risk visible.",
+          "ARL-KB-068 Approver authentication, role validation and signed approval-event configuration linking decisions to verified principals rather than request fields.",
           "ARL-KB-068 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-068 policy, authorization, tool or audit events proving whether the tested approver identity is self-asserted path executed",
           "ARL-KB-068 tester identity, role, timestamp and evidence digest"
@@ -14523,7 +14523,7 @@
           "ARL-KB-068 self-asserted approver, cross-tenant approval or identity-spoofing evidence",
           "ARL-KB-068 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -14579,7 +14579,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2f18235cfd3cf9922bfb00c6dfe526fd00a50581de866128a26fdc5ad79d4fb5"
+      "content_digest": "72b7f898a0cb815b1c53034c4012e36710c96b1e282a79c1996a3af51930b2d1"
     },
     {
       "id": "ARL-KB-069",
@@ -14621,7 +14621,7 @@
         ],
         "required_evidence": [
           "ARL-KB-069 assessed system, version, environment and scope for Requester can approve its own action",
-          "ARL-KB-069 control configuration or source location showing how reduce the likelihood and impact of requester can approve its own action and make the remaining risk visible.",
+          "ARL-KB-069 Separation-of-duties and approver-assignment configuration demonstrating distinct requester and approver principals and independent role authority.",
           "ARL-KB-069 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-069 policy, authorization, tool or audit events proving whether the tested requester can approve its own action path executed",
           "ARL-KB-069 tester identity, role, timestamp and evidence digest"
@@ -14728,7 +14728,7 @@
           "ARL-KB-069 self-approval, collocated approval or separation-of-duties bypass evidence",
           "ARL-KB-069 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -14784,7 +14784,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "09d953dd26b99821c64225e75ffe6937133822b044454a862e29a9bdd8868870"
+      "content_digest": "99ea05230c61899d921902187772244730b499323c7cbbd28088c0acced7b081"
     },
     {
       "id": "ARL-KB-070",
@@ -14826,7 +14826,7 @@
         ],
         "required_evidence": [
           "ARL-KB-070 assessed system, version, environment and scope for Approval remains valid after identity or policy change",
-          "ARL-KB-070 control configuration or source location showing how reduce the likelihood and impact of approval remains valid after identity or policy change and make the remaining risk visible.",
+          "ARL-KB-070 Approval freshness and invalidation configuration covering identity revocation, role changes, policy revisions and material action-scope changes.",
           "ARL-KB-070 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-070 policy, authorization, tool or audit events proving whether the tested approval remains valid after identity or policy change path executed",
           "ARL-KB-070 tester identity, role, timestamp and evidence digest"
@@ -14925,7 +14925,7 @@
           "ARL-KB-070 stale-approval execution after user, role or policy change",
           "ARL-KB-070 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -14982,7 +14982,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "c86893d4ddab92660b78b753a44f784e7e86e40504b7e170a8b2d07e1083ee88"
+      "content_digest": "fba54bdc27a9580dea26acead6dbcc8400bf4966df7fef53e27826a7618166c3"
     },
     {
       "id": "ARL-KB-071",
@@ -15024,7 +15024,7 @@
         ],
         "required_evidence": [
           "ARL-KB-071 assessed system, version, environment and scope for High-value actions lack threshold and dual control",
-          "ARL-KB-071 control configuration or source location showing how reduce the likelihood and impact of high-value actions lack threshold and dual control and make the remaining risk visible.",
+          "ARL-KB-071 High-value transaction threshold, aggregation and multi-approver policy configuration covering split transactions, dual control and override approvals.",
           "ARL-KB-071 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-071 policy, authorization, tool or audit events proving whether the tested high-value actions lack threshold and dual control path executed",
           "ARL-KB-071 tester identity, role, timestamp and evidence digest"
@@ -15131,7 +15131,7 @@
           "ARL-KB-071 threshold bypass, transaction splitting or missing dual-control evidence",
           "ARL-KB-071 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -15187,7 +15187,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "51a4c330121991f2d6cca96fdbf7e3ea052e5b399b8e37f77dbe2258d45de70d"
+      "content_digest": "3150adca89a189efab47d14cd8a7ddff70361b45b6a51c382d4c374c7e49721c"
     },
     {
       "id": "ARL-KB-072",
@@ -15229,7 +15229,7 @@
         ],
         "required_evidence": [
           "ARL-KB-072 assessed system, version, environment and scope for Approval interface hides material context",
-          "ARL-KB-072 control configuration or source location showing how reduce the likelihood and impact of approval interface hides material context and make the remaining risk visible.",
+          "ARL-KB-072 Approval display schema and canonical action payload mapping showing amounts, recipients, privileges, side effects and ambiguity-safe formatting.",
           "ARL-KB-072 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-072 policy, authorization, tool or audit events proving whether the tested approval interface hides material context path executed",
           "ARL-KB-072 tester identity, role, timestamp and evidence digest"
@@ -15328,7 +15328,7 @@
           "ARL-KB-072 misleading approval display, confusable value or post-approval mutation evidence",
           "ARL-KB-072 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -15385,7 +15385,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "1bd5268992e299c87426cb3645122d88aa828263adc6ee6dcdabbec48c67447a"
+      "content_digest": "2f1ac0b3c0343604a4fc7102455b404a6e4f39b6de8b21913e62a43b7a3a327b"
     },
     {
       "id": "ARL-KB-073",
@@ -15427,7 +15427,7 @@
         ],
         "required_evidence": [
           "ARL-KB-073 assessed system, version, environment and scope for Model provenance cannot be verified",
-          "ARL-KB-073 control configuration or source location showing how reduce the likelihood and impact of model provenance cannot be verified and make the remaining risk visible.",
+          "ARL-KB-073 Model provider and publisher provenance records with immutable model version/digest, signatures where available, license/source and distribution-channel identity.",
           "ARL-KB-073 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-073 policy, authorization, tool or audit events proving whether the tested model provenance cannot be verified path executed",
           "ARL-KB-073 tester identity, role, timestamp and evidence digest"
@@ -15534,7 +15534,7 @@
           "ARL-KB-073 digest mismatch, substituted model or provenance-failure evidence",
           "ARL-KB-073 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -15591,7 +15591,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "6f716278a754d929f7a2e6aabfbbac0ecd9d124ec7eeb8254f9eb08ec4bdba12"
+      "content_digest": "b47a7ea772521f56c0d566c958a39d8b2d9995348a538e2e9e08657ce955e205"
     },
     {
       "id": "ARL-KB-074",
@@ -15633,7 +15633,7 @@
         ],
         "required_evidence": [
           "ARL-KB-074 assessed system, version, environment and scope for Executable model formats load arbitrary code",
-          "ARL-KB-074 control configuration or source location showing how reduce the likelihood and impact of executable model formats load arbitrary code and make the remaining risk visible.",
+          "ARL-KB-074 Model loader allowlist and accepted file-format configuration identifying executable deserialization risks, sandbox limits and artifact signature checks.",
           "ARL-KB-074 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-074 policy, authorization, tool or audit events proving whether the tested executable model formats load arbitrary code path executed",
           "ARL-KB-074 tester identity, role, timestamp and evidence digest"
@@ -15740,7 +15740,7 @@
           "ARL-KB-074 unsafe deserialisation or model-load code-execution evidence",
           "ARL-KB-074 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -15796,7 +15796,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2b65959e23364218aab03a0f247027c6e4688b73b2075037971569be959b3195"
+      "content_digest": "fa97206cccfa953d718e97a1258c66eebfa1c38e50e4b991621e5934741afe86"
     },
     {
       "id": "ARL-KB-075",
@@ -15836,7 +15836,7 @@
         ],
         "required_evidence": [
           "ARL-KB-075 assessed system, version, environment and scope for Container or runtime image uses a mutable tag",
-          "ARL-KB-075 control configuration or source location showing how reduce the likelihood and impact of container or runtime image uses a mutable tag and make the remaining risk visible.",
+          "ARL-KB-075 Container build-and-deploy manifest recording immutable image digests, registry signatures, source revision and the exact running image identity.",
           "ARL-KB-075 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-075 policy, authorization, tool or audit events proving whether the tested container or runtime image uses a mutable tag path executed",
           "ARL-KB-075 tester identity, role, timestamp and evidence digest"
@@ -15943,7 +15943,7 @@
           "ARL-KB-075 mutable-tag drift or deployed-image mismatch evidence",
           "ARL-KB-075 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -15999,7 +15999,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "1fcdd83fc261f2e3872ee2b0185332c8e4ceae66081ba6fb09c275fba3d0d6be"
+      "content_digest": "7bdaa3b67c6667990f218cee44eef320af153fca0b5eed978eb020c699877196"
     },
     {
       "id": "ARL-KB-076",
@@ -16041,7 +16041,7 @@
         ],
         "required_evidence": [
           "ARL-KB-076 assessed system, version, environment and scope for Known vulnerable dependencies remain reachable",
-          "ARL-KB-076 control configuration or source location showing how reduce the likelihood and impact of known vulnerable dependencies remain reachable and make the remaining risk visible.",
+          "ARL-KB-076 Dependency and version inventory correlated with applicable security advisories and reachability or exploitability review for the assessed deployed release.",
           "ARL-KB-076 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-076 policy, authorization, tool or audit events proving whether the tested known vulnerable dependencies remain reachable path executed",
           "ARL-KB-076 tester identity, role, timestamp and evidence digest"
@@ -16148,7 +16148,7 @@
           "ARL-KB-076 reachable vulnerable path, exploit evidence or compensating-control failure",
           "ARL-KB-076 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -16204,7 +16204,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0957bfe9d547f7411f8f0dc7b70665cb0088376208383bf1f4879e87481464e3"
+      "content_digest": "44fea74e540506bb46dd9181fc48ac7240a44e0bf0efecef772f36793d734f1a"
     },
     {
       "id": "ARL-KB-077",
@@ -16246,7 +16246,7 @@
         ],
         "required_evidence": [
           "ARL-KB-077 assessed system, version, environment and scope for Plugin, package or MCP dependency is malicious",
-          "ARL-KB-077 control configuration or source location showing how reduce the likelihood and impact of plugin, package or mcp dependency is malicious and make the remaining risk visible.",
+          "ARL-KB-077 Plugin, package and MCP dependency provenance records including publisher identity, manifest integrity, installation scripts, permissions and update channels.",
           "ARL-KB-077 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-077 policy, authorization, tool or audit events proving whether the tested plugin, package or mcp dependency is malicious path executed",
           "ARL-KB-077 tester identity, role, timestamp and evidence digest"
@@ -16353,7 +16353,7 @@
           "ARL-KB-077 malicious dependency, typosquat, publisher compromise or integrity-failure evidence",
           "ARL-KB-077 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -16411,7 +16411,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2971ec9a976ad41e77e14f8b7f36213d0abb377d0ae82a7cf527b6c850eb4327"
+      "content_digest": "d7118155e676f173d3fa77e8fd3b53628c453994055a39868d338c0f29daaca2"
     },
     {
       "id": "ARL-KB-078",
@@ -16453,7 +16453,7 @@
         ],
         "required_evidence": [
           "ARL-KB-078 assessed system, version, environment and scope for Model update causes unmeasured behavioural drift",
-          "ARL-KB-078 control configuration or source location showing how reduce the likelihood and impact of model update causes unmeasured behavioural drift and make the remaining risk visible.",
+          "ARL-KB-078 Version-bound model regression and drift test plan covering comparable input corpora, policy settings, output metrics and approval-triggering thresholds.",
           "ARL-KB-078 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-078 policy, authorization, tool or audit events proving whether the tested model update causes unmeasured behavioural drift path executed",
           "ARL-KB-078 tester identity, role, timestamp and evidence digest"
@@ -16560,7 +16560,7 @@
           "ARL-KB-078 behavioural drift, refusal regression, tool-selection change or leakage evidence",
           "ARL-KB-078 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -16616,7 +16616,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "444b5d5aa34187424c8bb63ce05e443a92c376e505183eb333e0d6ba98f65d22"
+      "content_digest": "42f4b9941f864b09d008047db528518c6675f5bebca279e4452ce22d1e800252"
     },
     {
       "id": "ARL-KB-079",
@@ -16658,7 +16658,7 @@
         ],
         "required_evidence": [
           "ARL-KB-079 assessed system, version, environment and scope for Training or fine-tuning data is poisoned",
-          "ARL-KB-079 control configuration or source location showing how reduce the likelihood and impact of training or fine-tuning data is poisoned and make the remaining risk visible.",
+          "ARL-KB-079 Training/fine-tuning dataset provenance and ingestion policy covering contributor permissions, integrity checks, suspicious samples and curation approval.",
           "ARL-KB-079 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-079 policy, authorization, tool or audit events proving whether the tested training or fine-tuning data is poisoned path executed",
           "ARL-KB-079 tester identity, role, timestamp and evidence digest"
@@ -16765,7 +16765,7 @@
           "ARL-KB-079 poisoning indicator, backdoor trigger or targeted unsafe-behaviour evidence",
           "ARL-KB-079 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -16821,7 +16821,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ac61f734c2e8055c6f152edafb3c57b9c4f17bb4defb6d34969ccc99e195d2aa"
+      "content_digest": "1b810bec7585178cc5d02daab7b1f2f6f976f4998aa4d604201b6add3072d7ba"
     },
     {
       "id": "ARL-KB-080",
@@ -16863,7 +16863,7 @@
         ],
         "required_evidence": [
           "ARL-KB-080 assessed system, version, environment and scope for Provider fallback changes security properties",
-          "ARL-KB-080 control configuration or source location showing how reduce the likelihood and impact of provider fallback changes security properties and make the remaining risk visible.",
+          "ARL-KB-080 Provider fallback policy and configuration covering alternate model identity, processing region, retention, permissions, tool access and downgrade approval.",
           "ARL-KB-080 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-080 policy, authorization, tool or audit events proving whether the tested provider fallback changes security properties path executed",
           "ARL-KB-080 tester identity, role, timestamp and evidence digest"
@@ -16970,7 +16970,7 @@
           "ARL-KB-080 silent weaker-provider fallback or security-property regression evidence",
           "ARL-KB-080 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -17026,7 +17026,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "0fc5c4d5a8c25d5a611f4ff0577f5a06004c19e807bb5ccf62ad8a492b2c6ef6"
+      "content_digest": "ec9a4425508a9b087bb298754f0d275e7a7e652750bd42db0e8cf5b98f478cbb"
     },
     {
       "id": "ARL-KB-081",
@@ -17068,7 +17068,7 @@
         ],
         "required_evidence": [
           "ARL-KB-081 assessed system, version, environment and scope for Model output is trusted as safe code or data",
-          "ARL-KB-081 control configuration or source location showing how reduce the likelihood and impact of model output is trusted as safe code or data and make the remaining risk visible.",
+          "ARL-KB-081 Model-output parsing and sink validation configuration identifying where generated text becomes executable code, data-store queries or privileged actions.",
           "ARL-KB-081 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-081 policy, authorization, tool or audit events proving whether the tested model output is trusted as safe code or data path executed",
           "ARL-KB-081 tester identity, role, timestamp and evidence digest"
@@ -17175,7 +17175,7 @@
           "ARL-KB-081 output-injection or unintended downstream-execution evidence",
           "ARL-KB-081 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -17231,7 +17231,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "1caca0c7af0c2b1c5005f59750ad6b9ce2dede6dbffd99c56193be22ccbd9bff"
+      "content_digest": "074d8489b8e216522b6a2264754b0a615d0350e176edf72c7a4748214cffa618"
     },
     {
       "id": "ARL-KB-082",
@@ -17271,7 +17271,7 @@
         ],
         "required_evidence": [
           "ARL-KB-082 assessed system, version, environment and scope for Generated content causes cross-site scripting",
-          "ARL-KB-082 control configuration or source location showing how reduce the likelihood and impact of generated content causes cross-site scripting and make the remaining risk visible.",
+          "ARL-KB-082 Generated-content rendering and HTML sanitisation configuration covering text/attribute/URL contexts, trusted types and stored or reflected XSS sinks.",
           "ARL-KB-082 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-082 policy, authorization, tool or audit events proving whether the tested generated content causes cross-site scripting path executed",
           "ARL-KB-082 tester identity, role, timestamp and evidence digest"
@@ -17378,7 +17378,7 @@
           "ARL-KB-082 stored, reflected or DOM execution evidence from agent content",
           "ARL-KB-082 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -17435,7 +17435,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ea1916b739d5b26c3e76c5a3c67de8adfbddf403e489536f4d823ccf5c4d7cb2"
+      "content_digest": "383ea79e4364d624987fe3f09392f0047529e3adb0f276897efe12c42f4d27e6"
     },
     {
       "id": "ARL-KB-083",
@@ -17477,7 +17477,7 @@
         ],
         "required_evidence": [
           "ARL-KB-083 assessed system, version, environment and scope for Generated output triggers data-store injection",
-          "ARL-KB-083 control configuration or source location showing how reduce the likelihood and impact of generated output triggers data-store injection and make the remaining risk visible.",
+          "ARL-KB-083 Data-store query construction and parameterization configuration for generated model values, filter operators, identifiers and tenant-scoped access controls.",
           "ARL-KB-083 positive and abuse inputs with expected and observed outputs for model and dependency artefacts and build, registry and deployment provenance",
           "ARL-KB-083 policy, authorization, tool or audit events proving whether the tested generated output triggers data-store injection path executed",
           "ARL-KB-083 tester identity, role, timestamp and evidence digest"
@@ -17584,7 +17584,7 @@
           "ARL-KB-083 SQL, NoSQL, LDAP, search or analytics injection evidence",
           "ARL-KB-083 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -17641,7 +17641,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "409ac7973e4ff9b0087be10258ffa73179ad6de90b0b876621cb9cb998130c73"
+      "content_digest": "5472377f571bbb937d89754db9e6346da7fdb9947653afde3e57134a2121280b"
     },
     {
       "id": "ARL-KB-084",
@@ -17683,7 +17683,7 @@
         ],
         "required_evidence": [
           "ARL-KB-084 assessed system, version, environment and scope for Generated text injects email, log or protocol fields",
-          "ARL-KB-084 control configuration or source location showing how reduce the likelihood and impact of generated text injects email, log or protocol fields and make the remaining risk visible.",
+          "ARL-KB-084 Generated email, HTTP header, log and structured-protocol serialization configuration covering CRLF, delimiters and control-character escaping.",
           "ARL-KB-084 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-084 policy, authorization, tool or audit events proving whether the tested generated text injects email, log or protocol fields path executed",
           "ARL-KB-084 tester identity, role, timestamp and evidence digest"
@@ -17790,7 +17790,7 @@
           "ARL-KB-084 CRLF, log-forging or protocol-splitting evidence",
           "ARL-KB-084 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -17846,7 +17846,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "2201092f51c24c8cca59a8a4f7b2722a30bdc48aa4bb9489573d67bae6bc4b2f"
+      "content_digest": "f741f0426172e14912d08517e329095861e7da6c9a3eeb4f18ebef3050009c67"
     },
     {
       "id": "ARL-KB-085",
@@ -17888,7 +17888,7 @@
         ],
         "required_evidence": [
           "ARL-KB-085 assessed system, version, environment and scope for Generated files contain active or dangerous content",
-          "ARL-KB-085 control configuration or source location showing how reduce the likelihood and impact of generated files contain active or dangerous content and make the remaining risk visible.",
+          "ARL-KB-085 Generated document and export pipeline configuration specifying allowed MIME types, macro/formula protections, embedded links and content scanning.",
           "ARL-KB-085 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-085 policy, authorization, tool or audit events proving whether the tested generated files contain active or dangerous content path executed",
           "ARL-KB-085 tester identity, role, timestamp and evidence digest"
@@ -17995,7 +17995,7 @@
           "ARL-KB-085 formula injection, macro, embedded payload or archive traversal evidence",
           "ARL-KB-085 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -18051,7 +18051,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "ca60514e5dcc177d78240d78d02fa2e2ed402bc476b99878099dd0439d20c574"
+      "content_digest": "206f61423f01f3546e6c8389aba3612dc74f6704f48510ff2e57939de255fdc8"
     },
     {
       "id": "ARL-KB-086",
@@ -18093,7 +18093,7 @@
         ],
         "required_evidence": [
           "ARL-KB-086 assessed system, version, environment and scope for Misinformation drives a consequential decision",
-          "ARL-KB-086 control configuration or source location showing how reduce the likelihood and impact of misinformation drives a consequential decision and make the remaining risk visible.",
+          "ARL-KB-086 Consequential-decision use-case specification, reference-source policy and human escalation configuration for unsupported or out-of-domain model answers.",
           "ARL-KB-086 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-086 policy, authorization, tool or audit events proving whether the tested misinformation drives a consequential decision path executed",
           "ARL-KB-086 tester identity, role, timestamp and evidence digest"
@@ -18208,7 +18208,7 @@
           "ARL-KB-086 harmful misinformation, unsupported recommendation or reviewer-bypass evidence",
           "ARL-KB-086 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -18264,7 +18264,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "46b253ca973cb23ffbe7fa965d0ef9f2840208a75c39570dca75183294835e6b"
+      "content_digest": "4a569e0b7e7c03eef1897b7b29b816d9ff80f0161672dadcf8d7ba7b3cce7f8f"
     },
     {
       "id": "ARL-KB-087",
@@ -18306,7 +18306,7 @@
         ],
         "required_evidence": [
           "ARL-KB-087 assessed system, version, environment and scope for No runtime enforcement exists",
-          "ARL-KB-087 control configuration or source location showing how reduce the likelihood and impact of no runtime enforcement exists and make the remaining risk visible.",
+          "ARL-KB-087 Runtime security-policy decision-point configuration mapping each sensitive request and tool operation to externally enforced checks before effects.",
           "ARL-KB-087 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-087 policy, authorization, tool or audit events proving whether the tested no runtime enforcement exists path executed",
           "ARL-KB-087 tester identity, role, timestamp and evidence digest"
@@ -18413,7 +18413,7 @@
           "ARL-KB-087 policy bypass or unmediated consequential execution evidence",
           "ARL-KB-087 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -18474,7 +18474,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "78f55eae16c148ad53f3bb41dacc040a98740074f8f390273209196892ea0bba"
+      "content_digest": "dddf8f6d3d5f060eabb77d60ae58b5b5734bd88c1dab81a64894c05d6feddc5d"
     },
     {
       "id": "ARL-KB-088",
@@ -18516,7 +18516,7 @@
         ],
         "required_evidence": [
           "ARL-KB-088 assessed system, version, environment and scope for Policy engine fails open",
-          "ARL-KB-088 control configuration or source location showing how reduce the likelihood and impact of policy engine fails open and make the remaining risk visible.",
+          "ARL-KB-088 Policy-engine error, timeout and dependency-failure handling configuration showing default-deny behaviour, stale-policy handling and auditability.",
           "ARL-KB-088 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-088 policy, authorization, tool or audit events proving whether the tested policy engine fails open path executed",
           "ARL-KB-088 tester identity, role, timestamp and evidence digest"
@@ -18623,7 +18623,7 @@
           "ARL-KB-088 fail-open execution, stale-policy use or policy-outage bypass evidence",
           "ARL-KB-088 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -18679,7 +18679,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "b17f9d3aaa1674f592eb594052b2c860a8669b4d934e7bf12dc7c6691f9f74c2"
+      "content_digest": "6847ec4e034163788de9aff8c85ced878abe501c4cba586db2b14cd01968685f"
     },
     {
       "id": "ARL-KB-089",
@@ -18721,7 +18721,7 @@
         ],
         "required_evidence": [
           "ARL-KB-089 assessed system, version, environment and scope for Logs and traces contain secrets or personal data",
-          "ARL-KB-089 control configuration or source location showing how reduce the likelihood and impact of logs and traces contain secrets or personal data and make the remaining risk visible.",
+          "ARL-KB-089 Logging, tracing and export redaction configuration specifying permitted prompt, credential, personal-data and error-field handling.",
           "ARL-KB-089 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-089 policy, authorization, tool or audit events proving whether the tested logs and traces contain secrets or personal data path executed",
           "ARL-KB-089 tester identity, role, timestamp and evidence digest"
@@ -18828,7 +18828,7 @@
           "ARL-KB-089 secret, credential or personal-data leakage into observability evidence",
           "ARL-KB-089 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -18886,7 +18886,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "42b8f566f59fc750de2dab639385fbbfe22cf366c5053c398df8ac16aef66640"
+      "content_digest": "68b42dca24126bcb577f4da937057d1104db36f72d4889982ce62d16504c5020"
     },
     {
       "id": "ARL-KB-090",
@@ -18928,7 +18928,7 @@
         ],
         "required_evidence": [
           "ARL-KB-090 assessed system, version, environment and scope for Audit coverage cannot reconstruct a decision",
-          "ARL-KB-090 control configuration or source location showing how reduce the likelihood and impact of audit coverage cannot reconstruct a decision and make the remaining risk visible.",
+          "ARL-KB-090 Audit-event schema and correlation configuration linking actor, canonical request, policy version, approvals, tool effects, timestamps and immutable evidence IDs.",
           "ARL-KB-090 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-090 policy, authorization, tool or audit events proving whether the tested audit coverage cannot reconstruct a decision path executed",
           "ARL-KB-090 tester identity, role, timestamp and evidence digest"
@@ -19035,7 +19035,7 @@
           "ARL-KB-090 missing, inconsistent or tampered decision-chain evidence",
           "ARL-KB-090 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -19091,7 +19091,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "47a1453156aa0b246b8f55b567854ad07d36483f20141c55fbeb50cf9b0a7fdc"
+      "content_digest": "7c1ebbbe19def441e073e04216ce76131ce6896931a0f3ea2295731653238644"
     },
     {
       "id": "ARL-KB-091",
@@ -19131,7 +19131,7 @@
         ],
         "required_evidence": [
           "ARL-KB-091 assessed system, version, environment and scope for Evidence can be rewritten without detection",
-          "ARL-KB-091 control configuration or source location showing how reduce the likelihood and impact of evidence can be rewritten without detection and make the remaining risk visible.",
+          "ARL-KB-091 Audit-evidence storage and integrity configuration covering append-only logging, signature or hash chaining, immutable checkpoints and privileged alteration alerts.",
           "ARL-KB-091 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-091 policy, authorization, tool or audit events proving whether the tested evidence can be rewritten without detection path executed",
           "ARL-KB-091 tester identity, role, timestamp and evidence digest"
@@ -19238,7 +19238,7 @@
           "ARL-KB-091 tampering, deletion, replacement or integrity-verification failure",
           "ARL-KB-091 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -19295,7 +19295,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f9729fac55d208faba1bd60526d1b894be1ee4d642117f487e9af6cbd0895a0f"
+      "content_digest": "75d8e63c5840f1e1f4a0a9d48d761e6fec451b7031b2653be6988cea51b232c2"
     },
     {
       "id": "ARL-KB-092",
@@ -19335,7 +19335,7 @@
         ],
         "required_evidence": [
           "ARL-KB-092 assessed system, version, environment and scope for Alerts have no tested owner or response",
-          "ARL-KB-092 control configuration or source location showing how reduce the likelihood and impact of alerts have no tested owner or response and make the remaining risk visible.",
+          "ARL-KB-092 Alert routing and escalation policy with on-call owner assignments, synthetic-drill records, delivery tracking and response time objectives.",
           "ARL-KB-092 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-092 policy, authorization, tool or audit events proving whether the tested alerts have no tested owner or response path executed",
           "ARL-KB-092 tester identity, role, timestamp and evidence digest"
@@ -19442,7 +19442,7 @@
           "ARL-KB-092 missed, delayed or unowned security-alert evidence",
           "ARL-KB-092 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -19498,7 +19498,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "bcb6cb49f06b6a14b561cab82dfe59a325bee289c97a999b64dcda5f3e0d8326"
+      "content_digest": "c1827c90ae800edb35f8318bdc2f4ce48d068fcfb65db28b7946cea66aeacdb7"
     },
     {
       "id": "ARL-KB-093",
@@ -19540,7 +19540,7 @@
         ],
         "required_evidence": [
           "ARL-KB-093 assessed system, version, environment and scope for Abuse and anomaly detection is absent",
-          "ARL-KB-093 control configuration or source location showing how reduce the likelihood and impact of abuse and anomaly detection is absent and make the remaining risk visible.",
+          "ARL-KB-093 Abuse/anomaly detection configuration covering credential misuse, unusual tool sequences, bulk access, destination changes and alert ownership.",
           "ARL-KB-093 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-093 policy, authorization, tool or audit events proving whether the tested abuse and anomaly detection is absent path executed",
           "ARL-KB-093 tester identity, role, timestamp and evidence digest"
@@ -19647,7 +19647,7 @@
           "ARL-KB-093 credential abuse, anomalous sequence, volume or value-splitting evidence",
           "ARL-KB-093 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -19708,7 +19708,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "3ea66f04f16ebc6b8c91ed1557ab299d7d7099e767e56fee4ad23d5fb179a47e"
+      "content_digest": "2fa01880889fa1c23966cc1c691f44848a2ad69384580311f38a7f94d56d911b"
     },
     {
       "id": "ARL-KB-094",
@@ -19748,7 +19748,7 @@
         ],
         "required_evidence": [
           "ARL-KB-094 assessed system, version, environment and scope for Telemetry collection is unbounded",
-          "ARL-KB-094 control configuration or source location showing how reduce the likelihood and impact of telemetry collection is unbounded and make the remaining risk visible.",
+          "ARL-KB-094 Telemetry inventory with event-field purpose, redaction, access authorization, storage destination, retention period and deletion configuration.",
           "ARL-KB-094 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-094 policy, authorization, tool or audit events proving whether the tested telemetry collection is unbounded path executed",
           "ARL-KB-094 tester identity, role, timestamp and evidence digest"
@@ -19855,7 +19855,7 @@
           "ARL-KB-094 unnecessary sensitive telemetry or excessive-retention evidence",
           "ARL-KB-094 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -19911,7 +19911,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "17f1d0db9b0a66c7b2481e68926544d013630ef589ba5cf24efd227440b16732"
+      "content_digest": "5f67bed597e0b7c54f9b3ff157c0b5208603c94bb25419c02374b0e20f6900d8"
     },
     {
       "id": "ARL-KB-095",
@@ -19953,7 +19953,7 @@
         ],
         "required_evidence": [
           "ARL-KB-095 assessed system, version, environment and scope for Token, compute or tool use is unbounded",
-          "ARL-KB-095 control configuration or source location showing how reduce the likelihood and impact of token, compute or tool use is unbounded and make the remaining risk visible.",
+          "ARL-KB-095 Per-principal token, compute, concurrency and tool-use budget configuration covering denial, cancellation, retries and cumulative resource accounting.",
           "ARL-KB-095 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-095 policy, authorization, tool or audit events proving whether the tested token, compute or tool use is unbounded path executed",
           "ARL-KB-095 tester identity, role, timestamp and evidence digest"
@@ -20060,7 +20060,7 @@
           "ARL-KB-095 runaway usage, resource exhaustion or unexpected cost evidence",
           "ARL-KB-095 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -20122,7 +20122,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "406aa7e19d7e39545f0d5ad14bac43d9345b87759bae21c82b40f4151f5ecaf1"
+      "content_digest": "e8bfedba4ee804067e9090df475a5ef4c264813278aae62fead0b39cec2a6cfb"
     },
     {
       "id": "ARL-KB-096",
@@ -20164,7 +20164,7 @@
         ],
         "required_evidence": [
           "ARL-KB-096 assessed system, version, environment and scope for Recursive planning or tool loops do not terminate",
-          "ARL-KB-096 control configuration or source location showing how reduce the likelihood and impact of recursive planning or tool loops do not terminate and make the remaining risk visible.",
+          "ARL-KB-096 Planner and delegated-agent recursion limits, step budgets, timeout and cycle-detection configuration defining enforced termination and containment.",
           "ARL-KB-096 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-096 policy, authorization, tool or audit events proving whether the tested recursive planning or tool loops do not terminate path executed",
           "ARL-KB-096 tester identity, role, timestamp and evidence digest"
@@ -20271,7 +20271,7 @@
           "ARL-KB-096 infinite loop, repeated-state or duplicate-side-effect evidence",
           "ARL-KB-096 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -20332,7 +20332,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "fbba38152e0ac287f2c393cff802833dd97839213096712a3ea9abeb67a7e39b"
+      "content_digest": "84cbaf90bc15abbef8d4f6895478eea4e8094d0de3776421a4f065078bd716ff"
     },
     {
       "id": "ARL-KB-097",
@@ -20374,7 +20374,7 @@
         ],
         "required_evidence": [
           "ARL-KB-097 assessed system, version, environment and scope for Third-party outage has no safe behaviour",
-          "ARL-KB-097 control configuration or source location showing how reduce the likelihood and impact of third-party outage has no safe behaviour and make the remaining risk visible.",
+          "ARL-KB-097 Third-party dependency failure and fallback configuration covering timeouts, retry bounds, circuit breakers, data handling and degraded-mode permissions.",
           "ARL-KB-097 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-097 policy, authorization, tool or audit events proving whether the tested third-party outage has no safe behaviour path executed",
           "ARL-KB-097 tester identity, role, timestamp and evidence digest"
@@ -20481,7 +20481,7 @@
           "ARL-KB-097 unsafe fallback, corrupted recovery or prolonged-outage evidence",
           "ARL-KB-097 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -20537,7 +20537,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "7a7df611ebe48ecee6ded05fefd89efc1258871785e0d2cda1fe340bae568dc2"
+      "content_digest": "11ae3fb56693b1655046fcf5d98d8bc30758b14ee460ca126d0c971154c94916"
     },
     {
       "id": "ARL-KB-098",
@@ -20577,7 +20577,7 @@
         ],
         "required_evidence": [
           "ARL-KB-098 assessed system, version, environment and scope for Concurrency produces inconsistent state",
-          "ARL-KB-098 control configuration or source location showing how reduce the likelihood and impact of concurrency produces inconsistent state and make the remaining risk visible.",
+          "ARL-KB-098 Concurrent state mutation and transaction configuration specifying locks, isolation levels, atomic approvals, quota reservation and rollback semantics.",
           "ARL-KB-098 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-098 policy, authorization, tool or audit events proving whether the tested concurrency produces inconsistent state path executed",
           "ARL-KB-098 tester identity, role, timestamp and evidence digest"
@@ -20676,7 +20676,7 @@
           "ARL-KB-098 race condition, stale-write, duplicate-effect or quota-bypass evidence",
           "ARL-KB-098 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -20732,7 +20732,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "f9b482f76c7f4ab9379e3b6964bb003fc2d5a8e124e6d119a9dde8f32c90aa9b"
+      "content_digest": "c1639b53fc2172048055201807de92a18588f2acb7c4b18c6a11ddef544250ad"
     },
     {
       "id": "ARL-KB-099",
@@ -20772,7 +20772,7 @@
         ],
         "required_evidence": [
           "ARL-KB-099 assessed system, version, environment and scope for Quota and billing controls can be evaded",
-          "ARL-KB-099 control configuration or source location showing how reduce the likelihood and impact of quota and billing controls can be evaded and make the remaining risk visible.",
+          "ARL-KB-099 Metering and billing authorization configuration covering key rotation, identity aliases, concurrent counters, retries, thresholds and tamper resistance.",
           "ARL-KB-099 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-099 policy, authorization, tool or audit events proving whether the tested quota and billing controls can be evaded path executed",
           "ARL-KB-099 tester identity, role, timestamp and evidence digest"
@@ -20879,7 +20879,7 @@
           "ARL-KB-099 unmetered usage, quota bypass or billing reconciliation mismatch",
           "ARL-KB-099 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -20941,7 +20941,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "aaa960c09abe33ac5a5c3e96222cd6975539e01b8b03e556b341791cebd812db"
+      "content_digest": "2b6e7f98c20cd7b2342860764bf6a92be92b711301351fcc2b394718ba72f5da"
     },
     {
       "id": "ARL-KB-100",
@@ -20983,7 +20983,7 @@
         ],
         "required_evidence": [
           "ARL-KB-100 assessed system, version, environment and scope for No effective kill switch or containment mode",
-          "ARL-KB-100 control configuration or source location showing how reduce the likelihood and impact of no effective kill switch or containment mode and make the remaining risk visible.",
+          "ARL-KB-100 Emergency kill-switch and containment configuration covering agent, tool, credential, provider and destination shutdown plus outstanding-work cancellation.",
           "ARL-KB-100 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-100 policy, authorization, tool or audit events proving whether the tested no effective kill switch or containment mode path executed",
           "ARL-KB-100 tester identity, role, timestamp and evidence digest"
@@ -21090,7 +21090,7 @@
           "ARL-KB-100 containment bypass, delayed shutdown or evidence-loss incident",
           "ARL-KB-100 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -21147,7 +21147,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "a99cc8648619c71017b9e806d7470652b5051d77b87f9d1b4c0357a402dd62f8"
+      "content_digest": "274fff3f72e682027028a10f98ac590d7416bd525ba4ade2ee53e357175a0b90"
     },
     {
       "id": "ARL-KB-101",
@@ -21189,7 +21189,7 @@
         ],
         "required_evidence": [
           "ARL-KB-101 assessed system, version, environment and scope for AI-specific incident response is missing",
-          "ARL-KB-101 control configuration or source location showing how reduce the likelihood and impact of ai-specific incident response is missing and make the remaining risk visible.",
+          "ARL-KB-101 Versioned AI-specific incident response policy and tabletop records covering detection, triage, containment, evidence custody, provider coordination and recovery.",
           "ARL-KB-101 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-101 policy, authorization, tool or audit events proving whether the tested ai-specific incident response is missing path executed",
           "ARL-KB-101 tester identity, role, timestamp and evidence digest"
@@ -21296,7 +21296,7 @@
           "ARL-KB-101 prompt-injection, rogue-tool, poisoned-memory, drift or evidence-compromise incident",
           "ARL-KB-101 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -21352,7 +21352,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "6f036028450c6b108a9781992fc9ec68648ec4ceb6ae6ce290bb6cf13eef2c77"
+      "content_digest": "d0a31d7757ca6babae05cf8d3fce7fe478deaddcf1d4c5dd32b9fbcf3027eb68"
     },
     {
       "id": "ARL-KB-102",
@@ -21394,7 +21394,7 @@
         ],
         "required_evidence": [
           "ARL-KB-102 assessed system, version, environment and scope for Credentials and authority cannot be revoked quickly",
-          "ARL-KB-102 control configuration or source location showing how reduce the likelihood and impact of credentials and authority cannot be revoked quickly and make the remaining risk visible.",
+          "ARL-KB-102 Credential, session, approval, MCP/tool and workload-identity revocation configuration specifying propagation, expiry and emergency containment.",
           "ARL-KB-102 positive and abuse inputs with expected and observed outputs for tenant-scoped records and object identifiers and service identities, roles and credentials",
           "ARL-KB-102 policy, authorization, tool or audit events proving whether the tested credentials and authority cannot be revoked quickly path executed",
           "ARL-KB-102 tester identity, role, timestamp and evidence digest"
@@ -21501,7 +21501,7 @@
           "ARL-KB-102 delayed revocation, stale session or residual-authority evidence",
           "ARL-KB-102 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -21557,7 +21557,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "38b62834f9e01131e2e912e2afad3fea95aaedb13f157f5f92256d7010c14378"
+      "content_digest": "7c9f36946cff6d460180e41d65f05ede158cdc4fac1b86f2aaada099184cc46c"
     },
     {
       "id": "ARL-KB-103",
@@ -21599,7 +21599,7 @@
         ],
         "required_evidence": [
           "ARL-KB-103 assessed system, version, environment and scope for Backups do not protect AI state and evidence",
-          "ARL-KB-103 control configuration or source location showing how reduce the likelihood and impact of backups do not protect ai state and evidence and make the remaining risk visible.",
+          "ARL-KB-103 Backup inventory and recovery policy for model configuration, vector stores, agent memory, evidence and approval records, including integrity and encryption.",
           "ARL-KB-103 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-103 policy, authorization, tool or audit events proving whether the tested backups do not protect ai state and evidence path executed",
           "ARL-KB-103 tester identity, role, timestamp and evidence digest"
@@ -21706,7 +21706,7 @@
           "ARL-KB-103 backup integrity, incomplete restore or recovery-consistency failure",
           "ARL-KB-103 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -21769,7 +21769,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "9562f299cff8b300e8180383c3499db73ca6bb65f3f24445716c95ed0fa11a50"
+      "content_digest": "844c30c0095031c5520abf299dc3abefe966172e38f93130e07092751701f9a9"
     },
     {
       "id": "ARL-KB-104",
@@ -21811,7 +21811,7 @@
         ],
         "required_evidence": [
           "ARL-KB-104 assessed system, version, environment and scope for Release rollback is unavailable or unsafe",
-          "ARL-KB-104 control configuration or source location showing how reduce the likelihood and impact of release rollback is unavailable or unsafe and make the remaining risk visible.",
+          "ARL-KB-104 Release provenance, rollback procedure and immutable deployment-artifact records covering authorized rollback, data compatibility and staged recovery.",
           "ARL-KB-104 positive and abuse inputs with expected and observed outputs for system prompt, retrieved context and persistent memory and source documents, messages and generated outputs",
           "ARL-KB-104 policy, authorization, tool or audit events proving whether the tested release rollback is unavailable or unsafe path executed",
           "ARL-KB-104 tester identity, role, timestamp and evidence digest"
@@ -21918,7 +21918,7 @@
           "ARL-KB-104 failed rollback, unidentified release or rollback-data-loss evidence",
           "ARL-KB-104 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -21975,7 +21975,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "05143133579bcf6eaa2195ce81ca5606488703792d6a550deab0759f5c9ff863"
+      "content_digest": "1c5e606f892d685806c8b5bc5fd6ac085b3ec4cd3441d7c9e02969bc3a720870"
     },
     {
       "id": "ARL-KB-105",
@@ -22015,7 +22015,7 @@
         ],
         "required_evidence": [
           "ARL-KB-105 assessed system, version, environment and scope for Findings have no owner, deadline or evidence requirement",
-          "ARL-KB-105 control configuration or source location showing how reduce the likelihood and impact of findings have no owner, deadline or evidence requirement and make the remaining risk visible.",
+          "ARL-KB-105 Finding tracking and closure policy including named owner, due date, severity rationale, remediation task, evidence requirements and approval roles.",
           "ARL-KB-105 positive and abuse inputs with expected and observed outputs for agent and model context",
           "ARL-KB-105 policy, authorization, tool or audit events proving whether the tested findings have no owner, deadline or evidence requirement path executed",
           "ARL-KB-105 tester identity, role, timestamp and evidence digest"
@@ -22122,7 +22122,7 @@
           "ARL-KB-105 unowned, overdue or evidence-free finding-closure evidence",
           "ARL-KB-105 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -22179,7 +22179,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "6f5af76f0f578a879ac0e9cf18c9e59d26211d9c461c8a38136fd955e2484971"
+      "content_digest": "bd62886883c88e86492c12e9f2303041b0e121d1f771b8dd23f4499ef37ef3a1"
     },
     {
       "id": "ARL-KB-106",
@@ -22221,7 +22221,7 @@
         ],
         "required_evidence": [
           "ARL-KB-106 assessed system, version, environment and scope for Fixes are accepted without adversarial retest",
-          "ARL-KB-106 control configuration or source location showing how reduce the likelihood and impact of fixes are accepted without adversarial retest and make the remaining risk visible.",
+          "ARL-KB-106 Remediation and adversarial retest plan linking each confirmed finding to the exact changed version, original failure path and regression/bypass cases.",
           "ARL-KB-106 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-106 policy, authorization, tool or audit events proving whether the tested fixes are accepted without adversarial retest path executed",
           "ARL-KB-106 tester identity, role, timestamp and evidence digest"
@@ -22328,7 +22328,7 @@
           "ARL-KB-106 failed retest, residual exploit or unsupported closure evidence",
           "ARL-KB-106 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -22384,7 +22384,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "5394c233d4816e1e3214979912c06eabcdc5d21a622fd2ade8924bb6220b6db6"
+      "content_digest": "597bb3ee4a25e18eb5a650fe674b755a70458b3dc8609654b1fd41de92924d14"
     },
     {
       "id": "ARL-KB-107",
@@ -22426,7 +22426,7 @@
         ],
         "required_evidence": [
           "ARL-KB-107 assessed system, version, environment and scope for Deployment decision lacks a complete evidence chain",
-          "ARL-KB-107 control configuration or source location showing how reduce the likelihood and impact of deployment decision lacks a complete evidence chain and make the remaining risk visible.",
+          "ARL-KB-107 Deployment evidence-chain policy linking the exact assessed version, control applicability, reviewer signoffs, residual risk and final accountable decision.",
           "ARL-KB-107 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-107 policy, authorization, tool or audit events proving whether the tested deployment decision lacks a complete evidence chain path executed",
           "ARL-KB-107 tester identity, role, timestamp and evidence digest"
@@ -22533,7 +22533,7 @@
           "ARL-KB-107 broken evidence chain, unsupported readiness or missing risk-acceptance evidence",
           "ARL-KB-107 evidence expiry or material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -22590,7 +22590,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "930ef329d9322eb50e19040a46a9f3699e29a373b5d6587d065d8ccc6b739adc"
+      "content_digest": "cee5b9893a15907141e3cbd8a2e6b6733d89318ebca662a82949510c41043e1b"
     },
     {
       "id": "ARL-KB-108",
@@ -22632,7 +22632,7 @@
         ],
         "required_evidence": [
           "ARL-KB-108 assessed system, version, environment and scope for Post-deployment assurance expires silently",
-          "ARL-KB-108 control configuration or source location showing how reduce the likelihood and impact of post-deployment assurance expires silently and make the remaining risk visible.",
+          "ARL-KB-108 Post-deployment reassessment policy covering evidence expiry, model/tool changes, incidents, drift, scheduled reviews and decision-owner notification.",
           "ARL-KB-108 positive and abuse inputs with expected and observed outputs for tool endpoints and downstream systems and financial, administrative or state-changing actions",
           "ARL-KB-108 policy, authorization, tool or audit events proving whether the tested post-deployment assurance expires silently path executed",
           "ARL-KB-108 tester identity, role, timestamp and evidence digest"
@@ -22739,7 +22739,7 @@
           "ARL-KB-108 material drift, incident or stale-assurance evidence",
           "ARL-KB-108 material scope, architecture or assessed-version change"
         ],
-        "review_status": "expert-authored candidate; customer and independent practitioner validation required"
+        "review_status": "Evidence requirement wording revised; independent practitioner and customer validation required"
       },
       "claims_boundary": "This entry supports a proprietary AgentRiskLayer assessment. It is not an accredited certification, legal opinion or guarantee that the system is risk-free.",
       "applicability_profile": {
@@ -22795,7 +22795,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "00f62b3eb6c0cb694e8a219ce973c96020cb771ecac38354acb9baff5a2f8ae4"
+      "content_digest": "6c62c055196343fe4409e3669a8577b134d96d1a0068d03ef950bafccf9b14e6"
     }
   ]
 }
