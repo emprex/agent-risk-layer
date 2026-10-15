@@ -222,3 +222,29 @@ test('incident tabletop records require documentary review, not generic log or t
  assert.equal(runtime.verification.type,'audit_and_monitoring');
  assert.match(runtime.activeTest.proposedScenario,/synthetic event/);
 });
+
+test('risk acceptance and exception artefacts are documentary, never automatic technical success',()=>{
+ const d=makeDossier();
+ d.controls[0].purpose='Review control enforcement and incident risk';
+ d.controls[0].assessmentMethod='Inspect tool permissions and monitor events';
+ for(const evidence of [
+  'Risk acceptance record with accountable owner, scope and expiry',
+  'Signed risk exception approval for inherited privileges',
+  'Security exception register with review dates',
+  'Documented policy exception decision with compensating controls'
+ ]){
+  d.controls[0].reviewRequirements[0].expectedEvidence=evidence;
+  const r=buildControlVerificationPlan(d,'ARL-KB-021').requirements[0];
+  assert.equal(r.verification.type,'risk_acceptance_record',evidence);
+  assert.equal(r.activeTest.proposedScenario,null);
+  assert.equal(r.activeTest.executionAllowed,false);
+  assert.equal(r.evidenceState,'static_metadata_candidate_unvalidated');
+  assert.equal(r.conclusionGate.result,'undetermined');
+  assert.equal(r.conclusionGate.evidenceAccepted,false);
+ }
+ d.controls[0].reviewRequirements[0].expectedEvidence='Effective IAM permissions and token revocation';
+ const runtime=buildControlVerificationPlan(d,'ARL-KB-021').requirements[0];
+ assert.equal(runtime.verification.type,'identity_and_permissions');
+ assert.match(runtime.activeTest.proposedScenario,/synthetic/);
+ assert.equal(runtime.activeTest.executionAllowed,false);
+});
