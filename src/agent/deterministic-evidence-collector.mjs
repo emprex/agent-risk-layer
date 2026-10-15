@@ -671,6 +671,7 @@ export function collectDeterministicEvidence({
   return {
     schema:
       'arl.deterministic-evidence-collection.v1',
+    sourceProjectionRevision:'arl.source-collection-projection.v2',
     targetRevision: facts.revision,
     privacyBoundary:
       'No source code, secret values, credential values or raw external destination names are included. Paths and destinations are represented by bounded metadata and hashes where appropriate.',
