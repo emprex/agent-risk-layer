@@ -199,3 +199,26 @@ test('reviewer attestations are evidence provenance, never least-privilege test 
  assert.equal(permission.verification.type,'identity_and_permissions');
  assert.notEqual(permission.activeTest.proposedScenario,null);
 });
+
+test('incident tabletop records require documentary review, not generic log or tool tests',()=>{
+ const d=makeDossier();
+ d.controls[0].purpose='Review incident response readiness';
+ d.controls[0].assessmentMethod='Verify signed exercise evidence';
+ const scenarios=['Incident response tabletop record and participants',
+  'Signed incident exercise findings and corrective actions',
+  'Dated incident simulation evidence and sign-off'];
+ for(const wording of scenarios){
+  d.controls[0].reviewRequirements[0].expectedEvidence=wording;
+  const r=buildControlVerificationPlan(d,'ARL-KB-021').requirements[0];
+  assert.equal(r.verification.type,'incident_exercise_record',wording);
+  assert.match(r.verification.technical,/timeline|corrective actions/);
+  assert.equal(r.activeTest.proposedScenario,null);
+  assert.equal(r.activeTest.executionAllowed,false);
+  assert.equal(r.conclusionGate.result,'undetermined');
+  assert.equal(r.conclusionGate.requiresHumanDecision,true);
+ }
+ d.controls[0].reviewRequirements[0].expectedEvidence='Incident alert telemetry and event logs';
+ const runtime=buildControlVerificationPlan(d,'ARL-KB-021').requirements[0];
+ assert.equal(runtime.verification.type,'audit_and_monitoring');
+ assert.match(runtime.activeTest.proposedScenario,/synthetic event/);
+});
