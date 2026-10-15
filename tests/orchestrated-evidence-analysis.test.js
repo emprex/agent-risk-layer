@@ -42,3 +42,24 @@ test('compact model prompt omits SHA digests, limits output and reconstructs pro
  assert.equal(request.messages[1].content.includes('a'.repeat(64)),false);
  assert.match(request.messages[1].content,/dependencyCount/);
 });
+
+
+test('source evidence retains only typed, hashed locators and never raw source names or destinations',()=>{
+ const token='a'.repeat(24),host='b'.repeat(24);
+ const facts=extractSourceObservationFacts({
+  source_and_configuration:{
+   mcpAndToolReferenceFiles:[{pathHash:token,basename:'customer-private.js'},{pathHash:'BAD',basename:'secret'}],
+   credentialReferenceFiles:[{pathHash:token,basename:'prod-secrets.env'}],
+   externalDestinationObservations:[{destinationHash:host,observedIn:{basename:'external.example'}}],
+   sensitiveRawContents:'SUPERTOKEN_DO_NOT_EXPOSE'
+  }
+ });
+ assert.equal(facts.length,1);
+ assert.deepEqual(facts[0].values.referenceSamples,[
+  {kind:'mcp_tool',hash:token},{kind:'credential_reference',hash:token},
+  {kind:'outbound_destination',hash:host}
+ ]);
+ const report=JSON.stringify(facts);
+ for(const secret of ['customer-private.js','prod-secrets.env','external.example','SUPERTOKEN_DO_NOT_EXPOSE','BAD'])
+  assert.equal(report.includes(secret),false);
+});
