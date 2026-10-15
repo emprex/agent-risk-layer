@@ -205,6 +205,23 @@ try {
         ? 'Where are we?'
         : request;
 
+    const analyseMatch=/^Analyse collected evidence (ARL-KB-\\d{3})[.!?]*$/i.exec(request);
+    if(analyseMatch){
+      const prior=await runLocalAssessment(repositoryPath,
+        'Build assessment action dossiers',options,frozen);
+      const {explainControlObservation}=await import('./ai/control-observation-analyst.mjs');
+      const advisory=await explainControlObservation({
+        dossier:prior.canonicalData?.assessmentActionDossiers,
+        controlId:analyseMatch[1].toUpperCase()
+      });
+      console.log('\\n=== ARL EVIDENCE ANALYST (ADVISORY ONLY) ===\\n');
+      console.log(advisory.available
+        ? advisory.analysis
+        : 'AI analysis not available: '+advisory.reason+
+          '. The assessment remains valid; no fallback finding was invented.');
+      console.log('\\nHuman review required. No validated finding or change of security authority.');
+      process.exit(0);
+    }
     if (/^Export client preassessment[.!?]*$/i.test(request)) {
       const dossierResult=await runLocalAssessment(repositoryPath,
         'Build assessment action dossiers',options,frozen);
