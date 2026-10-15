@@ -434,7 +434,7 @@ function repositoryFacts({
   repositoryPath,
   frozen
 }) {
-  const revision=safeExec(repositoryPath,['rev-parse','HEAD']);
+  const revision=safeExec(repositoryPath,['rev-parse','HEAD'])||frozen?.target?.revision||null;
   // Cache only clean, exact-SHA working trees. A changed working tree is never
   // treated as cached frozen evidence, even if a stale caller says "clean".
   const clean=Boolean(revision && frozen?.target?.dirty===false &&
