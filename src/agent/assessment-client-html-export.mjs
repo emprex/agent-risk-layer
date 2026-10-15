@@ -44,6 +44,6 @@ export function writeAssessmentClientHtml({report,outputDirectory}) {
   const flags=fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL|fs.constants.O_NOFOLLOW;
   let status='created';
   try {const fd=fs.openSync(file,flags,0o600);try{fs.writeFileSync(fd,html,'utf8');}finally{fs.closeSync(fd);}}
-  catch(e){if(e.code!=='EEXIST')throw e;const st=fs.lstatSync(file);if(!st.isFile()||st.isSymbolicLink()||fs.readFileSync(file,'utf8')!==html)throw new Error('Existing assessment export differs; refusing overwrite.');status='already_present_identical';}
+  catch(e){if(e.code!=='EEXIST')throw e;const st=fs.lstatSync(file);if(!st.isFile()||st.isSymbolicLink()||fs.readFileSync(file,'utf8')!==html)throw new Error('Existing assessment export differs; refusing overwrite.',{cause:e});status='already_present_identical';}
   return {file,status,bytes:Buffer.byteLength(html),sha256:crypto.createHash('sha256').update(html).digest('hex')};
 }
