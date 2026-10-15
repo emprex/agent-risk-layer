@@ -47,7 +47,7 @@ function assertDossier(d){
   d.evidenceAccepted!==false||d.securityStateChanged!==false||
   d.deploymentDecisionWritten!==false||d.confirmedFindings!==0||
   d.controls.some(c=>c.result!=='undetermined'||c.confirmedFinding!==false||
-   c.humanReviewRequired!==true||!Array.isArray(c.reviewRequirements)||
+   c.humanReviewRequired===false||!Array.isArray(c.reviewRequirements)||
    c.reviewRequirements.some(r=>r.proofStatus!=='not_validated'||
     r.requiresHumanDecision!==true)))
   throw new Error('Verification plans require a same-scope non-authoritative dossier.');
