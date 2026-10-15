@@ -42,8 +42,16 @@ function controlCard(c){
   <p><strong>Action:</strong> ${escape(actionText(r,c.workflowLane))}</p>
   <p><strong>Completion condition:</strong> ${escape(r.acceptanceCriterion)}</p></div>`).join('')}</div></details></article>`;
 }
-export function renderClientPreassessment(d){
+export function renderClientPreassessment(d,{advisories=[]}={}){
  validate(d);
+ const permitted=new Set(d.controls.map(c=>c.controlId));
+ if(!Array.isArray(advisories)||advisories.length>3||new Set(advisories.map(a=>a.controlId)).size!==advisories.length||
+   advisories.some(a=>!permitted.has(a.controlId)||a.advisoryOnly!==true||
+     a.humanReviewRequired!==true||a.confirmedFinding!==false||
+     a.evidenceAccepted!==false||a.securityStateChanged!==false||
+     a.deploymentDecisionWritten!==false||!Array.isArray(a.structuredItems)||
+     a.structuredItems.length<1||a.structuredItems.length>12))
+   throw new Error('AI advisory annex requires bounded non-authoritative analysis.');
  const candidate=d.candidateRequirementCount,remaining=d.requiresEvidenceOrReviewCount;
  const grouped=new Map();
  for(const c of d.controls){let a=grouped.get(c.category);if(!a){a=[];grouped.set(c.category,a);}a.push(c);}
@@ -73,6 +81,9 @@ export function renderClientPreassessment(d){
  <h2>3. Review work organised by security area</h2>
  <p class="small muted">This list is ordered by knowledge category, not implied risk or severity. Review priority requires the client's environment and accountable assessment.</p>
  ${categories.map((g,i)=>`<div class="categoryblock"><a href="#area-${i}"><b>${escape(g.cat)} — ${g.cs.length} controls</b></a><span class="small muted">${g.observed} requirements have static metadata candidates; ${g.unmet} have no static match.</span></div>`).join('')}
+ ${advisories.length?\`<h2>4. AI-assisted evidence review — unapproved analysis</h2>
+ <div class="notice"><strong>Operator review only.</strong> The following analyses are machine-generated proposals, not verified observations, accepted evidence, findings, risk ratings or approved client conclusions. A human assessor must check every statement against the cited source before any external distribution.</div>
+ \${advisories.map(a=>\`<article class="control"><h3>\${escape(a.controlId)}</h3>\${a.structuredItems.map(item=>\`<div class="req"><p><strong>\${escape(item.type)} (AI proposal):</strong> \${escape(item.text)}</p><p class="small">Fact references: \${item.factIds.map(escape).join(', ')}\${item.artifactSha256.length?' · Artifact digests: '+item.artifactSha256.map(escape).join(', '):''}</p></div>\`).join('')}</article>\`).join('')}\`:''}
  <h2>4. Findings and remediation status</h2><div class="outline"><strong>No confirmed security findings are represented in this assessment export.</strong> The worklist below is for evidence validation and further assessment, not vulnerability remediation. Generating a list of patches without validated causes and impacts would be misleading.</div>
  <h2>5. Detailed evidence and action register</h2>
  ${categories.map((g,i)=>`<section id="area-${i}" class="anchor"><h2>${escape(g.cat)}</h2><p class="small muted">${g.cs.length} controls · ${g.observed} candidate evidence requirements · ${g.unmet} without matching metadata</p>${g.cs.map(controlCard).join('')}</section>`).join('')}
@@ -81,8 +92,8 @@ export function renderClientPreassessment(d){
  <p class="foot small">AgentRiskLayer · Pre-assessment draft · Not approved for external release without accountable reviewer sign-off.</p>
  </main></body></html>`;
 }
-export function writeClientPreassessment({dossier,outputDirectory}){
- const html=renderClientPreassessment(dossier);
+export function writeClientPreassessment({dossier,outputDirectory,advisories=[]}){
+ const html=renderClientPreassessment(dossier,{advisories});
  const digest=sig(html);
  const root=path.resolve(outputDirectory);
  fs.mkdirSync(root,{recursive:true,mode:0o700});
