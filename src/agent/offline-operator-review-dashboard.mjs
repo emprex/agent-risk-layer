@@ -148,7 +148,9 @@ export function buildOfflineOperatorReviewDashboard(index, dossierBatches, expec
     controlRegistry:registry,
     registryTotal:registry.length,
     systemSnapshotId:index.systemSnapshotId,
-    targetRevision:revision,
+    // An assessment with no independently actionable tests still needs a
+    // complete, snapshot-bound read-only status register for its operator.
+    targetRevision:revision || expectedRevision,
     assessedControls:controls.length,
     excludedControls:index.excludedControls,
     controls,
