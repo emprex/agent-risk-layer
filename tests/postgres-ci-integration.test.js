@@ -25,7 +25,7 @@ function ephemeralCiUrl() {
   return url;
 }
 
-test('ephemeral PostgreSQL refuses unsupported review export and stale target SHA', {
+test('ephemeral PostgreSQL opens unprepared dashboard without bootstrap and refuses stale target SHA', {
   skip: !url && 'Only the dedicated CI PostgreSQL service is authorized.',
   timeout: 150_000
 }, async () => {
