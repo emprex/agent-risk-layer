@@ -82,7 +82,7 @@ test('operator:open reuses a prepared local snapshot and never creates another',
     assert.equal(git('init', '-q').status, 0);
     assert.equal(git('config', 'user.email', 'synthetic@example.invalid').status, 0);
     assert.equal(git('config', 'user.name', 'Synthetic ARL Test').status, 0);
-    fs.writeFileSync(path.join(target, 'README.md'), '# Synthetic assessment fixture\\n');
+    fs.writeFileSync(path.join(target, 'README.md'), '# Synthetic assessment fixture\n');
     assert.equal(git('add', 'README.md').status, 0);
     assert.equal(git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'Synthetic fixture').status, 0);
     const revision = git('rev-parse', 'HEAD').stdout.trim();
