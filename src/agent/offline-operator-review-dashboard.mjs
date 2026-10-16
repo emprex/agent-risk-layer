@@ -402,16 +402,19 @@ export function operatorNextActionMarkup(dashboard) {
     lane, dashboard.controlRegistry.filter(row => row.lane === lane).length
   ]));
   const blocked = counts.follow_up_blocked;
+  const applicability = counts.human_applicability;
   const human = counts.human_decision;
   const evidence = counts.test_planning + counts.evidence_collection +
-    counts.human_applicability + counts.review_required;
+    counts.review_required;
   const guidance = blocked > 0
     ? 'First review the blocked finding or remediation in the separate accountable ARL workflow. Do not infer closure.'
-    : human > 0
-      ? 'First review pending accountable human decisions in the authoritative ARL workflow. This page cannot approve them.'
-      : evidence > 0
-        ? 'Start with the evidence work plan below, verifying provenance and required human records before any test.'
-        : 'No pending queue item is demonstrated by this snapshot. Verify the live assessment before deciding anything.';
+    : applicability > 0
+      ? 'First confirm the assessed architecture, scope and human applicability decisions. Nothing is approved or tested by this page.'
+      : human > 0
+        ? 'First review pending accountable human decisions in the authoritative ARL workflow. This page cannot approve them.'
+        : evidence > 0
+          ? 'Start with the evidence work plan below, verifying provenance and required human records before any test.'
+          : 'No pending queue item is demonstrated by this snapshot. Verify the live assessment before deciding anything.';
   return '<section class="notice" aria-label="Operator next action"><h2>Next operator action — review only</h2>'+
     '<p><strong>'+esc(guidance)+'</strong></p>'+
     '<p>Blocked follow-up: '+esc(blocked)+' controls · Human-decision stage: '+
@@ -486,7 +489,10 @@ export function renderOfflineOperatorReviewHtml(dashboard) {
       ['Separate runtime authorisations',sum('requiresSeparateRuntimeAuthorisation')]
     ].map(([title,num])=>'<div><b>'+esc(num)+'</b><small>'+esc(title)+'</small></div>').join('')+'</section>'+
     fullControlRegistryMarkup(dashboard)+
-    '<h2>Evidence work plan</h2><p class="muted">Priority is an operator navigation aid, not a security finding or a request to execute tests. Streams overlap: one control can require source evidence, human records and authorised runtime observations. Counts are not distinct findings or approved actions.</p>'+
+    '<h2>Evidence work plan</h2>'+
+    (dashboard.assessedControls === 0
+      ? '<p class="muted">No independently actionable test or evidence items exist in this snapshot yet. Review the scope and accountable decisions in the complete control register above. No tests or approvals are inferred.</p>'
+      : '<p class="muted">Priority is an operator navigation aid, not a security finding or a request to execute tests. Streams overlap: one control can require source evidence, human records and authorised runtime observations. Counts are not distinct findings or approved actions.</p>')+
     '<div class="workstreams">'+buildOperatorReviewWorkplan(dashboard).map(workstreamMarkup).join('')+'</div>'+
     '<h2>All '+esc(dashboard.assessedControls)+' independent controls</h2><p class="muted">Open a control for exact-version criteria, existing evidence and recorded test metadata. No external resources or scripts are loaded.</p>'+
     '<details class="all-controls"><summary>Show all '+esc(dashboard.assessedControls)+' control links</summary><nav class="links" aria-label="All independent controls">'+dashboard.controls.map(c=>'<a href="#'+esc(c.controlId)+'">'+esc(c.controlId)+'</a>').join('')+'</nav></details>'+
