@@ -151,6 +151,11 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
       'system_snapshots', 'control_snapshot_evaluations'
     ];
     const operatorStateBefore = await Promise.all(operatorTables.map(operatorCount));
+    const reviewDirectory=path.join(temp,'review-output');
+    const fakeBin=path.join(temp,'fake-bin');
+    fs.mkdirSync(reviewDirectory,{mode:0o700});
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(path.join(fakeBin,'xdg-open'),'#!/bin/sh\\nexit 0\\n',{mode:0o755});
 
     const openExisting = spawnSync(process.execPath, [
       'src/agent/arl-local-assessment-runner.mjs', target
@@ -161,13 +166,21 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
         NODE_ENV: 'test', PRODUCT_STAGE: 'development',
         ARL_LOCAL_MODE: '1', ARL_AI_ADVISORY: '0',
         ARL_OPERATOR_OPEN_DASHBOARD: '1',
+        ARL_REPORT_OUTPUT_DIR: reviewDirectory,
+        PATH: fakeBin + path.delimiter + (process.env.PATH || ''),
         DATABASE_URL: connectionString,
         ARL_EXPECTED_TARGET_SHA: revision
       }
     });
-    assert.equal(openExisting.status, 2);
-    assert.match(openExisting.stderr,
-      /No independent controls are ready for operator review export/);
+    assert.equal(openExisting.status, 0,
+      'existing dashboard opener failed: ' + openExisting.stderr);
+    assert.match(openExisting.stdout,/Offline operator review dashboard created/);
+    const openedFiles = fs.readdirSync(reviewDirectory);
+    assert.equal(openedFiles.length,1);
+    const openedHtml = fs.readFileSync(path.join(reviewDirectory,openedFiles[0]),'utf8');
+    assert.match(openedHtml,/All 108 controls — authoritative snapshot/);
+    assert.match(openedHtml,/All 0 independent controls/);
+    assert.match(openedHtml,/Deployment HOLD/);
     assert.deepEqual(await Promise.all(operatorTables.map(operatorCount)),
       operatorStateBefore, 'opening an existing assessment cannot mutate authoritative PostgreSQL entities');
 
@@ -182,6 +195,8 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
         NODE_ENV: 'test', PRODUCT_STAGE: 'development',
         ARL_LOCAL_MODE: '1', ARL_AI_ADVISORY: '0',
         ARL_OPERATOR_OPEN_DASHBOARD: '1',
+        ARL_REPORT_OUTPUT_DIR: reviewDirectory,
+        PATH: fakeBin + path.delimiter + (process.env.PATH || ''),
         DATABASE_URL: connectionString,
         ARL_EXPECTED_TARGET_SHA: revision
       }
@@ -191,10 +206,8 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     assert.deepEqual(await Promise.all(operatorTables.map(operatorCount)),
       operatorStateBefore, 'unknown target must not silently initialise anything in PostgreSQL');
 
-    // A second, read-only operator request must reuse the exact frozen
-    // assessment in real PostgreSQL and export one local, private HTML file.
-    const reviewDirectory=path.join(temp,'review-output');
-    fs.mkdirSync(reviewDirectory,{mode:0o700});
+    // A second, read-only export must reuse the exact frozen assessment
+    // and identical private HTML in real PostgreSQL.
     const review=spawnSync(process.execPath,[
       'src/agent/arl-local-assessment-runner.mjs',
       target,
@@ -215,13 +228,11 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
       encoding:'utf8',
       timeout:90_000
     });
-    // The fixture has no human-prepared evidence/application scope.
-    // A real database must not manufacture 98 eligible controls or HTML.
-    assert.equal(review.status,2);
-    assert.match(review.stderr,/No independent controls are ready for operator review export/);
-    assert.doesNotMatch(review.stdout,/Offline operator review dashboard created:/);
-    assert.equal(fs.readdirSync(reviewDirectory).length,0,
-      'No eligible controls means no HTML dashboard may be exported');
+    // No human-prepared evidence is fabricated for a newly created snapshot.
+    assert.equal(review.status,0,'second export failed: '+review.stderr);
+    assert.match(review.stdout,/Offline operator review dashboard unchanged/);
+    assert.equal(fs.readdirSync(reviewDirectory).length,1,
+      'Only one immutable snapshot-bound review dashboard may be exported');
     assert.equal(fs.statSync(reviewDirectory).mode & 0o777,0o700);
     assert.equal(git(['status','--porcelain']).stdout.trim(),'',
       'The exact frozen synthetic target must remain unchanged');
@@ -256,8 +267,8 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     });
     assert.equal(stale.status,2);
     assert.match(stale.stderr,/Local assessment frozen target mismatch/);
-    assert.equal(fs.readdirSync(reviewDirectory).length,0,
-      'A changed target may not create a trusted old-revision dossier');
+    assert.equal(fs.readdirSync(reviewDirectory).length,1,
+      'A changed target must not create another trusted old-revision dossier');
 
     const owners = await db.prepare('SELECT COUNT(*) AS count FROM users WHERE email LIKE ?').get('%@local.invalid');
     assert.equal(Number(owners.count),1);
