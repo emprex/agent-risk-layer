@@ -237,6 +237,10 @@ test('legacy artifact-only verified retest evidence is treated as unverified and
   assert.equal(readiness.summary.controlsWithObservedEvidence, 0,
     'stored legacy verified evidence must not be counted as a trustworthy observation');
   assert.equal(readiness.summary.controlsMissingEvidence, 1);
+  assert.equal(readiness.summary.evidenceTrustExceptions, 1,
+    'the core readiness summary must expose stored/effective trust mismatches');
+  assert.ok(readiness.reasons.includes('legacy_evidence_trust_invalid'),
+    'a nonqualifying verified historical record must force HOLD even when other evidence could be sufficient');
   assert.ok(!readiness.evidenceIds.includes(legacy.id),
     'nonqualifying legacy evidence must not appear in readiness evidence IDs');
   const historical = await db.prepare('SELECT verification_state FROM control_evidence_items WHERE id=?').get(legacy.id);
