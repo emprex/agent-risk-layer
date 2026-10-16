@@ -103,15 +103,32 @@ test('operator:open reuses a prepared local snapshot and never creates another',
     const before = counts();
     assert.equal(before.system_snapshots, 1);
 
-    // The offline opener must never execute the snapshot bootstrap path.
+    // A new assessment with zero eligible evidence controls still needs a
+    // complete operator status view. The browser launcher is stubbed.
+    const reportDirectory = path.join(temporary, 'private-reports');
+    const fakeBin = path.join(temporary, 'fake-bin');
+    fs.mkdirSync(reportDirectory, { mode:0o700 });
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(path.join(fakeBin, 'xdg-open'), '#!/bin/sh\nexit 0\n', { mode:0o755 });
     const opened = spawnSync(process.execPath, [
       'src/agent/arl-local-assessment-runner.mjs', target
     ], {
       cwd: root, encoding: 'utf8', timeout: 90_000,
-      env: { ...env, ARL_OPERATOR_OPEN_DASHBOARD: '1' }
+      env: {
+        ...env,
+        PATH: fakeBin + path.delimiter + (process.env.PATH || ''),
+        ARL_OPERATOR_OPEN_DASHBOARD: '1',
+        ARL_REPORT_OUTPUT_DIR: reportDirectory
+      }
     });
-    assert.equal(opened.status, 2, `open stderr: ${opened.stderr}`);
-    assert.match(opened.stderr, /No independent controls are ready for operator review export/);
+    assert.equal(opened.status, 0, `open stderr: ${opened.stderr}`);
+    assert.match(opened.stdout, /Offline operator review dashboard created/);
+    const reportFiles = fs.readdirSync(reportDirectory);
+    assert.equal(reportFiles.length,1);
+    const html=fs.readFileSync(path.join(reportDirectory,reportFiles[0]),'utf8');
+    assert.match(html,/All 108 controls — authoritative snapshot/);
+    assert.match(html,/Deployment HOLD/);
+    assert.match(html,/All 0 independent controls/);
     assert.deepEqual(counts(), before, 'read-only opener must preserve all canonical identities and snapshots');
     assert.equal(git('status', '--porcelain').stdout.trim(), '');
   } finally {
