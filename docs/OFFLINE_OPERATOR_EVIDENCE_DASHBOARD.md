@@ -9,7 +9,7 @@ cd ~/agent-risk-layer
 npm run operator:open -- "$HOME/arl-target-mcp-agent"
 ```
 
-This explicit local command fixes the request to `Export assessment operator dashboard`. It uses the **existing** frozen-target preflight, original assessment binding, evidence-trust calculations, and read-only report preparation before asking Linux to open the verified HTML with `xdg-open` (an argument array, not a shell command). The browser does not host a service or get permission to record decisions.
+This command is **strictly for an existing local assessment**: it will not create a user, project, assessment or system snapshot. When the assessment has no independently actionable test/evidence controls yet, the offline dashboard still shows the full canonical control register, the pending scope/applicability decisions and an explicit zero-evidence work-plan state. It does not create or imply security findings or approvals.\n\nThis explicit local command fixes the request to `Export assessment operator dashboard`. It uses the **existing** frozen-target preflight, original assessment binding, evidence-trust calculations, and read-only report preparation before asking Linux to open the verified HTML with `xdg-open` (an argument array, not a shell command). The browser does not host a service or get permission to record decisions.
 
 If the desktop opener is unavailable, the operator still receives the local HTML path. The shortcut checks the report's 64-character SHA-256 digest, filename, private file/directory permissions, and refuses symlinks. It does not bypass PostgreSQL availability, source SHA checks, authorisation or evidence review. It does not update `main` or the target automatically.
 

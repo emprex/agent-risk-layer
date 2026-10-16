@@ -552,9 +552,6 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     }
     const queue = await readCurrentControlQueue(options);
     const index = buildAssessmentEvidenceBatchIndex(queue);
-    if (index.eligibleControls === 0) {
-      throw new Error('No independent controls are ready for operator review export.');
-    }
     const batches = [];
     for (const batch of index.batches) {
       const details = await readBatchDetails(options, batch.controlIds);
