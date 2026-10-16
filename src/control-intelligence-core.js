@@ -730,6 +730,10 @@ async function deriveDeploymentDecision(access, snapshot) {
   const effectiveTrustById = new Map(trustRows.map((row) => [
     row.id, effectiveEvidenceTrust(row)
   ]));
+  const invalidStoredVerified = evidence.filter((row) =>
+    row.verification_state === 'verified' &&
+    effectiveTrustById.get(row.id)?.state !== 'verified'
+  );
   const trustedEvidence = evidence.filter((row) =>
     row.verification_state === 'verified' &&
     row.retention_status === 'active' &&
@@ -798,12 +802,12 @@ async function deriveDeploymentDecision(access, snapshot) {
     ),
     applicableControls: applicable.length,
     controlsNeedingAssessment: unknown.length,
-    controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, openFindings: findings.length,
+    controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, evidenceTrustExceptions: invalidStoredVerified.length, openFindings: findings.length,
     criticalBlockers, failedTests: tests.filter((row) => row.result === 'failed').length,
     completedRetests: new Set([...tests.filter((row) => validRetest(row,tests,findings)).map((row)=>row.entry_id),...closedSatisfied]).size,verifiedClosedRemediationControls:closedSatisfied.size,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
   // An empty applicable scope cannot establish readiness: it has no tests or verified evidence.
   // Keep N/A-only and partially scoped assessments on HOLD for accountable review.
-  const reasons=[]; if(!applicable.length)reasons.push('no_applicable_controls_verified'); if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
+  const reasons=[]; if(!applicable.length)reasons.push('no_applicable_controls_verified'); if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(invalidStoredVerified.length)reasons.push('legacy_evidence_trust_invalid'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
   const common={summary,reasons,evidenceIds:trustedEvidence.map(x=>x.id).sort(),requiredApprovals,controlProfileDigest:intelligenceDigest(evaluations.map(x=>({id:x.entry_id,digest:x.entry_digest})).sort((a,b)=>a.id.localeCompare(b.id)))};
   if (criticalBlockers) return { ...common,decision: 'do_not_deploy', rationale: 'An open evaluated Critical finding blocks deployment.' };
   if (reasons.length || tests.some((row) => row.result === 'failed' && !tests.some(r=>r.execution_kind==='retest'&&r.result==='passed'&&r.retest_of_execution_id===row.id))) return { ...common,decision: 'hold', rationale: 'Material context, evidence, findings, retesting or approvals remain unresolved.' };
