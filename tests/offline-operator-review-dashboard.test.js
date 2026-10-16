@@ -101,6 +101,8 @@ test('empty independent evidence queue still renders all 108 snapshot-bound cont
   assert.match(html,/All 108 controls — authoritative snapshot/);
   assert.match(html,/All 0 independent controls/);
   assert.match(html,/Deployment HOLD/);
+  assert.match(html,/First confirm the assessed architecture, scope and human applicability decisions/);
+  assert.match(html,/No independently actionable test or evidence items exist in this snapshot yet/);
   assert.match(html,/Accountable human applicability decision required/);
   assert.doesNotMatch(html,/SYNTHETIC DEMONSTRATION/);
   assert.throws(() => buildOfflineOperatorReviewDashboard(
