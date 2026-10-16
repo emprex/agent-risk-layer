@@ -140,6 +140,57 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     assert.match(result.stdout,/ARL LOCAL ASSESSMENT ANSWER/);
     assert.doesNotMatch(result.stdout,/deployment (?:authorised|approved)|release approved/i);
 
+    // This entry point is read-only even on real PostgreSQL. A prepared
+    // synthetic assessment may be opened, but neither it nor an unknown
+    // target is allowed to initialise a new user, project or snapshot.
+    const operatorCount = async (table) => Number((await db.prepare(
+      'SELECT COUNT(*) AS count FROM ' + table
+    ).get()).count);
+    const operatorTables = [
+      'users', 'security_projects', 'assessments',
+      'system_snapshots', 'control_snapshot_evaluations'
+    ];
+    const operatorStateBefore = await Promise.all(operatorTables.map(operatorCount));
+
+    const openExisting = spawnSync(process.execPath, [
+      'src/agent/arl-local-assessment-runner.mjs', target
+    ], {
+      cwd: root, encoding: 'utf8', timeout: 90_000,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test', PRODUCT_STAGE: 'development',
+        ARL_LOCAL_MODE: '1', ARL_AI_ADVISORY: '0',
+        ARL_OPERATOR_OPEN_DASHBOARD: '1',
+        DATABASE_URL: connectionString,
+        ARL_EXPECTED_TARGET_SHA: revision
+      }
+    });
+    assert.equal(openExisting.status, 2);
+    assert.match(openExisting.stderr,
+      /No independent controls are ready for operator review export/);
+    assert.deepEqual(await Promise.all(operatorTables.map(operatorCount)),
+      operatorStateBefore, 'opening an existing assessment cannot mutate authoritative PostgreSQL entities');
+
+    const unpreparedTarget = path.join(temp, 'unknown-operator-target');
+    fs.mkdirSync(unpreparedTarget);
+    const openUnknown = spawnSync(process.execPath, [
+      'src/agent/arl-local-assessment-runner.mjs', unpreparedTarget
+    ], {
+      cwd: root, encoding: 'utf8', timeout: 90_000,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test', PRODUCT_STAGE: 'development',
+        ARL_LOCAL_MODE: '1', ARL_AI_ADVISORY: '0',
+        ARL_OPERATOR_OPEN_DASHBOARD: '1',
+        DATABASE_URL: connectionString,
+        ARL_EXPECTED_TARGET_SHA: revision
+      }
+    });
+    assert.equal(openUnknown.status, 2);
+    assert.match(openUnknown.stderr, /No existing local assessment for this target/);
+    assert.deepEqual(await Promise.all(operatorTables.map(operatorCount)),
+      operatorStateBefore, 'unknown target must not silently initialise anything in PostgreSQL');
+
     // A second, read-only operator request must reuse the exact frozen
     // assessment in real PostgreSQL and export one local, private HTML file.
     const reviewDirectory=path.join(temp,'review-output');
