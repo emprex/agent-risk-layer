@@ -20,7 +20,7 @@ import {
   recordControlTestExecution,
   recordDeploymentDecision,
 } from '../src/control-intelligence.js';
-import { recordControlEvidence as recordCoreControlEvidence } from '../src/control-intelligence-core.js';
+import { recordControlEvidence as recordCoreControlEvidence, getDerivedDeploymentReadiness } from '../src/control-intelligence-core.js';
 
 const randomId = (prefix) => `${prefix}${crypto.randomUUID().replaceAll('-', '')}`;
 const CONTROL_ID = 'ARL-KB-032';
@@ -229,6 +229,19 @@ test('legacy artifact-only verified retest evidence is treated as unverified and
   assert.equal(effective.storedVerificationState, 'verified');
   assert.equal(effective.verificationState, 'unverified');
   assert.match(effective.trustReason, /implementation artifact|predates completion/i);
+  const readiness = await getDerivedDeploymentReadiness({
+    projectId: f.project.id, userId: f.userId
+  });
+  assert.equal(readiness.available, true);
+  assert.equal(readiness.decision, 'hold');
+  assert.equal(readiness.summary.controlsWithObservedEvidence, 0,
+    'stored legacy verified evidence must not be counted as a trustworthy observation');
+  assert.equal(readiness.summary.controlsMissingEvidence, 1);
+  assert.ok(!readiness.evidenceIds.includes(legacy.id),
+    'nonqualifying legacy evidence must not appear in readiness evidence IDs');
+  const historical = await db.prepare('SELECT verification_state FROM control_evidence_items WHERE id=?').get(legacy.id);
+  assert.equal(historical.verification_state, 'verified',
+    'effective trust is a read-time projection, not an unauthorised database rewrite');
   assert.equal(detail.chain.currentStage, 'retest');
   assert.match(detail.chain.nextAction, /verify evidence/i);
   assert.ok(detail.chain.notRequiredStages.includes('approval'));
