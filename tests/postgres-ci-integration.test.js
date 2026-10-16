@@ -155,7 +155,7 @@ test('ephemeral PostgreSQL refuses unsupported review export and stale target SH
     const fakeBin=path.join(temp,'fake-bin');
     fs.mkdirSync(reviewDirectory,{mode:0o700});
     fs.mkdirSync(fakeBin);
-    fs.writeFileSync(path.join(fakeBin,'xdg-open'),'#!/bin/sh\\nexit 0\\n',{mode:0o755});
+    fs.writeFileSync(path.join(fakeBin,'xdg-open'),'#!/bin/sh\nexit 0\n',{mode:0o755});
 
     const openExisting = spawnSync(process.execPath, [
       'src/agent/arl-local-assessment-runner.mjs', target
