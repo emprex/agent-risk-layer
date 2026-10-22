@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
 import { existingEvidenceWorkplan, EXISTING_EVIDENCE_SUMMARY_SCHEMA }
   from '../src/agent/existing-evidence-workplan.mjs';
 
@@ -71,5 +75,57 @@ test('evidence workplan refuses altered target, snapshot or authority flags',()=
       ...summary,packs:[...summary.packs.slice(0,2),{...summary.packs[2],number:8}]}}}}
   ]){
     assert.throws(()=>existingEvidenceWorkplan({...input,...variant}));
+  }
+});
+
+
+test('evidence JSON lookup on a missing synthetic assessment never creates state',()=>{
+  const child=spawnSync;
+  const root=new URL('../',import.meta.url).pathname;
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'arl-evidence-readonly-'));
+  const target=path.join(directory,'target');
+  const sqlite=path.join(directory,'fixture.sqlite');
+  fs.mkdirSync(target);
+  const git=args=>child('git',['-C',target,...args],{encoding:'utf8',timeout:10000});
+  const env={...process.env,NODE_ENV:'test',PRODUCT_STAGE:'development',
+    DATABASE_URL:'',DATABASE_PATH:sqlite,ARL_EXPECTED_TARGET_SHA:''};
+  try {
+    for(const a of [
+      ['init','-q'],['config','user.name','ARL synthetic'],
+      ['config','user.email','synthetic@example.invalid'],
+      ['config','commit.gpgsign','false']
+    ])assert.equal(git(a).status,0);
+    fs.writeFileSync(path.join(target,'README.md'),'Synthetic authorised fixture only\\n');
+    assert.equal(git(['add','README.md']).status,0);
+    assert.equal(git(['commit','-q','-m','fixture']).status,0);
+    const setup=child(process.execPath,['--input-type=module','--eval',
+      "const {initialiseDatabase}=await import('./src/db.js'); await initialiseDatabase();"
+    ],{cwd:root,env,encoding:'utf8',timeout:20000});
+    assert.equal(setup.status,0,setup.stderr);
+    const run=child(process.execPath,[
+      'src/agent/arl-inspect-existing-assessment.mjs','--evidence-json',target
+    ],{cwd:root,env,encoding:'utf8',timeout:20000});
+    assert.equal(run.status,0,run.stderr);
+    const out=JSON.parse(run.stdout);
+    assert.equal(out.schema,EXISTING_EVIDENCE_SUMMARY_SCHEMA);
+    assert.equal(out.available,false);
+    assert.equal(out.reason,'not_found');
+    assert.equal(out.evidenceAccepted,false);
+    assert.equal(out.testsExecuted,0);
+    assert.equal(out.humanReviewRequired,true);
+    const count=child(process.execPath,['--input-type=module','--eval',
+      "const {db}=await import('./src/db.js'); const t=['users','security_projects','assessments','system_snapshots']; console.log((await Promise.all(t.map(x=>db.prepare('SELECT COUNT(*) AS n FROM '+x).get()))).map(y=>Number(y.n)).join(','));"
+    ],{cwd:root,env,encoding:'utf8',timeout:20000});
+    assert.equal(count.status,0,count.stderr);
+    assert.equal(count.stdout.trim(),'0,0,0,0');
+    const badSha=child(process.execPath,[
+      'src/agent/arl-inspect-existing-assessment.mjs','--evidence-json',target
+    ],{cwd:root,env:{...env,ARL_EXPECTED_TARGET_SHA:'0'.repeat(40)},
+       encoding:'utf8',timeout:20000});
+    assert.equal(badSha.status,2);
+    assert.equal(badSha.stdout.trim(),'');
+    assert.equal(git(['status','--porcelain']).stdout.trim(),'');
+  } finally {
+    fs.rmSync(directory,{force:true,recursive:true});
   }
 });
