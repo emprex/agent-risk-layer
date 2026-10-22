@@ -18,7 +18,7 @@ export const operatorHelp = [
   'Existing assessment command (may create/update local assessment records):',
   '  arl-operator <clean-frozen-target-repository> "<request>"',
   '',
-  'Existing offline review dashboard (may initialise a new assessment):',
+  'Existing-only offline review dashboard (refuses an unknown target; requires existing PostgreSQL assessment):',
   '  npm run operator:open -- <clean-frozen-target-repository>',
   '',
   'Active tests require separate written authorisation and bounded scope.',
