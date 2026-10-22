@@ -46,6 +46,22 @@ test('operator browser accepts only exact private digest-bound output', () => {
   } finally {clean(f);}
 });
 
+
+test('operator browser accepts a complete zero-eligible assessment register, not an empty unbound artifact', () => {
+  const f=fixture();
+  try {
+    assert.equal(validateOperatorDashboardArtifact({
+      ...f.metadata, assessedControls:0, excludedControls:108
+    },f.outputDirectory),f.filePath);
+    assert.throws(() => validateOperatorDashboardArtifact({
+      ...f.metadata, assessedControls:0, excludedControls:0
+    },f.outputDirectory),/unverified/);
+    assert.throws(() => validateOperatorDashboardArtifact({
+      ...f.metadata, assessedControls:0, excludedControls:-1
+    },f.outputDirectory),/unverified/);
+  } finally { clean(f); }
+});
+
 test('operator browser refuses forged path, foreign directory and incorrect content prefix',()=>{
   const f=fixture();
   try {
