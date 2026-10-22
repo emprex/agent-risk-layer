@@ -72,6 +72,44 @@ function dashboard(){
   return buildOfflineOperatorReviewDashboard(index,[review],rev,queue);
 }
 
+
+test('empty independent evidence queue still renders all 108 snapshot-bound controls without approval', () => {
+  const controlRows = Array.from({length:108}, (_,i) => ({
+    controlId: 'ARL-KB-' + String(i+1).padStart(3,'0'),
+    currentStage: 'applicability',
+    chainStatus: 'context_required',
+    deploymentImpact: 'hold'
+  }));
+  const currentQueue = buildControlWorkQueue([{
+    systemSnapshot: {id:'new-synthetic-snapshot'},
+    total:108, items:controlRows, hasMore:false
+  }]);
+  const currentIndex = buildAssessmentEvidenceBatchIndex(currentQueue);
+  assert.equal(currentIndex.batchCount,0);
+  assert.equal(currentIndex.eligibleControls,0);
+  const report=buildOfflineOperatorReviewDashboard(currentIndex,[],rev,currentQueue);
+  assert.equal(report.targetRevision,rev);
+  assert.equal(report.registryTotal,108);
+  assert.equal(report.assessedControls,0);
+  assert.equal(report.excludedControls,108);
+  assert.ok(report.controlRegistry.every(row =>
+    row.lane==='human_applicability' && row.inEvidenceWorkplan===false
+  ));
+  assert.equal(report.securityStateChanged,false);
+  assert.equal(report.deploymentDecisionWritten,false);
+  const html=renderOfflineOperatorReviewHtml(report);
+  assert.match(html,/All 108 controls — authoritative snapshot/);
+  assert.match(html,/All 0 independent controls/);
+  assert.match(html,/Deployment HOLD/);
+  assert.match(html,/First confirm the assessed architecture, scope and human applicability decisions/);
+  assert.match(html,/No independently actionable test or evidence items exist in this snapshot yet/);
+  assert.match(html,/Accountable human applicability decision required/);
+  assert.doesNotMatch(html,/SYNTHETIC DEMONSTRATION/);
+  assert.throws(() => buildOfflineOperatorReviewDashboard(
+    currentIndex, [], rev, {...currentQueue,systemSnapshotId:'foreign-snapshot'}
+  ),/same-snapshot authoritative/);
+});
+
 test('real 4-control scenario renders 2 review controls and explicitly excludes held findings',()=>{
   const report=dashboard();
   assert.equal(report.assessedControls,2);
