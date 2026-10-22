@@ -17,8 +17,10 @@ from typing import Any
 
 if __package__:
     from .report_bridge import verify_existing_bundle
+    from .assessment_bridge import inspect_existing
 else:
     from report_bridge import verify_existing_bundle
+    from assessment_bridge import inspect_existing
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -174,7 +176,7 @@ def launch_gui() -> int:
     reports_page = ttk.Frame(notebook, padding=24, style="Panel.TFrame")
 
     notebook.add(overview, text="Overview")
-    notebook.add(target_page, text="Target")
+    notebook.add(target_page, text="Assessments")
     notebook.add(evidence_page, text="Evidence")
     notebook.add(tests_page, text="Controlled tests")
     notebook.add(reports_page, text="Reports")
@@ -198,7 +200,9 @@ def launch_gui() -> int:
         wraplength=735, justify="left"
     ).pack(anchor="w", pady=(0, 24))
 
+    selected_target: dict[str, Any] = {"path": None, "revision": None}
     target_text = tk.StringVar(value="No target selected. No assessment loaded.")
+    assessment_text = tk.StringVar(value="No existing assessment inspected.")
     ttk.Label(
         target_page, text="Selected local repository", style="Text.TLabel",
         font=("DejaVu Sans", 12, "bold")
@@ -240,13 +244,21 @@ def launch_gui() -> int:
         )
         if not selected:
             return
+        selected_target.update(path=None, revision=None)
+        assessment_text.set("No existing assessment inspected.")
         observed = repository_diagnostics(Path(selected))
-        if not observed["available"]:
+        if not observed["available"] or observed.get("worktree") != "clean":
+            if observed["available"]:
+                observed = {
+                    "available": False,
+                    "reason": "Target repository is not clean; inspection blocked"
+                }
             target_text.set(
                 "Repository not available: " + observed["reason"] +
                 "\nNo assessment was loaded."
             )
         else:
+            selected_target.update(path=observed["repository"], revision=observed["revision"])
             target_text.set(
                 "Path: " + observed["repository"] + "\n" +
                 "Commit: " + observed["revision"] + "\n" +
@@ -259,6 +271,46 @@ def launch_gui() -> int:
     ).pack(anchor="w")
     ttk.Button(
         target_page, text="Choose local repository…", command=choose_target
+    ).pack(anchor="w", pady=(0, 20))
+    ttk.Label(
+        target_page, text="Existing assessment lookup", style="Text.TLabel",
+        font=("DejaVu Sans", 12, "bold")
+    ).pack(anchor="w", pady=(0, 8))
+    ttk.Label(
+        target_page, textvariable=assessment_text, style="Text.TLabel",
+        wraplength=730, justify="left"
+    ).pack(anchor="w", pady=(0, 14))
+
+    def inspect_selected_assessment() -> None:
+        target_path = selected_target["path"]
+        expected_sha = selected_target["revision"]
+        if not target_path or not expected_sha:
+            assessment_text.set("Choose a clean authorised local repository first.")
+            return
+        assessment_text.set("Checking the existing ARL assessment…")
+        root.update_idletasks()
+        found = inspect_existing(Path(target_path), expected_sha)
+        if not found["available"]:
+            assessment_text.set(
+                "EXISTING ASSESSMENT NOT CONFIRMED: " + found["reason"] +
+                "\nNo record created, edited or approved by this view."
+            )
+            return
+        assessment_text.set(
+            "Existing assessment located (READ ONLY)\n"
+            "Project ID: " + found["project_id"] + "\n"
+            "Assessment ID: " + found["assessment_id"] + "\n"
+            "Snapshot ID: " + found["snapshot_id"] + "\n"
+            "Frozen target SHA: " + found["target_revision"] + "\n"
+            "Recorded environment: " + found["environment"] + "\n"
+            "Evidence and control outcomes: NOT INSPECTED\n"
+            "Readiness and security verdict: NOT EVALUATED\n"
+            "Human review remains required."
+        )
+
+    ttk.Button(
+        target_page, text="Inspect existing assessment (read only)",
+        command=inspect_selected_assessment
     ).pack(anchor="w")
 
     section(
@@ -345,13 +397,37 @@ def main(arguments: list[str] | None = None) -> int:
         "--verify-report", type=Path,
         help="verify an existing private ARL report bundle without opening the GUI"
     )
+    parser.add_argument(
+        "--inspect-existing", type=Path,
+        help="inspect an existing frozen local ARL assessment without GUI"
+    )
     args = parser.parse_args(arguments)
-    if args.verify_report is not None and (args.check or args.target is not None):
-        parser.error("--verify-report cannot be combined with --check or --target")
+    if args.verify_report is not None and (
+        args.check or args.target is not None or args.inspect_existing is not None
+    ):
+        parser.error("--verify-report cannot be combined with other modes")
+    if args.inspect_existing is not None and (args.check or args.target is not None):
+        parser.error("--inspect-existing cannot be combined with other modes")
     if args.target is not None and not args.check:
         parser.error("--target is available only with --check")
     if args.verify_report is not None:
         result = verify_existing_bundle(args.verify_report)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["available"] else 1
+    if args.inspect_existing is not None:
+        repository = repository_diagnostics(args.inspect_existing)
+        if not repository["available"] or repository.get("worktree") != "clean":
+            result = {
+                "available": False,
+                "reason": "A clean committed local Git target is required",
+                "security_verdict": "not_assessed",
+                "readiness_decision": "not_evaluated",
+                "human_review_required": True,
+            }
+        else:
+            result = inspect_existing(
+                Path(repository["repository"]), repository["revision"]
+            )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["available"] else 1
     if args.check:
