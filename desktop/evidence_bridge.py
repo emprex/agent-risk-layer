@@ -28,6 +28,7 @@ def load_evidence_workplan(
     expected_sha: str,
     expected_project: str,
     expected_snapshot: str,
+    expected_assessment: str,
     *,
     runner: Callable[..., Any] = subprocess.run,
     product_root: Path = PRODUCT_ROOT,
@@ -43,7 +44,8 @@ def load_evidence_workplan(
 
     if (not SHA.fullmatch(expected_sha) or
         not IDENTIFIER.fullmatch(expected_project) or
-        not IDENTIFIER.fullmatch(expected_snapshot)):
+        not IDENTIFIER.fullmatch(expected_snapshot) or
+        not IDENTIFIER.fullmatch(expected_assessment)):
         return refused("Exact project, snapshot and target SHA required")
     try:
         selected = target.expanduser().resolve(strict=True)
@@ -87,6 +89,7 @@ def load_evidence_workplan(
         record.get("targetRevision") != expected_sha or
         not isinstance(record.get("assessmentId"), str) or
         not IDENTIFIER.fullmatch(record["assessmentId"]) or
+        record["assessmentId"] != expected_assessment or
         record.get("securityStateChanged") is not False or
         record.get("deploymentDecisionWritten") is not False or
         record.get("humanReviewRequired") is not True or
