@@ -15,6 +15,11 @@ import subprocess
 import sys
 from typing import Any
 
+if __package__:
+    from .report_bridge import verify_existing_bundle
+else:
+    from report_bridge import verify_existing_bundle
+
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -269,11 +274,50 @@ def launch_gui() -> int:
         "Engagement, synthetic data, human approval and an auditable result."
     )
     section(
-        reports_page, "Reports — not connected",
-        "Final reports must be derived from existing snapshot-bound records "
-        "and verified evidence, with human review of findings, limitations "
-        "and release decisions. This desktop view generates no report."
+        reports_page, "Verify an existing ARL report bundle",
+        "Select an already exported private ARL .manifest.json file. "
+        "The existing Node.js ARL bundle verifier checks the report files "
+        "and SHA-256 content correspondence. No database, target or security "
+        "test is accessed. This does NOT verify authenticity, finding "
+        "validity, disclosure approval or deployment readiness."
     )
+    report_text = tk.StringVar(
+        value="No report selected. Integrity NOT ESTABLISHED."
+    )
+    ttk.Label(
+        reports_page, textvariable=report_text, style="Text.TLabel",
+        wraplength=730, justify="left"
+    ).pack(anchor="w", pady=(0, 18))
+
+    def choose_report() -> None:
+        selected = filedialog.askopenfilename(
+            parent=root, title="Select a saved ARL report manifest",
+            filetypes=[("ARL report manifest", "*.manifest.json")]
+        )
+        if not selected:
+            return
+        report_text.set("Checking selected bundle with the ARL verifier…")
+        root.update_idletasks()
+        verified = verify_existing_bundle(Path(selected))
+        if not verified["available"]:
+            report_text.set(
+                "Integrity NOT ESTABLISHED. " + verified["reason"] +
+                "\nNo report contents were displayed or changed."
+            )
+            return
+        report_text.set(
+            "Integrity: CONTENT CONSISTENT ONLY (not a signature)\n"
+            "Target Git SHA: " + verified["target_revision"] + "\n"
+            "Bundle SHA-256: " + verified["bundle_sha256"] + "\n"
+            "Recorded readiness label (NOT independently verified): " +
+            verified["reported_readiness_label"] + "\n"
+            "Security verdict: NOT ASSESSED by this interface\n"
+            "Human review and disclosure approval: REQUIRED"
+        )
+
+    ttk.Button(
+        reports_page, text="Verify saved ARL report…", command=choose_report
+    ).pack(anchor="w")
 
     ttk.Label(
         container,
@@ -297,9 +341,19 @@ def main(arguments: list[str] | None = None) -> int:
         "--target", type=Path,
         help="optionally inspect Git metadata of an explicitly chosen local target"
     )
+    parser.add_argument(
+        "--verify-report", type=Path,
+        help="verify an existing private ARL report bundle without opening the GUI"
+    )
     args = parser.parse_args(arguments)
+    if args.verify_report is not None and (args.check or args.target is not None):
+        parser.error("--verify-report cannot be combined with --check or --target")
     if args.target is not None and not args.check:
         parser.error("--target is available only with --check")
+    if args.verify_report is not None:
+        result = verify_existing_bundle(args.verify_report)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["available"] else 1
     if args.check:
         print(json.dumps(local_status(args.target), indent=2, sort_keys=True))
         return 0
