@@ -63,7 +63,7 @@ process.chdir(productRoot);
 
 try {
   const [
-    { resolveLocalAssessmentContext },
+    { resolveLocalAssessmentContext, findExistingLocalAssessmentContext },
     { inspectFrozenRepository },
     { buildFrozenInspectionTransport },
     { ensureInitialAssessmentSnapshot },
@@ -93,6 +93,17 @@ try {
     import('./ai/advisory-context.mjs')
   ]);
 
+  // Opening an existing local dashboard is strictly non-provisioning.
+  // Fail before inspection if no assessment is already bound to this path.
+  const existingContext = openDashboardInBrowser
+    ? await findExistingLocalAssessmentContext(repositoryPath)
+    : null;
+  if (openDashboardInBrowser && !existingContext) {
+    throw new Error(
+      'No existing local assessment for this target. operator:open cannot create an assessment or snapshot.'
+    );
+  }
+
   const frozen = await inspectFrozenRepository(repositoryPath);
   const suppliedExpectedRevision = String(
     process.env.ARL_EXPECTED_TARGET_SHA || ''
@@ -118,14 +129,19 @@ try {
 
   process.env.ARL_EXPECTED_TARGET_SHA = expectedRevision;
 
-  const options =
-    await resolveLocalAssessmentContext(repositoryPath);
+  const options = openDashboardInBrowser
+    ? existingContext
+    : await resolveLocalAssessmentContext(repositoryPath);
 
-  await ensureInitialAssessmentSnapshot({
-    operatorContextInternal: options,
-    frozenInspection:
-      buildFrozenInspectionTransport(frozen)
-  });
+  // Snapshot bootstrap belongs only to explicitly transactional assessment
+  // entry points. The offline Operator opener cannot create security state.
+  if (!openDashboardInBrowser) {
+    await ensureInitialAssessmentSnapshot({
+      operatorContextInternal: options,
+      frozenInspection:
+        buildFrozenInspectionTransport(frozen)
+    });
+  }
 
   const deliverableCommand =
     detectCustomerAssessmentDeliverableCommand(request);

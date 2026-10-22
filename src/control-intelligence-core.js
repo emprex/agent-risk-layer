@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { db, id, nowIso } from './db.js';
 import { getSeveritySemantics } from './risk-knowledge-core.js';
 import { runtimeApprovalActionDigest } from './access-control.js';
+import { effectiveEvidenceTrust, evidenceTrustRows } from './control-evidence-effective-trust.js';
 import { ARCHITECTURE_FACTS, suggestControls, suggestionProfile } from './control-suggestions.js';
 
 const VIEW_ROLES = new Set(['viewer','analyst','developer','admin','owner']);
@@ -722,12 +723,28 @@ async function deriveDeploymentDecision(access, snapshot) {
   const tests = await db.prepare('SELECT * FROM control_test_executions WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?').all(access.project.workspace_id, access.project.id, snapshot.id);
   const evidence = await db.prepare("SELECT * FROM control_evidence_items WHERE workspace_id=? AND project_id=? AND system_snapshot_id=?").all(access.project.workspace_id, access.project.id, snapshot.id);
   await verifyRows(tests,'content_digest','test'); await verifyRows(evidence,'integrity_digest','evidence');
+  // The persisted `verified` field describes historical storage, not whether
+  // the proof still qualifies under current temporal, artifact and signed-run
+  // rules. All readiness projections use the same policy as Operator review.
+  const trustRows = await evidenceTrustRows(access.project.id, snapshot.id);
+  const effectiveTrustById = new Map(trustRows.map((row) => [
+    row.id, effectiveEvidenceTrust(row)
+  ]));
+  const invalidStoredVerified = evidence.filter((row) =>
+    row.verification_state === 'verified' &&
+    effectiveTrustById.get(row.id)?.state !== 'verified'
+  );
+  const trustedEvidence = evidence.filter((row) =>
+    row.verification_state === 'verified' &&
+    row.retention_status === 'active' &&
+    effectiveTrustById.get(row.id)?.state === 'verified'
+  );
   const findings = await db.prepare(`SELECT r.id,r.finding_key,r.status,c.entry_id,c.contextual_severity,c.severity_status
     FROM remediation_items r JOIN control_finding_bindings b ON b.finding_id=r.id AND b.workspace_id=? AND b.project_id=r.project_id AND b.system_snapshot_id=?
     JOIN control_snapshot_evaluations c ON c.workspace_id=b.workspace_id AND c.project_id=b.project_id AND c.system_snapshot_id=b.system_snapshot_id AND c.entry_id=b.entry_id
     WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk','invalidated_unsubstantiated')`).all(access.project.workspace_id,snapshot.id,access.project.id);
   const unboundFindings=Number((await db.prepare(`SELECT COUNT(*) count FROM remediation_items r WHERE r.project_id=? AND r.status NOT IN ('verified_closed','accepted_risk','invalidated_unsubstantiated') AND NOT EXISTS (SELECT 1 FROM control_finding_bindings b WHERE b.finding_id=r.id AND b.workspace_id=? AND b.project_id=? AND b.system_snapshot_id=?)`).get(access.project.id,access.project.workspace_id,access.project.id,snapshot.id)).count||0);
-  const closedSatisfied = await verifiedClosedRemediationControlIds(access,snapshot,evidence);
+  const closedSatisfied = await verifiedClosedRemediationControlIds(access,snapshot,trustedEvidence);
   const effectiveEvaluations = evaluations.map((row) => closedSatisfied.has(row.entry_id) && row.applicability_status==='unknown' ? { ...row, applicability_status: 'applicable' } : row);
 
   /*
@@ -769,7 +786,7 @@ async function deriveDeploymentDecision(access, snapshot) {
   );
   const tested = new Set(tests.filter((row) => row.result === 'passed' && (row.execution_kind==='initial'||validRetest(row,tests,findings))).map((row) => row.entry_id));
   for (const controlId of closedSatisfied) tested.add(controlId);
-  const observed = new Set(evidence.filter((row) => ['verified'].includes(row.verification_state) && row.retention_status === 'active').map((row) => row.entry_id));
+  const observed = new Set(trustedEvidence.map((row) => row.entry_id));
   const missingEvidence = applicable.filter((row) => !tested.has(row.entry_id) || !observed.has(row.entry_id)).length;
   const criticalBlockers = findings.filter((row) => row.contextual_severity === 'critical' && row.severity_status === 'evaluated').length;
   const requiredApprovals=requiredApprovalControls(snapshot,applicable);
@@ -785,13 +802,13 @@ async function deriveDeploymentDecision(access, snapshot) {
     ),
     applicableControls: applicable.length,
     controlsNeedingAssessment: unknown.length,
-    controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, openFindings: findings.length,
+    controlsWithObservedEvidence: observed.size, controlsMissingEvidence: missingEvidence, evidenceTrustExceptions: invalidStoredVerified.length, openFindings: findings.length,
     criticalBlockers, failedTests: tests.filter((row) => row.result === 'failed').length,
     completedRetests: new Set([...tests.filter((row) => validRetest(row,tests,findings)).map((row)=>row.entry_id),...closedSatisfied]).size,verifiedClosedRemediationControls:closedSatisfied.size,requiredApprovals:requiredApprovals.length,missingRequiredApprovals:missingApprovals.length,unboundHistoricalFindings:unboundFindings };
   // An empty applicable scope cannot establish readiness: it has no tests or verified evidence.
   // Keep N/A-only and partially scoped assessments on HOLD for accountable review.
-  const reasons=[]; if(!applicable.length)reasons.push('no_applicable_controls_verified'); if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
-  const common={summary,reasons,evidenceIds:evidence.filter(x=>x.verification_state==='verified'&&x.retention_status==='active').map(x=>x.id).sort(),requiredApprovals,controlProfileDigest:intelligenceDigest(evaluations.map(x=>({id:x.entry_id,digest:x.entry_digest})).sort((a,b)=>a.id.localeCompare(b.id)))};
+  const reasons=[]; if(!applicable.length)reasons.push('no_applicable_controls_verified'); if(unknown.length)reasons.push('material_context_missing'); if(missingEvidence)reasons.push('required_evidence_missing'); if(invalidStoredVerified.length)reasons.push('legacy_evidence_trust_invalid'); if(findings.length)reasons.push('open_findings'); if(unboundFindings)reasons.push('legacy_evidence_exact_scope_unproven'); if(missingApprovals.length)reasons.push('approval_exact_scope_unproven');
+  const common={summary,reasons,evidenceIds:trustedEvidence.map(x=>x.id).sort(),requiredApprovals,controlProfileDigest:intelligenceDigest(evaluations.map(x=>({id:x.entry_id,digest:x.entry_digest})).sort((a,b)=>a.id.localeCompare(b.id)))};
   if (criticalBlockers) return { ...common,decision: 'do_not_deploy', rationale: 'An open evaluated Critical finding blocks deployment.' };
   if (reasons.length || tests.some((row) => row.result === 'failed' && !tests.some(r=>r.execution_kind==='retest'&&r.result==='passed'&&r.retest_of_execution_id===row.id))) return { ...common,decision: 'hold', rationale: 'Material context, evidence, findings, retesting or approvals remain unresolved.' };
   return { ...common,decision: 'proceed', rationale: 'Applicable controls have current verified evidence, valid required approvals and no open blockers; human review remains required.' };
