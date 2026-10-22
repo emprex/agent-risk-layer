@@ -302,16 +302,16 @@ def launch_gui() -> int:
         if not verified["available"]:
             report_text.set(
                 "Integrity NOT ESTABLISHED. " + verified["reason"] +
-                "\\nNo report contents were displayed or changed."
+                "\nNo report contents were displayed or changed."
             )
             return
         report_text.set(
-            "Integrity: CONTENT CONSISTENT ONLY (not a signature)\\n"
-            "Target Git SHA: " + verified["target_revision"] + "\\n"
-            "Bundle SHA-256: " + verified["bundle_sha256"] + "\\n"
+            "Integrity: CONTENT CONSISTENT ONLY (not a signature)\n"
+            "Target Git SHA: " + verified["target_revision"] + "\n"
+            "Bundle SHA-256: " + verified["bundle_sha256"] + "\n"
             "Recorded readiness label (NOT independently verified): " +
-            verified["reported_readiness_label"] + "\\n"
-            "Security verdict: NOT ASSESSED by this interface\\n"
+            verified["reported_readiness_label"] + "\n"
+            "Security verdict: NOT ASSESSED by this interface\n"
             "Human review and disclosure approval: REQUIRED"
         )
 
