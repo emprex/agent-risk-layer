@@ -29,7 +29,8 @@ test('Operator help does not invoke the target-bound assessment runner', () => {
   const result = invoke('--help');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Read-only information commands/);
-  assert.match(result.stdout, /may initialise a new assessment/);
+  assert.match(result.stdout, /refuses an unknown target/);
+  assert.doesNotMatch(result.stdout, /may initialise a new assessment/);
   assert.doesNotMatch(result.stdout + result.stderr, /SYNTHETIC_PRIVATE_VALUE/);
   assert.doesNotMatch(result.stderr, /DATABASE_URL is required|PREFLIGHT FAILED/);
   assert.match(operatorHelp, /written authorisation/);
