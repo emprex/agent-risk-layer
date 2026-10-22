@@ -18,9 +18,11 @@ from typing import Any
 if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
+    from .evidence_bridge import load_evidence_workplan
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
+    from evidence_bridge import load_evidence_workplan
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -201,6 +203,7 @@ def launch_gui() -> int:
     ).pack(anchor="w", pady=(0, 24))
 
     selected_target: dict[str, Any] = {"path": None, "revision": None}
+    selected_assessment: dict[str, Any] = {"value": None}
     target_text = tk.StringVar(value="No target selected. No assessment loaded.")
     assessment_text = tk.StringVar(value="No existing assessment inspected.")
     ttk.Label(
@@ -245,7 +248,11 @@ def launch_gui() -> int:
         if not selected:
             return
         selected_target.update(path=None, revision=None)
+        selected_assessment["value"] = None
         assessment_text.set("No existing assessment inspected.")
+        evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
         observed = repository_diagnostics(Path(selected))
         if not observed["available"] or observed.get("worktree") != "clean":
             if observed["available"]:
@@ -287,6 +294,10 @@ def launch_gui() -> int:
         if not target_path or not expected_sha:
             assessment_text.set("Choose a clean authorised local repository first.")
             return
+        selected_assessment["value"] = None
+        evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
         assessment_text.set("Checking the existing ARL assessment…")
         root.update_idletasks()
         found = inspect_existing(Path(target_path), expected_sha)
@@ -296,6 +307,7 @@ def launch_gui() -> int:
                 "\nNo record created, edited or approved by this view."
             )
             return
+        selected_assessment["value"] = found
         assessment_text.set(
             "Existing assessment located (READ ONLY)\n"
             "Project ID: " + found["project_id"] + "\n"
@@ -314,11 +326,89 @@ def launch_gui() -> int:
     ).pack(anchor="w")
 
     section(
-        evidence_page, "Evidence workspace — not connected",
-        "The current Python interface cannot read or approve evidence. "
-        "Authoritative evidence lives in the existing ARL workflow and "
-        "PostgreSQL. Never treat missing evidence as PASS."
+        evidence_page, "Snapshot-bound evidence requests",
+        "Inspect only the existing assessment selected on the Assessments tab. "
+        "ARL computes this plan using its current canonical evidence queue. "
+        "Counts are work still requiring review, not verified evidence, "
+        "passed controls, authorised tests or deployment readiness."
     )
+    evidence_text = tk.StringVar(
+        value="No assessment selected. Evidence NOT INSPECTED."
+    )
+    ttk.Label(
+        evidence_page, textvariable=evidence_text, style="Text.TLabel",
+        wraplength=735, justify="left"
+    ).pack(anchor="w", pady=(0, 15))
+    columns = ("pack", "category", "tasks", "controls")
+    evidence_table = ttk.Treeview(
+        evidence_page, columns=columns, show="headings", height=9
+    )
+    for key, heading, width in (
+        ("pack", "Pack", 55),
+        ("category", "Workstream", 230),
+        ("tasks", "Requirements", 125),
+        ("controls", "Controls", 110),
+    ):
+        evidence_table.heading(key, text=heading)
+        evidence_table.column(key, width=width, stretch=(key == "category"))
+    evidence_table.pack(fill="both", expand=True, pady=(0, 10))
+
+    def read_evidence_plan() -> None:
+        selected = selected_assessment["value"]
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
+        if selected is None or not selected_target["path"]:
+            evidence_text.set(
+                "First choose and inspect an existing clean frozen assessment. "
+                "No evidence was read or accepted."
+            )
+            return
+        evidence_text.set("Reading canonical snapshot-bound evidence requests…")
+        root.update_idletasks()
+        data = load_evidence_workplan(
+            Path(selected_target["path"]),
+            selected["target_revision"],
+            selected["project_id"],
+            selected["snapshot_id"],
+            selected["assessment_id"],
+        )
+        if not data["available"]:
+            evidence_text.set(
+                "EVIDENCE NOT CONFIRMED: " + data["reason"] +
+                "\nReinspect the assessment and its frozen target. "
+                "No evidence was accepted."
+            )
+            return
+        counts = data["counts"]
+        evidence_text.set(
+            "Snapshot: " + data["snapshot_id"] + "\n"
+            "Controls in evidence/test-planning lanes: " +
+            str(data["assessment_controls"]) + "\n"
+            "Other workflow controls (NOT cleared): " +
+            str(data["other_workflow_controls"]) + "\n"
+            "Criterion instances: " + str(data["criterion_count"]) + "\n"
+            "Missing static observations: " + str(counts["staticMissing"]) + "\n"
+            "Static observation candidates (UNVERIFIED): " +
+            str(counts["staticCandidates"]) + "\n"
+            "Human documentation requirements: " +
+            str(counts["humanRequirements"]) + "\n"
+            "Separately authorised runtime requirements: " +
+            str(counts["runtimeRequirements"]) + "\n"
+            "Source lineage issues: " + str(counts["sourceLineageIssues"]) + "\n"
+            "No evidence accepted, no tests executed, no verdict inferred."
+        )
+        for pack in data["packs"]:
+            evidence_table.insert(
+                "", "end",
+                values=(
+                    pack["number"], pack["category"].replace("_", " "),
+                    pack["requirement_instances"], pack["affected_controls"]
+                )
+            )
+    ttk.Button(
+        evidence_page, text="Read existing evidence work plan (read only)",
+        command=read_evidence_plan
+    ).pack(anchor="w", pady=(0, 12))
     section(
         tests_page, "Controlled tests — disabled",
         "No execution controls are available in this first version. "
@@ -401,21 +491,34 @@ def main(arguments: list[str] | None = None) -> int:
         "--inspect-existing", type=Path,
         help="inspect an existing frozen local ARL assessment without GUI"
     )
+    parser.add_argument(
+        "--inspect-evidence", type=Path,
+        help="read the existing snapshot-bound evidence queue without GUI"
+    )
     args = parser.parse_args(arguments)
     if args.verify_report is not None and (
-        args.check or args.target is not None or args.inspect_existing is not None
+        args.check or args.target is not None or
+        args.inspect_existing is not None or args.inspect_evidence is not None
     ):
         parser.error("--verify-report cannot be combined with other modes")
-    if args.inspect_existing is not None and (args.check or args.target is not None):
+    if args.inspect_existing is not None and (
+        args.check or args.target is not None or args.inspect_evidence is not None
+    ):
         parser.error("--inspect-existing cannot be combined with other modes")
+    if args.inspect_evidence is not None and (
+        args.check or args.target is not None
+    ):
+        parser.error("--inspect-evidence cannot be combined with other modes")
     if args.target is not None and not args.check:
         parser.error("--target is available only with --check")
     if args.verify_report is not None:
         result = verify_existing_bundle(args.verify_report)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["available"] else 1
-    if args.inspect_existing is not None:
-        repository = repository_diagnostics(args.inspect_existing)
+    if args.inspect_existing is not None or args.inspect_evidence is not None:
+        repository = repository_diagnostics(
+            args.inspect_existing or args.inspect_evidence
+        )
         if not repository["available"] or repository.get("worktree") != "clean":
             result = {
                 "available": False,
@@ -428,6 +531,12 @@ def main(arguments: list[str] | None = None) -> int:
             result = inspect_existing(
                 Path(repository["repository"]), repository["revision"]
             )
+            if result["available"] and args.inspect_evidence is not None:
+                result = load_evidence_workplan(
+                    Path(repository["repository"]), repository["revision"],
+                    result["project_id"], result["snapshot_id"],
+                    result["assessment_id"],
+                )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["available"] else 1
     if args.check:
