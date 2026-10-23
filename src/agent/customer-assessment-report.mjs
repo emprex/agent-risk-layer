@@ -1,3 +1,5 @@
+import { renderProfessionalCustomerReport } from './customer-report-professional-narrative.mjs';
+
 import {
   getControlIntelligenceControl,
   getControlIntelligenceReportSummary
@@ -446,44 +448,5 @@ export function renderCustomerAssessmentReport(report) {
       'No security state or deployment decision was changed.'
     ].join('\n');
   }
-
-  const lines = [
-    'CUSTOMER ASSESSMENT REPORT',
-    '',
-    'Scope',
-    `Project: ${report.assessment.projectName || 'Unknown'}`,
-    `Target revision: ${report.assessment.targetRevision || 'Unknown'}`,
-    `System snapshot: ${report.assessment.systemSnapshotVersion || 'Unknown'}`,
-    `Control profile: ${report.assessment.controlProfileVersion || 'Unknown'}`,
-    `Mapped controls: ${report.assessment.mappedControlCount}`,
-    ''
-  ];
-
-  for (const control of report.controls) {
-    lines.push(
-      `${control.controlId} — ${control.title || 'Control'}`,
-      `Applicability: ${control.applicability.status || 'unknown'}`,
-      `Authority stage: ${control.authorityState.currentStage || 'unknown'}`,
-      `Tests: ${control.tests.map((item) => item.result || 'unknown').join(', ') || 'none'}`,
-      `Retests: ${control.retests.map((item) => item.result || 'unknown').join(', ') || 'none'}`,
-      `Findings: ${control.findings.map((item) => item.status || 'unknown').join(', ') || 'none'}`,
-      `Verified closed: ${control.verifiedClosed ? 'YES' : 'NO'}`,
-      ''
-    );
-  }
-
-  lines.push(
-    'Readiness',
-    `Status: ${report.readiness.status || 'UNAVAILABLE'}`,
-    `Rationale: ${report.readiness.rationale || 'No authoritative rationale available.'}`,
-    `Human review required: ${report.readiness.humanReviewRequired ? 'YES' : 'NO'}`,
-    `Final deployment decision recorded: ${report.readiness.finalDecisionRecorded ? 'YES' : 'NO'}`,
-    'The report is read-only. It does not create evidence, findings, closure, readiness, or a deployment decision.'
-  );
-
-  if (report.disclaimer) {
-    lines.push('', report.disclaimer);
-  }
-
-  return lines.join('\n');
+  return renderProfessionalCustomerReport(report);
 }
