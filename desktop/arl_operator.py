@@ -19,13 +19,13 @@ if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
-    from .read_only_jobs import ReadOnlyJobs
+    from .read_only_jobs import OperatorJobs
     from .lab_prepare_bridge import prepare_lab_assessment
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
-    from read_only_jobs import ReadOnlyJobs
+    from read_only_jobs import OperatorJobs
     from lab_prepare_bridge import prepare_lab_assessment
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
@@ -235,7 +235,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         for button in busy_controls:
             button.state(["disabled"] if value else ["!disabled"])
 
-    jobs = ReadOnlyJobs(root.after, set_busy)
+    jobs = OperatorJobs(root.after, set_busy)
 
     def close_window() -> None:
         jobs.close()
