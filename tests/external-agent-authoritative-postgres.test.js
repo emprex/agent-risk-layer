@@ -166,7 +166,7 @@ test('dedicated ephemeral PostgreSQL: bind candidates to external snapshot, reje
   });
   assert.notEqual(transition.newSnapshotId, first.snapshotId);
   assert.equal(transition.controlsRequiringReassessment, 108);
-  assert.equal(transition.priorEvidenceReused, false);
+  assert.equal(transition.previousEvidenceReused, false);
   assert.equal(transition.deploymentDecision, 'hold');
   assert.equal(transition.nextCandidateEvidenceState, 'not_collected');
 
