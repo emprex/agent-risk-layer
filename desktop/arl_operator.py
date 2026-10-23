@@ -129,6 +129,46 @@ def local_status(target: Path | None = None) -> dict[str, Any]:
     }
 
 
+def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """UI labels derived from local diagnostics, never security conclusions."""
+    repo = observed.get("product") or {}
+    available = repo.get("available") is True
+    revision = repo.get("revision", "") if available else ""
+    if not isinstance(revision, str) or not SHA_RE.fullmatch(revision):
+        revision = ""
+    worktree = repo.get("worktree") if available else None
+    condition = (
+        "CLEAN" if worktree == "clean" else
+        "CHANGED" if worktree == "has_local_changes" else "UNKNOWN"
+    )
+    return {
+        "version": (
+            str(observed.get("version", "unknown")),
+            "Manifest version; not an engine health check"
+        ),
+        "source": (
+            revision[:12] if revision else "UNAVAILABLE",
+            "Local GUI checkout Git revision"
+        ),
+        "worktree": (
+            condition,
+            "GUI checkout only; not the assessment target"
+        ),
+        "database": (
+            "NOT CHECKED",
+            "No PostgreSQL connection attempted"
+        ),
+        "assessment": (
+            "NOT LOADED",
+            "Use Assessments to inspect an existing record"
+        ),
+        "security": (
+            "NOT EVALUATED",
+            "No findings, tests or deployment decisions"
+        ),
+    }
+
+
 def launch_gui() -> int:
     try:
         import tkinter as tk
@@ -148,8 +188,8 @@ def launch_gui() -> int:
         return 2
 
     root.title("AgentRiskLayer — Local Operator")
-    root.geometry("940x640")
-    root.minsize(740, 540)
+    root.geometry("1120x760")
+    root.minsize(880, 610)
     root.configure(bg="#edf2f7")
 
     style = ttk.Style(root)
@@ -168,8 +208,18 @@ def launch_gui() -> int:
         "Hint.TLabel", background="#ffffff", foreground="#566a80",
         font=("DejaVu Sans", 10)
     )
-    style.configure("TNotebook", background="#edf2f7")
-    style.configure("TNotebook.Tab", padding=(16, 9))
+    style.configure("TNotebook", background="#edf2f7", borderwidth=0)
+    style.configure(
+        "TNotebook.Tab", padding=(20, 12),
+        font=("DejaVu Sans", 10, "bold"),
+        background="#dce5ef", foreground="#263e57"
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", "#ffffff"), ("active", "#f4f8fc")],
+        foreground=[("selected", "#1653a3")]
+    )
+    style.configure("TButton", font=("DejaVu Sans", 10), padding=(14, 9))
 
     busy_controls: list[Any] = []
 
@@ -226,16 +276,98 @@ def launch_gui() -> int:
             wraplength=730, justify="left"
         ).pack(anchor="w", pady=(0, 18))
 
-    section(
-        overview, "Product status",
-        "This screen inspects local Git metadata and the package manifest. "
-        "It does not inspect PostgreSQL, create assessments, or infer readiness."
-    )
-    status_text = tk.StringVar(value="")
+    # A responsive dashboard of factual local observations. The cards
+    # intentionally contain no simulated assessments or security outcomes.
+    overview.columnconfigure(0, weight=1)
     ttk.Label(
-        overview, textvariable=status_text, style="Text.TLabel",
-        wraplength=735, justify="left"
-    ).pack(anchor="w", pady=(0, 24))
+        overview, text="Operator overview",
+        background="#ffffff", foreground="#17263c",
+        font=("DejaVu Sans", 15, "bold")
+    ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+    ttk.Label(
+        overview,
+        text="Local status only. All security decisions remain with the human operator.",
+        background="#ffffff", foreground="#566a80",
+        font=("DejaVu Sans", 10)
+    ).grid(row=1, column=0, sticky="w", pady=(0, 14))
+
+    status_values: dict[str, Any] = {}
+    tiles = tk.Frame(overview, bg="#ffffff")
+    tiles.grid(row=2, column=0, sticky="ew")
+    for column in range(3):
+        tiles.grid_columnconfigure(column, weight=1, uniform="operator-cards")
+
+    cards = (
+        ("version", "ARL VERSION"),
+        ("source", "GIT REVISION"),
+        ("worktree", "GUI WORKTREE"),
+        ("database", "POSTGRESQL"),
+        ("assessment", "ASSESSMENT"),
+        ("security", "SECURITY READINESS"),
+    )
+    for index, (key, heading) in enumerate(cards):
+        tile = tk.Frame(
+            tiles, bg="#f2f6fb", padx=18, pady=14,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        tile.grid(
+            row=index // 3, column=index % 3, sticky="nsew",
+            padx=7, pady=7
+        )
+        tk.Label(
+            tile, text=heading, bg="#f2f6fb", fg="#526c89",
+            font=("DejaVu Sans", 9, "bold"), anchor="w"
+        ).pack(fill="x")
+        value = tk.StringVar(value="CHECKING…")
+        status_values[key] = value
+        tk.Label(
+            tile, textvariable=value, bg="#f2f6fb", fg="#17263c",
+            font=("DejaVu Sans", 15, "bold"), anchor="w"
+        ).pack(fill="x", pady=(8, 2))
+        caption = tk.StringVar(value="")
+        status_values[key + "_caption"] = caption
+        tk.Label(
+            tile, textvariable=caption, bg="#f2f6fb", fg="#657a93",
+            font=("DejaVu Sans", 9),
+            anchor="w", justify="left", wraplength=260
+        ).pack(fill="x")
+
+    status_text = tk.StringVar(value="Reading local product metadata…")
+    tk.Label(
+        overview, textvariable=status_text, bg="#ffffff", fg="#496887",
+        font=("DejaVu Sans", 10), justify="left", anchor="w"
+    ).grid(row=3, column=0, sticky="ew", padx=8, pady=(8, 18))
+
+    next_steps = tk.Frame(overview, bg="#ffffff")
+    next_steps.grid(row=4, column=0, sticky="ew", padx=7, pady=(0, 14))
+    for column in range(2):
+        next_steps.grid_columnconfigure(column, weight=1, uniform="operator-next")
+    def info_panel(column: int, title: str, description: str) -> None:
+        panel = tk.Frame(
+            next_steps, bg="#ffffff", padx=16, pady=13,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        panel.grid(row=0, column=column, sticky="nsew", padx=(0, 12) if column == 0 else (12, 0))
+        tk.Label(
+            panel, text=title, bg="#ffffff", fg="#17263c",
+            font=("DejaVu Sans", 11, "bold"), anchor="w"
+        ).pack(fill="x", pady=(0, 8))
+        tk.Label(
+            panel, text=description, bg="#ffffff", fg="#526c89",
+            font=("DejaVu Sans", 10), justify="left", anchor="w",
+            wraplength=360
+        ).pack(fill="x")
+    info_panel(
+        0, "Next: inspect an existing assessment",
+        "Assessments → Select an authorised clean Git repository → "
+        "Inspect existing assessment. The interface never creates a missing record."
+    )
+    info_panel(
+        1, "Review evidence and saved reports",
+        "Evidence → Read the snapshot-bound work plan. "
+        "Reports → Verify a saved private bundle. "
+        "Neither action approves evidence or security outcomes."
+    )
 
     selected_target: dict[str, Any] = {"path": None, "revision": None}
     selected_assessment: dict[str, Any] = {"value": None}
@@ -258,32 +390,26 @@ def launch_gui() -> int:
     ).pack(anchor="w", pady=(0, 18))
 
     def refresh_status() -> None:
-        status_text.set("Reading local product and Git metadata…")
+        status_text.set("Checking local manifest and Git metadata…")
         def completed(observed: dict[str, Any]) -> None:
-            if not observed.get("application"):
-                status_text.set(
-                    "Local diagnostics unavailable. No readiness decision made."
-                )
-                return
             show_status(observed)
         jobs.start(local_status, completed)
 
     def show_status(observed: dict[str, Any]) -> None:
-        repo = observed["product"]
-        if repo["available"]:
-            revision = repo["revision"]
-            condition = repo["worktree"]
+        for key, (value, caption) in overview_status_fields(observed).items():
+            status_values[key].set(value)
+            status_values[key + "_caption"].set(caption)
+        repo = observed.get("product") or {}
+        if observed.get("application") and repo.get("available") is True:
+            status_text.set(
+                "Local checkout inspected. Database, live agents, evidence "
+                "and security readiness are NOT evaluated here."
+            )
         else:
-            revision = "unavailable"
-            condition = repo["reason"]
-        status_text.set(
-            f"ARL v{observed['version']}    •    Required Node.js: "
-            f"{observed['required_node']}\n"
-            f"Git HEAD: {revision}\n"
-            f"Working tree: {condition}\n"
-            "Database: NOT CHECKED    •    Assessment: NOT LOADED\n"
-            "Tests, findings and readiness: NOT EVALUATED"
-        )
+            status_text.set(
+                "Local status unavailable. No security or deployment "
+                "decision can be inferred."
+            )
 
     def choose_target() -> None:
         selected = filedialog.askdirectory(
