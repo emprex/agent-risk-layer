@@ -56,6 +56,8 @@ An additional offline `npm run assess:external:review -- --manifest <file> --roe
 
 See [External agent assessment](docs/EXTERNAL_AGENT_ASSESSMENT.md). Do not use this path to test regional-restricted Meta Muse or any service without explicit owner permission.
 
+The optional internal [external candidate PostgreSQL bridge](docs/EXTERNAL_AGENT_AUTHORITATIVE_IMPORT.md) binds **unverified** external observations to their own canonical system snapshot without fabricating a Git SHA. This is a trusted service component, not a public identity-taking CLI or a completed external customer-assessment workflow.
+
 ## Authority model
 
 LLMs may assist with explanation, research, evidence organisation, remediation suggestions and drafting.
