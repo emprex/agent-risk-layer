@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-import { buildWizardManifest, buildWizardRoe } from '../bin/arl-work.mjs';
+import { buildWizardManifest, buildWizardRoe, buildLocalObservationRequest } from '../bin/arl-work.mjs';
 import { validateExternalRoe } from '../src/agent/external-agent-assessment.mjs';
 
 function validPlan() {
@@ -107,4 +107,28 @@ test('operator menu opens a visibly synthetic local workbench with no external i
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test('local operator action builds existing canonical inconclusive evidence command', () => {
+  const request = buildLocalObservationRequest({
+    controlId: 'arl-kb-032',
+    observedResult: 'Observed a denied operation in the approved staging session.',
+    sourceReference: 'customer-staging-log-001'
+  });
+  assert.match(request, /^Record manual evidence /);
+  const record = JSON.parse(request.slice('Record manual evidence '.length));
+  assert.equal(record.controlId, 'ARL-KB-032');
+  assert.equal(record.result, 'inconclusive');
+  assert.equal(record.evidenceChecklist.length, 0);
+  assert.equal(record.sourceReference, 'customer-staging-log-001');
+  assert.match(record.limitations, /not independent validation/i);
+  assert.throws(() => buildLocalObservationRequest({
+    controlId: 'ARL-KB-999', observedResult: 'Observed denied access.',
+    sourceReference: 'log-001'
+  }));
+  assert.throws(() => buildLocalObservationRequest({
+    controlId: 'ARL-KB-032', observedResult: 'denied',
+    sourceReference: 'log-001'
+  }));
 });
