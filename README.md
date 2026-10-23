@@ -45,6 +45,15 @@ npm run assess:local -- <repository-path> "<request>"
 
 The runner freezes the exact clean Git revision automatically. If `ARL_EXPECTED_TARGET_SHA` is supplied explicitly, it is treated as a strict assertion and a mismatch fails closed.
 
+## External / closed-source agents (new, limited)
+
+`npm run assess:external -- --manifest <private-target.json> --plan`
+prepares a **non-networked** assessment plan for a declared closed-source agent API without a Git repository.
+
+A separate `--execute` path can capture bounded **candidate observations only** from an authorised customer-owned **isolated staging HTTPS endpoint**. It requires a written-ROE reference tied to exact manifest bytes, allowed probes, synthetic-only data, a time window and operator acknowledgement. It does not modify PostgreSQL or create validated findings, control PASS decisions or customer reports. The existing local Git-based Operator remains unchanged.
+
+See [External agent assessment](docs/EXTERNAL_AGENT_ASSESSMENT.md). Do not use this path to test regional-restricted Meta Muse or any service without explicit owner permission.
+
 ## Authority model
 
 LLMs may assist with explanation, research, evidence organisation, remediation suggestions and drafting.
