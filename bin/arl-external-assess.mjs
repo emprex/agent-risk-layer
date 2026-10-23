@@ -2,7 +2,7 @@
 import { readFile, mkdir, open } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  parseExternalManifest, runExternalAssessment
+  parseExternalManifest, validateExternalRoe, runExternalAssessment
 } from '../src/agent/external-agent-assessment.mjs';
 
 function usage() {
@@ -46,15 +46,36 @@ async function main(args) {
   if (flags.size !== 6 || !flags.get('--ack-authorised') || !flags.get('--roe') ||
     !flags.get('--operator') || !flags.get('--out')) throw new Error(usage());
   const roeRaw = await readFile(flags.get('--roe'), 'utf8');
+  // Validate scope BEFORE reserving a file; reserve it BEFORE any network traffic.
+  validateExternalRoe(roeRaw, parsed, flags.get('--operator'), true);
   const output = path.resolve(flags.get('--out'));
-  const report = await runExternalAssessment({
-    manifestRaw: raw, roeRaw, operator: flags.get('--operator'), acknowledged: true
-  });
-  // Immutable private artifact; never overwrite existing reports or follow a file symlink.
   await mkdir(path.dirname(output), { recursive: true, mode: 0o700 });
   const file = await open(output, 'wx', 0o600);
-  try { await file.writeFile(JSON.stringify(report, null, 2) + '\n'); }
-  finally { await file.close(); }
+  let report;
+  try {
+    // An existing output path fails before the first probe, preventing a
+    // dangerous repeat when an operator reruns a previously used command.
+    report = await runExternalAssessment({
+      manifestRaw: raw, roeRaw, operator: flags.get('--operator'), acknowledged: true
+    });
+    await file.writeFile(JSON.stringify(report, null, 2) + '\n');
+  } catch (error) {
+    // We cannot know whether any earlier request caused a side effect.
+    // Preserve a non-authoritative incomplete-run marker, never a clean PASS.
+    await file.writeFile(JSON.stringify({
+      schema: 'arl.external-agent-interrupted-run.v1',
+      endpoint: parsed.manifest.target.endpoint,
+      manifestSha256: parsed.sha256,
+      state: 'incomplete_unknown_side_effects',
+      securityVerdict: 'none',
+      deploymentDecision: 'hold',
+      reason: 'Collection aborted; do not retry without checking target side effects and reauthorising.',
+      recordedAtUtc: new Date().toISOString()
+    }, null, 2) + '\n');
+    throw error;
+  } finally {
+    await file.close();
+  }
   console.log(JSON.stringify({
     output, observationCount: report.observationCount,
     evidenceStatus: report.evidenceStatus, securityVerdict: report.securityVerdict,
