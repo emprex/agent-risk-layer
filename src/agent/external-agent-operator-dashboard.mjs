@@ -17,7 +17,7 @@ function demand(ok, message) {
   if (!ok) throw new Error('ARL external operator blocked: ' + message);
 }
 
-export function buildExternalOperatorDossier({ manifestRaw, roeRaw, observationRaw }) {
+export function buildExternalOperatorDossier({ manifestRaw, roeRaw, observationRaw, syntheticDemo = false }) {
   // Offline verification is mandatory. This validates source consistency,
   // not independent origin, security posture or customer authorisation.
   const verified = verifyExternalObservation({ manifestRaw, roeRaw, observationRaw });
@@ -38,6 +38,7 @@ export function buildExternalOperatorDossier({ manifestRaw, roeRaw, observationR
 
   return {
     schema: 'arl.external-agent-operator-dossier.v1',
+    syntheticDemo: syntheticDemo === true,
     target: {
       name: manifest.target.name,
       declaredVersion: manifest.target.version,
@@ -85,6 +86,7 @@ export function buildExternalOperatorDossier({ manifestRaw, roeRaw, observationR
 
 function assertReadOnly(d) {
   demand(d?.schema === 'arl.external-agent-operator-dossier.v1' &&
+    [true, false].includes(d.syntheticDemo) &&
     d?.controlsTotal === 108 &&
     d.controls?.length === 108 &&
     d.target?.versionVerified === false &&
@@ -208,6 +210,7 @@ export function renderExternalOperatorHtml(dossier) {
     htmlEscape(d.target.declaredVersion) + '</code></p>' +
     '<p>Collection: <code>' + htmlEscape(d.provenance.collectionId) +
     '</code></p></header>' +
+    (d.syntheticDemo ? '<div class="notice"><strong>SYNTHETIC DEMONSTRATION — NO REAL CUSTOMER OR ASSESSMENT DATA.</strong> The probes and responses on this page are simulated; nothing was sent to a real agent.</div>' : '') +
     '<div class="notice"><strong>Deployment HOLD · No security verdict.</strong> ' +
     'The endpoint, release and permission claims have NOT been independently verified. ' +
     'Response digests are candidates, not observed tool-side-effect proof. ' +
