@@ -56,6 +56,8 @@ An additional offline `npm run assess:external:review -- --manifest <file> --roe
 
 See [External agent assessment](docs/EXTERNAL_AGENT_ASSESSMENT.md). Do not use this path to test regional-restricted Meta Muse or any service without explicit owner permission.
 
+Preview this UI with no network, database or customer target: `npm run demo:external -- --out-dir "$HOME/arl-private-external-review"` (the output is prominently marked SYNTHETIC).
+
 The new [external operator workbench](docs/EXTERNAL_AGENT_OPERATOR_WORKBENCH.md) produces a private read-only HTML review of an existing candidate collection, showing all 108 controls and their unreviewed probe metadata. It performs no network requests, database writes or security approvals. Run `npm run assess:external:operator -- --manifest <file> --roe <file> --observation <file> --out-dir <private-dir>`.
 
 The optional internal [external candidate PostgreSQL bridge](docs/EXTERNAL_AGENT_AUTHORITATIVE_IMPORT.md) binds **unverified** external observations to their own canonical system snapshot without fabricating a Git SHA. This is a trusted service component, not a public identity-taking CLI or a completed external customer-assessment workflow.
