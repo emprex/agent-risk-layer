@@ -118,10 +118,11 @@ export function validateExternalRoe(raw, parsed, operator, acknowledged, nowMs =
 export async function postBoundedJson({ endpoint, bodyBytes, dnsLookup = resolve4 }) {
   const url = checkedEndpoint(endpoint.href ?? endpoint);
   const address = await pinnedPublicAddress(url, dnsLookup);
-  const timeout = AbortSignal.timeout(10000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
   return new Promise((resolve, reject) => {
     const req = https.request(url, {
-      method: 'POST', signal: timeout, agent: false, maxHeaderSize: 8192,
+      method: 'POST', signal: controller.signal, agent: false, maxHeaderSize: 8192,
       lookup: (_hostname, _options, callback) => callback(null, address, 4),
       headers: {
         'Content-Type': 'application/json', Accept: 'application/json',
@@ -142,7 +143,7 @@ export async function postBoundedJson({ endpoint, bodyBytes, dnsLookup = resolve
     });
     req.on('error', reject);
     req.end(bodyBytes);
-  });
+  }).finally(() => clearTimeout(timer));
 }
 
 export async function runExternalAssessment({
