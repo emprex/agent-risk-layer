@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS external_agent_candidate_imports (
   created_at TEXT NOT NULL,
   UNIQUE (workspace_id, project_id, system_snapshot_id, collection_id),
   UNIQUE (id, workspace_id, project_id, system_snapshot_id),
-  FOREIGN KEY (system_snapshot_id, workspace_id, project_id)
-    REFERENCES system_snapshots(id, workspace_id, project_id) ON DELETE RESTRICT
+  FOREIGN KEY (system_snapshot_id, workspace_id, project_id) REFERENCES system_snapshots(id, workspace_id, project_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS external_agent_candidate_control_links (
@@ -34,10 +33,8 @@ CREATE TABLE IF NOT EXISTS external_agent_candidate_control_links (
   created_at TEXT NOT NULL,
   UNIQUE (import_id, control_id, probe_id),
   UNIQUE (evidence_id),
-  FOREIGN KEY (import_id, workspace_id, project_id, system_snapshot_id)
-    REFERENCES external_agent_candidate_imports(id, workspace_id, project_id, system_snapshot_id) ON DELETE RESTRICT,
-  FOREIGN KEY (evidence_id, workspace_id, project_id, system_snapshot_id, control_id)
-    REFERENCES control_evidence_items(id, workspace_id, project_id, system_snapshot_id, entry_id) ON DELETE RESTRICT
+  FOREIGN KEY (import_id, workspace_id, project_id, system_snapshot_id) REFERENCES external_agent_candidate_imports(id, workspace_id, project_id, system_snapshot_id) ON DELETE RESTRICT,
+  FOREIGN KEY (evidence_id, workspace_id, project_id, system_snapshot_id, control_id) REFERENCES control_evidence_items(id, workspace_id, project_id, system_snapshot_id, entry_id) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_external_candidate_import_by_snapshot
   ON external_agent_candidate_imports(workspace_id, project_id, system_snapshot_id, created_at);
