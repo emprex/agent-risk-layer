@@ -69,6 +69,10 @@ try {
   const before=await freezeLocalRepository(repositoryPath);
   if (before.dirty || before.revision!==expected)
     throw new Error('Synthetic Git target must be clean and exactly pinned.');
+  // Only this dedicated lab database may be initialised/migrated, and
+  // only after the operator's exact target confirmation and freeze checks.
+  const {initialiseDatabase}=await import('../db.js');
+  await initialiseDatabase();
   // Refuse existing assessments. No silent rescope, update, or rebootstrap.
   if (await findExistingLocalAssessmentContext(repositoryPath)) {
     throw new Error('This target already has an assessment. Inspect existing instead.');
