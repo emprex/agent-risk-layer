@@ -19,10 +19,12 @@ if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
+    from .read_only_jobs import ReadOnlyJobs
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
+    from read_only_jobs import ReadOnlyJobs
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -156,6 +158,26 @@ def launch_gui() -> int:
     style.configure("TNotebook", background="#edf2f7")
     style.configure("TNotebook.Tab", padding=(16, 9))
 
+    busy_controls: list[Any] = []
+
+    def ui_button(parent: Any, **kwargs: Any) -> Any:
+        button = ttk.Button(parent, **kwargs)
+        busy_controls.append(button)
+        return button
+
+    def set_busy(value: bool) -> None:
+        # All controls and Tk callbacks are touched on the main UI thread only.
+        for button in busy_controls:
+            button.state(["disabled"] if value else ["!disabled"])
+
+    jobs = ReadOnlyJobs(root.after, set_busy)
+
+    def close_window() -> None:
+        jobs.close()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", close_window)
+
     container = ttk.Frame(root, padding=20, style="App.TFrame")
     container.pack(fill="both", expand=True)
 
@@ -223,7 +245,17 @@ def launch_gui() -> int:
     ).pack(anchor="w", pady=(0, 18))
 
     def refresh_status() -> None:
-        observed = local_status()
+        status_text.set("Reading local product and Git metadata…")
+        def completed(observed: dict[str, Any]) -> None:
+            if not observed.get("application"):
+                status_text.set(
+                    "Local diagnostics unavailable. No readiness decision made."
+                )
+                return
+            show_status(observed)
+        jobs.start(local_status, completed)
+
+    def show_status(observed: dict[str, Any]) -> None:
         repo = observed["product"]
         if repo["available"]:
             revision = repo["revision"]
@@ -251,10 +283,17 @@ def launch_gui() -> int:
         selected_assessment["value"] = None
         assessment_text.set("No existing assessment inspected.")
         evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        report_text.set("No report selected. Integrity NOT ESTABLISHED.")
         for row in evidence_table.get_children():
             evidence_table.delete(row)
-        observed = repository_diagnostics(Path(selected))
-        if not observed["available"] or observed.get("worktree") != "clean":
+        target_text.set("Checking selected local repository metadata…")
+        jobs.start(
+            lambda: repository_diagnostics(Path(selected)),
+            show_target
+        )
+
+    def show_target(observed: dict[str, Any]) -> None:
+        if not observed.get("available") or observed.get("worktree") != "clean":
             if observed["available"]:
                 observed = {
                     "available": False,
@@ -273,10 +312,10 @@ def launch_gui() -> int:
                 "This is NOT a security assessment or test authorisation."
             )
 
-    ttk.Button(
+    ui_button(
         overview, text="Refresh local diagnostics", command=refresh_status
     ).pack(anchor="w")
-    ttk.Button(
+    ui_button(
         target_page, text="Choose local repository…", command=choose_target
     ).pack(anchor="w", pady=(0, 20))
     ttk.Label(
@@ -299,9 +338,13 @@ def launch_gui() -> int:
         for row in evidence_table.get_children():
             evidence_table.delete(row)
         assessment_text.set("Checking the existing ARL assessment…")
-        root.update_idletasks()
-        found = inspect_existing(Path(target_path), expected_sha)
-        if not found["available"]:
+        jobs.start(
+            lambda: inspect_existing(Path(target_path), expected_sha),
+            show_existing_assessment
+        )
+
+    def show_existing_assessment(found: dict[str, Any]) -> None:
+        if not found.get("available"):
             assessment_text.set(
                 "EXISTING ASSESSMENT NOT CONFIRMED: " + found["reason"] +
                 "\nNo record created, edited or approved by this view."
@@ -320,7 +363,7 @@ def launch_gui() -> int:
             "Human review remains required."
         )
 
-    ttk.Button(
+    ui_button(
         target_page, text="Inspect existing assessment (read only)",
         command=inspect_selected_assessment
     ).pack(anchor="w")
@@ -364,15 +407,20 @@ def launch_gui() -> int:
             )
             return
         evidence_text.set("Reading canonical snapshot-bound evidence requests…")
-        root.update_idletasks()
-        data = load_evidence_workplan(
-            Path(selected_target["path"]),
-            selected["target_revision"],
-            selected["project_id"],
-            selected["snapshot_id"],
-            selected["assessment_id"],
+        target_path = Path(selected_target["path"])
+        jobs.start(
+            lambda: load_evidence_workplan(
+                target_path,
+                selected["target_revision"],
+                selected["project_id"],
+                selected["snapshot_id"],
+                selected["assessment_id"],
+            ),
+            show_evidence_plan
         )
-        if not data["available"]:
+
+    def show_evidence_plan(data: dict[str, Any]) -> None:
+        if not data.get("available"):
             evidence_text.set(
                 "EVIDENCE NOT CONFIRMED: " + data["reason"] +
                 "\nReinspect the assessment and its frozen target. "
@@ -405,7 +453,7 @@ def launch_gui() -> int:
                     pack["requirement_instances"], pack["affected_controls"]
                 )
             )
-    ttk.Button(
+    ui_button(
         evidence_page, text="Read existing evidence work plan (read only)",
         command=read_evidence_plan
     ).pack(anchor="w", pady=(0, 12))
@@ -439,12 +487,25 @@ def launch_gui() -> int:
         if not selected:
             return
         report_text.set("Checking selected bundle with the ARL verifier…")
-        root.update_idletasks()
-        verified = verify_existing_bundle(Path(selected))
-        if not verified["available"]:
+        jobs.start(
+            lambda: verify_existing_bundle(Path(selected)),
+            show_report
+        )
+
+    def show_report(verified: dict[str, Any]) -> None:
+        if not verified.get("available"):
             report_text.set(
                 "Integrity NOT ESTABLISHED. " + verified["reason"] +
                 "\nNo report contents were displayed or changed."
+            )
+            return
+        if (selected_target["revision"] is not None and
+            verified["target_revision"] != selected_target["revision"]):
+            report_text.set(
+                "REPORT TARGET MISMATCH — the saved report's Git revision "
+                "does not match the selected local repository.\n"
+                "The report is NOT linked to this selected target. "
+                "No security verdict or approval was inferred."
             )
             return
         report_text.set(
@@ -454,10 +515,11 @@ def launch_gui() -> int:
             "Recorded readiness label (NOT independently verified): " +
             verified["reported_readiness_label"] + "\n"
             "Security verdict: NOT ASSESSED by this interface\n"
-            "Human review and disclosure approval: REQUIRED"
+            "Human review and disclosure approval: REQUIRED\n"
+            "Saved report may be stale relative to current ARL records."
         )
 
-    ttk.Button(
+    ui_button(
         reports_page, text="Verify saved ARL report…", command=choose_report
     ).pack(anchor="w")
 
