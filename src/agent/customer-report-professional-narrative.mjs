@@ -7,8 +7,8 @@ const text = (value, fallback = 'Not recorded') => {
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return fallback;
   // Markdown/HTML-safe human text, bounded and single-line. The independent
   // disclosure preflight must still be run before sharing with a customer.
-  return String(value).slice(0, 2048)
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+  return Array.from(String(value).slice(0, 2048)).map(ch =>
+    ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127 ? ' ' : ch).join('')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\|/g, '\\|');
 };
