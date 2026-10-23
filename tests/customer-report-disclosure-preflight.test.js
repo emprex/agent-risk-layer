@@ -178,7 +178,8 @@ test('private manifest disclosure CLI verifies bundle first and returns no raw c
     const result=JSON.parse(command.stdout);
     assert.equal(result.integrity,'consistent_only');
     assert.equal(result.bundleSha256,bundle.bundleSha256);
-    assert.equal(result.disclosurePreflight.flaggedFieldCount,3);
+    assert.equal(result.disclosurePreflight.flaggedFieldCount,4);
+    // Expanded narrative also exposes the scope exclusion; the disclosure scanner must flag that additional email indicator.
     assert.equal(result.disclosurePreflight.markdownArtifactScanned,true);
     assert.ok(result.disclosurePreflight.scannedMarkdownLines>0);
     assert.ok(result.disclosurePreflight.flaggedFields.some(
@@ -189,7 +190,7 @@ test('private manifest disclosure CLI verifies bundle first and returns no raw c
     for(const secret of SECRETS)assert.equal(command.stdout.includes(secret),false);
     assert.equal(verifyCustomerReportBundle(manifest).disclosurePreflight,undefined);
     assert.equal(verifyCustomerReportBundle(manifest,{disclosurePreflight:true})
-      .disclosurePreflight.flaggedFieldCount,3);
+      .disclosurePreflight.flaggedFieldCount,4);
   });
 });
 
