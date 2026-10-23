@@ -99,6 +99,19 @@ def repository_diagnostics(directory: Path) -> dict[str, Any]:
     }
 
 
+
+def report_matches_selected_target(
+    report_revision: str, selected_revision: str | None
+) -> bool:
+    """UI association only; matching Git SHA is not security approval."""
+    if selected_revision is None:
+        return True
+    return (
+        bool(SHA_RE.fullmatch(selected_revision)) and
+        report_revision == selected_revision
+    )
+
+
 def local_status(target: Path | None = None) -> dict[str, Any]:
     manifest = _read_manifest()
     return {
@@ -499,8 +512,9 @@ def launch_gui() -> int:
                 "\nNo report contents were displayed or changed."
             )
             return
-        if (selected_target["revision"] is not None and
-            verified["target_revision"] != selected_target["revision"]):
+        if not report_matches_selected_target(
+            verified["target_revision"], selected_target["revision"]
+        ):
             report_text.set(
                 "REPORT TARGET MISMATCH — the saved report's Git revision "
                 "does not match the selected local repository.\n"
@@ -508,8 +522,14 @@ def launch_gui() -> int:
                 "No security verdict or approval was inferred."
             )
             return
+        association = (
+            "Selected local Git SHA matches (assessment binding NOT checked)"
+            if selected_target["revision"] else
+            "Standalone saved report — no selected target or assessment binding"
+        )
         report_text.set(
             "Integrity: CONTENT CONSISTENT ONLY (not a signature)\n"
+            "Association: " + association + "\n"
             "Target Git SHA: " + verified["target_revision"] + "\n"
             "Bundle SHA-256: " + verified["bundle_sha256"] + "\n"
             "Recorded readiness label (NOT independently verified): " +
