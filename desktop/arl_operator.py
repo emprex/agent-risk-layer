@@ -424,6 +424,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             return
         selected_target.update(path=None, revision=None)
         selected_assessment["value"] = None
+        lab_text.set("No lab preparation requested.")
         assessment_text.set("No existing assessment inspected.")
         evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
         report_text.set("No report selected. Integrity NOT ESTABLISHED.")
@@ -545,11 +546,11 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             return
         approved = messagebox.askyesno(
             "Prepare lab assessment — database write",
-            "Only use a SYNTHETIC local target you control.\\n\\n"
+            "Only use a SYNTHETIC local target you control.\n\n"
             "This will CREATE assessment records in the dedicated local "
             "arl_operator_lab PostgreSQL database, but will NOT execute tests "
-            "or make security decisions.\\n\\n"
-            "The exact pinned Git SHA is: " + sha + "\\n\\n"
+            "or make security decisions.\n\n"
+            "The exact pinned Git SHA is: " + sha + "\n\n"
             "Do you authorise this LAB-ONLY record creation?",
             parent=root
         )
@@ -559,7 +560,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         confirmation = "PREPARE LAB " + sha
         typed = simpledialog.askstring(
             "Confirm isolated lab preparation",
-            "Type the entire confirmation phrase exactly:\\n" +
+            "Type the entire confirmation phrase exactly:\n" +
             confirmation,
             parent=root
         )
@@ -581,17 +582,17 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             lab_text.set(
                 "LAB PREPARATION NOT CONFIRMED: " +
                 result.get("reason", "Unknown failure") +
-                "\\nCheck only the isolated lab records before retrying. "
+                "\nCheck only the isolated lab records before retrying. "
                 "No tests or security approval were issued."
             )
             return
         lab_text.set(
-            "NEW SYNTHETIC LAB RECORD CREATED.\\n"
-            "Project: " + result["project_id"] + "\\n"
-            "Assessment: " + result["assessment_id"] + "\\n"
-            "Frozen Git revision: " + result["target_revision"] + "\\n"
-            "Initial state: UNKNOWN, human review required.\\n"
-            "Evidence: NOT ACCEPTED  •  Tests: NONE  •  Readiness: HOLD.\\n"
+            "NEW SYNTHETIC LAB RECORD CREATED.\n"
+            "Project: " + result["project_id"] + "\n"
+            "Assessment: " + result["assessment_id"] + "\n"
+            "Frozen Git revision: " + result["target_revision"] + "\n"
+            "Initial state: UNKNOWN, human review required.\n"
+            "Evidence: NOT ACCEPTED  •  Tests: NONE  •  Readiness: HOLD.\n"
             "Use 'Inspect existing assessment' to review the resulting snapshot."
         )
 
