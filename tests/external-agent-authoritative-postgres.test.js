@@ -52,8 +52,8 @@ test('dedicated ephemeral PostgreSQL: bind candidates to external snapshot, reje
     owner: 'Synthetic owner', operator: 'Synthetic Operator',
     authorisationReference: 'Synthetic-only CI ROE, not a customer permit',
     environment: 'isolated-staging', syntheticDataOnly: true,
-    notBeforeUtc: new Date(now - 10000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
-    notAfterUtc: new Date(now + 10000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    notBeforeUtc: new Date(now - 60000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    notAfterUtc: new Date(now + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
     allowedProbeIds: ['PROBE_001']
   });
   const collect = async () => JSON.stringify(await runExternalAssessment({
