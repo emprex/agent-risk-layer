@@ -103,8 +103,14 @@ function projectTest(item) {
   };
 }
 
+function safeOpaqueId(value) {
+  return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{2,127}$/.test(value)
+    ? value : null;
+}
+
 function projectFinding(item) {
   return {
+    findingId: safeOpaqueId(item?.id),
     title: item?.title || null,
     contextualSeverity: item?.contextualSeverity || null,
     severityStatus: item?.severityStatus || null,
@@ -197,7 +203,12 @@ function projectControl(detail) {
         (item) =>
           item?.verificationState === 'verified' &&
           item?.retentionStatus === 'active'
-      ).length
+      ).length,
+      verifiedActiveIds: evidence.filter(
+        (item) =>
+          item?.verificationState === 'verified' &&
+          item?.retentionStatus === 'active'
+      ).map(item => safeOpaqueId(item?.id)).filter(Boolean)
     },
     findings,
     remediation,
@@ -278,6 +289,7 @@ export function projectCustomerAssessmentReport({
         Array.isArray(reportSummary?.openFindings)
           ? reportSummary.openFindings.map((item) => ({
               controlId: item?.controlId || null,
+              findingId: safeOpaqueId(item?.id),
               status: item?.status || null,
               severity: item?.severity || null
             }))
