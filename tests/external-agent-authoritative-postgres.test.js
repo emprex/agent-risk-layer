@@ -132,4 +132,104 @@ test('dedicated ephemeral PostgreSQL: bind candidates to external snapshot, reje
   assert.equal(Number((await db.prepare(
     'SELECT COUNT(*) AS count FROM external_agent_candidate_imports WHERE project_id=?'
   ).get(project.id)).count), 2);
+  // A previous project-level human applicability or severity decision is
+  // deliberately stale when the external release changes.
+  await db.prepare(
+    'INSERT INTO project_risk_knowledge_states ' +
+    '(id,workspace_id,project_id,entry_id,applicability_status,applicability_reason,' +
+    'assessed_by,last_assessed_at,updated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).run(id('prs_'), workspace.id, project.id, 'ARL-KB-032',
+    'applicable', 'Prior synthetic version was in scope',
+    userId, nowIso(), nowIso(), nowIso());
+  await db.prepare(
+    'INSERT INTO project_risk_context ' +
+    '(id,workspace_id,project_id,entry_id,project_severity,rationale,' +
+    'assessed_by,assessed_at,updated_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).run(id('prc_'), workspace.id, project.id, 'ARL-KB-032',
+    'high', 'Synthetic prior-version contextual severity',
+    userId, nowIso(), nowIso(), nowIso());
+
+  const { transitionExternalTarget } =
+    await import('../src/agent/external-agent-version-handoff.mjs');
+  await assert.rejects(transitionExternalTarget({
+    projectId: project.id, userId, manifestRaw: changedManifest, roeRaw: changedRoe,
+    operator: 'Synthetic Operator', expectedCurrentSnapshotId: first.snapshotId,
+    reason: 'Version changed: this specific synthetic release requires reassessment.',
+    acknowledgeMaterialChange: false
+  }), /acknowledgement/);
+
+  const transition = await transitionExternalTarget({
+    projectId: project.id, userId, manifestRaw: changedManifest, roeRaw: changedRoe,
+    operator: 'Synthetic Operator', expectedCurrentSnapshotId: first.snapshotId,
+    reason: 'Version changed: this specific synthetic release requires reassessment.',
+    acknowledgeMaterialChange: true
+  });
+  assert.notEqual(transition.newSnapshotId, first.snapshotId);
+  assert.equal(transition.controlsRequiringReassessment, 108);
+  assert.equal(transition.priorEvidenceReused, false);
+  assert.equal(transition.deploymentDecision, 'hold');
+  assert.equal(transition.nextCandidateEvidenceState, 'not_collected');
+
+  const oldAfter = await db.prepare(
+    'SELECT status FROM system_snapshots WHERE id=?'
+  ).get(first.snapshotId);
+  assert.equal(oldAfter.status, 'superseded');
+  const fresh = await db.prepare(
+    'SELECT source,status,assessment_configuration_json FROM system_snapshots WHERE id=?'
+  ).get(transition.newSnapshotId);
+  assert.equal(fresh.source, 'arl_external_black_box');
+  assert.equal(fresh.status, 'current');
+  const freshBinding = JSON.parse(fresh.assessment_configuration_json).targetBinding;
+  assert.equal(freshBinding.declaredVersion, 'declared-18');
+  assert.equal(freshBinding.versionVerified, false);
+
+  const { intelligenceDigest } = await import('../src/control-intelligence.js');
+  const freshEvaluations = await db.prepare(
+    'SELECT applicability_status,severity_status,contextual_severity,' +
+    'evaluator_id,descriptor_json,content_digest FROM control_snapshot_evaluations ' +
+    'WHERE system_snapshot_id=?'
+  ).all(transition.newSnapshotId);
+  assert.equal(freshEvaluations.length, 108);
+  assert.ok(freshEvaluations.every(e =>
+    e.applicability_status === 'unknown' &&
+    e.severity_status === 'not_evaluated' &&
+    e.contextual_severity === null &&
+    e.evaluator_id === null &&
+    intelligenceDigest(JSON.parse(e.descriptor_json)) === e.content_digest
+  ), 'All 108 controls must be unknown and integrity-valid after the change.');
+
+  assert.equal(Number((await db.prepare(
+    'SELECT COUNT(*) AS count FROM control_evidence_items WHERE system_snapshot_id=?'
+  ).get(transition.newSnapshotId)).count), 0);
+  assert.equal(Number((await db.prepare(
+    'SELECT COUNT(*) AS count FROM control_evidence_items WHERE system_snapshot_id=?'
+  ).get(first.snapshotId)).count), 4);
+  assert.equal(Number((await db.prepare(
+    'SELECT COUNT(*) AS count FROM control_deployment_decisions WHERE project_id=?'
+  ).get(project.id)).count), 0);
+
+  await assert.rejects(importExternalCandidateEvidence({
+    ...input, observationRaw: await collect()
+  }), /existing snapshot differs/, 'Old-release evidence must never attach to the current release.');
+
+  await assert.rejects(transitionExternalTarget({
+    projectId: project.id, userId, manifestRaw: changedManifest, roeRaw: changedRoe,
+    operator: 'Synthetic Operator', expectedCurrentSnapshotId: first.snapshotId,
+    reason: 'Attempted stale snapshot replay must not supersede an existing release.',
+    acknowledgeMaterialChange: true
+  }), /exact current external snapshot/);
+
+  const currentCollection = await importExternalCandidateEvidence({
+    ...input, manifestRaw: changedManifest, roeRaw: changedRoe,
+    observationRaw: JSON.stringify(changedRecord)
+  });
+  assert.equal(currentCollection.snapshotId, transition.newSnapshotId);
+  assert.equal(currentCollection.evidenceVerification, 'unverified');
+  assert.equal(currentCollection.candidateEvidenceCount, 2);
+  const newEvidence = await db.prepare(
+    'SELECT verification_state FROM control_evidence_items WHERE system_snapshot_id=?'
+  ).all(transition.newSnapshotId);
+  assert.equal(newEvidence.length, 2);
+  assert.ok(newEvidence.every(x => x.verification_state === 'unverified'));
+
 });
