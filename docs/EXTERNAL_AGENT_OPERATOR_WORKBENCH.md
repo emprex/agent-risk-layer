@@ -12,6 +12,15 @@ This is an operator review screen, not an automatic security assessor, live brow
 - No database access, server, JavaScript, browser storage, outgoing network requests or remote resources. Content Security Policy restricts the bundled CSS by its exact SHA-256.
 - Writes to a private real directory (0700), with immutable mode-0600 content-addressed artifact, atomically published. Symlinked directories, public directories and conflicting artifacts fail closed.
 
+## Open the fully synthetic preview first
+
+This does not need a customer, ROE, API key, Postgres connection or any network permission. It runs two simulated in-memory responses and labels the generated HTML clearly as SYNTHETIC DEMONSTRATION, not security evidence:
+
+    cd ~/agent-risk-layer
+    npm run demo:external -- --out-dir "$HOME/arl-private-external-review"
+
+Copy the returned filePath from the command output and open the local file in your Debian browser using xdg-open. The private HTML workbench shows two simulated probes (HTTP 200 and 403), four candidate control links, all 108 controls, zero accepted evidence and deployment HOLD. Neither response is a PASS/FAIL finding.
+
 ## Operator command — no network request
 
 Input: one previously authorised collection with exact matching private manifest, ROE and observations. This command only renders the review page:
