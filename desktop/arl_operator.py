@@ -169,7 +169,7 @@ def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str
     }
 
 
-def launch_gui() -> int:
+def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
         from tkinter import filedialog, ttk
@@ -451,9 +451,11 @@ def launch_gui() -> int:
                 "This is NOT a security assessment or test authorisation."
             )
 
+    # Overview uses grid for its direct children; mixing pack/grid here
+    # causes an immediate TclError on Debian when launching the GUI.
     ui_button(
         overview, text="Refresh local diagnostics", command=refresh_status
-    ).pack(anchor="w")
+    ).grid(row=5, column=0, sticky="w", padx=8, pady=(0, 12))
     ui_button(
         target_page, text="Choose local repository…", command=choose_target
     ).pack(anchor="w", pady=(0, 20))
@@ -675,6 +677,19 @@ def launch_gui() -> int:
         foreground="#4e657b", background="#edf2f7"
     ).pack(anchor="w", pady=(12, 0))
     refresh_status()
+    if smoke_test:
+        # Build the real window and navigate every tab in a virtual display.
+        # Fail this process on any Tk geometry/layout exception.
+        try:
+            root.update()
+            if len(notebook.tabs()) != 5:
+                raise RuntimeError("Expected all five Operator tabs")
+            for tab in notebook.tabs():
+                notebook.select(tab)
+                root.update_idletasks()
+        finally:
+            close_window()
+        return 0
     root.mainloop()
     return 0
 
@@ -682,6 +697,10 @@ def launch_gui() -> int:
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Local read-only Python GUI for AgentRiskLayer"
+    )
+    parser.add_argument(
+        "--ui-smoke", action="store_true",
+        help="create and validate a native Tkinter window, then close (CI test)"
     )
     parser.add_argument(
         "--check", action="store_true",
@@ -704,6 +723,13 @@ def main(arguments: list[str] | None = None) -> int:
         help="read the existing snapshot-bound evidence queue without GUI"
     )
     args = parser.parse_args(arguments)
+    if args.ui_smoke:
+        if (args.check or args.target is not None or
+            args.verify_report is not None or
+            args.inspect_existing is not None or
+            args.inspect_evidence is not None):
+            parser.error("--ui-smoke cannot be combined with other modes")
+        return launch_gui(smoke_test=True)
     if args.verify_report is not None and (
         args.check or args.target is not None or
         args.inspect_existing is not None or args.inspect_evidence is not None
