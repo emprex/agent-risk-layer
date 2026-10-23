@@ -111,7 +111,7 @@ try {
     deploymentDecisionWritten:false,humanReviewRequired:true,
     securityVerdict:'not_assessed',readinessDecision:'HOLD'
   }));
-} catch (error) {
+} catch {
   // Never print driver output, SQL, credentials or arbitrary exception text.
   refuse('Prerequisite, frozen target or dedicated lab operation failed. Check local lab configuration and logs.');
 }
