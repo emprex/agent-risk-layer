@@ -20,11 +20,13 @@ if __package__:
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
     from .read_only_jobs import ReadOnlyJobs
+    from .lab_prepare_bridge import prepare_lab_assessment
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
     from read_only_jobs import ReadOnlyJobs
+    from lab_prepare_bridge import prepare_lab_assessment
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -172,7 +174,7 @@ def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str
 def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
-        from tkinter import filedialog, ttk
+        from tkinter import filedialog, ttk, messagebox, simpledialog
     except ImportError:
         print(
             "Python Tkinter is not installed. On Debian install python3-tk "
@@ -509,7 +511,94 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ui_button(
         target_page, text="Inspect existing assessment (read only)",
         command=inspect_selected_assessment
-    ).pack(anchor="w")
+    ).pack(anchor="w", pady=(0, 24))
+
+    # This action is explicitly TRANSACTIONAL. It is restricted to a
+    # dedicated local PostgreSQL lab by the canonical Node entry point.
+    section(
+        target_page, "Prepare NEW synthetic lab assessment",
+        "This action writes NEW project and initial UNKNOWN snapshot records "
+        "to a SEPARATE local PostgreSQL database named arl_operator_lab. "
+        "It does not scan live agents, run tests, accept evidence or approve "
+        "findings. It is disabled unless ARL_OPERATOR_LAB_DATABASE_URL is "
+        "configured in the launching environment. Never point it at your "
+        "normal customer or production database."
+    )
+    lab_text = tk.StringVar(value="No lab preparation requested.")
+    ttk.Label(
+        target_page, textvariable=lab_text, style="Text.TLabel",
+        wraplength=1000, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 10))
+
+    def prepare_selected_lab() -> None:
+        # This is an opt-in write, unlike the other read-only tabs.
+        target_path = selected_target["path"]
+        sha = selected_target["revision"]
+        if not target_path or not sha:
+            lab_text.set("Choose an authorised, clean, SYNTHETIC lab repository first.")
+            return
+        if not os.environ.get("ARL_OPERATOR_LAB_DATABASE_URL"):
+            lab_text.set(
+                "Isolated lab not configured: set ARL_OPERATOR_LAB_DATABASE_URL "
+                "to the local arl_operator_lab database. No records written."
+            )
+            return
+        approved = messagebox.askyesno(
+            "Prepare lab assessment — database write",
+            "Only use a SYNTHETIC local target you control.\\n\\n"
+            "This will CREATE assessment records in the dedicated local "
+            "arl_operator_lab PostgreSQL database, but will NOT execute tests "
+            "or make security decisions.\\n\\n"
+            "The exact pinned Git SHA is: " + sha + "\\n\\n"
+            "Do you authorise this LAB-ONLY record creation?",
+            parent=root
+        )
+        if not approved:
+            lab_text.set("Lab preparation cancelled; no records created.")
+            return
+        confirmation = "PREPARE LAB " + sha
+        typed = simpledialog.askstring(
+            "Confirm isolated lab preparation",
+            "Type the entire confirmation phrase exactly:\\n" +
+            confirmation,
+            parent=root
+        )
+        if typed != confirmation:
+            lab_text.set("Confirmation mismatch or cancelled; no records created.")
+            return
+        lab_text.set("Preparing isolated lab records using canonical ARL authority…")
+        selected_assessment["value"] = None
+        evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
+        jobs.start(
+            lambda: prepare_lab_assessment(Path(target_path), sha, typed),
+            show_lab_result
+        )
+
+    def show_lab_result(result: dict[str, Any]) -> None:
+        if result.get("available") is not True:
+            lab_text.set(
+                "LAB PREPARATION NOT CONFIRMED: " +
+                result.get("reason", "Unknown failure") +
+                "\\nCheck only the isolated lab records before retrying. "
+                "No tests or security approval were issued."
+            )
+            return
+        lab_text.set(
+            "NEW SYNTHETIC LAB RECORD CREATED.\\n"
+            "Project: " + result["project_id"] + "\\n"
+            "Assessment: " + result["assessment_id"] + "\\n"
+            "Frozen Git revision: " + result["target_revision"] + "\\n"
+            "Initial state: UNKNOWN, human review required.\\n"
+            "Evidence: NOT ACCEPTED  •  Tests: NONE  •  Readiness: HOLD.\\n"
+            "Use 'Inspect existing assessment' to review the resulting snapshot."
+        )
+
+    ui_button(
+        target_page, text="Prepare synthetic LAB assessment (writes lab DB)",
+        command=prepare_selected_lab
+    ).pack(anchor="w", pady=(0, 10))
 
     section(
         evidence_page, "Snapshot-bound evidence requests",
