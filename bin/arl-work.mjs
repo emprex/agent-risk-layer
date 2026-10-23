@@ -155,8 +155,14 @@ async function externalWizard(question) {
     collected = await runExternalAssessment({
       manifestRaw, roeRaw, operator, acknowledged: true
     });
-    await reserved.truncate(0);
-    await reserved.writeFile(JSON.stringify(collected, null, 2) + '\n');
+    const bytes = Buffer.from(JSON.stringify(collected, null, 2) + '\n');
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await reserved.write(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesWritten < 1) throw Error('Incomplete observation write.');
+      offset += result.bytesWritten;
+    }
+    await reserved.truncate(bytes.length);
     await reserved.sync();
   } finally {
     await reserved.close();
