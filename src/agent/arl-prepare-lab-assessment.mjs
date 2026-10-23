@@ -52,31 +52,13 @@ try {
   const repositoryPath=path.resolve(process.argv[3]);
   const {enableLocalCliMode}=await import('./local-cli-mode.mjs');
   enableLocalCliMode(process.env);
-  const [
-    {freezeLocalRepository},
-    {inspectFrozenRepository},
-    {buildFrozenInspectionTransport},
-    {resolveLocalAssessmentContext,findExistingLocalAssessmentContext},
-    {ensureInitialAssessmentSnapshot}
-  ]=await Promise.all([
-    import('./tools/freeze-local-repository.mjs'),
-    import('./tools/inspect-frozen-repository.mjs'),
-    import('./frozen-inspection-transport.mjs'),
-    import('./local-assessment-context.mjs'),
-    import('./initial-assessment-snapshot.mjs')
-  ]);
   process.chdir(root);
+  // No database code is imported before target verification.
+  const {freezeLocalRepository}=await import('./tools/freeze-local-repository.mjs');
   const before=await freezeLocalRepository(repositoryPath);
   if (before.dirty || before.revision!==expected)
     throw new Error('Synthetic Git target must be clean and exactly pinned.');
-  // Only this dedicated lab database may be initialised/migrated, and
-  // only after the operator's exact target confirmation and freeze checks.
-  const {initialiseDatabase}=await import('../db.js');
-  await initialiseDatabase();
-  // Refuse existing assessments. No silent rescope, update, or rebootstrap.
-  if (await findExistingLocalAssessmentContext(repositoryPath)) {
-    throw new Error('This target already has an assessment. Inspect existing instead.');
-  }
+  const {inspectFrozenRepository}=await import('./tools/inspect-frozen-repository.mjs');
   const frozen=await inspectFrozenRepository(repositoryPath);
   if (frozen.target.dirty!==false || frozen.target.revision!==expected ||
       frozen.binding.verified!==true)
@@ -84,6 +66,25 @@ try {
   const afterInspection=await freezeLocalRepository(repositoryPath);
   if (afterInspection.dirty || afterInspection.revision!==expected)
     throw new Error('Target changed before lab assessment preparation.');
+
+  // All validations above must succeed before loading/initialising the
+  // isolated lab database. Even a rejected dirty target leaves DB unopened.
+  const [
+    {buildFrozenInspectionTransport},
+    {resolveLocalAssessmentContext,findExistingLocalAssessmentContext},
+    {ensureInitialAssessmentSnapshot},
+    {initialiseDatabase}
+  ]=await Promise.all([
+    import('./frozen-inspection-transport.mjs'),
+    import('./local-assessment-context.mjs'),
+    import('./initial-assessment-snapshot.mjs'),
+    import('../db.js')
+  ]);
+  await initialiseDatabase();
+  // Refuse existing assessments. No silent rescope, update, or rebootstrap.
+  if (await findExistingLocalAssessmentContext(repositoryPath)) {
+    throw new Error('This target already has an assessment. Inspect existing instead.');
+  }
   // The following two canonical calls create initial records in the
   // dedicated isolated lab database. No general assessment command runs.
   const binding=await resolveLocalAssessmentContext(repositoryPath);
