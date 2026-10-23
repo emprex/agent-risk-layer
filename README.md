@@ -45,6 +45,19 @@ npm run assess:local -- <repository-path> "<request>"
 
 The runner freezes the exact clean Git revision automatically. If `ARL_EXPECTED_TARGET_SHA` is supplied explicitly, it is treated as a strict assertion and a mismatch fails closed.
 
+## Start working with ARL (Debian local Operator)
+
+After updating your canonical ARL checkout to a reviewed release, open the human-led operator in a single command:
+
+```bash
+cd ~/agent-risk-layer
+npm run arl:work
+```
+
+The menu offers an existing authorised Git agent assessment, a new external staging AI agent (scope plan or bounded authorised probe), previous evidence review, and a clearly marked zero-network synthetic UI preview. It creates private assessment folders in `~/ARL-Assessments`. The external path asks for a target, one harmless JSON request and scoped control IDs; it will not send network requests unless the operator explicitly confirms already-held written owner permission.
+
+This is a usable **limited pilot collector and operator review interface**, not a complete customer penetration-testing product. The current external black-box collector supports only unauthenticated JSON POST to a public HTTPS staging endpoint, at most five probes through its advanced manifest API; the interactive menu starts with one. The operator page is read-only and cannot record authoritative human decisions or a verified customer security report. Do not claim a target PASS or validated finding from a response digest. A full customer engagement still needs confirmed target scope, independently checked action traces, accountable evidence review, remediation, retest and an approved report.
+
 ## External / closed-source agents (new, limited)
 
 `npm run assess:external -- --manifest <private-target.json> --plan`
