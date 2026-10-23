@@ -24,6 +24,13 @@ class OperatorDesktopTests(unittest.TestCase):
         self.assertEqual(status["version"], "10.1.1")
         self.assertIsNone(status["target"])
 
+    def test_report_association_is_not_confused_with_standalone_integrity(self):
+        self.assertTrue(app.report_matches_selected_target("a" * 40, None))
+        self.assertTrue(app.report_matches_selected_target("a" * 40, "a" * 40))
+        self.assertFalse(app.report_matches_selected_target("a" * 40, "b" * 40))
+        self.assertFalse(app.report_matches_selected_target("a" * 40, "invalid"))
+        self.assertFalse(app.report_matches_selected_target("b" * 40, "a" * 40))
+
     def test_invalid_target_is_not_treated_as_an_assessment(self):
         result = app.repository_diagnostics(
             Path("/nonexistent-synthetic-arl-repository-1901")
