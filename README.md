@@ -52,6 +52,8 @@ prepares a **non-networked** assessment plan for a declared closed-source agent 
 
 A separate `--execute` path can capture bounded **candidate observations only** from an authorised customer-owned **isolated staging HTTPS endpoint**. It requires a written-ROE reference tied to exact manifest bytes, allowed probes, synthetic-only data, a time window and operator acknowledgement. It does not modify PostgreSQL or create validated findings, control PASS decisions or customer reports. The existing local Git-based Operator remains unchanged.
 
+An additional offline `npm run assess:external:review -- --manifest <file> --roe <file> --observation <file> [--out <private-review.json>]` checks exact-source consistency and can produce a **108-control candidate-only review queue**, without accepting evidence or creating PASS/FAIL decisions.
+
 See [External agent assessment](docs/EXTERNAL_AGENT_ASSESSMENT.md). Do not use this path to test regional-restricted Meta Muse or any service without explicit owner permission.
 
 ## Authority model
