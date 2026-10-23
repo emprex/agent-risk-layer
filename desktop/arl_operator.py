@@ -269,12 +269,14 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     notebook.add(reports_page, text="Reports")
 
     def section(parent: Any, heading: str, detail: str) -> None:
-        ttk.Label(parent, text=heading, style="Text.TLabel",
-                  font=("DejaVu Sans", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            parent, text=heading, style="Text.TLabel",
+            font=("DejaVu Sans", 12, "bold")
+        ).pack(anchor="w", fill="x", pady=(0, 8))
         ttk.Label(
             parent, text=detail, style="Hint.TLabel",
-            wraplength=730, justify="left"
-        ).pack(anchor="w", pady=(0, 18))
+            wraplength=1100, justify="left"
+        ).pack(anchor="w", fill="x", pady=(0, 18))
 
     # A responsive dashboard of factual local observations. The cards
     # intentionally contain no simulated assessments or security outcomes.
@@ -527,14 +529,19 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     evidence_table = ttk.Treeview(
         evidence_page, columns=columns, show="headings", height=9
     )
-    for key, heading, width in (
-        ("pack", "Pack", 55),
-        ("category", "Workstream", 230),
-        ("tasks", "Requirements", 125),
-        ("controls", "Controls", 110),
+    # The original fixed-width headings were clipped on the owner's Debian
+    # display. Give every non-expanding column a readable minimum width.
+    for key, heading, width, minimum in (
+        ("pack", "Pack", 130, 110),
+        ("category", "Workstream", 390, 240),
+        ("tasks", "Requirements", 220, 190),
+        ("controls", "Controls", 185, 165),
     ):
-        evidence_table.heading(key, text=heading)
-        evidence_table.column(key, width=width, stretch=(key == "category"))
+        evidence_table.heading(key, text=heading, anchor="w")
+        evidence_table.column(
+            key, width=width, minwidth=minimum,
+            anchor="w", stretch=(key == "category")
+        )
     evidence_table.pack(fill="both", expand=True, pady=(0, 10))
 
     def read_evidence_plan() -> None:
@@ -600,10 +607,30 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ).pack(anchor="w", pady=(0, 12))
     section(
         tests_page, "Controlled tests — disabled",
-        "No execution controls are available in this first version. "
-        "Any future active test requires explicit scope, written Rules of "
-        "Engagement, synthetic data, human approval and an auditable result."
+        "No test execution is available from this desktop interface. "
+        "Running any active security test requires separately authorised "
+        "scope, written Rules of Engagement, synthetic data where required, "
+        "human approval and an auditable result."
     )
+    ttk.Label(
+        tests_page, text="Planned authorised workflow (not executable here)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 10))
+    ttk.Label(
+        tests_page,
+        text=(
+            "1. Confirm scope and rules of engagement\n"
+            "2. Approve a bounded test plan\n"
+            "3. Execute through ARL's existing controlled runner\n"
+            "4. Verify evidence and exact target/snapshot binding\n"
+            "5. Human review of findings, retests and readiness"
+        ),
+        style="Hint.TLabel", justify="left", wraplength=1000
+    ).pack(anchor="w", fill="x", pady=(0, 14))
+    ttk.Label(
+        tests_page, text="Status: NO TESTS STARTED BY THIS INTERFACE",
+        style="Text.TLabel", font=("DejaVu Sans", 10, "bold")
+    ).pack(anchor="w", pady=(0, 8))
     section(
         reports_page, "Verify an existing ARL report bundle",
         "Select an already exported private ARL .manifest.json file. "
