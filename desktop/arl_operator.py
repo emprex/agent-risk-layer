@@ -714,6 +714,16 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             for tab in notebook.tabs():
                 notebook.select(tab)
                 root.update_idletasks()
+            for key, expected_heading, min_width in (
+                ("pack", "Pack", 110),
+                ("category", "Workstream", 240),
+                ("tasks", "Requirements", 190),
+                ("controls", "Controls", 165),
+            ):
+                if evidence_table.heading(key, "text") != expected_heading:
+                    raise RuntimeError("Evidence heading mismatch: " + key)
+                if int(evidence_table.column(key, "minwidth")) < min_width:
+                    raise RuntimeError("Evidence column too narrow: " + key)
         finally:
             close_window()
         return 0
