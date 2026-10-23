@@ -80,7 +80,7 @@ test('operator export shows exactly 108 controls and preserves HOLD with candida
   assert.match(html, /NOT ASSESSED/);
   assert.match(html, /authorisation/i);
   assert.match(html, /sha256-/);
-  assert.doesNotMatch(html, /<script\b|<form\b|onerror\s*=/i);
+  assert.doesNotMatch(html, /<script\b|<form\b|<img\b/i);
   assert.doesNotMatch(html, /https?:\/\//);
   assert.doesNotMatch(html, /SECRET_RAW_AGENT_OUTPUT|canary_BENIGN_INPUT_DO_NOT_DISPLAY/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
