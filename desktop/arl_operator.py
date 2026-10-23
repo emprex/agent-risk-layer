@@ -129,7 +129,47 @@ def local_status(target: Path | None = None) -> dict[str, Any]:
     }
 
 
-def launch_gui() -> int:
+def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """UI labels derived from local diagnostics, never security conclusions."""
+    repo = observed.get("product") or {}
+    available = repo.get("available") is True
+    revision = repo.get("revision", "") if available else ""
+    if not isinstance(revision, str) or not SHA_RE.fullmatch(revision):
+        revision = ""
+    worktree = repo.get("worktree") if available else None
+    condition = (
+        "CLEAN" if worktree == "clean" else
+        "CHANGED" if worktree == "has_local_changes" else "UNKNOWN"
+    )
+    return {
+        "version": (
+            str(observed.get("version", "unknown")),
+            "Manifest version; not an engine health check"
+        ),
+        "source": (
+            revision[:12] if revision else "UNAVAILABLE",
+            "Local GUI checkout Git revision"
+        ),
+        "worktree": (
+            condition,
+            "GUI checkout only; not the assessment target"
+        ),
+        "database": (
+            "NOT CHECKED",
+            "No PostgreSQL connection attempted"
+        ),
+        "assessment": (
+            "NOT LOADED",
+            "Use Assessments to inspect an existing record"
+        ),
+        "security": (
+            "NOT EVALUATED",
+            "No findings, tests or deployment decisions"
+        ),
+    }
+
+
+def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
         from tkinter import filedialog, ttk
@@ -148,8 +188,8 @@ def launch_gui() -> int:
         return 2
 
     root.title("AgentRiskLayer — Local Operator")
-    root.geometry("940x640")
-    root.minsize(740, 540)
+    root.geometry("1120x760")
+    root.minsize(880, 610)
     root.configure(bg="#edf2f7")
 
     style = ttk.Style(root)
@@ -168,8 +208,18 @@ def launch_gui() -> int:
         "Hint.TLabel", background="#ffffff", foreground="#566a80",
         font=("DejaVu Sans", 10)
     )
-    style.configure("TNotebook", background="#edf2f7")
-    style.configure("TNotebook.Tab", padding=(16, 9))
+    style.configure("TNotebook", background="#edf2f7", borderwidth=0)
+    style.configure(
+        "TNotebook.Tab", padding=(20, 12),
+        font=("DejaVu Sans", 10, "bold"),
+        background="#dce5ef", foreground="#263e57"
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", "#ffffff"), ("active", "#f4f8fc")],
+        foreground=[("selected", "#1653a3")]
+    )
+    style.configure("TButton", font=("DejaVu Sans", 10), padding=(14, 9))
 
     busy_controls: list[Any] = []
 
@@ -219,23 +269,107 @@ def launch_gui() -> int:
     notebook.add(reports_page, text="Reports")
 
     def section(parent: Any, heading: str, detail: str) -> None:
-        ttk.Label(parent, text=heading, style="Text.TLabel",
-                  font=("DejaVu Sans", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            parent, text=heading, style="Text.TLabel",
+            font=("DejaVu Sans", 12, "bold")
+        ).pack(anchor="w", fill="x", pady=(0, 8))
         ttk.Label(
             parent, text=detail, style="Hint.TLabel",
-            wraplength=730, justify="left"
-        ).pack(anchor="w", pady=(0, 18))
+            wraplength=1100, justify="left"
+        ).pack(anchor="w", fill="x", pady=(0, 18))
 
-    section(
-        overview, "Product status",
-        "This screen inspects local Git metadata and the package manifest. "
-        "It does not inspect PostgreSQL, create assessments, or infer readiness."
-    )
-    status_text = tk.StringVar(value="")
+    # A responsive dashboard of factual local observations. The cards
+    # intentionally contain no simulated assessments or security outcomes.
+    overview.columnconfigure(0, weight=1)
     ttk.Label(
-        overview, textvariable=status_text, style="Text.TLabel",
-        wraplength=735, justify="left"
-    ).pack(anchor="w", pady=(0, 24))
+        overview, text="Operator overview",
+        background="#ffffff", foreground="#17263c",
+        font=("DejaVu Sans", 15, "bold")
+    ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+    ttk.Label(
+        overview,
+        text="Local status only. All security decisions remain with the human operator.",
+        background="#ffffff", foreground="#566a80",
+        font=("DejaVu Sans", 10)
+    ).grid(row=1, column=0, sticky="w", pady=(0, 14))
+
+    status_values: dict[str, Any] = {}
+    tiles = tk.Frame(overview, bg="#ffffff")
+    tiles.grid(row=2, column=0, sticky="ew")
+    for column in range(3):
+        tiles.grid_columnconfigure(column, weight=1, uniform="operator-cards")
+
+    cards = (
+        ("version", "ARL VERSION"),
+        ("source", "GIT REVISION"),
+        ("worktree", "GUI WORKTREE"),
+        ("database", "POSTGRESQL"),
+        ("assessment", "ASSESSMENT"),
+        ("security", "SECURITY READINESS"),
+    )
+    for index, (key, heading) in enumerate(cards):
+        tile = tk.Frame(
+            tiles, bg="#f2f6fb", padx=18, pady=14,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        tile.grid(
+            row=index // 3, column=index % 3, sticky="nsew",
+            padx=7, pady=7
+        )
+        tk.Label(
+            tile, text=heading, bg="#f2f6fb", fg="#526c89",
+            font=("DejaVu Sans", 9, "bold"), anchor="w"
+        ).pack(fill="x")
+        value = tk.StringVar(value="CHECKING…")
+        status_values[key] = value
+        tk.Label(
+            tile, textvariable=value, bg="#f2f6fb", fg="#17263c",
+            font=("DejaVu Sans", 15, "bold"), anchor="w"
+        ).pack(fill="x", pady=(8, 2))
+        caption = tk.StringVar(value="")
+        status_values[key + "_caption"] = caption
+        tk.Label(
+            tile, textvariable=caption, bg="#f2f6fb", fg="#657a93",
+            font=("DejaVu Sans", 9),
+            anchor="w", justify="left", wraplength=260
+        ).pack(fill="x")
+
+    status_text = tk.StringVar(value="Reading local product metadata…")
+    tk.Label(
+        overview, textvariable=status_text, bg="#ffffff", fg="#496887",
+        font=("DejaVu Sans", 10), justify="left", anchor="w"
+    ).grid(row=3, column=0, sticky="ew", padx=8, pady=(8, 18))
+
+    next_steps = tk.Frame(overview, bg="#ffffff")
+    next_steps.grid(row=4, column=0, sticky="ew", padx=7, pady=(0, 14))
+    for column in range(2):
+        next_steps.grid_columnconfigure(column, weight=1, uniform="operator-next")
+    def info_panel(column: int, title: str, description: str) -> None:
+        panel = tk.Frame(
+            next_steps, bg="#ffffff", padx=16, pady=13,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        panel.grid(row=0, column=column, sticky="nsew", padx=(0, 12) if column == 0 else (12, 0))
+        tk.Label(
+            panel, text=title, bg="#ffffff", fg="#17263c",
+            font=("DejaVu Sans", 11, "bold"), anchor="w"
+        ).pack(fill="x", pady=(0, 8))
+        tk.Label(
+            panel, text=description, bg="#ffffff", fg="#526c89",
+            font=("DejaVu Sans", 10), justify="left", anchor="w",
+            wraplength=360
+        ).pack(fill="x")
+    info_panel(
+        0, "Next: inspect an existing assessment",
+        "Assessments → Select an authorised clean Git repository → "
+        "Inspect existing assessment. The interface never creates a missing record."
+    )
+    info_panel(
+        1, "Review evidence and saved reports",
+        "Evidence → Read the snapshot-bound work plan. "
+        "Reports → Verify a saved private bundle. "
+        "Neither action approves evidence or security outcomes."
+    )
 
     selected_target: dict[str, Any] = {"path": None, "revision": None}
     selected_assessment: dict[str, Any] = {"value": None}
@@ -258,32 +392,26 @@ def launch_gui() -> int:
     ).pack(anchor="w", pady=(0, 18))
 
     def refresh_status() -> None:
-        status_text.set("Reading local product and Git metadata…")
+        status_text.set("Checking local manifest and Git metadata…")
         def completed(observed: dict[str, Any]) -> None:
-            if not observed.get("application"):
-                status_text.set(
-                    "Local diagnostics unavailable. No readiness decision made."
-                )
-                return
             show_status(observed)
         jobs.start(local_status, completed)
 
     def show_status(observed: dict[str, Any]) -> None:
-        repo = observed["product"]
-        if repo["available"]:
-            revision = repo["revision"]
-            condition = repo["worktree"]
+        for key, (value, caption) in overview_status_fields(observed).items():
+            status_values[key].set(value)
+            status_values[key + "_caption"].set(caption)
+        repo = observed.get("product") or {}
+        if observed.get("application") and repo.get("available") is True:
+            status_text.set(
+                "Local checkout inspected. Database, live agents, evidence "
+                "and security readiness are NOT evaluated here."
+            )
         else:
-            revision = "unavailable"
-            condition = repo["reason"]
-        status_text.set(
-            f"ARL v{observed['version']}    •    Required Node.js: "
-            f"{observed['required_node']}\n"
-            f"Git HEAD: {revision}\n"
-            f"Working tree: {condition}\n"
-            "Database: NOT CHECKED    •    Assessment: NOT LOADED\n"
-            "Tests, findings and readiness: NOT EVALUATED"
-        )
+            status_text.set(
+                "Local status unavailable. No security or deployment "
+                "decision can be inferred."
+            )
 
     def choose_target() -> None:
         selected = filedialog.askdirectory(
@@ -325,9 +453,11 @@ def launch_gui() -> int:
                 "This is NOT a security assessment or test authorisation."
             )
 
+    # Overview uses grid for its direct children; mixing pack/grid here
+    # causes an immediate TclError on Debian when launching the GUI.
     ui_button(
         overview, text="Refresh local diagnostics", command=refresh_status
-    ).pack(anchor="w")
+    ).grid(row=5, column=0, sticky="w", padx=8, pady=(0, 12))
     ui_button(
         target_page, text="Choose local repository…", command=choose_target
     ).pack(anchor="w", pady=(0, 20))
@@ -399,14 +529,19 @@ def launch_gui() -> int:
     evidence_table = ttk.Treeview(
         evidence_page, columns=columns, show="headings", height=9
     )
-    for key, heading, width in (
-        ("pack", "Pack", 55),
-        ("category", "Workstream", 230),
-        ("tasks", "Requirements", 125),
-        ("controls", "Controls", 110),
+    # The original fixed-width headings were clipped on the owner's Debian
+    # display. Give every non-expanding column a readable minimum width.
+    for key, heading, width, minimum in (
+        ("pack", "Pack", 130, 110),
+        ("category", "Workstream", 390, 240),
+        ("tasks", "Requirements", 220, 190),
+        ("controls", "Controls", 185, 165),
     ):
-        evidence_table.heading(key, text=heading)
-        evidence_table.column(key, width=width, stretch=(key == "category"))
+        evidence_table.heading(key, text=heading, anchor="w")
+        evidence_table.column(
+            key, width=width, minwidth=minimum,
+            anchor="w", stretch=(key == "category")
+        )
     evidence_table.pack(fill="both", expand=True, pady=(0, 10))
 
     def read_evidence_plan() -> None:
@@ -472,10 +607,30 @@ def launch_gui() -> int:
     ).pack(anchor="w", pady=(0, 12))
     section(
         tests_page, "Controlled tests — disabled",
-        "No execution controls are available in this first version. "
-        "Any future active test requires explicit scope, written Rules of "
-        "Engagement, synthetic data, human approval and an auditable result."
+        "No test execution is available from this desktop interface. "
+        "Running any active security test requires separately authorised "
+        "scope, written Rules of Engagement, synthetic data where required, "
+        "human approval and an auditable result."
     )
+    ttk.Label(
+        tests_page, text="Planned authorised workflow (not executable here)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 10))
+    ttk.Label(
+        tests_page,
+        text=(
+            "1. Confirm scope and rules of engagement\n"
+            "2. Approve a bounded test plan\n"
+            "3. Execute through ARL's existing controlled runner\n"
+            "4. Verify evidence and exact target/snapshot binding\n"
+            "5. Human review of findings, retests and readiness"
+        ),
+        style="Hint.TLabel", justify="left", wraplength=1000
+    ).pack(anchor="w", fill="x", pady=(0, 14))
+    ttk.Label(
+        tests_page, text="Status: NO TESTS STARTED BY THIS INTERFACE",
+        style="Text.TLabel", font=("DejaVu Sans", 10, "bold")
+    ).pack(anchor="w", pady=(0, 8))
     section(
         reports_page, "Verify an existing ARL report bundle",
         "Select an already exported private ARL .manifest.json file. "
@@ -549,6 +704,29 @@ def launch_gui() -> int:
         foreground="#4e657b", background="#edf2f7"
     ).pack(anchor="w", pady=(12, 0))
     refresh_status()
+    if smoke_test:
+        # Build the real window and navigate every tab in a virtual display.
+        # Fail this process on any Tk geometry/layout exception.
+        try:
+            root.update()
+            if len(notebook.tabs()) != 5:
+                raise RuntimeError("Expected all five Operator tabs")
+            for tab in notebook.tabs():
+                notebook.select(tab)
+                root.update_idletasks()
+            for key, expected_heading, min_width in (
+                ("pack", "Pack", 110),
+                ("category", "Workstream", 240),
+                ("tasks", "Requirements", 190),
+                ("controls", "Controls", 165),
+            ):
+                if evidence_table.heading(key, "text") != expected_heading:
+                    raise RuntimeError("Evidence heading mismatch: " + key)
+                if int(evidence_table.column(key, "minwidth")) < min_width:
+                    raise RuntimeError("Evidence column too narrow: " + key)
+        finally:
+            close_window()
+        return 0
     root.mainloop()
     return 0
 
@@ -556,6 +734,10 @@ def launch_gui() -> int:
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Local read-only Python GUI for AgentRiskLayer"
+    )
+    parser.add_argument(
+        "--ui-smoke", action="store_true",
+        help="create and validate a native Tkinter window, then close (CI test)"
     )
     parser.add_argument(
         "--check", action="store_true",
@@ -578,6 +760,13 @@ def main(arguments: list[str] | None = None) -> int:
         help="read the existing snapshot-bound evidence queue without GUI"
     )
     args = parser.parse_args(arguments)
+    if args.ui_smoke:
+        if (args.check or args.target is not None or
+            args.verify_report is not None or
+            args.inspect_existing is not None or
+            args.inspect_evidence is not None):
+            parser.error("--ui-smoke cannot be combined with other modes")
+        return launch_gui(smoke_test=True)
     if args.verify_report is not None and (
         args.check or args.target is not None or
         args.inspect_existing is not None or args.inspect_evidence is not None
