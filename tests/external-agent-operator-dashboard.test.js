@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import { runExternalAssessment } from '../src/agent/external-agent-assessment.mjs';
+import { buildSyntheticExternalOperatorDemo } from '../scripts/demo-external-operator.mjs';
 import {
   buildExternalOperatorDossier,
   renderExternalOperatorHtml,
@@ -189,5 +190,35 @@ test('CLI produces immutable private HTML from three verified input files withou
     assert.equal(JSON.parse(again.stdout).status, 'unchanged');
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+
+test('synthetic demo is visibly watermarked, network-free and preserves zero authority', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-synthetic-external-'));
+  const outputDirectory = path.join(root, 'private');
+  try {
+    const result = await buildSyntheticExternalOperatorDemo({
+      outputDirectory, nowMs: Date.parse('2026-10-23T18:00:00.000Z')
+    });
+    assert.equal(result.syntheticDemo, true);
+    assert.equal(result.simulatedCalls, 2);
+    assert.equal(result.liveNetworkCalls, 0);
+    assert.equal(result.databaseModified, false);
+    assert.equal(result.controlsTotal, 108);
+    assert.equal(result.mappedControls, 4);
+    assert.equal(result.evidenceAccepted, false);
+    assert.equal(result.confirmedFindings, 0);
+    assert.equal(result.deploymentDecision, 'hold');
+    const html = fs.readFileSync(result.filePath, 'utf8');
+    assert.match(html, /SYNTHETIC DEMONSTRATION — NO REAL CUSTOMER OR ASSESSMENT DATA/);
+    assert.match(html, /nothing was sent to a real agent/);
+    assert.match(html, /Deployment HOLD/);
+    assert.match(html, /HTTP 200/);
+    assert.match(html, /HTTP 403/);
+    assert.doesNotMatch(html, /https?:\/\//);
+    assert.doesNotMatch(html, /<script\b|<form\b|<img\b/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
