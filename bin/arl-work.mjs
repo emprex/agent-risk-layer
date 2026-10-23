@@ -58,6 +58,25 @@ export function buildWizardManifest({ name, owner, endpoint, version, controlIds
   return { raw, parsed };
 }
 
+export function buildLocalObservationRequest({ controlId, observedResult, sourceReference }) {
+  const id = String(controlId || '').trim().toUpperCase();
+  const observation = String(observedResult || '').trim();
+  const source = String(sourceReference || '').trim();
+  if (!/^ARL-KB-(?:00[1-9]|0[1-9]\d|10[0-8])$/.test(id) ||
+    observation.length < 10 || observation.length > 3000 ||
+    source.length < 3 || source.length > 500) {
+    throw Error('An exact control ID, specific observation and evidence source reference are required.');
+  }
+  return 'Record manual evidence ' + JSON.stringify({
+    controlId: id,
+    result: 'inconclusive',
+    observedResult: observation,
+    sourceReference: source,
+    limitations: 'Operator note only. Not independent validation or a conclusive finding.',
+    evidenceChecklist: []
+  });
+}
+
 export function buildWizardRoe({ manifestRaw, operator, reference, fromMs, untilMs }) {
   const parsed = parseExternalManifest(manifestRaw);
   if (!(typeof reference === 'string' && reference.trim().length >= 8 &&
@@ -212,9 +231,32 @@ export async function main() {
     console.log('4. Explore synthetic operator screen (no network)');
     const mode = await ask('\nChoose 1–4: ');
     if (mode === '1') {
-      const target = await ask('Clean, authorised target Git repository folder: ');
+      const target = path.resolve(await ask('Clean, authorised target Git repository folder: '));
+      console.log('\nGit-based ARL assessment actions:');
+      console.log('1. Run / continue the assessment');
+      console.log('2. Open the local review dashboard');
+      console.log('3. Record a documented, inconclusive operator observation');
+      console.log('4. Export customer preassessment (human-review draft)');
+      console.log('5. Export current customer assessment report (if eligible)');
+      const action = await ask('Choose 1–5: ');
+      let request;
+      if (action === '1') request = 'Assess this agent';
+      else if (action === '2') {
+        await runner('src/agent/arl-local-assessment-runner.mjs',
+          [target], { ARL_OPERATOR_OPEN_DASHBOARD: '1' });
+        return;
+      } else if (action === '3') {
+        const controlId = await ask('Control ID (ARL-KB-###): ');
+        const observedResult = await ask('Specific observed fact, minimum 10 characters: ');
+        const sourceReference = await ask('Evidence reference or filename: ');
+        request = buildLocalObservationRequest({
+          controlId, observedResult, sourceReference
+        });
+      } else if (action === '4') request = 'Export client preassessment';
+      else if (action === '5') request = 'Export customer assessment report';
+      else throw Error('Choose an authorised assessment action.');
       await runner('src/agent/arl-local-assessment-runner.mjs',
-        [path.resolve(target)], { ARL_OPERATOR_OPEN_DASHBOARD: '1' });
+        [target, request]);
     } else if (mode === '2') {
       await externalWizard(ask);
     } else if (mode === '3') {
