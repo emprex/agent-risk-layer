@@ -76,6 +76,34 @@ npm run assess:external -- \
 
 Output uses exclusive file creation (0600) in an output directory created 0700 if new. An existing artifact is never overwritten. Review all results before drawing conclusions.
 
+The output path is **reserved before the first network request**. If it already exists, no request is issued. If collection aborts after starting, an `arl.external-agent-interrupted-run.v1` marker is retained with `incomplete_unknown_side_effects`; it cannot be mistaken for a completed observation. Do not blindly retry a probe whose side effects are unknown.
+
+## Offline evidence consistency review (new, no network or database)
+
+The reviewer must have the **original exact-byte manifest, ROE and observation JSON**. The receipt includes an internally computed SHA-256 content identifier, a unique collection ID, bounded per-probe response digests, and the source and allowed-input bindings. The offline verifier rejects mismatched versions, control IDs, requests, ROE, timestamps, HTTP metadata and falsely promoted findings.
+
+```bash
+npm run assess:external:review -- \
+  --manifest /private/target.json \
+  --roe /private/roe.json \
+  --observation /private/arl-external-evidence/observation.json
+```
+
+To create a private immutable **108-control candidate review queue** (still not a validated assessment):
+
+```bash
+npm run assess:external:review -- \
+  --manifest /private/target.json \
+  --roe /private/roe.json \
+  --observation /private/arl-external-evidence/observation.json \
+  --out /private/arl-external-evidence/review-queue.json
+```
+
+All 108 controls retain `applicability: unknown`, `assessmentResult: not_assessed`, `evidenceAccepted: false`, `deploymentDecision: hold`. Candidate probes only identify which controls might be investigated next.
+
+**Integrity interpretation:** `consistent_only` is internal consistency, **not** cryptographic authenticity: anybody able to alter and replace the manifest, ROE and observation file could compute new digests. It is not a digital signature, proof of signed authorisation, validated version, real agent behaviour, independent side-effect trace or human verdict. The verifier does not read the live network, obtain owner signatures or change the PostgreSQL assessment. Do not treat a successful consistency check as evidence sufficient for a finding or release.
+
+
 ## Explicitly unfinished
 
 1. Authenticated connectors with separately secured customer test credentials.
