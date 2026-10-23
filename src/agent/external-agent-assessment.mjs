@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve4 } from 'node:dns/promises';
 import https from 'node:https';
 import { isIP } from 'node:net';
@@ -178,8 +178,9 @@ export async function runExternalAssessment({
     }
     results.push(observation);
   }
-  return {
+  const payload = {
     schema: 'arl.external-agent-observation.v1',
+    collectionId: randomUUID(),
     target: {
       type: 'external_black_box', name: parsed.manifest.target.name,
       endpoint: parsed.manifest.target.endpoint,
@@ -199,4 +200,5 @@ export async function runExternalAssessment({
       'Not yet ingested into canonical PostgreSQL Control Intelligence or tied to its snapshot lineage.'
     ]
   };
+  return { ...payload, artifactSha256: hash(JSON.stringify(payload)) };
 }
