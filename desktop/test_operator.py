@@ -13,6 +13,17 @@ from desktop import arl_operator as app
 
 
 class OperatorDesktopTests(unittest.TestCase):
+    def test_gui_discloses_isolated_lab_writes_without_false_readonly_claim(self):
+        gui_source = Path(__file__).with_name("arl_operator.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("CONFIRMED LAB SETUP", gui_source)
+        self.assertIn("Confirmed LAB setup writes", gui_source)
+        self.assertIn("PREPARE LAB ", gui_source)
+        self.assertNotIn(
+            "No network, assessment execution, database writes", gui_source
+        )
+
     def test_product_status_does_not_claim_security_evaluation(self):
         status = app.local_status()
         self.assertEqual(status["mode"], "read_only_gui_foundation")
