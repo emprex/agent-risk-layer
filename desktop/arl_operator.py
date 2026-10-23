@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only Python desktop entry point for the canonical ARL Operator.
+"""Python desktop entry point for the canonical ARL Operator.
 
-This module neither imports nor reimplements ARL security authority. It never
-runs assessments, talks to PostgreSQL, reads .env, or contacts remote services.
+The desktop reuses Node.js ARL authority. Most views are read-only. Only a
+separately confirmed synthetic LAB preparation action can create initial
+records in a dedicated local PostgreSQL database. No controlled tests or
+security decisions are executed by the desktop.
 """
 from __future__ import annotations
 
@@ -251,7 +253,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ).pack(anchor="w")
     ttk.Label(
         container,
-        text="LOCAL DESKTOP  •  READ-ONLY FOUNDATION  •  HUMAN SECURITY AUTHORITY",
+        text="LOCAL DESKTOP  •  READ-ONLY REVIEW + CONFIRMED LAB SETUP  •  HUMAN AUTHORITY",
         foreground="#43617e", background="#edf2f7"
     ).pack(anchor="w", pady=(5, 14))
 
@@ -790,7 +792,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
 
     ttk.Label(
         container,
-        text="No network, assessment execution, database writes or security decisions.",
+        text="No active tests or security decisions. Confirmed LAB setup writes only to the isolated lab database.",
         foreground="#4e657b", background="#edf2f7"
     ).pack(anchor="w", pady=(12, 0))
     refresh_status()
