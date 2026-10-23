@@ -91,7 +91,7 @@ test('operator menu opens a visibly synthetic local workbench with no external i
       timeout: 15000
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /ARL.*LOCAL OPERATOR/);
+    assert.match(result.stdout, /AGENTRISKLAYER.*LOCAL OPERATOR/);
     assert.match(result.stdout, /SYNTHETIC DEMO ONLY/);
     const outputRoot = path.join(localHome, 'ARL-Assessments');
     assert.equal(fs.statSync(outputRoot).mode & 0o077, 0);
