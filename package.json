@@ -49,6 +49,7 @@
     "assess:external:review": "node bin/arl-external-review.mjs",
     "assess:external:operator": "node bin/arl-external-operator.mjs",
     "operator:open": "ARL_OPERATOR_OPEN_DASHBOARD=1 node --env-file-if-exists=.env src/agent/arl-local-assessment-runner.mjs",
+    "arl:work": "node --env-file-if-exists=.env bin/arl-work.mjs",
     "operator:inspect-existing": "node --env-file-if-exists=.env src/agent/arl-inspect-existing-assessment.mjs",
     "demo:operator": "node scripts/generate-synthetic-operator-dashboard.mjs",
     "demo:external": "node scripts/demo-external-operator.mjs",
