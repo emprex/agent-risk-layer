@@ -1,8 +1,9 @@
-"""Small Tk-compatible single-flight runner for read-only ARL desktop queries.
+"""Single-flight UI job scheduler for ARL's desktop.
 
-Only the main Tk thread calls the scheduler, callbacks or button state setter.
-Worker exceptions are never shown to the operator (they could include secrets
-or private local file paths). No background task may mutate ARL security state.
+Only the Tk main thread touches the scheduler, callbacks and controls. Worker
+exceptions are hidden from the UI. This queue does NOT authorise any action:
+read-only operations stay read-only, and the one isolated lab preparation
+requires independent GUI confirmation and Node.js lab authority guards.
 """
 from __future__ import annotations
 
@@ -13,11 +14,11 @@ from typing import Any, Callable
 POLL_MS = 75
 FAILURE = {
     "available": False,
-    "reason": "The read-only operation could not complete",
+    "reason": "The operator operation could not complete",
 }
 
 
-class ReadOnlyJobs:
+class OperatorJobs:
     def __init__(
         self,
         schedule: Callable[[int, Callable[[], None]], Any],
@@ -77,3 +78,7 @@ class ReadOnlyJobs:
 
         self._schedule(POLL_MS, poll)
         return True
+
+
+# Compatibility for the original read-only desktop regression suite.
+ReadOnlyJobs = OperatorJobs
