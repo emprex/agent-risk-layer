@@ -24,6 +24,45 @@ class OperatorDesktopTests(unittest.TestCase):
         self.assertEqual(status["version"], "10.1.1")
         self.assertIsNone(status["target"])
 
+    def test_overview_cards_state_observation_without_false_readiness(self):
+        observed = {
+            "application": "AgentRiskLayer Operator",
+            "version": "10.1.1",
+            "required_node": "24.21.0",
+            "product": {
+                "available": True,
+                "revision": "a" * 40,
+                "worktree": "clean",
+            }
+        }
+        cards = app.overview_status_fields(observed)
+        self.assertEqual(cards["version"][0], "10.1.1")
+        self.assertEqual(cards["source"][0], "a" * 12)
+        self.assertEqual(cards["worktree"][0], "CLEAN")
+        self.assertIn("GUI checkout only", cards["worktree"][1])
+        self.assertEqual(cards["database"][0], "NOT CHECKED")
+        self.assertEqual(cards["assessment"][0], "NOT LOADED")
+        self.assertEqual(cards["security"][0], "NOT EVALUATED")
+        self.assertNotIn("PASS", str(cards))
+        self.assertNotIn("READY", str(cards))
+
+    def test_overview_unknown_and_dirty_git_are_not_marked_clean(self):
+        source = {"version": "10.1.1", "product": {"available": False}}
+        missing = app.overview_status_fields(source)
+        self.assertEqual(missing["source"][0], "UNAVAILABLE")
+        self.assertEqual(missing["worktree"][0], "UNKNOWN")
+
+        dirty = app.overview_status_fields({
+            "product": {
+                "available": True,
+                "revision": "f" * 40,
+                "worktree": "has_local_changes",
+            }
+        })
+        self.assertEqual(dirty["worktree"][0], "CHANGED")
+        self.assertEqual(dirty["database"][0], "NOT CHECKED")
+        self.assertEqual(dirty["security"][0], "NOT EVALUATED")
+
     def test_report_association_is_not_confused_with_standalone_integrity(self):
         self.assertTrue(app.report_matches_selected_target("a" * 40, None))
         self.assertTrue(app.report_matches_selected_target("a" * 40, "a" * 40))
