@@ -427,6 +427,51 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         wraplength=730, justify="left"
     ).pack(anchor="w", pady=(0, 18))
 
+    ttk.Label(
+        target_page, text="Assessment platform guidance",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 6))
+    platform_choice = tk.StringVar(value="Local Git / MCP agent")
+    platform_options = (
+        "Local Git / MCP agent",
+        "Meta Muse (hosted / manual scope)",
+        "Other hosted agent (manual scope)",
+    )
+    platform_selector = ttk.Combobox(
+        target_page, textvariable=platform_choice, values=platform_options,
+        state="readonly", width=42
+    )
+    platform_selector.pack(anchor="w", pady=(0, 8))
+    platform_guidance = tk.StringVar()
+
+    def explain_platform(_event: Any = None) -> None:
+        if platform_choice.get() == "Meta Muse (hosted / manual scope)":
+            platform_guidance.set(
+                "Meta Muse: external hosted platform. Review connector permissions, "
+                "per-action approvals, identity/delegation, network egress and audit "
+                "evidence only with authorised access. No direct Muse connector is "
+                "installed. Choosing this option does NOT permit tests, import data, "
+                "or change the selected frozen Git target."
+            )
+        elif platform_choice.get() == "Other hosted agent (manual scope)":
+            platform_guidance.set(
+                "Hosted agent: define vendor, tenant, authorised scope and "
+                "available evidence before assessment. No live connection or "
+                "security test is made by this selector."
+            )
+        else:
+            platform_guidance.set(
+                "Local Git / MCP: choose a clean committed local repository below. "
+                "Its exact revision is used to inspect existing ARL assessments."
+            )
+
+    platform_selector.bind("<<ComboboxSelected>>", explain_platform)
+    explain_platform()
+    ttk.Label(
+        target_page, textvariable=platform_guidance, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 16))
+
     def refresh_status() -> None:
         status_text.set("Checking local manifest and Git metadata…")
         def completed(observed: dict[str, Any]) -> None:
