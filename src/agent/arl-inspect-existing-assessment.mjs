@@ -9,9 +9,14 @@ try {
   if (error?.code !== 'ENOENT') throw error;
 }
 const evidenceJsonMode = process.argv[2] === '--evidence-json';
-const jsonMode = process.argv[2] === '--json' || evidenceJsonMode;
+const packJsonMode = process.argv[2] === '--evidence-pack-json';
+const jsonMode = process.argv[2] === '--json' || evidenceJsonMode || packJsonMode;
 const targetArgument = jsonMode ? process.argv[3] : process.argv[2];
-if (process.argv.length !== (jsonMode ? 4 : 3) || !targetArgument?.trim()) {
+const packNumber = packJsonMode ? Number(process.argv[4]) : null;
+if (process.argv.length !== (packJsonMode ? 5 : jsonMode ? 4 : 3) ||
+    !targetArgument?.trim() ||
+    (packJsonMode && (!/^[1-9][0-9]*$/.test(process.argv[4] || '') ||
+      !Number.isSafeInteger(packNumber) || packNumber > 150))) {
   console.error('Usage: npm run operator:inspect-existing -- [--json|--evidence-json] <existing-frozen-target-path>');
   process.exit(2);
 }
@@ -47,7 +52,7 @@ try {
   // This intentionally does not initialise the database or create a snapshot.
   const binding = await findExistingLocalAssessmentContext(repositoryPath);
   if (!binding) {
-    if (evidenceJsonMode) {
+    if (evidenceJsonMode || packJsonMode) {
       const {existingEvidenceWorkplan} = await import('./existing-evidence-workplan.mjs');
       console.log(JSON.stringify(existingEvidenceWorkplan({
         frozenRevision:before.revision
@@ -71,7 +76,7 @@ try {
         result.canonicalData.targetBinding?.revision !== before.revision) {
       throw new Error('Recorded assessment snapshot does not match the frozen target SHA.');
     }
-    if (evidenceJsonMode) {
+    if (evidenceJsonMode || packJsonMode) {
       if (result.canonicalData?.available !== true) {
         throw new Error('Existing authoritative scope unavailable for evidence review.');
       }
@@ -80,7 +85,7 @@ try {
       // executes tests, bootstraps state or records decisions.
       const {runLocalAssessment} = await import('./local-assessment-workflow.mjs');
       const requests = await runLocalAssessment(
-        repositoryPath, 'Show assessment evidence requests', binding
+        repositoryPath, packJsonMode ? `Show assessment evidence request pack ${packNumber}` : 'Show assessment evidence requests', binding
       );
       const {existingEvidenceWorkplan} = await import('./existing-evidence-workplan.mjs');
       const updatedScope = await showLocalAssessmentContext(binding);
@@ -88,13 +93,23 @@ try {
       if (finalFreeze.dirty || finalFreeze.revision !== before.revision) {
         throw new Error('Frozen target changed during evidence workplan review.');
       }
-      console.log(JSON.stringify(existingEvidenceWorkplan({
-        frozenRevision:before.revision,
-        binding,
-        scopeBefore:result.canonicalData,
-        scopeAfter:updatedScope.canonicalData,
-        requests
-      })));
+      if (packJsonMode) {
+        const {existingEvidencePackPage} = await import('./existing-evidence-pack-page.mjs');
+        console.log(JSON.stringify(existingEvidencePackPage({
+          frozenRevision:before.revision, binding,
+          scopeBefore:result.canonicalData,
+          scopeAfter:updatedScope.canonicalData,
+          requests, packNumber
+        })));
+      } else {
+        console.log(JSON.stringify(existingEvidenceWorkplan({
+          frozenRevision:before.revision,
+          binding,
+          scopeBefore:result.canonicalData,
+          scopeAfter:updatedScope.canonicalData,
+          requests
+        })));
+      }
     } else if (jsonMode) {
       const {existingAssessmentSummary} = await import('./existing-assessment-summary.mjs');
       console.log(JSON.stringify(existingAssessmentSummary({
