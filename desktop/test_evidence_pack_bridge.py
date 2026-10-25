@@ -56,7 +56,7 @@ class EvidencePackBridgeTests(unittest.TestCase):
         self.assertEqual(result["page_count"], 2)
         self.assertFalse(result["evidence_accepted"])
         self.assertNotIn("DO_NOT_RETURN_THIS_VALUE", str(result))
-        self.assertEqual(self.command[-3:], [
+        self.assertEqual(self.command[-4:], [
             "--evidence-pack-json", str(self.path), "1", "1"
         ])
         self.assertNotIn("NODE_OPTIONS", self.options["env"])
