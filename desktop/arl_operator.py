@@ -745,8 +745,11 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ).pack(anchor="w", fill="x", pady=(0, 5))
     task_list = tk.Text(evidence_page, height=8, wrap="word", state="disabled")
     task_list.pack(fill="both", expand=True, pady=(0, 8))
+    current_pack_page: dict[str, Any] = {"number": None, "page": 0, "total": 0}
+
 
     def clear_task_page() -> None:
+        current_pack_page.update(number=None, page=0, total=0)
         task_status.set("No control-specific requirements loaded.")
         task_list.configure(state="normal")
         task_list.delete("1.0", "end")
@@ -762,8 +765,9 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             selected_assessment["value"]["target_revision"] != data["target_revision"]):
             task_status.set("The selected assessment changed. Reinspect it.")
             return
+        current_pack_page.update(number=data["pack_number"], page=data["page_number"], total=data["page_count"])
         task_status.set(
-            f"Pack {data['pack_number']}, page 1 of {data['page_count']}. "
+            f"Pack {data['pack_number']}, page {data['page_number']} of {data['page_count']}. "
             "These are requirements and candidate counts, NOT verified evidence."
         )
         task_list.configure(state="normal")
@@ -777,10 +781,29 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             )
         task_list.configure(state="disabled")
 
+    def inspect_pack_page(number: int, page: int) -> None:
+        selected = selected_assessment["value"]
+        if selected is None or not selected_target["path"]:
+            clear_task_page()
+            return
+        target_path = Path(selected_target["path"])
+        revision = selected["target_revision"]
+        project = selected["project_id"]
+        snapshot = selected["snapshot_id"]
+        assessment = selected["assessment_id"]
+        clear_task_page()
+        task_status.set("Reading control-specific requirements from ARL…")
+        jobs.start(
+            lambda: read_evidence_pack(
+                target_path, revision, project, snapshot, assessment,
+                number, page=page,
+            ),
+            show_pack_page
+        )
+
     def inspect_selected_pack() -> None:
         chosen = evidence_table.selection()
-        selected = selected_assessment["value"]
-        if not chosen or selected is None or not selected_target["path"]:
+        if not chosen or selected_assessment["value"] is None:
             task_status.set("Select an existing assessment and a workstream first.")
             return
         values = evidence_table.item(chosen[0], "values")
@@ -792,21 +815,24 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         except (ValueError, TypeError):
             task_status.set("Invalid workstream selection.")
             return
-        clear_task_page()
-        task_status.set("Reading control-specific requirements from ARL…")
-        jobs.start(
-            lambda: read_evidence_pack(
-                Path(selected_target["path"]), selected["target_revision"],
-                selected["project_id"], selected["snapshot_id"],
-                selected["assessment_id"], number,
-            ),
-            show_pack_page
-        )
+        inspect_pack_page(number, 1)
+
+    def move_pack_page(offset: int) -> None:
+        number = current_pack_page["number"]
+        next_page = current_pack_page["page"] + offset
+        if (number is None or next_page < 1 or
+            next_page > current_pack_page["total"]):
+            return
+        inspect_pack_page(number, next_page)
 
     ui_button(
         evidence_page, text="Inspect selected workstream requirements (read only)",
         command=inspect_selected_pack
     ).pack(anchor="w", pady=(0, 12))
+    page_buttons = ttk.Frame(evidence_page, style="Panel.TFrame")
+    page_buttons.pack(anchor="w", pady=(0, 12))
+    ui_button(page_buttons, text="Previous page", command=lambda: move_pack_page(-1)).pack(side="left", padx=(0, 8))
+    ui_button(page_buttons, text="Next page", command=lambda: move_pack_page(1)).pack(side="left")
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
