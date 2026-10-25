@@ -36,7 +36,7 @@ class EvidencePackBridgeTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def load(self, record=None):
+    def load(self, record=None, page=1):
         source = BASE if record is None else record
         def runner(command, **kwargs):
             self.command = command
@@ -46,7 +46,7 @@ class EvidencePackBridgeTests(unittest.TestCase):
             )
         return read_evidence_pack(
             self.path, SHA, "prj_test", "sys_test", "asmt_test", 1,
-            runner=runner
+            page=page, runner=runner
         )
 
     def test_read_only_canonical_page_projection(self):
@@ -57,7 +57,7 @@ class EvidencePackBridgeTests(unittest.TestCase):
         self.assertFalse(result["evidence_accepted"])
         self.assertNotIn("DO_NOT_RETURN_THIS_VALUE", str(result))
         self.assertEqual(self.command[-3:], [
-            "--evidence-pack-json", str(self.path), "1"
+            "--evidence-pack-json", str(self.path), "1", "1"
         ])
         self.assertNotIn("NODE_OPTIONS", self.options["env"])
 
@@ -74,6 +74,19 @@ class EvidencePackBridgeTests(unittest.TestCase):
         ]:
             with self.subTest(key=key):
                 self.assertFalse(self.load({**BASE, key: value})["available"])
+
+    def test_second_page_uses_exact_requested_page(self):
+        source = {**BASE, "pageNumber": 2}
+        result = self.load(source, page=2)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["page_number"], 2)
+        self.assertEqual(self.command[-1], "2")
+        self.assertFalse(self.load(source, page=1)["available"])
+
+    def test_page_out_of_bounds_fails_closed(self):
+        self.assertFalse(self.load(page=0)["available"])
+        self.assertFalse(self.load(page=1001)["available"])
+        self.assertFalse(self.load({**BASE, "pageCount": 1}, page=2)["available"])
 
     def test_rejects_malformed_task(self):
         for item in [
