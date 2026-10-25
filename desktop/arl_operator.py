@@ -726,9 +726,9 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             task_list.insert(
                 "end",
                 f"{task['control_id']} / requirement {task['requirement_index']} "
-                f"/ candidates {task['candidate_count']}\\n"
-                f"{task['review_state'].replace('_', ' ')}\\n"
-                f"{task['requirement']}\\n\\n"
+                f"/ candidates {task['candidate_count']}\n"
+                f"{task['review_state'].replace('_', ' ')}\n"
+                f"{task['requirement']}\n\n"
             )
         task_list.configure(state="disabled")
 
