@@ -681,7 +681,6 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         chosen = evidence_table.selection()
         if not chosen:
             pack_detail.set("No workstream selected. No evidence reviewed.")
-        clear_task_page()
             return
         values = evidence_table.item(chosen[0], "values")
         pack_detail.set(evidence_workstream_detail(tuple(values)))
