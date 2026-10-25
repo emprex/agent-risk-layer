@@ -173,6 +173,36 @@ def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str
     }
 
 
+
+def evidence_workstream_detail(values: tuple[Any, ...]) -> str:
+    """Display bounded workplan counts, never security/evidence conclusions."""
+    if len(values) != 4:
+        return "Workstream details unavailable. No evidence reviewed."
+    number, category, requirements, controls = values
+    if (not isinstance(number, (int, str)) or
+        not isinstance(category, str) or
+        category not in (
+            "static observation", "human document",
+            "runtime authorisation", "manual review"
+        )):
+        return "Workstream details unavailable. No evidence reviewed."
+    try:
+        pack = int(number)
+        req = int(requirements)
+        affected = int(controls)
+    except (TypeError, ValueError, OverflowError):
+        return "Workstream details unavailable. No evidence reviewed."
+    if (pack < 1 or pack > 150 or req < 0 or req > 100000 or
+        affected < 0 or affected > 108):
+        return "Workstream details unavailable. No evidence reviewed."
+    return (
+        f"Workstream {pack}: {category} | "
+        f"Requirement instances: {req} | Affected controls: {affected}\\n"
+        "These are request counts only. Individual source artefacts, "
+        "sufficiency and applicability have NOT been reviewed."
+    )
+
+
 def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
@@ -650,16 +680,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             pack_detail.set("No workstream selected. No evidence reviewed.")
             return
         values = evidence_table.item(chosen[0], "values")
-        if len(values) != 4:
-            pack_detail.set("Workstream details unavailable. No evidence reviewed.")
-            return
-        pack_detail.set(
-            "Workstream " + str(values[0]) + ": " + str(values[1]) +
-            " | Requirement instances: " + str(values[2]) +
-            " | Affected controls: " + str(values[3]) +
-            "\nThese are request counts only. Individual source artefacts, "
-            "sufficiency and applicability have NOT been reviewed."
-        )
+        pack_detail.set(evidence_workstream_detail(tuple(values)))
 
     evidence_table.bind("<<TreeviewSelect>>", show_selected_pack)
 
