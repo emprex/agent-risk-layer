@@ -531,6 +531,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             )
             return
         selected_assessment["value"] = found
+        clear_task_page()
         assessment_text.set(
             "Existing assessment located (READ ONLY)\n"
             "Project ID: " + found["project_id"] + "\n"
@@ -768,6 +769,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         for row in evidence_table.get_children():
             evidence_table.delete(row)
         pack_detail.set("No workstream selected. No evidence reviewed.")
+        clear_task_page()
         if selected is None or not selected_target["path"]:
             evidence_text.set(
                 "First choose and inspect an existing clean frozen assessment. "
