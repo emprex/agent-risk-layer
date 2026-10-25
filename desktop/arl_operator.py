@@ -657,7 +657,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             "Workstream " + str(values[0]) + ": " + str(values[1]) +
             " | Requirement instances: " + str(values[2]) +
             " | Affected controls: " + str(values[3]) +
-            "\\nThese are request counts only. Individual source artefacts, "
+            "\nThese are request counts only. Individual source artefacts, "
             "sufficiency and applicability have NOT been reviewed."
         )
 
