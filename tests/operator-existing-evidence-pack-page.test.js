@@ -56,3 +56,17 @@ test('stale revision, forged verdict and mismatched pack are rejected',()=>{
     assert.throws(()=>existingEvidencePackPage(source),Error);
   }
 });
+
+test('canonical second page remains read only and exact-page bound',()=>{
+  const source=input();
+  source.pageNumber=2;
+  source.requests.canonicalData.assessmentEvidenceRequestPack.pageNumber=2;
+  const result=existingEvidencePackPage(source);
+  assert.equal(result.pageNumber,2);
+  assert.equal(result.evidenceAccepted,false);
+  source.requests.canonicalData.assessmentEvidenceRequestPack.pageNumber=1;
+  assert.throws(()=>existingEvidencePackPage(source),Error);
+  source.requests.canonicalData.assessmentEvidenceRequestPack.pageNumber=2;
+  source.requests.canonicalData.assessmentEvidenceRequestPack.pageCount=1;
+  assert.throws(()=>existingEvidencePackPage(source),Error);
+});
