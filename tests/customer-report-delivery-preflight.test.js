@@ -131,7 +131,7 @@ test('delivery check rejects a different bundle digest, even for same customer t
   privateFixture(({ report, manifest }) => {
     assert.throws(() => inspectCustomerReportDelivery({
       report, manifestPath: manifest, expectedBundleSha256: 'f'.repeat(64)
-    }), /not consistently bound/);
+    }), /source projection disagrees/);
   }));
 
 test('edited source data cannot be paired with a stale but internally valid bundle', () =>
