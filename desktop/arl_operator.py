@@ -635,11 +635,39 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             anchor="w", stretch=(key == "category")
         )
     evidence_table.pack(fill="both", expand=True, pady=(0, 10))
+    pack_detail = tk.StringVar(
+        value="Select a workstream to inspect its requirement counts. "
+              "This is a planning summary, not underlying evidence."
+    )
+    ttk.Label(
+        evidence_page, textvariable=pack_detail, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 12))
+
+    def show_selected_pack(_event: Any = None) -> None:
+        chosen = evidence_table.selection()
+        if not chosen:
+            pack_detail.set("No workstream selected. No evidence reviewed.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        if len(values) != 4:
+            pack_detail.set("Workstream details unavailable. No evidence reviewed.")
+            return
+        pack_detail.set(
+            "Workstream " + str(values[0]) + ": " + str(values[1]) +
+            " | Requirement instances: " + str(values[2]) +
+            " | Affected controls: " + str(values[3]) +
+            "\\nThese are request counts only. Individual source artefacts, "
+            "sufficiency and applicability have NOT been reviewed."
+        )
+
+    evidence_table.bind("<<TreeviewSelect>>", show_selected_pack)
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
         for row in evidence_table.get_children():
             evidence_table.delete(row)
+        pack_detail.set("No workstream selected. No evidence reviewed.")
         if selected is None or not selected_target["path"]:
             evidence_text.set(
                 "First choose and inspect an existing clean frozen assessment. "
