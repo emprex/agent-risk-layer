@@ -54,6 +54,10 @@ class EvidencePackBridgeTests(unittest.TestCase):
         self.assertTrue(result["available"])
         self.assertEqual(result["tasks"][0]["control_id"], "ARL-KB-019")
         self.assertEqual(result["page_count"], 2)
+        self.assertEqual(result["project_id"], "prj_test")
+        self.assertEqual(result["assessment_id"], "asmt_test")
+        self.assertEqual(result["snapshot_id"], "sys_test")
+        self.assertEqual(result["target_revision"], SHA)
         self.assertFalse(result["evidence_accepted"])
         self.assertNotIn("DO_NOT_RETURN_THIS_VALUE", str(result))
         self.assertEqual(self.command[-4:], [
