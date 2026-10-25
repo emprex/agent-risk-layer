@@ -45,6 +45,17 @@ npm run assess:local -- <repository-path> "<request>"
 
 The runner freezes the exact clean Git revision automatically. If `ARL_EXPECTED_TARGET_SHA` is supplied explicitly, it is treated as a strict assertion and a mismatch fails closed.
 
+## Drive the assessed agent from the local Operator menu
+
+Inside `npm run arl:work`, select **1. Git agent** and choose:
+
+- **1** to run or resume; **6** to see the current stage and next required evidence.
+- **7** only with written permission to run the exact authorised local bounded staging test; ARL independently checks the current stage, frozen SHA and verified local adapter before execution.
+- **8** only to run the exact retest at its authorised gate, after a failed condition and remediation. If the previous ROE expired, use **9** with a separate operator acknowledgement.
+- **5** to export the immutable customer report and see the delivery integrity, coverage and disclosure-review checklist.
+
+Actions 7–9 require typing the exact acknowledgement displayed by the menu; choosing the option alone cannot start a test. The underlying Control Intelligence and authorised red-team/retest workflow retains final authority. The menu does **not** grant customer permission or bypass a blocked test. Never exercise an unapproved target, production credentials or external systems.
+
 ## Deliver a customer assessment with an explicit review gate
 
 The local Operator's Git-target menu action **5. Export current customer assessment report** runs the existing authoritative assessment report projection, writes a private immutable Markdown/JSON/manifest bundle, and now automatically:
