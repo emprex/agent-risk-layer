@@ -761,6 +761,8 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             task_status.set("PACK NOT AVAILABLE: " + data.get("reason", "Unknown reason"))
             return
         if (selected_assessment["value"] is None or
+            selected_assessment["value"]["project_id"] != data["project_id"] or
+            selected_assessment["value"]["assessment_id"] != data["assessment_id"] or
             selected_assessment["value"]["snapshot_id"] != data["snapshot_id"] or
             selected_assessment["value"]["target_revision"] != data["target_revision"]):
             task_status.set("The selected assessment changed. Reinspect it.")
