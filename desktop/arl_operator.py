@@ -21,12 +21,14 @@ if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
+    from .evidence_pack_bridge import read_evidence_pack
     from .read_only_jobs import OperatorJobs
     from .lab_prepare_bridge import prepare_lab_assessment
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
+    from evidence_pack_bridge import read_evidence_pack
     from read_only_jobs import OperatorJobs
     from lab_prepare_bridge import prepare_lab_assessment
 
@@ -678,11 +680,88 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         chosen = evidence_table.selection()
         if not chosen:
             pack_detail.set("No workstream selected. No evidence reviewed.")
+        clear_task_page()
             return
         values = evidence_table.item(chosen[0], "values")
         pack_detail.set(evidence_workstream_detail(tuple(values)))
 
     evidence_table.bind("<<TreeviewSelect>>", show_selected_pack)
+
+    ttk.Label(
+        evidence_page, text="Control-specific requirements (read only)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(5, 5))
+    task_status = tk.StringVar(
+        value="Choose a workstream and inspect its first page (up to 20 tasks)."
+    )
+    ttk.Label(
+        evidence_page, textvariable=task_status, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 5))
+    task_list = tk.Text(evidence_page, height=8, wrap="word", state="disabled")
+    task_list.pack(fill="both", expand=True, pady=(0, 8))
+
+    def clear_task_page() -> None:
+        task_status.set("No control-specific requirements loaded.")
+        task_list.configure(state="normal")
+        task_list.delete("1.0", "end")
+        task_list.configure(state="disabled")
+
+    def show_pack_page(data: dict[str, Any]) -> None:
+        clear_task_page()
+        if not data.get("available"):
+            task_status.set("PACK NOT AVAILABLE: " + data.get("reason", "Unknown reason"))
+            return
+        if (selected_assessment["value"] is None or
+            selected_assessment["value"]["snapshot_id"] != data["snapshot_id"] or
+            selected_assessment["value"]["target_revision"] != data["target_revision"]):
+            task_status.set("The selected assessment changed. Reinspect it.")
+            return
+        task_status.set(
+            f"Pack {data['pack_number']}, page 1 of {data['page_count']}. "
+            "These are requirements and candidate counts, NOT verified evidence."
+        )
+        task_list.configure(state="normal")
+        for task in data["tasks"]:
+            task_list.insert(
+                "end",
+                f"{task['control_id']} / requirement {task['requirement_index']} "
+                f"/ candidates {task['candidate_count']}\\n"
+                f"{task['review_state'].replace('_', ' ')}\\n"
+                f"{task['requirement']}\\n\\n"
+            )
+        task_list.configure(state="disabled")
+
+    def inspect_selected_pack() -> None:
+        chosen = evidence_table.selection()
+        selected = selected_assessment["value"]
+        if not chosen or selected is None or not selected_target["path"]:
+            task_status.set("Select an existing assessment and a workstream first.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        if len(values) != 4:
+            task_status.set("Invalid workstream selection.")
+            return
+        try:
+            number = int(values[0])
+        except (ValueError, TypeError):
+            task_status.set("Invalid workstream selection.")
+            return
+        clear_task_page()
+        task_status.set("Reading control-specific requirements from ARL…")
+        jobs.start(
+            lambda: read_evidence_pack(
+                Path(selected_target["path"]), selected["target_revision"],
+                selected["project_id"], selected["snapshot_id"],
+                selected["assessment_id"], number,
+            ),
+            show_pack_page
+        )
+
+    ui_button(
+        evidence_page, text="Inspect selected workstream requirements (read only)",
+        command=inspect_selected_pack
+    ).pack(anchor="w", pady=(0, 12))
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
