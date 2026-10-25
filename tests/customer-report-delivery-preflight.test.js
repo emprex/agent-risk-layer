@@ -134,20 +134,37 @@ test('delivery check rejects a different bundle digest, even for same customer t
     }), /not consistently bound/);
   }));
 
-test('no test or verified evidence never becomes complete or clear', () =>
+test('edited source data cannot be paired with a stale but internally valid bundle', () =>
   privateFixture(({ report, deliverable, manifest }) => {
     report.controls[0].tests = [];
     report.controls[0].retests = [];
-    report.controls[0].evidence = { currentItems: 0, verifiedActiveItems: 0 };
-    // Existing exported immutable files intentionally differ from this
-    // modified source: quality view alone must not accept changed metadata.
-    const qualityMismatch = inspectCustomerReportDelivery({
+    assert.throws(() => inspectCustomerReportDelivery({
       report, manifestPath: manifest, expectedBundleSha256: deliverable.bundleSha256
-    });
-    assert.equal(qualityMismatch.customerReleaseApproved, false);
-    assert.ok(qualityMismatch.reviewIssues.some(s => s.includes('No test or retest')));
-    assert.ok(qualityMismatch.reviewIssues.some(s => s.includes('No verified active evidence')));
+    }), /source projection disagrees/);
   }));
+
+test('no test or verified evidence in a CONSISTENT report cannot become complete', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-incomplete-report-'));
+  try {
+    const report = fixture();
+    report.controls[0].tests = [];
+    report.controls[0].retests = [];
+    report.controls[0].evidence = { currentItems: 0, verifiedActiveItems: 0 };
+    const bundle = buildCustomerAssessmentDeliverable(report);
+    const written = writeCustomerAssessmentDeliverable({
+      deliverable: bundle, outputDirectory: root
+    });
+    const manifest = written.files.find(f => f.name.endsWith('.manifest.json')).path;
+    const result = inspectCustomerReportDelivery({
+      report, manifestPath: manifest, expectedBundleSha256: bundle.bundleSha256
+    });
+    assert.equal(result.customerReleaseApproved, false);
+    assert.ok(result.reviewIssues.some(s => s.includes('No test or retest')));
+    assert.ok(result.reviewIssues.some(s => s.includes('No verified active evidence')));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('disclosure scanner flags potential secrets without printing their values', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arl-report-secret-check-'));
