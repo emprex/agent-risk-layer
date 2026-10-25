@@ -314,6 +314,9 @@ export async function main() {
       });
       console.log('SYNTHETIC DEMO ONLY: ' + result.filePath);
       openInBrowser(result.filePath);
+    } else if (mode === '5') {
+      const manifest = await ask('Private customer report .manifest.json path: ');
+      await runner('bin/arl-review-customer-report.mjs', [path.resolve(manifest)]);
     } else {
       throw Error('Choose a valid option.');
     }
