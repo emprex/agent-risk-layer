@@ -13,7 +13,7 @@ const VALID_STATES=new Set([
 export const EVIDENCE_PACK_PAGE_SCHEMA='arl.operator.existing-evidence-pack-page.v1';
 
 export function existingEvidencePackPage({
-  frozenRevision,binding,scopeBefore,scopeAfter,requests,packNumber
+  frozenRevision,binding,scopeBefore,scopeAfter,requests,packNumber,pageNumber=1
 }={}) {
   if (!SHA.test(frozenRevision||'') ||
       !ID.test(binding?.projectId||'') ||
@@ -38,8 +38,10 @@ export function existingEvidencePackPage({
       payload.packNumber!==packNumber ||
       !Number.isSafeInteger(payload.packCount) || payload.packCount<1 ||
       payload.packCount>150 ||
-      !Number.isSafeInteger(payload.pageNumber) || payload.pageNumber!==1 ||
-      !Number.isSafeInteger(payload.pageCount) || payload.pageCount<1 ||
+      !Number.isSafeInteger(payload.pageNumber) || payload.pageNumber!==pageNumber ||
+      !Number.isSafeInteger(pageNumber) || pageNumber<1 || pageNumber>1000 ||
+      !Number.isSafeInteger(payload.pageCount) || payload.pageCount<1 || payload.pageCount>1000 ||
+      pageNumber>payload.pageCount ||
       !Number.isSafeInteger(payload.taskCount) || payload.taskCount<0 ||
       !Array.isArray(payload.controlSpecificReviewTasks) ||
       payload.controlSpecificReviewTasks.length>20 ||
@@ -72,7 +74,7 @@ export function existingEvidencePackPage({
     projectId:binding.projectId,assessmentId:binding.assessmentId,
     systemSnapshotId:scopeBefore.systemSnapshotId,
     targetRevision:frozenRevision,
-    packNumber,pageNumber:1,pageCount:payload.pageCount,
+    packNumber,pageNumber,pageCount:payload.pageCount,
     taskCount:payload.taskCount,tasks,
     evidenceAccepted:false,testsExecuted:0,passFailInferred:false,
     securityStateChanged:false,deploymentDecisionWritten:false,
