@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { verifyCustomerReportBundle } from './customer-report-bundle-verifier.mjs';
+import { buildCustomerAssessmentDeliverable } from './customer-assessment-deliverable.mjs';
 import { describeCustomerReportQuality } from './customer-report-professional-narrative.mjs';
 
 export const CUSTOMER_DELIVERY_PREFLIGHT_SCHEMA =
@@ -16,6 +17,12 @@ export function inspectCustomerReportDelivery({
       typeof expectedBundleSha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(expectedBundleSha256)) {
     throw new Error('Exact report manifest and expected SHA-256 are required.');
+  }
+  // Reconstruct the digest from the exact in-memory report, too. Otherwise a
+  // caller could attach an old consistent bundle to newly edited source data.
+  const expectedFromSource = buildCustomerAssessmentDeliverable(report);
+  if (expectedFromSource.bundleSha256 !== expectedBundleSha256) {
+    throw new Error('Customer source projection disagrees with exported immutable bundle.');
   }
   const quality = describeCustomerReportQuality(report);
   const verified = verifyCustomerReportBundle(manifestPath, {
