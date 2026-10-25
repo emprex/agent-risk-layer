@@ -77,6 +77,36 @@ export function buildLocalObservationRequest({ controlId, observedResult, source
   });
 }
 
+export function resolveLocalOperatorAction({ action, acknowledgement = '' }) {
+  const ordinary = {
+    '1': 'Assess this agent',
+    '4': 'Export client preassessment',
+    '5': 'Export customer assessment report',
+    '6': 'Where are we?'
+  };
+  if (Object.hasOwn(ordinary, action)) return ordinary[action];
+  const sensitive = {
+    '7': {
+      acknowledgement: 'I AUTHORISE THE BOUNDED LOCAL TEST',
+      command: 'I authorise the bounded test'
+    },
+    '8': {
+      acknowledgement: 'I AUTHORISE THE EXACT RETEST',
+      command: 'I authorise the exact retest'
+    },
+    '9': {
+      acknowledgement: 'I REAUTHORISE THE EXACT RETEST',
+      command: 'I reauthorise the exact retest'
+    }
+  };
+  const command = sensitive[action];
+  if (!command) throw Error('Choose a valid ARL assessment action.');
+  if (acknowledgement !== command.acknowledgement) {
+    throw Error('No explicit authorised test or retest acknowledgement: no test started.');
+  }
+  return command.command;
+}
+
 export function buildWizardRoe({ manifestRaw, operator, reference, fromMs, untilMs }) {
   const parsed = parseExternalManifest(manifestRaw);
   if (!(typeof reference === 'string' && reference.trim().length >= 8 &&
@@ -238,10 +268,13 @@ export async function main() {
       console.log('3. Record a documented, inconclusive operator observation');
       console.log('4. Export customer preassessment (human-review draft)');
       console.log('5. Export current customer assessment report (if eligible)');
-      const action = await ask('Choose 1–5: ');
+      console.log('6. Where are we? Show the current gate and next required evidence');
+      console.log('7. Authorise and run a bounded LOCAL staging test');
+      console.log('8. Authorise and run the exact retest');
+      console.log('9. Reauthorise the exact retest if ROE has expired');
+      const action = await ask('Choose 1–9: ');
       let request;
-      if (action === '1') request = 'Assess this agent';
-      else if (action === '2') {
+      if (action === '2') {
         await runner('src/agent/arl-local-assessment-runner.mjs',
           [target], { ARL_OPERATOR_OPEN_DASHBOARD: '1' });
         return;
@@ -252,9 +285,21 @@ export async function main() {
         request = buildLocalObservationRequest({
           controlId, observedResult, sourceReference
         });
-      } else if (action === '4') request = 'Export client preassessment';
-      else if (action === '5') request = 'Export customer assessment report';
-      else throw Error('Choose an authorised assessment action.');
+      } else if (['7', '8', '9'].includes(action)) {
+        console.log('Authorised local staging only. These actions may invoke the approved');
+        console.log('local adapter and produce real test side effects in that environment.');
+        console.log('Review the exact target, original finding, signed scope and ROE first.');
+        console.log('The canonical ARL engine must still independently permit this stage.');
+        const phrase = {
+          '7': 'I AUTHORISE THE BOUNDED LOCAL TEST',
+          '8': 'I AUTHORISE THE EXACT RETEST',
+          '9': 'I REAUTHORISE THE EXACT RETEST'
+        }[action];
+        const acknowledgement = await ask('Type '+phrase+' to continue: ');
+        request = resolveLocalOperatorAction({action,acknowledgement});
+      } else {
+        request = resolveLocalOperatorAction({action});
+      }
       await runner('src/agent/arl-local-assessment-runner.mjs',
         [target, request]);
     } else if (mode === '2') {
