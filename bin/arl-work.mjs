@@ -259,7 +259,8 @@ export async function main() {
     console.log('2. New authorised external AI-agent staging assessment');
     console.log('3. Open previous external evidence review');
     console.log('4. Explore synthetic operator screen (no network)');
-    const mode = await ask('\nChoose 1–4: ');
+    console.log('5. Check an exported customer report before delivery');
+    const mode = await ask('\nChoose 1–5: ');
     if (mode === '1') {
       const target = path.resolve(await ask('Clean, authorised target Git repository folder: '));
       console.log('\nGit-based ARL assessment actions:');
