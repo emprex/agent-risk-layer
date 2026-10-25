@@ -32,7 +32,7 @@ class OperatorDesktopTests(unittest.TestCase):
         self.assertIn("Affected controls: 7", detail)
         self.assertIn("NOT been reviewed", detail)
         self.assertNotIn("PASS", detail)
-        self.assertIn("\\n", detail)
+        self.assertIn("\n", detail)
 
     def test_evidence_workstream_detail_rejects_invalid_or_untrusted_values(self):
         for values in (
