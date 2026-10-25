@@ -48,6 +48,16 @@ class OperatorDesktopTests(unittest.TestCase):
                     "Workstream details unavailable. No evidence reviewed."
                 )
 
+    def test_meta_muse_option_does_not_claim_live_integration(self):
+        gui = Path(__file__).with_name("arl_operator.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Meta Muse (hosted / manual scope)", gui)
+        self.assertIn("No direct Muse connector is ", gui)
+        self.assertIn("No live connection or ", gui)
+        self.assertIn('state="readonly"', gui)
+        self.assertIn("does NOT permit tests", gui)
+
     def test_product_status_does_not_claim_security_evaluation(self):
         status = app.local_status()
         self.assertEqual(status["mode"], "read_only_gui_foundation")
