@@ -197,7 +197,7 @@ def evidence_workstream_detail(values: tuple[Any, ...]) -> str:
         return "Workstream details unavailable. No evidence reviewed."
     return (
         f"Workstream {pack}: {category} | "
-        f"Requirement instances: {req} | Affected controls: {affected}\\n"
+        f"Requirement instances: {req} | Affected controls: {affected}\n"
         "These are request counts only. Individual source artefacts, "
         "sufficiency and applicability have NOT been reviewed."
     )
