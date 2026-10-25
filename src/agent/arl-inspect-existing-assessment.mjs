@@ -13,10 +13,13 @@ const packJsonMode = process.argv[2] === '--evidence-pack-json';
 const jsonMode = process.argv[2] === '--json' || evidenceJsonMode || packJsonMode;
 const targetArgument = jsonMode ? process.argv[3] : process.argv[2];
 const packNumber = packJsonMode ? Number(process.argv[4]) : null;
-if (process.argv.length !== (packJsonMode ? 5 : jsonMode ? 4 : 3) ||
+const pageNumber = packJsonMode ? Number(process.argv[5] || '1') : null;
+if (process.argv.length !== (packJsonMode ? (process.argv[5] ? 6 : 5) : jsonMode ? 4 : 3) ||
     !targetArgument?.trim() ||
     (packJsonMode && (!/^[1-9][0-9]*$/.test(process.argv[4] || '') ||
-      !Number.isSafeInteger(packNumber) || packNumber > 150))) {
+      !Number.isSafeInteger(packNumber) || packNumber > 150 ||
+      !/^[1-9][0-9]*$/.test(process.argv[5] || '1') ||
+      !Number.isSafeInteger(pageNumber) || pageNumber > 1000))) {
   console.error('Usage: npm run operator:inspect-existing -- [--json|--evidence-json] <existing-frozen-target-path>');
   process.exit(2);
 }
@@ -85,7 +88,7 @@ try {
       // executes tests, bootstraps state or records decisions.
       const {runLocalAssessment} = await import('./local-assessment-workflow.mjs');
       const requests = await runLocalAssessment(
-        repositoryPath, packJsonMode ? `Show assessment evidence request pack ${packNumber}` : 'Show assessment evidence requests', binding
+        repositoryPath, packJsonMode ? `Show assessment evidence request pack ${packNumber} page ${pageNumber}` : 'Show assessment evidence requests', binding
       );
       const {existingEvidenceWorkplan} = await import('./existing-evidence-workplan.mjs');
       const updatedScope = await showLocalAssessmentContext(binding);
@@ -99,7 +102,7 @@ try {
           frozenRevision:before.revision, binding,
           scopeBefore:result.canonicalData,
           scopeAfter:updatedScope.canonicalData,
-          requests, packNumber
+          requests, packNumber, pageNumber
         })));
       } else {
         console.log(JSON.stringify(existingEvidenceWorkplan({
