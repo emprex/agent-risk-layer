@@ -41,7 +41,7 @@ test('real exported bundle -> operator reviewer: facts and missing evidence, no 
   assert.equal(r.testAndRetestRecords,1);
   assert.equal(r.customerReleaseApproved,false);
   assert.equal(r.certified,false);
-  assert.ok(r.reviewIssues.some(x=>x.includes('missing evidence')));
+  assert.ok(r.reviewIssues.some(x=>x.toLowerCase().includes('missing evidence')));
   const proc=spawnSync(process.execPath,['bin/arl-review-customer-report.mjs',manifest],{
     cwd:path.resolve(import.meta.dirname,'..'),encoding:'utf8',timeout:10000
   });
