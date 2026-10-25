@@ -1,4 +1,4 @@
-"""Read-only bridge to the canonical ARL evidence request pack page (page one)."""
+"""Read-only bridge to bounded canonical evidence request pack pages."""
 from __future__ import annotations
 
 import json
@@ -25,7 +25,7 @@ STATES = {
 
 def read_evidence_pack(
     target: Path, sha: str, project: str, snapshot: str,
-    assessment: str, number: int, *,
+    assessment: str, number: int, *, page: int = 1,
     runner: Callable[..., Any] = subprocess.run,
     product_root: Path = PRODUCT_ROOT,
 ) -> dict[str, Any]:
@@ -36,7 +36,8 @@ def read_evidence_pack(
 
     if (not SHA.fullmatch(sha) or
         any(not IDENTIFIER.fullmatch(x) for x in (project, snapshot, assessment)) or
-        type(number) is not int or not 1 <= number <= 150):
+        type(number) is not int or not 1 <= number <= 150 or
+        type(page) is not int or not 1 <= page <= 1000):
         return refused("Exact assessment identity and pack number required")
     try:
         selected = target.expanduser().resolve(strict=True)
@@ -47,7 +48,7 @@ def read_evidence_pack(
     command = [
         "node", str(product_root / "src" / "agent" /
                     "arl-inspect-existing-assessment.mjs"),
-        "--evidence-pack-json", str(selected), str(number)
+        "--evidence-pack-json", str(selected), str(number), str(page)
     ]
     try:
         completed = runner(
@@ -70,7 +71,7 @@ def read_evidence_pack(
         data.get("systemSnapshotId") != snapshot,
         data.get("targetRevision") != sha,
         data.get("packNumber") != number,
-        data.get("pageNumber") != 1,
+        data.get("pageNumber") != page,
         data.get("evidenceAccepted") is not False,
         data.get("testsExecuted") != 0,
         data.get("passFailInferred") is not False,
@@ -85,7 +86,8 @@ def read_evidence_pack(
     task_count = data.get("taskCount")
     if (not isinstance(tasks, list) or len(tasks) > 20 or
         type(page_count) is not int or not 1 <= page_count <= 1000 or
-        type(task_count) is not int or not 0 <= task_count <= 100000):
+        type(task_count) is not int or not 0 <= task_count <= 100000 or
+        page > page_count):
         return refused("Invalid evidence task page")
     safe = []
     for item in tasks:
@@ -108,7 +110,7 @@ def read_evidence_pack(
             "candidate_count": count
         })
     return {
-        "available": True, "pack_number": number, "page_number": 1,
+        "available": True, "pack_number": number, "page_number": page,
         "page_count": page_count, "task_count": task_count,
         "snapshot_id": snapshot, "target_revision": sha, "tasks": safe,
         "human_review_required": True, "evidence_accepted": False
