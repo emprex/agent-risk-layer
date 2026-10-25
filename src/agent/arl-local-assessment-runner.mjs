@@ -157,6 +157,22 @@ try {
             path.join(productRoot, 'data/local-reports')
         });
 
+      // Check exact immutable report files after export. Digest consistency
+      // and disclosure indicators never authorise sending a customer report.
+      const manifestFile = writeResult.files.find(
+        (file) => file.name.endsWith('.manifest.json')
+      );
+      if (!manifestFile) throw new Error('Customer assessment manifest not written.');
+      const {
+        inspectCustomerReportDelivery,
+        renderCustomerDeliveryPreflight
+      } = await import('./customer-report-delivery-preflight.mjs');
+      const deliveryCheck = inspectCustomerReportDelivery({
+        report,
+        manifestPath: manifestFile.path,
+        expectedBundleSha256: deliverable.bundleSha256
+      });
+
       if (process.env.ARL_DEBUG_CANONICAL === '1') {
         console.log(
           '\n=== ARL LOCAL CANONICAL RESULT ===\n'
@@ -196,6 +212,7 @@ try {
         'Human final deployment decision remains required.',
         'No deployment decision was written by the export.'
       ].join('\n'));
+      console.log('\n' + renderCustomerDeliveryPreflight(deliveryCheck));
     }
   } else {
     const explainCurrentState =
