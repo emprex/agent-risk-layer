@@ -45,6 +45,17 @@ npm run assess:local -- <repository-path> "<request>"
 
 The runner freezes the exact clean Git revision automatically. If `ARL_EXPECTED_TARGET_SHA` is supplied explicitly, it is treated as a strict assertion and a mismatch fails closed.
 
+## Deliver a customer assessment with an explicit review gate
+
+The local Operator's Git-target menu action **5. Export current customer assessment report** runs the existing authoritative assessment report projection, writes a private immutable Markdown/JSON/manifest bundle, and now automatically:
+
+- reconstructs the exact bundle hash from the in-memory report before checking the written files;
+- verifies all three exported files, their target SHA/snapshot and content digests;
+- performs the established bounded disclosure preflight on both JSON and Markdown;
+- prints a readable delivery checklist with mapped controls, verified evidence IDs, test/retest references, findings, gaps and potentially sensitive disclosure locations.
+
+The output remains an **internal draft requiring accountable human review**, even if all byte-integrity checks pass. The scanner does not certify that a report is safe to email. No customer report is issued automatically and no test, finding closure, readiness or deployment decision is made by export. For external black-box collections that currently contain only unverified response metadata, the full customer assessment report gate is not met; do not present their read-only review page as a validated finding report.
+
 ## Start working with ARL (Debian local Operator)
 
 After updating your canonical ARL checkout to a reviewed release, open the human-led operator in a single command:
