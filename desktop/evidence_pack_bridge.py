@@ -112,6 +112,7 @@ def read_evidence_pack(
     return {
         "available": True, "pack_number": number, "page_number": page,
         "page_count": page_count, "task_count": task_count,
+        "project_id": project, "assessment_id": assessment,
         "snapshot_id": snapshot, "target_revision": sha, "tasks": safe,
         "human_review_required": True, "evidence_accepted": False
     }
