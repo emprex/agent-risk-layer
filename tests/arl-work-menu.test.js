@@ -6,7 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-import { buildWizardManifest, buildWizardRoe, buildLocalObservationRequest } from '../bin/arl-work.mjs';
+import { buildWizardManifest, buildWizardRoe, buildLocalObservationRequest, resolveLocalOperatorAction } from '../bin/arl-work.mjs';
+import { detectBoundedTestCommand } from '../src/agent/bounded-redteam-handoff.mjs';
+import { detectExactRetestExecutionCommand, detectExactRetestReauthorisationCommand } from '../src/agent/exact-retest-redteam-handoff.mjs';
 import { validateExternalRoe } from '../src/agent/external-agent-assessment.mjs';
 
 function validPlan() {
@@ -131,4 +133,51 @@ test('local operator action builds existing canonical inconclusive evidence comm
     controlId: 'ARL-KB-032', observedResult: 'denied',
     sourceReference: 'log-001'
   }));
+});
+
+
+test('operator exposes the real assessment stage and report commands without a new engine', () => {
+  assert.equal(resolveLocalOperatorAction({action:'1'}),'Assess this agent');
+  assert.equal(resolveLocalOperatorAction({action:'4'}),'Export client preassessment');
+  assert.equal(resolveLocalOperatorAction({action:'5'}),'Export customer assessment report');
+  assert.equal(resolveLocalOperatorAction({action:'6'}),'Where are we?');
+});
+
+test('bound authorised test action requires typed consent before canonical command is returned', () => {
+  for(const wrong of ['', 'yes', 'i authorise the bounded local test',
+    'I AUTHORISE THE EXACT RETEST']) {
+    assert.throws(()=>resolveLocalOperatorAction({
+      action:'7',acknowledgement:wrong
+    }),/No explicit authorised/);
+  }
+  const command=resolveLocalOperatorAction({
+    action:'7',acknowledgement:'I AUTHORISE THE BOUNDED LOCAL TEST'
+  });
+  assert.equal(detectBoundedTestCommand(command),'bounded_test_execute');
+});
+
+test('exact retest and new ROE confirmation are distinct gated actions', () => {
+  const retest=resolveLocalOperatorAction({
+    action:'8',acknowledgement:'I AUTHORISE THE EXACT RETEST'
+  });
+  assert.equal(detectExactRetestExecutionCommand(retest),'exact_retest_execute');
+  const reauthorise=resolveLocalOperatorAction({
+    action:'9',acknowledgement:'I REAUTHORISE THE EXACT RETEST'
+  });
+  assert.equal(detectExactRetestReauthorisationCommand(reauthorise),
+    'exact_retest_reauthorise');
+  assert.equal(detectExactRetestExecutionCommand(reauthorise),null);
+  assert.throws(()=>resolveLocalOperatorAction({
+    action:'8',acknowledgement:'I REAUTHORISE THE EXACT RETEST'
+  }),/No explicit authorised/);
+  assert.throws(()=>resolveLocalOperatorAction({
+    action:'9',acknowledgement:'I AUTHORISE THE EXACT RETEST'
+  }),/No explicit authorised/);
+  assert.throws(()=>resolveLocalOperatorAction({action:'10'}),/valid ARL/);
+});
+
+test('sensitive menu actions do not execute when user only selects an option', () => {
+  for (const action of ['7','8','9']) {
+    assert.throws(()=>resolveLocalOperatorAction({action}),/no test started/);
+  }
 });
