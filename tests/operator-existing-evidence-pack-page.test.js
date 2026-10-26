@@ -39,6 +39,7 @@ test('evidence pack is bounded and strips source identifiers',()=>{
   const out=existingEvidencePackPage(source);
   assert.equal(out.schema,'arl.operator.existing-evidence-pack-page.v1');
   assert.equal(out.tasks[0].candidateCount,1);
+  assert.deepEqual(out.tasks[0].expectedCollectors,['source_and_configuration']);
   assert.equal(out.tasks[0].requirement,'Synthetic requirement');
   assert.equal(out.evidenceAccepted,false);
   assert.equal(out.humanReviewRequired,true);
@@ -68,5 +69,19 @@ test('canonical second page remains read only and exact-page bound',()=>{
   assert.throws(()=>existingEvidencePackPage(source),Error);
   source.requests.canonicalData.assessmentEvidenceRequestPack.pageNumber=2;
   source.requests.canonicalData.assessmentEvidenceRequestPack.pageCount=1;
+  assert.throws(()=>existingEvidencePackPage(source),Error);
+});
+
+test('expected collectors are bounded metadata, not observed evidence',()=>{
+  const source=input();
+  const row=source.requests.canonicalData.assessmentEvidenceRequestPack
+    .controlSpecificReviewTasks[0];
+  row.expectedCollectors=['source_and_configuration','source_and_configuration'];
+  const out=existingEvidencePackPage(source);
+  assert.deepEqual(out.tasks[0].expectedCollectors,['source_and_configuration']);
+  assert.equal(out.evidenceAccepted,false);
+  row.expectedCollectors=['../not_a_collector'];
+  assert.throws(()=>existingEvidencePackPage(source),Error);
+  row.expectedCollectors=Array.from({length:17},()=> 'collector');
   assert.throws(()=>existingEvidencePackPage(source),Error);
 });
