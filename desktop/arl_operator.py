@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only Python desktop entry point for the canonical ARL Operator.
+"""Python desktop entry point for the canonical ARL Operator.
 
-This module neither imports nor reimplements ARL security authority. It never
-runs assessments, talks to PostgreSQL, reads .env, or contacts remote services.
+The desktop reuses Node.js ARL authority. Most views are read-only. Only a
+separately confirmed synthetic LAB preparation action can create initial
+records in a dedicated local PostgreSQL database. No controlled tests or
+security decisions are executed by the desktop.
 """
 from __future__ import annotations
 
@@ -19,12 +21,16 @@ if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
-    from .read_only_jobs import ReadOnlyJobs
+    from .evidence_pack_bridge import read_evidence_pack
+    from .read_only_jobs import OperatorJobs
+    from .lab_prepare_bridge import prepare_lab_assessment
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
-    from read_only_jobs import ReadOnlyJobs
+    from evidence_pack_bridge import read_evidence_pack
+    from read_only_jobs import OperatorJobs
+    from lab_prepare_bridge import prepare_lab_assessment
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -169,10 +175,40 @@ def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str
     }
 
 
+
+def evidence_workstream_detail(values: tuple[Any, ...]) -> str:
+    """Display bounded workplan counts, never security/evidence conclusions."""
+    if len(values) != 4:
+        return "Workstream details unavailable. No evidence reviewed."
+    number, category, requirements, controls = values
+    if (not isinstance(number, (int, str)) or
+        not isinstance(category, str) or
+        category not in (
+            "static observation", "human document",
+            "runtime authorisation", "manual review"
+        )):
+        return "Workstream details unavailable. No evidence reviewed."
+    try:
+        pack = int(number)
+        req = int(requirements)
+        affected = int(controls)
+    except (TypeError, ValueError, OverflowError):
+        return "Workstream details unavailable. No evidence reviewed."
+    if (pack < 1 or pack > 150 or req < 0 or req > 100000 or
+        affected < 0 or affected > 108):
+        return "Workstream details unavailable. No evidence reviewed."
+    return (
+        f"Workstream {pack}: {category} | "
+        f"Requirement instances: {req} | Affected controls: {affected}\n"
+        "These are request counts only. Individual source artefacts, "
+        "sufficiency and applicability have NOT been reviewed."
+    )
+
+
 def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
-        from tkinter import filedialog, ttk
+        from tkinter import filedialog, ttk, messagebox, simpledialog
     except ImportError:
         print(
             "Python Tkinter is not installed. On Debian install python3-tk "
@@ -233,7 +269,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         for button in busy_controls:
             button.state(["disabled"] if value else ["!disabled"])
 
-    jobs = ReadOnlyJobs(root.after, set_busy)
+    jobs = OperatorJobs(root.after, set_busy)
 
     def close_window() -> None:
         jobs.close()
@@ -249,7 +285,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ).pack(anchor="w")
     ttk.Label(
         container,
-        text="LOCAL DESKTOP  •  READ-ONLY FOUNDATION  •  HUMAN SECURITY AUTHORITY",
+        text="LOCAL DESKTOP  •  READ-ONLY REVIEW + CONFIRMED LAB SETUP  •  HUMAN AUTHORITY",
         foreground="#43617e", background="#edf2f7"
     ).pack(anchor="w", pady=(5, 14))
 
@@ -391,6 +427,51 @@ def launch_gui(*, smoke_test: bool = False) -> int:
         wraplength=730, justify="left"
     ).pack(anchor="w", pady=(0, 18))
 
+    ttk.Label(
+        target_page, text="Assessment platform guidance",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 6))
+    platform_choice = tk.StringVar(value="Local Git / MCP agent")
+    platform_options = (
+        "Local Git / MCP agent",
+        "Meta Muse (hosted / manual scope)",
+        "Other hosted agent (manual scope)",
+    )
+    platform_selector = ttk.Combobox(
+        target_page, textvariable=platform_choice, values=platform_options,
+        state="readonly", width=42
+    )
+    platform_selector.pack(anchor="w", pady=(0, 8))
+    platform_guidance = tk.StringVar()
+
+    def explain_platform(_event: Any = None) -> None:
+        if platform_choice.get() == "Meta Muse (hosted / manual scope)":
+            platform_guidance.set(
+                "Meta Muse: external hosted platform. Review connector permissions, "
+                "per-action approvals, identity/delegation, network egress and audit "
+                "evidence only with authorised access. No direct Muse connector is "
+                "installed. Choosing this option does NOT permit tests, import data, "
+                "or change the selected frozen Git target."
+            )
+        elif platform_choice.get() == "Other hosted agent (manual scope)":
+            platform_guidance.set(
+                "Hosted agent: define vendor, tenant, authorised scope and "
+                "available evidence before assessment. No live connection or "
+                "security test is made by this selector."
+            )
+        else:
+            platform_guidance.set(
+                "Local Git / MCP: choose a clean committed local repository below. "
+                "Its exact revision is used to inspect existing ARL assessments."
+            )
+
+    platform_selector.bind("<<ComboboxSelected>>", explain_platform)
+    explain_platform()
+    ttk.Label(
+        target_page, textvariable=platform_guidance, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 16))
+
     def refresh_status() -> None:
         status_text.set("Checking local manifest and Git metadata…")
         def completed(observed: dict[str, Any]) -> None:
@@ -422,6 +503,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             return
         selected_target.update(path=None, revision=None)
         selected_assessment["value"] = None
+        lab_text.set("No lab preparation requested.")
         assessment_text.set("No existing assessment inspected.")
         evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
         report_text.set("No report selected. Integrity NOT ESTABLISHED.")
@@ -494,6 +576,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             )
             return
         selected_assessment["value"] = found
+        clear_task_page()
         assessment_text.set(
             "Existing assessment located (READ ONLY)\n"
             "Project ID: " + found["project_id"] + "\n"
@@ -509,7 +592,94 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     ui_button(
         target_page, text="Inspect existing assessment (read only)",
         command=inspect_selected_assessment
-    ).pack(anchor="w")
+    ).pack(anchor="w", pady=(0, 24))
+
+    # This action is explicitly TRANSACTIONAL. It is restricted to a
+    # dedicated local PostgreSQL lab by the canonical Node entry point.
+    section(
+        target_page, "Prepare NEW synthetic lab assessment",
+        "This action writes NEW project and initial UNKNOWN snapshot records "
+        "to a SEPARATE local PostgreSQL database named arl_operator_lab. "
+        "It does not scan live agents, run tests, accept evidence or approve "
+        "findings. It is disabled unless ARL_OPERATOR_LAB_DATABASE_URL is "
+        "configured in the launching environment. Never point it at your "
+        "normal customer or production database."
+    )
+    lab_text = tk.StringVar(value="No lab preparation requested.")
+    ttk.Label(
+        target_page, textvariable=lab_text, style="Text.TLabel",
+        wraplength=1000, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 10))
+
+    def prepare_selected_lab() -> None:
+        # This is an opt-in write, unlike the other read-only tabs.
+        target_path = selected_target["path"]
+        sha = selected_target["revision"]
+        if not target_path or not sha:
+            lab_text.set("Choose an authorised, clean, SYNTHETIC lab repository first.")
+            return
+        if not os.environ.get("ARL_OPERATOR_LAB_DATABASE_URL"):
+            lab_text.set(
+                "Isolated lab not configured: set ARL_OPERATOR_LAB_DATABASE_URL "
+                "to the local arl_operator_lab database. No records written."
+            )
+            return
+        approved = messagebox.askyesno(
+            "Prepare lab assessment — database write",
+            "Only use a SYNTHETIC local target you control.\n\n"
+            "This will CREATE assessment records in the dedicated local "
+            "arl_operator_lab PostgreSQL database, but will NOT execute tests "
+            "or make security decisions.\n\n"
+            "The exact pinned Git SHA is: " + sha + "\n\n"
+            "Do you authorise this LAB-ONLY record creation?",
+            parent=root
+        )
+        if not approved:
+            lab_text.set("Lab preparation cancelled; no records created.")
+            return
+        confirmation = "PREPARE LAB " + sha
+        typed = simpledialog.askstring(
+            "Confirm isolated lab preparation",
+            "Type the entire confirmation phrase exactly:\n" +
+            confirmation,
+            parent=root
+        )
+        if typed != confirmation:
+            lab_text.set("Confirmation mismatch or cancelled; no records created.")
+            return
+        lab_text.set("Preparing isolated lab records using canonical ARL authority…")
+        selected_assessment["value"] = None
+        evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
+        jobs.start(
+            lambda: prepare_lab_assessment(Path(target_path), sha, typed),
+            show_lab_result
+        )
+
+    def show_lab_result(result: dict[str, Any]) -> None:
+        if result.get("available") is not True:
+            lab_text.set(
+                "LAB PREPARATION NOT CONFIRMED: " +
+                result.get("reason", "Unknown failure") +
+                "\nCheck only the isolated lab records before retrying. "
+                "No tests or security approval were issued."
+            )
+            return
+        lab_text.set(
+            "NEW SYNTHETIC LAB RECORD CREATED.\n"
+            "Project: " + result["project_id"] + "\n"
+            "Assessment: " + result["assessment_id"] + "\n"
+            "Frozen Git revision: " + result["target_revision"] + "\n"
+            "Initial state: UNKNOWN, human review required.\n"
+            "Evidence: NOT ACCEPTED  •  Tests: NONE  •  Readiness: HOLD.\n"
+            "Use 'Inspect existing assessment' to review the resulting snapshot."
+        )
+
+    ui_button(
+        target_page, text="Prepare synthetic LAB assessment (writes lab DB)",
+        command=prepare_selected_lab
+    ).pack(anchor="w", pady=(0, 10))
 
     section(
         evidence_page, "Snapshot-bound evidence requests",
@@ -543,11 +713,137 @@ def launch_gui(*, smoke_test: bool = False) -> int:
             anchor="w", stretch=(key == "category")
         )
     evidence_table.pack(fill="both", expand=True, pady=(0, 10))
+    pack_detail = tk.StringVar(
+        value="Select a workstream to inspect its requirement counts. "
+              "This is a planning summary, not underlying evidence."
+    )
+    ttk.Label(
+        evidence_page, textvariable=pack_detail, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 12))
+
+    def show_selected_pack(_event: Any = None) -> None:
+        chosen = evidence_table.selection()
+        if not chosen:
+            pack_detail.set("No workstream selected. No evidence reviewed.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        pack_detail.set(evidence_workstream_detail(tuple(values)))
+
+    evidence_table.bind("<<TreeviewSelect>>", show_selected_pack)
+
+    ttk.Label(
+        evidence_page, text="Control-specific requirements (read only)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(5, 5))
+    task_status = tk.StringVar(
+        value="Choose a workstream and inspect its first page (up to 20 tasks)."
+    )
+    ttk.Label(
+        evidence_page, textvariable=task_status, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 5))
+    task_list = tk.Text(evidence_page, height=8, wrap="word", state="disabled")
+    task_list.pack(fill="both", expand=True, pady=(0, 8))
+    current_pack_page: dict[str, Any] = {"number": None, "page": 0, "total": 0}
+
+
+    def clear_task_page() -> None:
+        current_pack_page.update(number=None, page=0, total=0)
+        task_status.set("No control-specific requirements loaded.")
+        task_list.configure(state="normal")
+        task_list.delete("1.0", "end")
+        task_list.configure(state="disabled")
+
+    def show_pack_page(data: dict[str, Any]) -> None:
+        clear_task_page()
+        if not data.get("available"):
+            task_status.set("PACK NOT AVAILABLE: " + data.get("reason", "Unknown reason"))
+            return
+        if (selected_assessment["value"] is None or
+            selected_assessment["value"]["project_id"] != data["project_id"] or
+            selected_assessment["value"]["assessment_id"] != data["assessment_id"] or
+            selected_assessment["value"]["snapshot_id"] != data["snapshot_id"] or
+            selected_assessment["value"]["target_revision"] != data["target_revision"]):
+            task_status.set("The selected assessment changed. Reinspect it.")
+            return
+        current_pack_page.update(number=data["pack_number"], page=data["page_number"], total=data["page_count"])
+        task_status.set(
+            f"Pack {data['pack_number']}, page {data['page_number']} of {data['page_count']}. "
+            "These are requirements and candidate counts, NOT verified evidence."
+        )
+        task_list.configure(state="normal")
+        for task in data["tasks"]:
+            task_list.insert(
+                "end",
+                f"{task['control_id']} / requirement {task['requirement_index']} "
+                f"/ candidates {task['candidate_count']}\n"
+                f"{task['review_state'].replace('_', ' ')}\n"
+                "Expected collectors (NOT observed provenance): "
+                + (", ".join(task["expected_collectors"]) or "none") + "\n"
+                + f"{task['requirement']}\n\n"
+            )
+        task_list.configure(state="disabled")
+
+    def inspect_pack_page(number: int, page: int) -> None:
+        selected = selected_assessment["value"]
+        if selected is None or not selected_target["path"]:
+            clear_task_page()
+            return
+        target_path = Path(selected_target["path"])
+        revision = selected["target_revision"]
+        project = selected["project_id"]
+        snapshot = selected["snapshot_id"]
+        assessment = selected["assessment_id"]
+        clear_task_page()
+        task_status.set("Reading control-specific requirements from ARL…")
+        jobs.start(
+            lambda: read_evidence_pack(
+                target_path, revision, project, snapshot, assessment,
+                number, page=page,
+            ),
+            show_pack_page
+        )
+
+    def inspect_selected_pack() -> None:
+        chosen = evidence_table.selection()
+        if not chosen or selected_assessment["value"] is None:
+            task_status.set("Select an existing assessment and a workstream first.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        if len(values) != 4:
+            task_status.set("Invalid workstream selection.")
+            return
+        try:
+            number = int(values[0])
+        except (ValueError, TypeError):
+            task_status.set("Invalid workstream selection.")
+            return
+        inspect_pack_page(number, 1)
+
+    def move_pack_page(offset: int) -> None:
+        number = current_pack_page["number"]
+        next_page = current_pack_page["page"] + offset
+        if (number is None or next_page < 1 or
+            next_page > current_pack_page["total"]):
+            return
+        inspect_pack_page(number, next_page)
+
+    ui_button(
+        evidence_page, text="Inspect selected workstream requirements (read only)",
+        command=inspect_selected_pack
+    ).pack(anchor="w", pady=(0, 12))
+    page_buttons = ttk.Frame(evidence_page, style="Panel.TFrame")
+    page_buttons.pack(anchor="w", pady=(0, 12))
+    ui_button(page_buttons, text="Previous page", command=lambda: move_pack_page(-1)).pack(side="left", padx=(0, 8))
+    ui_button(page_buttons, text="Next page", command=lambda: move_pack_page(1)).pack(side="left")
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
         for row in evidence_table.get_children():
             evidence_table.delete(row)
+        pack_detail.set("No workstream selected. No evidence reviewed.")
+        clear_task_page()
         if selected is None or not selected_target["path"]:
             evidence_text.set(
                 "First choose and inspect an existing clean frozen assessment. "
@@ -700,7 +996,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
 
     ttk.Label(
         container,
-        text="No network, assessment execution, database writes or security decisions.",
+        text="No active tests or security decisions. Confirmed LAB setup writes only to the isolated lab database.",
         foreground="#4e657b", background="#edf2f7"
     ).pack(anchor="w", pady=(12, 0))
     refresh_status()

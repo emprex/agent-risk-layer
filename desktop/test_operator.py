@@ -13,6 +13,51 @@ from desktop import arl_operator as app
 
 
 class OperatorDesktopTests(unittest.TestCase):
+    def test_gui_discloses_isolated_lab_writes_without_false_readonly_claim(self):
+        gui_source = Path(__file__).with_name("arl_operator.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("CONFIRMED LAB SETUP", gui_source)
+        self.assertIn("Confirmed LAB setup writes", gui_source)
+        self.assertIn("PREPARE LAB ", gui_source)
+        self.assertNotIn(
+            "No network, assessment execution, database writes", gui_source
+        )
+
+    def test_evidence_workstream_detail_is_counts_only(self):
+        detail = app.evidence_workstream_detail(
+            ("1", "static observation", "14", "7")
+        )
+        self.assertIn("Requirement instances: 14", detail)
+        self.assertIn("Affected controls: 7", detail)
+        self.assertIn("NOT been reviewed", detail)
+        self.assertNotIn("PASS", detail)
+        self.assertIn("\n", detail)
+
+    def test_evidence_workstream_detail_rejects_invalid_or_untrusted_values(self):
+        for values in (
+            (), ("1", "unknown", "5", "2"),
+            ("1", "static observation", "-1", "2"),
+            ("1", "static observation", "2", "109"),
+            ("1", "static observation", "not-a-count", "2"),
+            ("151", "manual review", "1", "1"),
+        ):
+            with self.subTest(values=values):
+                self.assertEqual(
+                    app.evidence_workstream_detail(values),
+                    "Workstream details unavailable. No evidence reviewed."
+                )
+
+    def test_meta_muse_option_does_not_claim_live_integration(self):
+        gui = Path(__file__).with_name("arl_operator.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Meta Muse (hosted / manual scope)", gui)
+        self.assertIn("No direct Muse connector is ", gui)
+        self.assertIn("No live connection or ", gui)
+        self.assertIn('state="readonly"', gui)
+        self.assertIn("does NOT permit tests", gui)
+
     def test_product_status_does_not_claim_security_evaluation(self):
         status = app.local_status()
         self.assertEqual(status["mode"], "read_only_gui_foundation")
