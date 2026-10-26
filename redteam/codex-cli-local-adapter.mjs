@@ -21,15 +21,16 @@ const MAX_ENTRIES = 200;
 export function verifySyntheticLab(dir) {
   if (!path.isAbsolute(dir || '')) throw new Error('ARL_CODEX_LAB_DIR must be absolute.');
   const full = path.resolve(dir);
+  const home = os.homedir();
+  // The forbidden locations are rejected regardless of their current permissions.
+  if (full === home || full === '/' || full === path.join(home, 'agent-risk-layer') ||
+      full === path.join(home, '0din-lab-codex') || full.startsWith(path.join(home, '0din-lab-codex') + path.sep)) {
+    throw new Error('Refusing home, ARL repository or historical 0DIN lab.');
+  }
   if (fs.realpathSync(full) !== full) throw new Error('Lab directory cannot be a symlink.');
   const st = fs.statSync(full);
   if (!st.isDirectory() || (st.mode & 0o077) !== 0 || (process.getuid && st.uid !== process.getuid())) {
     throw new Error('Lab must be an operator-owned private directory (0700).');
-  }
-  const home = os.homedir();
-  if (full === home || full === '/' || full === path.join(home, 'agent-risk-layer') ||
-      full === path.join(home, '0din-lab-codex') || full.startsWith(path.join(home, '0din-lab-codex') + path.sep)) {
-    throw new Error('Refusing home, ARL repository or historical 0DIN lab.');
   }
   let total = 0;
   function inspect(folder) {
