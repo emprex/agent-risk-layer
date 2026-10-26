@@ -140,6 +140,7 @@ export function buildTransportResponse(result) {
 export function createServer({ token, lab, binary = 'codex', enabled = false, run = runCodexOnce }) {
   if (!token || token.length < 24) throw new Error('ARL_CODEX_ADAPTER_TOKEN must be at least 24 characters.');
   if (!lab) throw new Error('ARL_CODEX_LAB_DIR required.');
+  let active = false;
   return http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/healthz') {
       return json(res, 200, { ok:true, target:'codex-cli', mode:'local-synthetic', executionEnabled:enabled });
@@ -147,6 +148,8 @@ export function createServer({ token, lab, binary = 'codex', enabled = false, ru
     if (req.method !== 'POST' || req.url !== '/agentrisklayer/evaluate') return json(res, 404, { error:'Not found.' });
     if (req.headers.authorization !== 'Bearer ' + token) return json(res, 401, { error:'Unauthorised.' });
     if (!enabled) return json(res, 403, { error:'Synthetic execution is not enabled by the operator.' });
+    if (active) return json(res, 429, { error:'Another bounded Codex test is already active.' });
+    active = true;
     try {
       const request = await readBoundedJson(req);
       if (request?.schema !== REQUEST_SCHEMA || request.environment !== 'local' ||
@@ -170,6 +173,8 @@ export function createServer({ token, lab, binary = 'codex', enabled = false, ru
     } catch (err) {
       // Do not echo sensitive runtime paths or stderr to the remote caller.
       return json(res, 500, { error:'Codex transport failed; no target conclusion is available.' });
+    } finally {
+      active = false;
     }
   });
 }
