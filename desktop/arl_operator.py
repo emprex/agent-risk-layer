@@ -781,7 +781,7 @@ def launch_gui(*, smoke_test: bool = False) -> int:
                 f"{task['review_state'].replace('_', ' ')}\n"
                 "Expected collectors (NOT observed provenance): "
                 + (", ".join(task["expected_collectors"]) or "none") + "\n"
-                f"{task['requirement']}\n\n"
+                + f"{task['requirement']}\n\n"
             )
         task_list.configure(state="disabled")
 
