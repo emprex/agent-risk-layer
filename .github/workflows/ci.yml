@@ -56,7 +56,7 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-tk xvfb
           PYTHONDONTWRITEBYTECODE=1 xvfb-run -a python3 -B desktop/arl_operator.py --ui-smoke
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest desktop.test_operator desktop.test_evidence_bridge desktop.test_evidence_pack_bridge
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest desktop.test_operator desktop.test_evidence_bridge desktop.test_evidence_pack_bridge desktop.test_human_review_draft
 
       - name: Unit and integration tests
         id: unit-tests
