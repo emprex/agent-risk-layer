@@ -22,6 +22,7 @@ if __package__:
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
     from .evidence_pack_bridge import read_evidence_pack
+    from .human_review_draft import build_review_draft
     from .read_only_jobs import OperatorJobs
     from .lab_prepare_bridge import prepare_lab_assessment
 else:
@@ -29,6 +30,7 @@ else:
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
     from evidence_pack_bridge import read_evidence_pack
+    from human_review_draft import build_review_draft
     from read_only_jobs import OperatorJobs
     from lab_prepare_bridge import prepare_lab_assessment
 
@@ -746,10 +748,16 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     task_list = tk.Text(evidence_page, height=8, wrap="word", state="disabled")
     task_list.pack(fill="both", expand=True, pady=(0, 8))
     current_pack_page: dict[str, Any] = {"number": None, "page": 0, "total": 0}
+    displayed_review_tasks: list[dict[str, Any]] = []
+    review_task_choice = tk.StringVar(value="")
+    review_status = tk.StringVar(value="No review draft prepared.")
 
 
     def clear_task_page() -> None:
         current_pack_page.update(number=None, page=0, total=0)
+        displayed_review_tasks.clear()
+        review_task_choice.set("")
+        review_status.set("No review draft prepared.")
         task_status.set("No control-specific requirements loaded.")
         task_list.configure(state="normal")
         task_list.delete("1.0", "end")
@@ -784,6 +792,11 @@ def launch_gui(*, smoke_test: bool = False) -> int:
                 + f"{task['requirement']}\n\n"
             )
         task_list.configure(state="disabled")
+        displayed_review_tasks.extend(data["tasks"])
+        review_task_selector.configure(values=[
+            f"{row['control_id']} / requirement {row['requirement_index']}"
+            for row in displayed_review_tasks
+        ])
 
     def inspect_pack_page(number: int, page: int) -> None:
         selected = selected_assessment["value"]
@@ -837,6 +850,72 @@ def launch_gui(*, smoke_test: bool = False) -> int:
     page_buttons.pack(anchor="w", pady=(0, 12))
     ui_button(page_buttons, text="Previous page", command=lambda: move_pack_page(-1)).pack(side="left", padx=(0, 8))
     ui_button(page_buttons, text="Next page", command=lambda: move_pack_page(1)).pack(side="left")
+
+    ttk.Label(
+        evidence_page, text="Human review note (draft only — not recorded in ARL)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(4, 6))
+    ttk.Label(
+        evidence_page,
+        text="Choose a requirement from the current page. Record a source reference and a specific observation. "
+             "This produces a local draft, not a PASS, FAIL, evidence acceptance or finding closure.",
+        style="Hint.TLabel", wraplength=760, justify="left"
+    ).pack(anchor="w", pady=(0, 6))
+    review_task_selector = ttk.Combobox(
+        evidence_page, textvariable=review_task_choice, state="readonly", width=55
+    )
+    review_task_selector.pack(anchor="w", pady=(0, 5))
+    review_reviewer = tk.StringVar()
+    review_reference = tk.StringVar()
+    review_observation = tk.StringVar()
+    review_disposition = tk.StringVar(value="needs_human_evidence")
+    for caption, variable in (
+        ("Accountable reviewer", review_reviewer),
+        ("Evidence source reference (privacy-safe)", review_reference),
+        ("Observed fact or missing evidence (minimum 10 characters)", review_observation),
+    ):
+        ttk.Label(evidence_page, text=caption, style="Hint.TLabel").pack(anchor="w")
+        ttk.Entry(evidence_page, textvariable=variable, width=70).pack(
+            anchor="w", fill="x", pady=(0, 5)
+        )
+    ttk.Combobox(
+        evidence_page, textvariable=review_disposition, state="readonly",
+        values=("needs_human_evidence", "missing", "candidate_requires_verification"),
+        width=44
+    ).pack(anchor="w", pady=(0, 6))
+
+    def copy_review_draft() -> None:
+        selected = selected_assessment["value"]
+        choices = review_task_selector.cget("values")
+        choice = review_task_choice.get()
+        if selected is None or choice not in choices or not displayed_review_tasks:
+            review_status.set("Select an inspected assessment and a displayed requirement.")
+            return
+        index = list(choices).index(choice)
+        task = displayed_review_tasks[index]
+        try:
+            draft = build_review_draft(
+                selected, task, review_reviewer.get(), review_reference.get(),
+                review_observation.get(), review_disposition.get()
+            )
+        except ValueError:
+            review_status.set("Draft rejected: check reviewer, observation and exact assessment.")
+            return
+        root.clipboard_clear()
+        root.clipboard_append(json.dumps(draft, indent=2, sort_keys=True))
+        review_status.set(
+            "Non-authoritative draft copied to clipboard. NOTHING recorded in ARL. "
+            "Revalidate the target and evidence before any canonical human decision."
+        )
+
+    ui_button(
+        evidence_page, text="Copy human review draft JSON (no database write)",
+        command=copy_review_draft
+    ).pack(anchor="w", pady=(0, 4))
+    ttk.Label(
+        evidence_page, textvariable=review_status, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", pady=(0, 12))
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
