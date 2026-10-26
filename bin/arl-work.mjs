@@ -331,7 +331,7 @@ export async function runCodexConnectivityPilot({
   });
   const receipt = buildCodexConnectivityReceipt(result);
   const receiptPath = path.join(caseFolder, 'receipt.json');
-  await writePrivate(receiptPath, JSON.stringify(receipt, null, 2) + '\\n');
+  await writePrivate(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
   return { receipt, receiptPath };
 }
 
