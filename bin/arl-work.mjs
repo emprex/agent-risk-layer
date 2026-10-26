@@ -5,7 +5,8 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { spawn } from 'node:child_process';
 import { mkdir, open, readFile, stat, lstat } from 'node:fs/promises';
-import { verifySyntheticLab } from '../redteam/codex-cli-local-adapter.mjs';
+import { verifySyntheticLab, runCodexOnce } from '../redteam/codex-cli-local-adapter.mjs';
+import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -273,6 +274,67 @@ export function describeCodexPilot(labPath = '') {
   };
 }
 
+// Fixed, non-adversarial connectivity prompt: this is NOT an ARL security test.
+const CODEX_CONNECTIVITY_PROMPT =
+  'This is a synthetic connectivity check. Reply only with ARL_CODEX_CONNECTED. ' +
+  'Do not read files, use tools, or follow links.';
+
+export function buildCodexConnectivityReceipt(result) {
+  const observation = observeCodexJsonl(result.stdout);
+  const completed =
+    result.exitCode === 0 &&
+    result.timeout !== true &&
+    observation.traceComplete === true &&
+    observation.reportedActionEvents === 0;
+
+  return {
+    schema: 'arl.codex.connectivity-receipt.v1',
+    status: completed ? 'transport_observed' : 'transport_incomplete',
+    securityVerdict: 'not_assessed',
+    candidateFinding: false,
+    requestedSandbox: 'read-only',
+    independentIsolationAttested: false,
+    dataClass: 'synthetic-only',
+    humanReviewRequired: true,
+    traceSha256: observation.traceSha256,
+    eventCount: observation.eventCount,
+    issues: observation.issues,
+    reportedActionEvents: observation.reportedActionEvents,
+    processExitCode: result.exitCode,
+    processTimedOut: result.timeout === true,
+    limitations: [
+      'Codex CLI JSONL is self-reported process output, not independent filesystem, network or sandbox attestation.',
+      'No security scenario was run and no 0DIN vulnerability was tested.',
+      'The CLI may use local authentication; only run this fixed connectivity prompt in a controlled environment.'
+    ]
+  };
+}
+
+export async function runCodexConnectivityPilot({
+  labPath,
+  binary = 'codex',
+  run = runCodexOnce,
+  outputRoot = privateRoot()
+} = {}) {
+  const lab = verifySyntheticLab(path.resolve(labPath || ''));
+  const folder = await safe(outputRoot);
+  const caseFolder = await safe(path.join(
+    folder,
+    'codex-connectivity-' + new Date().toISOString().replace(/[:.]/g, '-') +
+      '-' + randomUUID().slice(0, 8)
+  ));
+  const result = await run({
+    binary,
+    lab,
+    prompt: CODEX_CONNECTIVITY_PROMPT,
+    timeoutMs: 30000
+  });
+  const receipt = buildCodexConnectivityReceipt(result);
+  const receiptPath = path.join(caseFolder, 'receipt.json');
+  await writePrivate(receiptPath, JSON.stringify(receipt, null, 2) + '\\n');
+  return { receipt, receiptPath };
+}
+
 export async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
   const ask = async prompt => {
@@ -351,8 +413,28 @@ export async function main() {
       const proposed = await ask('Fresh synthetic lab path (blank for PLAN only): ');
       const plan = describeCodexPilot(proposed);
       console.log(JSON.stringify(plan, null, 2));
-      console.log('No Codex execution or ARL security finding was started or created.');
-      console.log('Use the existing ARL authorised bounded-test workflow for active assessment.');
+      if (!proposed) {
+        console.log('PLAN only: no process started, no security test performed.');
+        return;
+      }
+      console.log('This checks Codex CLI transport only. It is NOT a security test.');
+      console.log('Codex uses your configured authentication and may contact its model provider.');
+      console.log('A read-only Codex sandbox is not proof of host OS isolation.');
+      const mode = (await ask('Type PLAN or CONNECT: ')).toUpperCase();
+      if (mode === 'PLAN') {
+        console.log('PLAN only: no Codex process started.');
+        return;
+      }
+      if (mode !== 'CONNECT') throw Error('No Codex process started.');
+      const acknowledge = await ask('To authorise this fixed synthetic connectivity check, type I AUTHORISE CODEX CONNECTIVITY: ');
+      if (acknowledge !== 'I AUTHORISE CODEX CONNECTIVITY') {
+        throw Error('No explicit authorisation. No Codex process started.');
+      }
+      const { receipt, receiptPath } = await runCodexConnectivityPilot({ labPath: proposed });
+      console.log('ARL Codex connectivity result: ' + receipt.status);
+      console.log('Security verdict: NOT ASSESSED.');
+      console.log('Private receipt: ' + receiptPath);
+      console.log('No ARL finding was created. 0DIN security testing remains separate.');
     } else {
       throw Error('Choose a valid option.');
     }
