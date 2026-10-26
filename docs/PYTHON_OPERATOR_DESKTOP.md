@@ -60,3 +60,5 @@ A later transaction-capable GUI must delegate to existing ARL authority boundari
 ## Consolidated desktop integration validation
 
 This integration contains the stacked Python Operator GUI work (assessment inspection, bounded evidence workplans and pack pagination, explicitly confirmed synthetic LAB preparation, and existing report-bundle verification). The graphical interface does **not** yet execute active security tests, record human evidence acceptance, or generate a completed customer assessment report. The merge must preserve the exact-head CI `test` check and require an authorised synthetic end-to-end desktop acceptance before customer deployment.
+
+**Integration note:** The Operator PR stack is consolidated on a branch fast-forwarded to the current `main` merge candidate; publish to `main` only after the required `test` and PostgreSQL integration checks pass for this synchronised head. Desktop synthetic acceptance remains separate from CI.
