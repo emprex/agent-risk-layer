@@ -3,6 +3,7 @@
 const SHA=/^[a-f0-9]{40}$/;
 const ID=/^[A-Za-z0-9._:-]{1,160}$/;
 const CONTROL=/^ARL-KB-[0-9]{3}$/;
+const COLLECTOR=/^[a-z][a-z0-9_]{0,79}$/;
 const VALID_STATES=new Set([
   'static_observation_candidate_review_required',
   'static_observation_missing',
@@ -58,7 +59,9 @@ export function existingEvidencePackPage({
         !task.requirement.trim() || task.requirement.length>3000 ||
         !VALID_STATES.has(task.reviewState) ||
         !Array.isArray(task.candidateEvidenceIds) ||
-        !Array.isArray(task.expectedCollectors))
+        !Array.isArray(task.expectedCollectors) ||
+        task.expectedCollectors.length>16 ||
+        task.expectedCollectors.some(name=>typeof name!=='string' || !COLLECTOR.test(name)))
       throw new Error('Invalid canonical control-specific evidence task.');
     return {
       controlId:task.controlId,
@@ -66,6 +69,7 @@ export function existingEvidencePackPage({
       requirement:task.requirement,
       reviewState:task.reviewState,
       candidateCount:task.candidateEvidenceIds.length,
+      expectedCollectors:[...new Set(task.expectedCollectors)],
       humanReviewRequired:true
     };
   });
