@@ -7,6 +7,7 @@ import http from 'node:http';
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 import { codexArgs, verifySyntheticLab, createServer, buildTransportResponse } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
+import { describeCodexPilot } from '../bin/arl-work.mjs';
 
 const trace = [
   { type:'thread.started', thread_id:'thread-synthetic-001' },
@@ -114,4 +115,23 @@ test('ARL Runner -> Codex localhost adapter transports a mocked Codex trace but 
     assert.equal(bundle.summary.assuranceStatus,'incomplete');
     assert.equal(bundle.summary.passRate,0);
   });
+});
+
+test('ARL operator offers a Codex plan without invoking target execution', t => {
+  const plan = describeCodexPilot();
+  assert.equal(plan.status,'plan_only');
+  assert.equal(plan.executable,false);
+  assert.equal(plan.humanReviewRequired,true);
+  const dir=lab(t);
+  const checked = describeCodexPilot(dir);
+  assert.equal(checked.status,'synthetic_lab_preflight_passed');
+  assert.equal(checked.executable,false);
+  assert.equal(checked.evidence,'preflight_only');
+});
+
+test('ARL operator Codex option rejects unsafe historical or linked labs', t => {
+  assert.throws(() => describeCodexPilot(os.homedir()), /Refusing/);
+  const dir=lab(t);
+  fs.symlinkSync('/tmp/outside-codex-lab', path.join(dir,'escape'));
+  assert.throws(() => describeCodexPilot(dir), /Symlinks/);
 });
