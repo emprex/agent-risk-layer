@@ -7,7 +7,7 @@ import http from 'node:http';
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 import { codexArgs, verifySyntheticLab, createServer, buildTransportResponse } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
-import { describeCodexPilot } from '../bin/arl-work.mjs';
+import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot } from '../bin/arl-work.mjs';
 
 const trace = [
   { type:'thread.started', thread_id:'thread-synthetic-001' },
@@ -134,4 +134,68 @@ test('ARL operator Codex option rejects unsafe historical or linked labs', t => 
   const dir=lab(t);
   fs.symlinkSync('/tmp/outside-codex-lab', path.join(dir,'escape'));
   assert.throws(() => describeCodexPilot(dir), /Symlinks/);
+});
+
+test('ARL connectivity receipt is not a security finding or false PASS', () => {
+  const receipt=buildCodexConnectivityReceipt({stdout:trace,exitCode:0,timeout:false,stderrBytes:0});
+  assert.equal(receipt.status,'transport_observed');
+  assert.equal(receipt.securityVerdict,'not_assessed');
+  assert.equal(receipt.candidateFinding,false);
+  assert.equal(receipt.independentIsolationAttested,false);
+  const actionTrace=[
+    {type:'thread.started',thread_id:'thread-synthetic-002'},
+    {type:'item.completed',item:{type:'command_execution',command:'untrusted example'}},
+    {type:'turn.completed'}
+  ].map(JSON.stringify).join('\n');
+  const nonClean=buildCodexConnectivityReceipt({stdout:actionTrace,exitCode:0,timeout:false});
+  assert.equal(nonClean.status,'transport_incomplete');
+});
+
+test('ARL operator connectivity pilot launches one fixed prompt and stores a redacted private receipt',async t=>{
+  const dir=lab(t);
+  const outputRoot=lab(t);
+  let invoked=0;
+  const {receipt,receiptPath}=await runCodexConnectivityPilot({
+    labPath:dir, outputRoot,
+    run:async ({prompt,timeoutMs,lab:observedLab})=>{
+      invoked++;
+      assert.match(prompt,/ARL_CODEX_CONNECTED/);
+      assert.equal(timeoutMs,30000);
+      assert.equal(observedLab,dir);
+      return {stdout:trace,exitCode:0,timeout:false,stderrBytes:0};
+    }
+  });
+  assert.equal(invoked,1);
+  assert.equal(receipt.status,'transport_observed');
+  assert.equal(fs.statSync(receiptPath).mode & 0o077,0);
+  const file=fs.readFileSync(receiptPath,'utf8');
+  assert.equal(JSON.parse(file).securityVerdict,'not_assessed');
+  assert.equal(file.includes('No policy is disclosed.'),false);
+  assert.equal(file.includes('ARL_CODEX_CONNECTED'),false);
+});
+
+test('ARL connectivity pilot fails closed when the synthetic lab is unsafe',async t=>{
+  const dir=lab(t);
+  fs.symlinkSync('/tmp/outside-arl-codex',path.join(dir,'unsafe'));
+  let invoked=false;
+  await assert.rejects(
+    runCodexConnectivityPilot({labPath:dir,run:async()=>{
+      invoked=true;
+      return {stdout:trace,exitCode:0,timeout:false};
+    }}),
+    /Symlinks/
+  );
+  assert.equal(invoked,false);
+});
+
+test('Codex connectivity receipt stays incomplete on timeout, error or tool events',()=>{
+  for (const result of [
+    {stdout:trace,exitCode:1,timeout:false},
+    {stdout:trace,exitCode:0,timeout:true},
+    {stdout:'',exitCode:0,timeout:false}
+  ]) {
+    const receipt=buildCodexConnectivityReceipt(result);
+    assert.equal(receipt.status,'transport_incomplete');
+    assert.equal(receipt.securityVerdict,'not_assessed');
+  }
 });
