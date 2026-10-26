@@ -14,6 +14,7 @@ else:
 
 SCHEMA = "arl.operator.existing-evidence-pack-page.v1"
 CONTROL = re.compile(r"^ARL-KB-[0-9]{3}$")
+COLLECTOR = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 STATES = {
     "static_observation_candidate_review_required",
     "static_observation_missing",
@@ -96,18 +97,23 @@ def read_evidence_pack(
         text = item.get("requirement")
         idx = item.get("requirementIndex")
         count = item.get("candidateCount")
+        collectors = item.get("expectedCollectors")
         if (not isinstance(item.get("controlId"), str) or
             not CONTROL.fullmatch(item["controlId"]) or
             type(idx) is not int or not 1 <= idx <= 100 or
             not isinstance(text, str) or not text.strip() or len(text) > 3000 or
             item.get("reviewState") not in STATES or
             type(count) is not int or not 0 <= count <= 100000 or
-            item.get("humanReviewRequired") is not True):
+            item.get("humanReviewRequired") is not True or
+            not isinstance(collectors, list) or len(collectors) > 16 or
+            any(not isinstance(name, str) or not COLLECTOR.fullmatch(name)
+                for name in collectors)):
             return refused("Invalid evidence task")
         safe.append({
             "control_id": item["controlId"], "requirement_index": idx,
             "requirement": text, "review_state": item["reviewState"],
-            "candidate_count": count
+            "candidate_count": count,
+            "expected_collectors": list(dict.fromkeys(collectors))
         })
     return {
         "available": True, "pack_number": number, "page_number": page,
