@@ -56,3 +56,7 @@ This Python GUI proposal is additive and does not modify their files. Resolve th
 Read-only, validated display of **existing** snapshot-bound assessment metadata and verified offline dashboard artifacts, using the existing canonical assessment APIs with fail-closed scope binding. Do not generate/alter assessments just to populate the GUI.
 
 A later transaction-capable GUI must delegate to existing ARL authority boundaries, authenticate its human operator, explicitly display proposed actions, enforce per-action confirmation, and record audit/provenance. Never treat the Python client as an independent security decision engine.
+
+## Consolidated desktop integration validation
+
+This integration contains the stacked Python Operator GUI work (assessment inspection, bounded evidence workplans and pack pagination, explicitly confirmed synthetic LAB preparation, and existing report-bundle verification). The graphical interface does **not** yet execute active security tests, record human evidence acceptance, or generate a completed customer assessment report. The merge must preserve the exact-head CI `test` check and require an authorised synthetic end-to-end desktop acceptance before customer deployment.
