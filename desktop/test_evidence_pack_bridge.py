@@ -18,7 +18,8 @@ BASE = {
         "controlId": "ARL-KB-019", "requirementIndex": 1,
         "requirement": "Synthetic canonical requirement",
         "reviewState": "static_observation_missing",
-        "candidateCount": 0, "humanReviewRequired": True
+        "candidateCount": 0, "expectedCollectors": ["source_and_configuration"],
+        "humanReviewRequired": True
     }],
     "evidenceAccepted": False, "testsExecuted": 0,
     "passFailInferred": False, "securityStateChanged": False,
@@ -53,6 +54,7 @@ class EvidencePackBridgeTests(unittest.TestCase):
         result = self.load()
         self.assertTrue(result["available"])
         self.assertEqual(result["tasks"][0]["control_id"], "ARL-KB-019")
+        self.assertEqual(result["tasks"][0]["expected_collectors"], ["source_and_configuration"])
         self.assertEqual(result["page_count"], 2)
         self.assertEqual(result["project_id"], "prj_test")
         self.assertEqual(result["assessment_id"], "asmt_test")
@@ -91,6 +93,15 @@ class EvidencePackBridgeTests(unittest.TestCase):
         self.assertFalse(self.load(page=0)["available"])
         self.assertFalse(self.load(page=1001)["available"])
         self.assertFalse(self.load({**BASE, "pageCount": 1}, page=2)["available"])
+
+    def test_rejects_forged_collector_metadata(self):
+        for collectors in (
+            ["../private"], ["source_and_configuration", "A BAD NAME"],
+            ["x" * 81], ["safe"] * 17, "not-a-list",
+        ):
+            with self.subTest(collectors=collectors):
+                item = {**BASE["tasks"][0], "expectedCollectors": collectors}
+                self.assertFalse(self.load({**BASE, "tasks": [item]})["available"])
 
     def test_rejects_malformed_task(self):
         for item in [
