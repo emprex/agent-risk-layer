@@ -14,7 +14,10 @@ export function validateOperatorDashboardArtifact(metadata, outputDirectory) {
       !SHA256.test(metadata.sha256 || '') ||
       !['created', 'unchanged'].includes(metadata.fileStatus) ||
       !Number.isSafeInteger(metadata.assessedControls) ||
-      metadata.assessedControls < 1 ||
+      metadata.assessedControls < 0 ||
+      !Number.isSafeInteger(metadata.excludedControls) ||
+      metadata.excludedControls < 0 ||
+      metadata.assessedControls + metadata.excludedControls < 1 ||
       !outputDirectory || !path.isAbsolute(metadata.filePath || '')) {
     throw new Error('Cannot open an unverified operator dashboard export.');
   }
