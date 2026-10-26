@@ -32,6 +32,28 @@ The endpoint uses the existing `arl.redteam.request.v1` /
   a host containing sensitive files without an independently controlled sandbox.
   Current integration must not be presented as a validated 0DIN vulnerability test.
 
+## Operator connectivity check (not a vulnerability test)
+
+The local Operator now offers option **6**, `Codex CLI research target`.
+The operator selects a **new 0700 synthetic directory**, chooses `CONNECT`,
+and must type `I AUTHORISE CODEX CONNECTIVITY` exactly.
+Only then does ARL launch `codex exec` using the fixed benign prompt
+`ARL_CODEX_CONNECTED`. The CLI uses configured authentication and may make
+provider API requests. This is not an offline test.
+
+The CLI output is parsed in memory, **never written as a transcript**.
+ARL saves a private 0600 receipt below `~/ARL-Assessments/codex-connectivity-*/receipt.json`.
+It contains a trace hash, bounded event metadata, process exit status and the
+explicit verdict `not_assessed`; it cannot become a security finding.
+A successful connectivity receipt **does not** demonstrate operating-system
+confinement, trustworthy policies, secured MCP permissions or safe tool behavior.
+
+Do not use the historical `~/0din-lab-codex` or `~/agent-risk-layer`
+as target directories. This benign smoke does not use the active Red Team
+authorisation path because it runs **no adversarial tests**.
+Any eventual adversarial 0DIN evaluation must use the existing ARL human ROE,
+frozen target identity, bounded Red Team gates and independent observations.
+
 ## Local development flow (not a live 0DIN instruction)
 
 ```sh
