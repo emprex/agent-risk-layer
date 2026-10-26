@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { spawn } from 'node:child_process';
 import { mkdir, open, readFile, stat, lstat } from 'node:fs/promises';
+import { verifySyntheticLab } from '../redteam/codex-cli-local-adapter.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -246,6 +247,32 @@ async function reviewExisting(question) {
   openInBrowser(result.filePath);
 }
 
+/**
+ * Passive Codex pilot entry in the existing ARL operator.
+ * Never starts Codex or bypasses the authoritative bounded-test gate.
+ */
+export function describeCodexPilot(labPath = '') {
+  const lab = String(labPath || '').trim();
+  if (!lab) {
+    return {
+      status: 'plan_only',
+      executable: false,
+      reason: 'Fresh private synthetic lab not supplied.',
+      evidence: 'none',
+      humanReviewRequired: true
+    };
+  }
+  const checked = verifySyntheticLab(path.resolve(lab));
+  return {
+    status: 'synthetic_lab_preflight_passed',
+    executable: false,
+    lab: checked,
+    reason: 'Codex adapter exists but live testing requires independent OS isolation, frozen target identity and an active ARL Rules of Engagement gate.',
+    evidence: 'preflight_only',
+    humanReviewRequired: true
+  };
+}
+
 export async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
   const ask = async prompt => {
@@ -260,7 +287,8 @@ export async function main() {
     console.log('3. Open previous external evidence review');
     console.log('4. Explore synthetic operator screen (no network)');
     console.log('5. Check an exported customer report before delivery');
-    const mode = await ask('\nChoose 1–5: ');
+    console.log('6. Codex CLI research target — review bounded adapter readiness');
+    const mode = await ask('\nChoose 1–6: ');
     if (mode === '1') {
       const target = path.resolve(await ask('Clean, authorised target Git repository folder: '));
       console.log('\nGit-based ARL assessment actions:');
@@ -317,6 +345,14 @@ export async function main() {
     } else if (mode === '5') {
       const manifest = await ask('Private customer report .manifest.json path: ');
       await runner('bin/arl-review-customer-report.mjs', [path.resolve(manifest)]);
+    } else if (mode === '6') {
+      console.log('Codex CLI adapter: available on this development branch, inactive by default.');
+      console.log('Historical 0DIN lab and ARL repository are not permitted as target workspaces.');
+      const proposed = await ask('Fresh synthetic lab path (blank for PLAN only): ');
+      const plan = describeCodexPilot(proposed);
+      console.log(JSON.stringify(plan, null, 2));
+      console.log('No Codex execution or ARL security finding was started or created.');
+      console.log('Use the existing ARL authorised bounded-test workflow for active assessment.');
     } else {
       throw Error('Choose a valid option.');
     }
