@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only Python desktop entry point for the canonical ARL Operator.
+"""Python desktop entry point for the canonical ARL Operator.
 
-This module neither imports nor reimplements ARL security authority. It never
-runs assessments, talks to PostgreSQL, reads .env, or contacts remote services.
+The desktop reuses Node.js ARL authority. Most views are read-only. Only a
+separately confirmed synthetic LAB preparation action can create initial
+records in a dedicated local PostgreSQL database. No controlled tests or
+security decisions are executed by the desktop.
 """
 from __future__ import annotations
 
@@ -19,10 +21,16 @@ if __package__:
     from .report_bridge import verify_existing_bundle
     from .assessment_bridge import inspect_existing
     from .evidence_bridge import load_evidence_workplan
+    from .evidence_pack_bridge import read_evidence_pack
+    from .read_only_jobs import OperatorJobs
+    from .lab_prepare_bridge import prepare_lab_assessment
 else:
     from report_bridge import verify_existing_bundle
     from assessment_bridge import inspect_existing
     from evidence_bridge import load_evidence_workplan
+    from evidence_pack_bridge import read_evidence_pack
+    from read_only_jobs import OperatorJobs
+    from lab_prepare_bridge import prepare_lab_assessment
 
 PRODUCT_ROOT = Path(__file__).resolve().parents[1]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -97,6 +105,19 @@ def repository_diagnostics(directory: Path) -> dict[str, Any]:
     }
 
 
+
+def report_matches_selected_target(
+    report_revision: str, selected_revision: str | None
+) -> bool:
+    """UI association only; matching Git SHA is not security approval."""
+    if selected_revision is None:
+        return True
+    return (
+        bool(SHA_RE.fullmatch(selected_revision)) and
+        report_revision == selected_revision
+    )
+
+
 def local_status(target: Path | None = None) -> dict[str, Any]:
     manifest = _read_manifest()
     return {
@@ -114,10 +135,80 @@ def local_status(target: Path | None = None) -> dict[str, Any]:
     }
 
 
-def launch_gui() -> int:
+def overview_status_fields(observed: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """UI labels derived from local diagnostics, never security conclusions."""
+    repo = observed.get("product") or {}
+    available = repo.get("available") is True
+    revision = repo.get("revision", "") if available else ""
+    if not isinstance(revision, str) or not SHA_RE.fullmatch(revision):
+        revision = ""
+    worktree = repo.get("worktree") if available else None
+    condition = (
+        "CLEAN" if worktree == "clean" else
+        "CHANGED" if worktree == "has_local_changes" else "UNKNOWN"
+    )
+    return {
+        "version": (
+            str(observed.get("version", "unknown")),
+            "Manifest version; not an engine health check"
+        ),
+        "source": (
+            revision[:12] if revision else "UNAVAILABLE",
+            "Local GUI checkout Git revision"
+        ),
+        "worktree": (
+            condition,
+            "GUI checkout only; not the assessment target"
+        ),
+        "database": (
+            "NOT CHECKED",
+            "No PostgreSQL connection attempted"
+        ),
+        "assessment": (
+            "NOT LOADED",
+            "Use Assessments to inspect an existing record"
+        ),
+        "security": (
+            "NOT EVALUATED",
+            "No findings, tests or deployment decisions"
+        ),
+    }
+
+
+
+def evidence_workstream_detail(values: tuple[Any, ...]) -> str:
+    """Display bounded workplan counts, never security/evidence conclusions."""
+    if len(values) != 4:
+        return "Workstream details unavailable. No evidence reviewed."
+    number, category, requirements, controls = values
+    if (not isinstance(number, (int, str)) or
+        not isinstance(category, str) or
+        category not in (
+            "static observation", "human document",
+            "runtime authorisation", "manual review"
+        )):
+        return "Workstream details unavailable. No evidence reviewed."
+    try:
+        pack = int(number)
+        req = int(requirements)
+        affected = int(controls)
+    except (TypeError, ValueError, OverflowError):
+        return "Workstream details unavailable. No evidence reviewed."
+    if (pack < 1 or pack > 150 or req < 0 or req > 100000 or
+        affected < 0 or affected > 108):
+        return "Workstream details unavailable. No evidence reviewed."
+    return (
+        f"Workstream {pack}: {category} | "
+        f"Requirement instances: {req} | Affected controls: {affected}\n"
+        "These are request counts only. Individual source artefacts, "
+        "sufficiency and applicability have NOT been reviewed."
+    )
+
+
+def launch_gui(*, smoke_test: bool = False) -> int:
     try:
         import tkinter as tk
-        from tkinter import filedialog, ttk
+        from tkinter import filedialog, ttk, messagebox, simpledialog
     except ImportError:
         print(
             "Python Tkinter is not installed. On Debian install python3-tk "
@@ -133,8 +224,8 @@ def launch_gui() -> int:
         return 2
 
     root.title("AgentRiskLayer — Local Operator")
-    root.geometry("940x640")
-    root.minsize(740, 540)
+    root.geometry("1120x760")
+    root.minsize(880, 610)
     root.configure(bg="#edf2f7")
 
     style = ttk.Style(root)
@@ -153,8 +244,38 @@ def launch_gui() -> int:
         "Hint.TLabel", background="#ffffff", foreground="#566a80",
         font=("DejaVu Sans", 10)
     )
-    style.configure("TNotebook", background="#edf2f7")
-    style.configure("TNotebook.Tab", padding=(16, 9))
+    style.configure("TNotebook", background="#edf2f7", borderwidth=0)
+    style.configure(
+        "TNotebook.Tab", padding=(20, 12),
+        font=("DejaVu Sans", 10, "bold"),
+        background="#dce5ef", foreground="#263e57"
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", "#ffffff"), ("active", "#f4f8fc")],
+        foreground=[("selected", "#1653a3")]
+    )
+    style.configure("TButton", font=("DejaVu Sans", 10), padding=(14, 9))
+
+    busy_controls: list[Any] = []
+
+    def ui_button(parent: Any, **kwargs: Any) -> Any:
+        button = ttk.Button(parent, **kwargs)
+        busy_controls.append(button)
+        return button
+
+    def set_busy(value: bool) -> None:
+        # All controls and Tk callbacks are touched on the main UI thread only.
+        for button in busy_controls:
+            button.state(["disabled"] if value else ["!disabled"])
+
+    jobs = OperatorJobs(root.after, set_busy)
+
+    def close_window() -> None:
+        jobs.close()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", close_window)
 
     container = ttk.Frame(root, padding=20, style="App.TFrame")
     container.pack(fill="both", expand=True)
@@ -164,7 +285,7 @@ def launch_gui() -> int:
     ).pack(anchor="w")
     ttk.Label(
         container,
-        text="LOCAL DESKTOP  •  READ-ONLY FOUNDATION  •  HUMAN SECURITY AUTHORITY",
+        text="LOCAL DESKTOP  •  READ-ONLY REVIEW + CONFIRMED LAB SETUP  •  HUMAN AUTHORITY",
         foreground="#43617e", background="#edf2f7"
     ).pack(anchor="w", pady=(5, 14))
 
@@ -184,23 +305,107 @@ def launch_gui() -> int:
     notebook.add(reports_page, text="Reports")
 
     def section(parent: Any, heading: str, detail: str) -> None:
-        ttk.Label(parent, text=heading, style="Text.TLabel",
-                  font=("DejaVu Sans", 12, "bold")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            parent, text=heading, style="Text.TLabel",
+            font=("DejaVu Sans", 12, "bold")
+        ).pack(anchor="w", fill="x", pady=(0, 8))
         ttk.Label(
             parent, text=detail, style="Hint.TLabel",
-            wraplength=730, justify="left"
-        ).pack(anchor="w", pady=(0, 18))
+            wraplength=1100, justify="left"
+        ).pack(anchor="w", fill="x", pady=(0, 18))
 
-    section(
-        overview, "Product status",
-        "This screen inspects local Git metadata and the package manifest. "
-        "It does not inspect PostgreSQL, create assessments, or infer readiness."
-    )
-    status_text = tk.StringVar(value="")
+    # A responsive dashboard of factual local observations. The cards
+    # intentionally contain no simulated assessments or security outcomes.
+    overview.columnconfigure(0, weight=1)
     ttk.Label(
-        overview, textvariable=status_text, style="Text.TLabel",
-        wraplength=735, justify="left"
-    ).pack(anchor="w", pady=(0, 24))
+        overview, text="Operator overview",
+        background="#ffffff", foreground="#17263c",
+        font=("DejaVu Sans", 15, "bold")
+    ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+    ttk.Label(
+        overview,
+        text="Local status only. All security decisions remain with the human operator.",
+        background="#ffffff", foreground="#566a80",
+        font=("DejaVu Sans", 10)
+    ).grid(row=1, column=0, sticky="w", pady=(0, 14))
+
+    status_values: dict[str, Any] = {}
+    tiles = tk.Frame(overview, bg="#ffffff")
+    tiles.grid(row=2, column=0, sticky="ew")
+    for column in range(3):
+        tiles.grid_columnconfigure(column, weight=1, uniform="operator-cards")
+
+    cards = (
+        ("version", "ARL VERSION"),
+        ("source", "GIT REVISION"),
+        ("worktree", "GUI WORKTREE"),
+        ("database", "POSTGRESQL"),
+        ("assessment", "ASSESSMENT"),
+        ("security", "SECURITY READINESS"),
+    )
+    for index, (key, heading) in enumerate(cards):
+        tile = tk.Frame(
+            tiles, bg="#f2f6fb", padx=18, pady=14,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        tile.grid(
+            row=index // 3, column=index % 3, sticky="nsew",
+            padx=7, pady=7
+        )
+        tk.Label(
+            tile, text=heading, bg="#f2f6fb", fg="#526c89",
+            font=("DejaVu Sans", 9, "bold"), anchor="w"
+        ).pack(fill="x")
+        value = tk.StringVar(value="CHECKING…")
+        status_values[key] = value
+        tk.Label(
+            tile, textvariable=value, bg="#f2f6fb", fg="#17263c",
+            font=("DejaVu Sans", 15, "bold"), anchor="w"
+        ).pack(fill="x", pady=(8, 2))
+        caption = tk.StringVar(value="")
+        status_values[key + "_caption"] = caption
+        tk.Label(
+            tile, textvariable=caption, bg="#f2f6fb", fg="#657a93",
+            font=("DejaVu Sans", 9),
+            anchor="w", justify="left", wraplength=260
+        ).pack(fill="x")
+
+    status_text = tk.StringVar(value="Reading local product metadata…")
+    tk.Label(
+        overview, textvariable=status_text, bg="#ffffff", fg="#496887",
+        font=("DejaVu Sans", 10), justify="left", anchor="w"
+    ).grid(row=3, column=0, sticky="ew", padx=8, pady=(8, 18))
+
+    next_steps = tk.Frame(overview, bg="#ffffff")
+    next_steps.grid(row=4, column=0, sticky="ew", padx=7, pady=(0, 14))
+    for column in range(2):
+        next_steps.grid_columnconfigure(column, weight=1, uniform="operator-next")
+    def info_panel(column: int, title: str, description: str) -> None:
+        panel = tk.Frame(
+            next_steps, bg="#ffffff", padx=16, pady=13,
+            highlightbackground="#dbe4ef", highlightthickness=1
+        )
+        panel.grid(row=0, column=column, sticky="nsew", padx=(0, 12) if column == 0 else (12, 0))
+        tk.Label(
+            panel, text=title, bg="#ffffff", fg="#17263c",
+            font=("DejaVu Sans", 11, "bold"), anchor="w"
+        ).pack(fill="x", pady=(0, 8))
+        tk.Label(
+            panel, text=description, bg="#ffffff", fg="#526c89",
+            font=("DejaVu Sans", 10), justify="left", anchor="w",
+            wraplength=360
+        ).pack(fill="x")
+    info_panel(
+        0, "Next: inspect an existing assessment",
+        "Assessments → Select an authorised clean Git repository → "
+        "Inspect existing assessment. The interface never creates a missing record."
+    )
+    info_panel(
+        1, "Review evidence and saved reports",
+        "Evidence → Read the snapshot-bound work plan. "
+        "Reports → Verify a saved private bundle. "
+        "Neither action approves evidence or security outcomes."
+    )
 
     selected_target: dict[str, Any] = {"path": None, "revision": None}
     selected_assessment: dict[str, Any] = {"value": None}
@@ -222,23 +427,72 @@ def launch_gui() -> int:
         wraplength=730, justify="left"
     ).pack(anchor="w", pady=(0, 18))
 
-    def refresh_status() -> None:
-        observed = local_status()
-        repo = observed["product"]
-        if repo["available"]:
-            revision = repo["revision"]
-            condition = repo["worktree"]
+    ttk.Label(
+        target_page, text="Assessment platform guidance",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 6))
+    platform_choice = tk.StringVar(value="Local Git / MCP agent")
+    platform_options = (
+        "Local Git / MCP agent",
+        "Meta Muse (hosted / manual scope)",
+        "Other hosted agent (manual scope)",
+    )
+    platform_selector = ttk.Combobox(
+        target_page, textvariable=platform_choice, values=platform_options,
+        state="readonly", width=42
+    )
+    platform_selector.pack(anchor="w", pady=(0, 8))
+    platform_guidance = tk.StringVar()
+
+    def explain_platform(_event: Any = None) -> None:
+        if platform_choice.get() == "Meta Muse (hosted / manual scope)":
+            platform_guidance.set(
+                "Meta Muse: external hosted platform. Review connector permissions, "
+                "per-action approvals, identity/delegation, network egress and audit "
+                "evidence only with authorised access. No direct Muse connector is "
+                "installed. Choosing this option does NOT permit tests, import data, "
+                "or change the selected frozen Git target."
+            )
+        elif platform_choice.get() == "Other hosted agent (manual scope)":
+            platform_guidance.set(
+                "Hosted agent: define vendor, tenant, authorised scope and "
+                "available evidence before assessment. No live connection or "
+                "security test is made by this selector."
+            )
         else:
-            revision = "unavailable"
-            condition = repo["reason"]
-        status_text.set(
-            f"ARL v{observed['version']}    •    Required Node.js: "
-            f"{observed['required_node']}\n"
-            f"Git HEAD: {revision}\n"
-            f"Working tree: {condition}\n"
-            "Database: NOT CHECKED    •    Assessment: NOT LOADED\n"
-            "Tests, findings and readiness: NOT EVALUATED"
-        )
+            platform_guidance.set(
+                "Local Git / MCP: choose a clean committed local repository below. "
+                "Its exact revision is used to inspect existing ARL assessments."
+            )
+
+    platform_selector.bind("<<ComboboxSelected>>", explain_platform)
+    explain_platform()
+    ttk.Label(
+        target_page, textvariable=platform_guidance, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 16))
+
+    def refresh_status() -> None:
+        status_text.set("Checking local manifest and Git metadata…")
+        def completed(observed: dict[str, Any]) -> None:
+            show_status(observed)
+        jobs.start(local_status, completed)
+
+    def show_status(observed: dict[str, Any]) -> None:
+        for key, (value, caption) in overview_status_fields(observed).items():
+            status_values[key].set(value)
+            status_values[key + "_caption"].set(caption)
+        repo = observed.get("product") or {}
+        if observed.get("application") and repo.get("available") is True:
+            status_text.set(
+                "Local checkout inspected. Database, live agents, evidence "
+                "and security readiness are NOT evaluated here."
+            )
+        else:
+            status_text.set(
+                "Local status unavailable. No security or deployment "
+                "decision can be inferred."
+            )
 
     def choose_target() -> None:
         selected = filedialog.askdirectory(
@@ -249,12 +503,20 @@ def launch_gui() -> int:
             return
         selected_target.update(path=None, revision=None)
         selected_assessment["value"] = None
+        lab_text.set("No lab preparation requested.")
         assessment_text.set("No existing assessment inspected.")
         evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        report_text.set("No report selected. Integrity NOT ESTABLISHED.")
         for row in evidence_table.get_children():
             evidence_table.delete(row)
-        observed = repository_diagnostics(Path(selected))
-        if not observed["available"] or observed.get("worktree") != "clean":
+        target_text.set("Checking selected local repository metadata…")
+        jobs.start(
+            lambda: repository_diagnostics(Path(selected)),
+            show_target
+        )
+
+    def show_target(observed: dict[str, Any]) -> None:
+        if not observed.get("available") or observed.get("worktree") != "clean":
             if observed["available"]:
                 observed = {
                     "available": False,
@@ -273,10 +535,12 @@ def launch_gui() -> int:
                 "This is NOT a security assessment or test authorisation."
             )
 
-    ttk.Button(
+    # Overview uses grid for its direct children; mixing pack/grid here
+    # causes an immediate TclError on Debian when launching the GUI.
+    ui_button(
         overview, text="Refresh local diagnostics", command=refresh_status
-    ).pack(anchor="w")
-    ttk.Button(
+    ).grid(row=5, column=0, sticky="w", padx=8, pady=(0, 12))
+    ui_button(
         target_page, text="Choose local repository…", command=choose_target
     ).pack(anchor="w", pady=(0, 20))
     ttk.Label(
@@ -299,15 +563,20 @@ def launch_gui() -> int:
         for row in evidence_table.get_children():
             evidence_table.delete(row)
         assessment_text.set("Checking the existing ARL assessment…")
-        root.update_idletasks()
-        found = inspect_existing(Path(target_path), expected_sha)
-        if not found["available"]:
+        jobs.start(
+            lambda: inspect_existing(Path(target_path), expected_sha),
+            show_existing_assessment
+        )
+
+    def show_existing_assessment(found: dict[str, Any]) -> None:
+        if not found.get("available"):
             assessment_text.set(
                 "EXISTING ASSESSMENT NOT CONFIRMED: " + found["reason"] +
                 "\nNo record created, edited or approved by this view."
             )
             return
         selected_assessment["value"] = found
+        clear_task_page()
         assessment_text.set(
             "Existing assessment located (READ ONLY)\n"
             "Project ID: " + found["project_id"] + "\n"
@@ -320,10 +589,97 @@ def launch_gui() -> int:
             "Human review remains required."
         )
 
-    ttk.Button(
+    ui_button(
         target_page, text="Inspect existing assessment (read only)",
         command=inspect_selected_assessment
-    ).pack(anchor="w")
+    ).pack(anchor="w", pady=(0, 24))
+
+    # This action is explicitly TRANSACTIONAL. It is restricted to a
+    # dedicated local PostgreSQL lab by the canonical Node entry point.
+    section(
+        target_page, "Prepare NEW synthetic lab assessment",
+        "This action writes NEW project and initial UNKNOWN snapshot records "
+        "to a SEPARATE local PostgreSQL database named arl_operator_lab. "
+        "It does not scan live agents, run tests, accept evidence or approve "
+        "findings. It is disabled unless ARL_OPERATOR_LAB_DATABASE_URL is "
+        "configured in the launching environment. Never point it at your "
+        "normal customer or production database."
+    )
+    lab_text = tk.StringVar(value="No lab preparation requested.")
+    ttk.Label(
+        target_page, textvariable=lab_text, style="Text.TLabel",
+        wraplength=1000, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 10))
+
+    def prepare_selected_lab() -> None:
+        # This is an opt-in write, unlike the other read-only tabs.
+        target_path = selected_target["path"]
+        sha = selected_target["revision"]
+        if not target_path or not sha:
+            lab_text.set("Choose an authorised, clean, SYNTHETIC lab repository first.")
+            return
+        if not os.environ.get("ARL_OPERATOR_LAB_DATABASE_URL"):
+            lab_text.set(
+                "Isolated lab not configured: set ARL_OPERATOR_LAB_DATABASE_URL "
+                "to the local arl_operator_lab database. No records written."
+            )
+            return
+        approved = messagebox.askyesno(
+            "Prepare lab assessment — database write",
+            "Only use a SYNTHETIC local target you control.\n\n"
+            "This will CREATE assessment records in the dedicated local "
+            "arl_operator_lab PostgreSQL database, but will NOT execute tests "
+            "or make security decisions.\n\n"
+            "The exact pinned Git SHA is: " + sha + "\n\n"
+            "Do you authorise this LAB-ONLY record creation?",
+            parent=root
+        )
+        if not approved:
+            lab_text.set("Lab preparation cancelled; no records created.")
+            return
+        confirmation = "PREPARE LAB " + sha
+        typed = simpledialog.askstring(
+            "Confirm isolated lab preparation",
+            "Type the entire confirmation phrase exactly:\n" +
+            confirmation,
+            parent=root
+        )
+        if typed != confirmation:
+            lab_text.set("Confirmation mismatch or cancelled; no records created.")
+            return
+        lab_text.set("Preparing isolated lab records using canonical ARL authority…")
+        selected_assessment["value"] = None
+        evidence_text.set("No assessment selected. Evidence NOT INSPECTED.")
+        for row in evidence_table.get_children():
+            evidence_table.delete(row)
+        jobs.start(
+            lambda: prepare_lab_assessment(Path(target_path), sha, typed),
+            show_lab_result
+        )
+
+    def show_lab_result(result: dict[str, Any]) -> None:
+        if result.get("available") is not True:
+            lab_text.set(
+                "LAB PREPARATION NOT CONFIRMED: " +
+                result.get("reason", "Unknown failure") +
+                "\nCheck only the isolated lab records before retrying. "
+                "No tests or security approval were issued."
+            )
+            return
+        lab_text.set(
+            "NEW SYNTHETIC LAB RECORD CREATED.\n"
+            "Project: " + result["project_id"] + "\n"
+            "Assessment: " + result["assessment_id"] + "\n"
+            "Frozen Git revision: " + result["target_revision"] + "\n"
+            "Initial state: UNKNOWN, human review required.\n"
+            "Evidence: NOT ACCEPTED  •  Tests: NONE  •  Readiness: HOLD.\n"
+            "Use 'Inspect existing assessment' to review the resulting snapshot."
+        )
+
+    ui_button(
+        target_page, text="Prepare synthetic LAB assessment (writes lab DB)",
+        command=prepare_selected_lab
+    ).pack(anchor="w", pady=(0, 10))
 
     section(
         evidence_page, "Snapshot-bound evidence requests",
@@ -343,20 +699,151 @@ def launch_gui() -> int:
     evidence_table = ttk.Treeview(
         evidence_page, columns=columns, show="headings", height=9
     )
-    for key, heading, width in (
-        ("pack", "Pack", 55),
-        ("category", "Workstream", 230),
-        ("tasks", "Requirements", 125),
-        ("controls", "Controls", 110),
+    # The original fixed-width headings were clipped on the owner's Debian
+    # display. Give every non-expanding column a readable minimum width.
+    for key, heading, width, minimum in (
+        ("pack", "Pack", 130, 110),
+        ("category", "Workstream", 390, 240),
+        ("tasks", "Requirements", 220, 190),
+        ("controls", "Controls", 185, 165),
     ):
-        evidence_table.heading(key, text=heading)
-        evidence_table.column(key, width=width, stretch=(key == "category"))
+        evidence_table.heading(key, text=heading, anchor="w")
+        evidence_table.column(
+            key, width=width, minwidth=minimum,
+            anchor="w", stretch=(key == "category")
+        )
     evidence_table.pack(fill="both", expand=True, pady=(0, 10))
+    pack_detail = tk.StringVar(
+        value="Select a workstream to inspect its requirement counts. "
+              "This is a planning summary, not underlying evidence."
+    )
+    ttk.Label(
+        evidence_page, textvariable=pack_detail, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 12))
+
+    def show_selected_pack(_event: Any = None) -> None:
+        chosen = evidence_table.selection()
+        if not chosen:
+            pack_detail.set("No workstream selected. No evidence reviewed.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        pack_detail.set(evidence_workstream_detail(tuple(values)))
+
+    evidence_table.bind("<<TreeviewSelect>>", show_selected_pack)
+
+    ttk.Label(
+        evidence_page, text="Control-specific requirements (read only)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(5, 5))
+    task_status = tk.StringVar(
+        value="Choose a workstream and inspect its first page (up to 20 tasks)."
+    )
+    ttk.Label(
+        evidence_page, textvariable=task_status, style="Hint.TLabel",
+        wraplength=760, justify="left"
+    ).pack(anchor="w", fill="x", pady=(0, 5))
+    task_list = tk.Text(evidence_page, height=8, wrap="word", state="disabled")
+    task_list.pack(fill="both", expand=True, pady=(0, 8))
+    current_pack_page: dict[str, Any] = {"number": None, "page": 0, "total": 0}
+
+
+    def clear_task_page() -> None:
+        current_pack_page.update(number=None, page=0, total=0)
+        task_status.set("No control-specific requirements loaded.")
+        task_list.configure(state="normal")
+        task_list.delete("1.0", "end")
+        task_list.configure(state="disabled")
+
+    def show_pack_page(data: dict[str, Any]) -> None:
+        clear_task_page()
+        if not data.get("available"):
+            task_status.set("PACK NOT AVAILABLE: " + data.get("reason", "Unknown reason"))
+            return
+        if (selected_assessment["value"] is None or
+            selected_assessment["value"]["project_id"] != data["project_id"] or
+            selected_assessment["value"]["assessment_id"] != data["assessment_id"] or
+            selected_assessment["value"]["snapshot_id"] != data["snapshot_id"] or
+            selected_assessment["value"]["target_revision"] != data["target_revision"]):
+            task_status.set("The selected assessment changed. Reinspect it.")
+            return
+        current_pack_page.update(number=data["pack_number"], page=data["page_number"], total=data["page_count"])
+        task_status.set(
+            f"Pack {data['pack_number']}, page {data['page_number']} of {data['page_count']}. "
+            "These are requirements and candidate counts, NOT verified evidence."
+        )
+        task_list.configure(state="normal")
+        for task in data["tasks"]:
+            task_list.insert(
+                "end",
+                f"{task['control_id']} / requirement {task['requirement_index']} "
+                f"/ candidates {task['candidate_count']}\n"
+                f"{task['review_state'].replace('_', ' ')}\n"
+                "Expected collectors (NOT observed provenance): "
+                + (", ".join(task["expected_collectors"]) or "none") + "\n"
+                + f"{task['requirement']}\n\n"
+            )
+        task_list.configure(state="disabled")
+
+    def inspect_pack_page(number: int, page: int) -> None:
+        selected = selected_assessment["value"]
+        if selected is None or not selected_target["path"]:
+            clear_task_page()
+            return
+        target_path = Path(selected_target["path"])
+        revision = selected["target_revision"]
+        project = selected["project_id"]
+        snapshot = selected["snapshot_id"]
+        assessment = selected["assessment_id"]
+        clear_task_page()
+        task_status.set("Reading control-specific requirements from ARL…")
+        jobs.start(
+            lambda: read_evidence_pack(
+                target_path, revision, project, snapshot, assessment,
+                number, page=page,
+            ),
+            show_pack_page
+        )
+
+    def inspect_selected_pack() -> None:
+        chosen = evidence_table.selection()
+        if not chosen or selected_assessment["value"] is None:
+            task_status.set("Select an existing assessment and a workstream first.")
+            return
+        values = evidence_table.item(chosen[0], "values")
+        if len(values) != 4:
+            task_status.set("Invalid workstream selection.")
+            return
+        try:
+            number = int(values[0])
+        except (ValueError, TypeError):
+            task_status.set("Invalid workstream selection.")
+            return
+        inspect_pack_page(number, 1)
+
+    def move_pack_page(offset: int) -> None:
+        number = current_pack_page["number"]
+        next_page = current_pack_page["page"] + offset
+        if (number is None or next_page < 1 or
+            next_page > current_pack_page["total"]):
+            return
+        inspect_pack_page(number, next_page)
+
+    ui_button(
+        evidence_page, text="Inspect selected workstream requirements (read only)",
+        command=inspect_selected_pack
+    ).pack(anchor="w", pady=(0, 12))
+    page_buttons = ttk.Frame(evidence_page, style="Panel.TFrame")
+    page_buttons.pack(anchor="w", pady=(0, 12))
+    ui_button(page_buttons, text="Previous page", command=lambda: move_pack_page(-1)).pack(side="left", padx=(0, 8))
+    ui_button(page_buttons, text="Next page", command=lambda: move_pack_page(1)).pack(side="left")
 
     def read_evidence_plan() -> None:
         selected = selected_assessment["value"]
         for row in evidence_table.get_children():
             evidence_table.delete(row)
+        pack_detail.set("No workstream selected. No evidence reviewed.")
+        clear_task_page()
         if selected is None or not selected_target["path"]:
             evidence_text.set(
                 "First choose and inspect an existing clean frozen assessment. "
@@ -364,15 +851,20 @@ def launch_gui() -> int:
             )
             return
         evidence_text.set("Reading canonical snapshot-bound evidence requests…")
-        root.update_idletasks()
-        data = load_evidence_workplan(
-            Path(selected_target["path"]),
-            selected["target_revision"],
-            selected["project_id"],
-            selected["snapshot_id"],
-            selected["assessment_id"],
+        target_path = Path(selected_target["path"])
+        jobs.start(
+            lambda: load_evidence_workplan(
+                target_path,
+                selected["target_revision"],
+                selected["project_id"],
+                selected["snapshot_id"],
+                selected["assessment_id"],
+            ),
+            show_evidence_plan
         )
-        if not data["available"]:
+
+    def show_evidence_plan(data: dict[str, Any]) -> None:
+        if not data.get("available"):
             evidence_text.set(
                 "EVIDENCE NOT CONFIRMED: " + data["reason"] +
                 "\nReinspect the assessment and its frozen target. "
@@ -405,16 +897,36 @@ def launch_gui() -> int:
                     pack["requirement_instances"], pack["affected_controls"]
                 )
             )
-    ttk.Button(
+    ui_button(
         evidence_page, text="Read existing evidence work plan (read only)",
         command=read_evidence_plan
     ).pack(anchor="w", pady=(0, 12))
     section(
         tests_page, "Controlled tests — disabled",
-        "No execution controls are available in this first version. "
-        "Any future active test requires explicit scope, written Rules of "
-        "Engagement, synthetic data, human approval and an auditable result."
+        "No test execution is available from this desktop interface. "
+        "Running any active security test requires separately authorised "
+        "scope, written Rules of Engagement, synthetic data where required, "
+        "human approval and an auditable result."
     )
+    ttk.Label(
+        tests_page, text="Planned authorised workflow (not executable here)",
+        style="Text.TLabel", font=("DejaVu Sans", 11, "bold")
+    ).pack(anchor="w", pady=(0, 10))
+    ttk.Label(
+        tests_page,
+        text=(
+            "1. Confirm scope and rules of engagement\n"
+            "2. Approve a bounded test plan\n"
+            "3. Execute through ARL's existing controlled runner\n"
+            "4. Verify evidence and exact target/snapshot binding\n"
+            "5. Human review of findings, retests and readiness"
+        ),
+        style="Hint.TLabel", justify="left", wraplength=1000
+    ).pack(anchor="w", fill="x", pady=(0, 14))
+    ttk.Label(
+        tests_page, text="Status: NO TESTS STARTED BY THIS INTERFACE",
+        style="Text.TLabel", font=("DejaVu Sans", 10, "bold")
+    ).pack(anchor="w", pady=(0, 8))
     section(
         reports_page, "Verify an existing ARL report bundle",
         "Select an already exported private ARL .manifest.json file. "
@@ -439,34 +951,78 @@ def launch_gui() -> int:
         if not selected:
             return
         report_text.set("Checking selected bundle with the ARL verifier…")
-        root.update_idletasks()
-        verified = verify_existing_bundle(Path(selected))
-        if not verified["available"]:
+        jobs.start(
+            lambda: verify_existing_bundle(Path(selected)),
+            show_report
+        )
+
+    def show_report(verified: dict[str, Any]) -> None:
+        if not verified.get("available"):
             report_text.set(
                 "Integrity NOT ESTABLISHED. " + verified["reason"] +
                 "\nNo report contents were displayed or changed."
             )
             return
+        if not report_matches_selected_target(
+            verified["target_revision"], selected_target["revision"]
+        ):
+            report_text.set(
+                "REPORT TARGET MISMATCH — the saved report's Git revision "
+                "does not match the selected local repository.\n"
+                "The report is NOT linked to this selected target. "
+                "No security verdict or approval was inferred."
+            )
+            return
+        association = (
+            "Selected local Git SHA matches (assessment binding NOT checked)"
+            if selected_target["revision"] else
+            "Standalone saved report — no selected target or assessment binding"
+        )
         report_text.set(
             "Integrity: CONTENT CONSISTENT ONLY (not a signature)\n"
+            "Association: " + association + "\n"
             "Target Git SHA: " + verified["target_revision"] + "\n"
             "Bundle SHA-256: " + verified["bundle_sha256"] + "\n"
             "Recorded readiness label (NOT independently verified): " +
             verified["reported_readiness_label"] + "\n"
             "Security verdict: NOT ASSESSED by this interface\n"
-            "Human review and disclosure approval: REQUIRED"
+            "Human review and disclosure approval: REQUIRED\n"
+            "Saved report may be stale relative to current ARL records."
         )
 
-    ttk.Button(
+    ui_button(
         reports_page, text="Verify saved ARL report…", command=choose_report
     ).pack(anchor="w")
 
     ttk.Label(
         container,
-        text="No network, assessment execution, database writes or security decisions.",
+        text="No active tests or security decisions. Confirmed LAB setup writes only to the isolated lab database.",
         foreground="#4e657b", background="#edf2f7"
     ).pack(anchor="w", pady=(12, 0))
     refresh_status()
+    if smoke_test:
+        # Build the real window and navigate every tab in a virtual display.
+        # Fail this process on any Tk geometry/layout exception.
+        try:
+            root.update()
+            if len(notebook.tabs()) != 5:
+                raise RuntimeError("Expected all five Operator tabs")
+            for tab in notebook.tabs():
+                notebook.select(tab)
+                root.update_idletasks()
+            for key, expected_heading, min_width in (
+                ("pack", "Pack", 110),
+                ("category", "Workstream", 240),
+                ("tasks", "Requirements", 190),
+                ("controls", "Controls", 165),
+            ):
+                if evidence_table.heading(key, "text") != expected_heading:
+                    raise RuntimeError("Evidence heading mismatch: " + key)
+                if int(evidence_table.column(key, "minwidth")) < min_width:
+                    raise RuntimeError("Evidence column too narrow: " + key)
+        finally:
+            close_window()
+        return 0
     root.mainloop()
     return 0
 
@@ -474,6 +1030,10 @@ def launch_gui() -> int:
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Local read-only Python GUI for AgentRiskLayer"
+    )
+    parser.add_argument(
+        "--ui-smoke", action="store_true",
+        help="create and validate a native Tkinter window, then close (CI test)"
     )
     parser.add_argument(
         "--check", action="store_true",
@@ -496,6 +1056,13 @@ def main(arguments: list[str] | None = None) -> int:
         help="read the existing snapshot-bound evidence queue without GUI"
     )
     args = parser.parse_args(arguments)
+    if args.ui_smoke:
+        if (args.check or args.target is not None or
+            args.verify_report is not None or
+            args.inspect_existing is not None or
+            args.inspect_evidence is not None):
+            parser.error("--ui-smoke cannot be combined with other modes")
+        return launch_gui(smoke_test=True)
     if args.verify_report is not None and (
         args.check or args.target is not None or
         args.inspect_existing is not None or args.inspect_evidence is not None
