@@ -213,6 +213,16 @@ test('offline Bubblewrap probe has no host-root bind, home bind or network share
   assert.equal(args.includes('--dev-bind'),false);
   const i=args.indexOf('--ro-bind');
   assert.deepEqual(args.slice(i,i+3),['--ro-bind','/usr','/usr']);
+  // Regression: merged-/usr Debian uses /lib64/ld-linux-x86-64.so.2 as
+  // the ELF loader, so /usr alone is insufficient to exec /usr/bin/sh.
+  // All reconstructed root paths must resolve into the read-only /usr bind.
+  for (const [target,link] of [
+    ['usr/bin','/bin'], ['usr/lib','/lib'], ['usr/lib64','/lib64']
+  ]) {
+    assert.ok(args.some((value,i) => value==='--symlink' &&
+      args[i+1]===target && args[i+2]===link), link+' merged-/usr link missing');
+    assert.ok(args.indexOf('--symlink') > i, 'symlinks must follow the /usr bind');
+  }
   assert.ok(args.some((value,i) => value===dir && args[i+1]==='/workspace'));
   assert.equal(args.some((value,i) => value==='/home' || value===os.homedir()),false);
 });
