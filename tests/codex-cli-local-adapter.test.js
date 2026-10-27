@@ -454,7 +454,8 @@ test('offline Codex agent evaluator accepts only fixture contact and complete st
   const hostNet='net:[4026531992]',hostMount='mnt:[4026531841]';
   const stdout=[
     'ARL_NET=net:[111]','ARL_MNT=mnt:[222]',
-    'ARL_FIXTURE=contacted','ARL_AGENT=completed','ARL_TOOLS=0','ARL_EXIT=0'
+    'ARL_FIXTURE=contacted','ARL_REQUEST=accepted','ARL_CODEX_EXIT=0',
+    'ARL_DIAG=no_process_details','ARL_AGENT=completed','ARL_TOOLS=0','ARL_EXIT=0'
   ].join('\n')+'\n';
   const options={hostNet,hostMount,nativeSha256:'b'.repeat(64),fixtureSha256:'c'.repeat(64)};
   const good=evaluateOfflineCodexAgent({result:{exitCode:0,stdout},...options});
@@ -462,11 +463,16 @@ test('offline Codex agent evaluator accepts only fixture contact and complete st
   assert.equal(good.verifiedOfflineTurn,true);
   assert.equal(good.securityVerdict,'not_assessed');
   assert.equal(good.independentIsolationAttested,false);
+  assert.equal(good.diagnosticStage,'completed');
+  assert.equal(good.fixtureRequestState,'accepted');
+  assert.equal(good.codexProcessExitCode,0);
   const mutants=[
     {stdout:stdout.replace('ARL_NET=net:[111]','ARL_NET='+hostNet),exitCode:0},
     {stdout:stdout.replace('ARL_FIXTURE=contacted','ARL_FIXTURE=missing'),exitCode:0},
     {stdout:stdout.replace('ARL_TOOLS=0','ARL_TOOLS=1'),exitCode:0},
     {stdout:stdout.replace('ARL_AGENT=completed','ARL_AGENT=incomplete'),exitCode:0},
+    {stdout:stdout.replace('ARL_REQUEST=accepted','ARL_REQUEST=stream_rejected'),exitCode:0},
+    {stdout:stdout.replace('ARL_CODEX_EXIT=0','ARL_CODEX_EXIT=2'),exitCode:0},
     {stdout:stdout+'unexpected output\n',exitCode:0},
     {stdout,exitCode:25},
     {stdout,exitCode:0,timedOut:true}
@@ -508,7 +514,8 @@ test('offline Codex model smoke snapshots two files then destroys them',async t=
       return {stdout:[
         'ARL_NET=net:['+otherNet+']',
         'ARL_MNT=mnt:['+otherMount+']',
-        'ARL_FIXTURE=contacted',
+        'ARL_FIXTURE=contacted','ARL_REQUEST=accepted','ARL_CODEX_EXIT=0',
+        'ARL_DIAG=no_process_details',
         'ARL_AGENT=completed','ARL_TOOLS=0','ARL_EXIT=0'
       ].join('\n')+'\n',exitCode:0};
     }
@@ -561,4 +568,38 @@ test('Python Responses fixture verifier accepts a synthetic completed turn, reje
   assert.match(blocked.stdout,/ARL_AGENT=incomplete/);
   const malformed=testTrace([{type:'turn.completed'}]);
   assert.equal(malformed.status,4);
+});
+
+
+test('offline Codex agent diagnostics classify failures without exposing raw stderr or model output',t=>{
+  const src='redteam/fixtures/codex-loopback-model.py';
+  const dir=lab(t),errors=path.join(dir,'stderr.txt'),trace=path.join(dir,'trace.jsonl');
+  fs.writeFileSync(errors,'Synthetic error: connection refused at secret.example.invalid:1234');
+  fs.writeFileSync(trace,'');
+  const processResult=spawnSync('python3',[src,'classify',errors,trace],{
+    encoding:'utf8'
+  });
+  assert.equal(processResult.status,0);
+  assert.equal(processResult.stdout.trim(),'ARL_DIAG=local_connection_error');
+  assert.equal(processResult.stdout.includes('secret.example.invalid'),false);
+  fs.writeFileSync(errors,'unknown argument "--imaginary-test-flag"');
+  const cli=spawnSync('python3',[src,'classify',errors,trace],{encoding:'utf8'});
+  assert.equal(cli.stdout.trim(),'ARL_DIAG=unsupported_cli_option');
+  fs.writeFileSync(errors,'some sensitive opaque text');
+  const opaque=spawnSync('python3',[src,'classify',errors,trace],{encoding:'utf8'});
+  assert.equal(opaque.stdout.trim(),'ARL_DIAG=unclassified');
+});
+
+test('offline AGENT evaluator records bounded preflight failure independently of JSONL text',()=>{
+  const args={hostNet:'net:[1]',hostMount:'mnt:[2]',
+    nativeSha256:'a'.repeat(64),fixtureSha256:'b'.repeat(64)};
+  const fail=evaluateOfflineCodexAgent({result:{
+    stdout:'ARL_NET=net:[3]\nARL_MNT=mnt:[4]\n',exitCode:24
+  },...args});
+  assert.equal(fail.status,'offline_agent_fixture_unverified');
+  assert.equal(fail.diagnosticStage,'fixture_not_ready');
+  assert.equal(fail.codexErrorCategory,'unknown');
+  assert.equal(fail.independentIsolationAttested,false);
+  const timeout=evaluateOfflineCodexAgent({result:{stdout:'',exitCode:null,timedOut:true},...args});
+  assert.equal(timeout.diagnosticStage,'timeout');
 });
