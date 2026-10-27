@@ -9,6 +9,7 @@ import { verifySyntheticLab, runCodexOnce } from '../redteam/codex-cli-local-ada
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
 import { runBubblewrapIsolationPreflight } from '../redteam/codex-bubblewrap-preflight.mjs';
 import { runCodexOfflineBinarySmoke } from '../redteam/codex-offline-binary-smoke.mjs';
+import { runOfflineCodexAgentFixture } from '../redteam/codex-offline-agent-fixture.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -368,6 +369,21 @@ export async function runCodexOfflineSmokeReceipt({
   return { receipt, receiptPath };
 }
 
+export async function runCodexOfflineAgentReceipt({
+  labPath, probe = runOfflineCodexAgentFixture, outputRoot = privateRoot()
+} = {}) {
+  const lab = verifySyntheticLab(path.resolve(labPath || ''));
+  const receipt = await probe({labPath:lab});
+  const folder = await safe(outputRoot);
+  const caseFolder = await safe(path.join(
+    folder,'codex-agent-fixture-' + new Date().toISOString().replace(/[:.]/g, '-') +
+    '-' + randomUUID().slice(0,8)
+  ));
+  const receiptPath = path.join(caseFolder,'receipt.json');
+  await writePrivate(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  return {receipt,receiptPath};
+}
+
 export async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
   const ask = async prompt => {
@@ -450,9 +466,9 @@ export async function main() {
         console.log('PLAN only: no process started, no security test performed.');
         return;
       }
-      console.log('Available checks: ISOLATION (offline shell), BINARY (offline Codex --version), CONNECT (online model).');
-      console.log('None is a vulnerability test or replaces ARL Rules of Engagement.');
-      const mode = (await ask('Type PLAN, ISOLATION, BINARY or CONNECT: ')).toUpperCase();
+      console.log('Checks: ISOLATION (shell), BINARY (Codex version), AGENT (synthetic offline model), CONNECT (online provider).');
+      console.log('No check is a vulnerability assessment or replaces ARL Rules of Engagement.');
+      const mode = (await ask('Type PLAN, ISOLATION, BINARY, AGENT or CONNECT: ')).toUpperCase();
       if (mode === 'PLAN') {
         console.log('PLAN only: no process started.');
         return;
@@ -472,6 +488,15 @@ export async function main() {
         console.log('ARL offline Codex result: ' + receipt.status);
         console.log('Native binary SHA-256: ' + receipt.binarySha256);
         console.log('Full OS isolation attested: NO. Security verdict: NOT ASSESSED.');
+        console.log('Private receipt: ' + receiptPath);
+        return;
+      }
+      if (mode === 'AGENT') {
+        console.log('Offline synthetic Responses API. No real model, credentials, remote network or attack.');
+        const {receipt,receiptPath} = await runCodexOfflineAgentReceipt({labPath:proposed});
+        console.log('ARL offline Codex agent result: ' + receipt.status);
+        console.log('Synthetic request observed: ' + receipt.loopbackModelRequestObserved);
+        console.log('Security verdict: NOT ASSESSED. Full online confinement: NOT ATTESTED.');
         console.log('Private receipt: ' + receiptPath);
         return;
       }
