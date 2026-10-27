@@ -7,7 +7,8 @@ import http from 'node:http';
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 import { codexArgs, verifySyntheticLab, createServer, buildTransportResponse } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
-import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot } from '../bin/arl-work.mjs';
+import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot, runCodexNamespacePreflight } from '../bin/arl-work.mjs';
+import { buildBubblewrapProbeArgs, evaluateBubblewrapProbe, runBubblewrapIsolationPreflight } from '../redteam/codex-bubblewrap-preflight.mjs';
 
 const trace = [
   { type:'thread.started', thread_id:'thread-synthetic-001' },
@@ -198,4 +199,84 @@ test('Codex connectivity receipt stays incomplete on timeout, error or tool even
     assert.equal(receipt.status,'transport_incomplete');
     assert.equal(receipt.securityVerdict,'not_assessed');
   }
+});
+
+test('offline Bubblewrap probe has no host-root bind, home bind or network share', t => {
+  const dir=lab(t);
+  const outside='/tmp/arl-synthetic-canary-only';
+  const args=buildBubblewrapProbeArgs(dir,outside);
+  for(const required of ['--unshare-user','--unshare-pid','--unshare-net','--unshare-ipc','--clearenv','--new-session','--die-with-parent']) {
+    assert.ok(args.includes(required), required);
+  }
+  assert.equal(args.includes('--share-net'),false);
+  assert.equal(args.includes('--bind'),false);
+  assert.equal(args.includes('--dev-bind'),false);
+  const i=args.indexOf('--ro-bind');
+  assert.deepEqual(args.slice(i,i+3),['--ro-bind','/usr','/usr']);
+  assert.ok(args.some((value,i) => value===dir && args[i+1]==='/workspace'));
+  assert.equal(args.some((value,i) => value==='/home' || value===os.homedir()),false);
+});
+
+test('Bubblewrap probe refuses to certify unchanged namespaces, malformed output and failing process', () => {
+  const hostNet='net:[4026531992]';
+  const hostMount='mnt:[4026531841]';
+  for(const result of [
+    { stdout:'ARL_NET=net:[4026531992]\nARL_MNT=mnt:[4026531841]\n',exitCode:0 },
+    { stdout:'ARL_NET=net:[3]\nARL_MNT=mnt:[4]\n',exitCode:1 },
+    { stdout:'ARL_NET=net:[3]\nARL_MNT=mnt:[4]\n',exitCode:0,timedOut:true },
+    { stdout:'garbage',exitCode:0 }
+  ]) {
+    const receipt=evaluateBubblewrapProbe({result,hostNet,hostMount});
+    assert.equal(receipt.status,'isolation_unverified');
+    assert.equal(receipt.independentIsolationAttested,false);
+    assert.equal(receipt.codexExecuted,false);
+  }
+});
+
+test('ARL offline namespace preflight runs synthetic probe once and stores private non-security receipt',async t=>{
+  const dir=lab(t);
+  const outputRoot=lab(t);
+  let runs=0;
+  const {receipt,receiptPath}=await runCodexNamespacePreflight({
+    labPath:dir, outputRoot,
+    probe:async ({labPath})=>{
+      runs++;
+      assert.equal(labPath,dir);
+      return {
+        schema:'arl.codex.bubblewrap-preflight.v1',
+        status:'namespace_probe_passed',
+        codexExecuted:false,
+        independentIsolationAttested:false,
+        securityVerdict:'not_assessed'
+      };
+    }
+  });
+  assert.equal(runs,1);
+  assert.equal(receipt.securityVerdict,'not_assessed');
+  assert.equal(fs.statSync(receiptPath).mode & 0o077,0);
+  assert.equal(JSON.parse(fs.readFileSync(receiptPath,'utf8')).codexExecuted,false);
+});
+
+test('Bubblewrap preflight cleans up host canary after a simulated namespace check',async t=>{
+  const dir=lab(t);
+  let seenMarker='';
+  const hostNet=fs.readlinkSync('/proc/self/ns/net');
+  const hostMount=fs.readlinkSync('/proc/self/ns/mnt');
+  const netId=Number(hostNet.match(/\d+/)[0])+1;
+  const mntId=Number(hostMount.match(/\d+/)[0])+1;
+  const receipt=await runBubblewrapIsolationPreflight({
+    labPath:dir,
+    runner:async ({binary,args,timeoutMs})=>{
+      assert.equal(binary,'/usr/bin/bwrap');
+      assert.equal(timeoutMs,6000);
+      seenMarker=args[args.length-1];
+      assert.equal(fs.existsSync(seenMarker),true);
+      assert.ok(args.includes('--unshare-net'));
+      return { stdout:'ARL_NET=net:['+netId+']\nARL_MNT=mnt:['+mntId+']\n',exitCode:0 };
+    }
+  });
+  assert.equal(receipt.status,'namespace_probe_passed');
+  assert.equal(receipt.securityVerdict,'not_assessed');
+  assert.equal(receipt.independentIsolationAttested,false);
+  assert.equal(fs.existsSync(seenMarker),false);
 });
