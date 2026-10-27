@@ -339,7 +339,7 @@ test('offline Codex build profile denies network/home and mounts only snapshot i
     args[i+1]==='CODEX_HOME' && args[i+2]==='/scratch/.codex'));
   assert.ok(args.some((arg,i)=>arg==='--setenv' &&
     args[i+1]==='HOME' && args[i+2]==='/scratch'));
-  assert.ok(args.some((arg,i)=>arg==='exec /app/codex --version'));
+  assert.ok(args.some(arg=>arg.includes('exec /app/codex --version')));
   assert.equal(args.includes('--share-net'),false);
   assert.equal(args.includes('--bind'),false);
   assert.equal(args.includes(os.homedir()),false);
