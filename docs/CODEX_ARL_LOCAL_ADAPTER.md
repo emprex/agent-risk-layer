@@ -137,6 +137,12 @@ clears environment variables, and points HOME/CODEX_HOME into ephemeral tmpfs.
 It does not mount user auth, Node/npm installation directories, the host
 home, previous 0DIN labs or real client data.
 
+The CLI invocation on Codex 0.164.0 places `--ignore-user-config` after
+`exec`, not before. The previous ordering failed at argument parsing with
+exit code 2 (`unsupported_cli_option`) before any local HTTP request;
+unit tests now enforce the corrected argument order. The mock provider is
+explicitly `requires_openai_auth = false`, never mounting API credentials.
+
 A bounded shell runs the mock server, checks its readiness, invokes Codex
 with `--ignore-user-config`, a fixed custom local Responses provider,
 `--sandbox read-only`, `--json`, and `--ephemeral`, then validates the
