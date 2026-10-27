@@ -7,8 +7,9 @@ import http from 'node:http';
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 import { codexArgs, verifySyntheticLab, createServer, buildTransportResponse } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
-import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot, runCodexNamespacePreflight } from '../bin/arl-work.mjs';
+import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot, runCodexNamespacePreflight, runCodexOfflineSmokeReceipt } from '../bin/arl-work.mjs';
 import { buildBubblewrapProbeArgs, evaluateBubblewrapProbe, runBubblewrapIsolationPreflight } from '../redteam/codex-bubblewrap-preflight.mjs';
+import { discoverInstalledCodexNative, buildBubblewrapCodexVersionArgs, evaluateCodexOfflineVersion, runCodexOfflineBinarySmoke } from '../redteam/codex-offline-binary-smoke.mjs';
 
 const trace = [
   { type:'thread.started', thread_id:'thread-synthetic-001' },
@@ -289,4 +290,135 @@ test('Bubblewrap preflight cleans up host canary after a simulated namespace che
   assert.equal(receipt.securityVerdict,'not_assessed');
   assert.equal(receipt.independentIsolationAttested,false);
   assert.equal(fs.existsSync(seenMarker),false);
+});
+
+
+function fakeNpmCodexInstall(t) {
+  const base=lab(t);
+  const binDir=path.join(base,'commands');
+  const pkg=path.join(base,'node_modules/@openai/codex');
+  const native=path.join(pkg,
+    'node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex');
+  fs.mkdirSync(binDir,{recursive:true});
+  fs.mkdirSync(path.dirname(native),{recursive:true});
+  fs.mkdirSync(path.join(pkg,'bin'),{recursive:true});
+  const launcher=path.join(pkg,'bin/codex.js');
+  fs.writeFileSync(launcher,'#!/usr/bin/env node\n',{mode:0o755});
+  fs.symlinkSync(launcher,path.join(binDir,'codex'));
+  fs.writeFileSync(path.join(pkg,'package.json'),
+    JSON.stringify({name:'@openai/codex',version:'0.164.0'}));
+  fs.writeFileSync(native,'Synthetic binary bytes; never executed by tests.',{mode:0o700});
+  return {binDir,native,pkg};
+}
+
+test('Codex native discovery resolves npm symlink into a single Linux x64 package artifact',t=>{
+  const {binDir,native,pkg}=fakeNpmCodexInstall(t);
+  const installed=discoverInstalledCodexNative({
+    pathEnv:binDir,platform:'linux',arch:'x64'
+  });
+  assert.equal(installed.binary,native);
+  assert.equal(installed.npmVersion,'0.164.0');
+  const collision=path.join(path.dirname(pkg),
+    'codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex');
+  fs.mkdirSync(path.dirname(collision),{recursive:true});
+  fs.copyFileSync(native,collision);
+  fs.chmodSync(collision,0o700);
+  assert.throws(()=>discoverInstalledCodexNative({pathEnv:binDir}),
+    /exactly one installed/);
+});
+
+test('offline Codex build profile denies network/home and mounts only snapshot in /app', t=>{
+  const dir=lab(t);
+  const args=buildBubblewrapCodexVersionArgs(dir,'/tmp/synthetic-codex-snapshot',
+    '/tmp/synthetic-host-canary');
+  for(const arg of ['--unshare-net','--unshare-user','--unshare-pid','--clearenv',
+    '--tmpfs','/scratch','--ro-bind']) assert.ok(args.includes(arg),arg);
+  assert.ok(args.some((arg,i)=>arg==='/tmp/synthetic-codex-snapshot' &&
+    args[i+1]==='/app/codex'));
+  assert.ok(args.some((arg,i)=>arg==='--setenv' &&
+    args[i+1]==='CODEX_HOME' && args[i+2]==='/scratch/.codex'));
+  assert.ok(args.some((arg,i)=>arg==='--setenv' &&
+    args[i+1]==='HOME' && args[i+2]==='/scratch'));
+  assert.ok(args.some((arg,i)=>arg==='exec /app/codex --version'));
+  assert.equal(args.includes('--share-net'),false);
+  assert.equal(args.includes('--bind'),false);
+  assert.equal(args.includes(os.homedir()),false);
+  assert.equal(args.includes('/root'),false);
+});
+
+test('offline Codex version verifier accepts only expected output + separate kernel namespaces',()=>{
+  const net='net:[4026531992]',mnt='mnt:[4026531841]',sha='a'.repeat(64);
+  const valid={
+    stdout:'ARL_NET=net:[111]\nARL_MNT=mnt:[222]\ncodex-cli 0.164.0\n',
+    exitCode:0
+  };
+  const opts={hostNet:net,hostMount:mnt,binarySha256:sha,npmVersion:'0.164.0'};
+  const good=evaluateCodexOfflineVersion({result:valid,...opts});
+  assert.equal(good.status,'offline_codex_binary_observed');
+  assert.equal(good.codexExecuted,true);
+  assert.equal(good.securityVerdict,'not_assessed');
+  assert.equal(good.modelApiCalled,false);
+  assert.equal(good.independentIsolationAttested,false);
+  for(const result of [
+    {...valid,exitCode:1}, {...valid,timedOut:true}, {...valid,outputExceeded:true},
+    {...valid,stdout:'ARL_NET=net:[4026531992]\nARL_MNT=mnt:[222]\ncodex-cli 0.164.0\n'},
+    {...valid,stdout:'ARL_NET=net:[111]\nARL_MNT=mnt:[222]\nmalicious extra output\n'},
+    {...valid,stdout:'ARL_NET=net:[111]\nARL_MNT=mnt:[222]\ncodex-cli 0.164.0\nextra\n'}
+  ]) {
+    const receipt=evaluateCodexOfflineVersion({result,...opts});
+    assert.equal(receipt.status,'offline_codex_unverified');
+    assert.equal(receipt.codexExecuted,false);
+  }
+});
+
+test('offline Codex smoke copies and hashes binary, runs bounded bwrap only, removes snapshot',async t=>{
+  const {native}=fakeNpmCodexInstall(t);
+  const workspace=lab(t);
+  let snapshot='';
+  let invoked=0;
+  const hostNet=fs.readlinkSync('/proc/self/ns/net');
+  const hostMount=fs.readlinkSync('/proc/self/ns/mnt');
+  const otherNet=Number(hostNet.match(/\d+/)[0])+13;
+  const otherMount=Number(hostMount.match(/\d+/)[0])+13;
+  const receipt=await runCodexOfflineBinarySmoke({
+    labPath:workspace,
+    locator:()=>({binary:native,npmVersion:'0.164.0'}),
+    runner:async ({binary,args,timeoutMs})=>{
+      invoked++;
+      assert.equal(binary,'/usr/bin/bwrap');
+      assert.equal(timeoutMs,6000);
+      const i=args.indexOf('/app/codex');
+      snapshot=args[i-1];
+      assert.notEqual(snapshot,native);
+      assert.ok(snapshot.includes('arl-codex-offline-'));
+      assert.equal(fs.readFileSync(snapshot,'utf8'),fs.readFileSync(native,'utf8'));
+      assert.equal(args.includes(native),false);
+      return {stdout:'ARL_NET=net:['+otherNet+']\nARL_MNT=mnt:['+
+        otherMount+']\ncodex-cli 0.164.0\n',exitCode:0};
+    }
+  });
+  assert.equal(invoked,1);
+  assert.equal(receipt.status,'offline_codex_binary_observed');
+  assert.equal(receipt.binarySha256.length,64);
+  assert.equal(receipt.credentialMountsConfigured,false);
+  assert.equal(fs.existsSync(snapshot),false);
+});
+
+test('ARL operator saves offline smoke result to private receipt with no host credentials',async t=>{
+  const labPath=lab(t),outputRoot=lab(t);
+  let hits=0;
+  const {receipt,receiptPath}=await runCodexOfflineSmokeReceipt({
+    labPath,outputRoot,
+    probe:async()=>{hits++;return {
+      schema:'arl.codex.offline-binary-smoke.v1',
+      status:'offline_codex_binary_observed',
+      modelApiCalled:false,
+      securityVerdict:'not_assessed',
+      binarySha256:'c'.repeat(64)
+    }; }
+  });
+  assert.equal(hits,1);
+  assert.equal(receipt.securityVerdict,'not_assessed');
+  assert.equal(fs.statSync(receiptPath).mode & 0o077,0);
+  assert.equal(JSON.parse(fs.readFileSync(receiptPath,'utf8')).modelApiCalled,false);
 });
