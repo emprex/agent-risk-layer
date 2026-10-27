@@ -41,11 +41,15 @@ export function buildOfflineCodexAgentArgs(lab, nativeSnapshot, fixtureSnapshot,
     'for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ' +
       'if test -f /scratch/fixture-ready; then ready=1; break; fi; /usr/bin/sleep 0.1; done',
     'test "$ready" = 1 || exit 24',
-    '/app/codex --ignore-user-config --ask-for-approval never ' +
+    // --ignore-user-config, --json, --ephemeral and --skip-git-repo-check
+    // belong to "codex exec" on Codex 0.164.0.  Putting an exec-only flag
+    // before the subcommand causes CLI exit code 2 before the HTTP request.
+    // Keep global approval/config overrides on the left of "exec".
+    '/app/codex --ask-for-approval never ' +
       '-c \'model_provider="arl_fixture"\' ' +
-      '-c \'model_providers.arl_fixture={ name = "ARL synthetic fixture", base_url = "http://127.0.0.1:18787/v1", wire_api = "responses", request_max_retries = 0, stream_max_retries = 0 }\' ' +
+      '-c \'model_providers.arl_fixture={ name = "ARL synthetic fixture", base_url = "http://127.0.0.1:18787/v1", wire_api = "responses", requires_openai_auth = false, supports_websockets = false, request_max_retries = 0, stream_max_retries = 0 }\' ' +
+      'exec --json --ephemeral --ignore-user-config --skip-git-repo-check ' +
       '-m gpt-5.1 --sandbox read-only -C /workspace ' +
-      'exec --json --ephemeral --skip-git-repo-check ' +
       '"Reply to the synthetic fixture with its exact acknowledgement. Do not use tools." ' +
       '> /scratch/trace.jsonl 2> /scratch/codex.stderr',
     'codex_status=$?',
