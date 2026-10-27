@@ -7,9 +7,11 @@ import http from 'node:http';
 import { runCampaign } from '../redteam/agent-risk-redteam.mjs';
 import { codexArgs, verifySyntheticLab, createServer, buildTransportResponse } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
-import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot, runCodexNamespacePreflight, runCodexOfflineSmokeReceipt } from '../bin/arl-work.mjs';
+import { describeCodexPilot, buildCodexConnectivityReceipt, runCodexConnectivityPilot, runCodexNamespacePreflight, runCodexOfflineSmokeReceipt, runCodexOfflineAgentReceipt } from '../bin/arl-work.mjs';
 import { buildBubblewrapProbeArgs, evaluateBubblewrapProbe, runBubblewrapIsolationPreflight } from '../redteam/codex-bubblewrap-preflight.mjs';
 import { discoverInstalledCodexNative, buildBubblewrapCodexVersionArgs, evaluateCodexOfflineVersion, runCodexOfflineBinarySmoke } from '../redteam/codex-offline-binary-smoke.mjs';
+import { buildOfflineCodexAgentArgs, evaluateOfflineCodexAgent, runOfflineCodexAgentFixture } from '../redteam/codex-offline-agent-fixture.mjs';
+import { spawnSync } from 'node:child_process';
 
 const trace = [
   { type:'thread.started', thread_id:'thread-synthetic-001' },
@@ -421,4 +423,142 @@ test('ARL operator saves offline smoke result to private receipt with no host cr
   assert.equal(receipt.securityVerdict,'not_assessed');
   assert.equal(fs.statSync(receiptPath).mode & 0o077,0);
   assert.equal(JSON.parse(fs.readFileSync(receiptPath,'utf8')).modelApiCalled,false);
+});
+
+
+test('offline Codex agent mode shares only synthetic localhost and no credentials',t=>{
+  const dir=lab(t);
+  const args=buildOfflineCodexAgentArgs(
+    dir,'/tmp/arl-native-snapshot','/tmp/arl-fixture-snapshot','/tmp/arl-host-canary');
+  for(const flag of ['--unshare-user','--unshare-net','--unshare-pid',
+    '--clearenv','--new-session','--die-with-parent']) assert.ok(args.includes(flag),flag);
+  assert.equal(args.includes('--share-net'),false);
+  assert.equal(args.includes('--bind'),false);
+  assert.equal(args.includes(os.homedir()),false);
+  assert.equal(args.includes('/root'),false);
+  assert.ok(args.some((v,i)=>v==='/tmp/arl-native-snapshot' &&
+    args[i+1]==='/app/codex'));
+  assert.ok(args.some((v,i)=>v==='/tmp/arl-fixture-snapshot' &&
+    args[i+1]==='/app/fixture.py'));
+  const script=args[args.indexOf('--')+3];
+  assert.match(script,/127\.0\.0\.1:18787\/v1/);
+  assert.match(script,/model_provider="arl_fixture"/);
+  assert.match(script,/exec --json --ephemeral --skip-git-repo-check/);
+  assert.match(script,/--sandbox read-only/);
+  assert.match(script,/--ignore-user-config/);
+  assert.match(script,/\/app\/codex/);
+  assert.doesNotMatch(script,/--share-net|api\.openai\.com|OPENAI_API_KEY|~\/\.codex/);
+});
+
+test('offline Codex agent evaluator accepts only fixture contact and complete structured turn',()=>{
+  const hostNet='net:[4026531992]',hostMount='mnt:[4026531841]';
+  const stdout=[
+    'ARL_NET=net:[111]','ARL_MNT=mnt:[222]',
+    'ARL_FIXTURE=contacted','ARL_AGENT=completed','ARL_TOOLS=0','ARL_EXIT=0'
+  ].join('\n')+'\n';
+  const options={hostNet,hostMount,nativeSha256:'b'.repeat(64),fixtureSha256:'c'.repeat(64)};
+  const good=evaluateOfflineCodexAgent({result:{exitCode:0,stdout},...options});
+  assert.equal(good.status,'offline_agent_fixture_observed');
+  assert.equal(good.verifiedOfflineTurn,true);
+  assert.equal(good.securityVerdict,'not_assessed');
+  assert.equal(good.independentIsolationAttested,false);
+  const mutants=[
+    {stdout:stdout.replace('ARL_NET=net:[111]','ARL_NET='+hostNet),exitCode:0},
+    {stdout:stdout.replace('ARL_FIXTURE=contacted','ARL_FIXTURE=missing'),exitCode:0},
+    {stdout:stdout.replace('ARL_TOOLS=0','ARL_TOOLS=1'),exitCode:0},
+    {stdout:stdout.replace('ARL_AGENT=completed','ARL_AGENT=incomplete'),exitCode:0},
+    {stdout:stdout+'unexpected output\n',exitCode:0},
+    {stdout,exitCode:25},
+    {stdout,exitCode:0,timedOut:true}
+  ];
+  for(const result of mutants) {
+    const receipt=evaluateOfflineCodexAgent({result,...options});
+    assert.equal(receipt.status,'offline_agent_fixture_unverified');
+    assert.equal(receipt.verifiedOfflineTurn,false);
+  }
+});
+
+test('offline Codex model smoke snapshots two files then destroys them',async t=>{
+  const {native}=fakeNpmCodexInstall(t);
+  const workspace=lab(t);
+  const fixture=path.resolve('redteam/fixtures/codex-loopback-model.py');
+  let nativeSnapshot='',fixtureSnapshot='',calls=0;
+  const hostNet=fs.readlinkSync('/proc/self/ns/net');
+  const hostMount=fs.readlinkSync('/proc/self/ns/mnt');
+  const otherNet=Number(hostNet.match(/\d+/)[0])+11;
+  const otherMount=Number(hostMount.match(/\d+/)[0])+11;
+  const receipt=await runOfflineCodexAgentFixture({
+    labPath:workspace,
+    locator:()=>({binary:native}),
+    fixtureSource:fixture,
+    runner:async ({binary,args,timeoutMs})=>{
+      calls++;
+      assert.equal(binary,'/usr/bin/bwrap');
+      assert.equal(timeoutMs,25000);
+      const i=args.indexOf('/app/codex');
+      const j=args.indexOf('/app/fixture.py');
+      nativeSnapshot=args[i-1];
+      fixtureSnapshot=args[j-1];
+      assert.equal(fs.existsSync(nativeSnapshot),true);
+      assert.equal(fs.existsSync(fixtureSnapshot),true);
+      assert.notEqual(nativeSnapshot,native);
+      assert.notEqual(fixtureSnapshot,fixture);
+      assert.equal(args.includes(native),false);
+      assert.equal(args.includes(fixture),false);
+      return {stdout:[
+        'ARL_NET=net:['+otherNet+']',
+        'ARL_MNT=mnt:['+otherMount+']',
+        'ARL_FIXTURE=contacted',
+        'ARL_AGENT=completed','ARL_TOOLS=0','ARL_EXIT=0'
+      ].join('\n')+'\n',exitCode:0};
+    }
+  });
+  assert.equal(calls,1);
+  assert.equal(receipt.status,'offline_agent_fixture_observed');
+  assert.equal(receipt.nativeSha256.length,64);
+  assert.equal(receipt.fixtureSha256.length,64);
+  assert.equal(fs.existsSync(nativeSnapshot),false);
+  assert.equal(fs.existsSync(fixtureSnapshot),false);
+});
+
+test('ARL operator writes a private NOT ASSESSED receipt for offline fixture turn',async t=>{
+  const labPath=lab(t),outputRoot=lab(t);
+  let called=0;
+  const {receipt,receiptPath}=await runCodexOfflineAgentReceipt({
+    labPath,outputRoot,
+    probe:async()=>{called++;return {
+      schema:'arl.codex.offline-agent-fixture.v1',
+      status:'offline_agent_fixture_observed',
+      syntheticModelOnly:true,securityVerdict:'not_assessed',
+      independentIsolationAttested:false
+    };}
+  });
+  assert.equal(called,1);
+  assert.equal(receipt.securityVerdict,'not_assessed');
+  assert.equal(fs.statSync(receiptPath).mode & 0o077,0);
+  const raw=fs.readFileSync(receiptPath,'utf8');
+  assert.equal(raw.includes('ARL_LOCAL_FIXTURE_OK'),false);
+  assert.equal(JSON.parse(raw).independentIsolationAttested,false);
+});
+
+test('Python Responses fixture verifier accepts a synthetic completed turn, rejects tool calls',t=>{
+  const dir=lab(t),src='redteam/fixtures/codex-loopback-model.py';
+  const valid=[
+    {type:'thread.started',thread_id:'synthetic-thread'},
+    {type:'item.completed',item:{type:'agent_message',text:'ARL_LOCAL_FIXTURE_OK'}},
+    {type:'turn.completed'}
+  ];
+  const testTrace=(events)=>{
+    const file=path.join(dir,'synthetic.jsonl');
+    fs.writeFileSync(file,events.map(JSON.stringify).join('\n')+'\n');
+    return spawnSync('python3',[src,'verify',file],{encoding:'utf8'});
+  };
+  const passed=testTrace(valid);
+  assert.equal(passed.status,0,passed.stderr);
+  assert.match(passed.stdout,/ARL_AGENT=completed/);
+  const blocked=testTrace([...valid,{type:'item.completed',item:{type:'command_execution'}}]);
+  assert.equal(blocked.status,4);
+  assert.match(blocked.stdout,/ARL_AGENT=incomplete/);
+  const malformed=testTrace([{type:'turn.completed'}]);
+  assert.equal(malformed.status,4);
 });
