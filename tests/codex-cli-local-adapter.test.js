@@ -443,9 +443,19 @@ test('offline Codex agent mode shares only synthetic localhost and no credential
   const script=args[args.indexOf('--')+3];
   assert.match(script,/127\.0\.0\.1:18787\/v1/);
   assert.match(script,/model_provider="arl_fixture"/);
-  assert.match(script,/exec --json --ephemeral --skip-git-repo-check/);
+  assert.match(script,/exec --json --ephemeral --ignore-user-config --skip-git-repo-check/);
   assert.match(script,/--sandbox read-only/);
   assert.match(script,/--ignore-user-config/);
+  assert.match(script,/requires_openai_auth = false/);
+  assert.match(script,/supports_websockets = false/);
+  const cli = script.slice(script.indexOf('/app/codex '),script.indexOf('> /scratch/trace.jsonl'));
+  const execIndex = cli.indexOf('exec --json');
+  assert.ok(execIndex > 0, 'Codex exec subcommand missing');
+  assert.equal(cli.slice(0,execIndex).includes('--ignore-user-config'),false,
+    'exec-only flag placed before subcommand');
+  assert.equal(cli.slice(execIndex).includes('--ignore-user-config'),true,
+    'exec-only flag must follow subcommand');
+  assert.equal(cli.slice(execIndex).includes('--skip-git-repo-check'),true);
   assert.match(script,/\/app\/codex/);
   assert.doesNotMatch(script,/--share-net|api\.openai\.com|OPENAI_API_KEY|~\/\.codex/);
 });
