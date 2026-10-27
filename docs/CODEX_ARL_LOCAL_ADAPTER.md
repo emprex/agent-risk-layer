@@ -86,6 +86,40 @@ network unsharing prevents normal model-provider access. A future authorised
 online assessment requires a separately reviewed egress/authentication design
 and OS-level evidence about the *actual* Codex process.
 
+## Offline Codex native-binary smoke (new Operator mode BINARY)
+
+Choose option **6**, enter the private 0700 synthetic lab, then select **BINARY**.
+This mode resolves the installed `@openai/codex` npm launcher (Linux x64),
+selects the single native Codex binary from its installed platform package,
+copies it to a temporary 0700 directory, computes its SHA-256, and binds
+only that snapshot into Bubblewrap read-only as `/app/codex`.
+
+The Bubblewrap sandbox retains the working ISOLATION namespace flags,
+unshares the network, exposes only read-only `/usr`, the same merged-/usr
+link fix, `/proc`, `/dev`, `/tmp`, the synthetic lab read-only at
+`/workspace`, and the native binary snapshot at `/app/codex`.
+The environment is cleared and explicitly sets an empty temporary
+`HOME` and `CODEX_HOME` under a tmpfs. **No ~/.codex, npm installation
+tree, model credentials, local project files or host filesystem root are
+mounted.** The command inside the namespace is exactly
+`/app/codex --version`, preceded by a bounded shell check of the network
+and mount namespace identifiers and a host canary.
+
+Version output must match the expected `codex-cli X.Y.Z` shape and the
+namespace IDs must differ from those of the parent process. The binary
+snapshot is removed in a finally block. Operator records a 0600 receipt
+under `~/ARL-Assessments/codex-offline-*/receipt.json` containing the
+snapshot digest and a `not_assessed` verdict. Tests with synthetic
+binaries are injected in CI; they **do not** execute the real Codex binary.
+
+**Limitations:** this verifies only a version command from a native
+executable under an offline sandbox. It does not exercise the actual
+agent's permissions, authentication, network/API policy, tools, MCP,
+prompt handling, or any 0DIN research scenario. Only one known npm
+Linux x64 package layout is supported; other layouts fail closed.
+Do not confuse this bounded demonstration with confinement of a full
+online agent or readiness for client assessment.
+
 ## Local development flow (not a live 0DIN instruction)
 
 ```sh
