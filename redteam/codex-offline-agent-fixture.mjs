@@ -50,6 +50,9 @@ export function buildOfflineCodexAgentArgs(lab, nativeSnapshot, fixtureSnapshot,
       '> /scratch/trace.jsonl 2> /scratch/codex.stderr',
     'codex_status=$?',
     'if test -f /scratch/fixture-contact; then echo ARL_FIXTURE=contacted; else echo ARL_FIXTURE=missing; fi',
+    'if test -f /scratch/fixture-attempt; then printf "ARL_REQUEST="; /usr/bin/cat /scratch/fixture-attempt; printf "\\n"; else echo ARL_REQUEST=none; fi',
+    'printf "ARL_CODEX_EXIT=%s\\n" "$codex_status"',
+    '/usr/bin/python3 /app/fixture.py classify /scratch/codex.stderr /scratch/trace.jsonl',
     '/usr/bin/python3 /app/fixture.py verify /scratch/trace.jsonl',
     'verify_status=$?',
     'if test "$codex_status" -eq 0 && test "$verify_status" -eq 0 ' +
@@ -73,7 +76,7 @@ export function buildOfflineCodexAgentArgs(lab, nativeSnapshot, fixtureSnapshot,
 
 export function evaluateOfflineCodexAgent({result,hostNet,hostMount,nativeSha256,fixtureSha256}={}) {
   const lines=String(result?.stdout || '').trim().split(/\r?\n/);
-  const exactKeys=['ARL_NET','ARL_MNT','ARL_FIXTURE','ARL_AGENT','ARL_TOOLS','ARL_EXIT'];
+  const exactKeys=['ARL_NET','ARL_MNT','ARL_FIXTURE','ARL_REQUEST','ARL_CODEX_EXIT','ARL_DIAG','ARL_AGENT','ARL_TOOLS','ARL_EXIT'];
   const parsed=lines.map(line=>{
     const i=line.indexOf('=');
     return i>0 ? [line.slice(0,i),line.slice(i+1)] : ['', ''];
@@ -85,9 +88,19 @@ export function evaluateOfflineCodexAgent({result,hostNet,hostMount,nativeSha256
     nsId(hostNet,'net') && nsId(record.ARL_NET,'net')!==nsId(hostNet,'net'));
   const mountNamespaceSeparated=Boolean(nsId(record.ARL_MNT,'mnt') &&
     nsId(hostMount,'mnt') && nsId(record.ARL_MNT,'mnt')!==nsId(hostMount,'mnt'));
+  const safeRequest=['none','post_received','path_rejected','length_invalid',
+    'length_rejected','json_invalid','stream_rejected','accepted'];
+  const safeDiag=['unsupported_cli_option','authentication_error','local_connection_error',
+    'provider_configuration_error','fixture_protocol_error','sandbox_permission_error',
+    'no_process_details','unclassified'];
+  const requestState=safeRequest.includes(record.ARL_REQUEST) ? record.ARL_REQUEST : 'unknown';
+  const diagnosis=safeDiag.includes(record.ARL_DIAG) ? record.ARL_DIAG : 'unknown';
+  const codexExit=/^(0|[1-9][0-9]{0,2})$/.test(record.ARL_CODEX_EXIT||'')
+    ? Number(record.ARL_CODEX_EXIT) : null;
   const ok=shape && networkNamespaceSeparated && mountNamespaceSeparated &&
-    record.ARL_FIXTURE==='contacted' && record.ARL_AGENT==='completed' &&
-    record.ARL_TOOLS==='0' && record.ARL_EXIT==='0' &&
+    record.ARL_FIXTURE==='contacted' && requestState==='accepted' &&
+    record.ARL_AGENT==='completed' && record.ARL_TOOLS==='0' &&
+    codexExit===0 && record.ARL_EXIT==='0' &&
     result?.exitCode===0 && !result?.timedOut && !result?.outputExceeded &&
     !result?.launchErrorCode &&
     /^[0-9a-f]{64}$/.test(String(nativeSha256)) &&
@@ -101,6 +114,19 @@ export function evaluateOfflineCodexAgent({result,hostNet,hostMount,nativeSha256
     networkNamespaceSeparated,
     mountNamespaceSeparated,
     loopbackModelRequestObserved:record.ARL_FIXTURE==='contacted',
+    fixtureRequestState:requestState,
+    codexProcessExitCode:codexExit,
+    codexErrorCategory:diagnosis,
+    diagnosticStage: result?.timedOut ? 'timeout'
+      : result?.outputExceeded ? 'output_limit'
+      : result?.exitCode===24 ? 'fixture_not_ready'
+      : shape && !networkNamespaceSeparated ? 'network_namespace_unverified'
+      : shape && !mountNamespaceSeparated ? 'mount_namespace_unverified'
+      : shape && requestState==='none' ? 'no_http_attempt'
+      : shape && requestState!=='accepted' ? 'mock_http_request_rejected'
+      : shape && codexExit!==0 ? 'codex_process_failed'
+      : shape && record.ARL_AGENT!=='completed' ? 'jsonl_completion_unverified'
+      : ok ? 'completed' : 'early_process_failure_or_unexpected_output',
     toolEvents:record.ARL_TOOLS==='0' ? 0 : null,
     nativeSha256:nativeSha256 || null,
     fixtureSha256:fixtureSha256 || null,
