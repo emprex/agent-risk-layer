@@ -496,6 +496,12 @@ export async function main() {
         const {receipt,receiptPath} = await runCodexOfflineAgentReceipt({labPath:proposed});
         console.log('ARL offline Codex agent result: ' + receipt.status);
         console.log('Synthetic request observed: ' + receipt.loopbackModelRequestObserved);
+        if (receipt.status !== 'offline_agent_fixture_observed') {
+          console.log('Failure stage: ' + receipt.diagnosticStage);
+          console.log('Mock HTTP request: ' + receipt.fixtureRequestState);
+          console.log('Codex diagnostic category: ' + receipt.codexErrorCategory);
+          console.log('Codex exit code (inside sandbox): ' + receipt.codexProcessExitCode);
+        }
         console.log('Security verdict: NOT ASSESSED. Full online confinement: NOT ATTESTED.');
         console.log('Private receipt: ' + receiptPath);
         return;
