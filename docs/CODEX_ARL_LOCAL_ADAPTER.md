@@ -145,7 +145,13 @@ namespace. Raw Codex prompts and output stay in the sandbox tmpfs and
 are never persisted as evidence. Both kernel namespace identifiers and
 the synthetic server contact marker must be present for
 `offline_agent_fixture_observed`; otherwise the receipt is
-`offline_agent_fixture_unverified`.
+`offline_agent_fixture_unverified`. If unverified, the receipt also records
+only bounded diagnostic enums (`diagnosticStage`, `fixtureRequestState`,
+`codexErrorCategory`) and a numeric in-sandbox process exit code. The
+fixture stores a fixed, non-sensitive enum for rejected HTTP requests.
+Raw HTTP payloads, stderr, Codex output and JSONL traces remain inside
+sandbox tmpfs and are not copied to the receipt. The absence of a validated
+fixture contact is not by itself evidence that *no* HTTP request was made.
 
 This mode writes a private `0600` receipt under
 `~/ARL-Assessments/codex-agent-fixture-*/receipt.json`, with hashes for
