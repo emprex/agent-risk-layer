@@ -120,6 +120,46 @@ Linux x64 package layout is supported; other layouts fail closed.
 Do not confuse this bounded demonstration with confinement of a full
 online agent or readiness for client assessment.
 
+## Synthetic offline agent protocol smoke (Operator mode AGENT)
+
+Operator option **6 → AGENT** executes a REAL native Codex `exec` turn
+inside the same offline Bubblewrap namespace as a fixed Python Responses
+API mock server (`127.0.0.1:18787/v1`). This is a deterministic protocol
+fixture, **not a real LLM**. It returns only `ARL_LOCAL_FIXTURE_OK` and no
+tool calls. The loopback server only accepts bounded POST requests to
+`/v1/responses` and records a local marker inside `/scratch`.
+
+Bubblewrap unshares the network so neither process can reach the host
+loopback, the user's Ollama instance, the internet, or a model provider.
+The runner copies only the native Codex executable and the fixture script
+into a temporary private staging area, mounts both read-only under `/app`,
+clears environment variables, and points HOME/CODEX_HOME into ephemeral tmpfs.
+It does not mount user auth, Node/npm installation directories, the host
+home, previous 0DIN labs or real client data.
+
+A bounded shell runs the mock server, checks its readiness, invokes Codex
+with `--ignore-user-config`, a fixed custom local Responses provider,
+`--sandbox read-only`, `--json`, and `--ephemeral`, then validates the
+Codex JSONL completion and exact synthetic fixture token inside the
+namespace. Raw Codex prompts and output stay in the sandbox tmpfs and
+are never persisted as evidence. Both kernel namespace identifiers and
+the synthetic server contact marker must be present for
+`offline_agent_fixture_observed`; otherwise the receipt is
+`offline_agent_fixture_unverified`.
+
+This mode writes a private `0600` receipt under
+`~/ARL-Assessments/codex-agent-fixture-*/receipt.json`, with hashes for
+the native binary and fixture, no authorising or closure decision, and
+`securityVerdict: not_assessed`. Tests in GitHub CI use a mocked runner;
+the real `AGENT` mode must be independently verified on the user's Debian.
+
+**Not validated by AGENT:** external API/network allowlisting, credentials,
+MCP or approval barriers, hostile prompts, dynamic model reasoning,
+OS confinement of an online process, client systems, or 0DIN findings.
+A future online model must have its own separately audited network and
+credential design. Do not reuse this fixture receipt as a real security
+assessment or independent full-isolation certificate.
+
 ## Local development flow (not a live 0DIN instruction)
 
 ```sh
