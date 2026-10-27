@@ -54,6 +54,34 @@ authorisation path because it runs **no adversarial tests**.
 Any eventual adversarial 0DIN evaluation must use the existing ARL human ROE,
 frozen target identity, bounded Red Team gates and independent observations.
 
+## Offline Bubblewrap namespace preflight
+
+Under Operator option 6, choose **ISOLATION** after providing a clean 0700
+synthetic lab. The host runs only a short-lived shell inside a Bubblewrap
+sandbox, NOT the Codex CLI. It requires /usr/bin/bwrap on Linux; installation
+alone is not proof that namespace creation works on the host kernel.
+
+The preflight requests a separate user, PID, IPC and **network** namespace,
+and a minimal synthetic mount root. The only host directory deliberately
+made available is /usr (read-only); the selected synthetic lab is bound
+read-only to /workspace. No home, ARL repository, account data, or host root
+is mounted. The preflight compares kernel-provided network and mount namespace
+identifiers and checks that a temporary host canary is not visible from inside
+the sandbox.
+
+A private 0600 receipt is saved under the ARL Assessments directory.
+Possible statuses: `namespace_probe_passed` and `isolation_unverified`.
+Both explicitly retain `securityVerdict:not_assessed` and
+`independentIsolationAttested:false`. A namespace probe does not demonstrate
+the security of a later, differently configured online Codex process or
+verify that the user namespace restrictions, filesystem policy or network
+allowlist used in an actual 0DIN campaign are adequate.
+
+**Do not reuse the offline profile to execute online Codex directly**:
+network unsharing prevents normal model-provider access. A future authorised
+online assessment requires a separately reviewed egress/authentication design
+and OS-level evidence about the *actual* Codex process.
+
 ## Local development flow (not a live 0DIN instruction)
 
 ```sh
