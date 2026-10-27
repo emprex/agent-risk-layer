@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, open, readFile, stat, lstat } from 'node:fs/promises';
 import { verifySyntheticLab, runCodexOnce } from '../redteam/codex-cli-local-adapter.mjs';
 import { observeCodexJsonl } from '../redteam/codex-jsonl-evidence.mjs';
+import { runBubblewrapIsolationPreflight } from '../redteam/codex-bubblewrap-preflight.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -335,6 +336,22 @@ export async function runCodexConnectivityPilot({
   return { receipt, receiptPath };
 }
 
+export async function runCodexNamespacePreflight({
+  labPath, probe = runBubblewrapIsolationPreflight, outputRoot = privateRoot()
+} = {}) {
+  const lab = verifySyntheticLab(path.resolve(labPath || ''));
+  const receipt = await probe({ labPath:lab });
+  const folder = await safe(outputRoot);
+  const caseFolder = await safe(path.join(
+    folder,
+    'codex-isolation-' + new Date().toISOString().replace(/[:.]/g, '-') +
+      '-' + randomUUID().slice(0, 8)
+  ));
+  const receiptPath = path.join(caseFolder, 'receipt.json');
+  await writePrivate(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
+  return { receipt, receiptPath };
+}
+
 export async function main() {
   const rl = createInterface({ input: stdin, output: stdout });
   const ask = async prompt => {
@@ -417,15 +434,24 @@ export async function main() {
         console.log('PLAN only: no process started, no security test performed.');
         return;
       }
-      console.log('This checks Codex CLI transport only. It is NOT a security test.');
-      console.log('Codex uses your configured authentication and may contact its model provider.');
-      console.log('A read-only Codex sandbox is not proof of host OS isolation.');
-      const mode = (await ask('Type PLAN or CONNECT: ')).toUpperCase();
+      console.log('Available checks: offline ISOLATION (Bubblewrap) or CONNECT (Codex API).');
+      console.log('Neither check is a vulnerability test or substitutes for ARL Rules of Engagement.');
+      const mode = (await ask('Type PLAN, ISOLATION or CONNECT: ')).toUpperCase();
       if (mode === 'PLAN') {
-        console.log('PLAN only: no Codex process started.');
+        console.log('PLAN only: no process started.');
+        return;
+      }
+      if (mode === 'ISOLATION') {
+        console.log('Only an offline synthetic shell will run; Codex will not start.');
+        const { receipt, receiptPath } = await runCodexNamespacePreflight({ labPath: proposed });
+        console.log('ARL Bubblewrap namespace result: ' + receipt.status);
+        console.log('Full OS isolation attested: NO. Security verdict: NOT ASSESSED.');
+        console.log('Private receipt: ' + receiptPath);
         return;
       }
       if (mode !== 'CONNECT') throw Error('No Codex process started.');
+      console.log('Codex uses your configured authentication and may contact its model provider.');
+      console.log('A read-only Codex sandbox is not proof of host OS isolation.');
       const acknowledge = await ask('To authorise this fixed synthetic connectivity check, type I AUTHORISE CODEX CONNECTIVITY: ');
       if (acknowledge !== 'I AUTHORISE CODEX CONNECTIVITY') {
         throw Error('No explicit authorisation. No Codex process started.');
