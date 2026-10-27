@@ -23,6 +23,13 @@ export function buildBubblewrapProbeArgs(lab, hostCanaryPath) {
     '--unshare-user', '--unshare-pid', '--unshare-ipc', '--unshare-net',
     '--clearenv', '--setenv', 'PATH', '/usr/bin',
     '--ro-bind', '/usr', '/usr',
+    // Debian merged-/usr: these root symlinks are required to resolve ELF
+    // interpreters such as /lib64/ld-linux-x86-64.so.2.  Without them,
+    // execvp(/usr/bin/sh) fails ENOENT despite the binary existing in /usr.
+    // These links point into the already read-only /usr bind (not host /).
+    '--symlink', 'usr/bin', '/bin',
+    '--symlink', 'usr/lib', '/lib',
+    '--symlink', 'usr/lib64', '/lib64',
     '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
     '--ro-bind', lab, '/workspace', '--chdir', '/workspace',
     '--', '/usr/bin/sh', '-c',
