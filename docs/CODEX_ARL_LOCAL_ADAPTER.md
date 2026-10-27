@@ -64,8 +64,12 @@ alone is not proof that namespace creation works on the host kernel.
 The preflight requests a separate user, PID, IPC and **network** namespace,
 and a minimal synthetic mount root. The only host directory deliberately
 made available is /usr (read-only); the selected synthetic lab is bound
-read-only to /workspace. No home, ARL repository, account data, or host root
-is mounted. The preflight compares kernel-provided network and mount namespace
+read-only to /workspace. On Debian 13's merged-/usr layout, Bubblewrap
+also reconstructs /bin, /lib and /lib64 as symlinks pointing into that
+read-only /usr mount. These are required for /usr/bin/sh to find its ELF
+loader; omission can yield a misleading 'execvp: No such file or directory'.
+No home, ARL repository, account data, or host root is mounted.
+The preflight compares kernel-provided network and mount namespace
 identifiers and checks that a temporary host canary is not visible from inside
 the sandbox.
 
