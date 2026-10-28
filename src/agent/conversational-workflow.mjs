@@ -402,7 +402,7 @@ function responseStatus(actor) {
   return 'user_action_required';
 }
 
-function defaultMessage({ command, stage, actor, label }) {
+function defaultMessage({ command, stage, actor, label, workflowState }) {
   const current = stageLabel(stage);
 
   if (command === 'needs') {
@@ -622,7 +622,8 @@ function commandMessage({
     command,
     stage: workflowState.stage,
     actor,
-    label
+    label,
+    workflowState
   });
 }
 
