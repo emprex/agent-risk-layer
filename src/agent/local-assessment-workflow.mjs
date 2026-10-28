@@ -54,6 +54,7 @@ import { buildAssessmentBusinessContentInventory } from './assessment-business-c
 import { mapAssessmentEvidenceToRequirements } from './assessment-evidence-requirement-map.mjs';
 import { buildAssessmentActionDossiers } from './assessment-action-dossiers.mjs';
 import { selectNextLegacyV2RecoveryBatch } from './legacy-v2-recovery-batch-plan.mjs';
+import { selectStaleV2CheckDigestRefreshControls } from './stale-v2-check-digest-refresh-controls.mjs';
 import { buildAssessmentReviewDossiers } from './assessment-review-dossiers.mjs';
 import { buildKb007ProviderEvidenceView } from './kb007-provider-evidence-view.mjs';
 import { buildKb008PrivacyEvidenceView } from './kb008-privacy-evidence-view.mjs';
@@ -266,7 +267,8 @@ export async function runLocalAssessment(repositoryPath, request, options, local
         '\\nNo evidence approval, PASS/FAIL or deployment decision was inferred.'
     };
   }
-  if (/^Refresh stale v2 check digests$/i.test(request.trim())) {
+  const staleDigestRefreshRequest = /^Refresh stale v2 check digests(?: (ARL-KB-\d{3}))?$/i.exec(request.trim());
+  if (staleDigestRefreshRequest) {
     if (localFrozenInspection?.binding?.verified !== true ||
         localFrozenInspection?.target?.dirty !== false ||
         localFrozenInspection?.target?.revision !== process.env.ARL_EXPECTED_TARGET_SHA ||
@@ -275,13 +277,9 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     }
     const {index,triages}=await readAllAssessmentTriages(options);
     const review=buildAssessmentEvidenceReviewPacks(index,triages);
-    const candidateIds=[...new Set(review.lineageExceptions.filter(item=>
-      item.lineageStatus === 'source_test_or_check_lineage_mismatch' &&
-      item.lineageMismatchReasons?.length === 1 &&
-      item.lineageMismatchReasons[0] === 'check_digest_mismatch' &&
-      item.sourceType === 'arl_frozen_source_evidence_collection_v2'
-    ).map(item=>item.controlId))].sort();
-    if (candidateIds.length > 20) throw new Error('Stale digest refresh exceeds bounded 20-control limit.');
+    const candidateIds = selectStaleV2CheckDigestRefreshControls(review, {
+      controlId: staleDigestRefreshRequest[1]?.toUpperCase() || null
+    });
     const outcomes=[];
     for (const controlId of candidateIds) {
       const detail=await getControlIntelligenceControl({
