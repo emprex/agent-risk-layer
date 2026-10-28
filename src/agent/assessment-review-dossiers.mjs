@@ -4,7 +4,9 @@ import { buildPilotBatchPlan } from './pilot-batch-plan.mjs';
 import { buildPilotEvidenceLineageTriage } from './pilot-evidence-lineage-triage.mjs';
 
 const MAX_CONTROLS = 20;
-const ELIGIBLE_LANES = new Set(['test_planning', 'evidence_collection']);
+// Human-decision controls can be inspected, but review dossiers remain read-only.
+// Existing PASS/verified storage does not prove every canonical criterion.
+const ELIGIBLE_LANES = new Set(['test_planning', 'evidence_collection', 'human_decision']);
 
 function uniqueRows(rows) {
   const result = new Map();
