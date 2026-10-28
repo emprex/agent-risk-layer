@@ -137,6 +137,133 @@ function assertOperatorReviewFrozenBinding(dossier, frozenInspection) {
 
 export async function runLocalAssessment(repositoryPath, request, options, localFrozenInspection = null) {
   if (!isLocalCliModeEnabled()) throw new Error('Local CLI mode is required.');
+  // An existing PASS may require a further accountable review. Preserve its
+  // test/decision history and append a separately identifiable owner attestation.
+  if (request.startsWith('Record supplemental control review ')) {
+    let input;
+    try {
+      input = JSON.parse(request.slice('Record supplemental control review '.length));
+    } catch {
+      throw new Error('Supplemental review requires a JSON object.');
+    }
+    const controlId = String(input?.controlId || '').trim().toUpperCase();
+    const snapshotId = String(input?.systemSnapshotId || '').trim();
+    const revision = String(input?.targetRevision || '').trim();
+    const outcome = String(input?.reviewOutcome || '').trim();
+    const summary = String(input?.summary || '').trim();
+    const limitations = String(input?.limitations || '').trim();
+    if (!/^ARL-KB-\d{3}$/.test(controlId) ||
+        !/^sys_[A-Za-z0-9_-]{8,100}$/.test(snapshotId) ||
+        !/^[0-9a-f]{40}$/.test(revision) ||
+        !['supported', 'limited'].includes(outcome) ||
+        summary.length < 40 || summary.length > 550 ||
+        limitations.length < 20 || limitations.length > 450 ||
+        input?.acknowledgement !== 'I CONFIRM THIS EXACT-SNAPSHOT HUMAN REVIEW') {
+      throw new Error('Supplemental review requires exact scope, bounded observation, limitations and explicit human confirmation.');
+    }
+    if (localFrozenInspection?.binding?.verified !== true ||
+        localFrozenInspection?.target?.dirty !== false ||
+        localFrozenInspection.target.revision !== revision ||
+        localFrozenInspection.binding.revisionBefore !== revision ||
+        localFrozenInspection.binding.revisionAfter !== revision ||
+        process.env.ARL_EXPECTED_TARGET_SHA !== revision) {
+      throw new Error('Supplemental review requires a verified clean frozen target at the exact expected SHA.');
+    }
+    const detail = await getControlIntelligenceControl({
+      projectId: options.projectId, controlId, userId: options.userId
+    });
+    const configuration = detail?.systemSnapshot?.assessmentConfiguration;
+    const requirements = detail?.testDefinition?.requiredEvidence;
+    if (detail?.systemSnapshot?.id !== snapshotId ||
+        configuration?.targetBinding?.source !== 'git' ||
+        configuration.targetBinding.revision !== revision ||
+        configuration?.assessmentBinding?.assessmentId !== options.assessmentId ||
+        !['approval', 'deployment_decision'].includes(detail?.chain?.currentStage) ||
+        !Array.isArray(requirements) || !requirements.length ||
+        !detail?.testDefinition?.digest) {
+      throw new Error('Supplemental review refuses an unbound or non-decision-stage control.');
+    }
+    const criteria = input?.criteria;
+    if (!Array.isArray(criteria) || criteria.length !== requirements.length ||
+        criteria.length > 30 || criteria.some((item, index) =>
+          item?.index !== index + 1 ||
+          !['supported', 'limited', 'missing'].includes(item?.status) ||
+          typeof item?.reference !== 'string' ||
+          item.reference.trim().length < 3 ||
+          item.reference.length > 150) ||
+        (outcome === 'supported' && criteria.some(item => item.status !== 'supported'))) {
+      throw new Error('Review must address all current canonical criteria in order; no missing or limited criterion may be described as fully supported.');
+    }
+    const passed = [...new Map([...(detail.tests || []), ...(detail.testHistory || [])]
+      .filter(test => test?.id && test.systemSnapshotId === snapshotId &&
+        test.result === 'passed' && test.executionKind !== 'retest')
+      .map(test => [test.id, test])).values()]
+      .filter(test => (detail.evidence || []).some(e =>
+        e.testExecutionId === test.id &&
+        e.systemSnapshotId === snapshotId &&
+        e.sourceType === 'manual_review' &&
+        e.verificationState === 'verified' &&
+        e.retentionStatus === 'active'));
+    if (passed.length !== 1) {
+      throw new Error('Supplemental review requires exactly one current PASS linked to verified active manual-review evidence.');
+    }
+    const review = {
+      schema: 'arl.supplemental-human-control-review.v1',
+      controlId, systemSnapshotId: snapshotId, targetRevision: revision,
+      originalTestId: passed[0].id,
+      currentCheckDigest: detail.testDefinition.digest,
+      originalCheckDigest: passed[0].checkDigest || null,
+      outcome, summary, limitations,
+      criteria: criteria.map(item => ({
+        index: item.index, status: item.status, reference: item.reference.trim()
+      })),
+      authorityLimit: 'Human attestation only; no new test PASS, criterion validation, finding closure or deployment approval.'
+    };
+    const body = JSON.stringify(review);
+    if (body.length > 2000) throw new Error('Review exceeds canonical evidence limit; shorten the narrative or references.');
+    const sourceReference = 'supplemental-human-review:' +
+      createHash('sha256').update(body).digest('hex');
+    const existing = (detail.evidence || []).filter(e =>
+      e.sourceReference === sourceReference &&
+      e.systemSnapshotId === snapshotId &&
+      e.testExecutionId === passed[0].id &&
+      e.retentionStatus === 'active');
+    if (existing.length > 1 || (existing.length === 1 && existing[0].limitations !== body)) {
+      throw new Error('Ambiguous or inconsistent prior supplementary evidence; no write performed.');
+    }
+    const evidence = existing[0] || await recordControlEvidence({
+      projectId: options.projectId, controlId, userId: options.userId,
+      input: {
+        systemSnapshotId: snapshotId, testExecutionId: passed[0].id,
+        evidenceClass: 'human_provided', sourceType: 'supplemental_human_review',
+        sourceReference, observedAt: new Date().toISOString(), limitations: body
+      }
+    });
+    if (!['unverified', 'verified'].includes(evidence.verificationState)) {
+      throw new Error('Unexpected trust state for supplementary human evidence.');
+    }
+    const trust = await verifyExplicitHumanEvidence({
+      projectId: options.projectId, evidenceId: evidence.id,
+      controlId, userId: options.userId,
+      verificationScope: 'explicit_supplemental_human_attestation',
+      reason: 'The authenticated owner explicitly confirmed this bounded exact-snapshot supplemental review. Verification attests the human record, not objective criterion or deployment satisfaction.'
+    });
+    return {
+      canonicalData: {
+        type: 'supplemental_human_control_review', controlId,
+        systemSnapshotId: snapshotId, targetRevision: revision,
+        originalTestId: passed[0].id, evidenceId: evidence.id,
+        verificationState: trust.verificationState, reviewOutcome: outcome,
+        alreadyRecorded: existing.length === 1,
+        securityStateChanged: false, deploymentDecisionWritten: false,
+        humanReviewRequired: true
+      },
+      answer: 'Supplemental human review recorded for ' + controlId +
+        ', evidence ' + evidence.id + ', outcome ' + outcome.toUpperCase() +
+        '. Existing PASS preserved. Human attestation does not prove all criteria or authorise deployment.'
+    };
+  }
+
   if (/^Import KB-028 local observation[.!?]*$/i.test(request.trim())) {
     // Candidate-only import: no tests, trust promotion, findings or readiness changes.
     const filePath = path.join(process.cwd(), 'data', 'local-reports',
