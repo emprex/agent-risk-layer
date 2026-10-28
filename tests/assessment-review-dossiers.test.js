@@ -105,12 +105,25 @@ test('does not infer criterion coverage even when evidence record is already ver
   assert.equal(result.dossiers[0].evidenceAutomaticallyAccepted,false);
 });
 
-test('refuses blocked finding and final-decision controls', () => {
-  for (const id of ['ARL-KB-006','ARL-KB-001']) {
+test('refuses blocked finding controls', () => {
+  for (const id of ['ARL-KB-006']) {
     assert.throws(() => buildAssessmentReviewDossiers({
       queue, details:[detail(id)], controlIds:[id]
     }),/not independently actionable/);
   }
+});
+
+test('shows human-decision control history without asserting criterion coverage', () => {
+  const controlId = 'ARL-KB-001';
+  const result = buildAssessmentReviewDossiers({
+    queue, details: [detail(controlId)], controlIds: [controlId]
+  });
+  assert.equal(result.dossiers[0].currentStage, 'deployment_decision');
+  assert.equal(result.dossiers[0].outcome, 'operator_review_required');
+  assert.equal(result.dossiers[0].evidenceInventory[0].verificationState, 'verified');
+  assert.ok(result.dossiers[0].criteria.every(item => item.criterionSatisfied === false));
+  assert.equal(result.evidencePersisted, 0);
+  assert.equal(result.deploymentDecisionWritten, false);
 });
 
 test('rejects partial, duplicate, foreign, stale, and change-of-target inputs', () => {
