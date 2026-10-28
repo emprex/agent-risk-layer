@@ -37,6 +37,14 @@ const STAGE_LABELS = Object.freeze({
     'an authorised bounded test is required',
   control_test_required:
     'an authoritative control test is required',
+  control_evidence_collection_required:
+    'deterministic frozen-source evidence collection is required',
+  active_test_plan_required:
+    'a scoped active-test plan and human authorisation are required',
+  authorised_active_test_execution_required:
+    'an authorised active test is ready for controlled execution',
+  active_test_evidence_review_required:
+    'inconclusive active-test evidence requires human review',
   evidence_recording_required:
     'qualifying evidence must be recorded authoritatively',
   finding_creation_required:
@@ -72,6 +80,16 @@ const ACTION_LABELS = Object.freeze({
     'resolve control applicability from authoritative project state',
   run_frozen_source_inspection:
     'inspect the frozen source for the required evidence',
+  collect_authoritative_control_evidence:
+    'collect deterministic source evidence for the scoped control',
+  run_authoritative_control_test:
+    'execute the authorised deterministic control test',
+  define_and_authorise_control_test:
+    'define and authorise the scoped control test',
+  perform_authorised_control_test:
+    'perform the separately authorised control test',
+  review_inconclusive_control_evidence:
+    'review inconclusive test evidence and remaining requirements',
   authorise_and_run_bounded_test:
     'authorise the bounded test',
   provide_authoritative_control_test:
@@ -201,17 +219,18 @@ export function detectConversationCommand(userRequest) {
 }
 
 function actionLabel(action) {
-  return (
-    ACTION_LABELS[action?.name] ||
-    'continue with the next authoritative ARL step'
-  );
+  const name = action?.name;
+  if (Object.hasOwn(ACTION_LABELS, name)) return ACTION_LABELS[name];
+  return typeof name === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(name)
+    ? `investigate unrecognised authoritative action (${name})`
+    : 'inspect the missing authoritative next action';
 }
 
 function stageLabel(stage) {
-  return (
-    STAGE_LABELS[stage] ||
-    'the authoritative workflow requires another step'
-  );
+  if (Object.hasOwn(STAGE_LABELS, stage)) return STAGE_LABELS[stage];
+  return typeof stage === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(stage)
+    ? `unrecognised workflow stage (${stage})`
+    : 'unknown authoritative workflow stage';
 }
 
 function relevantControls(workflowState) {
@@ -411,7 +430,11 @@ function defaultMessage({ command, stage, actor, label }) {
   }
 
   if (command === 'status') {
-    return `Current assessment state: ${current}. Next: ${label}.`;
+    const controlId = workflowState?.nextAllowedAction?.controlId ||
+      workflowState?.scopedControl?.controlId || null;
+    const scope = /^ARL-KB-[0-9]{3}$/.test(controlId || '')
+      ? ` Control: ${controlId}.` : '';
+    return `Current assessment state: ${current}.${scope} Next: ${label}.`;
   }
 
   return `Assessment state loaded: ${current}. Next: ${label}.`;
