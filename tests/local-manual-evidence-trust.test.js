@@ -143,3 +143,22 @@ test('conclusive manual evidence is checked against the exact canonical Risk Kno
     /Canonical remaining human-only evidence checklist verified against Risk Knowledge/
   );
 });
+
+
+test('a supplemental review is exact-SHA, append-only and never rewrites the historical PASS', () => {
+  const workflow = fs.readFileSync(
+    path.join(root, 'src/agent/local-assessment-workflow.mjs'), 'utf8'
+  );
+  const section = workflow.split("if (request.startsWith('Record supplemental control review ')) {")[1]
+    ?.split("if (/^Import KB-028 local observation")[0];
+  assert.ok(section, 'supplemental control review route');
+  assert.match(section, /localFrozenInspection\.binding\.revisionBefore !== revision/);
+  assert.match(section, /detail\?\.systemSnapshot\?\.id !== snapshotId/);
+  assert.match(section, /criteria\.length !== requirements\.length/);
+  assert.match(section, /e\.sourceType === 'manual_review'/);
+  assert.match(section, /existing\.length === 1/);
+  assert.match(section, /recordControlEvidence\(/);
+  assert.match(section, /verifyExplicitHumanEvidence\(/);
+  assert.match(section, /explicit_supplemental_human_attestation/);
+  assert.doesNotMatch(section, /recordControlTestExecution\(|closeControlFinding\(|recordDeploymentDecision\(/);
+});
