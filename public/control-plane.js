@@ -579,13 +579,46 @@ function decisionEvidence(event) {
   return `<b class="decision-chip ${escapeHtml(event.decision)}">${event.decision === 'deny' ? 'Denied' : 'Allowed'}</b><small>Policy: ${event.observed_decision === 'would-deny' ? 'would deny' : 'allow'}</small>`;
 }
 
+function inventoryPresentation(snapshot) {
+  const summary = snapshot?.summary || {};
+  const assets = Array.isArray(snapshot?.assets) ? snapshot.assets : [];
+  const unknownCount = (statusField, valueField, summaryField) => {
+    const observed = assets.filter((asset) => {
+      const status = asset?.[statusField];
+      if (status === 'known-true' || status === 'known-false') return false;
+      if (status === 'unknown') return true;
+      return asset?.[valueField] !== true;
+    }).length;
+    return Math.max(observed, Number(summary[summaryField]) || 0);
+  };
+  const exposureUnknown = unknownCount('internetExposureStatus', 'internetExposed', 'internetExposureUnknown');
+  const privilegeUnknown = unknownCount('privilegeStatus', 'privileged', 'privilegeUnknown');
+  const incomplete = summary.evidenceComplete !== true || exposureUnknown > 0 || privilegeUnknown > 0;
+  const gate = snapshot?.drift?.deploymentGate;
+  const driftLabel = gate === 'review-required' ? 'Exposure drift review required'
+    : gate === 'clear' ? 'No confirmed risky exposure drift' : 'Exposure drift status unknown';
+  return {
+    warning: incomplete || gate !== 'clear',
+    label: incomplete ? `Inventory evidence incomplete — ${driftLabel}` : driftLabel,
+    note: `${exposureUnknown} internet-exposure statuses unknown · ${privilegeUnknown} privilege statuses unknown. This exposure-change indicator is not deployment approval.`,
+    exposureUnknown,
+    privilegeUnknown,
+  };
+}
+
 function inventorySummary(snapshot) {
   const d = snapshot.drift || {};
-  return `<div class="inventory-score"><strong>${snapshot.summary.total || 0}</strong><span>AI assets discovered</span></div><div class="inventory-metrics"><div><b>${snapshot.summary.production || 0}</b><span>Production</span></div><div><b>${snapshot.summary.internetExposed || 0}</b><span>Internet exposed</span></div><div><b>${snapshot.summary.privileged || 0}</b><span>Privileged</span></div></div><div class="drift-banner ${d.deploymentGate === 'review-required' ? 'warning' : 'clear'}"><strong>${d.deploymentGate === 'review-required' ? 'Deployment review required' : 'No risky exposure drift'}</strong><span>${d.added?.length || 0} added · ${d.removed?.length || 0} removed · ${d.changed?.length || 0} changed</span></div><div class="asset-list">${snapshot.assets.slice(0, 12).map((asset) => `<div><span class="asset-kind">${escapeHtml(asset.kind)}</span><strong>${escapeHtml(asset.name)}</strong><small>${escapeHtml(asset.provider)} · ${escapeHtml(asset.environment)}${asset.privileged ? ' · privileged' : ''}${asset.internetExposed ? ' · public' : ''}</small></div>`).join('')}</div>`;
+  const summary = snapshot.summary || {};
+  const presentation = inventoryPresentation(snapshot);
+  const assets = Array.isArray(snapshot.assets) ? snapshot.assets : [];
+  return `<div class="inventory-score"><strong>${summary.total || 0}</strong><span>AI assets discovered</span></div><div class="inventory-metrics"><div><b>${summary.production || 0}</b><span>Production</span></div><div><b>${summary.internetExposed || 0}</b><span>Internet exposed</span><small>${presentation.exposureUnknown} unknown</small></div><div><b>${summary.privileged || 0}</b><span>Privileged</span><small>${presentation.privilegeUnknown} unknown</small></div></div><div class="drift-banner ${presentation.warning ? 'warning' : 'clear'}"><strong>${escapeHtml(presentation.label)}</strong><span>${escapeHtml(presentation.note)}</span><span>${d.added?.length || 0} added · ${d.removed?.length || 0} removed · ${d.changed?.length || 0} changed</span></div><div class="asset-list">${assets.slice(0, 12).map((asset) => `<div><span class="asset-kind">${escapeHtml(asset.kind)}</span><strong>${escapeHtml(asset.name)}</strong><small>${escapeHtml(asset.provider)} · ${escapeHtml(asset.environment)}${asset.privileged ? ' · privileged' : ''}${asset.internetExposed ? ' · public' : ''}</small></div>`).join('')}</div>`;
 }
 
 function inventoryHistory(items) {
-  return items.map((item) => `<div class="history-row"><span>${dateTime(item.createdAt)}</span><strong>${item.summary.total || 0} assets</strong><span>${item.drift.added?.length || 0} added</span><span>${item.drift.changed?.length || 0} changed</span><span class="status-dot ${item.drift.deploymentGate === 'review-required' ? 'warning' : 'active'}">${escapeHtml(item.drift.deploymentGate || 'clear')}</span></div>`).join('');
+  return items.map((item) => {
+    const presentation = inventoryPresentation(item);
+    return `<div class="history-row"><span>${dateTime(item.createdAt)}</span><strong>${item.summary?.total || 0} assets</strong><span>${item.drift?.added?.length || 0} added</span><span>${item.drift?.changed?.length || 0} changed</span><span class="status-dot ${presentation.warning ? 'warning' : 'active'}">${escapeHtml(presentation.label)}</span><small>${escapeHtml(presentation.note)}</small></div>`;
+  }).join('');
 }
 
 function remediationRow(item) {
