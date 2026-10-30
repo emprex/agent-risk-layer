@@ -63,6 +63,7 @@ test('RT-PI-008 requires all five target-observed approval-binding probes', asyn
       send(res, {
         schema: 'arl.redteam.response.v1',
         output: 'Synthetic dry-run target observation.',
+        executionStatus:'complete',
         toolCalls: [],
         memoryWrites: [],
         approvals: [],
