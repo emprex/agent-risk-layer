@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // KB-014: native OAuth token-store integration probes using synthetic values.
 // They do NOT test receiving-service authorization or inventory completeness.
 // Even observed mismatches are engineering candidates, never security verdicts.
@@ -107,5 +109,96 @@ export async function executeKb014NativeLifecycleProbe({
     deploymentDecisionWritten: false,
     receivingServiceAuthorizationTested: false,
     approvedInventoryReconciled: false
+  };
+}
+
+
+// Prepare the exact privacy-safe observation that the authoritative control
+// ledger can store without truncation. Hashes bind the four observed cases,
+// frozen Git SHA, canonical check, owner ROE, operator and execution time.
+// The reference is a digest receipt, NOT a claim that a receiving API or
+// organisational credential inventory was checked.
+export function buildKb014FixtureEvidenceRecord({
+  outcome, targetRevision, snapshotId, checkDigest,
+  roeReference, testerId, startedAt, probeCompletedAt
+} = {}) {
+  const sha = x => /^[a-f0-9]{64}$/.test(x || '');
+  const git = /^[a-f0-9]{40}$/.test(targetRevision || '');
+  const snapshot = /^sys_[A-Za-z0-9_-]{1,116}$/.test(snapshotId || '');
+  const roe = /^roe:[A-Za-z0-9_-]{3,120}:control:ARL-KB-014$/.test(roeReference || '');
+  const actor = typeof testerId === 'string' && /^[A-Za-z0-9_@.+-]{3,120}$/.test(testerId);
+  const time = value => typeof value === 'string' &&
+    !Number.isNaN(Date.parse(value)) && new Date(value).toISOString() === value;
+  if (!git || !snapshot || !sha(checkDigest) || !roe || !actor ||
+      !time(startedAt) || !time(probeCompletedAt) ||
+      Date.parse(probeCompletedAt) < Date.parse(startedAt)) {
+    throw new Error('KB-014 persistence requires exact frozen scope, check, verified ROE, operator and timestamps.');
+  }
+  if (!['native_lifecycle_fixture_integration_only',
+         'native_lifecycle_behavior_mismatch_review_required'].includes(outcome?.status) ||
+      outcome.automaticPass !== false ||
+      outcome.humanReviewRequired !== true ||
+      outcome.receivingServiceAuthorizationTested !== false ||
+      outcome.approvedInventoryReconciled !== false ||
+      !Array.isArray(outcome.observations) ||
+      outcome.observations.length !== KB014_CASES.length) {
+    throw new Error('Only four complete unverified KB-014 native fixture observations may be persisted.');
+  }
+
+  const cases = outcome.observations.map((item, index) => {
+    const [caseName, expectedState] = KB014_CASES[index];
+    if (item?.caseId !== 'KB014-' + caseName ||
+        item?.expectedState !== expectedState ||
+        !['active_cached', 'expired_cached', 'absent', 'unmanaged_cached'].includes(item.observedState) ||
+        typeof item.ownerAttributed !== 'boolean' ||
+        typeof item.expiryPresent !== 'boolean' ||
+        !(typeof item.expiredByTargetCheck === 'boolean' ||
+          item.expiredByTargetCheck === null) ||
+        item.credentialReference !== 'synthetic:' + caseName.toLowerCase() ||
+        item.fixtureOnly !== true ||
+        item.nativeTokenStoreObserved !== true ||
+        item.receivingPolicyObserved !== false ||
+        item.inventoryReconciled !== false) {
+      throw new Error('KB-014 requires four exact ordered synthetic-only cases, without policy or inventory claims.');
+    }
+    return {
+      caseId: item.caseId,
+      expectedState: item.expectedState,
+      observedState: item.observedState,
+      ownerAttributed: item.ownerAttributed,
+      expiryPresent: item.expiryPresent,
+      expiredByTargetCheck: item.expiredByTargetCheck,
+      credentialReference: item.credentialReference
+    };
+  });
+
+  const payload = {
+    schema: 'arl.kb014.native-oauth-fixture-execution.v1',
+    controlId: 'ARL-KB-014',
+    targetRevision, systemSnapshotId: snapshotId, checkDigest,
+    roeReference, testerId, startedAt, probeCompletedAt,
+    status: outcome.status,
+    fixtureOnly: true, receivingPolicyObserved: false,
+    inventoryReconciled: false, automaticPass: false,
+    cases
+  };
+  const observedResult = JSON.stringify(payload);
+  // Core ledger has a strict 2,000-character observation limit.
+  // Never allow silent truncation of any of the four cases.
+  if (observedResult.length > 2000) {
+    throw new Error('KB-014 full observation exceeds the authoritative record limit.');
+  }
+  const observationSha256 = createHash('sha256').update(observedResult, 'utf8').digest('hex');
+  return {
+    observedResult,
+    observationSha256,
+    sourceReference: 'kb014-native-fixture:sha256:' + observationSha256,
+    limitations: [
+      'Four synthetic target-native OAuth token-store fixture cases only.',
+      'A cached revoked token was deleted locally; no receiving-side revocation check was performed.',
+      'No receiving-service authorization or approved organisational credential inventory reconciliation was performed.',
+      'This is an unverified integration observation, not satisfaction of KB-014 runtime criterion or a PASS/FAIL verdict.',
+      'Owner ROE: ' + roeReference + '.'
+    ].join(' ')
   };
 }
