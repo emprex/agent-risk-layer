@@ -121,10 +121,15 @@ test('workflow persists complete native cases atomically as inconclusive unverif
     "kb014RecordedFixture:receipt",
     "No automatic PASS, FAIL, criterion acceptance or deployment decision"
   ]) assert.ok(route.includes(guard), guard);
-  assert.ok(route.indexOf("recordControlTestExecution")>route.indexOf('db.transaction(async()=>'));
-  assert.ok(route.indexOf("recordControlEvidence")>route.indexOf("recordControlTestExecution"));
+  const transactionStart = route.indexOf('db.transaction(async()=>');
+  const executionWrite = route.indexOf("const execution=await recordControlTestExecution", transactionStart);
+  const evidenceWrite = route.indexOf("const evidence=await recordControlEvidence", executionWrite);
+  const receiptReturn = route.indexOf("return {canonicalData:{kb014ActiveTest:outcome,kb014RecordedFixture:receipt", evidenceWrite);
+  assert.ok(transactionStart > 0);
+  assert.ok(executionWrite > transactionStart);
+  assert.ok(evidenceWrite > executionWrite);
+  assert.ok(receiptReturn > evidenceWrite);
   assert.ok(route.indexOf("buildKb014FixtureEvidenceRecord")>route.indexOf("executeKb014NativeLifecycleProbe"));
-  assert.ok(route.indexOf("return {canonicalData:{kb014ActiveTest:outcome,kb014RecordedFixture:receipt")>route.indexOf("recordControlEvidence"));
   assert.ok(!route.includes("result:'passed'"));
   assert.ok(!route.includes("result:'failed'"));
   assert.ok(!route.includes("verifyExplicitHumanEvidence({projectId:options.projectId,\n        evidenceId:execution.id"));
