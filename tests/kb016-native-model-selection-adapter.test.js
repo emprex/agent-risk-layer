@@ -22,7 +22,7 @@ test('KB-016 is explicitly bounded to synthetic local model selection', () => {
   assert.match(source, /async def exercise_kb016_native_selection/);
   assert.match(source, /AugmentedLLM\.select_model\(/);
   assert.match(source, /elif case_id in KB016_CASES:/);
-  assert.match(source, /case_id in KB016_CASES or case_id == "RT-DATA-001"/);
+  assert.match(source, /case_id in KB014_CASES or case_id in KB027_CASES or case_id in KB016_CASES/);
   assert.match(source, /"deployedModelDigestResolved": False/);
   assert.match(source, /"evidenceInvalidationTested": False/);
   assert.match(source, /"controlVerdict": "not_determined"/);
