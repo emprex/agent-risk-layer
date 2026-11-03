@@ -14,7 +14,7 @@ const retestMigration=fs.readFileSync(new URL('../migrations/059_canonical_retes
 
 test('all 81 canonical evidence requests are individually reviewed candidates, not boilerplate',()=>{
  assert.equal(canonical.entries.length,108);
- assert.equal(canonical.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),575);
+ assert.equal(canonical.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),576);
  const proposed=revision.required_evidence_replacements;
  assert.equal(Object.keys(proposed).length,81);
  const variants=new Set();
