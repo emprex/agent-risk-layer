@@ -5,7 +5,7 @@ import {renderClientPreassessment} from '../src/agent/client-preassessment-expor
 
 // This is an OFFLINE, synthetic quality contract driven by all canonical
 // 108 knowledge controls. It does not invent verified real-world evidence.
-test('canonical 108-control preassessment renders complete bounded and honest 575-requirement register',()=>{
+test('canonical 108-control preassessment renders complete bounded and honest 576-requirement register',()=>{
  const kb=JSON.parse(fs.readFileSync(new URL('../risk-knowledge/risk-knowledge-v1.json',import.meta.url),'utf8'));
  assert.equal(kb.entries.length,108);
  const controls=kb.entries.map((entry,i)=>({
@@ -21,7 +21,7 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
   }))
  }));
  const count=controls.reduce((n,c)=>n+c.reviewRequirements.length,0);
- assert.equal(count,575);
+ assert.equal(count,576);
  // Synthetic static candidate: a verified-shaped hash does NOT confer validity.
  const provider=controls.find(c=>c.controlId==='ARL-KB-007');
  const target=provider.reviewRequirements.find(r=>/observed model, MCP, plugin/i.test(r.expectedEvidence));
@@ -41,15 +41,15 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
  controls[12].reviewRequirements[0].expectedEvidence='Effective IAM permissions and token revocation';
  const d={schema:'arl.agent.assessment-action-dossiers.v1',
   projectId:'prj_synthetic',snapshotId:'sys_synthetic',
-  targetRevision:'c'.repeat(40),controlsTotal:108,requirementsTotal:575,
-  candidateRequirementCount:1,requiresEvidenceOrReviewCount:574,
+  targetRevision:'c'.repeat(40),controlsTotal:108,requirementsTotal:576,
+  candidateRequirementCount:1,requiresEvidenceOrReviewCount:575,
   confirmedFindings:0,remediationPlansIssued:0,controls,
   humanReviewRequired:true,passFailInferred:false,evidenceAccepted:false,
   deploymentDecisionWritten:false,securityStateChanged:false};
  const html=renderClientPreassessment(d);
  assert.equal((html.match(/class="control" id=/g)||[]).length,108);
- assert.equal((html.match(/<div class="req">/g)||[]).length,575);
- assert.match(html,/575 individual evidence requirements/);
+ assert.equal((html.match(/<div class="req">/g)||[]).length,576);
+ assert.match(html,/576 individual evidence requirements/);
  assert.match(html,/Historical source-collection format/);
  assert.match(html,/Reference privacy/);
  assert.match(html,/No confirmed security findings/);
@@ -89,5 +89,5 @@ test('canonical 108-control preassessment renders complete bounded and honest 57
  assert.match(permissions,/narrowly scoped, synthetic least-privilege/);
  assert.match(permissions,/blocked_no_verified_rules_of_engagement/);
  // Every requirement still has a human conclusion gate.
- assert.equal((html.match(/<strong>Human conclusion gate:<\/strong>/g)||[]).length,575);
+ assert.equal((html.match(/<strong>Human conclusion gate:<\/strong>/g)||[]).length,576);
 });
