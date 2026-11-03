@@ -14,7 +14,7 @@ test('all 78 affected controls have scope-specific success and concrete failure 
  const map=manifest.pass_conditions;
  assert.equal(Object.keys(map).length,78);
  assert.equal(asset.entries.length,108);
- assert.equal(asset.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),575);
+ assert.equal(asset.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),576);
  let checked=0;
  for(const [suffix,condition] of Object.entries(map)){
   const id='ARL-KB-'+suffix;
