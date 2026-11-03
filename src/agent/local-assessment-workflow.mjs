@@ -14,6 +14,7 @@ import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { executeKb027ActiveTest } from './kb027-active-executor.mjs';
 import { executeKb014NativeLifecycleProbe, KB014_CASES, buildKb014FixtureEvidenceRecord } from './kb014-active-executor.mjs';
+import { executeKb016NativeModelProbe } from './kb016-native-model-executor.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
@@ -2934,6 +2935,123 @@ export async function runLocalAssessment(repositoryPath, request, options, local
 
     const controlId =
       String(input?.controlId || '').trim();
+
+    if (controlId === 'ARL-KB-016') {
+      // Exact authorised gate only. Native selection does not test inference,
+      // deployed-model digest, policy bypass or stale-evidence invalidation.
+      const current = await runArlAgent(repositoryPath, 'Where are we?', options);
+      const state = current?.canonicalData?.workflowState || {};
+      const action = state.nextAllowedAction || {};
+      if (state.stage !== 'authorised_active_test_execution_required' ||
+          action.name !== 'perform_authorised_control_test' ||
+          action.actor !== 'user' || action.requiresUserInput !== true ||
+          action.controlId !== controlId ||
+          !/^roe:[A-Za-z0-9_-]+:control:ARL-KB-016$/.test(action.authorisationReference || '')) {
+        throw new Error('KB-016 blocked: exact active-test authorisation gate is required.');
+      }
+      const snapshotId = state?.authoritativeArtifacts?.assessmentContext?.systemSnapshotId;
+      const targetRevision = state?.authoritativeArtifacts?.frozenTarget?.revision;
+      if (!/^sys_[A-Za-z0-9_-]{1,116}$/.test(snapshotId || '') ||
+          !/^[a-f0-9]{40}$/.test(targetRevision || '')) {
+        throw new Error('KB-016 blocked: exact authoritative snapshot and frozen target are required.');
+      }
+      const detail = await getControlIntelligenceControl({
+        projectId:options.projectId, controlId, userId:options.userId
+      });
+      if (detail?.systemSnapshot?.id !== snapshotId ||
+          detail?.chain?.currentStage !== 'test') {
+        throw new Error('KB-016 blocked: control stage or snapshot differs from the authoritative workflow.');
+      }
+      const plan = await db.prepare(
+        "SELECT id FROM control_evidence_items WHERE project_id=? AND entry_id=? AND system_snapshot_id=? AND source_type='active_test_plan_authorisation' AND source_reference=? AND verification_state='verified' AND retention_status='active' ORDER BY created_at DESC LIMIT 1"
+      ).get(options.projectId,controlId,snapshotId,action.authorisationReference);
+      if (!plan) {
+        throw new Error('KB-016 blocked: no verified, active, snapshot-bound human test plan.');
+      }
+      const origin = 'http://127.0.0.1:' +
+        (process.env.ARL_TARGET_ADAPTER_PORT || '8787');
+      const roeId = action.authorisationReference.slice(4, -(':control:' + controlId).length);
+      const now = Date.now();
+      const roes = (await listRedTeamAuthorisations(options)).filter(item =>
+        item.id === roeId && item.status === 'active' &&
+        item.environment === 'local' && item.endpointOrigin === origin &&
+        Date.parse(item.windowStart) <= now && Date.parse(item.windowEnd) > now &&
+        Array.isArray(item.permittedActions) &&
+        item.permittedActions.includes('ARL active control test ' + controlId)
+      );
+      if (roes.length !== 1) {
+        throw new Error('KB-016 blocked: owner Rules of Engagement are missing or expired.');
+      }
+      const existing = await db.prepare(
+        "SELECT id FROM control_evidence_items WHERE project_id=? AND entry_id=? AND system_snapshot_id=? AND source_type='authorised_local_active_test' AND source_reference LIKE 'kb016-native-selection:sha256:%' AND retention_status='active' LIMIT 1"
+      ).get(options.projectId,controlId,snapshotId);
+      if (existing) {
+        return {...current, answer:
+          'KB-016 native selection already recorded for this snapshot; no duplicate test executed.\\n' +
+          current.answer};
+      }
+      const adapterGate = await verifyLocalTargetAdapter({
+        repositoryPath, expectedRevision:targetRevision, origin
+      });
+      if (adapterGate.available !== true) {
+        return blockedLocalAdapterResult(current,adapterGate);
+      }
+      const token = String(process.env.ARL_TARGET_TOKEN || '').trim();
+      if (!token) throw new Error('KB-016 blocked: local adapter token is missing.');
+      const outcome = await executeKb016NativeModelProbe({
+        origin, token, targetRevision, snapshotId
+      });
+      if (outcome.status !== 'native_selection_observed_inconclusive' ||
+          outcome.observations.length !== 2 ||
+          outcome.automaticPass !== false ||
+          outcome.evidenceInvalidationTested !== false ||
+          outcome.deployedModelDigestResolved !== false) {
+        return {...current, answer:
+          'KB-016 native observation BLOCKED (' + (outcome.reason || outcome.status) +
+          '); no test or evidence was recorded.\\n' + current.answer};
+      }
+      const receipt = {
+        schema:'arl.kb016.native-selection-receipt.v1',
+        controlId, systemSnapshotId:snapshotId, targetRevision,
+        authorisationReference:action.authorisationReference,
+        testerId:options.userId,
+        observations:outcome.observations,
+        nativeSelectionOnly:true,
+        deployedModelDigestResolved:false,
+        evidenceInvalidationTested:false,
+        automaticPass:false
+      };
+      const observedResult = JSON.stringify(receipt);
+      if (observedResult.length > 2000) {
+        throw new Error('KB-016 bounded receipt exceeds the ledger size limit.');
+      }
+      const sourceReference = 'kb016-native-selection:sha256:' +
+        createHash('sha256').update(observedResult).digest('hex');
+      const limitations = [
+        'Two synthetic, frozen-target native model-selection requests only.',
+        'No deployed model was loaded, no inference was run, and no real user authority boundary was tested.',
+        'No immutable deployed-model digest, configuration binding or stale-evidence invalidation was verified.',
+        'This is INCONCLUSIVE evidence for human review, not PASS/FAIL or deployment approval.',
+        'Owner authorisation: ' + action.authorisationReference
+      ].join(' ');
+      const execution = await recordControlTestExecution({
+        projectId:options.projectId, controlId, userId:options.userId,
+        input:{systemSnapshotId:snapshotId, executionKind:'initial',
+          executionMethod:'authorised_local_active_test', result:'inconclusive',
+          observedResult, inputReference:sourceReference, limitations}
+      });
+      await recordControlEvidence({
+        projectId:options.projectId, controlId, userId:options.userId,
+        input:{systemSnapshotId:snapshotId, evidenceClass:'test_generated',
+          sourceType:'authorised_local_active_test', sourceReference,
+          testExecutionId:execution.id, limitations}
+      });
+      const next = await runArlAgent(repositoryPath, 'Where are we?', options);
+      return {...next, answer:
+        'KB-016 two native model-selection observations recorded as INCONCLUSIVE only. ' +
+        'Deployed-model digest and invalidation checks remain OPEN. No PASS/FAIL or deployment approval.\\n' +
+        next.answer};
+    }
 
     if (controlId !== 'ARL-KB-006') {
       throw new Error(
