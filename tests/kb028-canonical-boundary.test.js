@@ -22,7 +22,9 @@ test('KB-028 independently verifies all 108 signatures and additive migration 05
   assert.equal(digest(unsigned),content_digest);
   // Stacked semantic migrations may change their own control only; KB-029 is independently verified by its own exact-head boundary test.
   const laterKB029 = item.id==='ARL-KB-029' && fs.existsSync(new URL('../migrations/052_risk_knowledge_kb029_principal_accountability.sql',import.meta.url));
-  if(item.id!=='ARL-KB-028' && !laterKB029 && !revised.has(item.id) && !retestRevision.has(item.id))assert.equal(content_digest,unchanged[item.id]);
+  const laterKB014 = item.id==='ARL-KB-014' && fs.existsSync(new URL('../migrations/061_kb014_runtime_evidence_route.sql',import.meta.url));
+  if(item.id!=='ARL-KB-028' && !laterKB029 && !laterKB014 && !revised.has(item.id) && !retestRevision.has(item.id))assert.equal(content_digest,unchanged[item.id]);
+  if(laterKB014) assert.ok(fs.readFileSync(new URL('../migrations/061_kb014_runtime_evidence_route.sql',import.meta.url),'utf8').includes("content_digest='"+content_digest+"'"));
   if(revised.has(item.id)||retestRevision.has(item.id))assert.ok((retestRevision.has(item.id)?retestMigration:latestCriteria.has(item.id)?latestMigration:revisionMigration).includes("content_digest='"+content_digest+"'"),item.id);
  }
  assert.equal(Object.keys(unchanged).length,107);
