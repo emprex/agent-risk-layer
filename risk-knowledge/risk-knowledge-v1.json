@@ -3404,6 +3404,7 @@
           "Authoritative credential or workload-identity inventory with owner, purpose, scope and lifecycle state",
           "Secret-store, environment, CI/CD and runtime references showing which credentials the assessed version can use",
           "Evidence of expiry, rotation, revocation or short-lived issuance where applicable",
+          "ARL-KB-014 observed runtime positive and bounded negative test evidence using owner-authorised synthetic approved, revoked and orphan credential references, with receiving-side authorization decisions, correlated downstream effects or denial, exact assessed version and test scope",
           "Tester identity, timestamp and evidence digest"
         ],
         "pass_condition": "ARL-KB-014 passes when all credentials available to the assessed agent are represented in the approved inventory with attributable ownership, necessary scope and documented lifecycle controls, and no tested active credential is orphaned or unexplained.",
@@ -3564,7 +3565,7 @@
         "evidence_reference": null,
         "statement": "Expert-authored candidate; not customer-exercised, independently reviewed or verified automation."
       },
-      "content_digest": "37d4568c5b8066eb244d3981ef94793544b0ecf18fbb8c24549054de4481b8aa"
+      "content_digest": "59ae778a119d0eb19b3ca2110b163e0f5b320b07518c98cb75a4a646bc5d2f5e"
     },
     {
       "id": "ARL-KB-015",
