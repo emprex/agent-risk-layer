@@ -12,7 +12,7 @@ test('82 controls have exact-case positive and abuse retest procedures, no gener
  assert.equal(manifest.revised_controls.length,82);
  assert.equal(new Set(manifest.revised_controls.map(x=>x.id)).size,82);
  assert.equal(asset.entries.length,108);
- assert.equal(asset.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),575);
+ assert.equal(asset.entries.reduce((n,e)=>n+e.check.required_evidence.length,0),576);
  for(const record of manifest.revised_controls){
   const e=asset.entries.find(x=>x.id===record.id);
   assert.ok(e,record.id);
