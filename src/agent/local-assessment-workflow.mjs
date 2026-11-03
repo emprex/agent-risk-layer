@@ -2768,7 +2768,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     }else if(existing.verificationState!=='verified'){
       throw new Error('Prior KB-014 authorisation evidence must be verified before testing.');
     }
-    return {canonicalData:{kb027Plan:{status:'authorised_not_executed',
+    return {canonicalData:{kb014Plan:{status:'authorised_not_executed',
       controlId,systemSnapshotId:snapshot.id,reference},
       securityStateChanged:true,deploymentDecisionWritten:false,humanReviewRequired:true},
       answer:'KB-014 synthetic active test authorised, NOT executed. Next command: Execute KB-014 synthetic active test.'};
@@ -2801,7 +2801,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       requiredCases:KB014_CASES.map(([name])=>'KB014-'+name)
     });
     if (adapter.available!==true) {
-      return {canonicalData:{kb027ActiveTest:{status:'blocked',reason:adapter.reason},
+      return {canonicalData:{kb014ActiveTest:{status:'blocked',reason:adapter.reason},
         securityStateChanged:false,deploymentDecisionWritten:false},
         answer:'KB-014 active test blocked: '+adapter.reason+
           '. No OAuth lifecycle cases were executed, no PASS or FAIL recorded.'};
@@ -2813,7 +2813,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       x.endpointOrigin===origin && Array.isArray(x.permittedActions) &&
       x.permittedActions.includes(marker) &&
       Date.parse(x.windowStart)<=now && Date.parse(x.windowEnd)>now);
-    if(active.length!==1) throw new Error('KB-014 requires exactly one current explicit owner ROE for synthetic OAuth lifecycle probeing.');
+    if(active.length!==1) throw new Error('KB-014 requires exactly one current explicit owner ROE for synthetic OAuth lifecycle probing.');
     const reference='roe:'+active[0].id+':control:ARL-KB-014';
     const authorised=(detail.evidence||[]).some(e=>
       e.sourceType==='active_test_plan_authorisation' &&
@@ -2827,7 +2827,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     });
     // Never promote adapter self assertions to verified evidence or automatically
     // close a finding. Human review and source provenance verification follow.
-    return {canonicalData:{kb027ActiveTest:outcome,
+    return {canonicalData:{kb014ActiveTest:outcome,
       securityStateChanged:false,deploymentDecisionWritten:false,
       humanReviewRequired:true},
       answer:'KB-014 bounded active test: '+JSON.stringify(outcome)+
