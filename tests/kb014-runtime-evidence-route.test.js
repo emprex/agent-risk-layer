@@ -31,7 +31,8 @@ test('KB-014 signed evidence route requires a scoped positive and negative runti
 
 test('KB-014 migration is digest-guarded and never changes historical security state', () => {
   const escape = value => String(value).replaceAll("'", "''");
-  assert.match(migration, /RAISE EXCEPTION 'KB-014 migration 061: canonical baseline digest mismatch'/);
+  assert.ok(migration.includes("WHERE id='ARL-KB-014' AND content_digest='37d4568c5b8066eb244d3981ef94793544b0ecf18fbb8c24549054de4481b8aa'"));
+  assert.ok(migration.includes("WHERE entry_id='ARL-KB-014' AND content_digest='9f55fdb91cf5d4543569eed6a3f920b11804153c3440685a6fbf51eac45bf361'"));
   assert.ok(migration.includes("required_evidence_json='" +
     escape(JSON.stringify(kb.check.required_evidence)) + "'"));
   assert.ok(migration.includes("content_digest='" + kb.content_digest + "'"));
