@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   buildFullProfileEvidenceWorkQueue
@@ -343,4 +344,48 @@ test('human review fails closed instead of creating an empty canonical evidence 
   assert.equal(queue.humanReviewBatches.length, 0);
   assert.equal(queue.summary.humanOnly, 0);
   assert.equal(queue.summary.unavailableOrInconclusive, 1);
+});
+
+
+test('KB-014 route follows runtime execution after frozen static evidence without inferring PASS', () => {
+  const canonical = JSON.parse(fs.readFileSync(
+    new URL('../risk-knowledge/risk-knowledge-v1.json', import.meta.url), 'utf8'
+  ));
+  const kb = canonical.entries.find(entry => entry.id === 'ARL-KB-014');
+  const queue = buildFullProfileEvidenceWorkQueue({
+    readiness: {
+      summary: { profileControls: 108, applicableControls: 1, controlsMissingEvidence: 1 }
+    },
+    riskKnowledge: {
+      items: [{
+        id: kb.id, title: kb.title, category: kb.category,
+        checks: [{
+          objective: kb.check.objective, method: kb.check.method,
+          requiredEvidence: kb.check.required_evidence,
+          passCondition: kb.check.pass_condition,
+          failCondition: kb.check.fail_condition
+        }]
+      }]
+    },
+    controlIntelligence: {
+      items: [{
+        controlId: kb.id, currentStage: 'test',
+        chainStatus: 'test_inconclusive', testMode: 'hybrid',
+        automationStatus: 'candidate',
+        authoritativeDetail: {
+          evidence: [{ sourceType: 'arl_frozen_source_evidence_collection_v2' }]
+        }
+      }]
+    }
+  });
+  assert.equal(queue.available, true);
+  assert.equal(queue.items.length, 1);
+  const item = queue.items[0];
+  assert.equal(item.classification, 'active_test_required');
+  assert.equal(item.automaticCollectionRequired, false);
+  assert.equal(item.activeTestRequirements.length, 1);
+  assert.equal(item.humanOnlyRequirements.length, 3);
+  assert.match(item.activeTestRequirements[0], /owner-authorised synthetic/);
+  assert.equal(queue.summary.activeTestRequired, 1);
+  assert.equal(queue.summary.humanOnly, 0);
 });
