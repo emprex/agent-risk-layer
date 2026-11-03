@@ -34,6 +34,7 @@ function targetIdentityMatches(reportedTarget, repositoryPath) {
 export async function verifyLocalTargetAdapter({
   repositoryPath,
   expectedRevision,
+  requiredCases = [],
   origin = 'http://127.0.0.1:8787',
   fetchImpl = globalThis.fetch,
   timeoutMs = 2_000
@@ -133,6 +134,20 @@ export async function verifyLocalTargetAdapter({
       origin: base.origin,
       healthUrl,
       reportedMode: clean(health.mode, 80) || null
+    });
+  }
+
+  // Only explicitly requested synthetic cases are required. Historical
+  // clients retain the same health contract without this optional parameter.
+  if (!Array.isArray(requiredCases) || requiredCases.some(x =>
+      typeof x !== 'string' || !/^[A-Z0-9-]{1,80}$/.test(x))) {
+    return blocked('local_adapter_required_cases_invalid');
+  }
+  const supported = Array.isArray(health.supportedCases) ? health.supportedCases : [];
+  const missing = requiredCases.filter(x => !supported.includes(x));
+  if (missing.length) {
+    return blocked('local_adapter_required_cases_unavailable', {
+      origin: base.origin, missingCases: missing
     });
   }
 
