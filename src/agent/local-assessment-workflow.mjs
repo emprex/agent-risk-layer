@@ -13,7 +13,7 @@ import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { executeKb027ActiveTest } from './kb027-active-executor.mjs';
-import { executeKb014NativeLifecycleProbe, KB014_CASES } from './kb014-active-executor.mjs';
+import { executeKb014NativeLifecycleProbe, KB014_CASES, buildKb014FixtureEvidenceRecord } from './kb014-active-executor.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
@@ -2822,16 +2822,99 @@ export async function runLocalAssessment(repositoryPath, request, options, local
     if(!authorised) throw new Error('Verified KB-014 active test authorisation evidence is required.');
     const token=String(process.env.ARL_TARGET_TOKEN||'').trim();
     if(!token) throw new Error('ARL_TARGET_TOKEN required for the loopback adapter.');
+    const startedAt=nowIso();
     const outcome=await executeKb014NativeLifecycleProbe({
       origin,token,targetRevision:revision,snapshotId:snapshot.id
     });
-    // Never promote adapter self assertions to verified evidence or automatically
-    // close a finding. Human review and source provenance verification follow.
-    return {canonicalData:{kb014ActiveTest:outcome,
-      securityStateChanged:false,deploymentDecisionWritten:false,
+    const probeCompletedAt=nowIso();
+    if (!['native_lifecycle_fixture_integration_only',
+          'native_lifecycle_behavior_mismatch_review_required'].includes(outcome.status)) {
+      // A partially executed or unverifiable run cannot be represented as
+      // four complete observations. Nothing is written to the control ledger.
+      return {canonicalData:{kb014ActiveTest:outcome,
+        securityStateChanged:false,deploymentDecisionWritten:false,humanReviewRequired:true},
+        answer:'KB-014 bounded probe not recorded: '+JSON.stringify(outcome)+
+          '\\nFour complete attributable native observations are required. No PASS or FAIL.'};
+    }
+    const recorded=buildKb014FixtureEvidenceRecord({
+      outcome,targetRevision:revision,snapshotId:snapshot.id,
+      checkDigest:detail.testDefinition.digest,
+      roeReference:reference,testerId:options.userId,
+      startedAt,probeCompletedAt
+    });
+
+    // The exact test and its unverified evidence are atomic, append-only,
+    // and bound to the same current authoritative KB-014 snapshot. An old
+    // canonical test digest cannot be smuggled forward after an update.
+    const receipt=await db.transaction(async()=>{
+      const current=await getControlIntelligenceControl({
+        projectId:options.projectId,controlId,userId:options.userId
+      });
+      if(current?.systemSnapshot?.id!==snapshot.id ||
+         current?.chain?.currentStage!=='test' ||
+         current?.testDefinition?.id!=='ARL-CHK-014' ||
+         current?.testDefinition?.digest!==detail.testDefinition.digest ||
+         current?.systemSnapshot?.assessmentConfiguration?.targetBinding?.revision!==revision ||
+         current?.systemSnapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId!==options.assessmentId) {
+        throw new Error('KB-014 current snapshot or canonical check changed during the synthetic probe. No evidence recorded.');
+      }
+      const currentRoe=(await listRedTeamAuthorisations(options)).filter(x=>
+        x.id===active[0].id &&
+        x.status==='active' && x.environment==='local' &&
+        x.endpointOrigin===origin && x.permittedActions?.includes(marker) &&
+        Date.parse(x.windowStart)<=Date.parse(probeCompletedAt) &&
+        Date.parse(x.windowEnd)>Date.parse(probeCompletedAt));
+      const currentAuthorised=(current.evidence||[]).some(e=>
+        e.sourceType==='active_test_plan_authorisation' &&
+        e.sourceReference===reference &&
+        e.verificationState==='verified' && e.retentionStatus==='active');
+      if(currentRoe.length!==1 || !currentAuthorised) {
+        throw new Error('KB-014 verified ROE or time window changed during the probe. No evidence recorded.');
+      }
+      const execution=await recordControlTestExecution({
+        projectId:options.projectId,controlId,userId:options.userId,
+        input:{
+          systemSnapshotId:snapshot.id,executionKind:'initial',
+          executionMethod:'kb014_native_oauth_fixture',
+          result:'inconclusive',
+          expectedResult:'Four synthetic native OAuth cache states match the expected behavior; no receiving policy or inventory conclusion.',
+          observedResult:recorded.observedResult,
+          inputReference:recorded.sourceReference,
+          startedAt,limitations:recorded.limitations
+        }
+      });
+      const evidence=await recordControlEvidence({
+        projectId:options.projectId,controlId,userId:options.userId,
+        input:{
+          systemSnapshotId:snapshot.id,
+          evidenceClass:'test_generated',
+          sourceType:'kb014_native_oauth_fixture',
+          sourceReference:recorded.sourceReference,
+          testExecutionId:execution.id,
+          limitations:recorded.limitations
+        }
+      });
+      if(execution.result!=='inconclusive' ||
+         evidence.verificationState!=='unverified' ||
+         evidence.testExecutionId!==execution.id) {
+        throw new Error('KB-014 persistence must remain inconclusive and unverified.');
+      }
+      return {testExecutionId:execution.id,evidenceId:evidence.id,
+        checkDigest:execution.checkDigest,
+        observationSha256:recorded.observationSha256,
+        evidenceIntegrityDigest:evidence.integrityDigest,
+        verificationState:evidence.verificationState};
+    });
+    // Canonical storage is the operator's PostgreSQL assessment. It does
+    // NOT assert KB-014 criterion satisfaction or a deployment decision.
+    return {canonicalData:{kb014ActiveTest:outcome,kb014RecordedFixture:receipt,
+      securityStateChanged:true,deploymentDecisionWritten:false,
       humanReviewRequired:true},
-      answer:'KB-014 bounded active test: '+JSON.stringify(outcome)+
-        '\\nNo automatic PASS, FAIL, evidence verification or deployment decision.'};
+      answer:'KB-014 bounded fixture recorded as INCONCLUSIVE, UNVERIFIED. '+
+        'Test: '+receipt.testExecutionId+'; evidence: '+receipt.evidenceId+
+        '; observation SHA-256: '+receipt.observationSha256+
+        '; canonical check: '+receipt.checkDigest+
+        '.\\nFour synthetic observations preserved. No receiving-policy or inventory proof. No automatic PASS, FAIL, criterion acceptance or deployment decision.'};
   }
 
   if (request.startsWith('Execute authorised active control test ')) {
