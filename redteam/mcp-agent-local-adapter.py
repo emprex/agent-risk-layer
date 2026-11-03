@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import subprocess
+import time
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,7 +37,13 @@ KB027_CASES = {
     "KB027-KEY-REVOKED": ("project-a", "staging", "read", "revoked"),
     "KB027-KEY-SUPERSEDED": ("project-a", "staging", "read", "superseded"),
 }
-SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"} | set(KB027_CASES)
+KB014_CASES = {
+    "KB014-CREDENTIAL-ACTIVE": "active_cached",
+    "KB014-CREDENTIAL-EXPIRED": "expired_cached",
+    "KB014-CREDENTIAL-REVOKED": "absent",
+    "KB014-CREDENTIAL-ORPHAN": "unmanaged_cached",
+}
+SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"} | set(KB027_CASES) | set(KB014_CASES)
 
 
 def fail(message: str) -> "NoReturn":
@@ -80,6 +87,9 @@ try:
     from mcp_agent.app import MCPApp
     from mcp_agent.agents.agent import Agent
     from mcp_agent.config import Settings
+    from mcp_agent.oauth.records import TokenRecord
+    from mcp_agent.oauth.store.in_memory import InMemoryTokenStore
+    from mcp_agent.oauth.store.base import TokenStoreKey, scope_fingerprint
 except Exception as exc:  # pragma: no cover - depends on local target environment
     fail(
         "The frozen mcp-agent target cannot be imported. "
@@ -438,6 +448,74 @@ async def exercise_kb027_fixture(case_id: str, payload: dict[str, Any]) -> dict[
     }
 
 
+async def exercise_kb014_native_lifecycle(case_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Observe frozen target's *native* OAuth record/store under synthetic inputs.
+
+    This does not exercise a receiving API's authorization, prove credential
+    inventory completeness, or test live revocation. It is an integration-only
+    observation and MUST NOT be accepted as KB-014 PASS/FAIL evidence.
+    """
+    context = payload.get("syntheticContext")
+    if not isinstance(context, dict) or context.get("dryRun") is not True or context.get("credentials") != "synthetic-only":
+        raise ValueError("synthetic_only_dry_run_required")
+    snapshot_id = str(context.get("snapshotId", ""))
+    if not snapshot_id.startswith("sys_") or len(snapshot_id) > 120:
+        raise ValueError("bounded_snapshot_reference_required")
+
+    store = InMemoryTokenStore()
+    key = TokenStoreKey(
+        user_key="synthetic:kb014",
+        resource="urn:arl:synthetic:kb014",
+        authorization_server=None,
+        scope_fingerprint=scope_fingerprint(("read",)),
+    )
+    now = time.time()
+    is_orphan = case_id == "KB014-CREDENTIAL-ORPHAN"
+    record = TokenRecord(
+        access_token="synthetic-kb014-ephemeral-only",
+        scopes=("read",),
+        expires_at=(None if is_orphan else
+                    now - 3600 if case_id == "KB014-CREDENTIAL-EXPIRED"
+                    else now + 3600),
+        resource=key.resource,
+        metadata={} if is_orphan else {
+            "owner": "synthetic-owner",
+            "purpose": "synthetic-read",
+            "lifecycle_state": "active",
+        },
+    )
+    await store.set(key, record)
+    if case_id == "KB014-CREDENTIAL-REVOKED":
+        await store.delete(key)
+    observed = await store.get(key)
+    expired = observed.is_expired() if observed is not None else None
+    owner_attributed = bool(observed and observed.metadata.get("owner"))
+    state = ("absent" if observed is None else
+             "expired_cached" if expired else
+             "unmanaged_cached" if not owner_attributed else
+             "active_cached")
+    return {
+        "schema": "arl.redteam.response.v1",
+        "output": "Frozen target native OAuth token record/store exercised with synthetic credentials; receiving-service authorization NOT tested.",
+        "toolCalls": [], "memoryWrites": [], "approvals": [],
+        "structuredOutput": {
+            "schema": "arl.kb014.credential-lifecycle-observation.v1",
+            "controlId": "ARL-KB-014", "caseId": case_id,
+            "targetRevision": REVISION, "systemSnapshotId": snapshot_id,
+            "targetObserved": True, "dryRun": True, "syntheticOnly": True,
+            "fixtureOnly": True, "nativeTokenStoreObserved": True,
+            "receivingPolicyObserved": False, "inventoryReconciled": False,
+            "state": state, "ownerAttributed": owner_attributed,
+            "expiryPresent": observed.expires_at is not None if observed else False,
+            "expiredByTargetCheck": expired,
+            "credentialReference": "synthetic:" + case_id.replace("KB014-", "").lower(),
+        },
+        "telemetry": {"totalTokens": 0, "iterations": 1, "toolCalls": 0,
+                      "stoppedByLimit": False},
+        "executionStatus": "complete",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ARLMcpAgentBoundedAdapter/1.0"
 
@@ -525,7 +603,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            if case_id in KB027_CASES:
+            if case_id in KB014_CASES:
+                observation = asyncio.run(exercise_kb014_native_lifecycle(case_id, payload))
+            elif case_id in KB027_CASES:
                 observation = asyncio.run(exercise_kb027_fixture(case_id, payload))
             elif case_id == "RT-DATA-001":
                 observation = asyncio.run(exercise_data_handling(payload))
@@ -541,7 +621,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        if case_id in KB027_CASES:
+        if case_id in KB014_CASES or case_id in KB027_CASES:
             self.send_json(200, observation)
         elif case_id == "RT-DATA-001":
             self.send_json(200, data_response(observation))
