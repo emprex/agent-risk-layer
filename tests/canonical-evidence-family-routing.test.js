@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   buildCanonicalEvidenceRequirementPlan,
@@ -206,23 +207,21 @@ test('KB-013 keeps approved egress inventory human-owned and runtime network tra
   for (const index of [1,3,4]) assert.deepEqual(plan[index].collectors, []);
 });
 
-test('KB-014 retains credential ownership and lifecycle authority outside deterministic discovery', () => {
-  const requirements = [
-    'ARL-KB-014 assessed system, exact version, environment and credential scope',
-    'Authoritative credential or workload-identity inventory with owner, purpose, scope and lifecycle state',
-    'Secret-store, environment, CI/CD and runtime references showing which credentials the assessed version can use',
-    'Evidence of expiry, rotation, revocation or short-lived issuance where applicable',
-    'Tester identity, timestamp and evidence digest'
-  ];
+test('KB-014 preserves documentary ownership and requires runtime positive/negative evidence', () => {
+  const asset = JSON.parse(fs.readFileSync(
+    new URL('../risk-knowledge/risk-knowledge-v1.json', import.meta.url), 'utf8'
+  ));
+  const requirements = asset.entries.find(x => x.id === 'ARL-KB-014').check.required_evidence;
   const plan = buildCanonicalEvidenceRequirementPlan(requirements);
-  assert.equal(plan.length, 5);
+  assert.equal(plan.length, 6);
   assert.deepEqual(plan.map(item => item.mode), [
     'machine_collectable', 'human_only', 'machine_collectable',
-    'human_only', 'human_only'
+    'human_only', 'active_test_or_runtime', 'human_only'
   ]);
   assert.deepEqual(plan[0].collectors, ['target_identity']);
   assert.deepEqual(plan[2].collectors, ['source_and_configuration']);
-  for (const index of [1, 3, 4]) assert.deepEqual(plan[index].collectors, []);
+  for (const index of [1, 3, 4, 5]) assert.deepEqual(plan[index].collectors, []);
+  assert.match(plan[4].requirement, /synthetic approved, revoked and orphan credential references/);
 });
 
 test('KB-015 memory and vector-store evidence requires distinct source, runtime and human authority', () => {
