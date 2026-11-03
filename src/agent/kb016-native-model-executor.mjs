@@ -35,7 +35,7 @@ export async function executeKb016NativeModelProbe({
             dryRun: true, credentials: 'synthetic-only', snapshotId
           }
         }),
-        signal: AbortSignal.timeout(15_000)
+        signal: globalThis.AbortSignal.timeout(15_000)
       });
     } catch {
       return {status:'blocked', reason:'adapter_request_unavailable',
