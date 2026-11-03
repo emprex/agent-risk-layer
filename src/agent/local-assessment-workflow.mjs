@@ -13,6 +13,7 @@ import { runArlAgent } from './arl-operational-orchestrator.mjs';
 import { completePersistedExactRetest } from './authoritative-auto-actions.mjs';
 import { verifyLocalTargetAdapter } from './local-target-adapter-gate.mjs';
 import { executeKb027ActiveTest } from './kb027-active-executor.mjs';
+import { executeKb014NativeLifecycleProbe, KB014_CASES } from './kb014-active-executor.mjs';
 import { parseLocalApplicabilityCommand, localApplicabilityCandidateIds, focusLocalApplicabilityControl } from './local-applicability-command.mjs';
 import { parseLocalManualEvidenceCommand } from './local-manual-evidence-command.mjs';
 import { parseLocalHumanEvidenceBatchCommand } from './local-human-evidence-batch-command.mjs';
@@ -2705,6 +2706,131 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       securityStateChanged:false,deploymentDecisionWritten:false,
       humanReviewRequired:true},
       answer:'KB-027 bounded active test: '+JSON.stringify(outcome)+
+        '\\nNo automatic PASS, FAIL, evidence verification or deployment decision.'};
+  }
+
+  // KB-014 native OAuth probes are fixture/integration evidence only.
+  // They never establish live inventory completeness or server-side policy.
+  if (/^Authorise KB-014 synthetic active test[.!?]*$/i.test(request.trim())) {
+    const controlId='ARL-KB-014';
+    const detail=await getControlIntelligenceControl({projectId:options.projectId,
+      controlId,userId:options.userId});
+    const revision=localFrozenInspection?.target?.revision;
+    const snapshot=detail?.systemSnapshot;
+    if(localFrozenInspection?.binding?.verified!==true ||
+       localFrozenInspection?.target?.dirty!==false ||
+       revision!==process.env.ARL_EXPECTED_TARGET_SHA ||
+       snapshot?.assessmentConfiguration?.assessmentBinding?.assessmentId!==options.assessmentId ||
+       snapshot?.assessmentConfiguration?.targetBinding?.revision!==revision ||
+       detail?.chain?.currentStage!=='test' ||
+       detail?.testDefinition?.id!=='ARL-CHK-014') {
+      throw new Error('KB-014 authorisation requires the exact current test stage and frozen assessment.');
+    }
+    const origin='http://127.0.0.1:'+(process.env.ARL_TARGET_ADAPTER_PORT||'8787');
+    const adapter=await verifyLocalTargetAdapter({repositoryPath,
+      expectedRevision:revision,origin,
+      requiredCases:KB014_CASES.map(([name])=>'KB014-'+name)});
+    if(adapter.available!==true) return blockedLocalAdapterResult(
+      await runArlAgent(repositoryPath,'Where are we?',options),adapter);
+    const marker='ARL KB-014 synthetic OAuth lifecycle probe';
+    const now=Date.now();
+    const active=(await listRedTeamAuthorisations(options)).filter(x=>
+      x.status==='active' && x.environment==='local' &&
+      x.endpointOrigin===origin && x.permittedActions?.includes(marker) &&
+      Date.parse(x.windowStart)<=now && Date.parse(x.windowEnd)>now);
+    if(active.length>1)throw new Error('Duplicate KB-014 ROE; revoke ambiguous authorisations.');
+    const authorisation=active[0]||await createRedTeamAuthorisation({...options,input:{
+      environment:'local',targetName:'Local '+path.basename(repositoryPath)+' KB-014',
+      endpointOrigin:origin,authorityBasis:'owner',
+      authorisedBy:os.userInfo().username,authorisedRole:'Local repository operator',
+      emergencyContact:'Local terminal operator '+os.userInfo().username,
+      windowStart:new Date(now-1000).toISOString(),
+      windowEnd:new Date(now+3600000).toISOString(),
+      permittedActions:[marker],
+      prohibitedActions:['Production effects','External actions','Real credentials or sensitive data'],
+      dataClassification:'synthetic-only',retentionDays:30,
+      syntheticDataOnly:true,dryRunToolsOnly:true,noProductionEffects:true,
+      confirmation:ROE_CONFIRMATION
+    }});
+    const reference='roe:'+authorisation.id+':control:ARL-KB-014';
+    const existing=(detail.evidence||[]).find(e=>
+      e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference && e.retentionStatus==='active');
+    if(!existing) {
+      const evidence=await recordControlEvidence({projectId:options.projectId,
+        controlId,userId:options.userId,input:{systemSnapshotId:snapshot.id,
+        evidenceClass:'human_provided',sourceType:'active_test_plan_authorisation',
+        sourceReference:reference,limitations:'Owner-authorised local synthetic tokens only. Four bounded OAuth lifecycle scenarios; no real keys, production, external effects or automatic verdict.'}});
+      await verifyExplicitHumanEvidence({projectId:options.projectId,
+        evidenceId:evidence.id,userId:options.userId,controlId,
+        verificationScope:'explicit_active_control_test_authorisation',
+        reason:'Owner explicitly authorised bounded KB-014 synthetic local OAuth lifecycle cases for the frozen target.'});
+    }else if(existing.verificationState!=='verified'){
+      throw new Error('Prior KB-014 authorisation evidence must be verified before testing.');
+    }
+    return {canonicalData:{kb027Plan:{status:'authorised_not_executed',
+      controlId,systemSnapshotId:snapshot.id,reference},
+      securityStateChanged:true,deploymentDecisionWritten:false,humanReviewRequired:true},
+      answer:'KB-014 synthetic active test authorised, NOT executed. Next command: Execute KB-014 synthetic active test.'};
+  }
+
+  // KB-014 uses its own owner-authorised test gate, independent of the
+  // other controls' remediation states. No static recollection is performed.
+  if (/^Execute KB-014 synthetic active test[.!?]*$/i.test(request.trim())) {
+    const controlId='ARL-KB-014';
+    const detail=await getControlIntelligenceControl({
+      projectId:options.projectId,controlId,userId:options.userId
+    });
+    const revision=localFrozenInspection?.target?.revision;
+    const snapshot=detail?.systemSnapshot;
+    const binding=snapshot?.assessmentConfiguration;
+    if (localFrozenInspection?.binding?.verified!==true ||
+        localFrozenInspection?.target?.dirty!==false ||
+        revision!==process.env.ARL_EXPECTED_TARGET_SHA ||
+        !/^[a-f0-9]{40}$/.test(revision||'') ||
+        detail?.chain?.currentStage!=='test' ||
+        detail?.testDefinition?.id!=='ARL-CHK-014' ||
+        binding?.assessmentBinding?.assessmentId!==options.assessmentId ||
+        binding?.targetBinding?.revision!==revision ||
+        !snapshot?.id) {
+      throw new Error('KB-014 requires the exact clean frozen target, assessment, current snapshot and canonical test stage.');
+    }
+    const origin='http://127.0.0.1:'+(process.env.ARL_TARGET_ADAPTER_PORT||'8787');
+    const adapter=await verifyLocalTargetAdapter({
+      repositoryPath,expectedRevision:revision,origin,
+      requiredCases:KB014_CASES.map(([name])=>'KB014-'+name)
+    });
+    if (adapter.available!==true) {
+      return {canonicalData:{kb027ActiveTest:{status:'blocked',reason:adapter.reason},
+        securityStateChanged:false,deploymentDecisionWritten:false},
+        answer:'KB-014 active test blocked: '+adapter.reason+
+          '. No OAuth lifecycle cases were executed, no PASS or FAIL recorded.'};
+    }
+    const now=Date.now();
+    const marker='ARL KB-014 synthetic OAuth lifecycle probe';
+    const active=(await listRedTeamAuthorisations(options)).filter(x=>
+      x.status==='active' && x.environment==='local' &&
+      x.endpointOrigin===origin && Array.isArray(x.permittedActions) &&
+      x.permittedActions.includes(marker) &&
+      Date.parse(x.windowStart)<=now && Date.parse(x.windowEnd)>now);
+    if(active.length!==1) throw new Error('KB-014 requires exactly one current explicit owner ROE for synthetic OAuth lifecycle probeing.');
+    const reference='roe:'+active[0].id+':control:ARL-KB-014';
+    const authorised=(detail.evidence||[]).some(e=>
+      e.sourceType==='active_test_plan_authorisation' &&
+      e.sourceReference===reference &&
+      e.verificationState==='verified' && e.retentionStatus==='active');
+    if(!authorised) throw new Error('Verified KB-014 active test authorisation evidence is required.');
+    const token=String(process.env.ARL_TARGET_TOKEN||'').trim();
+    if(!token) throw new Error('ARL_TARGET_TOKEN required for the loopback adapter.');
+    const outcome=await executeKb014NativeLifecycleProbe({
+      origin,token,targetRevision:revision,snapshotId:snapshot.id
+    });
+    // Never promote adapter self assertions to verified evidence or automatically
+    // close a finding. Human review and source provenance verification follow.
+    return {canonicalData:{kb027ActiveTest:outcome,
+      securityStateChanged:false,deploymentDecisionWritten:false,
+      humanReviewRequired:true},
+      answer:'KB-014 bounded active test: '+JSON.stringify(outcome)+
         '\\nNo automatic PASS, FAIL, evidence verification or deployment decision.'};
   }
 
