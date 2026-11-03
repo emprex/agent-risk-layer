@@ -18,6 +18,7 @@ import time
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 PORT = int(os.environ.get("ARL_TARGET_ADAPTER_PORT", "8787"))
@@ -43,7 +44,11 @@ KB014_CASES = {
     "KB014-CREDENTIAL-REVOKED": "absent",
     "KB014-CREDENTIAL-ORPHAN": "unmanaged_cached",
 }
-SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"} | set(KB027_CASES) | set(KB014_CASES)
+KB016_CASES = {
+    "KB016-MODEL-REFERENCE": "llama3.2:3b",
+    "KB016-MODEL-OVERRIDE": "arl-kb016-synthetic-model:revision-b",
+}
+SUPPORTED_CASES = {"RT-TOOL-004", "RT-TOOL-005", "RT-DATA-001"} | set(KB027_CASES) | set(KB014_CASES) | set(KB016_CASES)
 
 
 def fail(message: str) -> "NoReturn":
@@ -88,6 +93,7 @@ try:
     from mcp_agent.agents.agent import Agent
     from mcp_agent.config import Settings
     from mcp_agent.oauth.records import TokenRecord
+    from mcp_agent.workflows.llm.augmented_llm import AugmentedLLM, RequestParams
     from mcp_agent.oauth.store.in_memory import InMemoryTokenStore
     from mcp_agent.oauth.store.base import TokenStoreKey, scope_fingerprint
 except Exception as exc:  # pragma: no cover - depends on local target environment
@@ -516,6 +522,65 @@ async def exercise_kb014_native_lifecycle(case_id: str, payload: dict[str, Any])
     }
 
 
+async def exercise_kb016_native_selection(case_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Observe the frozen target's native request-model selection without loading a model.
+
+    This synthetic request tests only the AugmentedLLM.select_model override path.
+    It does NOT identify a deployed model digest, prove an unauthorised override,
+    check inference, or demonstrate evidence invalidation after configuration drift.
+    Neither PASS nor FAIL may be inferred from this single-path observation.
+    """
+    context = payload.get("syntheticContext")
+    if not isinstance(context, dict) or context.get("dryRun") is not True or context.get("credentials") != "synthetic-only":
+        raise ValueError("synthetic_only_dry_run_required")
+    snapshot_id = str(context.get("snapshotId", ""))
+    if not snapshot_id.startswith("sys_") or len(snapshot_id) > 120:
+        raise ValueError("bounded_snapshot_reference_required")
+    if case_id not in KB016_CASES:
+        raise ValueError("unsupported_bounded_case")
+
+    requested_model = KB016_CASES[case_id]
+    # The real frozen-target method is called with a minimal, synthetic self.
+    # Its explicit request.model branch returns before any model selector or provider call.
+    probe = SimpleNamespace(
+        name="arl_kb016_model_probe",
+        agent=SimpleNamespace(name="arl_kb016_model_probe"),
+        context=None,
+        model_preferences=None,
+        model_selector=None,
+        default_request_params=None,
+    )
+    observed_model = await AugmentedLLM.select_model(
+        probe, RequestParams(model=requested_model)
+    )
+    if observed_model != requested_model:
+        raise RuntimeError("native_model_selection_mismatch")
+
+    return {
+        "schema": "arl.redteam.response.v1",
+        "output": "Frozen target native request-model selection observed with synthetic inputs; no inference or version-drift assessment.",
+        "toolCalls": [], "memoryWrites": [], "approvals": [],
+        "structuredOutput": {
+            "schema": "arl.kb016.model-selection-observation.v1",
+            "controlId": "ARL-KB-016", "caseId": case_id,
+            "targetRevision": REVISION, "systemSnapshotId": snapshot_id,
+            "targetObserved": True, "dryRun": True, "syntheticOnly": True,
+            "nativeMethod": "AugmentedLLM.select_model",
+            "requestModel": requested_model, "selectedModel": observed_model,
+            "requestModelSelected": observed_model == requested_model,
+            "modelLoaded": False, "inferenceExecuted": False,
+            "deployedModelDigestResolved": False,
+            "providerConfigurationBound": False,
+            "evidenceInvalidationTested": False,
+            "authorisationBypassDemonstrated": False,
+            "controlVerdict": "not_determined",
+        },
+        "telemetry": {"totalTokens": 0, "iterations": 1, "toolCalls": 0,
+                      "stoppedByLimit": False},
+        "executionStatus": "complete",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ARLMcpAgentBoundedAdapter/1.0"
 
@@ -607,6 +672,8 @@ class Handler(BaseHTTPRequestHandler):
                 observation = asyncio.run(exercise_kb014_native_lifecycle(case_id, payload))
             elif case_id in KB027_CASES:
                 observation = asyncio.run(exercise_kb027_fixture(case_id, payload))
+            elif case_id in KB016_CASES:
+                observation = asyncio.run(exercise_kb016_native_selection(case_id, payload))
             elif case_id == "RT-DATA-001":
                 observation = asyncio.run(exercise_data_handling(payload))
             else:
@@ -621,7 +688,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        if case_id in KB014_CASES or case_id in KB027_CASES:
+        if case_id in KB014_CASES or case_id in KB027_CASES or case_id in KB016_CASES:
             self.send_json(200, observation)
         elif case_id == "RT-DATA-001":
             self.send_json(200, data_response(observation))
