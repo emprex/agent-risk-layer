@@ -70,7 +70,8 @@ try {
       await fs.rm(backup,{force:true}).catch(()=>{});
       throw new Error('PostgreSQL backup failed. Schema unchanged.');
     }
-    console.log('Local PostgreSQL backup created: '+backup);
+    await fs.chmod(backup,0o600);
+    console.log('Local PostgreSQL backup created with owner-only access: '+backup);
     await client.query('BEGIN');
     try{
       await client.query('SELECT pg_advisory_xact_lock(814720260)');
