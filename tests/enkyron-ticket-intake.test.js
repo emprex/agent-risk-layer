@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateIntake, validateStatusChange, createDeskTicket,
-  updateDeskTicketStatus, TICKET_TRANSITIONS
+  updateDeskTicketStatus, TICKET_TRANSITIONS,
+  validateAssignment, assignDeskTicket, validateArchive, archiveDeskTicket
 } from '../desktop/enkyron-ticket-intake.mjs';
 
 const ticketId = '1111111a-2222-4333-8444-555555555555';
@@ -11,14 +12,14 @@ const call = {
   contact_phone:'+44 200 000 0000', contact_email:'help@example.invalid',
   title:'Request a consultation', request_text:'Customer called to discuss a security review.'
 };
-function fakePool({previous='new', sequence='42'}={}) {
+function fakePool({previous='new', sequence='42', assignee=null, archivedAt=null}={}) {
   const calls=[];
   const db={
     query:async (sql,params)=>{
       calls.push({sql,params});
       if (sql.includes('nextval(')) return {rows:[{n:sequence}]};
       if (sql.includes('FOR UPDATE')) return {
-        rows:previous===null?[]:[{status:previous,assessor_name:'localoperator'}]
+        rows:previous===null?[]:[{status:previous,assessor_name:'localoperator', assigned_to:assignee, archived_at:archivedAt}]
       };
       return {rows:[]};
     },
@@ -104,8 +105,80 @@ test('unauthorised status jump and unknown ticket never update records',async()=
       previous===null?/Ticket not found/:/Status transition not allowed/
     );
     assert.deepEqual(db.calls.map(x=>x.sql),[
-      'BEGIN','SELECT status,assessor_name FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'BEGIN','SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       'ROLLBACK','RELEASE'
     ]);
   }
+});
+
+
+test('self-assignment is atomic and records a separate owner, not an assessor rewrite', async()=>{
+  const db=fakePool();
+  const result=await assignDeskTicket(db,{ticket_id:ticketId,action:'self'},'localoperator',
+    {uuid:()=> '00000000-0000-4000-8000-000000000003'});
+  assert.deepEqual(result,{ticket_id:ticketId,assigned_to:'localoperator'});
+  const ops=db.calls.map(x=>x.sql);
+  assert.deepEqual([ops[0],ops.at(-2),ops.at(-1)],['BEGIN','COMMIT','RELEASE']);
+  assert.match(ops[2],/SET assigned_to=\$1/);
+  assert.deepEqual(db.calls[2].params,['localoperator',ticketId]);
+  assert.equal(db.calls[3].params[2],'assigned');
+  assert.equal(db.calls[3].params[4],'localoperator');
+  assert.doesNotMatch(ops.join(' '),/SET assessor_name/);
+});
+
+test('can unassign self, but cannot reassign another owner',async()=>{
+  const db=fakePool({assignee:'localoperator'});
+  const result=await assignDeskTicket(db,{ticket_id:ticketId,action:'unassigned'},'localoperator');
+  assert.equal(result.assigned_to,null);
+  assert.equal(db.calls[3].params[2],'unassigned');
+  for(const action of ['unassigned','self']){
+    const foreign=fakePool({assignee:'otheroperator'});
+    await assert.rejects(
+      ()=>assignDeskTicket(foreign,{ticket_id:ticketId,action},'localoperator'),
+      /Only the assigned|already assigned/
+    );
+    assert.equal(foreign.calls[2].sql,'ROLLBACK');
+    assert.equal(foreign.calls.some(x=>/UPDATE arl_workbench_tickets/.test(x.sql)),false);
+  }
+  assert.throws(()=>validateAssignment({ticket_id:ticketId,action:'otheroperator'}));
+});
+
+test('archiving requires CLOSED ticket, reason and operator confirmation in UI',async()=>{
+  const good={ticket_id:ticketId,reason:'Customer request completed and documented'};
+  assert.equal(validateArchive(good).ticketId,ticketId);
+  const db=fakePool({previous:'closed'});
+  const result=await archiveDeskTicket(db,good,'localoperator',
+    {uuid:()=> '00000000-0000-4000-8000-000000000004'});
+  assert.equal(result.archived,true);
+  assert.equal(result.archived_by,'localoperator');
+  const ops=db.calls.map(x=>x.sql);
+  assert.match(ops[2],/SET archived_at=NOW\(\)/);
+  assert.match(ops[3],/archived/);
+  assert.equal(db.calls[3].params[2], 'Archive reason: '+good.reason);
+  assert.equal(ops[4],'COMMIT');
+  assert.doesNotMatch(ops.join(' '),/\bDELETE FROM\b|DROP TABLE/);
+  assert.throws(()=>validateArchive({...good,reason:'short'}));
+});
+
+test('open/already archived tickets cannot be archived or modified',async()=>{
+  const good={ticket_id:ticketId,reason:'Resolved ticket retained for history'};
+  for(const sample of [
+    {previous:'scoping',archivedAt:null,error:/Close ticket/},
+    {previous:'closed',archivedAt:'2026-11-05T00:00:00Z',error:/already archived/}
+  ]){
+    const db=fakePool(sample);
+    await assert.rejects(()=>archiveDeskTicket(db,good,'localoperator'),sample.error);
+    assert.equal(db.calls.some(x=>/UPDATE arl_workbench_tickets/.test(x.sql)),false);
+    assert.equal(db.calls[2].sql,'ROLLBACK');
+  }
+  const archived=fakePool({previous:'closed',archivedAt:'2026-11-05T00:00:00Z'});
+  await assert.rejects(
+    ()=>updateDeskTicketStatus(archived,{ticket_id:ticketId,status:'in_progress'}),
+    /Archived ticket/
+  );
+  const a=fakePool({previous:'scoping',archivedAt:'2026-11-05T00:00:00Z'});
+  await assert.rejects(
+    ()=>assignDeskTicket(a,{ticket_id:ticketId,action:'self'},'localoperator'),
+    /Archived or closed ticket/
+  );
 });
