@@ -1,10 +1,10 @@
 # ENKYRON — FEUILLE DE ROUTE DE LA PLATEFORME PSA / SERVICE DESK / CYBERSECURITY OPERATIONS
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Établie:** 2026-11-05  
 **Branche de travail:** `feat/enkyron-desktop-20261105`  
 **Statut:** plan de développement ordonné, non promesse de livraison  
-**Total:** 17 blocs, 143 fonctions/critères de livraison
+**Total:** 17 blocs, 157 fonctions/critères de livraison
 
 ## 1. Vision fixe — une seule plateforme
 
@@ -63,6 +63,27 @@ La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron
 
 ## 5. Backlog détaillé numéroté
 
+## 4 bis. Comptes, niveaux d'accès et espaces de travail — priorité architecturale
+
+Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identités techniques partagées. L'Owner est administrateur du produit, **pas** une autorité pouvant falsifier les journaux, les preuves ou la validation d'un assessment.
+
+| Profil | Rôle initial | Autorisations attendues |
+| --- | --- | --- |
+| **L1 — Accueil / Service Desk** | Ouvrir et qualifier des tickets, consulter ses files, ajouter des notes, transférer au niveau 2 | Pas de gestion des droits, ni exécution de tests KYRTHOS, ni données financières confidentielles |
+| **L2 — Technicien / Analyste** | Gérer tickets et tâches assignés, suivre incidents, documenter observations | Pas d'approbation indépendante des résultats ni d'administration |
+| **L3 — Expert / Ingénieur** | Analyser des missions autorisées, préparer/exécuter des tests bornés selon permission explicite, proposer des conclusions | Pas de validation automatique ni de dépassement de périmètre |
+| **L4 — Superviseur / Responsable** | Piloter équipe, affectations, SLA, revues et autorisations métier déléguées | Pas de pouvoir général sur les autres sociétés ni d'effacement des journaux |
+| **L5 — Owner / Direction** | Administrer les comptes, politiques d'accès, équipes, accès financiers et paramètres de sa propre société | Aucune modification rétroactive des preuves et aucun contournement des contrôles de sûreté |
+| **Client / Invité** | Voir ses tickets et documents explicitement publiés, envoyer ses demandes | Accès strictement limité à son organisation / son espace |
+
+**La numérotation n'est PAS une autorisation automatique.** Le système doit contrôler une règle de type **RBAC + ABAC** (rôle + organisation + équipe + client + dossier + action + contexte). Par exemple, un L4 de l'équipe A ne doit pas lire un dossier privé de l'équipe B sans attribution explicite.
+
+**Espaces prévus:** Direction, Service Desk, Engineering, Sales, Billing et espaces client/mission. Les équipes peuvent travailler depuis différents bureaux ou à distance, sous contrôle d'accès du serveur. Le desktop garde son interface Qt; lorsqu'il y aura plusieurs utilisateurs, un **service authentifié** sera nécessaire entre ENKYRON et NEMORYTH. La connexion locale actuelle avec l'utilisateur du système d'exploitation n'est pas un système de comptes multi-utilisateur.
+
+**Séquence opérationnelle:** valider la création des tickets sur ton Debian avec un seul opérateur → figer le modèle d'identité et permissions E00-10 à E00-23 avant tout accès externe ou ajout d'employé → seulement ensuite permettre un second utilisateur connecté et tester les refus inter-espaces. La revue de conformité et d'autorisation de KYRTHOS reste séparée du rang hiérarchique.
+
+**Critère de réception multi-utilisateur:** deux comptes différents connectés simultanément; un L1 ne peut ni modifier les permissions ni consulter un dossier hors périmètre; un L3 ne peut pas valider sa propre preuve comme indépendant; L5 peut administrer l'organisation mais pas modifier les événements passés; révocation d'un compte immédiatement effective et traçable.
+
 ### Bloc 00 — Fondations communes et sécurité des données
 
 **Objectif:** Un socle sûr et partageable avant d'exposer clients, emails ou site web.
@@ -76,6 +97,20 @@ La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron
 - [ ] **E00-07** — Gérer secrets, jetons OAuth, clés API et logs sans fuite; définir politique de conservation / suppression.
 - [ ] **E00-08** — Documenter sauvegarde, restauration testée, migration réversible et reprise après panne.
 - [ ] **E00-09** — Installer des conventions de tests et de versions: CI exacte, tests Qt, intégration PostgreSQL, recette Debian.
+- [ ] **E00-10** — Créer et désactiver des comptes utilisateurs personnels (pas de compte partagé), avec invitation/révocation traçable.
+- [ ] **E00-11** — Définir une matrice de rôles L1 (accueil), L2 (support), L3 (expert), L4 (superviseur) et L5 (Owner), plus un rôle client distinct.
+- [ ] **E00-12** — Séparer le rôle métier des permissions effectives: lecture, écriture, assignation, export, suppression, administration, exécution technique.
+- [ ] **E00-13** — Créer des espaces de travail par équipe, service, client et mission, avec visibilité à périmètre explicite.
+- [ ] **E00-14** — Autoriser l'affectation d'un utilisateur à plusieurs équipes/espaces sans exposer les autres clients.
+- [ ] **E00-15** — Appliquer par défaut le refus d'accès et le moindre privilège dans chaque service/API/SQL, pas seulement cacher les boutons Qt.
+- [ ] **E00-16** — Authentification robuste: identifiants personnels, MFA, sessions courtes, déconnexion et révocation d'appareils.
+- [ ] **E00-17** — Prévoir invitation, récupération d'accès sécurisée, départ d'employé et transfert de propriété des dossiers.
+- [ ] **E00-18** — Configurer séparation des tâches: auteur de preuve, relecteur et approbateur; aucune validation automatique par IA.
+- [ ] **E00-19** — Journaliser consultations sensibles, exports, changement de rôle, élévations, rejets et accès inter-espaces.
+- [ ] **E00-20** — Vérifier les protections contre l'escalade horizontale/verticale et les IDOR avec tests négatifs multi-utilisateurs.
+- [ ] **E00-21** — Construire un service distant authentifié TLS pour les équipes distribuées: aucun poste distant ne se connecte directement à PostgreSQL.
+- [ ] **E00-22** — Prévoir rôles personnalisables et permissions temporaires approuvées sans permettre de modifier ou effacer l'historique.
+- [ ] **E00-23** — Définir une procédure Owner L5 de récupération d'administration avec approbation et journalisation, sans passe-droit sur l'intégrité ni les décisions réglementées.
 
 **Done si:** Socle documenté et frontières de sécurité vérifiées; aucune connexion externe tant que l'authentification et l'isolation ne sont pas prouvées.
 
