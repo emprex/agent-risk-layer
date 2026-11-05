@@ -32,10 +32,14 @@ jobs:
           node --check desktop/enkyron-contract.mjs
           node --check desktop/enkyron-bridge.mjs
           node --test tests/enkyron-desktop.test.js
+      - name: Install native Qt system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libegl1 libopengl0 libxkbcommon0
       - name: Install isolated Qt runtime
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
-          "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6>=6.9,<7"
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen
