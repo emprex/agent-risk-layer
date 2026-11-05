@@ -36,10 +36,12 @@ jobs:
           node --check desktop/enkyron-crm-prospects.mjs
           node --check desktop/enkyron-crm.mjs
           node --check desktop/enkyron-crm-link.mjs
+          node --check desktop/enkyron-crm-tickets.mjs
+          node --check scripts/enkyron-crm-ticket-schema.mjs
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -183,6 +185,42 @@ jobs:
               }], "more": False
           }, None)
           assert window.crm_contacts_table.rowCount() == 1
+          assert window.crm_company_detail_tabs.count() == 2
+          ticket_links_call = next(item for item in calls if item[0] == "crm-company-tickets")
+          assert ticket_links_call[1] == company_id
+          example_ticket_id = "22222222-3333-4444-8555-666666666666"
+          ticket_links_call[3]({
+              "company": {"id": company_id, "name": "Synthetic Company"},
+              "items": [{
+                  "ticket_id": example_ticket_id,
+                  "ticket_number": "ARL-2026-000009",
+                  "title": "Synthetic support request",
+                  "client_name": "Historical customer name",
+                  "status": "new"
+              }], "more": False,
+          }, None)
+          assert window.crm_company_tickets_table.rowCount() == 1
+          window.crm_company_tickets_table.selectRow(0)
+          assert window.crm_open_company_ticket_button.isEnabled()
+          window.crm_company_detail_tabs.setCurrentIndex(1)
+          window.open_ticket_link_dialog()
+          assert window.crm_link_dialog.isVisible()
+          assert calls[-1][0] == "crm-ticket-options"
+          assert calls[-1][1] == ""
+          calls[-1][3]({
+              "available": True,
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000010",
+                  "title": "Unlinked synthetic ticket",
+                  "client_name": "Unverified customer",
+                  "status": "scoping",
+              }], "more": False,
+          }, None)
+          assert window.crm_link_ticket_choice.count() == 1
+          assert window.crm_link_ticket_submit.isEnabled()
+          assert not window.crm_link_ticket_checked.isChecked()
+          window.crm_link_dialog.reject()
           window.open_new_company()
           assert window.crm_company_dialog.isVisible()
           window.crm_name_input.setText("Another Synthetic Company")
