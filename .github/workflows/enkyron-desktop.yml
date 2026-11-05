@@ -39,13 +39,15 @@ jobs:
           node --check desktop/enkyron-crm-tickets.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check desktop/enkyron-crm-activities.mjs
+          node --check desktop/enkyron-crm-mail-drafts.mjs
+          node --check scripts/enkyron-crm-mail-schema.mjs
           node --check scripts/enkyron-crm-activity-schema.mjs
           node --check scripts/enkyron-crm-opportunities-schema.mjs
           node --check scripts/enkyron-crm-ticket-schema.mjs
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -177,7 +179,7 @@ jobs:
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
           }, None)
-          assert window.crm_tabs.count() == 3
+          assert window.crm_tabs.count() == 4
           assert window.crm_company_table.rowCount() == 1
           assert window.crm_company_add.isEnabled()
           window.crm_company_table.selectRow(0)
@@ -269,7 +271,7 @@ jobs:
 
           # Follow-ups are available with no registered CRM company.
           assert window.crm_plan_followup.isEnabled()
-          assert window.crm_tabs.count() == 3
+          assert window.crm_tabs.count() == 4
           window.open_prospect_followup()
           assert calls[-1][0] == "crm-prospect-opportunity"
           assert calls[-1][1] == "ARL-P-000001"
@@ -339,6 +341,59 @@ jobs:
           assert calls[-1][2]["reviewed"] is True
           assert "research-only call note" in calls[-1][2]["detail"]
           window.crm_activity_dialog.reject()
+
+          # Mail drafts belong to the selected opportunity. No mailbox or send.
+          assert window.crm_compose_button.isEnabled()
+          window.open_compose_draft()
+          assert window.crm_draft_dialog.isVisible()
+          assert window.crm_mail_to.text() == ""
+          assert window.crm_draft_context["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_mail_subject.setText("Synthetic proposal draft")
+          window.crm_mail_body.setPlainText(
+              "Hello, this is a local draft, not a sent communication."
+          )
+          window.save_mail_draft()
+          assert calls[-1][0] == "crm-mail-create"
+          assert calls[-1][2]["recipient_email"] == ""
+          assert calls[-1][2]["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_draft_dialog.reject()
+
+          draft_call = next(x for x in calls if x[0] == "crm-mail-drafts")
+          draft_call[3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "recipient_email": None, "subject": "Synthetic proposal draft",
+                  "revision": 1, "updated_at": "2026-11-05"
+              }]
+          }, None)
+          assert window.crm_draft_table.rowCount() == 1
+          window.crm_draft_table.selectRow(0)
+          assert window.crm_edit_draft.isEnabled()
+          window.open_selected_draft()
+          assert calls[-1][0] == "crm-mail-draft"
+          assert calls[-1][1] == "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "draft": {
+                  "id": "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "recipient_email": None, "subject": "Synthetic proposal draft",
+                  "body_text": "Hello, this is a local draft.",
+                  "revision": 1
+              }
+          }, None)
+          assert window.crm_draft_dialog.isVisible()
+          assert window.crm_mail_body.toPlainText().startswith("Hello")
+          window.crm_mail_body.setPlainText("Updated locally, still not sent.")
+          window.save_mail_draft()
+          assert calls[-1][0] == "crm-mail-update"
+          assert calls[-1][2]["expected_revision"] == 1
+          window.crm_draft_dialog.reject()
+
           window.open_followup_update()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.isEnabled()
