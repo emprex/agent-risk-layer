@@ -164,6 +164,15 @@ class EnkyronWindow(QMainWindow):
         self.crm_seq = 0
         self.crm_items = []
         self.crm_loaded = False
+        self.crm_company_loaded = False
+        self.crm_company_seq = 0
+        self.crm_contact_seq = 0
+        self.crm_company_items = []
+        self.crm_contact_items = []
+        self.crm_company_id = None
+        self.crm_pending_company_id = None
+        self.crm_company_dialog = None
+        self.crm_contact_dialog = None
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -506,20 +515,91 @@ class EnkyronWindow(QMainWindow):
         self.ticket_views.addWidget(right)
         self.ticket_views.setCurrentIndex(0)
 
-        # Legacy sales prospects are presented as unverified candidates, NOT
-        # customer accounts. No database mutation or automatic conversion.
+        # A real company/contact CRM and the historical lead research are
+        # distinct views. No silent promotion of legacy research candidates.
         crm_page = QWidget()
         crm_l = QVBoxLayout(crm_page)
-        crm_l.setContentsMargins(25, 22, 25, 20)
-        crm_l.setSpacing(12)
-        crm_l.addWidget(section_title("CRM · EXISTING COMMERCIAL PROSPECTS"))
+        crm_l.setContentsMargins(25, 18, 25, 18)
+        crm_l.addWidget(section_title("CRM · COMPANIES, CONTACTS AND RESEARCH"))
+        self.crm_tabs = QTabWidget()
+        crm_l.addWidget(self.crm_tabs, 1)
+
+        companies_page = QWidget()
+        company_l = QVBoxLayout(companies_page)
+        company_l.setSpacing(10)
+        company_toolbar = QHBoxLayout()
+        self.crm_company_search = QLineEdit()
+        self.crm_company_search.setPlaceholderText("Search registered companies…")
+        self.crm_company_search.setMaxLength(100)
+        company_toolbar.addWidget(self.crm_company_search, 1)
+        company_refresh = QPushButton("Refresh")
+        company_refresh.clicked.connect(self.load_companies)
+        company_toolbar.addWidget(company_refresh)
+        self.crm_company_add = QPushButton("+ Add company")
+        self.crm_company_add.setObjectName("primary")
+        self.crm_company_add.setEnabled(False)
+        self.crm_company_add.clicked.connect(self.open_new_company)
+        company_toolbar.addWidget(self.crm_company_add)
+        company_l.addLayout(company_toolbar)
+        self.crm_company_notice = QLabel(
+            "Structured CRM has not been loaded. Historic prospects remain separate."
+        )
+        self.crm_company_notice.setWordWrap(True)
+        company_l.addWidget(self.crm_company_notice)
+        self.crm_company_table = QTableWidget(0, 5)
+        self.crm_company_table.setHorizontalHeaderLabels(
+            ["Company", "Relationship", "Sector", "Location", "Updated"]
+        )
+        self.crm_company_table.setAlternatingRowColors(True)
+        self.crm_company_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_company_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_company_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_company_table.itemSelectionChanged.connect(self.company_selected)
+        company_l.addWidget(self.crm_company_table, 3)
+        contacts_heading = QHBoxLayout()
+        contacts_heading.addWidget(section_title("CONTACTS FOR SELECTED COMPANY"))
+        contacts_heading.addStretch()
+        self.crm_contact_add = QPushButton("+ Add contact")
+        self.crm_contact_add.setEnabled(False)
+        self.crm_contact_add.clicked.connect(self.open_new_contact)
+        contacts_heading.addWidget(self.crm_contact_add)
+        company_l.addLayout(contacts_heading)
+        self.crm_contacts_notice = QLabel(
+            "Select a company to view its contacts. Email consent starts as unknown."
+        )
+        self.crm_contacts_notice.setWordWrap(True)
+        company_l.addWidget(self.crm_contacts_notice)
+        self.crm_contacts_table = QTableWidget(0, 4)
+        self.crm_contacts_table.setHorizontalHeaderLabels(
+            ["Name", "Role", "Email", "Phone"]
+        )
+        self.crm_contacts_table.setAlternatingRowColors(True)
+        self.crm_contacts_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_contacts_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        company_l.addWidget(self.crm_contacts_table, 2)
+        self.crm_tabs.addTab(companies_page, "Companies & Contacts")
+
+        prospects_page = QWidget()
+        prospect_l = QVBoxLayout(prospects_page)
+        prospect_l.setSpacing(12)
+        prospect_l.addWidget(section_title("CRM · EXISTING COMMERCIAL PROSPECTS"))
         crm_warning = QLabel(
             "Read-only inventory from sales_prospects, if installed locally. "
             "Candidate companies and buyer names are NOT verified CRM entities. "
             "No contacts are automatically created or merged."
         )
         crm_warning.setWordWrap(True)
-        crm_l.addWidget(crm_warning)
+        prospect_l.addWidget(crm_warning)
         crm_actions = QHBoxLayout()
         self.crm_search = QLineEdit()
         self.crm_search.setPlaceholderText("Find a prospect company, buyer or website…")
@@ -528,10 +608,10 @@ class EnkyronWindow(QMainWindow):
         crm_refresh = QPushButton("Refresh prospects")
         crm_refresh.clicked.connect(self.load_prospects)
         crm_actions.addWidget(crm_refresh)
-        crm_l.addLayout(crm_actions)
+        prospect_l.addLayout(crm_actions)
         self.crm_notice = QLabel("Prospect inventory has not been read.")
         self.crm_notice.setWordWrap(True)
-        crm_l.addWidget(self.crm_notice)
+        prospect_l.addWidget(self.crm_notice)
         self.crm_table = QTableWidget(0, 5)
         self.crm_table.setHorizontalHeaderLabels(
             ["Company candidate", "Buyer candidate", "Stage", "Source", "Updated"]
@@ -547,14 +627,15 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.crm_table.itemSelectionChanged.connect(self.show_prospect)
-        crm_l.addWidget(self.crm_table, 1)
-        crm_l.addWidget(section_title("CANDIDATE PROVENANCE"))
+        prospect_l.addWidget(self.crm_table, 1)
+        prospect_l.addWidget(section_title("CANDIDATE PROVENANCE"))
         self.crm_details = make_text_area()
         self.crm_details.setMaximumHeight(180)
         self.crm_details.setPlaceholderText(
             "Select a candidate for its source and recorded buyer details."
         )
-        crm_l.addWidget(self.crm_details)
+        prospect_l.addWidget(self.crm_details)
+        self.crm_tabs.addTab(prospects_page, "Existing prospect research")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -562,6 +643,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_search_timer.setInterval(300)
         self.crm_search_timer.timeout.connect(self.load_prospects)
         self.crm_search.textChanged.connect(lambda _: self.crm_search_timer.start())
+        self.crm_company_search_timer = QTimer(self)
+        self.crm_company_search_timer.setSingleShot(True)
+        self.crm_company_search_timer.setInterval(300)
+        self.crm_company_search_timer.timeout.connect(self.load_companies)
+        self.crm_company_search.textChanged.connect(
+            lambda _: self.crm_company_search_timer.start()
+        )
         self.navigation.currentRowChanged.connect(self.module_changed)
         self.navigation.setCurrentRow(1)
 
@@ -577,8 +665,11 @@ class EnkyronWindow(QMainWindow):
         if index < 0 or index >= self.pages.count():
             return
         self.pages.setCurrentIndex(index)
-        if index == 2 and not self.crm_loaded:
-            self.load_prospects()
+        if index == 2:
+            if not self.crm_company_loaded:
+                self.load_companies()
+            if not self.crm_loaded:
+                self.load_prospects()
 
     def show_ticket_index(self):
         # Reset the selection so clicking the same record opens it again.
@@ -590,6 +681,269 @@ class EnkyronWindow(QMainWindow):
         self.ticket_list.blockSignals(False)
         self.current_id = None
         self.current_ticket = None
+
+    def load_companies(self):
+        self.crm_company_seq += 1
+        request_seq = self.crm_company_seq
+        self.crm_company_notice.setText("Reading registered companies…")
+
+        def received(data, error):
+            if request_seq != self.crm_company_seq:
+                return
+            self.crm_company_loaded = True
+            self.crm_company_items = []
+            self.crm_company_table.blockSignals(True)
+            self.crm_company_table.setRowCount(0)
+            self.crm_company_table.blockSignals(False)
+            self.crm_company_id = None
+            self.crm_contact_seq += 1
+            self.crm_contacts_table.setRowCount(0)
+            self.crm_contact_add.setEnabled(False)
+            if error:
+                self.crm_company_notice.setText("CRM company lookup unavailable.")
+                self.crm_company_add.setEnabled(False)
+                self.show_error(error)
+                return
+            if not data.get("available"):
+                self.crm_company_add.setEnabled(False)
+                self.crm_company_notice.setText(data.get(
+                    "notice", "Structured CRM migration 065 is not installed."
+                ))
+                return
+            self.crm_company_add.setEnabled(True)
+            self.crm_company_items = data.get("items", [])
+            self.crm_company_table.blockSignals(True)
+            self.crm_company_table.setRowCount(len(self.crm_company_items))
+            pending = self.crm_pending_company_id
+            chosen = -1
+            for row, company in enumerate(self.crm_company_items):
+                values = [
+                    company.get("name") or "",
+                    company.get("relationship_state") or "",
+                    company.get("sector") or "",
+                    ", ".join(filter(None, [
+                        company.get("city"), company.get("country")
+                    ])),
+                    display_date(company.get("updated_at"))
+                ]
+                for col, val in enumerate(values):
+                    self.crm_company_table.setItem(
+                        row, col, QTableWidgetItem(str(val))
+                    )
+                if pending and pending == company.get("id"):
+                    chosen = row
+            self.crm_company_table.blockSignals(False)
+            self.crm_pending_company_id = None
+            count = len(self.crm_company_items)
+            suffix = " (first 100; narrow search)" if data.get("more") else ""
+            self.crm_company_notice.setText(
+                f"{count} registered companie(s){suffix}. "
+                "Legacy prospects have not been imported."
+            )
+            if chosen >= 0:
+                self.crm_company_table.selectRow(chosen)
+            else:
+                self.crm_contacts_notice.setText(
+                    "Select a company to view or create contacts."
+                )
+
+        self.bridge.call(
+            "crm-companies", self.crm_company_search.text(), callback=received
+        )
+
+    def company_selected(self):
+        row = self.crm_company_table.currentRow()
+        if row < 0 or row >= len(self.crm_company_items):
+            self.crm_company_id = None
+            self.crm_contact_add.setEnabled(False)
+            self.crm_contacts_table.setRowCount(0)
+            return
+        company = self.crm_company_items[row]
+        company_id = company["id"]
+        self.crm_company_id = company_id
+        self.crm_contact_add.setEnabled(True)
+        self.crm_contact_seq += 1
+        seq = self.crm_contact_seq
+        self.crm_contacts_table.setRowCount(0)
+        self.crm_contacts_notice.setText(
+            "Reading contacts for " + str(company.get("name") or "") + "…"
+        )
+
+        def received(data, error):
+            if seq != self.crm_contact_seq or company_id != self.crm_company_id:
+                return
+            self.crm_contact_items = []
+            self.crm_contacts_table.setRowCount(0)
+            if error:
+                self.crm_contacts_notice.setText("Contacts unavailable.")
+                self.show_error(error)
+                return
+            self.crm_contact_items = data.get("items", [])
+            self.crm_contacts_table.setRowCount(len(self.crm_contact_items))
+            for index, contact in enumerate(self.crm_contact_items):
+                for col, val in enumerate([
+                    contact.get("full_name") or "",
+                    contact.get("job_title") or "",
+                    contact.get("email") or "",
+                    contact.get("phone") or ""
+                ]):
+                    self.crm_contacts_table.setItem(
+                        index, col, QTableWidgetItem(str(val))
+                    )
+            more = " First 100; paging pending." if data.get("more") else ""
+            self.crm_contacts_notice.setText(
+                f"{len(self.crm_contact_items)} contact(s). "
+                "No marketing permission inferred." + more
+            )
+
+        self.bridge.call("crm-contacts", company_id, callback=received)
+
+    def open_new_company(self):
+        if not self.crm_company_add.isEnabled():
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · New company")
+        dialog.setMinimumWidth(540)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("REGISTER A COMPANY"))
+        explanation = QLabel(
+            "Manual CRM record. Starts as a prospect; this does not convert "
+            "or modify legacy sales data."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        form = QFormLayout()
+        self.crm_name_input = QLineEdit()
+        self.crm_name_input.setMaxLength(160)
+        form.addRow("Company name *", self.crm_name_input)
+        self.crm_legal_input = QLineEdit()
+        self.crm_legal_input.setMaxLength(160)
+        form.addRow("Legal name", self.crm_legal_input)
+        self.crm_sector_input = QLineEdit()
+        self.crm_sector_input.setMaxLength(120)
+        form.addRow("Sector", self.crm_sector_input)
+        self.crm_city_input = QLineEdit()
+        self.crm_city_input.setMaxLength(120)
+        form.addRow("City", self.crm_city_input)
+        self.crm_country_input = QLineEdit()
+        self.crm_country_input.setMaxLength(90)
+        form.addRow("Country", self.crm_country_input)
+        self.crm_website_input = QLineEdit()
+        self.crm_website_input.setMaxLength(500)
+        form.addRow("Website", self.crm_website_input)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        self.crm_company_submit = QPushButton("Save company")
+        self.crm_company_submit.setObjectName("primary")
+        self.crm_company_submit.clicked.connect(self.create_company)
+        buttons.addWidget(self.crm_company_submit)
+        layout.addLayout(buttons)
+        self.crm_company_dialog = dialog
+        dialog.open()
+
+    def create_company(self):
+        dialog = self.crm_company_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        payload = {
+            "name": self.crm_name_input.text(),
+            "legal_name": self.crm_legal_input.text(),
+            "sector": self.crm_sector_input.text(),
+            "city": self.crm_city_input.text(),
+            "country": self.crm_country_input.text(),
+            "website": self.crm_website_input.text()
+        }
+        if not payload["name"].strip():
+            QMessageBox.warning(dialog, "Required", "Company name is required.")
+            return
+        self.crm_company_submit.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("id"):
+                QMessageBox.warning(dialog, "Not saved", error or "CRM creation failed.")
+                self.crm_company_submit.setEnabled(True)
+                return
+            dialog.accept()
+            self.crm_pending_company_id = data["id"]
+            self.crm_company_search.clear()
+            self.load_companies()
+
+        self.bridge.call("crm-create-company", payload=payload, callback=received)
+
+    def open_new_contact(self):
+        if not self.crm_company_id or not self.crm_contact_add.isEnabled():
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · New contact")
+        dialog.setMinimumWidth(540)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("REGISTER CONTACT"))
+        hint = QLabel(
+            "This contact belongs to the selected company. Marketing permission "
+            "is UNKNOWN until independently established."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QFormLayout()
+        self.crm_contact_name_input = QLineEdit()
+        self.crm_contact_name_input.setMaxLength(160)
+        form.addRow("Full name *", self.crm_contact_name_input)
+        self.crm_contact_job_input = QLineEdit()
+        self.crm_contact_job_input.setMaxLength(160)
+        form.addRow("Role", self.crm_contact_job_input)
+        self.crm_contact_email_input = QLineEdit()
+        self.crm_contact_email_input.setMaxLength(254)
+        form.addRow("Email", self.crm_contact_email_input)
+        self.crm_contact_phone_input = QLineEdit()
+        self.crm_contact_phone_input.setMaxLength(80)
+        form.addRow("Telephone", self.crm_contact_phone_input)
+        layout.addLayout(form)
+        row = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        row.addWidget(cancel)
+        self.crm_contact_submit = QPushButton("Save contact")
+        self.crm_contact_submit.setObjectName("primary")
+        self.crm_contact_submit.clicked.connect(self.create_contact)
+        row.addWidget(self.crm_contact_submit)
+        layout.addLayout(row)
+        self.crm_contact_dialog = dialog
+        self.crm_contact_dialog_company_id = self.crm_company_id
+        dialog.open()
+
+    def create_contact(self):
+        dialog = self.crm_contact_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        company_id = self.crm_contact_dialog_company_id
+        if company_id != self.crm_company_id:
+            QMessageBox.warning(dialog, "Selection changed", "Reopen the contact form.")
+            return
+        payload = {
+            "company_id": company_id,
+            "full_name": self.crm_contact_name_input.text(),
+            "job_title": self.crm_contact_job_input.text(),
+            "email": self.crm_contact_email_input.text(),
+            "phone": self.crm_contact_phone_input.text()
+        }
+        if not payload["full_name"].strip():
+            QMessageBox.warning(dialog, "Required", "Contact name is required.")
+            return
+        self.crm_contact_submit.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("id"):
+                QMessageBox.warning(dialog, "Not saved", error or "Contact creation failed.")
+                self.crm_contact_submit.setEnabled(True)
+                return
+            dialog.accept()
+            if company_id == self.crm_company_id:
+                self.company_selected()
+
+        self.bridge.call("crm-create-contact", payload=payload, callback=received)
 
     def load_prospects(self):
         self.crm_seq += 1
