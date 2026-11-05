@@ -673,6 +673,11 @@ class EnkyronWindow(QMainWindow):
         def pack_loaded(data, error):
             if ticket_id != self.current_id or sequence != self.evidence_seq:
                 return
+            current_item = self.evidence_packs.currentItem()
+            if not current_item or current_item.data(Qt.ItemDataRole.UserRole) != number:
+                self.evidence_details.setPlainText("Selection changed. Inspect the new pack.")
+                self.evidence_open.setEnabled(True)
+                return
             self.evidence_open.setEnabled(True)
             if (error or not isinstance(data, dict)
                 or not data.get("available") or data.get("kind") != "pack"):
