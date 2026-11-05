@@ -163,6 +163,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-crm-opportunities-postgres.test.js
 
+      - name: ENKYRON CRM manual activity journal PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-activities-postgres.test.js
+
       - name: External black-box candidate PostgreSQL import boundary
         env:
           CI: 'true'
