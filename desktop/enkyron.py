@@ -465,7 +465,7 @@ class EnkyronWindow(QMainWindow):
                         ))
                     )
                     return
-                self.engine_view.setPlainText("\\n".join([
+                self.engine_view.setPlainText("\n".join([
                     "CANONICAL ARL ASSESSMENT — EXISTING RECORD",
                     "",
                     "Project: " + data["project_id"],
