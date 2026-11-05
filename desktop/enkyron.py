@@ -593,7 +593,7 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         company_l.addWidget(self.crm_contacts_table, 2)
-        self.crm_tabs.addTab(companies_page, "Companies & Contacts")
+        self.crm_tabs.addTab(companies_page, "Companies && Contacts")
 
         prospects_page = QWidget()
         prospect_l = QVBoxLayout(prospects_page)
