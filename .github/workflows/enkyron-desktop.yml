@@ -143,14 +143,33 @@ jobs:
                   "snapshot_id": "sys_test", "verification_state": "unverified",
                   "retention_status": "active", "evidence_class": "observed",
                   "source_type": "runtime_log", "observed_at": "2026-11-05",
-                  "created_at": "2026-11-05", "test_execution_id": None,
+                  "created_at": "2026-11-05", "test_execution_id": "test_1",
                   "runtime_event_id": None, "approval_id": None,
                   "recorded_integrity_digest": "b" * 64,
-              }]
+              }],
+              "tests": [{
+                  "id": "test_1", "entry_id": "ARL-KB-013",
+                  "snapshot_id": "sys_test", "execution_kind": "initial",
+                  "recorded_result": "passed",
+                  "started_at": "2026-11-05", "completed_at": "2026-11-05",
+                  "retest_of_execution_id": None, "original_snapshot_id": None,
+                  "finding_id": None, "remediation_id": None,
+                  "recorded_content_digest": "c" * 64,
+              }],
+              "more_tests": False,
           }, None)
           assert window.records_table.rowCount() == 1
           assert window.records_table.item(0, 1).text() == "unverified"
           assert "not recomputed" in window.record_details.toPlainText()
+          assert window.tests_table.rowCount() == 1
+          assert window.record_views.tabText(1) == "Test history (1)"
+          window.record_views.setCurrentIndex(1)
+          window.tests_table.selectRow(0)
+          assert "Recorded test result: passed" in window.record_details.toPlainText()
+          assert "NOT a control PASS" in window.record_details.toPlainText()
+          window.record_control.setValue(14)
+          assert window.records_table.rowCount() == 0
+          assert window.tests_table.rowCount() == 0
           window.close()
           app.quit()
           PY
