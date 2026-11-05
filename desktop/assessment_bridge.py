@@ -64,7 +64,7 @@ def inspect_existing(
             env=_child_env(expected_sha),
             capture_output=True,
             text=True,
-            timeout=25,
+            timeout=75,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
