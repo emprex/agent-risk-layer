@@ -69,10 +69,12 @@ class DesktopBridge:
     def call(self, action, arg="", payload=None, callback=None):
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
-        if action == "operator-state":
-            # Reuse the existing Python ARL Operator's read-only adapter.
+        if action in ("operator-state", "evidence-summary", "evidence-pack"):
+            # Reuse existing ARL Operator adapters; do not start a second engine.
             process.setProgram(sys.executable)
-            process.setArguments(["-m", "desktop.enkyron_operator_state"])
+            module = ("desktop.enkyron_operator_state" if action == "operator-state"
+                      else "desktop.enkyron_evidence")
+            process.setArguments(["-m", module])
         else:
             process.setProgram("node")
             args = [str(BRIDGE), action]
@@ -123,7 +125,8 @@ class DesktopBridge:
             process.started.connect(send_payload)
         self.running.add(process)
         process.start()
-        timer.start(35000 if action == "operator-state" else 15000)
+        timer.start(60000 if action in ("evidence-summary", "evidence-pack") else
+                    35000 if action == "operator-state" else 15000)
 
 
 class EnkyronWindow(QMainWindow):
@@ -136,6 +139,10 @@ class EnkyronWindow(QMainWindow):
         self.current_id = None
         self.current_ticket = None
         self.list_seq = 0
+        self.evidence_seq = 0
+        self.evidence_context = None
+        self.evidence_page = 0
+        self.evidence_page_count = 0
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -265,6 +272,46 @@ class EnkyronWindow(QMainWindow):
         engine_l.addWidget(self.engine_view, 1)
         self.tabs.addTab(engine, "ARL Engine")
 
+        evidence = QWidget()
+        evidence_l = QVBoxLayout(evidence)
+        evidence_l.addWidget(section_title("NEMORYTH · CANONICAL ARL EVIDENCE REQUESTS"))
+        self.evidence_intro = QLabel(
+            "Read-only evidence requirements from ARL's 108-control register. "
+            "Candidate counts are NOT accepted or verified evidence."
+        )
+        self.evidence_intro.setWordWrap(True)
+        evidence_l.addWidget(self.evidence_intro)
+        self.evidence_button = QPushButton("Read existing 108-control evidence workplan")
+        self.evidence_button.setObjectName("primary")
+        self.evidence_button.setEnabled(False)
+        self.evidence_button.clicked.connect(self.inspect_evidence)
+        evidence_l.addWidget(self.evidence_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.evidence_summary = make_text_area()
+        self.evidence_summary.setMaximumHeight(190)
+        evidence_l.addWidget(self.evidence_summary)
+        evidence_l.addWidget(section_title("EVIDENCE REQUEST PACKS"))
+        self.evidence_packs = QListWidget()
+        self.evidence_packs.setMaximumHeight(190)
+        evidence_l.addWidget(self.evidence_packs)
+        actions = QHBoxLayout()
+        self.evidence_open = QPushButton("Inspect selected pack")
+        self.evidence_open.setEnabled(False)
+        self.evidence_open.clicked.connect(self.open_evidence_pack)
+        actions.addWidget(self.evidence_open)
+        self.evidence_previous = QPushButton("Previous page")
+        self.evidence_previous.setEnabled(False)
+        self.evidence_previous.clicked.connect(lambda: self.load_evidence_page(self.evidence_page - 1))
+        actions.addWidget(self.evidence_previous)
+        self.evidence_next = QPushButton("Next page")
+        self.evidence_next.setEnabled(False)
+        self.evidence_next.clicked.connect(lambda: self.load_evidence_page(self.evidence_page + 1))
+        actions.addWidget(self.evidence_next)
+        actions.addStretch()
+        evidence_l.addLayout(actions)
+        self.evidence_details = make_text_area()
+        evidence_l.addWidget(self.evidence_details, 1)
+        self.tabs.addTab(evidence, "Evidence Requests")
+
         self.status = QLabel("No active tests or assessment decisions can be executed from this window.")
         self.status.setObjectName("subtle")
         self.status.setWordWrap(True)
@@ -328,6 +375,17 @@ class EnkyronWindow(QMainWindow):
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
         self.engine_button.setEnabled(False)
+        self.evidence_seq += 1
+        self.evidence_context = None
+        self.evidence_page = 0
+        self.evidence_page_count = 0
+        self.evidence_summary.clear()
+        self.evidence_details.clear()
+        self.evidence_packs.clear()
+        self.evidence_button.setEnabled(False)
+        self.evidence_open.setEnabled(False)
+        self.evidence_previous.setEnabled(False)
+        self.evidence_next.setEnabled(False)
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
         self.title.setText("Loading ticket…")
@@ -376,6 +434,7 @@ class EnkyronWindow(QMainWindow):
                 and bool(ticket.get("linked_project_id"))
                 and bool(ticket.get("linked_assessment_id"))
             )
+            self.evidence_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
                 self.load_master()
@@ -489,6 +548,168 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("operator-state", payload=request, callback=state_loaded)
 
         self.bridge.call("master", ticket_id, callback=master_loaded)
+
+    def inspect_evidence(self):
+        """Read existing evidence requirements; never accept evidence or run tests."""
+        ticket_id, ticket = self.current_id, self.current_ticket
+        if not ticket_id or not ticket or ticket.get("target_kind") != "git":
+            return
+        if not ticket.get("linked_project_id") or not ticket.get("linked_assessment_id"):
+            return
+        self.evidence_seq += 1
+        sequence = self.evidence_seq
+        self.evidence_context = None
+        self.evidence_button.setEnabled(False)
+        self.evidence_open.setEnabled(False)
+        self.evidence_previous.setEnabled(False)
+        self.evidence_next.setEnabled(False)
+        self.evidence_packs.clear()
+        self.evidence_details.clear()
+        self.evidence_summary.setPlainText("Verifying master and exact snapshot binding…")
+
+        def master_loaded(master, error):
+            if ticket_id != self.current_id or sequence != self.evidence_seq:
+                return
+            if (error or not isinstance(master, dict)
+                or not master.get("available")
+                or master.get("snapshot_status") != "current"):
+                self.evidence_summary.setPlainText(
+                    "Evidence workplan blocked: current verified master unavailable."
+                )
+                self.evidence_button.setEnabled(True)
+                return
+            request = {
+                "action": "summary",
+                "target_kind": "git",
+                "target_reference": ticket["target_reference"],
+                "target_sha": master["target_sha"],
+                "project_id": ticket["linked_project_id"],
+                "assessment_id": ticket["linked_assessment_id"],
+                "snapshot_id": master["snapshot_id"],
+            }
+            self.evidence_summary.setPlainText(
+                "Reading canonical ARL evidence requirements…"
+            )
+
+            def summary_loaded(data, summary_error):
+                if ticket_id != self.current_id or sequence != self.evidence_seq:
+                    return
+                self.evidence_button.setEnabled(True)
+                if (summary_error or not isinstance(data, dict)
+                    or not data.get("available") or data.get("kind") != "summary"):
+                    self.evidence_summary.setPlainText(
+                        "Evidence workplan blocked: "
+                        + (summary_error or (
+                            str(data.get("reason", "No verified response"))
+                            if isinstance(data, dict) else "No verified response"
+                        ))
+                    )
+                    return
+                self.evidence_context = {
+                    "target_kind": "git", "target_reference": request["target_reference"],
+                    "target_sha": request["target_sha"], "project_id": request["project_id"],
+                    "assessment_id": request["assessment_id"],
+                    "snapshot_id": request["snapshot_id"],
+                }
+                counts = data["counts"]
+                self.evidence_summary.setPlainText("\n".join([
+                    "ARL CONTROL REGISTER: 108",
+                    "Assessment controls: " + str(data["assessment_controls"]),
+                    "Other workflow controls: " + str(data["other_workflow_controls"]),
+                    "Criterion count: " + str(data["criterion_count"]),
+                    "",
+                    "Static candidates: " + str(counts["staticCandidates"]),
+                    "Static missing: " + str(counts["staticMissing"]),
+                    "Human requirements: " + str(counts["humanRequirements"]),
+                    "Runtime requirements: " + str(counts["runtimeRequirements"]),
+                    "Source lineage issues: " + str(counts["sourceLineageIssues"]),
+                    "",
+                    "No evidence accepted. No tests executed. Human review required.",
+                ]))
+                for pack in data["packs"]:
+                    widget = QListWidgetItem(
+                        "Pack {number} · {category} · {requirement_instances} requirements · "
+                        "{affected_controls} controls".format(**pack)
+                    )
+                    widget.setData(Qt.ItemDataRole.UserRole, pack["number"])
+                    self.evidence_packs.addItem(widget)
+                self.evidence_open.setEnabled(self.evidence_packs.count() > 0)
+                if self.evidence_packs.count():
+                    self.evidence_packs.setCurrentRow(0)
+                self.status.setText(
+                    "ARL evidence workplan read-only. Candidate records are NOT accepted proof."
+                )
+
+            self.bridge.call("evidence-summary", payload=request, callback=summary_loaded)
+
+        self.bridge.call("master", ticket_id, callback=master_loaded)
+
+    def open_evidence_pack(self):
+        if not self.evidence_context or not self.evidence_packs.currentItem():
+            return
+        self.load_evidence_page(1)
+
+    def load_evidence_page(self, page):
+        if not self.evidence_context or not isinstance(page, int):
+            return
+        chosen = self.evidence_packs.currentItem()
+        if not chosen:
+            return
+        number = chosen.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(number, int) or not 1 <= number <= 150:
+            return
+        if not 1 <= page <= 1000 or (self.evidence_page_count and page > self.evidence_page_count):
+            return
+        ticket_id = self.current_id
+        self.evidence_seq += 1
+        sequence = self.evidence_seq
+        request = dict(self.evidence_context)
+        request.update(action="pack", pack_number=number, page_number=page)
+        self.evidence_open.setEnabled(False)
+        self.evidence_previous.setEnabled(False)
+        self.evidence_next.setEnabled(False)
+        self.evidence_details.setPlainText("Reading requirements from ARL…")
+
+        def pack_loaded(data, error):
+            if ticket_id != self.current_id or sequence != self.evidence_seq:
+                return
+            self.evidence_open.setEnabled(True)
+            if (error or not isinstance(data, dict)
+                or not data.get("available") or data.get("kind") != "pack"):
+                self.evidence_details.setPlainText(
+                    "Evidence pack blocked: "
+                    + (error or (
+                        str(data.get("reason", "No verified response"))
+                        if isinstance(data, dict) else "No verified response"
+                    ))
+                )
+                return
+            self.evidence_page = data["page_number"]
+            self.evidence_page_count = data["page_count"]
+            self.evidence_previous.setEnabled(self.evidence_page > 1)
+            self.evidence_next.setEnabled(self.evidence_page < self.evidence_page_count)
+            lines = [
+                "PACK {} · PAGE {}/{} · {} requirements total".format(
+                    number, data["page_number"], data["page_count"], data["task_count"]
+                ),
+                "Recorded candidate counts do NOT establish evidence validity.",
+                "",
+            ]
+            for task in data["tasks"]:
+                lines.extend([
+                    "{} · Requirement {}".format(task["control_id"], task["requirement_index"]),
+                    "Review state: " + task["review_state"],
+                    "Candidate count: " + str(task["candidate_count"]),
+                    "Expected collectors: " + (", ".join(task["expected_collectors"]) or "none"),
+                    task["requirement"],
+                    "",
+                ])
+            self.evidence_details.setPlainText("\n".join(lines))
+            self.status.setText(
+                "Canonical requirements displayed. No control PASS/FAIL inferred."
+            )
+
+        self.bridge.call("evidence-pack", payload=request, callback=pack_loaded)
 
     def save_note(self):
         if not self.current_ticket or self.current_ticket["status"] == "closed":
