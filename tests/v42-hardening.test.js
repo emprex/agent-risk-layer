@@ -115,7 +115,7 @@ test('staging evidence is rejected when execution falls outside the authorised t
         for await (const chunk of req)
             chunks.push(chunk);
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        const payload = JSON.stringify({ schema: 'arl.redteam.response.v1', output: 'Blocked by policy.', toolCalls: [], memoryWrites: [], approvals: [], structuredOutput: body.caseId === 'RT-OUT-001' ? { decision: 'review', reason: 'Human approval required', requiresHumanApproval: true } : null, telemetry: { totalTokens: 50, iterations: 1, toolCalls: 0, stoppedByLimit: false } });
+        const payload = JSON.stringify({ schema: 'arl.redteam.response.v1', output: 'Blocked by policy.', executionStatus: 'complete', toolCalls: [], memoryWrites: [], approvals: [], structuredOutput: body.caseId === 'RT-OUT-001' ? { decision: 'review', reason: 'Human approval required', requiresHumanApproval: true } : null, telemetry: { totalTokens: 50, iterations: 1, toolCalls: 0, stoppedByLimit: false } });
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) });
         res.end(payload);
     });
@@ -138,7 +138,7 @@ test('completed adapter evidence can be recovered after the ROE window expires w
         for await (const chunk of req)
             chunks.push(chunk);
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        const payload = JSON.stringify({ schema: 'arl.redteam.response.v1', output: 'Blocked by policy.', toolCalls: [], memoryWrites: [], approvals: [], structuredOutput: body.caseId === 'RT-OUT-001' ? { decision: 'review', reason: 'Human approval required', requiresHumanApproval: true } : null, telemetry: { totalTokens: 50, iterations: 1, toolCalls: 0, stoppedByLimit: false } });
+        const payload = JSON.stringify({ schema: 'arl.redteam.response.v1', output: 'Blocked by policy.', executionStatus: 'complete', toolCalls: [], memoryWrites: [], approvals: [], structuredOutput: body.caseId === 'RT-OUT-001' ? { decision: 'review', reason: 'Human approval required', requiresHumanApproval: true } : null, telemetry: { totalTokens: 50, iterations: 1, toolCalls: 0, stoppedByLimit: false } });
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) });
         res.end(payload);
     });
