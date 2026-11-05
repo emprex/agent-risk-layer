@@ -54,7 +54,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem
           from PySide6.QtCore import Qt
           from desktop.enkyron import DesktopBridge, EnkyronWindow
 
@@ -216,6 +216,9 @@ jobs:
               "linked": None, "matches": [], "more_matches": False,
           }, None)
           assert window.crm_review_dialog.isVisible()
+          summaries = [x.text() for x in window.crm_review_dialog.findChildren(QLabel)]
+          assert any("Research candidate: Synthetic Research Co." in x and
+                     "Buyer (not verified): Unconfirmed Contact" in x for x in summaries)
           assert window.crm_review_choice.currentData() == {"mode": "create"}
           assert not window.crm_review_check.isChecked()
           window.crm_review_dialog.reject()
