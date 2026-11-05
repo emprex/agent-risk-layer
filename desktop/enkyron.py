@@ -8,8 +8,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QInputDialog,
     QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget,
 )
@@ -192,6 +193,10 @@ class EnkyronWindow(QMainWindow):
         create.setObjectName("primary")
         create.clicked.connect(self.open_new_ticket)
         left_l.addWidget(create)
+        self.show_archived = QCheckBox("Include archived tickets")
+        self.show_archived.setStyleSheet("color: #ecf5fa;")
+        self.show_archived.toggled.connect(self.load_tickets)
+        left_l.addWidget(self.show_archived)
         self.new_ticket_dialog = None
         self.ticket_list = QListWidget()
         self.ticket_list.currentItemChanged.connect(self.ticket_changed)
@@ -234,6 +239,19 @@ class EnkyronWindow(QMainWindow):
         status_bar.addWidget(self.update_status_button)
         status_bar.addStretch()
         overview_l.addLayout(status_bar)
+        assignment = QHBoxLayout()
+        self.owner_label = QLabel("Assigned to: Unassigned")
+        assignment.addWidget(self.owner_label)
+        self.assign_button = QPushButton("Assign to me")
+        self.assign_button.setEnabled(False)
+        self.assign_button.clicked.connect(self.change_ticket_assignment)
+        assignment.addWidget(self.assign_button)
+        self.archive_button = QPushButton("Archive closed ticket")
+        self.archive_button.setEnabled(False)
+        self.archive_button.clicked.connect(self.archive_current_ticket)
+        assignment.addWidget(self.archive_button)
+        assignment.addStretch()
+        overview_l.addLayout(assignment)
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
         overview_l.addWidget(section_title("OPTIONAL ARL ENGINE LINK"))
@@ -552,6 +570,79 @@ class EnkyronWindow(QMainWindow):
             callback=completed,
         )
 
+    def change_ticket_assignment(self):
+        ticket = self.current_ticket
+        if not ticket or not self.current_id or ticket.get("archived_at"):
+            return
+        if ticket.get("status") == "closed":
+            return
+        operator = ticket.get("assigned_to")
+        action = "unassigned" if operator else "self"
+        ticket_id = self.current_id
+        self.assign_button.setEnabled(False)
+
+        def completed(data, error):
+            if ticket_id != self.current_id:
+                return
+            if error or not isinstance(data, dict):
+                self.show_error(error or "Assignment failed")
+                self.assign_button.setEnabled(True)
+                return
+            item = self.ticket_list.currentItem()
+            if item:
+                self.ticket_changed(item, None)
+            self.load_tickets()
+
+        self.bridge.call(
+            "ticket-assignment",
+            payload={"ticket_id": ticket_id, "action": action}, callback=completed,
+        )
+
+    def archive_current_ticket(self):
+        ticket = self.current_ticket
+        if not ticket or not self.current_id or ticket.get("status") != "closed":
+            return
+        if ticket.get("archived_at"):
+            return
+        reason, accepted = QInputDialog.getText(
+            self, "Archive closed ticket", "Reason for archival (min. 10 characters):"
+        )
+        if not accepted:
+            return
+        if len(reason.strip()) < 10:
+            QMessageBox.warning(self, "Archive blocked", "Explain the reason in at least 10 characters.")
+            return
+        answer = QMessageBox.question(
+            self, "Confirm archival",
+            "Archive ticket {}? The ticket, notes and history will be preserved. "
+            "This action is recorded.".format(ticket["ticket_number"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        ticket_id = self.current_id
+        self.archive_button.setEnabled(False)
+
+        def completed(data, error):
+            if ticket_id != self.current_id:
+                return
+            if error or not isinstance(data, dict) or not data.get("archived"):
+                self.show_error(error or "Archive was refused")
+                self.archive_button.setEnabled(True)
+                return
+            self.status.setText(
+                "Ticket archived without deletion; all notes and events preserved."
+            )
+            self.current_ticket = None
+            self.current_id = None
+            self.load_tickets()
+
+        self.bridge.call(
+            "ticket-archive",
+            payload={"ticket_id": ticket_id, "reason": reason}, callback=completed,
+        )
+
     def load_tickets(self):
         self.list_seq += 1
         sequence = self.list_seq
@@ -589,7 +680,10 @@ class EnkyronWindow(QMainWindow):
             self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
             if not old_id and self.ticket_list.count():
                 self.ticket_list.setCurrentRow(0)
-        self.bridge.call("tickets", self.search.text(), callback=received)
+        self.bridge.call(
+            "tickets-archived" if self.show_archived.isChecked() else "tickets",
+            self.search.text(), callback=received,
+        )
 
     def ticket_changed(self, item, _previous):
         if not item:
@@ -626,6 +720,9 @@ class EnkyronWindow(QMainWindow):
         self.ticket_status.clear()
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
+        self.owner_label.setText("Assigned to: Unassigned")
+        self.assign_button.setEnabled(False)
+        self.archive_button.setEnabled(False)
         self.title.setText("Loading ticket…")
         def received(data, error):
             if ticket_id != self.current_id:
@@ -672,9 +769,23 @@ class EnkyronWindow(QMainWindow):
                     next_status.replace("_", " ").title(), next_status
                 )
             can_update = self.ticket_status.count() > 0
-            self.ticket_status.setEnabled(can_update)
-            self.update_status_button.setEnabled(can_update)
-            self.save_button.setEnabled(ticket["status"] != "closed")
+            active = not bool(ticket.get("archived_at"))
+            self.ticket_status.setEnabled(can_update and active)
+            self.update_status_button.setEnabled(can_update and active)
+            self.save_button.setEnabled(active and ticket["status"] != "closed")
+            owner = ticket.get("assigned_to")
+            self.owner_label.setText(
+                "Assigned to: {}".format(owner or "Unassigned")
+            )
+            self.assign_button.setText(
+                "Unassign" if owner else "Assign to me"
+            )
+            # Until RBAC is implemented, the local backend additionally enforces
+            # self-assignment and refuses reassignment of someone else's ticket.
+            self.assign_button.setEnabled(active and ticket["status"] != "closed")
+            self.archive_button.setEnabled(active and ticket["status"] == "closed")
+            if not active:
+                self.meta.setText(self.meta.text() + " · ARCHIVED")
             self.engine_button.setEnabled(
                 ticket["target_kind"] == "git"
                 and bool(ticket.get("linked_project_id"))
