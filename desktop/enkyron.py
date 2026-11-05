@@ -1590,6 +1590,227 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_followup.setEnabled(selected)
         self.crm_activity_button.setEnabled(selected)
 
+    def open_activity_history(self):
+        row = self.crm_followup_table.currentRow()
+        if row < 0 or row >= len(self.crm_followup_items):
+            return
+        if self.crm_activity_dialog and self.crm_activity_dialog.isVisible():
+            self.crm_activity_dialog.raise_()
+            self.crm_activity_dialog.activateWindow()
+            return
+        selected = self.crm_followup_items[row]
+        opportunity_id = selected["id"]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Commercial activity history")
+        dialog.resize(780, 620)
+        dialog.setMinimumSize(670, 530)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("OPPORTUNITY ACTIVITY · {}".format(
+            selected.get("company_name_at_creation") or "Unknown"
+        )))
+        warning = QLabel(
+            "This is an operator-entered journal, not proof that a call or email "
+            "was delivered. Nothing is sent externally. Entries are append-only."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        self.crm_activity_notice = QLabel("Reading recorded history…")
+        layout.addWidget(self.crm_activity_notice)
+        self.crm_activity_table = QTableWidget(0, 4)
+        self.crm_activity_table.setHorizontalHeaderLabels(
+            ["Recorded", "Kind", "Summary", "Operator"]
+        )
+        self.crm_activity_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_activity_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_activity_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_activity_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_activity_table.itemSelectionChanged.connect(
+            self.activity_history_selected
+        )
+        layout.addWidget(self.crm_activity_table, 2)
+        self.crm_activity_details = make_text_area()
+        self.crm_activity_details.setMaximumHeight(90)
+        layout.addWidget(self.crm_activity_details)
+        layout.addWidget(section_title("ADD MANUAL ACTIVITY NOTE"))
+        form = QFormLayout()
+        self.crm_activity_type = QComboBox()
+        for code, title in (
+            ("note", "General note"),
+            ("call_note", "Call note (operator-reported)"),
+            ("meeting_note", "Meeting note (operator-reported)"),
+            ("email_note", "Email note (not verified delivery)"),
+            ("task_note", "Task progress note")
+        ):
+            self.crm_activity_type.addItem(title, code)
+        form.addRow("Category", self.crm_activity_type)
+        self.crm_activity_detail_input = QPlainTextEdit()
+        self.crm_activity_detail_input.setMaximumHeight(105)
+        self.crm_activity_detail_input.setPlaceholderText(
+            "Record the relevant context, outcome or next step (10–2000 characters). "
+            "Never paste secrets or private credentials."
+        )
+        form.addRow("Record *", self.crm_activity_detail_input)
+        layout.addLayout(form)
+        self.crm_activity_confirm = QCheckBox(
+            "I confirm this is my manual record, not verified external delivery."
+        )
+        layout.addWidget(self.crm_activity_confirm)
+        buttons = QHBoxLayout()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        buttons.addWidget(close)
+        buttons.addStretch()
+        self.crm_activity_save = QPushButton("Save activity note")
+        self.crm_activity_save.setObjectName("primary")
+        self.crm_activity_save.setEnabled(False)
+        self.crm_activity_save.clicked.connect(self.save_activity_note)
+        buttons.addWidget(self.crm_activity_save)
+        layout.addLayout(buttons)
+        self.crm_activity_dialog = dialog
+        self.crm_activity_opportunity_id = opportunity_id
+        dialog.open()
+        self.refresh_activity_history()
+
+    def refresh_activity_history(self):
+        dialog = self.crm_activity_dialog
+        opportunity_id = self.crm_activity_opportunity_id
+        if not dialog or not dialog.isVisible() or not opportunity_id:
+            return
+        self.crm_activity_seq += 1
+        seq = self.crm_activity_seq
+        self.crm_activity_save.setEnabled(False)
+        self.crm_activity_notice.setText("Reading history…")
+
+        def received(data, error):
+            if (not dialog.isVisible() or seq != self.crm_activity_seq or
+                    opportunity_id != self.crm_activity_opportunity_id):
+                return
+            if error or not data or not data.get("available", True):
+                self.crm_activity_notice.setText(
+                    error or (data or {}).get("notice", "Activity history unavailable.")
+                )
+                self.crm_activity_save.setEnabled(False)
+                return
+            self.crm_activity_entries = data.get("items", [])
+            self.crm_activity_table.blockSignals(True)
+            self.crm_activity_table.setRowCount(len(self.crm_activity_entries))
+            for row, entry in enumerate(self.crm_activity_entries):
+                if entry.get("entry_kind") == "activity":
+                    category = (entry.get("activity_type") or "note").replace("_", " ").title()
+                    summary = (entry.get("detail") or "").replace("\n", " ")
+                else:
+                    category = "Stage / action change"
+                    summary = "{}: {} → {}".format(
+                        entry.get("event_type") or "change",
+                        entry.get("old_stage") or "—",
+                        entry.get("new_stage") or "—"
+                    )
+                for column, value in enumerate([
+                    display_date(entry.get("recorded_at")),
+                    category,
+                    summary,
+                    entry.get("actor_local") or ""
+                ]):
+                    self.crm_activity_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+            self.crm_activity_table.blockSignals(False)
+            self.crm_activity_details.clear()
+            more = " First 100, older history not shown." if data.get("more") else ""
+            self.crm_activity_notice.setText(
+                "{} historical record(s).{}".format(
+                    len(self.crm_activity_entries), more
+                )
+            )
+            self.crm_activity_save.setEnabled(True)
+
+        self.bridge.call(
+            "crm-activity-timeline", opportunity_id, callback=received
+        )
+
+    def activity_history_selected(self):
+        row = self.crm_activity_table.currentRow()
+        if row < 0 or row >= len(self.crm_activity_entries):
+            self.crm_activity_details.clear()
+            return
+        entry = self.crm_activity_entries[row]
+        if entry.get("entry_kind") == "activity":
+            body = (
+                "OPERATOR-REPORTED {}\nRecorded by: {}\n\n{}".format(
+                    entry.get("activity_type") or "note",
+                    entry.get("actor_local") or "Unknown",
+                    entry.get("detail") or ""
+                )
+            )
+        else:
+            body = (
+                "MANUAL OPPORTUNITY CHANGE\n"
+                "Recorded by: {}\n"
+                "Stage: {} → {}\n"
+                "Previous action: {}\n"
+                "New action: {}\n"
+                "Previous due: {}\n"
+                "New due: {}"
+            ).format(
+                entry.get("actor_local") or "Unknown",
+                entry.get("old_stage") or "—",
+                entry.get("new_stage") or "—",
+                entry.get("old_next_action") or "—",
+                entry.get("new_next_action") or "—",
+                str(entry.get("old_due_date") or "—")[:10],
+                str(entry.get("new_due_date") or "—")[:10]
+            )
+        self.crm_activity_details.setPlainText(body)
+
+    def save_activity_note(self):
+        dialog = self.crm_activity_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_activity_opportunity_id:
+            return
+        detail = self.crm_activity_detail_input.toPlainText().strip()
+        if not 10 <= len(detail) <= 2000:
+            QMessageBox.warning(
+                dialog, "Activity note required",
+                "Provide a note of 10–2000 characters."
+            )
+            return
+        if not self.crm_activity_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Operator confirmation required",
+                "Confirm that this is a manual record, not independent proof."
+            )
+            return
+        payload = {
+            "opportunity_id": self.crm_activity_opportunity_id,
+            "activity_type": self.crm_activity_type.currentData(),
+            "detail": detail,
+            "reviewed": True
+        }
+        self.crm_activity_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                QMessageBox.warning(
+                    dialog, "Activity not saved",
+                    error or "Unable to record activity."
+                )
+                self.crm_activity_save.setEnabled(True)
+                return
+            self.crm_activity_detail_input.clear()
+            self.crm_activity_confirm.setChecked(False)
+            self.refresh_activity_history()
+
+        self.bridge.call("crm-record-activity", payload=payload, callback=received)
+
     def open_prospect_followup(self):
         row = self.crm_table.currentRow()
         if row < 0 or row >= len(self.crm_items):
