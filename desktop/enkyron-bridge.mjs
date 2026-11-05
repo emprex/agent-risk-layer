@@ -61,7 +61,7 @@ async function ticketDetails(pool, id) {
      FROM arl_workbench_ticket_events WHERE ticket_id=$1
      ORDER BY created_at DESC,id DESC LIMIT 100`, [ticketId]
   )).rows;
-  return { ticket, notes, events, allowed_statuses: ticket.archived_at ? [] : TICKET_TRANSITIONS[ticket.status] || [] };
+  return { ticket, notes, events, local_operator: os.userInfo().username, allowed_statuses: ticket.archived_at ? [] : TICKET_TRANSITIONS[ticket.status] || [] };
 }
 
 async function masterDetails(pool, ticketId) {
