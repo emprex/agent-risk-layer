@@ -49,7 +49,8 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QMainWindow
+          from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem
+          from PySide6.QtCore import Qt
           from desktop.enkyron import DesktopBridge, EnkyronWindow
 
           # Verify Qt widget construction without connecting to a DB or running ARL.
@@ -203,8 +204,46 @@ jobs:
           window.change_ticket_assignment()
           assert calls[-1][0] == "ticket-assignment"
           assert calls[-1][2] == {"ticket_id": ticket_id, "action": "self"}
+          # The status picker never presents a candidate as the current state:
+          # the operator must explicitly choose a valid transition.
+          synthetic = QListWidgetItem("Synthetic Client Desk ticket")
+          synthetic.setData(Qt.ItemDataRole.UserRole, ticket_id)
+          window.ticket_changed(synthetic, None)
+          assert calls[-1][0] == "ticket"
+          calls[-1][3]({
+              "ticket": {
+                  "ticket_number": "ARL-2026-000999", "title": "Synthetic ticket",
+                  "client_name": "Example", "status": "in_progress",
+                  "assessor_name": "ci-operator", "system_owner": "not assigned",
+                  "target_reference": "intake:phone", "target_kind": "other",
+                  "scope_text": "Synthetic request", "assigned_to": None,
+                  "archived_at": None,
+              },
+              "notes": [], "events": [],
+              "allowed_statuses": ["waiting", "pending_review"],
+              "local_operator": "ci-operator",
+          }, None)
+          assert window.current_status_label.text() == "Current: IN PROGRESS"
+          assert window.ticket_status.currentData() is None
+          assert window.ticket_status.itemData(1) == "pending_review"
+          assert not window.update_status_button.isEnabled()
+          window.ticket_status.setCurrentIndex(1)
+          assert window.update_status_button.isEnabled()
+          window.change_ticket_status()
+          assert calls[-1][0] == "ticket-status"
+          assert calls[-1][2] == {
+              "ticket_id": ticket_id, "status": "pending_review"
+          }
+          # A visibly latched archive filter reports ON/OFF unambiguously.
+          assert not window.show_archived.isChecked()
+          assert "☐" in window.show_archived.text()
           window.show_archived.setChecked(True)
           assert calls[-1][0] == "tickets-archived"
+          assert window.show_archived.isChecked()
+          assert "☑" in window.show_archived.text()
+          window.show_archived.setChecked(False)
+          assert calls[-1][0] == "tickets"
+          assert "☐" in window.show_archived.text()
           window.close()
           app.quit()
           PY
