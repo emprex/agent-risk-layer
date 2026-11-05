@@ -904,6 +904,269 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-contacts", company_id, callback=received)
 
+    def load_company_tickets(self, company_id):
+        self.crm_ticket_seq += 1
+        seq = self.crm_ticket_seq
+        self.crm_ticket_items = []
+        self.crm_company_tickets_table.setRowCount(0)
+        self.crm_open_company_ticket_button.setEnabled(False)
+        self.crm_company_tickets_notice.setText("Reading associated tickets…")
+
+        def received(data, error):
+            if seq != self.crm_ticket_seq or company_id != self.crm_company_id:
+                return
+            if error:
+                self.crm_company_tickets_notice.setText("CRM ticket lookup failed.")
+                self.crm_link_ticket_button.setEnabled(False)
+                self.show_error(error)
+                return
+            if not data.get("available", True):
+                self.crm_company_tickets_notice.setText(
+                    data.get("notice", "CRM migration 067 is required.")
+                )
+                self.crm_link_ticket_button.setEnabled(False)
+                return
+            self.crm_link_ticket_button.setEnabled(True)
+            self.crm_ticket_items = data.get("items", [])
+            self.crm_company_tickets_table.blockSignals(True)
+            self.crm_company_tickets_table.setRowCount(len(self.crm_ticket_items))
+            for row, ticket in enumerate(self.crm_ticket_items):
+                values = [
+                    ticket.get("ticket_number") or "",
+                    ticket.get("title") or "",
+                    ticket.get("client_name") or "",
+                    ticket.get("status") or "",
+                ]
+                for column, value in enumerate(values):
+                    self.crm_company_tickets_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+            self.crm_company_tickets_table.blockSignals(False)
+            self.crm_company_tickets_notice.setText(
+                "{} ticket(s) linked with recorded human review.{}".format(
+                    len(self.crm_ticket_items),
+                    " First 100; further pagination pending." if data.get("more") else ""
+                )
+            )
+
+        self.bridge.call("crm-company-tickets", company_id, callback=received)
+
+    def company_ticket_selected(self):
+        row = self.crm_company_tickets_table.currentRow()
+        self.crm_open_company_ticket_button.setEnabled(
+            0 <= row < len(self.crm_ticket_items)
+        )
+
+    def open_selected_company_ticket(self):
+        row = self.crm_company_tickets_table.currentRow()
+        if row < 0 or row >= len(self.crm_ticket_items):
+            return
+        ticket_id = self.crm_ticket_items[row]["ticket_id"]
+        self.pending_ticket_id = ticket_id
+        self.ticket_views.setCurrentIndex(0)
+        self.search.clear()
+        self.navigation.setCurrentRow(1)
+        self.load_tickets()
+
+    def load_current_ticket_company(self, ticket_id):
+        self.crm_ticket_company_label.setText("CRM company: checking local association…")
+
+        def received(data, error):
+            if self.current_id != ticket_id:
+                return
+            if error:
+                self.crm_ticket_company_label.setText("CRM company: unavailable")
+                return
+            if not data.get("available", True):
+                self.crm_ticket_company_label.setText(
+                    "CRM company: association module not installed (067)"
+                )
+                return
+            link = data.get("link")
+            if not link:
+                self.crm_ticket_company_label.setText(
+                    "CRM company: Not associated (ticket client name is historical text)"
+                )
+                return
+            self.crm_ticket_company_label.setText(
+                "CRM company: {} · relationship: {} · linked by {}".format(
+                    link.get("company_name") or link.get("company_id"),
+                    link.get("relationship_state") or "unknown",
+                    link.get("linked_by") or "local operator",
+                )
+            )
+
+        self.bridge.call("crm-ticket-company", ticket_id, callback=received)
+
+    def open_ticket_link_dialog(self):
+        company_id = self.crm_company_id
+        if not company_id or not self.crm_link_ticket_button.isEnabled():
+            return
+        if self.crm_link_dialog and self.crm_link_dialog.isVisible():
+            self.crm_link_dialog.raise_()
+            self.crm_link_dialog.activateWindow()
+            return
+        company = next(
+            (x for x in self.crm_company_items if x.get("id") == company_id), None
+        )
+        if not company:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Associate existing ticket")
+        dialog.setMinimumWidth(640)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("LINK EXISTING TICKET TO CRM COMPANY"))
+        warning = QLabel(
+            "CRM company: {}. This action records one human-reviewed link; "
+            "the original ticket, its recorded client name and status stay unchanged. "
+            "Do not assume that similar names prove an identical customer. "
+            "The link cannot yet be reassigned through the UI.".format(
+                company.get("name") or ""
+            )
+        )
+        warning.setTextFormat(Qt.TextFormat.PlainText)
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        search_row = QHBoxLayout()
+        self.crm_link_ticket_search = QLineEdit()
+        self.crm_link_ticket_search.setPlaceholderText(
+            "Find available tickets by number, title or recorded client…"
+        )
+        self.crm_link_ticket_search.setMaxLength(100)
+        search_row.addWidget(self.crm_link_ticket_search, 1)
+        lookup = QPushButton("Find tickets")
+        lookup.clicked.connect(self.load_ticket_link_options)
+        search_row.addWidget(lookup)
+        layout.addLayout(search_row)
+        self.crm_link_ticket_notice = QLabel("Available tickets not yet loaded.")
+        self.crm_link_ticket_notice.setWordWrap(True)
+        layout.addWidget(self.crm_link_ticket_notice)
+        self.crm_link_ticket_choice = QComboBox()
+        self.crm_link_ticket_choice.setMinimumWidth(550)
+        layout.addWidget(self.crm_link_ticket_choice)
+        self.crm_link_ticket_note = QPlainTextEdit()
+        self.crm_link_ticket_note.setMaximumHeight(110)
+        self.crm_link_ticket_note.setPlaceholderText(
+            "Explain how you verified this is the correct company for the "
+            "ticket despite possible differences in the recorded client name (20–1000 characters)."
+        )
+        layout.addWidget(self.crm_link_ticket_note)
+        self.crm_link_ticket_checked = QCheckBox(
+            "I reviewed the ticket identity, target company and recorded client name."
+        )
+        layout.addWidget(self.crm_link_ticket_checked)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        self.crm_link_ticket_submit = QPushButton("Record ticket association")
+        self.crm_link_ticket_submit.setObjectName("primary")
+        self.crm_link_ticket_submit.setEnabled(False)
+        self.crm_link_ticket_submit.clicked.connect(self.confirm_ticket_link)
+        buttons.addWidget(self.crm_link_ticket_submit)
+        layout.addLayout(buttons)
+        self.crm_link_dialog = dialog
+        self.crm_link_dialog_company_id = company_id
+        dialog.open()
+        self.load_ticket_link_options()
+
+    def load_ticket_link_options(self):
+        dialog = self.crm_link_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        company_id = self.crm_link_dialog_company_id
+        if company_id != self.crm_company_id:
+            self.crm_link_ticket_notice.setText(
+                "Company selection changed; close and reopen the dialog."
+            )
+            self.crm_link_ticket_submit.setEnabled(False)
+            return
+        search = self.crm_link_ticket_search.text()
+        self.crm_link_ticket_submit.setEnabled(False)
+        self.crm_link_ticket_notice.setText("Searching unlinked tickets…")
+        self.crm_link_options = []
+        self.crm_link_ticket_choice.clear()
+
+        def received(data, error):
+            if (not dialog.isVisible() or company_id != self.crm_company_id
+                    or search != self.crm_link_ticket_search.text()):
+                return
+            if error or not data.get("available", True):
+                self.crm_link_ticket_notice.setText(
+                    error or data.get("notice", "Ticket candidates unavailable.")
+                )
+                return
+            self.crm_link_options = data.get("items", [])
+            for ticket in self.crm_link_options:
+                label = "{} · {} · {} [{}]".format(
+                    ticket.get("ticket_number") or "",
+                    ticket.get("title") or "",
+                    ticket.get("client_name") or "",
+                    ticket.get("status") or ""
+                )
+                self.crm_link_ticket_choice.addItem(label, ticket)
+            count = len(self.crm_link_options)
+            self.crm_link_ticket_submit.setEnabled(count > 0)
+            self.crm_link_ticket_notice.setText(
+                "{} unlinked ticket(s) available.{}".format(
+                    count, " First 100; refine search." if data.get("more") else ""
+                )
+            )
+
+        self.bridge.call("crm-ticket-options", search, callback=received)
+
+    def confirm_ticket_link(self):
+        dialog = self.crm_link_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        if self.crm_link_dialog_company_id != self.crm_company_id:
+            QMessageBox.warning(dialog, "Selection changed", "Reopen the dialog.")
+            return
+        ticket = self.crm_link_ticket_choice.currentData()
+        rationale = self.crm_link_ticket_note.toPlainText().strip()
+        if not ticket or len(rationale) < 20 or len(rationale) > 1000:
+            QMessageBox.warning(
+                dialog, "Review required",
+                "Select one existing ticket and enter a 20–1000 character explanation."
+            )
+            return
+        if not self.crm_link_ticket_checked.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm that you reviewed the company and the ticket identity."
+            )
+            return
+        accepted = QMessageBox.question(
+            dialog, "Confirm association",
+            "Link only this ticket to the selected CRM company? "
+            "No ticket fields or client status will change.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if accepted != QMessageBox.StandardButton.Yes:
+            return
+        payload = {
+            "company_id": self.crm_link_dialog_company_id,
+            "ticket_id": ticket["ticket_id"],
+            "ticket_client_name_at_review": ticket["client_name"],
+            "review_note": rationale,
+            "reviewed": True
+        }
+        self.crm_link_ticket_submit.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("ticket_id"):
+                QMessageBox.warning(dialog, "Association refused",
+                                    error or "Ticket was not linked.")
+                self.crm_link_ticket_submit.setEnabled(True)
+                return
+            dialog.accept()
+            if self.crm_company_id == data["company_id"]:
+                self.load_company_tickets(data["company_id"])
+
+        self.bridge.call("crm-link-ticket", payload=payload, callback=received)
+
     def open_new_company(self):
         if not self.crm_company_add.isEnabled():
             return
