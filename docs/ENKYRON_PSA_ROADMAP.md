@@ -175,6 +175,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-MAIL-DRAFT-01 — brouillons commerciaux locaux (2026-11-05) :**
+- Migration additive `070_enkyron_crm_mail_drafts.sql` : brouillons de texte brut rattachés **explicitement** à une opportunité existante via clé composite `(workspace_key,opportunity_id)`. Destinataire facultatif, sujet, corps, auteur, révision optimiste et horodatages.
+- `enkyron_crm_mail_draft_events` : journal append-only des révisions (création / modification) contenant un **hachage SHA-256 du contenu** et le nom de l'opérateur, sans stocker une deuxième copie des adresses et textes personnels. En cas d'édition obsolète, la modification est refusée et doit être rechargée.
+- Qt : bouton **Compose mail draft…** depuis une opportunité sélectionnée ; onglet séparé **Mail drafts** pour rechercher et rouvrir les brouillons. Aucun destinataire n'est prérempli depuis les emails **non vérifiés** des prospects. L'éditeur est uniquement en texte brut.
+- **Aucune boîte de réception, connexion IMAP/SMTP/Gmail, pièce jointe ou fonction Send** dans cet incrément. Un brouillon enregistré n'est **jamais** une preuve d'envoi ni de consentement marketing. Aucun prospect, contact, ticket, mail historique ou statut d'opportunité n'est modifié.
+- Périmètre local mono-opérateur ; `workspace_key` OS n'est pas une preuve RBAC multi-tenant ; pas de déploiement distant. Jusqu'à validation d'une véritable passerelle de messagerie, ne pas représenter ce module comme une boîte email intégrée.
+- Migration contrôlée : `node scripts/enkyron-crm-mail-schema.mjs --check` puis `--apply` (sauvegarde locale sécurisée, checksums antérieurs, transaction). CI Qt + PostgreSQL exact-head et recette Debian nécessaires avant clôture.
+
+
 **Incrément E02-ACTIVITY-01 — journal commercial et suivi des échéances (2026-11-05) :**
 - Migration additive `069_enkyron_crm_activities.sql` : notes manuelles liées par clé composite `(workspace_key,opportunity_id)` à l'opportunité, horodatage base PostgreSQL, type, contenu, opérateur. Historique **append-only** avec refus d'UPDATE/DELETE ordinaires ; les enregistrements `068` et les prospects historiques restent inchangés.
 - Catégories : `note`, `call_note`, `meeting_note`, `email_note`, `task_note`. Ces descriptions sont **déclarations de l'opérateur**, pas une preuve d'envoi, de réception, de consentement ou de tenue effective d'une réunion.
