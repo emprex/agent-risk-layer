@@ -1495,6 +1495,241 @@ class EnkyronWindow(QMainWindow):
             "Origin: " + str(prospect.get("source") or "Unknown"),
         ]))
 
+    def followup_search_changed(self, _value):
+        # Prevent an older response from overwriting a newly typed search.
+        self.crm_followup_seq += 1
+        self.crm_followup_search_timer.start()
+
+    def load_followups(self):
+        self.crm_followup_seq += 1
+        sequence = self.crm_followup_seq
+        search = self.crm_followup_search.text()
+        self.crm_followup_notice.setText("Reading local follow-up records…")
+        self.crm_edit_followup.setEnabled(False)
+
+        def received(data, error):
+            if sequence != self.crm_followup_seq or search != self.crm_followup_search.text():
+                return
+            self.crm_followup_loaded = True
+            self.crm_followup_items = []
+            self.crm_followup_table.blockSignals(True)
+            self.crm_followup_table.setRowCount(0)
+            self.crm_followup_table.blockSignals(False)
+            if error:
+                self.crm_followup_notice.setText("Follow-up lookup failed.")
+                self.show_error(error)
+                return
+            if not data.get("available", True):
+                self.crm_followup_notice.setText(data.get(
+                    "notice", "Local follow-up migration 068 is required."
+                ))
+                return
+            self.crm_followup_items = data.get("items", [])
+            self.crm_followup_table.blockSignals(True)
+            self.crm_followup_table.setRowCount(len(self.crm_followup_items))
+            for row, opportunity in enumerate(self.crm_followup_items):
+                values = [
+                    opportunity.get("company_name_at_creation") or "",
+                    (opportunity.get("stage") or "").replace("_", " ").title(),
+                    opportunity.get("next_action") or "",
+                    str(opportunity.get("due_date") or "")[:10] or "Not scheduled",
+                    display_date(opportunity.get("updated_at"))
+                ]
+                for column, value in enumerate(values):
+                    self.crm_followup_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+            self.crm_followup_table.blockSignals(False)
+            more = " First 100; refine search." if data.get("more") else ""
+            self.crm_followup_notice.setText(
+                "{} manually managed opportunity/follow-up record(s).{}".format(
+                    len(self.crm_followup_items), more
+                )
+            )
+
+        self.bridge.call("crm-opportunities", search, callback=received)
+
+    def followup_selected(self):
+        row = self.crm_followup_table.currentRow()
+        self.crm_edit_followup.setEnabled(
+            0 <= row < len(self.crm_followup_items)
+        )
+
+    def open_prospect_followup(self):
+        row = self.crm_table.currentRow()
+        if row < 0 or row >= len(self.crm_items):
+            return
+        if self.crm_followup_dialog and self.crm_followup_dialog.isVisible():
+            self.crm_followup_dialog.raise_()
+            return
+        prospect = dict(self.crm_items[row])
+        prospect_id = prospect["id"]
+        self.crm_plan_followup.setEnabled(False)
+
+        def received(data, error):
+            self.crm_plan_followup.setEnabled(self.crm_table.currentRow() >= 0)
+            if error or not data or not data.get("available", True):
+                QMessageBox.warning(
+                    self, "CRM follow-ups unavailable",
+                    error or (data or {}).get("notice", "Migration 068 is required.")
+                )
+                return
+            # A current opportunity is edited rather than duplicated.
+            existing = data.get("opportunity")
+            self.build_followup_dialog(prospect, existing)
+
+        self.bridge.call("crm-prospect-opportunity", prospect_id, callback=received)
+
+    def open_followup_update(self):
+        row = self.crm_followup_table.currentRow()
+        if row < 0 or row >= len(self.crm_followup_items):
+            return
+        if self.crm_followup_dialog and self.crm_followup_dialog.isVisible():
+            self.crm_followup_dialog.raise_()
+            return
+        current = dict(self.crm_followup_items[row])
+        self.build_followup_dialog({
+            "id": current["prospect_id"],
+            "company_name": current["company_name_at_creation"]
+        }, current)
+
+    def build_followup_dialog(self, prospect, existing):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            "ENKYRON · Update follow-up" if existing else
+            "ENKYRON · Plan prospect follow-up"
+        )
+        dialog.setMinimumWidth(600)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title(
+            "UPDATE COMMERCIAL OPPORTUNITY" if existing else
+            "PLAN A PROSPECT FOLLOW-UP"
+        ))
+        title = QLabel("Research candidate: {}".format(
+            prospect.get("company_name") or "Unknown"
+        ))
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setWordWrap(True)
+        layout.addWidget(title)
+        disclaimer = QLabel(
+            "Manual commercial planning only. No email will be sent, "
+            "no contact verified and no customer account created."
+        )
+        disclaimer.setWordWrap(True)
+        layout.addWidget(disclaimer)
+        form = QFormLayout()
+        self.crm_followup_stage = QComboBox()
+        stages = [
+            "research", "qualified", "contact_planned", "contacted",
+            "discovery", "proposal", "negotiation", "won", "lost"
+        ]
+        for stage in stages:
+            self.crm_followup_stage.addItem(
+                stage.replace("_", " ").title(), stage
+            )
+        if existing:
+            index = self.crm_followup_stage.findData(existing.get("stage"))
+            self.crm_followup_stage.setCurrentIndex(max(index, 0))
+        else:
+            self.crm_followup_stage.setEnabled(False)
+        form.addRow("Commercial stage", self.crm_followup_stage)
+        self.crm_followup_action = QPlainTextEdit()
+        self.crm_followup_action.setMaximumHeight(130)
+        self.crm_followup_action.setPlaceholderText(
+            "A specific next step you plan to take, not an automatic email."
+        )
+        if existing:
+            self.crm_followup_action.setPlainText(existing.get("next_action") or "")
+        form.addRow("Next action *", self.crm_followup_action)
+        self.crm_followup_has_date = QCheckBox("Schedule a due date")
+        self.crm_followup_due = QDateEdit()
+        self.crm_followup_due.setDisplayFormat("yyyy-MM-dd")
+        self.crm_followup_due.setCalendarPopup(True)
+        self.crm_followup_due.setDate(QDate.currentDate())
+        recorded = str(existing.get("due_date") or "")[:10] if existing else ""
+        if recorded:
+            chosen = QDate.fromString(recorded, "yyyy-MM-dd")
+            if chosen.isValid():
+                self.crm_followup_due.setDate(chosen)
+                self.crm_followup_has_date.setChecked(True)
+        self.crm_followup_due.setEnabled(self.crm_followup_has_date.isChecked())
+        self.crm_followup_has_date.toggled.connect(self.crm_followup_due.setEnabled)
+        date_row = QHBoxLayout()
+        date_row.addWidget(self.crm_followup_has_date)
+        date_row.addWidget(self.crm_followup_due)
+        date_row.addStretch()
+        form.addRow("Reminder", date_row)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        self.crm_followup_submit = QPushButton(
+            "Update follow-up" if existing else "Create follow-up"
+        )
+        self.crm_followup_submit.setObjectName("primary")
+        self.crm_followup_submit.clicked.connect(self.save_followup)
+        buttons.addWidget(self.crm_followup_submit)
+        layout.addLayout(buttons)
+        self.crm_followup_context = {
+            "prospect_id": prospect["id"],
+            "company_name": prospect.get("company_name") or "",
+            "existing": existing
+        }
+        self.crm_followup_dialog = dialog
+        dialog.open()
+
+    def save_followup(self):
+        dialog = self.crm_followup_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_followup_context:
+            return
+        next_action = self.crm_followup_action.toPlainText().strip()
+        if not 5 <= len(next_action) <= 1000:
+            QMessageBox.warning(
+                dialog, "Next action required",
+                "Describe the next commercial action in 5–1000 characters."
+            )
+            return
+        due_date = (
+            self.crm_followup_due.date().toString("yyyy-MM-dd")
+            if self.crm_followup_has_date.isChecked() else None
+        )
+        existing = self.crm_followup_context["existing"]
+        if existing:
+            action = "crm-update-opportunity"
+            payload = {
+                "id": existing["id"],
+                "expected_version": existing["version"],
+                "stage": self.crm_followup_stage.currentData(),
+                "next_action": next_action,
+                "due_date": due_date
+            }
+        else:
+            action = "crm-create-opportunity"
+            payload = {
+                "prospect_id": self.crm_followup_context["prospect_id"],
+                "company_name_at_review": self.crm_followup_context["company_name"],
+                "next_action": next_action,
+                "due_date": due_date
+            }
+        self.crm_followup_submit.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("id"):
+                self.crm_followup_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Follow-up not saved",
+                    error or "CRM record could not be saved."
+                )
+                return
+            dialog.accept()
+            self.crm_tabs.setCurrentIndex(2)
+            self.crm_followup_search.clear()
+            self.load_followups()
+
+        self.bridge.call(action, payload=payload, callback=received)
+
     def open_prospect_review(self):
         row = self.crm_table.currentRow()
         if row < 0 or row >= len(self.crm_items):
