@@ -159,6 +159,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
 
+**Incrément E02-NAV-01 — développement branché et smoke natif CI validé (2026-11-05):**
+- Navigation native via `QStackedWidget`: menu principal `Home / Tickets / CRM · Prospects`; la liste et les actions Tickets sont désormais dans la page Tickets, avec callbacks existants conservés.
+- Page CRM initiale **réelle mais en lecture seule** : recherche bornée et tableau des anciennes données `sales_prospects`, avec provenance, stage et identité du contact acheteur clairement **non vérifiée**. La requête utilise des paramètres SQL, 100 lignes maximum, et traite explicitement l'absence de la table.
+- Source identifiée : migrations `004_sales_agent.sql` et `018_sales_prospect_verified_enrichment.sql`, et `scripts/import-prospects.mjs`. **Aucune migration, import, déduplication, création de client ou changement de ticket.**
+- Les tables `sales_prospects`, `sales_messages` et `sales_activities` ne remplacent pas les futures entités canoniques CRM. Aucun candidat ne doit être promu automatiquement en client ou en contact confirmé.
+- **À confirmer sur Debian :** présence et peuplement de ces tables dans `arl_local`; comportement Qt de la nouvelle navigation et affichage des prospects, puis conception E02-01/E02-02 à partir de l'inventaire PostgreSQL constaté. Les contrôles multi-utilisateur ne sont pas implémentés.
+- **Statut :** premier incrément `DONE-CI` pour smoke ENKYRON; recette locale `NOT-VERIFIED`. E02-01 à E02-08 restent ouverts.
+
+
 - [ ] **E02-01** — Table entreprise/client avec identité, secteur, localisation, statut et propriétaire.
 - [ ] **E02-02** — Table contacts avec nom, rôle, emails, téléphones, préférences et relation à l'entreprise.
 - [ ] **E02-03** — Fiche client 360°: tickets, échanges, missions, documents, contrats.
