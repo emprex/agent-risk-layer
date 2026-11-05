@@ -110,10 +110,11 @@ export async function updateDeskTicketStatus(pool, data) {
   const {ticketId,status} = validateStatusChange(data);
   return transaction(pool, async client => {
     const current = (await client.query(
-      'SELECT status,assessor_name FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'SELECT status,assessor_name,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       [ticketId]
     )).rows[0];
     if (!current) throw new Error('Ticket not found');
+    if (current.archived_at) throw new Error('Archived ticket is read-only');
     if (!Object.hasOwn(TICKET_TRANSITIONS,current.status) ||
         !TICKET_TRANSITIONS[current.status].includes(status)) {
       throw new Error('Status transition not allowed');
