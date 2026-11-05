@@ -1,0 +1,350 @@
+# ENKYRON — FEUILLE DE ROUTE DE LA PLATEFORME PSA / SERVICE DESK / CYBERSECURITY OPERATIONS
+
+**Version:** 1.0  
+**Établie:** 2026-11-05  
+**Branche de travail:** `feat/enkyron-desktop-20261105`  
+**Statut:** plan de développement ordonné, non promesse de livraison  
+**Total:** 17 blocs, 143 fonctions/critères de livraison
+
+## 1. Vision fixe — une seule plateforme
+
+**AGENTRISKLAYER LTD** est l'entreprise. **AgentRiskLayer** est la plateforme unique. Noms de travail (non validés au registre des marques) :
+- **ENKYRON** — interface opérateur native Qt6/PySide6; c'est le poste de travail quotidien.
+- **KYRTHOS** — moteur d'inspection/évaluation de sécurité ARL existant, sous autorité humaine.
+- **EIRYON** — assistance et coordination IA, basée sur l'orchestrateur existant.
+- **NEMORYTH** — base PostgreSQL et connaissances/preuves/documents; source persistante commune.
+
+**Type de produit:** PSA (*Professional Services Automation*) spécialisé en services cyber + Service Desk / ITSM + CRM + projets + facturation + portail client + assistant IA + moteur de sécurité. **Une seule plateforme, un seul modèle de données cohérent, pas quatre logiciels réécrits en parallèle.**
+
+**Navigation opérateur cible:** Accueil → Client Desk / Tickets → Clients & Contacts → Inbox → Agenda → Opportunités & Devis → Contrats → Projets → Temps & Facturation → NEMORYTH / Knowledge → KYRTHOS / Security → EIRYON / AI → Rapports → Administration.
+
+La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron ni interface browser. Un futur **formulaire de site** et un **portail client** sont des interfaces externes séparées, qui appellent des services sécurisés; ils ne sont jamais un remplacement du desktop.
+
+## 2. Ce qui est réellement démontré, au 5 novembre 2026
+
+- **Validation réelle sur Debian:** ENKYRON s'ouvre; lecture tickets, notes, master révision 15; inspection ARL en lecture seule au bon SHA après correction de timeout; lecture du workplan 108 contrôles; registre KB-013 avec 4 preuves non vérifiées et 4 tests inconclusifs; test-history et fiche de provenance affichés.
+- **Implémenté et CI réussie, MAIS pas encore accepté sur Debian:** bouton **+ New ticket · call / manual**, création locale de ticket, données de contact intégrées provisoirement au `scope_text`, changement de statut audité; commit `f3087e87282f4fadc68a93c781c1e32faab90ec6`.
+- **Non démontré / à développer:** vrai CRM structuré, webmail entrant/sortant, formulaire du site, communication bidirectionnelle, agenda, offres/contrats, facturation, portail client, EIRYON dans ENKYRON, multi-organisation distribué.
+- **Attention:** tests unitaires/CI ≠ recette locale; preuve candidate ≠ preuve vérifiée; un test inconclusif ≠ PASS/FAIL; lecture du master ≠ décision d'évaluation.
+
+## 3. Règles pour NE PLUS PERDRE LE FIL
+
+1. Traiter **un seul bloc et une seule fonctionnalité ID à la fois**, dans l'ordre ci-dessous. Pas de saut vers les assessments sauf incident de sécurité P0.
+2. Pour chaque ID: **état observé → besoin utilisateur → réutilisation de l'existant → plus petit changement → test ciblé → CI → recette locale → décision de clôture**.
+3. Les statuts autorisés sont: **DONE-LOCAL**, **DONE-CI**, **IN-PROGRESS**, **PLANNED**, **BLOCKED**, **NOT-VERIFIED**. Aucun statut DONE sans preuve correspondante.
+4. Une fiche de capacité clôturée doit mentionner commit, fichiers modifiés, scénarios positifs/négatifs, migrations éventuelles, effet sur les données, et résultat opérateur Debian.
+5. **Pas de nouveau schéma, service ou dépôt** sans vérifier d'abord l'existant. Pas de changements de noms physiques des tables ou de moteur simplement pour adopter les noms mythiques.
+6. Les dépendances de sécurité (authentification, cloisonnement clients, vie privée, sauvegardes, consentement, audit) sont **obligatoires avant exposition Internet ou données clients non synthétiques**.
+7. **EIRYON / LLM n'est jamais l'autorité de sécurité** et ne peut produire d'action externe ou d'écriture sensible sans contrôle.
+8. Respecter `ARL_PLAN_DIRECTEUR_TECHNIQUE_v1.0.md` pour les limites scientifiques/techniques de KYRTHOS; la présente feuille de route est **produit/PSA** et ne remplace pas ce plan.
+
+## 4. Ordre impératif des blocs
+
+| Bloc | Domaine | Porte de validation |
+| --- | --- | --- |
+| 00 | Fondations communes et sécurité des données | Socle documenté et frontières de sécurité vérifiées; aucune connexion externe tant que l'authentification et l'isolation ne sont pas prouvées. |
+| 01 | Accueil / création des tickets — NEXT | Un ticket créé sur Debian est retrouvé après redémarrage, change de statut et conserve son historique; aucune évaluation ARL n'a été lancée. |
+| 02 | CRM — entreprises et contacts | Deux clients portant des noms similaires ne sont pas confondus; les coordonnées restent dans un modèle structuré et protégé. |
+| 03 | Service Desk et flux des demandes | Un opérateur peut classer, affecter, traiter et clôturer une demande avec dossier auditable, sans lancer un assessment. |
+| 04 | Inbox professionnelle — webmail | Un vrai email autorisé apparaît dans ENKYRON une seule fois, au bon client, sans exécuter d'instructions de contenu. |
+| 05 | Site web — réception des demandes | Une demande synthétique du vrai site atteint ENKYRON, sans accès direct à NEMORYTH et sans doublon. |
+| 06 | Communications et agenda | Un échange email aller-retour et un rappel de rendez-vous sont visibles dans la même fiche client. |
+| 07 | Vente et engagements contractuels | Une offre peut être acceptée et convertie en mission documentée sans perdre son périmètre ni ses autorisations. |
+| 08 | Projets et exécution des missions | Une mission réelle possède ses tâches, sa responsabilité, son calendrier et ses livrables, même sans test KYRTHOS. |
+| 09 | Temps, coûts et facturation | Une prestation facturable aboutit à un justificatif réconciliable et à une facture approuvée, sans calcul ou envoi non autorisé. |
+| 10 | NEMORYTH — connaissance, dossiers et recherche | Une information retrouvée indique sa source, sa version, son niveau d'accès et ses liens sans fuite inter-client. |
+| 11 | KYRTHOS — moteur de cybersécurité existant | Un dossier technique complet reste sous contrôle humain, reproduit les tests autorisés et ne donne aucun PASS fictif. |
+| 12 | EIRYON — orchestrateur IA assisté | EIRYON assiste une action réelle de bureau, explique sa provenance et demande l'accord opérateur avant tout effet sensible. |
+| 13 | Portail client externe | Deux clients distincts ne peuvent jamais accéder au contenu l'un de l'autre, y compris par URL ou API. |
+| 14 | Tableaux de bord et pilotage | Un responsable peut piloter une semaine d'activité depuis ENKYRON avec des chiffres réconciliables. |
+| 15 | Intégrations, API et automatisations | Une intégration de bout en bout peut être interrompue, rejouée et auditée sans doublon ni effet non autorisé. |
+| 16 | Produit commercialisable par plusieurs sociétés | Une seconde société peut être installée et travailler sur ses propres clients sans voir ni modifier les données ARL. |
+
+## 5. Backlog détaillé numéroté
+
+### Bloc 00 — Fondations communes et sécurité des données
+
+**Objectif:** Un socle sûr et partageable avant d'exposer clients, emails ou site web.
+
+- [ ] **E00-01** — Cartographier les fonctions existantes, tables et chemins du moteur ARL sans créer de doublons.
+- [ ] **E00-02** — Définir le modèle canonique: organisation → client → contact → ticket → mission → documents.
+- [ ] **E00-03** — Prévoir dès le schéma l'identité de l'organisation exploitante (tenant_id) et l'isolation par client.
+- [ ] **E00-04** — Identifier l'opérateur authentifié et définir rôles/permissions (administrateur, analyste, commercial, client).
+- [ ] **E00-05** — Faire passer toute mutation par un service contrôlé (pas d'accès direct au PostgreSQL par le site).
+- [ ] **E00-06** — Journal d'audit horodaté, attributable et non réécrit pour créations, changements et actions sensibles.
+- [ ] **E00-07** — Gérer secrets, jetons OAuth, clés API et logs sans fuite; définir politique de conservation / suppression.
+- [ ] **E00-08** — Documenter sauvegarde, restauration testée, migration réversible et reprise après panne.
+- [ ] **E00-09** — Installer des conventions de tests et de versions: CI exacte, tests Qt, intégration PostgreSQL, recette Debian.
+
+**Done si:** Socle documenté et frontières de sécurité vérifiées; aucune connexion externe tant que l'authentification et l'isolation ne sont pas prouvées.
+
+### Bloc 01 — Accueil / création des tickets — NEXT
+
+**Objectif:** Ouvrir et retrouver une demande téléphonique réelle sans créer un assessment.
+
+- [ ] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande.
+- [ ] **E01-02** — Créer un ticket saisi manuellement, sans feindre une origine email ou web vérifiée.
+- [ ] **E01-03** — Numéro unique, date, statut NEW, propriétaire et source d'entrée.
+- [ ] **E01-04** — Afficher/rechercher les tickets et retrouver le ticket créé.
+- [ ] **E01-05** — Afficher la fiche et les notes / événements de son historique.
+- [ ] **E01-06** — Changer de statut par transitions autorisées, avec événement d'audit.
+- [ ] **E01-07** — Mettre en place suppression interdite/archivage contrôlé des tickets.
+- [ ] **E01-08** — Recette réelle sur Debian: créer un ticket autorisé, contrôler PostgreSQL et sa persistance.
+
+**Done si:** Un ticket créé sur Debian est retrouvé après redémarrage, change de statut et conserve son historique; aucune évaluation ARL n'a été lancée.
+
+### Bloc 02 — CRM — entreprises et contacts
+
+**Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
+
+- [ ] **E02-01** — Table entreprise/client avec identité, secteur, localisation, statut et propriétaire.
+- [ ] **E02-02** — Table contacts avec nom, rôle, emails, téléphones, préférences et relation à l'entreprise.
+- [ ] **E02-03** — Fiche client 360°: tickets, échanges, missions, documents, contrats.
+- [ ] **E02-04** — Création, modification, recherche et dédoublonnage prudent d'entreprises/contacts.
+- [ ] **E02-05** — Association de plusieurs contacts à un client et d'un contact à plusieurs demandes.
+- [ ] **E02-06** — Traçabilité des modifications et contraintes de visibilité par organisation.
+- [ ] **E02-07** — Consentement, minimisation, durée de conservation et export/suppression encadrés.
+- [ ] **E02-08** — Import/exports contrôlés CSV sans perte de provenance.
+
+**Done si:** Deux clients portant des noms similaires ne sont pas confondus; les coordonnées restent dans un modèle structuré et protégé.
+
+### Bloc 03 — Service Desk et flux des demandes
+
+**Objectif:** Transformer un ticket en travail affectable et suivi.
+
+- [ ] **E03-01** — Types: question commerciale, demande de mission, incident, support, changement, consultation.
+- [ ] **E03-02** — Priorité, impact, urgence, catégorie, tags et statut lisible.
+- [ ] **E03-03** — Responsable, équipe et file d'attente avec transfert/assignation.
+- [ ] **E03-04** — Actions, sous-tâches, checklist, dates cibles et blocages.
+- [ ] **E03-05** — Notes internes séparées des messages visibles par le client.
+- [ ] **E03-06** — Pièces jointes chiffrées/contrôlées, limites de taille, antivirus et droits d'accès.
+- [ ] **E03-07** — Historique complet des changements, recherche et filtres sauvegardés.
+- [ ] **E03-08** — Doublons, fusion contrôlée, tickets liés et réouverture sous règles explicites.
+- [ ] **E03-09** — Accusé de réception, SLA et escalades configurables par client/contrat.
+
+**Done si:** Un opérateur peut classer, affecter, traiter et clôturer une demande avec dossier auditable, sans lancer un assessment.
+
+### Bloc 04 — Inbox professionnelle — webmail
+
+**Objectif:** Recevoir un vrai message client et l'associer à son dossier.
+
+- [ ] **E04-01** — Identifier la boîte réelle à connecter et ses autorisations; commencer par un seul fournisseur.
+- [ ] **E04-02** — OAuth/API ou IMAP sécurisé selon fournisseur, sans mot de passe en clair.
+- [ ] **E04-03** — Synchronisation entrante bornée, idempotente, avec identifiant de message et threading.
+- [ ] **E04-04** — Associer le message au bon contact/client/ticket ou préparer un nouveau ticket à confirmer.
+- [ ] **E04-05** — Stocker métadonnées de provenance, destinataire, date, ID, sans suivre des instructions contenues dans l'email.
+- [ ] **E04-06** — Pièces jointes en quarantaine / scan, filtrage spam et limites.
+- [ ] **E04-07** — Gérer échec de synchronisation, renouvellement OAuth, retrait d'accès et journaux.
+- [ ] **E04-08** — Revue opérateur avant création automatique depuis une source extérieure non fiable.
+
+**Done si:** Un vrai email autorisé apparaît dans ENKYRON une seule fois, au bon client, sans exécuter d'instructions de contenu.
+
+### Bloc 05 — Site web — réception des demandes
+
+**Objectif:** Recevoir les demandes du site sans exposer PostgreSQL ni le moteur ARL.
+
+- [ ] **E05-01** — Formulaire public de contact/devis avec validation côté serveur.
+- [ ] **E05-02** — Service d'ingestion dédié avec TLS, authentification des webhooks, quotas et anti-spam.
+- [ ] **E05-03** — Stocker une demande externe en file d'attente avec provenance et ID idempotent.
+- [ ] **E05-04** — Relier le formulaire aux clients/contacts existants sans confusion d'identité.
+- [ ] **E05-05** — Créer un ticket après validation opérateur ou règle explicitement approuvée.
+- [ ] **E05-06** — Accusé de réception non sensible et gestion des erreurs.
+- [ ] **E05-07** — Protection contre injections, abus, pièces jointes non fiables et fuites de données.
+- [ ] **E05-08** — Journal et tests end-to-end formulaire → ingestion → Client Desk.
+
+**Done si:** Une demande synthétique du vrai site atteint ENKYRON, sans accès direct à NEMORYTH et sans doublon.
+
+### Bloc 06 — Communications et agenda
+
+**Objectif:** Gérer les conversations et les rendez-vous depuis le poste de travail.
+
+- [ ] **E06-01** — Répondre par email depuis le ticket avec confirmation opérateur d'envoi.
+- [ ] **E06-02** — Historique bidirectionnel des messages et pièces jointes liés au ticket.
+- [ ] **E06-03** — Modèles d'emails et signatures configurables, brouillons.
+- [ ] **E06-04** — Consigner un appel entrant/sortant avec interlocuteur, résultat et rappel.
+- [ ] **E06-05** — Agenda: rendez-vous client, réunions, deadlines et disponibilités.
+- [ ] **E06-06** — Notifications locales, rappels et alertes sur tickets en attente.
+- [ ] **E06-07** — Collaboration interne: mentions, commentaires, transfert à un collègue.
+- [ ] **E06-08** — Synchronisation calendrier externe avec consentement et règles d'accès.
+
+**Done si:** Un échange email aller-retour et un rappel de rendez-vous sont visibles dans la même fiche client.
+
+### Bloc 07 — Vente et engagements contractuels
+
+**Objectif:** Passer de la demande client à une mission autorisée et vendable.
+
+- [ ] **E07-01** — Leads, opportunités, étapes pipeline et probabilité configurable.
+- [ ] **E07-02** — Catalogue de services et tarifs: audit agent, revue MCP, retest, accompagnement.
+- [ ] **E07-03** — Devis versionnés, options, échéances et approbation commerciale.
+- [ ] **E07-04** — Propositions/SOW et périmètre de mission validé.
+- [ ] **E07-05** — NDA, contrat-cadre, DPA, droit explicite de tester et exclusions.
+- [ ] **E07-06** — Workflow de revue et signature électronique par fournisseur fiable.
+- [ ] **E07-07** — Renouvellements, abonnements, engagements de service et dates d'expiration.
+- [ ] **E07-08** — Conversion opportunité → contrat → projet avec liens auditables.
+
+**Done si:** Une offre peut être acceptée et convertie en mission documentée sans perdre son périmètre ni ses autorisations.
+
+### Bloc 08 — Projets et exécution des missions
+
+**Objectif:** Piloter le travail des ingénieurs indépendamment du résultat d'un assessment.
+
+- [ ] **E08-01** — Création de projet à partir d'un contrat/accord signé.
+- [ ] **E08-02** — Phases, tâches, responsables, jalons, dépendances et délais.
+- [ ] **E08-03** — Gestion des disponibilités, charge et affectations d'ingénieurs.
+- [ ] **E08-04** — Gestion documentaire, versions, commentaires et livrables.
+- [ ] **E08-05** — Compte rendu de réunion, décisions et changements de périmètre.
+- [ ] **E08-06** — Checklist de démarrage/fin, points de contrôle et validation client.
+- [ ] **E08-07** — Suivi des risques, obstacles, actions correctives et retards.
+- [ ] **E08-08** — Timeline projet et vue portefeuille multi-clients.
+
+**Done si:** Une mission réelle possède ses tâches, sa responsabilité, son calendrier et ses livrables, même sans test KYRTHOS.
+
+### Bloc 09 — Temps, coûts et facturation
+
+**Objectif:** Prouver la valeur du travail et récupérer les revenus sans recréer une comptabilité entière.
+
+- [ ] **E09-01** — Chronomètre et saisie manuelle du temps par ticket/tâche/projet.
+- [ ] **E09-02** — Heures facturables/non facturables, tarifs et contrôles d'approbation.
+- [ ] **E09-03** — Frais, dépenses, forfaits et abonnement/récurrence.
+- [ ] **E09-04** — Préfacturation et détail transparent des prestations.
+- [ ] **E09-05** — Factures, avoirs et échéances avec validation humaine avant émission.
+- [ ] **E09-06** — Intégration comptable/facturation externe plutôt qu'un grand livre parallèle.
+- [ ] **E09-07** — Suivi des paiements, impayés et rentabilité par client/projet.
+- [ ] **E09-08** — Règles fiscales, devise, confidentialité financière et exports.
+
+**Done si:** Une prestation facturable aboutit à un justificatif réconciliable et à une facture approuvée, sans calcul ou envoi non autorisé.
+
+### Bloc 10 — NEMORYTH — connaissance, dossiers et recherche
+
+**Objectif:** Une source de connaissance commune, structurée et traçable.
+
+- [ ] **E10-01** — Recherche transverse autorisée: clients, tickets, documents, projets, connaissances.
+- [ ] **E10-02** — Articles de connaissance interne et procédures approuvées.
+- [ ] **E10-03** — Sources, versions, références, SHA et provenance des documents.
+- [ ] **E10-04** — Liens entre contrôle technique, exigence, observation, preuve et ticket.
+- [ ] **E10-05** — Classification confidentielle, droits et séparation des données clients.
+- [ ] **E10-06** — Gestion des annexes, stockage et rétention sécurisés.
+- [ ] **E10-07** — Archivage, export auditable, restauration et contrôle d'intégrité.
+- [ ] **E10-08** — Recherche contextuelle pour l'opérateur et future récupération RAG contrôlée.
+
+**Done si:** Une information retrouvée indique sa source, sa version, son niveau d'accès et ses liens sans fuite inter-client.
+
+### Bloc 11 — KYRTHOS — moteur de cybersécurité existant
+
+**Objectif:** Raccorder la prestation technique sans recréer un second moteur.
+
+- [ ] **E11-01** — Réutiliser l'inspection de l'évaluation déjà validée localement.
+- [ ] **E11-02** — Catalogue existant des 108 contrôles et critères, pas de recopie de logique.
+- [ ] **E11-03** — Inventaire de cible: agents, API, MCP, outils, autorisations et versions.
+- [ ] **E11-04** — Figer le périmètre et l'identité de la cible avant analyse.
+- [ ] **E11-05** — Préparer tests et collectes, demander autorisation humaine explicite.
+- [ ] **E11-06** — Exécuter uniquement les tests bornés autorisés sur cible permise.
+- [ ] **E11-07** — Revue humaine des preuves, limitations et applicabilité.
+- [ ] **E11-08** — Findings, remédiation, retests et changement matériel de SHA/périmètre.
+- [ ] **E11-09** — Rapports sourcés, versions, conclusions limitées aux observations vérifiées.
+
+**Done si:** Un dossier technique complet reste sous contrôle humain, reproduit les tests autorisés et ne donne aucun PASS fictif.
+
+### Bloc 12 — EIRYON — orchestrateur IA assisté
+
+**Objectif:** Aider l'opérateur à travailler plus vite sans déléguer l'autorité.
+
+- [ ] **E12-01** — Chat IA contextuel à l'intérieur d'ENKYRON par client/ticket/projet.
+- [ ] **E12-02** — Connexion contrôlée à l'orchestrateur existant et aux modèles locaux ou approuvés.
+- [ ] **E12-03** — Récupération de connaissances NEMORYTH avec périmètre d'accès strict.
+- [ ] **E12-04** — Résumé de tickets/messages et préparation de réponses avec source et degré d'incertitude.
+- [ ] **E12-05** — Proposition de classement, de tâches et de plans; confirmation humaine avant application.
+- [ ] **E12-06** — Interfaces d'outils/MCP explicitement autorisées, listes blanches et limites d'effets.
+- [ ] **E12-07** — Journal des demandes/outils/réponses, coûts, versions de modèle et responsabilité.
+- [ ] **E12-08** — Protections contre prompt injection, exfiltration, confusion d'identité et permissions abusives.
+- [ ] **E12-09** — Bouton stop/kill switch, timeouts, replis sûrs et erreurs lisibles.
+- [ ] **E12-10** — Interdiction d'autoriser, lancer ou clôturer seul des tests, findings, approbations ou GO.
+
+**Done si:** EIRYON assiste une action réelle de bureau, explique sa provenance et demande l'accord opérateur avant tout effet sensible.
+
+### Bloc 13 — Portail client externe
+
+**Objectif:** Donner au client une visibilité sécurisée sans lui installer ENKYRON.
+
+- [ ] **E13-01** — Authentification forte du client et autorisations à granularité organisation/contact.
+- [ ] **E13-02** — Créer et consulter ses tickets, sans voir ceux d'un autre client.
+- [ ] **E13-03** — Répondre aux demandes et échanger des documents autorisés.
+- [ ] **E13-04** — Consulter jalons, rendez-vous, délais, états et livrables publiables.
+- [ ] **E13-05** — Approuver devis, périmètres, changements et livrables par workflow explicite.
+- [ ] **E13-06** — Accéder aux factures et paiements via prestataire autorisé.
+- [ ] **E13-07** — Branding de l'entreprise utilisatrice, confidentialité, consentement et notifications.
+- [ ] **E13-08** — Tests d'isolation inter-clients, anti-abus et journalisation.
+
+**Done si:** Deux clients distincts ne peuvent jamais accéder au contenu l'un de l'autre, y compris par URL ou API.
+
+### Bloc 14 — Tableaux de bord et pilotage
+
+**Objectif:** Transformer les données du travail en décisions opérationnelles.
+
+- [ ] **E14-01** — Vue d'accueil: tickets ouverts, urgents, en retard, à assigner.
+- [ ] **E14-02** — Vue clients et activité: demandes, conversations, contrats, rendez-vous.
+- [ ] **E14-03** — Indicateurs SLA: temps de réponse, résolution et attentes.
+- [ ] **E14-04** — Pipeline commercial, conversion et prévisions avec sources.
+- [ ] **E14-05** — Temps vendu, temps passé, facturation, encaissements et marges.
+- [ ] **E14-06** — Suivi projets: jalons, charge, retards et capacité.
+- [ ] **E14-07** — Qualité de service, satisfaction, retours et amélioration continue.
+- [ ] **E14-08** — Rapports filtrés/exportables avec droits et audit des exports.
+
+**Done si:** Un responsable peut piloter une semaine d'activité depuis ENKYRON avec des chiffres réconciliables.
+
+### Bloc 15 — Intégrations, API et automatisations
+
+**Objectif:** Interconnecter les outils sans livrer l'autorité aux données externes.
+
+- [ ] **E15-01** — API de service versionnée et documentée avec auth, périmètre, quotas.
+- [ ] **E15-02** — Webhooks entrants signés, idempotents et rejouables.
+- [ ] **E15-03** — Webhooks sortants limités et auditables, vérification des destinations.
+- [ ] **E15-04** — Connecteurs GitHub/GitLab et dépôts autorisés en contexte de mission.
+- [ ] **E15-05** — Messagerie/calendrier et outils de collaboration (selon besoin réel).
+- [ ] **E15-06** — Import/export de données et synchronisations contrôlées avec CRM/comptabilité.
+- [ ] **E15-07** — Règles d'automatisation sans escalade de privilèges; approbation des effets.
+- [ ] **E15-08** — Surveillance des erreurs de connecteurs, réconciliation et reprise.
+
+**Done si:** Une intégration de bout en bout peut être interrompue, rejouée et auditée sans doublon ni effet non autorisé.
+
+### Bloc 16 — Produit commercialisable par plusieurs sociétés
+
+**Objectif:** Distribuer la même plateforme avec isolation, personnalisation et support.
+
+- [ ] **E16-01** — Onboarding d'une organisation cliente, configuration et propriété de données.
+- [ ] **E16-02** — Isolation forte multi-tenant et tests de non-contournement sur chaque accès.
+- [ ] **E16-03** — Gestion utilisateurs, rôles, équipes, MFA et éventuellement SSO.
+- [ ] **E16-04** — Paramétrage logo, service catalogue, champs, langues, fuseaux et devise.
+- [ ] **E16-05** — Installateur Linux signé, lancement natif, configuration et mise à jour contrôlée.
+- [ ] **E16-06** — Stratégie hébergée/hybride pour partager le service entre opérateurs et portail.
+- [ ] **E16-07** — Licences, plans, quotas, renouvellements et paiement du produit.
+- [ ] **E16-08** — Monitoring, journaux de diagnostic expurgés, sauvegardes et restauration testée.
+- [ ] **E16-09** — Documentation, formation, support produit, tickets internes, migration de données.
+- [ ] **E16-10** — Accessibilité, performance, charge, sécurité applicative, tests de récupération.
+
+**Done si:** Une seconde société peut être installée et travailler sur ses propres clients sans voir ni modifier les données ARL.
+
+## 6. Prochain bloc exécutable et recette
+
+**En cours:** E01-01 à E01-08. Le code est disponible en branche, tests GitHub verts, **recette Debian encore à réaliser**.
+
+**Prochaine action unique:** sur le Debian, ouvrir ENKYRON mis à jour et créer **un ticket réel seulement lorsque l'opérateur le souhaite**. Vérifier le nouveau numéro, les coordonnées, la persistance, le statut et l'événement sans créer d'assessment. Ne pas ouvrir d'autre chantier avant cette validation.
+
+**Immédiatement après la recette:** démarrer **Bloc 02 CRM** pour sortir les coordonnées du texte libre et préparer l'intégration véritable du webmail et du site (Blocs 04–05).
+
+## 7. Livraison commerciale incrémentale
+
+- **Palier A — Poste de travail interne utilisable:** blocs 00–03 et recette de véritables tickets/clients; aucun canal Internet exposé.
+- **Palier B — Gestion de l'activité et clients:** blocs 04–09, communication, vente et exécution de missions facturables.
+- **Palier C — Différenciation ARL:** blocs 10–12, connaissances, moteur sécurité déjà existant, assistance IA sous contrôles.
+- **Palier D — Suite vendable à d'autres entreprises:** blocs 13–16, portail, reporting, connecteurs et isolation multi-organisation validée.
+
+**Ne pas confondre un palier atteint avec une certification, une conformité formelle ou un produit accepté pour la production.**
+
+## 8. Références de périmètre fonctionnel
+
+La couverture PSA est inspirée des grandes familles reconnues dans HaloPSA (ticketing, CRM, projets, contrats, facturation, actifs, portail, rapports, IA) et ConnectWise PSA (tickets, SLA, projets, temps, devis, facturation, finances, portail), **sans obligation de reproduire toutes leurs fonctions ni de créer un RMM**. Les fonctionnalités au-dessus sont des **choix de feuille de route ARL**, non des fonctions déjà prouvées.
+
+- HaloPSA : https://usehalo.com/halopsa/
+- ConnectWise PSA : https://www.connectwise.com/platform/psa/request-pricing
+
