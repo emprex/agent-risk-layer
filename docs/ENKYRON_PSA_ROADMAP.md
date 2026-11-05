@@ -129,6 +129,16 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Done si:** Un ticket créé sur Debian est retrouvé après redémarrage, change de statut et conserve son historique; aucune évaluation ARL n'a été lancée.
 
+### Implémentation Client Desk — affectation et archivage (en attente de recette locale)
+
+**Bloc E01-03 / E01-07 :** ENKYRON dispose désormais d'un propriétaire de ticket distinct de l'opérateur créateur (champ `assigned_to`), de l'affectation/retrait limitée au compte local actif, d'un archivage **non destructif** après statut `closed` avec raison obligatoire, d'un affichage optionnel des tickets archivés, et d'événements d'audit dédiés (`assigned`, `unassigned`, `archived`). Il n'existe toujours **aucun vrai compte multi-utilisateur ou RBAC L1–L5** : aucune affectation arbitraire à un salarié n'est autorisée.
+
+**Migration additive :** `migrations/064_enkyron_ticket_assignment_archive.sql`, enregistrée avec checksum dans `schema_migrations`. Les 63 migrations existantes ne sont pas modifiées. La commande `node scripts/enkyron-client-desk-schema.mjs --check` inspecte localement les versions; `--apply` exige une sauvegarde `pg_dump` réussie avant de changer `arl_local` en transaction. Le nouveau client ENKYRON exige cette migration pour la liste et les détails des tickets.
+
+**Contrôle avant recette :** CI Qt et PostgreSQL temporaire; une fois verts, tester sur Debian l'affectation du ticket `ARL-2026-000002` sans changer son status `scoping`. Pour l'archivage, conserver ce ticket pilote et ne pas l'archiver simplement pour tester l'interface; l'acceptation sur poste nécessite une autre demande expressément autorisée et déjà clôturée.
+
+**E01-01 (appel téléphonique)** : le formulaire et son schéma de sauvegarde étaient déjà couverts par les tests synthétiques; **pas encore de recette réelle** avec nom et coordonnées d'appel. Ne pas considérer E01-01 comme DONE-LOCAL.
+
 ### Bloc 02 — CRM — entreprises et contacts
 
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
