@@ -661,7 +661,8 @@ class EnkyronWindow(QMainWindow):
             for item in data.get("items", []):
                 label = "{}  ·  {}\n{}  |  {}".format(
                     item["ticket_number"], item["title"],
-                    item["client_name"], item["status"].replace("_", " ").upper()
+                    item["client_name"], item["status"].replace("_", " ").upper() +
+                    (" · ARCHIVED" if item.get("archived_at") else "")
                 )
                 widget = QListWidgetItem(label)
                 widget.setData(Qt.ItemDataRole.UserRole, item["id"])
@@ -782,7 +783,10 @@ class EnkyronWindow(QMainWindow):
             )
             # Until RBAC is implemented, the local backend additionally enforces
             # self-assignment and refuses reassignment of someone else's ticket.
-            self.assign_button.setEnabled(active and ticket["status"] != "closed")
+            is_local_owner = not owner or owner == data.get("local_operator")
+            self.assign_button.setEnabled(
+                active and ticket["status"] != "closed" and is_local_owner
+            )
             self.archive_button.setEnabled(active and ticket["status"] == "closed")
             if not active:
                 self.meta.setText(self.meta.text() + " · ARCHIVED")
