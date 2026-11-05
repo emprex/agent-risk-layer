@@ -8,10 +8,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QSplitter, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem,
-    QAbstractItemView, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -165,7 +165,7 @@ class EnkyronWindow(QMainWindow):
         brand.setStyleSheet("font-size: 22px; font-weight: bold; letter-spacing: 3px;")
         top_layout.addWidget(brand)
         top_layout.addSpacing(24)
-        top_layout.addWidget(QLabel("AI Agent Security Engineering"))
+        top_layout.addWidget(QLabel("AgentRiskLayer · Client Desk & Security Operations"))
         top_layout.addStretch()
         top_layout.addWidget(QLabel("LOCAL OPERATOR  |  PostgreSQL"))
         outer.addWidget(top)
@@ -181,13 +181,18 @@ class EnkyronWindow(QMainWindow):
         left_l = QVBoxLayout(left)
         left_l.setContentsMargins(15, 21, 15, 15)
         left_l.setSpacing(12)
-        section = QLabel("ASSESSMENT TICKETS")
+        section = QLabel("CLIENT DESK · TICKETS")
         section.setStyleSheet("font-size: 13px; font-weight: bold;")
         left_l.addWidget(section)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search ticket, client, target…")
         self.search.setMaxLength(100)
         left_l.addWidget(self.search)
+        create = QPushButton("+ New ticket · call / manual")
+        create.setObjectName("primary")
+        create.clicked.connect(self.open_new_ticket)
+        left_l.addWidget(create)
+        self.new_ticket_dialog = None
         self.ticket_list = QListWidget()
         self.ticket_list.currentItemChanged.connect(self.ticket_changed)
         left_l.addWidget(self.ticket_list, 1)
@@ -197,14 +202,14 @@ class EnkyronWindow(QMainWindow):
         refresh = QPushButton("Refresh tickets")
         refresh.clicked.connect(self.load_tickets)
         left_l.addWidget(refresh)
-        left_l.addWidget(QLabel("Existing ARL records. No assessment is created."))
+        left_l.addWidget(QLabel("Tickets can exist without any assessment."))
         split.addWidget(left)
 
         right = QWidget()
         body = QVBoxLayout(right)
         body.setContentsMargins(24, 20, 24, 16)
         body.setSpacing(12)
-        self.title = QLabel("Select an assessment ticket")
+        self.title = QLabel("Select a customer ticket")
         self.title.setObjectName("heading")
         self.title.setWordWrap(True)
         body.addWidget(self.title)
@@ -217,10 +222,21 @@ class EnkyronWindow(QMainWindow):
         body.addWidget(self.tabs, 1)
         overview = QWidget()
         overview_l = QVBoxLayout(overview)
-        overview_l.addWidget(section_title("SCOPE & TARGET"))
+        overview_l.addWidget(section_title("CUSTOMER REQUEST / TECHNICAL SCOPE"))
+        status_bar = QHBoxLayout()
+        status_bar.addWidget(QLabel("Ticket status:"))
+        self.ticket_status = QComboBox()
+        self.ticket_status.setEnabled(False)
+        status_bar.addWidget(self.ticket_status)
+        self.update_status_button = QPushButton("Update status")
+        self.update_status_button.setEnabled(False)
+        self.update_status_button.clicked.connect(self.change_ticket_status)
+        status_bar.addWidget(self.update_status_button)
+        status_bar.addStretch()
+        overview_l.addLayout(status_bar)
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
-        overview_l.addWidget(section_title("ASSESSMENT BINDING"))
+        overview_l.addWidget(section_title("OPTIONAL ARL ENGINE LINK"))
         self.binding = make_text_area()
         self.binding.setMaximumHeight(160)
         overview_l.addWidget(self.binding)
@@ -405,10 +421,141 @@ class EnkyronWindow(QMainWindow):
     def show_error(self, message):
         self.status.setText("Operation blocked: " + message)
 
+    def open_new_ticket(self):
+        """Front-door intake; no assessment, Git target or test is created."""
+        if self.new_ticket_dialog and self.new_ticket_dialog.isVisible():
+            self.new_ticket_dialog.raise_()
+            self.new_ticket_dialog.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Open customer ticket")
+        dialog.setMinimumWidth(620)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("NEW CUSTOMER REQUEST"))
+        hint = QLabel(
+            "Record a telephone conversation or manually received request. "
+            "This creates only a ticket in NEMORYTH; no security assessment is started."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        form = QFormLayout()
+        self.intake_source = QComboBox()
+        self.intake_source.addItem("Telephone call", "phone")
+        self.intake_source.addItem("Manual entry", "manual")
+        form.addRow("Received via", self.intake_source)
+        self.intake_client = QLineEdit()
+        self.intake_client.setMaxLength(160)
+        self.intake_client.setPlaceholderText("Customer / organisation")
+        form.addRow("Client *", self.intake_client)
+        self.intake_contact = QLineEdit()
+        self.intake_contact.setMaxLength(160)
+        form.addRow("Contact person", self.intake_contact)
+        self.intake_phone = QLineEdit()
+        self.intake_phone.setMaxLength(80)
+        form.addRow("Phone", self.intake_phone)
+        self.intake_email = QLineEdit()
+        self.intake_email.setMaxLength(254)
+        form.addRow("Email", self.intake_email)
+        self.intake_title = QLineEdit()
+        self.intake_title.setMaxLength(160)
+        self.intake_title.setPlaceholderText("Short summary of the request")
+        form.addRow("Subject *", self.intake_title)
+        self.intake_description = QPlainTextEdit()
+        self.intake_description.setPlaceholderText(
+            "What did the client request? What are the next actions?"
+        )
+        self.intake_description.setMinimumHeight(120)
+        form.addRow("Request *", self.intake_description)
+        layout.addLayout(form)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        self.intake_submit = QPushButton("Create ticket")
+        self.intake_submit.setObjectName("primary")
+        self.intake_submit.clicked.connect(self.create_ticket)
+        buttons.addWidget(self.intake_submit)
+        layout.addLayout(buttons)
+        self.new_ticket_dialog = dialog
+        dialog.open()
+
+    def create_ticket(self):
+        dialog = self.new_ticket_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        data = {
+            "source": self.intake_source.currentData(),
+            "client_name": self.intake_client.text(),
+            "contact_name": self.intake_contact.text(),
+            "contact_phone": self.intake_phone.text(),
+            "contact_email": self.intake_email.text(),
+            "title": self.intake_title.text(),
+            "request_text": self.intake_description.toPlainText(),
+        }
+        if not all(data[key].strip() for key in ("client_name", "title", "request_text")):
+            QMessageBox.warning(dialog, "Required fields", "Client, subject and request are required.")
+            return
+        self.intake_submit.setEnabled(False)
+
+        def completed(result, error):
+            if error or not isinstance(result, dict) or not result.get("id"):
+                QMessageBox.warning(
+                    dialog, "Ticket not created",
+                    error or "Local ticket creation failed."
+                )
+                self.intake_submit.setEnabled(True)
+                return
+            dialog.accept()
+            self.search.clear()
+            self.current_id = None
+            self.current_ticket = None
+            self.status.setText(
+                "Ticket {} created in PostgreSQL from {}. No assessment created."
+                .format(result["ticket_number"], result["source"])
+            )
+            new_id = result["id"]
+            # Select the newly opened ticket after asynchronous list refresh.
+            self.pending_ticket_id = new_id
+            self.load_tickets()
+
+        self.bridge.call("create-ticket", payload=data, callback=completed)
+
+    def change_ticket_status(self):
+        if not self.current_ticket or not self.current_id:
+            return
+        next_status = self.ticket_status.currentData()
+        if not next_status:
+            return
+        ticket_id = self.current_id
+        self.update_status_button.setEnabled(False)
+
+        def completed(result, error):
+            if ticket_id != self.current_id:
+                return
+            if error:
+                self.show_error(error)
+                self.update_status_button.setEnabled(True)
+                return
+            self.status.setText(
+                "Ticket status: {} → {}. Event saved in PostgreSQL."
+                .format(result["from"], result["status"])
+            )
+            self.load_tickets()
+            item = self.ticket_list.currentItem()
+            if item:
+                self.ticket_changed(item, None)
+
+        self.bridge.call(
+            "ticket-status",
+            payload={"ticket_id": ticket_id, "status": next_status},
+            callback=completed,
+        )
+
     def load_tickets(self):
         self.list_seq += 1
         sequence = self.list_seq
-        old_id = self.current_id
+        old_id = getattr(self, "pending_ticket_id", None) or self.current_id
         self.list_notice.setText("Reading saved tickets…")
         def received(data, error):
             if sequence != self.list_seq:
@@ -433,6 +580,10 @@ class EnkyronWindow(QMainWindow):
             if matching:
                 self.ticket_list.setCurrentItem(matching)
             self.ticket_list.blockSignals(False)
+            if matching:
+                self.pending_ticket_id = None
+                if self.current_id != old_id:
+                    self.ticket_changed(matching, None)
             total = len(data.get("items", []))
             suffix = " (first 100; refine search)" if data.get("more") else ""
             self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
@@ -472,6 +623,9 @@ class EnkyronWindow(QMainWindow):
         self.record_button.setEnabled(False)
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
+        self.ticket_status.clear()
+        self.ticket_status.setEnabled(False)
+        self.update_status_button.setEnabled(False)
         self.title.setText("Loading ticket…")
         def received(data, error):
             if ticket_id != self.current_id:
@@ -512,6 +666,14 @@ class EnkyronWindow(QMainWindow):
                     display_date(e["created_at"]), e["event_type"], e["actor"], e["detail"]
                 ) for e in data.get("events", [])) or "No activity recorded."
             )
+            self.ticket_status.clear()
+            for next_status in data.get("allowed_statuses", []):
+                self.ticket_status.addItem(
+                    next_status.replace("_", " ").title(), next_status
+                )
+            can_update = self.ticket_status.count() > 0
+            self.ticket_status.setEnabled(can_update)
+            self.update_status_button.setEnabled(can_update)
             self.save_button.setEnabled(ticket["status"] != "closed")
             self.engine_button.setEnabled(
                 ticket["target_kind"] == "git"
