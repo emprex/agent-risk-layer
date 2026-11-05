@@ -260,7 +260,9 @@ export async function main() {
     console.log('3. Open previous external evidence review');
     console.log('4. Explore synthetic operator screen (no network)');
     console.log('5. Check an exported customer report before delivery');
-    const mode = await ask('\nChoose 1–5: ');
+    console.log('6. Consult technical engineering knowledge (read-only)');
+    console.log('7. Open ARL Assessment Workbench');
+    const mode = await ask('\nChoose 1–7: ');
     if (mode === '1') {
       const target = path.resolve(await ask('Clean, authorised target Git repository folder: '));
       console.log('\nGit-based ARL assessment actions:');
@@ -317,6 +319,11 @@ export async function main() {
     } else if (mode === '5') {
       const manifest = await ask('Private customer report .manifest.json path: ');
       await runner('bin/arl-review-customer-report.mjs', [path.resolve(manifest)]);
+    } else if (mode === '6') {
+      const lookup = await ask('TECH-001, ARL-KB-057, or search terms: ');
+      await runner('scripts/technical-knowledge.mjs', [lookup]);
+    } else if (mode === '7') {
+      await runner('scripts/arl-workbench.mjs', []);
     } else {
       throw Error('Choose a valid option.');
     }

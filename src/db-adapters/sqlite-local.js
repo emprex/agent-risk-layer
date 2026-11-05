@@ -675,6 +675,7 @@ for (const migrationName of [
   '058_canonical_pass_fail_specificity_78.sql',
   '059_canonical_retest_acceptance_82.sql',
   '061_kb014_runtime_evidence_route.sql',
+  '062_technical_engineering_knowledge.sql',
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
