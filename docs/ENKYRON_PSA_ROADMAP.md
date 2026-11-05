@@ -35,6 +35,7 @@ La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron
 4. Une fiche de capacité clôturée doit mentionner commit, fichiers modifiés, scénarios positifs/négatifs, migrations éventuelles, effet sur les données, et résultat opérateur Debian.
 5. **Pas de nouveau schéma, service ou dépôt** sans vérifier d'abord l'existant. Pas de changements de noms physiques des tables ou de moteur simplement pour adopter les noms mythiques.
 6. Les dépendances de sécurité (authentification, cloisonnement clients, vie privée, sauvegardes, consentement, audit) sont **obligatoires avant exposition Internet ou données clients non synthétiques**.
+   - **Exception cadrée:** la recette locale d'un ticket téléphonique/manuellement saisi peut avancer dans le Bloc 01 avant la clôture de tous les items du Bloc 00, sur le PC de l'opérateur et dans le périmètre déjà autorisé. Cela ne vaut pas validation de sécurité multi-utilisateur, ni mise en production du webmail/site/portail.
 7. **EIRYON / LLM n'est jamais l'autorité de sécurité** et ne peut produire d'action externe ou d'écriture sensible sans contrôle.
 8. Respecter `ARL_PLAN_DIRECTEUR_TECHNIQUE_v1.0.md` pour les limites scientifiques/techniques de KYRTHOS; la présente feuille de route est **produit/PSA** et ne remplace pas ce plan.
 
