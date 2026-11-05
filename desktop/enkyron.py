@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QApplication, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
     QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
@@ -29,6 +29,8 @@ QFrame#sidebar QListWidget { background: #203a50; color: #f5fbff; border: 0; }
 QFrame#sidebar QListWidget::item { padding: 13px 10px; border-bottom: 1px solid #344c5e; }
 QFrame#sidebar QListWidget::item:selected { background: #176e81; color: white; }
 QFrame#sidebar QLineEdit { background: #f8fbfd; color: #20354a; }
+QPushButton#archivedToggle { text-align: left; background: #203a50; color: #ecf5fa; border: 1px solid #7291a6; }
+QPushButton#archivedToggle:checked { background: #176e81; color: white; border: 2px solid #8be2ec; font-weight: bold; }
 QLabel#heading { font-size: 23px; font-weight: bold; }
 QLabel#sectionTitle { font-size: 15px; font-weight: bold; }
 QLabel#subtle { color: #587184; }
@@ -193,9 +195,13 @@ class EnkyronWindow(QMainWindow):
         create.setObjectName("primary")
         create.clicked.connect(self.open_new_ticket)
         left_l.addWidget(create)
-        self.show_archived = QCheckBox("Include archived tickets")
-        self.show_archived.setStyleSheet("color: #ecf5fa;")
-        self.show_archived.toggled.connect(self.load_tickets)
+        # Use a visibly latched filter: the platform checkbox indicator was
+        # ambiguous with the sidebar stylesheet on some Debian themes.
+        self.show_archived = QPushButton("☐ Include archived tickets")
+        self.show_archived.setObjectName("archivedToggle")
+        self.show_archived.setCheckable(True)
+        self.show_archived.setChecked(False)
+        self.show_archived.toggled.connect(self.archived_filter_toggled)
         left_l.addWidget(self.show_archived)
         self.new_ticket_dialog = None
         self.ticket_list = QListWidget()
@@ -229,13 +235,19 @@ class EnkyronWindow(QMainWindow):
         overview_l = QVBoxLayout(overview)
         overview_l.addWidget(section_title("CUSTOMER REQUEST / TECHNICAL SCOPE"))
         status_bar = QHBoxLayout()
-        status_bar.addWidget(QLabel("Ticket status:"))
+        self.current_status_label = QLabel("Current: —")
+        self.current_status_label.setStyleSheet("font-weight: bold;")
+        status_bar.addWidget(self.current_status_label)
+        status_bar.addSpacing(12)
+        status_bar.addWidget(QLabel("Move to:"))
         self.ticket_status = QComboBox()
+        self.ticket_status.setMinimumWidth(190)
         self.ticket_status.setEnabled(False)
         status_bar.addWidget(self.ticket_status)
-        self.update_status_button = QPushButton("Update status")
+        self.update_status_button = QPushButton("Apply change")
         self.update_status_button.setEnabled(False)
         self.update_status_button.clicked.connect(self.change_ticket_status)
+        self.ticket_status.currentIndexChanged.connect(self.refresh_status_action)
         status_bar.addWidget(self.update_status_button)
         status_bar.addStretch()
         overview_l.addLayout(status_bar)
@@ -539,6 +551,21 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("create-ticket", payload=data, callback=completed)
 
+    def archived_filter_toggled(self, checked):
+        self.show_archived.setText(
+            "☑ Archived tickets included" if checked else "☐ Include archived tickets"
+        )
+        self.load_tickets()
+
+    def refresh_status_action(self, *_args):
+        ticket = self.current_ticket
+        can_change = bool(
+            ticket and not ticket.get("archived_at")
+            and self.ticket_status.isEnabled()
+            and self.ticket_status.currentData() is not None
+        )
+        self.update_status_button.setEnabled(can_change)
+
     def change_ticket_status(self):
         if not self.current_ticket or not self.current_id:
             return
@@ -729,6 +756,7 @@ class EnkyronWindow(QMainWindow):
         self.ticket_status.clear()
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
+        self.current_status_label.setText("Current: loading…")
         self.owner_label.setText("Assigned to: Unassigned")
         self.assign_button.setEnabled(False)
         self.archive_button.setEnabled(False)
@@ -772,15 +800,32 @@ class EnkyronWindow(QMainWindow):
                     display_date(e["created_at"]), e["event_type"], e["actor"], e["detail"]
                 ) for e in data.get("events", [])) or "No activity recorded."
             )
+            self.current_status_label.setText(
+                "Current: " + ticket["status"].replace("_", " ").upper()
+            )
+            self.ticket_status.setEnabled(False)
             self.ticket_status.clear()
-            for next_status in data.get("allowed_statuses", []):
+            self.ticket_status.addItem("Select next status…", None)
+            # Normal forward progress before WAITING or rework; the canonical
+            # backend transition list and permission checks remain unchanged.
+            options = list(data.get("allowed_statuses", []))
+            preferred = {
+                "in_progress": "pending_review",
+                "pending_review": "resolved",
+                "waiting": "in_progress",
+            }.get(ticket["status"])
+            options.sort(key=lambda value: (
+                0 if value == preferred else
+                2 if value == "waiting" else 1
+            ))
+            for next_status in options:
                 self.ticket_status.addItem(
                     next_status.replace("_", " ").title(), next_status
                 )
-            can_update = self.ticket_status.count() > 0
             active = not bool(ticket.get("archived_at"))
-            self.ticket_status.setEnabled(can_update and active)
-            self.update_status_button.setEnabled(can_update and active)
+            self.ticket_status.setEnabled(bool(options) and active)
+            self.ticket_status.setCurrentIndex(0)
+            self.refresh_status_action()
             self.save_button.setEnabled(active and ticket["status"] != "closed")
             owner = ticket.get("assigned_to")
             self.owner_label.setText(
