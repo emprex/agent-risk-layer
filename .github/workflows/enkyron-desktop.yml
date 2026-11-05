@@ -69,6 +69,9 @@ jobs:
               "Home", "Tickets", "CRM · Prospects"
           ]
           assert window.pages.currentIndex() == 1
+          assert window.ticket_views.count() == 2
+          assert window.ticket_views.currentIndex() == 0
+          assert window.ticket_list.parentWidget() is not window.tabs.parentWidget()
           assert window.ticket_list.count() == 0
           assert not window.show_archived.isChecked()
           assert not window.assign_button.isEnabled()
@@ -262,6 +265,15 @@ jobs:
           assert calls[-1][2] == {
               "ticket_id": ticket_id, "status": "pending_review"
           }
+          # Full-width ticket detail closes with Back, and reopening the same
+          # item reuses the original callbacks, without a second fixed column.
+          assert window.ticket_views.currentIndex() == 1
+          window.back_to_tickets.click()
+          assert window.ticket_views.currentIndex() == 0
+          assert window.current_id is None
+          window.ticket_changed(synthetic, None)
+          assert window.ticket_views.currentIndex() == 1
+          assert calls[-1][0] == "ticket"
           # A visibly latched archive filter reports ON/OFF unambiguously.
           assert not window.show_archived.isChecked()
           assert "☐" in window.show_archived.text()
