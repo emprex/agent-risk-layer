@@ -177,6 +177,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
 
+**Incrément E02-PAGE-01 — pagination complète des prospects historiques (2026-11-05) :**
+- Onglet **Existing prospect research** : 100 résultats par page, boutons **Previous/Next**, compteur **Showing X–Y of N**, 4 pages attendues pour les 344 prospects locaux sans filtre ; recherche remettant la page à 1, avec protection contre les anciennes réponses asynchrones et la sélection périmée.
+- PostgreSQL : requête paramétrée `search + page`, `COUNT(*)` et lignes dans une même instruction SQL MVCC pour cohérence ; ordre `updated_at DESC, id`, offset borné, lecture seule. Aucun changement de données, aucune migration supplémentaire nécessaire pour cette pagination.
+- Régression : test synthétique PostgreSQL avec **344 candidats et pages 100/100/100/44**, contrôle des doublons, recherche et total ; smoke natif Qt sur passage page 1 → 2 → 1.
+- Fenêtre de rapprochement : affichage explicite et sécurisé des valeurs de provenance (formatage complet de la phrase et texte brut Qt, sans balises interprétées).
+- **Statut : développement sur branche ; validation des deux workflows HEAD exact exigée et vérification visuelle Debian à effectuer.**
+
+
+
 **Incrément E02-LINK-01 — rapprochement manuel des prospects historiques (2026-11-05) :**
 - Nouvelle migration `066_enkyron_crm_prospect_links.sql` : liens immuables entre `sales_prospects` et `enkyron_crm_companies` dans un périmètre local ; plusieurs prospects peuvent référencer une même entreprise, mais chaque prospect ne peut être associé qu'une fois par opérateur. Les anciennes lignes restent intactes.
 - Onglet **Existing prospect research** : sélectionner un prospect → **Review for CRM association…** → consulter source, entreprise pressentie et doublons de nom/domaine → créer *une* entreprise de type prospect si aucun rapprochement évident, ou choisir une entreprise existante. Si des correspondances existent, la création d'une nouvelle entreprise est refusée par le serveur.
