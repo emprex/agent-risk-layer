@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
     QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
-    QTableWidget, QTableWidgetItem, QAbstractItemView, QStackedWidget, QVBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -207,7 +207,7 @@ class EnkyronWindow(QMainWindow):
         nav_l.addWidget(QLabel("WORKSPACE"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
-        self.navigation.addItems(["Home", "Tickets", "CRM · Prospects"])
+        self.navigation.addItems(["Home", "Tickets", "CRM"])
         self.navigation.setMaximumHeight(204)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
@@ -551,6 +551,9 @@ class EnkyronWindow(QMainWindow):
             ["Company", "Relationship", "Sector", "Location", "Updated"]
         )
         self.crm_company_table.setAlternatingRowColors(True)
+        self.crm_company_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
         self.crm_company_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -580,6 +583,9 @@ class EnkyronWindow(QMainWindow):
             ["Name", "Role", "Email", "Phone"]
         )
         self.crm_contacts_table.setAlternatingRowColors(True)
+        self.crm_contacts_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
         self.crm_contacts_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -617,6 +623,10 @@ class EnkyronWindow(QMainWindow):
             ["Company candidate", "Buyer candidate", "Stage", "Source", "Updated"]
         )
         self.crm_table.setAlternatingRowColors(True)
+        for column in (0, 1, 3):
+            self.crm_table.horizontalHeader().setSectionResizeMode(
+                column, QHeaderView.ResizeMode.Stretch
+            )
         self.crm_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
