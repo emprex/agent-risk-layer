@@ -32,7 +32,8 @@ jobs:
           node --check desktop/enkyron-contract.mjs
           node --check desktop/enkyron-bridge.mjs
           node --check desktop/enkyron-evidence-register.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js
+          node --check desktop/enkyron-ticket-intake.mjs
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -60,6 +61,26 @@ jobs:
           assert window.tabs.tabText(5) == 'Evidence Requests'
           assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
+          assert window.ticket_list.count() == 0
+          window.open_new_ticket()
+          assert window.new_ticket_dialog is not None
+          assert window.new_ticket_dialog.isVisible()
+          window.intake_client.setText("Synthetic Customer")
+          window.intake_contact.setText("Caller")
+          window.intake_phone.setText("+44 0000 000000")
+          window.intake_title.setText("Telephone enquiry")
+          window.intake_description.setPlainText("Customer requests a consultation")
+          # The actual bridge is stubbed: verify the native callback and payload.
+          intake_calls = []
+          DesktopBridge.call = lambda _self,action,arg="",payload=None,callback=None: intake_calls.append(
+              (action, arg, payload, callback)
+          )
+          window.create_ticket()
+          assert intake_calls[-1][0] == "create-ticket"
+          assert intake_calls[-1][2]["source"] == "phone"
+          assert intake_calls[-1][2]["client_name"] == "Synthetic Customer"
+          assert "consultation" in intake_calls[-1][2]["request_text"]
+          window.new_ticket_dialog.reject()
           # Exercise the real Qt callback path using a stubbed local IPC process.
           calls = []
           def fake_call(_self, action, arg="", payload=None, callback=None):
