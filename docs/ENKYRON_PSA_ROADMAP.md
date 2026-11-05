@@ -119,13 +119,13 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 **Objectif:** Ouvrir et retrouver une demande téléphonique réelle sans créer un assessment.
 
 - [ ] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande.
-- [ ] **E01-02** — Créer un ticket saisi manuellement, sans feindre une origine email ou web vérifiée.
+- [x] **E01-02** — Créer un ticket saisi manuellement, sans feindre une origine email ou web vérifiée. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 - [ ] **E01-03** — Numéro unique, date, statut NEW, propriétaire et source d'entrée.
-- [ ] **E01-04** — Afficher/rechercher les tickets et retrouver le ticket créé.
-- [ ] **E01-05** — Afficher la fiche et les notes / événements de son historique.
-- [ ] **E01-06** — Changer de statut par transitions autorisées, avec événement d'audit.
+- [x] **E01-04** — Afficher/rechercher les tickets et retrouver le ticket créé. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
+- [x] **E01-05** — Afficher la fiche et les notes / événements de son historique. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
+- [x] **E01-06** — Changer de statut par transitions autorisées, avec événement d'audit. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 - [ ] **E01-07** — Mettre en place suppression interdite/archivage contrôlé des tickets.
-- [ ] **E01-08** — Recette réelle sur Debian: créer un ticket autorisé, contrôler PostgreSQL et sa persistance.
+- [x] **E01-08** — Recette réelle sur Debian: créer un ticket autorisé, contrôler PostgreSQL et sa persistance. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 
 **Done si:** Un ticket créé sur Debian est retrouvé après redémarrage, change de statut et conserve son historique; aucune évaluation ARL n'a été lancée.
 
@@ -362,9 +362,9 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ## 6. Prochain bloc exécutable et recette
 
-**En cours:** E01-01 à E01-08. Le code est disponible en branche, tests GitHub verts, **recette Debian encore à réaliser**.
+**Recette locale partielle réussie le 2026-11-05:** ticket manuel `ARL-2026-000002` créé sous `AGENTRISKLAYER LTD — Internal Lab`, historique `created` (18:43:25), transition `NEW → SCOPING` journalisée (18:46:02), puis **SCOPING conservé après fermeture et relancement** d’ENKYRON sur Debian 13. Tests documentés par captures opérateur. E01-02, E01-04, E01-05, E01-06 et E01-08 sont **DONE-LOCAL**; E01-01 (saisie téléphonique avec contact), E01-03 (assignation effective du propriétaire), E01-07 (archivage contrôlé) demeurent à valider. Ce résultat ne prouve pas encore la création multi-utilisateur, le CRM ni les intégrations externes.
 
-**Prochaine action unique:** sur le Debian, ouvrir ENKYRON mis à jour et créer **un ticket réel seulement lorsque l'opérateur le souhaite**. Vérifier le nouveau numéro, les coordonnées, la persistance, le statut et l'événement sans créer d'assessment. Ne pas ouvrir d'autre chantier avant cette validation.
+**Prochaine action unique:** compléter le bloc 01 sans créer de ticket inutile: vérifier la prise d'appel avec coordonnées (E01-01), la responsabilité / affectation (E01-03) et la politique d'archivage (E01-07). Ensuite ouvrir **Bloc 02 CRM**, en commençant par les clients et contacts structurés. Conserver le ticket pilote et ses données.
 
 **Immédiatement après la recette:** démarrer **Bloc 02 CRM** pour sortir les coordonnées du texte libre et préparer l'intégration véritable du webmail et du site (Blocs 04–05).
 
