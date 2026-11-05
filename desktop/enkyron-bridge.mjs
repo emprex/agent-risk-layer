@@ -36,7 +36,7 @@ async function stdinJson() {
 async function ticketList(pool, query, includeArchived=false) {
   const q = boundedSearch(query);
   const rows = (await pool.query(
-    `SELECT id,ticket_number,title,client_name,status,updated_at
+    `SELECT id,ticket_number,title,client_name,status,archived_at,updated_at
      FROM arl_workbench_tickets
      WHERE ($3::boolean OR archived_at IS NULL)
        AND ($1='' OR ticket_number ILIKE $2 OR title ILIKE $2
