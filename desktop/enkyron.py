@@ -1111,25 +1111,30 @@ class EnkyronWindow(QMainWindow):
             layout = QVBoxLayout(dialog)
             layout.addWidget(section_title("MANUAL PROSPECT → COMPANY ASSOCIATION"))
             source = data["prospect"]
-            note = QLabel(
+            # Explicitly format the entire message (adjacent string literal
+            # method binding would otherwise leave literal '{}' placeholders).
+            reviewed_summary = (
                 "Research candidate: {}\nSource: {}\nWebsite: {}\n"
                 "Buyer (not verified): {}\n\nNo contacts, clients, "
                 "marketing permission or emails are created by this action."
-                .format(
-                    source.get("company_name") or "Unknown",
-                    source.get("source") or "Unknown",
-                    source.get("website") or "Not recorded",
-                    source.get("buyer_name") or "Not recorded"
-                )
+            ).format(
+                source.get("company_name") or "Unknown",
+                source.get("source") or "Unknown",
+                source.get("website") or "Not recorded",
+                source.get("buyer_name") or "Not recorded"
             )
+            note = QLabel(reviewed_summary)
+            note.setTextFormat(Qt.TextFormat.PlainText)
             note.setWordWrap(True)
             layout.addWidget(note)
             existing = data.get("linked")
             if existing:
                 already = QLabel(
-                    "Already associated with: {}\nNo second link can be created."
-                    .format(existing.get("company_name") or existing.get("company_id"))
+                    "Already associated with: {}\nNo second link can be created.".format(
+                        existing.get("company_name") or existing.get("company_id")
+                    )
                 )
+                already.setTextFormat(Qt.TextFormat.PlainText)
                 already.setWordWrap(True)
                 layout.addWidget(already)
                 close = QPushButton("Close")
