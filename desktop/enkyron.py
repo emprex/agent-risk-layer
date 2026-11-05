@@ -210,6 +210,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_opportunity_id = None
         self.crm_activity_seq = 0
         self.crm_activity_entries = []
+        self.crm_drafts_seq = 0
+        self.crm_drafts_loaded = False
+        self.crm_draft_items = []
+        self.crm_draft_dialog = None
+        self.crm_draft_context = None
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -818,6 +823,10 @@ class EnkyronWindow(QMainWindow):
             "Create a follow-up from a selected prospect in Existing prospect research."
         ))
         footer.addStretch()
+        self.crm_compose_button = QPushButton("Compose mail draft…")
+        self.crm_compose_button.setEnabled(False)
+        self.crm_compose_button.clicked.connect(self.open_compose_draft)
+        footer.addWidget(self.crm_compose_button)
         self.crm_activity_button = QPushButton("Activity history…")
         self.crm_activity_button.setEnabled(False)
         self.crm_activity_button.clicked.connect(self.open_activity_history)
@@ -828,6 +837,61 @@ class EnkyronWindow(QMainWindow):
         footer.addWidget(self.crm_edit_followup)
         followups_l.addLayout(footer)
         self.crm_tabs.addTab(followups_page, "Follow-ups")
+        drafts_page = QWidget()
+        drafts_l = QVBoxLayout(drafts_page)
+        drafts_l.setSpacing(12)
+        drafts_l.addWidget(section_title("CRM · LOCAL UNSENT MAIL DRAFTS"))
+        drafts_info = QLabel(
+            "These are plain-text drafts stored in local PostgreSQL. "
+            "They are not messages in an email inbox, and ENKYRON cannot send them. "
+            "Unverified research contacts are never inserted as recipients automatically."
+        )
+        drafts_info.setWordWrap(True)
+        drafts_l.addWidget(drafts_info)
+        drafts_toolbar = QHBoxLayout()
+        self.crm_draft_search = QLineEdit()
+        self.crm_draft_search.setMaxLength(100)
+        self.crm_draft_search.setPlaceholderText(
+            "Search draft subject, opportunity or recipient…"
+        )
+        drafts_toolbar.addWidget(self.crm_draft_search, 1)
+        draft_refresh = QPushButton("Refresh drafts")
+        draft_refresh.clicked.connect(self.load_mail_drafts)
+        drafts_toolbar.addWidget(draft_refresh)
+        drafts_l.addLayout(drafts_toolbar)
+        self.crm_draft_notice = QLabel("Drafts have not been loaded.")
+        self.crm_draft_notice.setWordWrap(True)
+        drafts_l.addWidget(self.crm_draft_notice)
+        self.crm_draft_table = QTableWidget(0, 5)
+        self.crm_draft_table.setHorizontalHeaderLabels(
+            ["Opportunity", "Recipient (manual)", "Subject", "Revision", "Updated"]
+        )
+        self.crm_draft_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_draft_table.setAlternatingRowColors(True)
+        self.crm_draft_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_draft_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_draft_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_draft_table.itemSelectionChanged.connect(self.mail_draft_selected)
+        drafts_l.addWidget(self.crm_draft_table, 1)
+        draft_footer = QHBoxLayout()
+        draft_footer.addWidget(QLabel(
+            "Create a draft by selecting an opportunity in Follow-ups."
+        ))
+        draft_footer.addStretch()
+        self.crm_edit_draft = QPushButton("Open selected draft")
+        self.crm_edit_draft.setEnabled(False)
+        self.crm_edit_draft.clicked.connect(self.open_selected_draft)
+        draft_footer.addWidget(self.crm_edit_draft)
+        drafts_l.addLayout(draft_footer)
+        self.crm_tabs.addTab(drafts_page, "Mail drafts")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -840,6 +904,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_search_timer.setInterval(300)
         self.crm_followup_search_timer.timeout.connect(self.load_followups)
         self.crm_followup_search.textChanged.connect(self.followup_search_changed)
+        self.crm_draft_search_timer = QTimer(self)
+        self.crm_draft_search_timer.setSingleShot(True)
+        self.crm_draft_search_timer.setInterval(300)
+        self.crm_draft_search_timer.timeout.connect(self.load_mail_drafts)
+        self.crm_draft_search.textChanged.connect(self.mail_draft_search_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
         self.crm_company_search_timer.setInterval(300)
@@ -869,6 +938,8 @@ class EnkyronWindow(QMainWindow):
                 self.load_prospects()
             if not self.crm_followup_loaded:
                 self.load_followups()
+            if not self.crm_drafts_loaded:
+                self.load_mail_drafts()
 
     def show_ticket_index(self):
         # Reset the selection so clicking the same record opens it again.
@@ -1539,6 +1610,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_notice.setText("Reading local follow-up records…")
         self.crm_edit_followup.setEnabled(False)
         self.crm_activity_button.setEnabled(False)
+        self.crm_compose_button.setEnabled(False)
 
         def received(data, error):
             if sequence != self.crm_followup_seq or search != self.crm_followup_search.text():
@@ -1589,6 +1661,7 @@ class EnkyronWindow(QMainWindow):
         selected = 0 <= row < len(self.crm_followup_items)
         self.crm_edit_followup.setEnabled(selected)
         self.crm_activity_button.setEnabled(selected)
+        self.crm_compose_button.setEnabled(selected)
 
     def open_activity_history(self):
         row = self.crm_followup_table.currentRow()
@@ -1619,6 +1692,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_table = QTableWidget(0, 4)
         self.crm_activity_table.setHorizontalHeaderLabels(
             ["Recorded", "Kind", "Summary", "Operator"]
+        )
+        self.crm_activity_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.crm_activity_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
         )
         self.crm_activity_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch
