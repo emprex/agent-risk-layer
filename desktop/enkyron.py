@@ -1663,6 +1663,207 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_button.setEnabled(selected)
         self.crm_compose_button.setEnabled(selected)
 
+    def mail_draft_search_changed(self, _value):
+        self.crm_drafts_seq += 1
+        self.crm_draft_search_timer.start()
+
+    def load_mail_drafts(self):
+        self.crm_drafts_seq += 1
+        seq = self.crm_drafts_seq
+        search = self.crm_draft_search.text()
+        self.crm_draft_notice.setText("Reading local unsent drafts…")
+        self.crm_edit_draft.setEnabled(False)
+
+        def received(data, error):
+            if seq != self.crm_drafts_seq or search != self.crm_draft_search.text():
+                return
+            self.crm_drafts_loaded = True
+            self.crm_draft_items = []
+            self.crm_draft_table.blockSignals(True)
+            self.crm_draft_table.setRowCount(0)
+            self.crm_draft_table.blockSignals(False)
+            if error:
+                self.crm_draft_notice.setText("Cannot read local draft list.")
+                self.show_error(error)
+                return
+            if not data or not data.get("available", True):
+                self.crm_draft_notice.setText(
+                    (data or {}).get("notice", "Local mail draft migration 070 is required.")
+                )
+                return
+            self.crm_draft_items = data.get("items", [])
+            self.crm_draft_table.blockSignals(True)
+            self.crm_draft_table.setRowCount(len(self.crm_draft_items))
+            for row, draft in enumerate(self.crm_draft_items):
+                fields = [
+                    draft.get("company_name_at_creation") or "",
+                    draft.get("recipient_email") or "Not set",
+                    draft.get("subject") or "(No subject)",
+                    draft.get("revision") or 1,
+                    display_date(draft.get("updated_at"))
+                ]
+                for column, value in enumerate(fields):
+                    self.crm_draft_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+            self.crm_draft_table.blockSignals(False)
+            suffix = " First 100; refine search." if data.get("more") else ""
+            self.crm_draft_notice.setText(
+                "{} local unsent draft(s).{}".format(len(self.crm_draft_items), suffix)
+            )
+
+        self.bridge.call("crm-mail-drafts", search, callback=received)
+
+    def mail_draft_selected(self):
+        row = self.crm_draft_table.currentRow()
+        self.crm_edit_draft.setEnabled(
+            0 <= row < len(self.crm_draft_items)
+        )
+
+    def open_compose_draft(self):
+        row = self.crm_followup_table.currentRow()
+        if row < 0 or row >= len(self.crm_followup_items):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+        entry = self.crm_followup_items[row]
+        self.show_mail_draft_dialog({
+            "opportunity_id": entry["id"],
+            "company_name_at_creation": entry.get("company_name_at_creation") or ""
+        })
+
+    def open_selected_draft(self):
+        row = self.crm_draft_table.currentRow()
+        if row < 0 or row >= len(self.crm_draft_items):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+        draft_id = self.crm_draft_items[row]["id"]
+        self.crm_edit_draft.setEnabled(False)
+
+        def received(data, error):
+            self.mail_draft_selected()
+            if error or not data or not data.get("available", True):
+                QMessageBox.warning(
+                    self, "Mail draft unavailable",
+                    error or (data or {}).get("notice", "Cannot load local draft.")
+                )
+                return
+            self.show_mail_draft_dialog(data["draft"])
+
+        self.bridge.call("crm-mail-draft", draft_id, callback=received)
+
+    def show_mail_draft_dialog(self, draft):
+        dialog = QDialog(self)
+        existing = bool(draft.get("id"))
+        dialog.setWindowTitle(
+            "ENKYRON · Edit unsent mail draft" if existing
+            else "ENKYRON · New unsent mail draft"
+        )
+        dialog.resize(720, 590)
+        dialog.setMinimumSize(610, 500)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title(
+            "EDIT LOCAL MAIL DRAFT" if existing else "COMPOSE LOCAL MAIL DRAFT"
+        ))
+        prospect = QLabel(
+            "Opportunity: {}".format(draft.get("company_name_at_creation") or "Unknown")
+        )
+        prospect.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(prospect)
+        warning = QLabel(
+            "Unsent local plain-text draft. Recipient addresses must be entered "
+            "manually and checked against applicable permission and outreach rules. "
+            "ENKYRON is not connected to a mailbox and has no send capability."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        form = QFormLayout()
+        self.crm_mail_to = QLineEdit()
+        self.crm_mail_to.setMaxLength(254)
+        self.crm_mail_to.setPlaceholderText(
+            "Optional · manually verified email address"
+        )
+        self.crm_mail_to.setText(draft.get("recipient_email") or "")
+        form.addRow("To", self.crm_mail_to)
+        self.crm_mail_subject = QLineEdit()
+        self.crm_mail_subject.setMaxLength(200)
+        self.crm_mail_subject.setPlaceholderText("Subject")
+        self.crm_mail_subject.setText(draft.get("subject") or "")
+        form.addRow("Subject", self.crm_mail_subject)
+        layout.addLayout(form)
+        self.crm_mail_body = QPlainTextEdit()
+        self.crm_mail_body.setPlaceholderText(
+            "Write your plain-text email draft here. Do not include secrets."
+        )
+        self.crm_mail_body.setPlainText(draft.get("body_text") or "")
+        layout.addWidget(self.crm_mail_body, 1)
+        buttons = QHBoxLayout()
+        close = QPushButton("Close without saving")
+        close.clicked.connect(dialog.reject)
+        buttons.addWidget(close)
+        buttons.addStretch()
+        self.crm_mail_save = QPushButton("Save local draft")
+        self.crm_mail_save.setObjectName("primary")
+        self.crm_mail_save.clicked.connect(self.save_mail_draft)
+        buttons.addWidget(self.crm_mail_save)
+        layout.addLayout(buttons)
+        self.crm_draft_context = {
+            "id": draft.get("id"),
+            "revision": draft.get("revision"),
+            "opportunity_id": draft["opportunity_id"]
+        }
+        self.crm_draft_dialog = dialog
+        dialog.open()
+
+    def save_mail_draft(self):
+        dialog = self.crm_draft_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_draft_context:
+            return
+        recipient = self.crm_mail_to.text().strip()
+        subject = self.crm_mail_subject.text().strip()
+        body = self.crm_mail_body.toPlainText().strip()
+        if not subject and not body:
+            QMessageBox.warning(dialog, "Empty draft",
+                                "Enter a subject or some text before saving.")
+            return
+        context = self.crm_draft_context
+        if context.get("id"):
+            command = "crm-mail-update"
+            payload = {
+                "id": context["id"],
+                "expected_revision": context["revision"],
+                "recipient_email": recipient,
+                "subject": subject,
+                "body_text": body
+            }
+        else:
+            command = "crm-mail-create"
+            payload = {
+                "opportunity_id": context["opportunity_id"],
+                "recipient_email": recipient,
+                "subject": subject,
+                "body_text": body
+            }
+        self.crm_mail_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_mail_save.setEnabled(True)
+                QMessageBox.warning(dialog, "Draft not saved",
+                                    error or "The local draft could not be saved.")
+                return
+            dialog.accept()
+            self.crm_tabs.setCurrentIndex(3)
+            self.crm_draft_search.clear()
+            self.load_mail_drafts()
+
+        self.bridge.call(command, payload=payload, callback=received)
+
     def open_activity_history(self):
         row = self.crm_followup_table.currentRow()
         if row < 0 or row >= len(self.crm_followup_items):
