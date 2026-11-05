@@ -33,6 +33,7 @@ jobs:
           node --check desktop/enkyron-bridge.mjs
           node --check desktop/enkyron-evidence-register.mjs
           node --check desktop/enkyron-ticket-intake.mjs
+          node --check scripts/enkyron-client-desk-schema.mjs
           node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
@@ -62,6 +63,9 @@ jobs:
           assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
           assert window.ticket_list.count() == 0
+          assert not window.show_archived.isChecked()
+          assert not window.assign_button.isEnabled()
+          assert not window.archive_button.isEnabled()
           window.open_new_ticket()
           assert window.new_ticket_dialog is not None
           assert window.new_ticket_dialog.isVisible()
@@ -191,6 +195,16 @@ jobs:
           window.record_control.setValue(14)
           assert window.records_table.rowCount() == 0
           assert window.tests_table.rowCount() == 0
+          # Check assignment IPC does not authorise assigning other employees.
+          window.current_id = ticket_id
+          window.current_ticket = {
+              "status": "scoping", "assigned_to": None, "archived_at": None
+          }
+          window.change_ticket_assignment()
+          assert calls[-1][0] == "ticket-assignment"
+          assert calls[-1][2] == {"ticket_id": ticket_id, "action": "self"}
+          window.show_archived.setChecked(True)
+          assert calls[-1][0] == "tickets-archived"
           window.close()
           app.quit()
           PY
