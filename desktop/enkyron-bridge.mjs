@@ -6,7 +6,11 @@ import os from 'node:os';
 import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
-import { createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange, TICKET_TRANSITIONS } from './enkyron-ticket-intake.mjs';
+import {
+  createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
+  assignDeskTicket, archiveDeskTicket, validateAssignment, validateArchive,
+  TICKET_TRANSITIONS
+} from './enkyron-ticket-intake.mjs';
 
 const socket = '/var/run/postgresql';
 const database = 'arl_local';
@@ -29,15 +33,16 @@ async function stdinJson() {
   catch { throw new Error('Malformed note request'); }
 }
 
-async function ticketList(pool, query) {
+async function ticketList(pool, query, includeArchived=false) {
   const q = boundedSearch(query);
   const rows = (await pool.query(
     `SELECT id,ticket_number,title,client_name,status,updated_at
      FROM arl_workbench_tickets
-     WHERE ($1='' OR ticket_number ILIKE $2 OR title ILIKE $2
+     WHERE ($3::boolean OR archived_at IS NULL)
+       AND ($1='' OR ticket_number ILIKE $2 OR title ILIKE $2
        OR client_name ILIKE $2 OR target_reference ILIKE $2)
      ORDER BY updated_at DESC,id LIMIT 101`,
-    [q, '%' + q + '%']
+    [q, '%' + q + '%', includeArchived]
   )).rows;
   return { items: rows.slice(0, 100), more: rows.length > 100 };
 }
@@ -56,7 +61,7 @@ async function ticketDetails(pool, id) {
      FROM arl_workbench_ticket_events WHERE ticket_id=$1
      ORDER BY created_at DESC,id DESC LIMIT 100`, [ticketId]
   )).rows;
-  return { ticket, notes, events, allowed_statuses: TICKET_TRANSITIONS[ticket.status] || [] };
+  return { ticket, notes, events, allowed_statuses: ticket.archived_at ? [] : TICKET_TRANSITIONS[ticket.status] || [] };
 }
 
 async function masterDetails(pool, ticketId) {
@@ -106,10 +111,11 @@ async function saveNote(pool, payload) {
   try {
     await client.query('BEGIN');
     const ticket = (await client.query(
-      'SELECT assessor_name,status FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      'SELECT assessor_name,status,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
       [ticketId]
     )).rows[0];
     if (!ticket) throw new Error('Ticket not found');
+    if (ticket.archived_at) throw new Error('Archived ticket is read-only');
     if (ticket.status === 'closed') throw new Error('Reopen closed ticket before adding notes');
     const id = crypto.randomUUID();
     await client.query(
@@ -150,18 +156,20 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
-  if (command === 'tickets') boundedSearch(arg);
+  if (['tickets', 'tickets-archived'].includes(command)) boundedSearch(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status'].includes(command) ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
   if (command === 'ticket-status') validateStatusChange(payload);
-  const readOnly = !['note', 'create-ticket', 'ticket-status'].includes(command);
+  if (command === 'ticket-assignment') validateAssignment(payload);
+  if (command === 'ticket-archive') validateArchive(payload);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -171,11 +179,14 @@ async function main() {
   try {
     const result =
       command === 'tickets' ? await ticketList(pool, arg) :
+      command === 'tickets-archived' ? await ticketList(pool, arg, true) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
       command === 'master' ? await masterDetails(pool, arg) :
       command === 'evidence-register' ? await evidenceRegister(pool, payload) :
       command === 'create-ticket' ? await createDeskTicket(pool, payload, os.userInfo().username) :
       command === 'ticket-status' ? await updateDeskTicketStatus(pool, payload) :
+      command === 'ticket-assignment' ? await assignDeskTicket(pool, payload, os.userInfo().username) :
+      command === 'ticket-archive' ? await archiveDeskTicket(pool, payload, os.userInfo().username) :
       await saveNote(pool, payload);
     emit({ ok: true, result });
   } finally { await pool.end(); }
@@ -184,7 +195,7 @@ async function main() {
 main().catch(error => {
   const message = String(error?.message || '');
   const expected =
-    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is)/.test(message);
+    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Only the assigned)/.test(message);
   emit({ ok: false, error: expected ? message.slice(0, 250) :
     'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;
