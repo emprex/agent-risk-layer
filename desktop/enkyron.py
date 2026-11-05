@@ -46,10 +46,16 @@ def display_date(value):
     return str(value or "").replace("T", " ")[:19]
 
 
+def section_title(value):
+    label = QLabel(value)
+    label.setObjectName("sectionTitle")
+    return label
+
+
 def make_text_area(readonly=True):
     area = QPlainTextEdit()
     area.setReadOnly(readonly)
-    area.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+    area.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
     return area
 
 
@@ -94,7 +100,7 @@ class DesktopBridge:
                 finish(None, "Invalid local bridge response")
 
         def on_error(_reason):
-            if process.error() == QProcess.FailedToStart:
+            if process.error() == QProcess.ProcessError.FailedToStart:
                 finish(None, "Node.js is not installed or cannot start")
 
         def on_timeout():
@@ -145,7 +151,7 @@ class EnkyronWindow(QMainWindow):
         top_layout.addWidget(QLabel("LOCAL OPERATOR  |  PostgreSQL"))
         outer.addWidget(top)
 
-        split = QSplitter(Qt.Horizontal)
+        split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
         outer.addWidget(split, 1)
 
@@ -192,10 +198,10 @@ class EnkyronWindow(QMainWindow):
         body.addWidget(self.tabs, 1)
         overview = QWidget()
         overview_l = QVBoxLayout(overview)
-        overview_l.addWidget(QLabel("SCOPE & TARGET", objectName="sectionTitle"))
+        overview_l.addWidget(section_title("SCOPE & TARGET"))
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
-        overview_l.addWidget(QLabel("ASSESSMENT BINDING", objectName="sectionTitle"))
+        overview_l.addWidget(section_title("ASSESSMENT BINDING"))
         self.binding = make_text_area()
         self.binding.setMaximumHeight(160)
         overview_l.addWidget(self.binding)
@@ -213,10 +219,10 @@ class EnkyronWindow(QMainWindow):
 
         notes = QWidget()
         notes_l = QVBoxLayout(notes)
-        notes_l.addWidget(QLabel("RECORDED WORK NOTES", objectName="sectionTitle"))
+        notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
         notes_l.addWidget(self.notes_view, 1)
-        notes_l.addWidget(QLabel("NEW MANUAL OBSERVATION (NOT VERIFIED EVIDENCE)", objectName="sectionTitle"))
+        notes_l.addWidget(section_title("NEW MANUAL OBSERVATION (NOT VERIFIED EVIDENCE)"))
         self.note_editor = make_text_area(False)
         self.note_editor.setPlaceholderText("Enter factual observations or next actions…")
         self.note_editor.setMaximumHeight(124)
@@ -225,12 +231,12 @@ class EnkyronWindow(QMainWindow):
         self.save_button.setObjectName("primary")
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_note)
-        notes_l.addWidget(self.save_button, alignment=Qt.AlignRight)
+        notes_l.addWidget(self.save_button, alignment=Qt.AlignmentFlag.AlignRight)
         self.tabs.addTab(notes, "Work Notes")
 
         history = QWidget()
         hist_l = QVBoxLayout(history)
-        hist_l.addWidget(QLabel("TICKET ACTIVITY LOG", objectName="sectionTitle"))
+        hist_l.addWidget(section_title("TICKET ACTIVITY LOG"))
         self.events_view = make_text_area()
         hist_l.addWidget(self.events_view)
         self.tabs.addTab(history, "History")
@@ -274,7 +280,7 @@ class EnkyronWindow(QMainWindow):
                     item["client_name"], item["status"].replace("_", " ").upper()
                 )
                 widget = QListWidgetItem(label)
-                widget.setData(Qt.UserRole, item["id"])
+                widget.setData(Qt.ItemDataRole.UserRole, item["id"])
                 self.ticket_list.addItem(widget)
                 if item["id"] == old_id:
                     matching = widget
@@ -291,7 +297,7 @@ class EnkyronWindow(QMainWindow):
     def ticket_changed(self, item, _previous):
         if not item:
             return
-        ticket_id = item.data(Qt.UserRole)
+        ticket_id = item.data(Qt.ItemDataRole.UserRole)
         self.current_id = ticket_id
         self.current_ticket = None
         self.master_doc.clear()
