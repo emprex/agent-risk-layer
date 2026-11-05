@@ -7,6 +7,7 @@ import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 import { listSalesProspects } from './enkyron-crm-prospects.mjs';
+import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
 import {
   createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
@@ -158,13 +159,14 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies'].includes(command)) boundedSearch(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact'].includes(command) ? await stdinJson() : null;
+  if (command === 'crm-prospect-review') requireProspectId(arg);
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
@@ -173,7 +175,8 @@ async function main() {
   if (command === 'ticket-archive') validateArchive(payload);
   if (command === 'crm-create-company') validateCompany(payload);
   if (command === 'crm-create-contact') validateContact(payload);
-  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact'].includes(command);
+  if (command === 'crm-prospect-link') validateProspectLink(payload);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -187,6 +190,8 @@ async function main() {
       command === 'crm-prospects' ? await listSalesProspects(pool, arg) :
       command === 'crm-companies' ? await listCompanies(pool, arg, os.userInfo().username) :
       command === 'crm-contacts' ? await listContacts(pool, arg, os.userInfo().username) :
+      command === 'crm-prospect-review' ? await previewProspectLink(pool, arg, os.userInfo().username) :
+      command === 'crm-prospect-link' ? await associateProspect(pool, payload, os.userInfo().username) :
       command === 'crm-create-company' ? await createCompany(pool, payload, os.userInfo().username) :
       command === 'crm-create-contact' ? await createContact(pool, payload, os.userInfo().username) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
