@@ -32,7 +32,7 @@ jobs:
           node --check desktop/enkyron-contract.mjs
           node --check desktop/enkyron-bridge.mjs
           node --test tests/enkyron-desktop.test.js
-          python3 -B -m unittest desktop.test_enkyron_operator_state
+          python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
@@ -54,8 +54,9 @@ jobs:
           app = QApplication([])
           window = EnkyronWindow()
           assert isinstance(window, QMainWindow)
-          assert window.tabs.count() == 5
+          assert window.tabs.count() == 6
           assert window.tabs.tabText(4) == 'ARL Engine'
+          assert window.tabs.tabText(5) == 'Evidence Requests'
           assert window.windowTitle().startswith("ENKYRON")
           # Exercise the real Qt callback path using a stubbed local IPC process.
           calls = []
@@ -87,6 +88,45 @@ jobs:
               "notice": "No test or verdict.",
           }, None)
           assert "not_assessed" in window.engine_view.toPlainText()
+          window.inspect_evidence()
+          assert calls[-1][0] == "master"
+          calls[-1][3]({
+              "available": True, "snapshot_status": "current",
+              "target_sha": "a" * 40, "snapshot_id": "sys_test",
+          }, None)
+          assert calls[-1][0] == "evidence-summary"
+          assert calls[-1][2]["snapshot_id"] == "sys_test"
+          calls[-1][3]({
+              "available": True, "kind": "summary",
+              "assessment_controls": 99, "other_workflow_controls": 9,
+              "criterion_count": 208,
+              "counts": {
+                  "staticCandidates": 1, "staticMissing": 2,
+                  "humanRequirements": 3, "runtimeRequirements": 4,
+                  "sourceLineageIssues": 5,
+              },
+              "packs": [{
+                  "number": 1, "category": "manual_review",
+                  "requirement_instances": 2, "affected_controls": 2
+              }],
+          }, None)
+          assert "ARL CONTROL REGISTER: 108" in window.evidence_summary.toPlainText()
+          assert window.evidence_packs.count() == 1
+          window.open_evidence_pack()
+          assert calls[-1][0] == "evidence-pack"
+          assert calls[-1][2]["pack_number"] == 1
+          calls[-1][3]({
+              "available": True, "kind": "pack", "pack_number": 1,
+              "page_number": 1, "page_count": 1, "task_count": 1,
+              "tasks": [{
+                  "control_id": "ARL-KB-013", "requirement_index": 1,
+                  "review_state": "manual_triage_required",
+                  "candidate_count": 0, "expected_collectors": [],
+                  "requirement": "Document approved egress destinations",
+              }],
+          }, None)
+          assert "ARL-KB-013" in window.evidence_details.toPlainText()
+          assert not window.evidence_next.isEnabled()
           window.close()
           app.quit()
           PY
