@@ -38,12 +38,14 @@ jobs:
           node --check desktop/enkyron-crm-link.mjs
           node --check desktop/enkyron-crm-tickets.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
+          node --check desktop/enkyron-crm-activities.mjs
+          node --check scripts/enkyron-crm-activity-schema.mjs
           node --check scripts/enkyron-crm-opportunities-schema.mjs
           node --check scripts/enkyron-crm-ticket-schema.mjs
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -59,8 +61,8 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
           from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem
-          from PySide6.QtCore import Qt
-          from desktop.enkyron import DesktopBridge, EnkyronWindow
+          from PySide6.QtCore import Qt, QDate
+          from desktop.enkyron import DesktopBridge, EnkyronWindow, format_followup_due
 
           # Verify Qt widget construction without connecting to a DB or running ARL.
           DesktopBridge.call = lambda *_args, **_kwargs: None
@@ -297,8 +299,46 @@ jobs:
               }], "more": False,
           }, None)
           assert window.crm_followup_table.rowCount() == 1
+          assert format_followup_due(
+              "2026-11-06", "research", QDate(2026, 11, 5)
+          ).endswith("Tomorrow")
+          assert format_followup_due(
+              "2026-11-04", "research", QDate(2026, 11, 5)
+          ).endswith("Overdue")
+          assert format_followup_due(
+              "2026-11-04", "won", QDate(2026, 11, 5)
+          ).endswith("Closed")
           window.crm_followup_table.selectRow(0)
           assert window.crm_edit_followup.isEnabled()
+          assert window.crm_activity_button.isEnabled()
+          window.open_activity_history()
+          assert window.crm_activity_dialog.isVisible()
+          assert calls[-1][0] == "crm-activity-timeline"
+          assert calls[-1][1] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True, "more": False, "items": [{
+                  "id": "event-ci", "entry_kind": "change",
+                  "event_type": "created", "old_stage": None,
+                  "new_stage": "research", "old_next_action": None,
+                  "new_next_action": "Review published company website",
+                  "actor_local": "ci-operator", "recorded_at": "2026-11-05"
+              }], "opportunity": {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+          }, None)
+          assert window.crm_activity_table.rowCount() == 1
+          assert window.crm_activity_save.isEnabled()
+          window.crm_activity_table.selectRow(0)
+          assert "MANUAL OPPORTUNITY CHANGE" in window.crm_activity_details.toPlainText()
+          window.crm_activity_type.setCurrentIndex(1)
+          window.crm_activity_detail_input.setPlainText(
+              "Operator recorded a research-only call note."
+          )
+          window.crm_activity_confirm.setChecked(True)
+          window.save_activity_note()
+          assert calls[-1][0] == "crm-record-activity"
+          assert calls[-1][2]["activity_type"] == "call_note"
+          assert calls[-1][2]["reviewed"] is True
+          assert "research-only call note" in calls[-1][2]["detail"]
+          window.crm_activity_dialog.reject()
           window.open_followup_update()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.isEnabled()
