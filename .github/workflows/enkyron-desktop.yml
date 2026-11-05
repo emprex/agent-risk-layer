@@ -175,7 +175,7 @@ jobs:
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
           }, None)
-          assert window.crm_tabs.count() == 2
+          assert window.crm_tabs.count() == 3
           assert window.crm_company_table.rowCount() == 1
           assert window.crm_company_add.isEnabled()
           window.crm_company_table.selectRow(0)
