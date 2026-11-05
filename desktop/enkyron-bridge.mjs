@@ -6,6 +6,7 @@ import os from 'node:os';
 import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
+import { listSalesProspects } from './enkyron-crm-prospects.mjs';
 import {
   createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
   assignDeskTicket, archiveDeskTicket, validateAssignment, validateArchive,
@@ -156,11 +157,11 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
-  if (['tickets', 'tickets-archived'].includes(command)) boundedSearch(arg);
+  if (['tickets', 'tickets-archived', 'crm-prospects'].includes(command)) boundedSearch(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
   const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
@@ -180,6 +181,7 @@ async function main() {
     const result =
       command === 'tickets' ? await ticketList(pool, arg) :
       command === 'tickets-archived' ? await ticketList(pool, arg, true) :
+      command === 'crm-prospects' ? await listSalesProspects(pool, arg) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
       command === 'master' ? await masterDetails(pool, arg) :
       command === 'evidence-register' ? await evidenceRegister(pool, payload) :
