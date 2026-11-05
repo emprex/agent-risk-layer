@@ -37,6 +37,9 @@ test('real CI PostgreSQL: explicit review, no duplicate company and immutable pr
         [id,name,website,'usr_enkyron_link_ci','synthetic-research',now,now]
       );
     }
+    const priorContactCount=(await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_crm_contacts'
+    )).rows[0].n;
     const initial=(await pool.query(
       "SELECT id,company_name,website,updated_at FROM sales_prospects WHERE id LIKE 'lead_link_ci_%' ORDER BY id"
     )).rows;
@@ -101,6 +104,6 @@ test('real CI PostgreSQL: explicit review, no duplicate company and immutable pr
     assert.deepEqual(final,initial,'historical prospect source rows must not be rewritten');
     assert.equal((await pool.query(
       'SELECT count(*)::int AS n FROM enkyron_crm_contacts'
-    )).rows[0].n,0);
+    )).rows[0].n,priorContactCount);
   }finally{await pool.end();}
 });
