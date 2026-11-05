@@ -175,6 +175,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-FOLLOWUP-01 — opportunités et prochaines actions commerciales (2026-11-05) :**
+- Migration additive `068_enkyron_crm_opportunities.sql` : chaque prospect historique peut être relié à **une opportunité de suivi par opérateur local** (clé unique `workspace_key,prospect_id`) ; l'entreprise enregistrée dans la recherche n'est **pas promue automatiquement** en client ou contact confirmé.
+- Champs : `stage` manuel (research, qualified, contact_planned, contacted, discovery, proposal, negotiation, won, lost), `next_action` obligatoire, `due_date` facultative, propriétaire local, révision optimiste et dates de création/mise à jour. Ces étapes sont des déclarations commerciales de l'opérateur, **pas** une preuve de consentement, de contact effectué, de vente, de contrat ou d'encaissement.
+- `enkyron_crm_opportunity_events` : historique append-only de chaque création et changement de stage/action/date. `UPDATE` verrouille la ligne, contrôle `expected_version`, refuse les écritures obsolètes et enregistre la transition dans la même transaction.
+- Qt : **Existing prospect research → Plan follow-up…** ; fenêtre native création/mise à jour, calendrier facultatif ; **CRM → Follow-ups** pour rechercher, lire, trier par échéance et mettre à jour manuellement les actions.
+- Aucun message envoyé, aucune automatisation de campagne, aucun import massif, aucune édition des anciennes tables `sales_prospects`, `sales_messages` ou `arl_workbench_tickets`. Le module fonctionne même si **Companies & Contacts** est encore vide.
+- Installation sur Debian uniquement après vérification du HEAD en CI : `node scripts/enkyron-crm-opportunities-schema.mjs --check` puis `--apply` (sauvegarde locale sécurisée, contrôle des checksums, migration transactionnelle). Lancement du desktop ne déclenche jamais une migration.
+- **Limitations actuelles :** 100 opportunités affichées au maximum par recherche (affichage explicitement borné), suivi local mono-opérateur, pas de boîte email intégrée, pas de relances envoyées, pas de permissions multitenant, pas de notification programmée. **Statut :** code en développement, recette Debian non effectuée.
+
+
+
 **Incrément E02-TICKET-01 — rapprochement contrôlé entreprise ↔ ticket (2026-11-05) :**
 - Migration additive `067_enkyron_crm_ticket_links.sql` : association d'un ticket à une unique entreprise par espace local (plusieurs tickets pour une même entreprise), référence explicite `ticket_id` + clé composée `(workspace_key,company_id)`. Aucun `client_name`, statut, événement ou note de ticket historique modifié.
 - **CRM → Companies & Contacts** : détails entreprise structurés dans deux sous-onglets **Contacts** et **Tickets** ; liste des tickets reliés ; action **Link existing ticket** ; accès à la fiche ticket en pleine largeur.
