@@ -11,7 +11,7 @@ import pg from 'pg';
 
 const mode=process.argv[2];
 if (!['--check','--apply'].includes(mode) || process.argv.length!==3) {
-  throw new Error('Usage: node scripts/enkyron-crm-schema.mjs --check | --apply');
+  throw new Error('Usage: node scripts/enkyron-crm-ticket-schema.mjs --check | --apply');
 }
 const version='067_enkyron_crm_ticket_links.sql';
 const dir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','migrations');
@@ -88,6 +88,6 @@ try{
       await client.query('ROLLBACK').catch(()=>{});
       throw error;
     }
-    console.log('CRM association schema 067 applied. Legacy tickets, contacts and tickets left untouched.');
+    console.log('CRM association schema 067 applied. Legacy prospects, contacts and tickets left untouched.');
   }
 }finally{await client.end();}
