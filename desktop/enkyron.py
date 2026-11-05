@@ -676,10 +676,18 @@ class EnkyronWindow(QMainWindow):
                 self.pending_ticket_id = None
                 if self.current_id != old_id:
                     self.ticket_changed(matching, None)
+            else:
+                # Hiding archived tickets must also clear an archived selection,
+                # or the right pane could continue displaying an invisible ticket.
+                self.current_id = None
+                self.current_ticket = None
+                self.pending_ticket_id = None
+                self.title.setText("Select a customer ticket")
+                self.meta.setText("Select a ticket from the current list.")
             total = len(data.get("items", []))
             suffix = " (first 100; refine search)" if data.get("more") else ""
             self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
-            if not old_id and self.ticket_list.count():
+            if not matching and self.ticket_list.count():
                 self.ticket_list.setCurrentRow(0)
         self.bridge.call(
             "tickets-archived" if self.show_archived.isChecked() else "tickets",
