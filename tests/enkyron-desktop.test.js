@@ -7,7 +7,7 @@ import {
   boundedSearch, noteInput, requireTicketId, verifiedMaster
 } from '../desktop/enkyron-contract.mjs';
 
-const id = '11111111-2222-4333-8444-555555555555';
+const id = '1111111a-2222-4333-8444-555555555555';
 
 test('ENKYRON ticket lookup uses strict identifiers', () => {
   assert.equal(requireTicketId(id), id);
