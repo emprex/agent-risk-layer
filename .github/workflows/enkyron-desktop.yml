@@ -68,7 +68,7 @@ jobs:
           assert window.windowTitle().startswith("ENKYRON")
           assert window.pages.count() == 3
           assert [window.navigation.item(i).text() for i in range(3)] == [
-              "Home", "Tickets", "CRM · Prospects"
+              "Home", "Tickets", "CRM"
           ]
           assert window.pages.currentIndex() == 1
           assert window.ticket_views.count() == 2
