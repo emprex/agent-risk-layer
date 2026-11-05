@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { boundedSearch } from './enkyron-contract.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const NO_CONTROLS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+const NO_CONTROLS = /[\x00-\x1f\x7f]/;
 
 function value(input, label, max, required=false) {
   if (typeof input !== 'string' || input.length > max || NO_CONTROLS.test(input)) {
