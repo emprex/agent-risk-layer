@@ -6,12 +6,12 @@ import json
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, QTimer, Qt
+from PySide6.QtCore import QDate, QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
-    QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
+    QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QDateEdit, QTabWidget,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -180,6 +180,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_link_dialog = None
         self.crm_link_options = []
         self.crm_link_dialog_company_id = None
+        self.crm_followup_seq = 0
+        self.crm_followup_items = []
+        self.crm_followup_loaded = False
+        self.crm_followup_dialog = None
+        self.crm_followup_context = None
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -723,6 +728,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_review_button.setEnabled(False)
         self.crm_review_button.clicked.connect(self.open_prospect_review)
         prospect_header.addWidget(self.crm_review_button)
+        self.crm_plan_followup = QPushButton("Plan follow-up…")
+        self.crm_plan_followup.setEnabled(False)
+        self.crm_plan_followup.clicked.connect(self.open_prospect_followup)
+        prospect_header.addWidget(self.crm_plan_followup)
         prospect_l.addLayout(prospect_header)
         self.crm_details = make_text_area()
         self.crm_details.setMaximumHeight(180)
@@ -731,6 +740,62 @@ class EnkyronWindow(QMainWindow):
         )
         prospect_l.addWidget(self.crm_details)
         self.crm_tabs.addTab(prospects_page, "Existing prospect research")
+        followups_page = QWidget()
+        followups_l = QVBoxLayout(followups_page)
+        followups_l.setSpacing(12)
+        followups_l.addWidget(section_title("SALES · MANUAL OPPORTUNITIES & FOLLOW-UPS"))
+        followup_info = QLabel(
+            "Operator-led planning for historical prospects. Stages and next actions "
+            "are manual records, not verified sales, contact consent or sent emails."
+        )
+        followup_info.setWordWrap(True)
+        followups_l.addWidget(followup_info)
+        followup_actions = QHBoxLayout()
+        self.crm_followup_search = QLineEdit()
+        self.crm_followup_search.setMaxLength(100)
+        self.crm_followup_search.setPlaceholderText(
+            "Find company candidate or next action…"
+        )
+        followup_actions.addWidget(self.crm_followup_search, 1)
+        refresh_followups = QPushButton("Refresh follow-ups")
+        refresh_followups.clicked.connect(self.load_followups)
+        followup_actions.addWidget(refresh_followups)
+        followups_l.addLayout(followup_actions)
+        self.crm_followup_notice = QLabel("Commercial follow-ups have not been loaded.")
+        self.crm_followup_notice.setWordWrap(True)
+        followups_l.addWidget(self.crm_followup_notice)
+        self.crm_followup_table = QTableWidget(0, 5)
+        self.crm_followup_table.setHorizontalHeaderLabels(
+            ["Prospect", "Stage", "Next action", "Due date", "Updated"]
+        )
+        self.crm_followup_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_followup_table.setAlternatingRowColors(True)
+        self.crm_followup_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_followup_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_followup_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_followup_table.itemSelectionChanged.connect(
+            self.followup_selected
+        )
+        followups_l.addWidget(self.crm_followup_table, 1)
+        footer = QHBoxLayout()
+        footer.addWidget(QLabel(
+            "Create a follow-up from a selected prospect in Existing prospect research."
+        ))
+        footer.addStretch()
+        self.crm_edit_followup = QPushButton("Update selected follow-up")
+        self.crm_edit_followup.setEnabled(False)
+        self.crm_edit_followup.clicked.connect(self.open_followup_update)
+        footer.addWidget(self.crm_edit_followup)
+        followups_l.addLayout(footer)
+        self.crm_tabs.addTab(followups_page, "Follow-ups")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -738,6 +803,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_search_timer.setInterval(300)
         self.crm_search_timer.timeout.connect(self.load_prospects)
         self.crm_search.textChanged.connect(self.prospect_search_changed)
+        self.crm_followup_search_timer = QTimer(self)
+        self.crm_followup_search_timer.setSingleShot(True)
+        self.crm_followup_search_timer.setInterval(300)
+        self.crm_followup_search_timer.timeout.connect(self.load_followups)
+        self.crm_followup_search.textChanged.connect(self.followup_search_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
         self.crm_company_search_timer.setInterval(300)
@@ -765,6 +835,8 @@ class EnkyronWindow(QMainWindow):
                 self.load_companies()
             if not self.crm_loaded:
                 self.load_prospects()
+            if not self.crm_followup_loaded:
+                self.load_followups()
 
     def show_ticket_index(self):
         # Reset the selection so clicking the same record opens it again.
@@ -1350,6 +1422,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_table.blockSignals(False)
             self.crm_details.clear()
             self.crm_review_button.setEnabled(False)
+            self.crm_plan_followup.setEnabled(False)
             if error:
                 self.crm_notice.setText("Unable to read local prospect inventory.")
                 self.show_error(error)
@@ -1405,8 +1478,10 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_items):
             self.crm_details.clear()
             self.crm_review_button.setEnabled(False)
+            self.crm_plan_followup.setEnabled(False)
             return
         self.crm_review_button.setEnabled(True)
+        self.crm_plan_followup.setEnabled(True)
         prospect = self.crm_items[row]
         self.crm_details.setPlainText("\n".join([
             "LEGACY SALES PROSPECT — NOT A VERIFIED CUSTOMER",
