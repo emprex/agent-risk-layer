@@ -175,6 +175,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_pending_company_id = None
         self.crm_company_dialog = None
         self.crm_contact_dialog = None
+        self.crm_ticket_seq = 0
+        self.crm_ticket_items = []
+        self.crm_link_dialog = None
+        self.crm_link_options = []
+        self.crm_link_dialog_company_id = None
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -344,6 +349,9 @@ class EnkyronWindow(QMainWindow):
         assignment.addWidget(self.archive_button)
         assignment.addStretch()
         overview_l.addLayout(assignment)
+        self.crm_ticket_company_label = QLabel("CRM company: Not loaded")
+        self.crm_ticket_company_label.setWordWrap(True)
+        overview_l.addWidget(self.crm_ticket_company_label)
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
         overview_l.addWidget(section_title("OPTIONAL ARL ENGINE LINK"))
@@ -570,6 +578,11 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_company_table.itemSelectionChanged.connect(self.company_selected)
         company_l.addWidget(self.crm_company_table, 3)
+        # Lower half remains one pane, with Contacts / Tickets internal tabs.
+        self.crm_company_detail_tabs = QTabWidget()
+        company_l.addWidget(self.crm_company_detail_tabs, 2)
+        contacts_page = QWidget()
+        contacts_l = QVBoxLayout(contacts_page)
         contacts_heading = QHBoxLayout()
         contacts_heading.addWidget(section_title("CONTACTS FOR SELECTED COMPANY"))
         contacts_heading.addStretch()
@@ -577,12 +590,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_add.setEnabled(False)
         self.crm_contact_add.clicked.connect(self.open_new_contact)
         contacts_heading.addWidget(self.crm_contact_add)
-        company_l.addLayout(contacts_heading)
+        contacts_l.addLayout(contacts_heading)
         self.crm_contacts_notice = QLabel(
             "Select a company to view its contacts. Email consent starts as unknown."
         )
         self.crm_contacts_notice.setWordWrap(True)
-        company_l.addWidget(self.crm_contacts_notice)
+        contacts_l.addWidget(self.crm_contacts_notice)
         self.crm_contacts_table = QTableWidget(0, 4)
         self.crm_contacts_table.setHorizontalHeaderLabels(
             ["Name", "Role", "Email", "Phone"]
@@ -597,7 +610,54 @@ class EnkyronWindow(QMainWindow):
         self.crm_contacts_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
-        company_l.addWidget(self.crm_contacts_table, 2)
+        contacts_l.addWidget(self.crm_contacts_table, 1)
+        self.crm_company_detail_tabs.addTab(contacts_page, "Contacts")
+
+        company_tickets_page = QWidget()
+        company_tickets_l = QVBoxLayout(company_tickets_page)
+        ticket_heading = QHBoxLayout()
+        ticket_heading.addWidget(section_title("TICKETS ASSOCIATED WITH THIS COMPANY"))
+        ticket_heading.addStretch()
+        self.crm_link_ticket_button = QPushButton("+ Link existing ticket")
+        self.crm_link_ticket_button.setEnabled(False)
+        self.crm_link_ticket_button.clicked.connect(self.open_ticket_link_dialog)
+        ticket_heading.addWidget(self.crm_link_ticket_button)
+        company_tickets_l.addLayout(ticket_heading)
+        self.crm_company_tickets_notice = QLabel(
+            "Select a company. Ticket names alone never prove client identity."
+        )
+        self.crm_company_tickets_notice.setWordWrap(True)
+        company_tickets_l.addWidget(self.crm_company_tickets_notice)
+        self.crm_company_tickets_table = QTableWidget(0, 4)
+        self.crm_company_tickets_table.setHorizontalHeaderLabels(
+            ["Ticket", "Title", "Recorded client name", "Status"]
+        )
+        self.crm_company_tickets_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_company_tickets_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_company_tickets_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_company_tickets_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_company_tickets_table.itemSelectionChanged.connect(
+            self.company_ticket_selected
+        )
+        company_tickets_l.addWidget(self.crm_company_tickets_table, 1)
+        self.crm_open_company_ticket_button = QPushButton("Open selected ticket")
+        self.crm_open_company_ticket_button.setEnabled(False)
+        self.crm_open_company_ticket_button.clicked.connect(
+            self.open_selected_company_ticket
+        )
+        company_tickets_l.addWidget(
+            self.crm_open_company_ticket_button,
+            alignment=Qt.AlignmentFlag.AlignRight
+        )
+        self.crm_company_detail_tabs.addTab(company_tickets_page, "Tickets")
         self.crm_tabs.addTab(companies_page, "Companies && Contacts")
 
         prospects_page = QWidget()
@@ -734,6 +794,11 @@ class EnkyronWindow(QMainWindow):
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
+            self.crm_ticket_seq += 1
+            self.crm_ticket_items = []
+            self.crm_company_tickets_table.setRowCount(0)
+            self.crm_link_ticket_button.setEnabled(False)
+            self.crm_open_company_ticket_button.setEnabled(False)
             if error:
                 self.crm_company_notice.setText("CRM company lookup unavailable.")
                 self.crm_company_add.setEnabled(False)
@@ -792,11 +857,17 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_id = None
             self.crm_contact_add.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
+            self.crm_ticket_seq += 1
+            self.crm_company_tickets_table.setRowCount(0)
+            self.crm_link_ticket_button.setEnabled(False)
+            self.crm_open_company_ticket_button.setEnabled(False)
             return
         company = self.crm_company_items[row]
         company_id = company["id"]
         self.crm_company_id = company_id
         self.crm_contact_add.setEnabled(True)
+        self.crm_link_ticket_button.setEnabled(True)
+        self.load_company_tickets(company_id)
         self.crm_contact_seq += 1
         seq = self.crm_contact_seq
         self.crm_contacts_table.setRowCount(0)
@@ -1577,6 +1648,7 @@ class EnkyronWindow(QMainWindow):
         self.assign_button.setEnabled(False)
         self.archive_button.setEnabled(False)
         self.title.setText("Loading ticket…")
+        self.load_current_ticket_company(ticket_id)
         def received(data, error):
             if ticket_id != self.current_id:
                 return
