@@ -39,6 +39,27 @@ La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron
 7. **EIRYON / LLM n'est jamais l'autorité de sécurité** et ne peut produire d'action externe ou d'écriture sensible sans contrôle.
 8. Respecter `ARL_PLAN_DIRECTEUR_TECHNIQUE_v1.0.md` pour les limites scientifiques/techniques de KYRTHOS; la présente feuille de route est **produit/PSA** et ne remplace pas ce plan.
 
+## 3 bis. Comptes, niveaux d'accès et espaces de travail — priorité architecturale
+
+Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identités techniques partagées. L'Owner est administrateur du produit, **pas** une autorité pouvant falsifier les journaux, les preuves ou la validation d'un assessment.
+
+| Profil | Rôle initial | Autorisations attendues |
+| --- | --- | --- |
+| **L1 — Accueil / Service Desk** | Ouvrir et qualifier des tickets, consulter ses files, ajouter des notes, transférer au niveau 2 | Pas de gestion des droits, ni exécution de tests KYRTHOS, ni données financières confidentielles |
+| **L2 — Technicien / Analyste** | Gérer tickets et tâches assignés, suivre incidents, documenter observations | Pas d'approbation indépendante des résultats ni d'administration |
+| **L3 — Expert / Ingénieur** | Analyser des missions autorisées, préparer/exécuter des tests bornés selon permission explicite, proposer des conclusions | Pas de validation automatique ni de dépassement de périmètre |
+| **L4 — Superviseur / Responsable** | Piloter équipe, affectations, SLA, revues et autorisations métier déléguées | Pas de pouvoir général sur les autres sociétés ni d'effacement des journaux |
+| **L5 — Owner / Direction** | Administrer les comptes, politiques d'accès, équipes, accès financiers et paramètres de sa propre société | Aucune modification rétroactive des preuves et aucun contournement des contrôles de sûreté |
+| **Client / Invité** | Voir ses tickets et documents explicitement publiés, envoyer ses demandes | Accès strictement limité à son organisation / son espace |
+
+**La numérotation n'est PAS une autorisation automatique.** Le système doit contrôler une règle de type **RBAC + ABAC** (rôle + organisation + équipe + client + dossier + action + contexte). Par exemple, un L4 de l'équipe A ne doit pas lire un dossier privé de l'équipe B sans attribution explicite.
+
+**Espaces prévus:** Direction, Service Desk, Engineering, Sales, Billing et espaces client/mission. Les équipes peuvent travailler depuis différents bureaux ou à distance, sous contrôle d'accès du serveur. Le desktop garde son interface Qt; lorsqu'il y aura plusieurs utilisateurs, un **service authentifié** sera nécessaire entre ENKYRON et NEMORYTH. La connexion locale actuelle avec l'utilisateur du système d'exploitation n'est pas un système de comptes multi-utilisateur.
+
+**Séquence opérationnelle:** valider la création des tickets sur ton Debian avec un seul opérateur → figer le modèle d'identité et permissions E00-10 à E00-23 avant tout accès externe ou ajout d'employé → seulement ensuite permettre un second utilisateur connecté et tester les refus inter-espaces. La revue de conformité et d'autorisation de KYRTHOS reste séparée du rang hiérarchique.
+
+**Critère de réception multi-utilisateur:** deux comptes différents connectés simultanément; un L1 ne peut ni modifier les permissions ni consulter un dossier hors périmètre; un L3 ne peut pas valider sa propre preuve comme indépendant; L5 peut administrer l'organisation mais pas modifier les événements passés; révocation d'un compte immédiatement effective et traçable.
+
 ## 4. Ordre impératif des blocs
 
 | Bloc | Domaine | Porte de validation |
@@ -62,27 +83,6 @@ La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron
 | 16 | Produit commercialisable par plusieurs sociétés | Une seconde société peut être installée et travailler sur ses propres clients sans voir ni modifier les données ARL. |
 
 ## 5. Backlog détaillé numéroté
-
-## 4 bis. Comptes, niveaux d'accès et espaces de travail — priorité architecturale
-
-Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identités techniques partagées. L'Owner est administrateur du produit, **pas** une autorité pouvant falsifier les journaux, les preuves ou la validation d'un assessment.
-
-| Profil | Rôle initial | Autorisations attendues |
-| --- | --- | --- |
-| **L1 — Accueil / Service Desk** | Ouvrir et qualifier des tickets, consulter ses files, ajouter des notes, transférer au niveau 2 | Pas de gestion des droits, ni exécution de tests KYRTHOS, ni données financières confidentielles |
-| **L2 — Technicien / Analyste** | Gérer tickets et tâches assignés, suivre incidents, documenter observations | Pas d'approbation indépendante des résultats ni d'administration |
-| **L3 — Expert / Ingénieur** | Analyser des missions autorisées, préparer/exécuter des tests bornés selon permission explicite, proposer des conclusions | Pas de validation automatique ni de dépassement de périmètre |
-| **L4 — Superviseur / Responsable** | Piloter équipe, affectations, SLA, revues et autorisations métier déléguées | Pas de pouvoir général sur les autres sociétés ni d'effacement des journaux |
-| **L5 — Owner / Direction** | Administrer les comptes, politiques d'accès, équipes, accès financiers et paramètres de sa propre société | Aucune modification rétroactive des preuves et aucun contournement des contrôles de sûreté |
-| **Client / Invité** | Voir ses tickets et documents explicitement publiés, envoyer ses demandes | Accès strictement limité à son organisation / son espace |
-
-**La numérotation n'est PAS une autorisation automatique.** Le système doit contrôler une règle de type **RBAC + ABAC** (rôle + organisation + équipe + client + dossier + action + contexte). Par exemple, un L4 de l'équipe A ne doit pas lire un dossier privé de l'équipe B sans attribution explicite.
-
-**Espaces prévus:** Direction, Service Desk, Engineering, Sales, Billing et espaces client/mission. Les équipes peuvent travailler depuis différents bureaux ou à distance, sous contrôle d'accès du serveur. Le desktop garde son interface Qt; lorsqu'il y aura plusieurs utilisateurs, un **service authentifié** sera nécessaire entre ENKYRON et NEMORYTH. La connexion locale actuelle avec l'utilisateur du système d'exploitation n'est pas un système de comptes multi-utilisateur.
-
-**Séquence opérationnelle:** valider la création des tickets sur ton Debian avec un seul opérateur → figer le modèle d'identité et permissions E00-10 à E00-23 avant tout accès externe ou ajout d'employé → seulement ensuite permettre un second utilisateur connecté et tester les refus inter-espaces. La revue de conformité et d'autorisation de KYRTHOS reste séparée du rang hiérarchique.
-
-**Critère de réception multi-utilisateur:** deux comptes différents connectés simultanément; un L1 ne peut ni modifier les permissions ni consulter un dossier hors périmètre; un L3 ne peut pas valider sa propre preuve comme indépendant; L5 peut administrer l'organisation mais pas modifier les événements passés; révocation d'un compte immédiatement effective et traçable.
 
 ### Bloc 00 — Fondations communes et sécurité des données
 
