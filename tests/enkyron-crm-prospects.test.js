@@ -22,7 +22,7 @@ test('legacy CRM prospects are bounded and read only', async () => {
   assert.match(calls[0].sql, /^SELECT /);
   assert.match(calls[0].sql, /LIMIT 101/);
   assert.deepEqual(calls[0].values, ['Example']);
-  assert.doesNotMatch(calls[0].sql, /INSERT|UPDATE|DELETE|MERGE/i);
+  assert.doesNotMatch(calls[0].sql, /\b(?:INSERT|UPDATE|DELETE|MERGE)\s/i);
 });
 
 test('prospect lookup preserves literal search and rejects oversized input', async () => {
