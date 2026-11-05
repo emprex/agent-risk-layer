@@ -130,3 +130,91 @@ export async function updateDeskTicketStatus(pool, data) {
     return {ticket_id:ticketId, from:current.status, status};
   });
 }
+
+
+// Accounts/RBAC are not deployed. A local operator can assign only themselves;
+// never accept an arbitrary employee name from an untrusted Qt payload.
+export function validateAssignment(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+      || typeof data.ticket_id !== 'string' || !TICKET_ID.test(data.ticket_id)
+      || !['self', 'unassigned'].includes(data.action)) {
+    throw new Error('Invalid ticket assignment request');
+  }
+  return {ticketId:data.ticket_id, action:data.action};
+}
+
+export async function assignDeskTicket(pool, data, actor, options={}) {
+  const {ticketId, action}=validateAssignment(data);
+  const operator=field(actor,'local operator',120,true);
+  const uuid=options.uuid ?? randomUUID;
+  return transaction(pool,async client=>{
+    const existing=(await client.query(
+      'SELECT status,assigned_to,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      [ticketId]
+    )).rows[0];
+    if (!existing) throw new Error('Ticket not found');
+    if (existing.archived_at || existing.status==='closed') {
+      throw new Error('Archived or closed ticket cannot be assigned');
+    }
+    if (action==='unassigned' && existing.assigned_to!==operator) {
+      throw new Error('Only the assigned local operator may unassign');
+    }
+    if (action==='self' && existing.assigned_to && existing.assigned_to!==operator) {
+      throw new Error('Ticket already assigned to another operator');
+    }
+    const assignee=action==='self'?operator:null;
+    if ((existing.assigned_to??null)===assignee) {
+      throw new Error('Ticket assignment unchanged');
+    }
+    await client.query(
+      'UPDATE arl_workbench_tickets SET assigned_to=$1,updated_at=NOW() WHERE id=$2',
+      [assignee,ticketId]
+    );
+    await client.query(
+      'INSERT INTO arl_workbench_ticket_events '+
+      '(id,ticket_id,event_type,detail,actor) VALUES ($1,$2,$3,$4,$5)',
+      [uuid(),ticketId,assignee?'assigned':'unassigned',
+        assignee?'Ticket assigned to local operator':'Ticket assignment cleared',operator]
+    );
+    return {ticket_id:ticketId,assigned_to:assignee};
+  });
+}
+
+export function validateArchive(data) {
+  if (!data || typeof data!=='object' || Array.isArray(data)
+      || typeof data.ticket_id !== 'string' || !TICKET_ID.test(data.ticket_id)) {
+    throw new Error('Invalid ticket archive request');
+  }
+  const reason=field(data.reason,'archive reason',500,true);
+  if (reason.length<10) throw new Error('Archive reason must contain at least 10 characters');
+  return {ticketId:data.ticket_id,reason};
+}
+
+// Archive is NOT deletion. Only a CLOSED ticket can be archived, its notes
+// and events stay in PostgreSQL; restoring is a future RBAC-governed action.
+export async function archiveDeskTicket(pool, data, actor, options={}) {
+  const {ticketId,reason}=validateArchive(data);
+  const operator=field(actor,'local operator',120,true);
+  const uuid=options.uuid ?? randomUUID;
+  return transaction(pool,async client=>{
+    const existing=(await client.query(
+      'SELECT status,archived_at FROM arl_workbench_tickets WHERE id=$1 FOR UPDATE',
+      [ticketId]
+    )).rows[0];
+    if (!existing) throw new Error('Ticket not found');
+    if (existing.archived_at) throw new Error('Ticket already archived');
+    if (existing.status!=='closed') throw new Error('Close ticket before archiving');
+    await client.query(
+      'UPDATE arl_workbench_tickets '+
+      'SET archived_at=NOW(),archived_by=$1,archive_reason=$2,updated_at=NOW() '+
+      'WHERE id=$3',
+      [operator,reason,ticketId]
+    );
+    await client.query(
+      'INSERT INTO arl_workbench_ticket_events '+
+      "(id,ticket_id,event_type,detail,actor) VALUES ($1,$2,'archived',$3,$4)",
+      [uuid(),ticketId,'Archive reason: '+reason,operator]
+    );
+    return {ticket_id:ticketId,archived:true,archived_by:operator};
+  });
+}
