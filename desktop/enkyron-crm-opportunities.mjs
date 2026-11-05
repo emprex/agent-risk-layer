@@ -14,7 +14,7 @@ function workspace(name){
   return {actor:name,key:'local:'+name};
 }
 function textField(value,label,min,max){
-  if(typeof value!=='string'||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)
+  if(typeof value!=='string'||/[\x00-\x1f\x7f]/.test(value)
     ||value.trim().length<min||value.trim().length>max) {
     throw new Error('CRM invalid '+label);
   }
