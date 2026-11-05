@@ -146,6 +146,7 @@ class EnkyronWindow(QMainWindow):
         self.evidence_page_count = 0
         self.records_seq = 0
         self.record_items = []
+        self.test_items = []
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -356,8 +357,28 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.records_table.itemSelectionChanged.connect(self.show_record_details)
-        ledger_l.addWidget(self.records_table, 1)
-        ledger_l.addWidget(section_title("RECORDED PROVENANCE (METADATA ONLY)"))
+
+        self.tests_table = QTableWidget(0, 6)
+        self.tests_table.setHorizontalHeaderLabels(
+            ["Test ID", "Recorded result", "Kind", "Started", "Completed", "Retest of"]
+        )
+        self.tests_table.setAlternatingRowColors(True)
+        self.tests_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.tests_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.tests_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.tests_table.itemSelectionChanged.connect(self.show_test_details)
+        self.record_views = QTabWidget()
+        self.record_views.addTab(self.records_table, "Recorded evidence")
+        self.record_views.addTab(self.tests_table, "Test history")
+        self.record_views.currentChanged.connect(self.show_register_selection)
+        ledger_l.addWidget(self.record_views, 1)
+        ledger_l.addWidget(section_title("PROVENANCE AND HUMAN REVIEW PREPARATION"))
         self.record_details = make_text_area()
         self.record_details.setMaximumHeight(210)
         ledger_l.addWidget(self.record_details)
@@ -439,7 +460,10 @@ class EnkyronWindow(QMainWindow):
         self.evidence_next.setEnabled(False)
         self.records_seq += 1
         self.record_items = []
+        self.test_items = []
         self.records_table.setRowCount(0)
+        self.tests_table.setRowCount(0)
+        self.record_views.setCurrentIndex(0)
         self.records_notice.setText("Select a linked assessment ticket.")
         self.record_details.clear()
         self.record_button.setEnabled(False)
@@ -777,7 +801,10 @@ class EnkyronWindow(QMainWindow):
     def invalidate_records(self, _number):
         self.records_seq += 1
         self.record_items = []
+        self.test_items = []
         self.records_table.setRowCount(0)
+        self.tests_table.setRowCount(0)
+        self.record_views.setCurrentIndex(0)
         self.record_details.clear()
         self.records_notice.setText("Control selection changed. Inspect to load matching records.")
         ticket = self.current_ticket or {}
@@ -800,7 +827,10 @@ class EnkyronWindow(QMainWindow):
         control_id = "ARL-KB-{:03d}".format(number)
         self.record_button.setEnabled(False)
         self.record_items = []
+        self.test_items = []
         self.records_table.setRowCount(0)
+        self.tests_table.setRowCount(0)
+        self.record_views.setCurrentIndex(0)
         self.record_details.clear()
         self.records_notice.setText(
             "Verifying latest master and reading stored {} metadata…".format(control_id)
@@ -813,7 +843,9 @@ class EnkyronWindow(QMainWindow):
             self.record_button.setEnabled(True)
             if (error or not isinstance(data, dict) or not data.get("available")
                 or data.get("control_id") != control_id
-                or data.get("integrity") != "master_verified"):
+                or data.get("integrity") != "master_verified"
+                or not isinstance(data.get("items"), list)
+                or not isinstance(data.get("tests"), list)):
                 self.records_notice.setText(
                     "Evidence register unavailable: "
                     + (error or (
@@ -836,19 +868,44 @@ class EnkyronWindow(QMainWindow):
                 for column, text in enumerate(cells):
                     self.records_table.setItem(i, column, QTableWidgetItem(str(text)))
             self.records_table.resizeColumnsToContents()
+            self.test_items = data["tests"]
+            self.tests_table.setRowCount(len(self.test_items))
+            for i, entry in enumerate(self.test_items):
+                cells = [
+                    entry.get("id") or "unknown",
+                    entry.get("recorded_result") or "unknown",
+                    entry.get("execution_kind") or "unknown",
+                    display_date(entry.get("started_at")),
+                    display_date(entry.get("completed_at")),
+                    entry.get("retest_of_execution_id") or "none",
+                ]
+                for column, value in enumerate(cells):
+                    self.tests_table.setItem(i, column, QTableWidgetItem(str(value)))
+            self.tests_table.resizeColumnsToContents()
+            self.record_views.setTabText(
+                0, "Recorded evidence ({})".format(len(self.record_items))
+            )
+            self.record_views.setTabText(
+                1, "Test history ({})".format(len(self.test_items))
+            )
             self.records_notice.setText(
-                "{} · Snapshot {} · {} saved record(s){} · "
-                "NO independent digest validation; no security conclusion.".format(
+                "{} · Snapshot {} · {} evidence{} · {} tests{} · "
+                "stored digests and results are NOT independently validated.".format(
                     control_id, data["snapshot_id"], len(self.record_items),
-                    " (first 100)" if data.get("more") else ""
+                    " (first 100)" if data.get("more") else "",
+                    len(self.test_items),
+                    " (first 100)" if data.get("more_tests") else ""
                 )
             )
             if self.record_items:
                 self.records_table.selectRow(0)
+            elif self.test_items:
+                self.record_views.setCurrentIndex(1)
+                self.tests_table.selectRow(0)
             else:
                 self.record_details.setPlainText(
-                    "No saved evidence for this control and snapshot. "
-                    "This does not establish a PASS or FAIL."
+                    "No evidence or test execution recorded for this control and "
+                    "snapshot. No PASS or FAIL can be inferred."
                 )
             self.status.setText(
                 "Stored evidence metadata only. Evidence validity and decisions are unchanged."
@@ -860,7 +917,15 @@ class EnkyronWindow(QMainWindow):
             callback=loaded,
         )
 
+    def show_register_selection(self, index):
+        if index == 0:
+            self.show_record_details()
+        elif index == 1:
+            self.show_test_details()
+
     def show_record_details(self):
+        if self.record_views.currentIndex() != 0:
+            return
         rows = self.records_table.selectionModel().selectedRows()
         if not rows:
             self.record_details.clear()
@@ -886,7 +951,59 @@ class EnkyronWindow(QMainWindow):
             "STORED integrity digest (not recomputed):",
             str(record.get("recorded_integrity_digest") or "not recorded"),
             "",
+            "HUMAN REVIEW CHECKLIST (not saved or approved):",
+            "1. Confirm source identity, collection authority and frozen target.",
+            "2. Obtain original material through the authorised ARL evidence flow.",
+            "3. Recompute digest and check source lineage, time and retention.",
+            "4. Review linked test, observed result, limitations and contradictions.",
+            "5. Record any decision in ARL's authorised human-review workflow.",
+            "",
             "No raw evidence or credential source displayed. Human verification required.",
+        ]
+        self.record_details.setPlainText("\n".join(details))
+
+    def show_test_details(self):
+        if self.record_views.currentIndex() != 1:
+            return
+        rows = self.tests_table.selectionModel().selectedRows()
+        if not rows:
+            self.record_details.clear()
+            return
+        index = rows[0].row()
+        if not 0 <= index < len(self.test_items):
+            return
+        record = self.test_items[index]
+        matched = sum(
+            item.get("test_execution_id") == record.get("id")
+            for item in self.record_items
+        )
+        details = [
+            "TEST EXECUTION HISTORY — RECORDED METADATA ONLY",
+            "",
+            "Test: " + str(record.get("id") or "unknown"),
+            "Control: " + str(record.get("entry_id") or "unknown"),
+            "Snapshot: " + str(record.get("snapshot_id") or "unknown"),
+            "Execution kind: " + str(record.get("execution_kind") or "unknown"),
+            "Recorded test result: " + str(record.get("recorded_result") or "unknown"),
+            "Started: " + str(record.get("started_at") or "unknown"),
+            "Completed: " + str(record.get("completed_at") or "not recorded"),
+            "Retest of: " + str(record.get("retest_of_execution_id") or "none"),
+            "Original snapshot: " + str(record.get("original_snapshot_id") or "none"),
+            "Finding: " + str(record.get("finding_id") or "none"),
+            "Remediation: " + str(record.get("remediation_id") or "none"),
+            "Linked evidence in displayed page: {}".format(matched),
+            "",
+            "STORED test digest (not recomputed):",
+            str(record.get("recorded_content_digest") or "not recorded"),
+            "",
+            "HUMAN REVIEW CHECKLIST (not saved or approved):",
+            "1. Confirm target SHA, test scope, execution authority and identity.",
+            "2. Inspect protected test inputs, observations and limitations in ARL.",
+            "3. Verify linked source evidence and its integrity independently.",
+            "4. Check finding/retest lineage and residual uncertainties.",
+            "5. Only a human-authorised ARL workflow may record a conclusion.",
+            "",
+            "A recorded test 'passed' is NOT a control PASS or deployment GO.",
         ]
         self.record_details.setPlainText("\n".join(details))
 
