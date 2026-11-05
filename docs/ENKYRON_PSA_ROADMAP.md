@@ -72,16 +72,23 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Ordre concret :** au démarrage du Bloc 02, inspecter la fenêtre Qt et les composants existants, établir la navigation globale sans changement de base, ajouter l'entrée `CRM` et la première vue réelle seulement; migrer ensuite l'ancienne colonne Tickets vers une page dédiée en conservant ses callbacks et ses tests. Puis démarrer les données CRM E02-01/E02-02 de manière additive, sans faux comptes utilisateurs ni requalification des demandes en assessments. Le travail d'ergonomie fait partie du Bloc 02, pas d'un projet séparé.
 
-### Option ergonomique ultérieure — fenêtres de tickets détachables (UX-TICKET-DETACH-01)
+### Architecture transversale — fenêtres de travail détachables et réintégrables (UX-WINDOWS-01)
 
-**Statut : PLANNED / non prioritaire tant que les blocs métier principaux ne sont pas validés.** Souhait opérateur confirmé le 5 novembre 2026, après validation locale du nouveau parcours liste Tickets → fiche plein écran → retour.
+**Statut : PLANNED — amélioration ergonomique de toute la plateforme ENKYRON, et non spécifique aux tickets.** Besoin précisé par l'opérateur le 5 novembre 2026. La fenêtre principale conserve sa navigation Qt native. Les **vues métier pertinentes** peuvent être ouvertes séparément sur un autre moniteur et réintégrées ensuite.
 
-- Depuis une fiche Ticket, proposer `Détacher` : ouvrir **la même fiche et le même ticket** dans une fenêtre Qt native indépendante, déplaçable sur un second moniteur pendant que la fenêtre principale ENKYRON sert au CRM ou aux autres tickets.
-- Proposer `Réintégrer` : rapatrier la fiche dans l'espace Tickets de la fenêtre principale, sans duplication de saisie, perte d'état ni création de session métier parallèle.
-- Garantir une seule identité de ticket, une seule voie de sauvegarde/audit PostgreSQL, et ne jamais multiplier les écritures ou les appels d'assessment à cause du changement d'affichage ; définir le comportement si le ticket est modifié/archivé pendant le détachement.
-- Vérifier fermeture/réouverture, destruction des widgets, choix d'écran, retour à un seul écran, erreurs d'affichage et tests offscreen. Qt6/PySide6 natif uniquement ; pas de fenêtre web ou d'autre application.
+**Vues candidates :** fiche ticket, fiche entreprise/contact, fil ou message email (future Inbox), projet, document/knowledge, devis et autres fiches suffisamment complexes. Les dialogues modaux brefs (confirmation, authentification, saisie simple) ne doivent pas devenir détachables par principe.
 
-**Priorité : amélioration ergonomique différée.** Ne pas interrompre E02-01/E02-02 (entreprises et contacts structurés) ni déclarer cette option déjà réalisée.
+**Contrat fonctionnel :**
+- Action explicite **Détacher / Réintégrer** sur toute vue éligible, via une capacité partagée et réutilisable plutôt qu'une implémentation différente dans chaque module.
+- Fenêtre Qt indépendante, redimensionnable et déplaçable entre écrans. La vue principale demeure utilisable simultanément ; possibilité d'avoir plusieurs vues métier ouvertes.
+- Les vues restent associées à **l'identité canonique d'une ressource** (ticket, contact, email, projet, document) et au même modèle de permissions. Aucun clone de base, aucune autorité parallèle, aucune duplication d'action ni envoi email lors du détachement.
+- Restaurer correctement sélection, édition non validée, rafraîchissement et notifications ; prévenir la double édition et gérer les modifications concurrentes avant sauvegarde.
+- Réintégration manuelle, comportement explicite à la fermeture, écran secondaire déconnecté, géométrie hors écran et redémarrage ; retomber sur un emplacement visible.
+- Les restrictions de lecture, secrets, confidentialité, audit et autorisations restent appliquées par les services, que la vue soit attachée ou détachée.
+- Tester le cycle détacher → déplacer → travailler → réintégrer et les cas de fermeture, double ouverture, changements d'accès, données périmées et affichage mono-/bi-écran sur Qt6/PySide6.
+
+**Séquence :** définir un gestionnaire commun de vues/fenêtres et son contrat lors du futur chantier UX, puis démontrer le mécanisme avec une fiche ticket avant de l'étendre à CRM, Inbox et autres modules. **Ne pas coder module par module ni interrompre E02-01/E02-02** pour cette option.
+
 
 ## 4. Ordre impératif des blocs
 
