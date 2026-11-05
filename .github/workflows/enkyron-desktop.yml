@@ -31,7 +31,8 @@ jobs:
         run: |
           node --check desktop/enkyron-contract.mjs
           node --check desktop/enkyron-bridge.mjs
-          node --test tests/enkyron-desktop.test.js
+          node --check desktop/enkyron-evidence-register.mjs
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js
           python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -54,9 +55,10 @@ jobs:
           app = QApplication([])
           window = EnkyronWindow()
           assert isinstance(window, QMainWindow)
-          assert window.tabs.count() == 6
+          assert window.tabs.count() == 7
           assert window.tabs.tabText(4) == 'ARL Engine'
           assert window.tabs.tabText(5) == 'Evidence Requests'
+          assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
           # Exercise the real Qt callback path using a stubbed local IPC process.
           calls = []
@@ -127,6 +129,28 @@ jobs:
           }, None)
           assert "ARL-KB-013" in window.evidence_details.toPlainText()
           assert not window.evidence_next.isEnabled()
+          window.inspect_records()
+          assert calls[-1][0] == "evidence-register"
+          assert calls[-1][2] == {
+              "ticket_id": ticket_id, "control_id": "ARL-KB-013"
+          }
+          calls[-1][3]({
+              "available": True, "control_id": "ARL-KB-013",
+              "integrity": "master_verified", "snapshot_id": "sys_test",
+              "more": False,
+              "items": [{
+                  "id": "ev_1", "entry_id": "ARL-KB-013",
+                  "snapshot_id": "sys_test", "verification_state": "unverified",
+                  "retention_status": "active", "evidence_class": "observed",
+                  "source_type": "runtime_log", "observed_at": "2026-11-05",
+                  "created_at": "2026-11-05", "test_execution_id": None,
+                  "runtime_event_id": None, "approval_id": None,
+                  "recorded_integrity_digest": "b" * 64,
+              }]
+          }, None)
+          assert window.records_table.rowCount() == 1
+          assert window.records_table.item(0, 1).text() == "unverified"
+          assert "not recomputed" in window.record_details.toPlainText()
           window.close()
           app.quit()
           PY
