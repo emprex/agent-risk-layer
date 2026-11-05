@@ -72,6 +72,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Ordre concret :** au démarrage du Bloc 02, inspecter la fenêtre Qt et les composants existants, établir la navigation globale sans changement de base, ajouter l'entrée `CRM` et la première vue réelle seulement; migrer ensuite l'ancienne colonne Tickets vers une page dédiée en conservant ses callbacks et ses tests. Puis démarrer les données CRM E02-01/E02-02 de manière additive, sans faux comptes utilisateurs ni requalification des demandes en assessments. Le travail d'ergonomie fait partie du Bloc 02, pas d'un projet séparé.
 
+### Option ergonomique ultérieure — fenêtres de tickets détachables (UX-TICKET-DETACH-01)
+
+**Statut : PLANNED / non prioritaire tant que les blocs métier principaux ne sont pas validés.** Souhait opérateur confirmé le 5 novembre 2026, après validation locale du nouveau parcours liste Tickets → fiche plein écran → retour.
+
+- Depuis une fiche Ticket, proposer `Détacher` : ouvrir **la même fiche et le même ticket** dans une fenêtre Qt native indépendante, déplaçable sur un second moniteur pendant que la fenêtre principale ENKYRON sert au CRM ou aux autres tickets.
+- Proposer `Réintégrer` : rapatrier la fiche dans l'espace Tickets de la fenêtre principale, sans duplication de saisie, perte d'état ni création de session métier parallèle.
+- Garantir une seule identité de ticket, une seule voie de sauvegarde/audit PostgreSQL, et ne jamais multiplier les écritures ou les appels d'assessment à cause du changement d'affichage ; définir le comportement si le ticket est modifié/archivé pendant le détachement.
+- Vérifier fermeture/réouverture, destruction des widgets, choix d'écran, retour à un seul écran, erreurs d'affichage et tests offscreen. Qt6/PySide6 natif uniquement ; pas de fenêtre web ou d'autre application.
+
+**Priorité : amélioration ergonomique différée.** Ne pas interrompre E02-01/E02-02 (entreprises et contacts structurés) ni déclarer cette option déjà réalisée.
+
 ## 4. Ordre impératif des blocs
 
 | Bloc | Domaine | Porte de validation |
