@@ -7,6 +7,7 @@ import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 import { listSalesProspects, listSalesProspectsPage, validateProspectPage } from './enkyron-crm-prospects.mjs';
+import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicketToCompany, validateTicketLink, requireCompanyId } from './enkyron-crm-tickets.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
 import {
@@ -159,14 +160,16 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
-  if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies'].includes(command)) boundedSearch(arg);
+  if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options'].includes(command)) boundedSearch(arg);
+  if (command === 'crm-company-tickets') requireCompanyId(arg);
+  if (command === 'crm-ticket-company') requireTicketId(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
   if (command === 'crm-prospect-review') requireProspectId(arg);
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link', 'crm-prospects-page'].includes(command) ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
@@ -177,7 +180,8 @@ async function main() {
   if (command === 'crm-create-contact') validateContact(payload);
   if (command === 'crm-prospect-link') validateProspectLink(payload);
   if (command === 'crm-prospects-page') validateProspectPage(payload);
-  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link'].includes(command);
+  if (command === 'crm-link-ticket') validateTicketLink(payload);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link', 'crm-link-ticket'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -192,6 +196,10 @@ async function main() {
       command === 'crm-prospects-page' ? await listSalesProspectsPage(pool, payload) :
       command === 'crm-companies' ? await listCompanies(pool, arg, os.userInfo().username) :
       command === 'crm-contacts' ? await listContacts(pool, arg, os.userInfo().username) :
+      command === 'crm-company-tickets' ? await listCompanyTickets(pool, arg, os.userInfo().username) :
+      command === 'crm-ticket-options' ? await listLinkableTickets(pool, arg, os.userInfo().username) :
+      command === 'crm-ticket-company' ? await ticketLinkedCompany(pool, arg, os.userInfo().username) :
+      command === 'crm-link-ticket' ? await linkTicketToCompany(pool, payload, os.userInfo().username) :
       command === 'crm-prospect-review' ? await previewProspectLink(pool, arg, os.userInfo().username) :
       command === 'crm-prospect-link' ? await associateProspect(pool, payload, os.userInfo().username) :
       command === 'crm-create-company' ? await createCompany(pool, payload, os.userInfo().username) :
