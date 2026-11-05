@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
     QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
-    QTableWidget, QTableWidgetItem, QAbstractItemView, QVBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +25,11 @@ QFrame#topbar { background: #10263b; border: 0; }
 QFrame#topbar QLabel { color: #f8fbff; }
 QFrame#sidebar { background: #172e44; border: 0; }
 QFrame#sidebar QLabel { color: #ecf5fa; }
+QFrame#navigation { background: #10263b; border: 0; }
+QFrame#navigation QLabel { color: #a8c7d7; font-weight: bold; }
+QListWidget#moduleNavigation { background: #10263b; color: #f5fbff; border: 0; }
+QListWidget#moduleNavigation::item { padding: 14px 10px; margin-bottom: 5px; border-radius: 5px; }
+QListWidget#moduleNavigation::item:selected { background: #176e81; color: white; }
 QFrame#sidebar QListWidget { background: #203a50; color: #f5fbff; border: 0; }
 QFrame#sidebar QListWidget::item { padding: 13px 10px; border-bottom: 1px solid #344c5e; }
 QFrame#sidebar QListWidget::item:selected { background: #176e81; color: white; }
@@ -153,6 +158,9 @@ class EnkyronWindow(QMainWindow):
         self.records_seq = 0
         self.record_items = []
         self.test_items = []
+        self.crm_seq = 0
+        self.crm_items = []
+        self.crm_loaded = False
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -173,9 +181,54 @@ class EnkyronWindow(QMainWindow):
         top_layout.addWidget(QLabel("LOCAL OPERATOR  |  PostgreSQL"))
         outer.addWidget(top)
 
+        # Application-level navigation; the ticket list is no longer the main menu.
+        workspace = QHBoxLayout()
+        workspace.setContentsMargins(0, 0, 0, 0)
+        workspace.setSpacing(0)
+        outer.addLayout(workspace, 1)
+
+        navigation = QFrame()
+        navigation.setObjectName("navigation")
+        navigation.setFixedWidth(174)
+        nav_l = QVBoxLayout(navigation)
+        nav_l.setContentsMargins(12, 22, 12, 12)
+        nav_l.addWidget(QLabel("WORKSPACE"))
+        self.navigation = QListWidget()
+        self.navigation.setObjectName("moduleNavigation")
+        self.navigation.addItems(["Home", "Tickets", "CRM · Prospects"])
+        self.navigation.setMaximumHeight(204)
+        nav_l.addWidget(self.navigation)
+        nav_l.addStretch()
+        workspace.addWidget(navigation)
+
+        self.pages = QStackedWidget()
+        workspace.addWidget(self.pages, 1)
+
+        home = QWidget()
+        home_l = QVBoxLayout(home)
+        home_l.setContentsMargins(32, 28, 32, 20)
+        home_l.addWidget(section_title("ENKYRON · OPERATOR WORKSPACE"))
+        introduction = QLabel(
+            "Your native AgentRiskLayer work environment.\n"
+            "Tickets and commercial prospect research are separate records. "
+            "No assessment or external communication runs automatically."
+        )
+        introduction.setWordWrap(True)
+        home_l.addWidget(introduction)
+        go_tickets = QPushButton("Open Client Desk")
+        go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
+        home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
+        home_l.addStretch()
+        self.pages.addWidget(home)
+
+        ticket_page = QWidget()
+        ticket_l = QVBoxLayout(ticket_page)
+        ticket_l.setContentsMargins(0, 0, 0, 0)
+        ticket_l.setSpacing(0)
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
-        outer.addWidget(split, 1)
+        ticket_l.addWidget(split, 1)
+        self.pages.addWidget(ticket_page)
 
         left = QFrame()
         left.setObjectName("sidebar")
@@ -438,7 +491,66 @@ class EnkyronWindow(QMainWindow):
         self.status.setWordWrap(True)
         body.addWidget(self.status)
         split.addWidget(right)
-        split.setSizes([330, 1020])
+        split.setSizes([315, 900])
+
+        # Legacy sales prospects are presented as unverified candidates, NOT
+        # customer accounts. No database mutation or automatic conversion.
+        crm_page = QWidget()
+        crm_l = QVBoxLayout(crm_page)
+        crm_l.setContentsMargins(25, 22, 25, 20)
+        crm_l.setSpacing(12)
+        crm_l.addWidget(section_title("CRM · EXISTING COMMERCIAL PROSPECTS"))
+        crm_warning = QLabel(
+            "Read-only inventory from sales_prospects, if installed locally. "
+            "Candidate companies and buyer names are NOT verified CRM entities. "
+            "No contacts are automatically created or merged."
+        )
+        crm_warning.setWordWrap(True)
+        crm_l.addWidget(crm_warning)
+        crm_actions = QHBoxLayout()
+        self.crm_search = QLineEdit()
+        self.crm_search.setPlaceholderText("Find a prospect company, buyer or website…")
+        self.crm_search.setMaxLength(100)
+        crm_actions.addWidget(self.crm_search, 1)
+        crm_refresh = QPushButton("Refresh prospects")
+        crm_refresh.clicked.connect(self.load_prospects)
+        crm_actions.addWidget(crm_refresh)
+        crm_l.addLayout(crm_actions)
+        self.crm_notice = QLabel("Prospect inventory has not been read.")
+        self.crm_notice.setWordWrap(True)
+        crm_l.addWidget(self.crm_notice)
+        self.crm_table = QTableWidget(0, 5)
+        self.crm_table.setHorizontalHeaderLabels(
+            ["Company candidate", "Buyer candidate", "Stage", "Source", "Updated"]
+        )
+        self.crm_table.setAlternatingRowColors(True)
+        self.crm_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_table.itemSelectionChanged.connect(self.show_prospect)
+        crm_l.addWidget(self.crm_table, 1)
+        crm_l.addWidget(section_title("CANDIDATE PROVENANCE"))
+        self.crm_details = make_text_area()
+        self.crm_details.setMaximumHeight(180)
+        self.crm_details.setPlaceholderText(
+            "Select a candidate for its source and recorded buyer details."
+        )
+        crm_l.addWidget(self.crm_details)
+        self.pages.addWidget(crm_page)
+
+        self.crm_search_timer = QTimer(self)
+        self.crm_search_timer.setSingleShot(True)
+        self.crm_search_timer.setInterval(300)
+        self.crm_search_timer.timeout.connect(self.load_prospects)
+        self.crm_search.textChanged.connect(lambda _: self.crm_search_timer.start())
+        self.navigation.currentRowChanged.connect(self.module_changed)
+        self.navigation.setCurrentRow(1)
 
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
@@ -447,6 +559,71 @@ class EnkyronWindow(QMainWindow):
         self.search.textChanged.connect(lambda _: self.search_timer.start())
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
+
+    def module_changed(self, index):
+        if index < 0 or index >= self.pages.count():
+            return
+        self.pages.setCurrentIndex(index)
+        if index == 2 and not self.crm_loaded:
+            self.load_prospects()
+
+    def load_prospects(self):
+        self.crm_seq += 1
+        sequence = self.crm_seq
+        self.crm_notice.setText("Reading legacy commercial candidates…")
+        def received(data, error):
+            if sequence != self.crm_seq:
+                return
+            self.crm_loaded = True
+            self.crm_items = []
+            self.crm_table.setRowCount(0)
+            self.crm_details.clear()
+            if error:
+                self.crm_notice.setText("Unable to read local prospect inventory.")
+                self.show_error(error)
+                return
+            if not data.get("available"):
+                self.crm_notice.setText(data.get(
+                    "notice", "Legacy prospect table is unavailable in this PostgreSQL database."
+                ))
+                return
+            self.crm_items = data.get("items", [])
+            self.crm_table.setRowCount(len(self.crm_items))
+            for row, prospect in enumerate(self.crm_items):
+                values = [
+                    prospect.get("company_name") or "",
+                    prospect.get("buyer_name") or "Not recorded",
+                    prospect.get("stage") or "",
+                    prospect.get("source") or "",
+                    display_date(prospect.get("updated_at"))
+                ]
+                for column, value in enumerate(values):
+                    self.crm_table.setItem(row, column, QTableWidgetItem(str(value)))
+            total = len(self.crm_items)
+            suffix = " · first 100, refine search" if data.get("more") else ""
+            self.crm_notice.setText(
+                f"{total} unverified prospect(s) shown{suffix}. "
+                "No conversion to customer accounts."
+            )
+        self.bridge.call("crm-prospects", self.crm_search.text(), callback=received)
+
+    def show_prospect(self):
+        row = self.crm_table.currentRow()
+        if row < 0 or row >= len(self.crm_items):
+            self.crm_details.clear()
+            return
+        prospect = self.crm_items[row]
+        self.crm_details.setPlainText("\n".join([
+            "LEGACY SALES PROSPECT — NOT A VERIFIED CUSTOMER",
+            "Record: " + str(prospect.get("id") or ""),
+            "Company candidate: " + str(prospect.get("company_name") or ""),
+            "Website: " + str(prospect.get("website") or "Not recorded"),
+            "Buyer candidate: " + str(prospect.get("buyer_name") or "Not recorded"),
+            "Buyer role: " + str(prospect.get("buyer_role") or "Not recorded"),
+            "Buyer email: " + str(prospect.get("buyer_email") or "Not recorded"),
+            "Commercial stage: " + str(prospect.get("stage") or ""),
+            "Origin: " + str(prospect.get("source") or "Unknown"),
+        ]))
 
     def show_error(self, message):
         self.status.setText("Operation blocked: " + message)
