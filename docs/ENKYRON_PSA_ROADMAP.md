@@ -175,6 +175,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-TICKET-01 — rapprochement contrôlé entreprise ↔ ticket (2026-11-05) :**
+- Migration additive `067_enkyron_crm_ticket_links.sql` : association d'un ticket à une unique entreprise par espace local (plusieurs tickets pour une même entreprise), référence explicite `ticket_id` + clé composée `(workspace_key,company_id)`. Aucun `client_name`, statut, événement ou note de ticket historique modifié.
+- **CRM → Companies & Contacts** : détails entreprise structurés dans deux sous-onglets **Contacts** et **Tickets** ; liste des tickets reliés ; action **Link existing ticket** ; accès à la fiche ticket en pleine largeur.
+- La recherche des tickets candidats exclut les tickets archivés et ceux déjà associés dans l'espace de l'opérateur ; association exige sélection d'entreprise, identité de ticket réexaminée, justification de 20–1000 caractères, confirmation explicite et nouvelle confirmation avant écriture. Le serveur compare le `client_name` actuellement enregistré avec celui observé à l'ouverture du dialogue.
+- **Tickets → Overview** : affiche le lien CRM existant ou son absence ; ne déduit jamais un statut client de la présence d'un ticket.
+- Transaction unique et événement CRM `linked` ; historique d'association append-only. **Limite** : pas encore de correction/dissociation par l'interface (nécessite un futur processus de correction audité), pas de contacts par ticket, pas de synchronisation de emails, pas de migration automatique des anciens tickets.
+- Installation locale distincte et non automatique : `node scripts/enkyron-crm-ticket-schema.mjs --check` puis `--apply` avec sauvegarde et contrôles de checksums de toutes les migrations antérieures.
+- **Statut** : CI et recette sur `arl_local` restent à valider au HEAD exact avant clôture. Périmètre local mono-opérateur uniquement, sans prétention RBAC/tenant distant. E02-03 reste partiellement réalisé, non clôturé.
+
+
+
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
 
 **Incrément E02-PAGE-01 — pagination complète des prospects historiques (2026-11-05) :**
