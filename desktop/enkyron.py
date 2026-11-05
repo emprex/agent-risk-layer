@@ -24,6 +24,9 @@ QWidget { color: #20354a; font-family: 'DejaVu Sans', sans-serif; font-size: 13p
 QFrame#topbar { background: #10263b; border: 0; }
 QFrame#topbar QLabel { color: #f8fbff; }
 QFrame#sidebar { background: #172e44; border: 0; }
+QListWidget#ticketList { background: white; color: #20354a; border: 1px solid #d8e2ea; border-radius: 6px; outline: 0; }
+QListWidget#ticketList::item { padding: 14px 18px; border-bottom: 1px solid #e1e8ed; }
+QListWidget#ticketList::item:selected { background: #d7edf1; color: #17364c; }
 QFrame#sidebar QLabel { color: #ecf5fa; }
 QFrame#navigation { background: #10263b; border: 0; }
 QFrame#navigation QLabel { color: #a8c7d7; font-weight: bold; }
@@ -225,54 +228,64 @@ class EnkyronWindow(QMainWindow):
         ticket_l = QVBoxLayout(ticket_page)
         ticket_l.setContentsMargins(0, 0, 0, 0)
         ticket_l.setSpacing(0)
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.setChildrenCollapsible(False)
-        ticket_l.addWidget(split, 1)
+        # Tickets have two independent full-width views. The old permanent
+        # ticket column made the details cramped and is deliberately removed.
+        self.ticket_views = QStackedWidget()
+        ticket_l.addWidget(self.ticket_views, 1)
         self.pages.addWidget(ticket_page)
 
-        left = QFrame()
-        left.setObjectName("sidebar")
-        left.setMinimumWidth(280)
-        left.setMaximumWidth(440)
-        left_l = QVBoxLayout(left)
-        left_l.setContentsMargins(15, 21, 15, 15)
-        left_l.setSpacing(12)
-        section = QLabel("CLIENT DESK · TICKETS")
-        section.setStyleSheet("font-size: 13px; font-weight: bold;")
-        left_l.addWidget(section)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Search ticket, client, target…")
-        self.search.setMaxLength(100)
-        left_l.addWidget(self.search)
+        ticket_index = QWidget()
+        index_l = QVBoxLayout(ticket_index)
+        index_l.setContentsMargins(25, 22, 25, 20)
+        index_l.setSpacing(12)
+        heading = QHBoxLayout()
+        heading.addWidget(section_title("CLIENT DESK · TICKETS"))
+        heading.addStretch()
         create = QPushButton("+ New ticket · call / manual")
         create.setObjectName("primary")
         create.clicked.connect(self.open_new_ticket)
-        left_l.addWidget(create)
-        # Use a visibly latched filter: the platform checkbox indicator was
-        # ambiguous with the sidebar stylesheet on some Debian themes.
+        heading.addWidget(create)
+        index_l.addLayout(heading)
+
+        filters = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search ticket, client, target…")
+        self.search.setMaxLength(100)
+        filters.addWidget(self.search, 1)
+        # Preserve the existing visible state for archived-ticket inclusion.
         self.show_archived = QPushButton("☐ Include archived tickets")
         self.show_archived.setObjectName("archivedToggle")
         self.show_archived.setCheckable(True)
         self.show_archived.setChecked(False)
         self.show_archived.toggled.connect(self.archived_filter_toggled)
-        left_l.addWidget(self.show_archived)
-        self.new_ticket_dialog = None
-        self.ticket_list = QListWidget()
-        self.ticket_list.currentItemChanged.connect(self.ticket_changed)
-        left_l.addWidget(self.ticket_list, 1)
-        self.list_notice = QLabel("Loading tickets…")
-        self.list_notice.setWordWrap(True)
-        left_l.addWidget(self.list_notice)
+        filters.addWidget(self.show_archived)
         refresh = QPushButton("Refresh tickets")
         refresh.clicked.connect(self.load_tickets)
-        left_l.addWidget(refresh)
-        left_l.addWidget(QLabel("Tickets can exist without any assessment."))
-        split.addWidget(left)
+        filters.addWidget(refresh)
+        index_l.addLayout(filters)
+
+        self.new_ticket_dialog = None
+        self.ticket_list = QListWidget()
+        self.ticket_list.setObjectName("ticketList")
+        self.ticket_list.setAlternatingRowColors(True)
+        self.ticket_list.currentItemChanged.connect(self.ticket_changed)
+        index_l.addWidget(self.ticket_list, 1)
+        self.list_notice = QLabel("Loading tickets…")
+        self.list_notice.setWordWrap(True)
+        index_l.addWidget(self.list_notice)
+        index_l.addWidget(QLabel("Select a ticket to open its full-width record."))
+        self.ticket_views.addWidget(ticket_index)
 
         right = QWidget()
         body = QVBoxLayout(right)
         body.setContentsMargins(24, 20, 24, 16)
         body.setSpacing(12)
+        detail_nav = QHBoxLayout()
+        self.back_to_tickets = QPushButton("← Back to tickets")
+        self.back_to_tickets.clicked.connect(self.show_ticket_index)
+        detail_nav.addWidget(self.back_to_tickets)
+        detail_nav.addStretch()
+        body.addLayout(detail_nav)
         self.title = QLabel("Select a customer ticket")
         self.title.setObjectName("heading")
         self.title.setWordWrap(True)
@@ -490,8 +503,8 @@ class EnkyronWindow(QMainWindow):
         self.status.setObjectName("subtle")
         self.status.setWordWrap(True)
         body.addWidget(self.status)
-        split.addWidget(right)
-        split.setSizes([315, 900])
+        self.ticket_views.addWidget(right)
+        self.ticket_views.setCurrentIndex(0)
 
         # Legacy sales prospects are presented as unverified candidates, NOT
         # customer accounts. No database mutation or automatic conversion.
@@ -566,6 +579,17 @@ class EnkyronWindow(QMainWindow):
         self.pages.setCurrentIndex(index)
         if index == 2 and not self.crm_loaded:
             self.load_prospects()
+
+    def show_ticket_index(self):
+        # Reset the selection so clicking the same record opens it again.
+        # An in-flight ticket callback must not reopen a record after Back.
+        self.ticket_views.setCurrentIndex(0)
+        self.ticket_list.blockSignals(True)
+        self.ticket_list.setCurrentRow(-1)
+        self.ticket_list.clearSelection()
+        self.ticket_list.blockSignals(False)
+        self.current_id = None
+        self.current_ticket = None
 
     def load_prospects(self):
         self.crm_seq += 1
@@ -840,6 +864,7 @@ class EnkyronWindow(QMainWindow):
             )
             self.current_ticket = None
             self.current_id = None
+            self.show_ticket_index()
             self.load_tickets()
 
         self.bridge.call(
@@ -850,7 +875,8 @@ class EnkyronWindow(QMainWindow):
     def load_tickets(self):
         self.list_seq += 1
         sequence = self.list_seq
-        old_id = getattr(self, "pending_ticket_id", None) or self.current_id
+        pending = getattr(self, "pending_ticket_id", None)
+        old_id = pending or (self.current_id if self.ticket_views.currentIndex() == 1 else None)
         self.list_notice.setText("Reading saved tickets…")
         def received(data, error):
             if sequence != self.list_seq:
@@ -863,36 +889,33 @@ class EnkyronWindow(QMainWindow):
             self.ticket_list.clear()
             matching = None
             for item in data.get("items", []):
-                label = "{}  ·  {}\n{}  |  {}".format(
-                    item["ticket_number"], item["title"],
-                    item["client_name"], item["status"].replace("_", " ").upper() +
-                    (" · ARCHIVED" if item.get("archived_at") else "")
+                label = "{}   ·   {}\n{}   ·   {}{}".format(
+                    item["ticket_number"], item["title"], item["client_name"],
+                    item["status"].replace("_", " ").upper(),
+                    "   ·   ARCHIVED" if item.get("archived_at") else ""
                 )
                 widget = QListWidgetItem(label)
                 widget.setData(Qt.ItemDataRole.UserRole, item["id"])
                 self.ticket_list.addItem(widget)
                 if item["id"] == old_id:
                     matching = widget
-            if matching:
+            if matching and (pending or
+                             (self.current_id == old_id and
+                              self.ticket_views.currentIndex() == 1)):
                 self.ticket_list.setCurrentItem(matching)
             self.ticket_list.blockSignals(False)
-            if matching:
+            if pending and matching:
                 self.pending_ticket_id = None
-                if self.current_id != old_id:
-                    self.ticket_changed(matching, None)
-            else:
-                # Hiding archived tickets must also clear an archived selection,
-                # or the right pane could continue displaying an invisible ticket.
-                self.current_id = None
-                self.current_ticket = None
+                self.ticket_changed(matching, None)
+            elif not matching:
+                # An archived/filtered-out ticket cannot remain visible in
+                # the detail view when it disappears from the current list.
                 self.pending_ticket_id = None
-                self.title.setText("Select a customer ticket")
-                self.meta.setText("Select a ticket from the current list.")
+                if self.ticket_views.currentIndex() == 1:
+                    self.show_ticket_index()
             total = len(data.get("items", []))
             suffix = " (first 100; refine search)" if data.get("more") else ""
             self.list_notice.setText(f"{total} ticket(s) shown{suffix}")
-            if not matching and self.ticket_list.count():
-                self.ticket_list.setCurrentRow(0)
         self.bridge.call(
             "tickets-archived" if self.show_archived.isChecked() else "tickets",
             self.search.text(), callback=received,
@@ -902,6 +925,7 @@ class EnkyronWindow(QMainWindow):
         if not item:
             return
         ticket_id = item.data(Qt.ItemDataRole.UserRole)
+        self.ticket_views.setCurrentIndex(1)
         self.current_id = ticket_id
         self.current_ticket = None
         self.master_doc.clear()
