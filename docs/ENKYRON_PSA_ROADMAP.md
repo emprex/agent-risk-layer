@@ -118,7 +118,7 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Ouvrir et retrouver une demande téléphonique réelle sans créer un assessment.
 
-- [ ] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande. **[DONE-CI: saisie téléphonique simulée; recette locale en attente]**
+- [x] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande. **[DONE-LOCAL: 2026-11-05, ARL-2026-000003, prise d'appel synthétique, client/contact/téléphone/email/source visibles en lecture PostgreSQL]**
 - [x] **E01-02** — Créer un ticket saisi manuellement, sans feindre une origine email ou web vérifiée. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 - [x] **E01-03** — Numéro unique, date, statut NEW, propriétaire et source d'entrée. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002 attribué à emprex, événement assigned 19:15:12]**
 - [x] **E01-04** — Afficher/rechercher les tickets et retrouver le ticket créé. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
@@ -138,6 +138,8 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 **Recette Debian du 2026-11-05 :** migration 064 appliquée sur le poste de l'opérateur, ticket `ARL-2026-000002` en `SCOPING` affecté à `emprex` ; capture de l'historique : `created` 18:43:25, `status_changed` 18:46:02, `assigned` 19:15:12. **E01-03 validé localement.** La sauvegarde et le détail de l'exécution du script `--apply` ne figurent pas dans la conversation, et ne sont donc pas indépendamment audités. Pour E01-07, la CI a réussi le parcours PostgreSQL synthétique complet; **recette locale d'archivage toujours à faire**, sans archiver `ARL-2026-000002`.
 
 **E01-01 (appel téléphonique)** : le formulaire et son schéma de sauvegarde étaient déjà couverts par les tests synthétiques; **pas encore de recette réelle** avec nom et coordonnées d'appel. Ne pas considérer E01-01 comme DONE-LOCAL.
+
+**Recette Debian 2026-11-05, E01-01:** capture du ticket `ARL-2026-000003` sous `ARL Internal QA`, source `phone`, contact `Test Caller`, téléphone et email synthétiques visibles, demande conservée, `NEW` réel et aucune évaluation liée. La lecture confirme la persistance immédiate; le redémarrage de ce ticket particulier n'a pas été testé. **E01-01 DONE-LOCAL**. Le parcours archivage de ce même ticket est le seul élément du Bloc 01 restant à accepter localement.
 
 ### Bloc 02 — CRM — entreprises et contacts
 
@@ -374,7 +376,7 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Recette locale partielle réussie le 2026-11-05:** ticket manuel `ARL-2026-000002` créé sous `AGENTRISKLAYER LTD — Internal Lab`, historique `created` (18:43:25), transition `NEW → SCOPING` journalisée (18:46:02), puis **SCOPING conservé après fermeture et relancement** d’ENKYRON sur Debian 13. Tests documentés par captures opérateur. E01-02, E01-04, E01-05, E01-06 et E01-08 sont **DONE-LOCAL**; E01-01 (saisie téléphonique avec contact) et E01-07 (archivage contrôlé) demeurent à valider sur Debian; E01-03 est désormais DONE-LOCAL. Ce résultat ne prouve pas encore la création multi-utilisateur, le CRM ni les intégrations externes.
 
-**Prochaine action unique:** recette combinée des seuls points encore ouverts E01-01 et E01-07 sur **un ticket de test distinct**, créé en canal `phone` avec coordonnées fictives. Le faire passer par le cycle autorisé, le clôturer puis l'archiver avec justification en vérifiant les événements. Ne pas modifier ni archiver le ticket pilote `ARL-2026-000002`. Ensuite ouvrir **Bloc 02 CRM**, clients et contacts structurés.
+**Prochaine action unique:** E01-07 seulement : faire évoluer le ticket synthétique téléphone `ARL-2026-000003` par les transitions autorisées jusqu'à `CLOSED`, puis archiver avec une justification et vérifier l'historique / l'option d'affichage des tickets archivés. **Ne pas toucher au ticket pilote `ARL-2026-000002`.** Ensuite ouvrir le Bloc 02 CRM, clients et contacts structurés.
 
 **Immédiatement après la recette:** démarrer **Bloc 02 CRM** pour sortir les coordonnées du texte libre et préparer l'intégration véritable du webmail et du site (Blocs 04–05).
 
