@@ -33,7 +33,7 @@ jobs:
           node --check desktop/enkyron-bridge.mjs
           node --check desktop/enkyron-evidence-register.mjs
           node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js
-          python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
+          python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
