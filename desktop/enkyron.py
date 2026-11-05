@@ -162,6 +162,8 @@ class EnkyronWindow(QMainWindow):
         self.record_items = []
         self.test_items = []
         self.crm_seq = 0
+        self.crm_page = 1
+        self.crm_total = 0
         self.crm_items = []
         self.crm_loaded = False
         self.crm_company_loaded = False
@@ -621,6 +623,19 @@ class EnkyronWindow(QMainWindow):
         self.crm_notice = QLabel("Prospect inventory has not been read.")
         self.crm_notice.setWordWrap(True)
         prospect_l.addWidget(self.crm_notice)
+        pages_row = QHBoxLayout()
+        pages_row.addStretch()
+        self.crm_previous = QPushButton("← Previous")
+        self.crm_previous.setEnabled(False)
+        self.crm_previous.clicked.connect(self.previous_prospect_page)
+        pages_row.addWidget(self.crm_previous)
+        self.crm_page_label = QLabel("Page 1 / 1")
+        pages_row.addWidget(self.crm_page_label)
+        self.crm_next = QPushButton("Next →")
+        self.crm_next.setEnabled(False)
+        self.crm_next.clicked.connect(self.next_prospect_page)
+        pages_row.addWidget(self.crm_next)
+        prospect_l.addLayout(pages_row)
         self.crm_table = QTableWidget(0, 5)
         self.crm_table.setHorizontalHeaderLabels(
             ["Company candidate", "Buyer candidate", "Stage", "Source", "Updated"]
@@ -662,7 +677,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_search_timer.setSingleShot(True)
         self.crm_search_timer.setInterval(300)
         self.crm_search_timer.timeout.connect(self.load_prospects)
-        self.crm_search.textChanged.connect(lambda _: self.crm_search_timer.start())
+        self.crm_search.textChanged.connect(self.prospect_search_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
         self.crm_company_search_timer.setInterval(300)
@@ -965,16 +980,40 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-create-contact", payload=payload, callback=received)
 
+    def prospect_search_changed(self, _value):
+        # Invalidate pending replies immediately, even during the debounce.
+        self.crm_seq += 1
+        self.crm_page = 1
+        self.crm_search_timer.start()
+
+    def previous_prospect_page(self):
+        if self.crm_page <= 1:
+            return
+        self.crm_page -= 1
+        self.load_prospects()
+
+    def next_prospect_page(self):
+        if self.crm_page * 100 >= self.crm_total:
+            return
+        self.crm_page += 1
+        self.load_prospects()
+
     def load_prospects(self):
         self.crm_seq += 1
         sequence = self.crm_seq
+        page = self.crm_page
+        search = self.crm_search.text()
         self.crm_notice.setText("Reading legacy commercial candidates…")
+        self.crm_previous.setEnabled(False)
+        self.crm_next.setEnabled(False)
         def received(data, error):
-            if sequence != self.crm_seq:
+            if sequence != self.crm_seq or search != self.crm_search.text():
                 return
             self.crm_loaded = True
             self.crm_items = []
+            self.crm_table.blockSignals(True)
             self.crm_table.setRowCount(0)
+            self.crm_table.blockSignals(False)
             self.crm_details.clear()
             self.crm_review_button.setEnabled(False)
             if error:
@@ -986,7 +1025,16 @@ class EnkyronWindow(QMainWindow):
                     "notice", "Legacy prospect table is unavailable in this PostgreSQL database."
                 ))
                 return
+            self.crm_total = int(data.get("total", 0))
+            page_size = int(data.get("page_size", 100))
+            page_count = max(1, (self.crm_total + page_size - 1) // page_size)
+            if page > page_count:
+                # Rows may have changed since the previous request.
+                self.crm_page = page_count
+                self.load_prospects()
+                return
             self.crm_items = data.get("items", [])
+            self.crm_table.blockSignals(True)
             self.crm_table.setRowCount(len(self.crm_items))
             for row, prospect in enumerate(self.crm_items):
                 values = [
@@ -998,13 +1046,25 @@ class EnkyronWindow(QMainWindow):
                 ]
                 for column, value in enumerate(values):
                     self.crm_table.setItem(row, column, QTableWidgetItem(str(value)))
-            total = len(self.crm_items)
-            suffix = " · first 100, refine search" if data.get("more") else ""
+            self.crm_table.blockSignals(False)
+            self.crm_page_label.setText(f"Page {page} / {page_count}")
+            self.crm_previous.setEnabled(page > 1)
+            self.crm_next.setEnabled(page < page_count)
+            if self.crm_total == 0:
+                self.crm_notice.setText(
+                    "No matching research prospects. The original records are unchanged."
+                )
+                return
+            first = (page - 1) * page_size + 1
+            last = first + len(self.crm_items) - 1
             self.crm_notice.setText(
-                f"{total} unverified prospect(s) shown{suffix}. "
-                "No conversion to customer accounts."
+                f"Showing {first}–{last} of {self.crm_total} unverified prospect(s). "
+                "Browse with Previous / Next; no conversion to customers."
             )
-        self.bridge.call("crm-prospects", self.crm_search.text(), callback=received)
+        self.bridge.call(
+            "crm-prospects-page", payload={"search": search, "page": page},
+            callback=received
+        )
 
     def show_prospect(self):
         row = self.crm_table.currentRow()
