@@ -177,6 +177,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
 
+**Incrément E02-LINK-01 — rapprochement manuel des prospects historiques (2026-11-05) :**
+- Nouvelle migration `066_enkyron_crm_prospect_links.sql` : liens immuables entre `sales_prospects` et `enkyron_crm_companies` dans un périmètre local ; plusieurs prospects peuvent référencer une même entreprise, mais chaque prospect ne peut être associé qu'une fois par opérateur. Les anciennes lignes restent intactes.
+- Onglet **Existing prospect research** : sélectionner un prospect → **Review for CRM association…** → consulter source, entreprise pressentie et doublons de nom/domaine → créer *une* entreprise de type prospect si aucun rapprochement évident, ou choisir une entreprise existante. Si des correspondances existent, la création d'une nouvelle entreprise est refusée par le serveur.
+- L'opérateur doit fournir une justification de 20–1000 caractères, cocher la revue et confirmer explicitement. Un condensat SHA-256 des champs source est comparé sous verrou avant insertion ; si les données ont changé, l'action est refusée et doit être recommencée. L'association et la justification sont journalisées atomiquement. Les signaux de doublons (nom/domaine) sont **partiels**, pas une validation d'identité juridique.
+- Aucun changement automatique de statut client, pas de création de contact à partir du nom acheteur, pas d'envoi email, pas de bulk import, pas d'assessment. Le champ de consentement marketing reste `unknown`.
+- Migration locale **non automatique** : `node scripts/enkyron-crm-link-schema.mjs --check` / `--apply`. Le script vérifie toutes les migrations antérieures, sauvegarde `arl_local` puis applique 066 dans une transaction. Ne pas lancer le script avant les tests sur HEAD et contrôle opérateur.
+- **Statut :** développé sur branche, CI à confirmer sur HEAD exact, recette manuelle Debian **NOT-VERIFIED**. Les 344 prospects ne sont pas importés : leur association devra être revue un par un ou via un futur workflow contrôlé, sans rapprochement silencieux.
+
+
 **Incrément E02-01/02 — socle structuré développé (2026-11-05, recette locale encore requise) :**
 - Migration additive `065_enkyron_crm_companies_contacts.sql` : `enkyron_crm_companies`, `enkyron_crm_contacts`, `enkyron_crm_events` (événements non modifiables/supprimables via SQL ordinaire) ; noms d'entreprises similaires autorisés, identités distinctes, rattachement des contacts vérifié par `workspace_key` et clé composite.
 - Interface Qt : deux onglets CRM, **Companies & Contacts** (liste, recherche, nouveaux enregistrements manuels) et **Existing prospect research** (344 prospects historiques lus sans les modifier).
