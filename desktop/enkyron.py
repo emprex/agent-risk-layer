@@ -983,7 +983,7 @@ class EnkyronWindow(QMainWindow):
                     prospect.get("buyer_name") or "Not recorded",
                     prospect.get("stage") or "",
                     prospect.get("source") or "",
-                    display_date(prospect.get("updated_at"))
+                    display_date(prospect.get("updated_at"))[:10]
                 ]
                 for column, value in enumerate(values):
                     self.crm_table.setItem(row, column, QTableWidgetItem(str(value)))
