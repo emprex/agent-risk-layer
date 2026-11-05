@@ -15,9 +15,20 @@ ENKYRON is the **Qt 6 / PySide6 desktop frontend** for AgentRiskLayer. It is not
 
 The names do **not** justify new engines, repositories or schemas. Reuse tested ARL modules and retain human decision gates. Trademark clearance remains outstanding.
 
+## Product priority: the client and operations environment
+
+ENKYRON is first a **single native business operations workspace**, not an assessment viewer. The operator can receive client requests, manage tickets, record communications, coordinate work and later call KYRTHOS (the existing ARL engine) or EIRYON (AI orchestration) only through controlled actions. NEMORYTH remains the authoritative local PostgreSQL store. Security assessment capabilities are secondary tabs, not the product's primary navigation.
+
+**Implemented Client Desk increment:** Create a ticket from a telephone call or manual request without any ARL assessment, target repo, master, or schema migration; store client/contact/phone/email/request text in the existing ticket's scope field, mark the origin `intake:phone` or `intake:manual`, issue the existing ARL ticket number and record the event. Update status through the same permitted transitions as the existing Workbench. Existing notes and history remain accessible.
+
+**Not connected yet:** real webmail/IMAP or website intake. External messages must arrive through a dedicated, authenticated and rate-limited ingestion boundary with provider verification, deduplication, spam handling, attachment quarantine and operator review. They cannot call the local database or assessment engine directly. The local GUI currently accepts only operator-attested `phone` and `manual` sources; do not label a manual entry as provider-verified email or website intake. Contact information is retained in the ticket's internal scope text as an interim representation, not a full CRM/contact model. Customer-data retention, roles and encryption need separate acceptance before real external onboarding.
+
+**Next sequence:** native ticket acceptance on Debian → status / contact management → inbox adapters → two-way communications → bounded EIRYON assistance → consolidated client/mission dashboard, preserving the existing KYRTHOS security engine.
+
 ## First implemented operator workflow
 
 - View and search the first 100 existing PostgreSQL tickets (search narrows results).
+- Open a **New ticket** native dialog for a telephone call or manual request; update permitted ticket statuses and record their audit events. No assessment is created.
 - Open an existing ticket and inspect scope, target, assessment binding, notes and activity.
 - Read the latest linked master dossier **only after SHA-256 integrity and project / assessment / snapshot / target binding checks**.
 - Append manual work notes to the existing ticket, recording an append-only ticket event.
@@ -53,7 +64,8 @@ The program opens a native desktop window, not a browser. If PySide6 is absent, 
 node --check desktop/enkyron-contract.mjs
 node --check desktop/enkyron-bridge.mjs
 node --check desktop/enkyron-evidence-register.mjs
-node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js
+node --check desktop/enkyron-ticket-intake.mjs
+node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js
 python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
 ```
 
@@ -61,7 +73,7 @@ These are code and contract tests, **not** a live PostgreSQL integration test. R
 
 ## Security design notes
 
-- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, `note` and the read-only `evidence-register`. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
+- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, `note`, the read-only `evidence-register`, local `create-ticket`, and audited `ticket-status`. Ticket writes are transactional, parameterised and do not touch any assessment or master record. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
 - Ticket/master reads use a PostgreSQL read-only connection; SQL is parameterised.
 - Manual notes are written transactionally, with the same append-only tables and status gate as the existing Workbench.
 - Document hash validation is an integrity consistency check, **not** a verified digital signature or independent authentication.
