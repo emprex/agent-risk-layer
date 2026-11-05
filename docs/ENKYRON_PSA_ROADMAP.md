@@ -118,13 +118,13 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Ouvrir et retrouver une demande téléphonique réelle sans créer un assessment.
 
-- [ ] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande.
+- [ ] **E01-01** — Créer un ticket après appel avec client, contact, téléphone, email, objet et demande. **[DONE-CI: saisie téléphonique simulée; recette locale en attente]**
 - [x] **E01-02** — Créer un ticket saisi manuellement, sans feindre une origine email ou web vérifiée. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
-- [ ] **E01-03** — Numéro unique, date, statut NEW, propriétaire et source d'entrée.
+- [ ] **E01-03** — Numéro unique, date, statut NEW, propriétaire et source d'entrée. **[DONE-CI: champ d'affectation séparé, propriétaire local; recette locale en attente]**
 - [x] **E01-04** — Afficher/rechercher les tickets et retrouver le ticket créé. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 - [x] **E01-05** — Afficher la fiche et les notes / événements de son historique. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 - [x] **E01-06** — Changer de statut par transitions autorisées, avec événement d'audit. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
-- [ ] **E01-07** — Mettre en place suppression interdite/archivage contrôlé des tickets.
+- [ ] **E01-07** — Mettre en place suppression interdite/archivage contrôlé des tickets. **[DONE-CI: soft archive + raison + conservation audit; recette locale en attente]**
 - [x] **E01-08** — Recette réelle sur Debian: créer un ticket autorisé, contrôler PostgreSQL et sa persistance. **[DONE-LOCAL: 2026-11-05, ticket ARL-2026-000002]**
 
 **Done si:** Un ticket créé sur Debian est retrouvé après redémarrage, change de statut et conserve son historique; aucune évaluation ARL n'a été lancée.
@@ -135,7 +135,7 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Migration additive :** `migrations/064_enkyron_ticket_assignment_archive.sql`, enregistrée avec checksum dans `schema_migrations`. Les 63 migrations existantes ne sont pas modifiées. La commande `node scripts/enkyron-client-desk-schema.mjs --check` inspecte localement les versions; `--apply` exige une sauvegarde `pg_dump` réussie avant de changer `arl_local` en transaction. Le nouveau client ENKYRON exige cette migration pour la liste et les détails des tickets.
 
-**Contrôle avant recette :** CI Qt et PostgreSQL temporaire; une fois verts, tester sur Debian l'affectation du ticket `ARL-2026-000002` sans changer son status `scoping`. Pour l'archivage, conserver ce ticket pilote et ne pas l'archiver simplement pour tester l'interface; l'acceptation sur poste nécessite une autre demande expressément autorisée et déjà clôturée.
+**Contrôle avant recette :** CI Qt, PostgreSQL temporaire et suite générale réussis au commit `5049ac3d9a875572b8313778333daa517d5dcda5`. La validation de l'interface réelle et la migration locale restent ouvertes. Tester sur Debian l'affectation du ticket `ARL-2026-000002` sans changer son status `scoping`. Pour l'archivage, conserver ce ticket pilote et ne pas l'archiver simplement pour tester l'interface; l'acceptation sur poste nécessite une autre demande expressément autorisée et déjà clôturée.
 
 **E01-01 (appel téléphonique)** : le formulaire et son schéma de sauvegarde étaient déjà couverts par les tests synthétiques; **pas encore de recette réelle** avec nom et coordonnées d'appel. Ne pas considérer E01-01 comme DONE-LOCAL.
 
