@@ -10,7 +10,8 @@ from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QSplitter, QTabWidget, QVBoxLayout, QWidget,
+    QSplitter, QSpinBox, QTabWidget, QTableWidget, QTableWidgetItem,
+    QAbstractItemView, QVBoxLayout, QWidget,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -143,6 +144,8 @@ class EnkyronWindow(QMainWindow):
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
+        self.records_seq = 0
+        self.record_items = []
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -312,6 +315,54 @@ class EnkyronWindow(QMainWindow):
         evidence_l.addWidget(self.evidence_details, 1)
         self.tabs.addTab(evidence, "Evidence Requests")
 
+        ledger = QWidget()
+        ledger_l = QVBoxLayout(ledger)
+        ledger_l.addWidget(section_title("NEMORYTH · RECORDED EVIDENCE INDEX"))
+        self.records_info = QLabel(
+            "Metadata for one control and the current master snapshot. "
+            "Source contents and sensitive references are never displayed; "
+            "a recorded digest does not prove integrity."
+        )
+        self.records_info.setWordWrap(True)
+        ledger_l.addWidget(self.records_info)
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(QLabel("Control number:"))
+        self.record_control = QSpinBox()
+        self.record_control.setRange(1, 108)
+        self.record_control.setValue(13)
+        self.record_control.setPrefix("ARL-KB-")
+        self.record_control.valueChanged.connect(self.invalidate_records)
+        toolbar.addWidget(self.record_control)
+        self.record_button = QPushButton("Inspect stored evidence")
+        self.record_button.setObjectName("primary")
+        self.record_button.setEnabled(False)
+        self.record_button.clicked.connect(self.inspect_records)
+        toolbar.addWidget(self.record_button)
+        toolbar.addStretch()
+        ledger_l.addLayout(toolbar)
+        self.records_notice = QLabel("Select a linked assessment ticket.")
+        self.records_notice.setWordWrap(True)
+        ledger_l.addWidget(self.records_notice)
+        self.records_table = QTableWidget(0, 6)
+        self.records_table.setHorizontalHeaderLabels(
+            ["Evidence ID", "Verification", "Retention",
+             "Source", "Observed at", "Linked test"]
+        )
+        self.records_table.setAlternatingRowColors(True)
+        self.records_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.records_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.records_table.itemSelectionChanged.connect(self.show_record_details)
+        ledger_l.addWidget(self.records_table, 1)
+        ledger_l.addWidget(section_title("RECORDED PROVENANCE (METADATA ONLY)"))
+        self.record_details = make_text_area()
+        self.record_details.setMaximumHeight(210)
+        ledger_l.addWidget(self.record_details)
+        self.tabs.addTab(ledger, "Evidence Register")
+
         self.status = QLabel("No active tests or assessment decisions can be executed from this window.")
         self.status.setObjectName("subtle")
         self.status.setWordWrap(True)
@@ -386,6 +437,12 @@ class EnkyronWindow(QMainWindow):
         self.evidence_open.setEnabled(False)
         self.evidence_previous.setEnabled(False)
         self.evidence_next.setEnabled(False)
+        self.records_seq += 1
+        self.record_items = []
+        self.records_table.setRowCount(0)
+        self.records_notice.setText("Select a linked assessment ticket.")
+        self.record_details.clear()
+        self.record_button.setEnabled(False)
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
         self.title.setText("Loading ticket…")
@@ -435,6 +492,7 @@ class EnkyronWindow(QMainWindow):
                 and bool(ticket.get("linked_assessment_id"))
             )
             self.evidence_button.setEnabled(self.engine_button.isEnabled())
+            self.record_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
                 self.load_master()
@@ -715,6 +773,116 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("evidence-pack", payload=request, callback=pack_loaded)
+
+    def invalidate_records(self, _number):
+        self.records_seq += 1
+        self.record_items = []
+        self.records_table.setRowCount(0)
+        self.record_details.clear()
+        self.records_notice.setText("Control selection changed. Inspect to load matching records.")
+
+    def inspect_records(self):
+        ticket_id = self.current_id
+        ticket = self.current_ticket
+        if (not ticket or not ticket_id or ticket.get("target_kind") != "git"
+            or not ticket.get("linked_project_id")
+            or not ticket.get("linked_assessment_id")):
+            return
+        self.records_seq += 1
+        sequence = self.records_seq
+        number = self.record_control.value()
+        control_id = "ARL-KB-{:03d}".format(number)
+        self.record_button.setEnabled(False)
+        self.record_items = []
+        self.records_table.setRowCount(0)
+        self.record_details.clear()
+        self.records_notice.setText(
+            "Verifying latest master and reading stored {} metadata…".format(control_id)
+        )
+
+        def loaded(data, error):
+            if (self.current_id != ticket_id or sequence != self.records_seq
+                or self.record_control.value() != number):
+                return
+            self.record_button.setEnabled(True)
+            if (error or not isinstance(data, dict) or not data.get("available")
+                or data.get("control_id") != control_id
+                or data.get("integrity") != "master_verified"):
+                self.records_notice.setText(
+                    "Evidence register unavailable: "
+                    + (error or (
+                        str(data.get("reason", "No verified response"))
+                        if isinstance(data, dict) else "No verified response"
+                    ))
+                )
+                return
+            self.record_items = data.get("items", [])
+            self.records_table.setRowCount(len(self.record_items))
+            for i, entry in enumerate(self.record_items):
+                cells = [
+                    entry.get("id") or "unknown",
+                    entry.get("verification_state") or "unknown",
+                    entry.get("retention_status") or "unknown",
+                    entry.get("source_type") or "unknown",
+                    display_date(entry.get("observed_at")),
+                    entry.get("test_execution_id") or "none",
+                ]
+                for column, text in enumerate(cells):
+                    self.records_table.setItem(i, column, QTableWidgetItem(str(text)))
+            self.records_table.resizeColumnsToContents()
+            self.records_notice.setText(
+                "{} · Snapshot {} · {} saved record(s){} · "
+                "NO independent digest validation; no security conclusion.".format(
+                    control_id, data["snapshot_id"], len(self.record_items),
+                    " (first 100)" if data.get("more") else ""
+                )
+            )
+            if self.record_items:
+                self.records_table.selectRow(0)
+            else:
+                self.record_details.setPlainText(
+                    "No saved evidence for this control and snapshot. "
+                    "This does not establish a PASS or FAIL."
+                )
+            self.status.setText(
+                "Stored evidence metadata only. Evidence validity and decisions are unchanged."
+            )
+
+        self.bridge.call(
+            "evidence-register",
+            payload={"ticket_id": ticket_id, "control_id": control_id},
+            callback=loaded,
+        )
+
+    def show_record_details(self):
+        rows = self.records_table.selectionModel().selectedRows()
+        if not rows:
+            self.record_details.clear()
+            return
+        index = rows[0].row()
+        if not 0 <= index < len(self.record_items):
+            return
+        record = self.record_items[index]
+        details = [
+            "Evidence: " + str(record.get("id") or "unknown"),
+            "Control: " + str(record.get("entry_id") or "unknown"),
+            "Snapshot: " + str(record.get("snapshot_id") or "unknown"),
+            "Evidence class: " + str(record.get("evidence_class") or "unknown"),
+            "Source type: " + str(record.get("source_type") or "unknown"),
+            "Verification state: " + str(record.get("verification_state") or "unknown"),
+            "Retention status: " + str(record.get("retention_status") or "unknown"),
+            "Observed: " + str(record.get("observed_at") or "unknown"),
+            "Recorded: " + str(record.get("created_at") or "unknown"),
+            "Test execution: " + str(record.get("test_execution_id") or "none"),
+            "Runtime event: " + str(record.get("runtime_event_id") or "none"),
+            "Approval: " + str(record.get("approval_id") or "none"),
+            "",
+            "STORED integrity digest (not recomputed):",
+            str(record.get("recorded_integrity_digest") or "not recorded"),
+            "",
+            "No raw evidence or credential source displayed. Human verification required.",
+        ]
+        self.record_details.setPlainText("\n".join(details))
 
     def save_note(self):
         if not self.current_ticket or self.current_ticket["status"] == "closed":
