@@ -6,6 +6,7 @@ import os from 'node:os';
 import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
 import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
+import { createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange, TICKET_TRANSITIONS } from './enkyron-ticket-intake.mjs';
 
 const socket = '/var/run/postgresql';
 const database = 'arl_local';
@@ -55,7 +56,7 @@ async function ticketDetails(pool, id) {
      FROM arl_workbench_ticket_events WHERE ticket_id=$1
      ORDER BY created_at DESC,id DESC LIMIT 100`, [ticketId]
   )).rows;
-  return { ticket, notes, events };
+  return { ticket, notes, events, allowed_statuses: TICKET_TRANSITIONS[ticket.status] || [] };
 }
 
 async function masterDetails(pool, ticketId) {
@@ -149,16 +150,18 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'ticket', 'master', 'note', 'evidence-register'].includes(command)) {
+  if (!['tickets', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (command === 'tickets') boundedSearch(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
-  const payload = ['note', 'evidence-register'].includes(command) ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
-  const readOnly = command !== 'note';
+  if (command === 'create-ticket') validateIntake(payload);
+  if (command === 'ticket-status') validateStatusChange(payload);
+  const readOnly = !['note', 'create-ticket', 'ticket-status'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -171,6 +174,8 @@ async function main() {
       command === 'ticket' ? await ticketDetails(pool, arg) :
       command === 'master' ? await masterDetails(pool, arg) :
       command === 'evidence-register' ? await evidenceRegister(pool, payload) :
+      command === 'create-ticket' ? await createDeskTicket(pool, payload, os.userInfo().username) :
+      command === 'ticket-status' ? await updateDeskTicketStatus(pool, payload) :
       await saveNote(pool, payload);
     emit({ ok: true, result });
   } finally { await pool.end(); }
@@ -179,7 +184,7 @@ async function main() {
 main().catch(error => {
   const message = String(error?.message || '');
   const expected =
-    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment)/.test(message);
+    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is)/.test(message);
   emit({ ok: false, error: expected ? message.slice(0, 250) :
     'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;
