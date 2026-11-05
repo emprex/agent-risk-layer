@@ -177,6 +177,16 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Objectif:** Cesser de stocker les coordonnées uniquement dans un champ libre du ticket.
 
+**Incrément E02-01/02 — socle structuré développé (2026-11-05, recette locale encore requise) :**
+- Migration additive `065_enkyron_crm_companies_contacts.sql` : `enkyron_crm_companies`, `enkyron_crm_contacts`, `enkyron_crm_events` (événements non modifiables/supprimables via SQL ordinaire) ; noms d'entreprises similaires autorisés, identités distinctes, rattachement des contacts vérifié par `workspace_key` et clé composite.
+- Interface Qt : deux onglets CRM, **Companies & Contacts** (liste, recherche, nouveaux enregistrements manuels) et **Existing prospect research** (344 prospects historiques lus sans les modifier).
+- Les enregistrements créés manuellement commencent `prospect`, contacts `unverified`, préférence marketing `unknown`. Aucun envoi email, promotion automatique de prospect, merge, modification de ticket ou exécution de KYRTHOS.
+- Protection : requêtes paramétrées/limitées, transaction de création + audit, séparation du périmètre **local mono-opérateur uniquement**. `workspace_key=local:<opérateur OS>` n'est pas du RBAC/multi-tenant prouvé ; exposition distante interdite avant les contrôles E00 d'identité, de permissions et d'isolation.
+- Installation locale non automatique : `node scripts/enkyron-crm-schema.mjs --check`, puis `--apply` après vérification ; sauvegarde PostgreSQL préalable et contrôles stricts de checksums/migrations ; aucun effet sur les données commerciales historiques.
+- **Statut E02-01/02 : DONE-CI seulement si les deux workflows du HEAD exact réussissent ; NOT-VERIFIED local** avant application contrôlée et création d'une entreprise et de son contact sur Debian. E02-03 à E02-08 non clôturés.
+- **Prochain chantier après recette :** E02-03 relation explicite company/contact ↔ ticket, puis E02-04 recherche/dédoublonnage et association volontaire des prospects existants ; ne pas déduire de client à partir du nom seul.
+
+
 **Incrément E02-NAV-01 — développement branché et smoke natif CI validé (2026-11-05):**
 - Navigation native via `QStackedWidget`: menu principal `Home / Tickets / CRM · Prospects`; la liste et les actions Tickets sont désormais dans la page Tickets, avec callbacks existants conservés.
 - Page CRM initiale **réelle mais en lecture seule** : recherche bornée et tableau des anciennes données `sales_prospects`, avec provenance, stage et identité du contact acheteur clairement **non vérifiée**. La requête utilise des paramètres SQL, 100 lignes maximum, et traite explicitement l'absence de la table.
