@@ -2,6 +2,19 @@
 
 ENKYRON is the **Qt 6 / PySide6 desktop frontend** for AgentRiskLayer. It is not a website, an Electron app, or an HTML wrapper.
 
+## One platform — working component names
+
+**AgentRiskLayer (ARL)** is the single platform and parent brand, maintained in the canonical `emprex/agent-risk-layer` repository. These are **working product labels**, not separate apps, databases or legal trademarks:
+
+| Name | Role |
+| --- | --- |
+| **ENKYRON** | Native desktop operator |
+| **KYRTHOS** | Existing deterministic ARL assessment/control/testing authority |
+| **EIRYON** | Planned AI-assisted coordination/orchestration; never the security authority |
+| **NEMORYTH** | Existing PostgreSQL knowledge, control and evidence store |
+
+The names do **not** justify new engines, repositories or schemas. Reuse tested ARL modules and retain human decision gates. Trademark clearance remains outstanding.
+
 ## First implemented operator workflow
 
 - View and search the first 100 existing PostgreSQL tickets (search narrows results).
@@ -10,10 +23,11 @@ ENKYRON is the **Qt 6 / PySide6 desktop frontend** for AgentRiskLayer. It is not
 - Append manual work notes to the existing ticket, recording an append-only ticket event.
 - Closed tickets cannot receive new notes. No security decision or test is ever triggered.
 - Open the native **ARL Engine** tab and request a read-only inspection using the **existing** Python Operator `assessment_bridge.inspect_existing`, which delegates to the canonical Node ARL command. ENKYRON first validates the master and requires the latest snapshot to be current; the existing reader must confirm the identical project, assessment, snapshot and frozen target SHA. No assessment is created if missing.
+- Open the native **Evidence Requests** tab to read ARL's authoritative **108-control workplan**, select a requirement pack and inspect up to 20 requirements per page. This reuses `evidence_bridge.load_evidence_workplan` and `evidence_pack_bridge.read_evidence_pack`. All results are requests/candidates only: **no proof accepted, no tests run, no PASS/FAIL inferred**.
 
 The Python Qt process talks to `desktop/enkyron-bridge.mjs` through one-shot JSON messages over local process pipes. The Node bridge uses the **existing** `pg` dependency and the **existing** `arl_local` PostgreSQL database and migration 063 tables. Nothing listens on an HTTP port. No database schema changes or additional assessment records are made during launch.
 
-This is an early desktop increment, not a completed operator interface. Only a **read-only status inspection** of the existing ARL assessment engine is now wired into ENKYRON. Evidence inspection, live testing, knowledge editing, status transitions, CMDB and reporting are **not yet** exposed. The historical browser Workbench is preserved but not invoked.
+This is an early desktop increment, not a completed operator interface. Only a **read-only status inspection** of the existing ARL assessment engine is now wired into ENKYRON. Only read-only assessment identity and evidence **requirements** inspection are exposed. Actual evidence artifact review/acceptance, live testing, knowledge editing, status transitions, CMDB and reporting are **not yet** exposed. The historical browser Workbench is preserved but not invoked.
 
 ## Prerequisites
 
@@ -38,14 +52,14 @@ The program opens a native desktop window, not a browser. If PySide6 is absent, 
 node --check desktop/enkyron-contract.mjs
 node --check desktop/enkyron-bridge.mjs
 node --test tests/enkyron-desktop.test.js
-python3 -B -m unittest desktop.test_enkyron_operator_state
+python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
 ```
 
 These are code and contract tests, **not** a live PostgreSQL integration test. Real login/peer authentication, master history, ticket persistence and user experience must be verified on the intended Debian machine before acceptance.
 
 ## Security design notes
 
-- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, and `note`. A separate one-shot Python IPC command `desktop.enkyron_operator_state` delegates only to ARL's existing read-only assessment inspector, not to an arbitrary command console.
+- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, and `note`. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
 - Ticket/master reads use a PostgreSQL read-only connection; SQL is parameterised.
 - Manual notes are written transactionally, with the same append-only tables and status gate as the existing Workbench.
 - Document hash validation is an integrity consistency check, **not** a verified digital signature or independent authentication.
