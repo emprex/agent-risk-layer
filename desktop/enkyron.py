@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
     QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QTabWidget,
@@ -173,6 +173,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_pending_company_id = None
         self.crm_company_dialog = None
         self.crm_contact_dialog = None
+        self.crm_review_dialog = None
+        self.crm_review_id = None
+        self.crm_review_digest = None
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -638,7 +641,14 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_table.itemSelectionChanged.connect(self.show_prospect)
         prospect_l.addWidget(self.crm_table, 1)
-        prospect_l.addWidget(section_title("CANDIDATE PROVENANCE"))
+        prospect_header = QHBoxLayout()
+        prospect_header.addWidget(section_title("CANDIDATE PROVENANCE"))
+        prospect_header.addStretch()
+        self.crm_review_button = QPushButton("Review for CRM association…")
+        self.crm_review_button.setEnabled(False)
+        self.crm_review_button.clicked.connect(self.open_prospect_review)
+        prospect_header.addWidget(self.crm_review_button)
+        prospect_l.addLayout(prospect_header)
         self.crm_details = make_text_area()
         self.crm_details.setMaximumHeight(180)
         self.crm_details.setPlaceholderText(
@@ -966,6 +976,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_items = []
             self.crm_table.setRowCount(0)
             self.crm_details.clear()
+            self.crm_review_button.setEnabled(False)
             if error:
                 self.crm_notice.setText("Unable to read local prospect inventory.")
                 self.show_error(error)
@@ -999,7 +1010,9 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_table.currentRow()
         if row < 0 or row >= len(self.crm_items):
             self.crm_details.clear()
+            self.crm_review_button.setEnabled(False)
             return
+        self.crm_review_button.setEnabled(True)
         prospect = self.crm_items[row]
         self.crm_details.setPlainText("\n".join([
             "LEGACY SALES PROSPECT — NOT A VERIFIED CUSTOMER",
@@ -1012,6 +1025,179 @@ class EnkyronWindow(QMainWindow):
             "Commercial stage: " + str(prospect.get("stage") or ""),
             "Origin: " + str(prospect.get("source") or "Unknown"),
         ]))
+
+    def open_prospect_review(self):
+        row = self.crm_table.currentRow()
+        if row < 0 or row >= len(self.crm_items):
+            return
+        if self.crm_review_dialog and self.crm_review_dialog.isVisible():
+            self.crm_review_dialog.raise_()
+            return
+        candidate_id = self.crm_items[row]["id"]
+        self.crm_review_button.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                self.crm_review_button.setEnabled(True)
+                QMessageBox.warning(
+                    self, "CRM review unavailable",
+                    error or (data or {}).get("notice", "Local migration 066 is required.")
+                )
+                return
+            self.crm_review_button.setEnabled(True)
+            dialog = QDialog(self)
+            dialog.setWindowTitle("ENKYRON · Review historical prospect")
+            dialog.setMinimumWidth(620)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(section_title("MANUAL PROSPECT → COMPANY ASSOCIATION"))
+            source = data["prospect"]
+            note = QLabel(
+                "Research candidate: {}\nSource: {}\nWebsite: {}\n"
+                "Buyer (not verified): {}\n\nNo contacts, clients, "
+                "marketing permission or emails are created by this action."
+                .format(
+                    source.get("company_name") or "Unknown",
+                    source.get("source") or "Unknown",
+                    source.get("website") or "Not recorded",
+                    source.get("buyer_name") or "Not recorded"
+                )
+            )
+            note.setWordWrap(True)
+            layout.addWidget(note)
+            existing = data.get("linked")
+            if existing:
+                already = QLabel(
+                    "Already associated with: {}\nNo second link can be created."
+                    .format(existing.get("company_name") or existing.get("company_id"))
+                )
+                already.setWordWrap(True)
+                layout.addWidget(already)
+                close = QPushButton("Close")
+                close.clicked.connect(dialog.reject)
+                layout.addWidget(close)
+                self.crm_review_dialog = dialog
+                dialog.open()
+                return
+
+            matches = list(data.get("matches", []))
+            warning = QLabel(
+                "Potential duplicate companies are flagged by exact name or "
+                "website domain. Review before deciding. Identical names do not "
+                "prove identical legal entities."
+            )
+            warning.setWordWrap(True)
+            layout.addWidget(warning)
+            form = QFormLayout()
+            self.crm_review_choice = QComboBox()
+            selected_id = self.crm_company_id
+            selected = next(
+                (c for c in self.crm_company_items if c.get("id") == selected_id),
+                None
+            ) if selected_id else None
+            if not matches and not data.get("more_matches"):
+                self.crm_review_choice.addItem(
+                    "Create a new prospect company (no apparent match)",
+                    {"mode": "create"}
+                )
+            for company in matches:
+                self.crm_review_choice.addItem(
+                    "Link existing: {} · {}".format(
+                        company.get("name") or "", company.get("id") or ""
+                    ),
+                    {"mode": "existing", "company_id": company["id"]}
+                )
+            if selected and selected_id not in {
+                c.get("id") for c in matches
+            }:
+                self.crm_review_choice.addItem(
+                    "Link selected company: {} · {}".format(
+                        selected.get("name") or "", selected_id
+                    ),
+                    {"mode": "existing", "company_id": selected_id}
+                )
+            form.addRow("Association decision", self.crm_review_choice)
+            self.crm_review_note = QPlainTextEdit()
+            self.crm_review_note.setPlaceholderText(
+                "Document your human verification and reasons for matching "
+                "this prospect to the selected company (20–1000 characters)."
+            )
+            self.crm_review_note.setMaximumHeight(105)
+            form.addRow("Review rationale *", self.crm_review_note)
+            layout.addLayout(form)
+            self.crm_review_check = QCheckBox(
+                "I have reviewed the candidate source and the chosen company mapping."
+            )
+            layout.addWidget(self.crm_review_check)
+            actions = QHBoxLayout()
+            cancel = QPushButton("Cancel")
+            cancel.clicked.connect(dialog.reject)
+            actions.addWidget(cancel)
+            actions.addStretch()
+            self.crm_review_submit = QPushButton("Record association")
+            self.crm_review_submit.setObjectName("primary")
+            self.crm_review_submit.setEnabled(self.crm_review_choice.count() > 0)
+            self.crm_review_submit.clicked.connect(self.confirm_prospect_link)
+            actions.addWidget(self.crm_review_submit)
+            layout.addLayout(actions)
+            self.crm_review_id = candidate_id
+            self.crm_review_digest = data["source_digest"]
+            self.crm_review_dialog = dialog
+            dialog.open()
+
+        self.bridge.call("crm-prospect-review", candidate_id, callback=received)
+
+    def confirm_prospect_link(self):
+        dialog = self.crm_review_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        decision = self.crm_review_choice.currentData()
+        rationale = self.crm_review_note.toPlainText().strip()
+        if not decision or not 20 <= len(rationale) <= 1000:
+            QMessageBox.warning(dialog, "Human review required",
+                                "Choose a company and explain your review in 20–1000 characters.")
+            return
+        if not self.crm_review_check.isChecked():
+            QMessageBox.warning(dialog, "Human confirmation required",
+                                "Confirm the reviewed association explicitly.")
+            return
+        answer = QMessageBox.question(
+            dialog, "Confirm CRM association",
+            "Save this ONE reviewed association? The historical prospect remains "
+            "unchanged and no emails will be sent.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        payload = {
+            "prospect_id": self.crm_review_id,
+            "source_digest": self.crm_review_digest,
+            "mode": decision["mode"],
+            "review_note": rationale,
+            "reviewed": True
+        }
+        if decision["mode"] == "existing":
+            payload["company_id"] = decision["company_id"]
+        self.crm_review_submit.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("company_id"):
+                QMessageBox.warning(dialog, "Association refused",
+                                    error or "CRM association was not recorded.")
+                self.crm_review_submit.setEnabled(True)
+                return
+            dialog.accept()
+            self.crm_details.setPlainText(
+                "HUMAN-REVIEWED ASSOCIATION SAVED\n"
+                "Historical prospect: {}\nCRM company: {}\n"
+                "No contact, client status or outbound email created."
+                .format(data["prospect_id"], data["company_id"])
+            )
+            self.crm_pending_company_id = data["company_id"]
+            self.crm_company_search.clear()
+            self.load_companies()
+
+        self.bridge.call("crm-prospect-link", payload=payload, callback=received)
 
     def show_error(self, message):
         self.status.setText("Operation blocked: " + message)
