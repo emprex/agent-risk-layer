@@ -780,6 +780,12 @@ class EnkyronWindow(QMainWindow):
         self.records_table.setRowCount(0)
         self.record_details.clear()
         self.records_notice.setText("Control selection changed. Inspect to load matching records.")
+        ticket = self.current_ticket or {}
+        self.record_button.setEnabled(
+            ticket.get("target_kind") == "git"
+            and bool(ticket.get("linked_project_id"))
+            and bool(ticket.get("linked_assessment_id"))
+        )
 
     def inspect_records(self):
         ticket_id = self.current_id
