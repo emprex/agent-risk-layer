@@ -58,6 +58,27 @@ def display_date(value):
     return str(value or "").replace("T", " ")[:19]
 
 
+def format_followup_due(value, stage, today=None):
+    due = str(value or "")[:10]
+    if not due:
+        return "Not scheduled"
+    if stage in ("won", "lost"):
+        return due + " · Closed"
+    date = QDate.fromString(due, "yyyy-MM-dd")
+    if not date.isValid():
+        return due
+    days = (today or QDate.currentDate()).daysTo(date)
+    if days < 0:
+        return due + " · Overdue"
+    if days == 0:
+        return due + " · Today"
+    if days == 1:
+        return due + " · Tomorrow"
+    if days <= 7:
+        return due + " · In {} days".format(days)
+    return due
+
+
 def section_title(value):
     label = QLabel(value)
     label.setObjectName("sectionTitle")
@@ -185,6 +206,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_loaded = False
         self.crm_followup_dialog = None
         self.crm_followup_context = None
+        self.crm_activity_dialog = None
+        self.crm_activity_opportunity_id = None
+        self.crm_activity_seq = 0
+        self.crm_activity_entries = []
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -766,10 +791,13 @@ class EnkyronWindow(QMainWindow):
         followups_l.addWidget(self.crm_followup_notice)
         self.crm_followup_table = QTableWidget(0, 5)
         self.crm_followup_table.setHorizontalHeaderLabels(
-            ["Prospect", "Stage", "Next action", "Due date", "Updated"]
+            ["Prospect", "Stage", "Next action", "Due / attention", "Updated"]
         )
         self.crm_followup_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_followup_table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.ResizeToContents
         )
         self.crm_followup_table.setAlternatingRowColors(True)
         self.crm_followup_table.setSelectionBehavior(
@@ -790,6 +818,10 @@ class EnkyronWindow(QMainWindow):
             "Create a follow-up from a selected prospect in Existing prospect research."
         ))
         footer.addStretch()
+        self.crm_activity_button = QPushButton("Activity history…")
+        self.crm_activity_button.setEnabled(False)
+        self.crm_activity_button.clicked.connect(self.open_activity_history)
+        footer.addWidget(self.crm_activity_button)
         self.crm_edit_followup = QPushButton("Update selected follow-up")
         self.crm_edit_followup.setEnabled(False)
         self.crm_edit_followup.clicked.connect(self.open_followup_update)
@@ -1506,6 +1538,7 @@ class EnkyronWindow(QMainWindow):
         search = self.crm_followup_search.text()
         self.crm_followup_notice.setText("Reading local follow-up records…")
         self.crm_edit_followup.setEnabled(False)
+        self.crm_activity_button.setEnabled(False)
 
         def received(data, error):
             if sequence != self.crm_followup_seq or search != self.crm_followup_search.text():
@@ -1532,7 +1565,9 @@ class EnkyronWindow(QMainWindow):
                     opportunity.get("company_name_at_creation") or "",
                     (opportunity.get("stage") or "").replace("_", " ").title(),
                     opportunity.get("next_action") or "",
-                    str(opportunity.get("due_date") or "")[:10] or "Not scheduled",
+                    format_followup_due(
+                        opportunity.get("due_date"), opportunity.get("stage")
+                    ),
                     display_date(opportunity.get("updated_at"))
                 ]
                 for column, value in enumerate(values):
@@ -1551,9 +1586,9 @@ class EnkyronWindow(QMainWindow):
 
     def followup_selected(self):
         row = self.crm_followup_table.currentRow()
-        self.crm_edit_followup.setEnabled(
-            0 <= row < len(self.crm_followup_items)
-        )
+        selected = 0 <= row < len(self.crm_followup_items)
+        self.crm_edit_followup.setEnabled(selected)
+        self.crm_activity_button.setEnabled(selected)
 
     def open_prospect_followup(self):
         row = self.crm_table.currentRow()
