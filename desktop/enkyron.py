@@ -69,11 +69,16 @@ class DesktopBridge:
     def call(self, action, arg="", payload=None, callback=None):
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
-        process.setProgram("node")
-        args = [str(BRIDGE), action]
-        if arg:
-            args.append(arg)
-        process.setArguments(args)
+        if action == "operator-state":
+            # Reuse the existing Python ARL Operator's read-only adapter.
+            process.setProgram(sys.executable)
+            process.setArguments(["-m", "desktop.enkyron_operator_state"])
+        else:
+            process.setProgram("node")
+            args = [str(BRIDGE), action]
+            if arg:
+                args.append(arg)
+            process.setArguments(args)
         timer = QTimer(process)
         timer.setSingleShot(True)
         state = {"done": False}
@@ -118,7 +123,7 @@ class DesktopBridge:
             process.started.connect(send_payload)
         self.running.add(process)
         process.start()
-        timer.start(15000)
+        timer.start(35000 if action == "operator-state" else 15000)
 
 
 class EnkyronWindow(QMainWindow):
@@ -241,6 +246,25 @@ class EnkyronWindow(QMainWindow):
         hist_l.addWidget(self.events_view)
         self.tabs.addTab(history, "History")
 
+        engine = QWidget()
+        engine_l = QVBoxLayout(engine)
+        engine_l.addWidget(section_title("CANONICAL ARL ASSESSMENT — READ ONLY"))
+        self.engine_info = QLabel(
+            "Inspect the existing frozen Git assessment through ARL's original "
+            "Operator. No test, evidence acceptance, finding closure or GO decision."
+        )
+        self.engine_info.setWordWrap(True)
+        engine_l.addWidget(self.engine_info)
+        self.engine_button = QPushButton("Inspect existing ARL assessment")
+        self.engine_button.setObjectName("primary")
+        self.engine_button.setEnabled(False)
+        self.engine_button.clicked.connect(self.inspect_engine)
+        engine_l.addWidget(self.engine_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.engine_view = make_text_area()
+        self.engine_view.setPlaceholderText("Select a linked Git ticket, then inspect.")
+        engine_l.addWidget(self.engine_view, 1)
+        self.tabs.addTab(engine, "ARL Engine")
+
         self.status = QLabel("No active tests or assessment decisions can be executed from this window.")
         self.status.setObjectName("subtle")
         self.status.setWordWrap(True)
@@ -302,6 +326,9 @@ class EnkyronWindow(QMainWindow):
         self.current_ticket = None
         self.master_doc.clear()
         self.master_meta.setText("Master dossier not loaded.")
+        self.engine_view.clear()
+        self.engine_button.setEnabled(False)
+        self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
         self.title.setText("Loading ticket…")
         def received(data, error):
@@ -344,6 +371,11 @@ class EnkyronWindow(QMainWindow):
                 ) for e in data.get("events", [])) or "No activity recorded."
             )
             self.save_button.setEnabled(ticket["status"] != "closed")
+            self.engine_button.setEnabled(
+                ticket["target_kind"] == "git"
+                and bool(ticket.get("linked_project_id"))
+                and bool(ticket.get("linked_assessment_id"))
+            )
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
                 self.load_master()
@@ -378,6 +410,85 @@ class EnkyronWindow(QMainWindow):
             self.master_doc.setPlainText(data["document_md"])
             self.status.setText("Master integrity and target binding verified. Historical record only.")
         self.bridge.call("master", ticket_id, callback=received)
+
+    def inspect_engine(self):
+        """Use the verified master to scope the existing ARL Operator inspection."""
+        ticket_id = self.current_id
+        ticket = self.current_ticket
+        if not ticket or not ticket_id:
+            return
+        if (ticket.get("target_kind") != "git" or
+            not ticket.get("linked_project_id") or
+            not ticket.get("linked_assessment_id")):
+            self.engine_view.setPlainText("A linked local Git assessment is required.")
+            return
+        self.engine_button.setEnabled(False)
+        self.engine_view.setPlainText("Verifying historical master and frozen target…")
+
+        def master_loaded(master, error):
+            if self.current_id != ticket_id:
+                return
+            if error or not isinstance(master, dict) or not master.get("available"):
+                self.engine_view.setPlainText(
+                    "ARL inspection blocked: verified master dossier unavailable."
+                )
+                self.engine_button.setEnabled(True)
+                return
+            if master.get("snapshot_status") != "current":
+                self.engine_view.setPlainText(
+                    "ARL inspection blocked: the recorded master snapshot is not current."
+                )
+                self.engine_button.setEnabled(True)
+                return
+            request = {
+                "target_kind": "git",
+                "target_reference": ticket["target_reference"],
+                "target_sha": master["target_sha"],
+                "project_id": ticket["linked_project_id"],
+                "assessment_id": ticket["linked_assessment_id"],
+                "snapshot_id": master["snapshot_id"],
+            }
+            self.engine_view.setPlainText(
+                "Inspecting existing assessment through canonical ARL Operator…"
+            )
+
+            def state_loaded(data, state_error):
+                if self.current_id != ticket_id:
+                    return
+                self.engine_button.setEnabled(True)
+                if state_error or not isinstance(data, dict) or not data.get("available"):
+                    self.engine_view.setPlainText(
+                        "ARL inspection blocked: "
+                        + (state_error or (
+                            str(data.get("reason", "Current assessment unavailable"))
+                            if isinstance(data, dict) else "No verified result"
+                        ))
+                    )
+                    return
+                self.engine_view.setPlainText("\\n".join([
+                    "CANONICAL ARL ASSESSMENT — EXISTING RECORD",
+                    "",
+                    "Project: " + data["project_id"],
+                    "Assessment: " + data["assessment_id"],
+                    "Snapshot: " + data["snapshot_id"],
+                    "Frozen Git SHA: " + data["target_sha"],
+                    "Environment: " + data["environment"],
+                    "",
+                    "Evidence: " + data["evidence_state"],
+                    "Control outcomes: " + data["control_outcomes"],
+                    "Security verdict: " + data["security_verdict"],
+                    "Readiness: " + data["readiness_decision"],
+                    "Human review required: YES",
+                    "",
+                    data["notice"],
+                ]))
+                self.status.setText(
+                    "Canonical ARL identity confirmed. No security state was changed."
+                )
+
+            self.bridge.call("operator-state", payload=request, callback=state_loaded)
+
+        self.bridge.call("master", ticket_id, callback=master_loaded)
 
     def save_note(self):
         if not self.current_ticket or self.current_ticket["status"] == "closed":
