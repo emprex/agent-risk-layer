@@ -24,10 +24,11 @@ The names do **not** justify new engines, repositories or schemas. Reuse tested 
 - Closed tickets cannot receive new notes. No security decision or test is ever triggered.
 - Open the native **ARL Engine** tab and request a read-only inspection using the **existing** Python Operator `assessment_bridge.inspect_existing`, which delegates to the canonical Node ARL command. ENKYRON first validates the master and requires the latest snapshot to be current; the existing reader must confirm the identical project, assessment, snapshot and frozen target SHA. No assessment is created if missing.
 - Open the native **Evidence Requests** tab to read ARL's authoritative **108-control workplan**, select a requirement pack and inspect up to 20 requirements per page. This reuses `evidence_bridge.load_evidence_workplan` and `evidence_pack_bridge.read_evidence_pack`. All results are requests/candidates only: **no proof accepted, no tests run, no PASS/FAIL inferred**.
+- Use the native **Evidence Register** tab to inspect stored metadata (maximum 100 rows) for any of `ARL-KB-001`–`ARL-KB-108`. Reads only `control_evidence_items` for the **verified current master project and snapshot**, in the same read-only PostgreSQL transaction. Shows recorded verification/retention status, source type, stored digest, observed time, test/runtime/approval links; **never** raw evidence, descriptor JSON or source references. A stored digest is **not** an independently checked integrity claim.
 
 The Python Qt process talks to `desktop/enkyron-bridge.mjs` through one-shot JSON messages over local process pipes. The Node bridge uses the **existing** `pg` dependency and the **existing** `arl_local` PostgreSQL database and migration 063 tables. Nothing listens on an HTTP port. No database schema changes or additional assessment records are made during launch.
 
-This is an early desktop increment, not a completed operator interface. Only a **read-only status inspection** of the existing ARL assessment engine is now wired into ENKYRON. Only read-only assessment identity and evidence **requirements** inspection are exposed. Actual evidence artifact review/acceptance, live testing, knowledge editing, status transitions, CMDB and reporting are **not yet** exposed. The historical browser Workbench is preserved but not invoked.
+This is an early desktop increment, not a completed operator interface. Only a **read-only status inspection** of the existing ARL assessment engine is now wired into ENKYRON. Only read-only assessment identity and evidence **requirements** inspection are exposed. Raw evidence inspection, evidence acceptance or revalidation, live testing, knowledge editing, status transitions, CMDB and reporting are **not yet** exposed. Evidence Register is a scoped **metadata index**, not a control assessment or a proof of integrity. The historical browser Workbench is preserved but not invoked.
 
 ## Prerequisites
 
@@ -51,7 +52,8 @@ The program opens a native desktop window, not a browser. If PySide6 is absent, 
 ```bash
 node --check desktop/enkyron-contract.mjs
 node --check desktop/enkyron-bridge.mjs
-node --test tests/enkyron-desktop.test.js
+node --check desktop/enkyron-evidence-register.mjs
+node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js
 python3 -B -m unittest desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
 ```
 
@@ -59,7 +61,7 @@ These are code and contract tests, **not** a live PostgreSQL integration test. R
 
 ## Security design notes
 
-- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, and `note`. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
+- The PostgreSQL bridge limits operations to `tickets`, `ticket`, `master`, `note` and the read-only `evidence-register`. Separate one-shot Python IPC commands `desktop.enkyron_operator_state` and `desktop.enkyron_evidence` delegate only to existing read-only ARL inspection/evidence adapters, not to arbitrary commands.
 - Ticket/master reads use a PostgreSQL read-only connection; SQL is parameterised.
 - Manual notes are written transactionally, with the same append-only tables and status gate as the existing Workbench.
 - Document hash validation is an integrity consistency check, **not** a verified digital signature or independent authentication.
