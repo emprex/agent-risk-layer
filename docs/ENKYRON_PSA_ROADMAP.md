@@ -175,6 +175,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-ACTIVITY-01 — journal commercial et suivi des échéances (2026-11-05) :**
+- Migration additive `069_enkyron_crm_activities.sql` : notes manuelles liées par clé composite `(workspace_key,opportunity_id)` à l'opportunité, horodatage base PostgreSQL, type, contenu, opérateur. Historique **append-only** avec refus d'UPDATE/DELETE ordinaires ; les enregistrements `068` et les prospects historiques restent inchangés.
+- Catégories : `note`, `call_note`, `meeting_note`, `email_note`, `task_note`. Ces descriptions sont **déclarations de l'opérateur**, pas une preuve d'envoi, de réception, de consentement ou de tenue effective d'une réunion.
+- **CRM → Follow-ups** : la date indique le niveau d'attention local (Overdue, Today, Tomorrow, In N days ; Won/Lost = Closed). Le bouton **Activity history…** ouvre une fenêtre compacte avec historique combiné des créations/changements d'opportunité et notes manuelles, plus formulaire d'ajout avec confirmation.
+- Endpoint local : `crm-activity-timeline` lecture seule de 100 entrées maximum (limite affichée si historique plus long) ; `crm-record-activity` validation stricte, contrôle du périmètre local, transaction d'insertion sans aucune commande email externe.
+- **Installation contrôlée :** `node scripts/enkyron-crm-activity-schema.mjs --check` puis `--apply`, sauvegarde owner-only, transaction et checksums précédents ; aucune migration lors du lancement de la GUI.
+- **Limites :** il n'y a ni boîte de réception, ni courriel envoyé, ni notifications système automatiques, ni RBAC multi-utilisateur, ni calendrier partagé ; la validation visuelle sur Debian est requise après CI. Ne jamais considérer le libellé "email note" comme une preuve d'envoi.
+
+
 **Incrément E02-FOLLOWUP-01 — opportunités et prochaines actions commerciales (2026-11-05) :**
 - Migration additive `068_enkyron_crm_opportunities.sql` : chaque prospect historique peut être relié à **une opportunité de suivi par opérateur local** (clé unique `workspace_key,prospect_id`) ; l'entreprise enregistrée dans la recherche n'est **pas promue automatiquement** en client ou contact confirmé.
 - Champs : `stage` manuel (research, qualified, contact_planned, contacted, discovery, proposal, negotiation, won, lost), `next_action` obligatoire, `due_date` facultative, propriétaire local, révision optimiste et dates de création/mise à jour. Ces étapes sont des déclarations commerciales de l'opérateur, **pas** une preuve de consentement, de contact effectué, de vente, de contrat ou d'encaissement.
