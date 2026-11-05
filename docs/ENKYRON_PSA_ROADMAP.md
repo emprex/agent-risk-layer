@@ -60,6 +60,18 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Critère de réception multi-utilisateur:** deux comptes différents connectés simultanément; un L1 ne peut ni modifier les permissions ni consulter un dossier hors périmètre; un L3 ne peut pas valider sa propre preuve comme indépendant; L5 peut administrer l'organisation mais pas modifier les événements passés; révocation d'un compte immédiatement effective et traçable.
 
+## 3 ter. Décision ergonomique — navigation générale et module Tickets (05 novembre 2026)
+
+**Exigence explicite de l'opérateur :** la colonne de gauche de l'application native ne doit pas rester occupée en permanence par une liste des tickets. Avec l'expansion CRM, Inbox, Projects, Finance, Knowledge et autres modules, elle devient la **navigation générale** de la plateforme. Les tickets sont une **page métier dédiée**, pas le menu principal.
+
+**Navigation cible (native Qt, pas web/Electron):** barre latérale principale stable et compacte avec `Accueil`, `Tickets`, `CRM`, puis les autres modules au fur et à mesure qu'ils fonctionnent réellement; les parties non développées ne doivent pas donner l'illusion d'être actives. Prévoir bas de menu `Compte` et `Administration` lorsqu'ils existent. Le panneau principal est partagé par un `QStackedWidget` ou mécanisme Qt natif équivalent, sans réécrire les widgets fonctionnels.
+
+**Page Tickets :** barre d'actions `New ticket`, `Search tickets`, recherche et filtres `Open / In progress / Closed / Archived`; tableau paginé ou liste métier affichant numéro, client, sujet, statut, responsable, date, accès aux détails au clic. La recherche/filtre des tickets archivés doit montrer son état activé. Conserver les données, événements, notes, archivages et les actions déjà validées. Le ticket miniagent `ARL-2026-000002` reste intact et assigné.
+
+**Page CRM :** vue liste `Companies` / `Contacts`, recherche dédiée, fiche client et liens de tickets; ne jamais transformer la liste de tickets en navigation globale. Une future recherche unifiée pourra couvrir clients/tickets/projets, mais uniquement avec filtrage serveur des droits d'accès.
+
+**Ordre concret :** au démarrage du Bloc 02, inspecter la fenêtre Qt et les composants existants, établir la navigation globale sans changement de base, ajouter l'entrée `CRM` et la première vue réelle seulement; migrer ensuite l'ancienne colonne Tickets vers une page dédiée en conservant ses callbacks et ses tests. Puis démarrer les données CRM E02-01/E02-02 de manière additive, sans faux comptes utilisateurs ni requalification des demandes en assessments. Le travail d'ergonomie fait partie du Bloc 02, pas d'un projet séparé.
+
 ## 4. Ordre impératif des blocs
 
 | Bloc | Domaine | Porte de validation |
@@ -137,9 +149,11 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Recette Debian du 2026-11-05 :** migration 064 appliquée sur le poste de l'opérateur, ticket `ARL-2026-000002` en `SCOPING` affecté à `emprex` ; capture de l'historique : `created` 18:43:25, `status_changed` 18:46:02, `assigned` 19:15:12. **E01-03 validé localement.** La sauvegarde et le détail de l'exécution du script `--apply` ne figurent pas dans la conversation, et ne sont donc pas indépendamment audités. Pour E01-07, la CI a réussi le parcours PostgreSQL synthétique complet; **recette locale d'archivage toujours à faire**, sans archiver `ARL-2026-000002`.
 
-**E01-01 (appel téléphonique)** : le formulaire et son schéma de sauvegarde étaient déjà couverts par les tests synthétiques; **pas encore de recette réelle** avec nom et coordonnées d'appel. Ne pas considérer E01-01 comme DONE-LOCAL.
+**E01-01 (appel téléphonique)** : recette locale réalisée sur le ticket synthétique `ARL-2026-000003` (voir observation ci-dessous), donc **DONE-LOCAL**.
 
 **Recette Debian 2026-11-05, E01-01:** capture du ticket `ARL-2026-000003` sous `ARL Internal QA`, source `phone`, contact `Test Caller`, téléphone et email synthétiques visibles, demande conservée, `NEW` réel et aucune évaluation liée. La lecture confirme la persistance immédiate; le redémarrage de ce ticket particulier n'a pas été testé. **E01-01 DONE-LOCAL**. Le parcours archivage de ce même ticket est le seul élément du Bloc 01 restant à accepter localement.
+
+**État d'archivage au 2026-11-05 :** l'opérateur a affiché `ARL-2026-000003` comme `CLOSED · ARCHIVED` avec le filtre activé; le fonctionnement de l'archivage et du filtrage est visible en capture. En revanche la capture de l'événement `archived` dans History après archivage n'a pas été fournie : le critère de conservation des événements est couvert par la CI PostgreSQL synthétique, **pas encore par une preuve locale complète**. L'ergonomie de la sélection des transitions et du filtre a été corrigée, CI verte au commit `e3f9cf6ad27134ce50e90f535234dc9b606c006d`; recette locale des nouveaux widgets à faire.
 
 ### Bloc 02 — CRM — entreprises et contacts
 
