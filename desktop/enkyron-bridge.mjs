@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import pg from 'pg';
 import { boundedSearch, noteInput, requireTicketId, verifiedMaster } from './enkyron-contract.mjs';
+import { readEvidenceRegister, validatedEvidenceRequest } from './enkyron-evidence-register.mjs';
 
 const socket = '/var/run/postgresql';
 const database = 'arl_local';
@@ -87,7 +88,9 @@ async function masterDetails(pool, ticketId) {
   if (!master) return { available: false, reason: 'No recorded master dossier' };
   const check = verifiedMaster(master, ticket.linked_project_id, ticket.linked_assessment_id);
   return {
-    available: true, dossier_key: master.dossier_key, revision: master.revision,
+    available: true, project_id: ticket.linked_project_id,
+    assessment_id: ticket.linked_assessment_id,
+    dossier_key: master.dossier_key, revision: master.revision,
     recorded_at: master.recorded_at, snapshot_id: master.system_snapshot_id,
     snapshot_version: master.snapshot_version, snapshot_status: master.snapshot_status,
     target_sha: master.target_sha, document_md: master.document_md,
@@ -129,16 +132,32 @@ async function saveNote(pool, payload) {
   } finally { client.release(); }
 }
 
+async function evidenceRegister(pool, request) {
+  // The master lookup and evidence index share one immutable PostgreSQL
+  // snapshot, so a concurrent revision cannot mix different assessments.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const result = await readEvidenceRegister(client, request, masterDetails);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'ticket', 'master', 'note'].includes(command)) {
+  if (!['tickets', 'ticket', 'master', 'note', 'evidence-register'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (command === 'tickets') boundedSearch(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
-  const payload = command === 'note' ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
+  if (command === 'evidence-register') validatedEvidenceRequest(payload);
   const readOnly = command !== 'note';
   const pool = new pg.Pool({
     ...config,
@@ -151,6 +170,7 @@ async function main() {
       command === 'tickets' ? await ticketList(pool, arg) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
       command === 'master' ? await masterDetails(pool, arg) :
+      command === 'evidence-register' ? await evidenceRegister(pool, payload) :
       await saveNote(pool, payload);
     emit({ ok: true, result });
   } finally { await pool.end(); }
@@ -159,7 +179,7 @@ async function main() {
 main().catch(error => {
   const message = String(error?.message || '');
   const expected =
-    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded)/.test(message);
+    /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment)/.test(message);
   emit({ ok: false, error: expected ? message.slice(0, 250) :
     'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;
