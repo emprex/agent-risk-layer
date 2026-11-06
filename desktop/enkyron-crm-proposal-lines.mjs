@@ -103,6 +103,13 @@ export async function replaceProposalLines(pool,input,actor,options={}){
         [uuid(),o.key,data.proposal_id,index+1,
           line.description,line.quantity,line.unit_price_minor]
       );
+      await client.query(
+        'INSERT INTO enkyron_crm_proposal_line_versions '
+        +'(id,workspace_key,proposal_id,revision,position,description,quantity,unit_price_minor) '
+        +'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+        [uuid(),o.key,data.proposal_id,version,index+1,
+          line.description,line.quantity,line.unit_price_minor]
+      );
     }
     const updated=(await client.query(
       'UPDATE enkyron_crm_proposal_drafts '
