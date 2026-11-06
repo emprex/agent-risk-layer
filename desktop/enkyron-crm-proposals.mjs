@@ -142,6 +142,15 @@ export async function updateProposalDraft(pool,input,actor,options={}){
     if(!current)throw new Error('CRM proposal not found in local workspace');
     if(current.revision!==data.expected_revision)
       throw new Error('CRM proposal changed since it was opened; reopen latest version');
+    // Once a detailed quote is itemized, the total belongs to its lines,
+    // never to the standalone fee input of the original draft editor.
+    const itemized=(await client.query(
+      'SELECT count(*)::integer AS n FROM enkyron_crm_proposal_lines '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      [owner.key,data.id]
+    )).rows[0]?.n??0;
+    if(itemized>0&&Number(current.amount_minor)!==data.amount_minor)
+      throw new Error('CRM proposal total is computed from quote lines; use Edit lines');
     if(current.title===data.title&&current.scope_text===data.scope_text&&
       current.currency===data.currency&&Number(current.amount_minor)===data.amount_minor)
       throw new Error('CRM proposal has no changes to save');
