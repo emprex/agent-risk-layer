@@ -79,6 +79,8 @@ jobs:
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
           from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem
           from PySide6.QtCore import Qt, QDate
+          from pathlib import Path
+          from unittest.mock import patch
           from desktop.enkyron import DesktopBridge, EnkyronWindow, format_followup_due
 
           # Verify Qt widget construction without connecting to a DB or running ARL.
@@ -756,6 +758,19 @@ jobs:
           window.crm_proposal_table.selectRow(0)
           assert window.crm_open_proposal.isEnabled()
           assert window.crm_export_draft_pdf.isEnabled()
+          # The chooser must start in the operator's own writable home area,
+          # never in the process launch directory (/home on some Debian setups).
+          with patch("desktop.enkyron.QFileDialog.getSaveFileName", return_value=("", "")) as chooser:
+              assert window.select_proposal_pdf_path(
+                  "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee", 2
+              ) == ""
+              suggested = Path(chooser.call_args.args[2])
+              expected_folder = Path.home() / "Documents"
+              if not expected_folder.is_dir():
+                  expected_folder = Path.home()
+              assert suggested.is_absolute()
+              assert suggested.parent == expected_folder
+              assert suggested.name == "ENKYRON_DRAFT_bbbbbbbb_R2.pdf"
           window.export_selected_draft_pdf()
           assert calls[-1][0] == "crm-proposal-export"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
