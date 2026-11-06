@@ -1267,6 +1267,11 @@ class EnkyronWindow(QMainWindow):
         )
         invoice_l.addWidget(self.crm_invoice_table, 1)
         invoice_buttons = QHBoxLayout()
+        self.crm_invoice_to_proposals = QPushButton("Prepare from Proposals…")
+        self.crm_invoice_to_proposals.clicked.connect(
+            lambda: self.crm_tabs.setCurrentIndex(5)
+        )
+        invoice_buttons.addWidget(self.crm_invoice_to_proposals)
         invoice_buttons.addStretch()
         self.crm_invoice_open = QPushButton("Open selected draft…")
         self.crm_invoice_open.setEnabled(False)
@@ -4035,7 +4040,11 @@ class EnkyronWindow(QMainWindow):
             self.crm_invoice_table.blockSignals(False)
             extra = " Showing first 100; refine search." if data.get("more") else ""
             self.crm_invoice_notice.setText(
-                "{} unissued draft(s).{}".format(len(self.crm_invoice_items), extra)
+                "{} unissued draft(s).{} To prepare one, open Proposals, "
+                "complete its internal review and billing worksheet, "
+                "then select Prepare invoice draft….".format(
+                    len(self.crm_invoice_items), extra
+                )
             )
 
         self.bridge.call("crm-invoice-drafts", search, callback=received)
