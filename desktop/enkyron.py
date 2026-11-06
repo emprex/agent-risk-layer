@@ -241,6 +241,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_profile_context = None
         self.crm_buyer_dialog = None
         self.crm_buyer_context = None
+        self.crm_terms_dialog = None
+        self.crm_terms_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1134,36 +1136,51 @@ class EnkyronWindow(QMainWindow):
             self.proposal_selected
         )
         proposals_l.addWidget(self.crm_proposal_table, 1)
-        proposal_footer = QHBoxLayout()
-        proposal_footer.addWidget(QLabel(
+        # Three compact rows prevent CRM actions being clipped on smaller screens.
+        proposal_footer = QVBoxLayout()
+        proposal_navigation = QHBoxLayout()
+        proposal_navigation.addWidget(QLabel(
             "To create a new draft, select an opportunity in Pipeline."
         ))
-        proposal_footer.addStretch()
+        proposal_navigation.addStretch()
         to_pipeline = QPushButton("Open Pipeline")
         to_pipeline.clicked.connect(
             lambda: self.crm_tabs.setCurrentIndex(4)
         )
-        proposal_footer.addWidget(to_pipeline)
+        proposal_navigation.addWidget(to_pipeline)
+        proposal_footer.addLayout(proposal_navigation)
+
+        proposal_edit_actions = QHBoxLayout()
         self.crm_open_proposal = QPushButton("Open selected proposal")
         self.crm_open_proposal.setEnabled(False)
         self.crm_open_proposal.clicked.connect(self.open_selected_proposal)
-        proposal_footer.addWidget(self.crm_open_proposal)
-        self.crm_buyer_button = QPushButton("Buyer identity review…")
-        self.crm_buyer_button.setEnabled(False)
-        self.crm_buyer_button.clicked.connect(self.open_proposal_buyer_review)
-        proposal_footer.addWidget(self.crm_buyer_button)
+        proposal_edit_actions.addWidget(self.crm_open_proposal)
         self.crm_edit_lines = QPushButton("Edit line items…")
         self.crm_edit_lines.setEnabled(False)
         self.crm_edit_lines.clicked.connect(self.open_selected_quote_lines)
-        proposal_footer.addWidget(self.crm_edit_lines)
+        proposal_edit_actions.addWidget(self.crm_edit_lines)
         self.crm_export_draft_pdf = QPushButton("Export draft PDF…")
         self.crm_export_draft_pdf.setEnabled(False)
         self.crm_export_draft_pdf.clicked.connect(self.export_selected_draft_pdf)
-        proposal_footer.addWidget(self.crm_export_draft_pdf)
+        proposal_edit_actions.addWidget(self.crm_export_draft_pdf)
+        proposal_edit_actions.addStretch()
+        proposal_footer.addLayout(proposal_edit_actions)
+
+        proposal_reviews = QHBoxLayout()
+        self.crm_buyer_button = QPushButton("Buyer identity review…")
+        self.crm_buyer_button.setEnabled(False)
+        self.crm_buyer_button.clicked.connect(self.open_proposal_buyer_review)
+        proposal_reviews.addWidget(self.crm_buyer_button)
+        self.crm_terms_button = QPushButton("Commercial terms…")
+        self.crm_terms_button.setEnabled(False)
+        self.crm_terms_button.clicked.connect(self.open_proposal_commercial_terms)
+        proposal_reviews.addWidget(self.crm_terms_button)
         self.crm_tax_review_button = QPushButton("International tax review…")
         self.crm_tax_review_button.setEnabled(False)
         self.crm_tax_review_button.clicked.connect(self.open_proposal_tax_review)
-        proposal_footer.addWidget(self.crm_tax_review_button)
+        proposal_reviews.addWidget(self.crm_tax_review_button)
+        proposal_reviews.addStretch()
+        proposal_footer.addLayout(proposal_reviews)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
@@ -2446,6 +2463,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_export_draft_pdf.setEnabled(False)
         self.crm_tax_review_button.setEnabled(False)
         self.crm_buyer_button.setEnabled(False)
+        self.crm_terms_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2497,6 +2515,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_export_draft_pdf.setEnabled(available)
         self.crm_tax_review_button.setEnabled(available)
         self.crm_buyer_button.setEnabled(available)
+        self.crm_terms_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -3062,6 +3081,219 @@ class EnkyronWindow(QMainWindow):
                 "outstanding.".format(data["proposal_revision"])
             )
         self.bridge.call("crm-buyer-record", payload=payload, callback=received)
+
+    def open_proposal_commercial_terms(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if self.crm_terms_dialog and self.crm_terms_dialog.isVisible():
+            self.crm_terms_dialog.raise_()
+            self.crm_terms_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_terms_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Commercial terms unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not read the commercial terms."
+                    )
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh the proposal list before reviewing commercial terms."
+                )
+                self.load_proposals()
+                return
+            self.show_proposal_commercial_terms(data)
+
+        self.bridge.call("crm-commercial-terms", proposal_id, callback=received)
+
+    def show_proposal_commercial_terms(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Commercial terms (internal draft)")
+        dialog.resize(770, 650)
+        dialog.setMinimumSize(600, 470)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("PROPOSAL COMMERCIAL TERMS · DRAFT"))
+        warning = QLabel(
+            "Manually document commercial terms for this exact proposal revision. "
+            "Nothing is legally approved, issued, accepted, sent or invoiced. "
+            "ENKYRON does not determine VAT, legal enforceability or delivery authority."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        proposal_name = QLabel(
+            "Proposal: " + (data.get("proposal_title") or "")
+            + " · Revision " + str(data["proposal_revision"])
+        )
+        proposal_name.setTextFormat(Qt.TextFormat.PlainText)
+        proposal_name.setWordWrap(True)
+        body_l.addWidget(proposal_name)
+        form = QFormLayout()
+        current = data.get("current") or {}
+
+        self.crm_terms_valid = QLineEdit()
+        self.crm_terms_valid.setMaxLength(10)
+        self.crm_terms_valid.setPlaceholderText("YYYY-MM-DD (manually chosen date)")
+        self.crm_terms_valid.setText(current.get("valid_until") or "")
+        form.addRow("Valid until *", self.crm_terms_valid)
+
+        self.crm_terms_fields = {}
+        for key, label, hint, limit in (
+            ("payment_terms", "Payment terms *",
+             "How payment would be due; no assumed deposit or VAT rate", 1000),
+            ("delivery_terms", "Delivery / schedule terms *",
+             "Timing and prerequisites, subject to separate authorisation", 1000),
+            ("exclusions", "Exclusions *",
+             "What the fee and scope explicitly do NOT include", 2000),
+            ("assumptions", "Assumptions *",
+             "Dependencies, access, customer responsibilities and approvals", 2000),
+        ):
+            widget = QPlainTextEdit()
+            widget.setMaximumHeight(86)
+            widget.setPlaceholderText(hint)
+            widget.setPlainText(current.get(key) or "")
+            form.addRow(label, widget)
+            self.crm_terms_fields[key] = widget
+
+        self.crm_terms_source = QLineEdit()
+        self.crm_terms_source.setMaxLength(500)
+        self.crm_terms_source.setPlaceholderText(
+            "Human source or draft reference (3–500 characters)"
+        )
+        self.crm_terms_source.setText(current.get("source_reference") or "")
+        form.addRow("Source / internal reference *", self.crm_terms_source)
+        body_l.addLayout(form)
+        if current:
+            for widget in (
+                self.crm_terms_valid, self.crm_terms_source
+            ):
+                widget.setReadOnly(True)
+            for widget in self.crm_terms_fields.values():
+                widget.setReadOnly(True)
+            note = QLabel(
+                "These terms have already been recorded for this proposal revision. "
+                "They cannot be edited or deleted. Revise the proposal to draft "
+                "different conditions for a new revision."
+            )
+            note.setWordWrap(True)
+            body_l.addWidget(note)
+
+        body_l.addWidget(section_title("IMMUTABLE TERMS HISTORY"))
+        history = data.get("history") or []
+        table = QTableWidget(len(history), 3)
+        table.setHorizontalHeaderLabels(
+            ["Proposal revision", "Valid until", "Recorded by"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(history):
+            for col, value in enumerate((
+                item.get("proposal_revision"), item.get("valid_until"),
+                item.get("recorded_by")
+            )):
+                table.setItem(row, col, QTableWidgetItem(str(value or "")))
+        table.setMinimumHeight(min(210, 42 + len(history) * 27))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 records are shown."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_terms_confirm = QCheckBox(
+            "I confirm these are manual DRAFT terms, not an approved offer."
+        )
+        footer.addWidget(self.crm_terms_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_terms_save = QPushButton("Record draft terms")
+        self.crm_terms_save.setObjectName("primary")
+        self.crm_terms_save.setEnabled(not bool(current))
+        self.crm_terms_save.clicked.connect(self.save_proposal_commercial_terms)
+        footer.addWidget(self.crm_terms_save)
+        layout.addLayout(footer)
+        self.crm_terms_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"]
+        }
+        self.crm_terms_dialog = dialog
+        dialog.open()
+
+    def save_proposal_commercial_terms(self):
+        dialog = self.crm_terms_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_terms_context:
+            return
+        date = self.crm_terms_valid.text().strip()
+        qt_date = QDate.fromString(date, "yyyy-MM-dd")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date) or not qt_date.isValid():
+            QMessageBox.warning(
+                dialog, "Invalid validity date",
+                "Enter a real calendar date in YYYY-MM-DD format."
+            )
+            return
+        fields = {
+            key: widget.toPlainText().strip()
+            for key, widget in self.crm_terms_fields.items()
+        }
+        if (not all(15 <= len(value) <= (2000 if key in ("assumptions", "exclusions")
+                                  else 1000) for key, value in fields.items())
+                or not 3 <= len(self.crm_terms_source.text().strip()) <= 500):
+            QMessageBox.warning(
+                dialog, "Missing commercial terms",
+                "Complete payment, delivery, exclusions, assumptions "
+                "and reference using the indicated lengths."
+            )
+            return
+        if not self.crm_terms_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm these are unapproved manual working terms."
+            )
+            return
+        self.crm_terms_save.setEnabled(False)
+        payload = {
+            **self.crm_terms_context, "valid_until": date,
+            **fields, "source_reference": self.crm_terms_source.text().strip(),
+            "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_terms_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Terms not recorded",
+                    error or "Could not save draft commercial terms."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Draft terms recorded",
+                "Terms saved for proposal revision {}. "
+                "No quote has been issued, no contract has been created.".format(
+                    data["proposal_revision"]
+                )
+            )
+
+        self.bridge.call("crm-commercial-record", payload=payload, callback=received)
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()

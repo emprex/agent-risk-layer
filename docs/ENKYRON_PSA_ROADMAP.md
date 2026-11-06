@@ -615,3 +615,12 @@ Aucune migration nouvelle, pas d'émission officielle, d'envoi, de facture ni d'
 ## E02-BUYER-REVIEW-01 — identité du destinataire des devis (2026-11-06)
 
 Une proposition commerciale ne doit pas devenir un devis officiel sur la seule base d'un nom de prospect. ENKYRON conserve désormais, par révision de proposition, un **documentary buyer record** saisi par l'opérateur : entreprise CRM explicitement liée au prospect historique, nom juridique saisi, adresse, référence de source et justification. Aucune recherche ou validation d'identité automatisée, aucun droit de facturer ou envoyer créé. Table append-only `078_enkyron_crm_proposal_buyer_reviews.sql`; migration additive avec sauvegarde préalable, aucune modification de l'historique CRM. Une seule entrée par révision; toute nouvelle correction requiert une nouvelle révision de la proposition. Accès local via `CRM → Proposals → Buyer identity review…`. Refus de liaison à une entreprise non associée, de révision obsolète et de doublon; le code ne présente jamais la déclaration comme une vérification indépendante. **CI et recette Debian restent des validations distinctes.**
+
+
+## E02-COMMERCIAL-TERMS-01 — conditions des propositions en brouillon (2026-11-06)
+
+- `CRM → Proposals → Commercial terms…`: saisie **manuelle** de la date de validité, modalités de paiement, conditions de livraison, exclusions, hypothèses et référence de travail. Aucun taux de TVA ou délai n'est présumé.
+- Migration additive `079_enkyron_crm_proposal_commercial_terms.sql` (script `enkyron-crm-commercial-terms-schema.mjs`, modes `--check` / `--apply`, sauvegarde avant modification). Une seule fiche immutable par révision ; nouveau contenu après révision de proposition uniquement. Isolation `workspace_key` de l'opérateur local, refus de version obsolète et de doublon.
+- Présentation dans une fenêtre native Qt, historique consultatif, lecture seule de l'enregistrement sauvegardé. Barre de commandes CRM répartie sur trois lignes pour éviter les boutons tronqués sur un écran étroit.
+- Ne crée **aucune** facture, offre officiellement émise, approbation, signature, envoi, engagement ou assessment ; ces documents sont des conditions préparatoires non validées juridiquement. **Pas de modification du PDF existant** dans cet incrément.
+- Validation : tests de schéma/validation, base PostgreSQL synthétique et Qt. La recette sur Debian reste distincte de la CI.
