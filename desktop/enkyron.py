@@ -2609,6 +2609,270 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-proposal-export", proposal_id, callback=received)
 
+    def open_proposal_tax_review(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if self.crm_tax_dialog and self.crm_tax_dialog.isVisible():
+            self.crm_tax_dialog.raise_()
+            self.crm_tax_dialog.activateWindow()
+            return
+        proposal = self.crm_proposal_items[row]
+        proposal_id, revision = proposal["id"], proposal["revision"]
+        self.crm_tax_review_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Review unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not load the research history."
+                    )
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh the proposal list before documenting its tax context."
+                )
+                self.load_proposals()
+                return
+            self.show_proposal_tax_dialog(data)
+
+        self.bridge.call("crm-tax-reviews", proposal_id, callback=received)
+
+    def show_proposal_tax_dialog(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · International tax review")
+        dialog.resize(800, 620)
+        dialog.setMinimumSize(650, 500)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("INTERNATIONAL SALES · TAX RESEARCH"))
+        disclaimer = QLabel(
+            "Record the facts needed to review VAT and overseas tax obligations. "
+            "ENKYRON does not decide tax treatment, apply VAT or issue invoices. "
+            "A qualified adviser must verify the final position."
+        )
+        disclaimer.setWordWrap(True)
+        layout.addWidget(disclaimer)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        form = QFormLayout()
+        self.crm_tax_buyer = QComboBox()
+        for label, key in (
+            ("Not established", "unknown"),
+            ("Business (B2B)", "business"),
+            ("Individual (B2C)", "consumer")
+        ):
+            self.crm_tax_buyer.addItem(label, key)
+        form.addRow("Buyer type", self.crm_tax_buyer)
+
+        self.crm_tax_country = QLineEdit()
+        self.crm_tax_country.setMaxLength(2)
+        self.crm_tax_country.setPlaceholderText("GB, FR, US… (ISO country code)")
+        form.addRow("Buyer country", self.crm_tax_country)
+
+        self.crm_tax_mode = QComboBox()
+        for label, key in (
+            ("Not established", "unknown"),
+            ("Human-led advisory / security review", "human_led_advisory"),
+            ("Automated digital service", "automated_digital"),
+            ("Mixed or other services", "mixed_or_other")
+        ):
+            self.crm_tax_mode.addItem(label, key)
+        form.addRow("Service type", self.crm_tax_mode)
+
+        self.crm_tax_uk_status = QComboBox()
+        for label, key in (
+            ("Unknown / not checked", "unknown"),
+            ("UK VAT registered (operator-reported)", "registered"),
+            ("Not VAT registered (operator-reported)", "not_registered"),
+            ("UK VAT application pending", "application_pending")
+        ):
+            self.crm_tax_uk_status.addItem(label, key)
+        form.addRow("ARL UK VAT status", self.crm_tax_uk_status)
+
+        self.crm_tax_withholding = QComboBox()
+        for label, key in (
+            ("Overseas withholding not checked", "not_checked"),
+            ("Possible withholding — investigate", "potential_issue"),
+            ("Manually reviewed; see notes", "reviewed_manually")
+        ):
+            self.crm_tax_withholding.addItem(label, key)
+        form.addRow("Overseas withholding", self.crm_tax_withholding)
+
+        self.crm_tax_business_evidence = QPlainTextEdit()
+        self.crm_tax_business_evidence.setMaximumHeight(68)
+        self.crm_tax_business_evidence.setPlaceholderText(
+            "If B2B: documented evidence of genuine business status "
+            "(registration, tax ID or reviewed commercial records)."
+        )
+        form.addRow("Business evidence", self.crm_tax_business_evidence)
+
+        self.crm_tax_location_evidence = QPlainTextEdit()
+        self.crm_tax_location_evidence.setMaximumHeight(68)
+        self.crm_tax_location_evidence.setPlaceholderText(
+            "If a country is entered: explain what establishes the buyer location."
+        )
+        form.addRow("Location evidence", self.crm_tax_location_evidence)
+
+        self.crm_tax_notes = QPlainTextEdit()
+        self.crm_tax_notes.setMaximumHeight(90)
+        self.crm_tax_notes.setPlaceholderText(
+            "Explain which VAT / local tax questions remain open and why. "
+            "Do not treat a provisional view as legal advice (30–2000 characters)."
+        )
+        form.addRow("Review notes *", self.crm_tax_notes)
+
+        self.crm_tax_source = QLineEdit()
+        self.crm_tax_source.setMaxLength(500)
+        self.crm_tax_source.setPlaceholderText(
+            "Optional HMRC guidance, accountant or other reference"
+        )
+        form.addRow("Reference", self.crm_tax_source)
+        body_l.addLayout(form)
+
+        history = data.get("items", [])
+        body_l.addWidget(section_title("RECORDED RESEARCH"))
+        if not history:
+            body_l.addWidget(QLabel("No international tax review recorded yet."))
+        else:
+            table = QTableWidget(min(len(history), 20), 4)
+            table.setHorizontalHeaderLabels(
+                ["Recorded", "Buyer", "Country", "Service"]
+            )
+            table.setEditTriggers(
+                QAbstractItemView.EditTrigger.NoEditTriggers
+            )
+            table.setSelectionBehavior(
+                QAbstractItemView.SelectionBehavior.SelectRows
+            )
+            table.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.ResizeMode.ResizeToContents
+            )
+            table.horizontalHeader().setSectionResizeMode(
+                3, QHeaderView.ResizeMode.Stretch
+            )
+            for row, record in enumerate(history[:20]):
+                fields = (
+                    display_date(record.get("recorded_at")),
+                    record.get("buyer_type") or "",
+                    record.get("buyer_country") or "Unknown",
+                    record.get("service_mode") or ""
+                )
+                for col, value in enumerate(fields):
+                    item = QTableWidgetItem(str(value))
+                    if col == 3:
+                        item.setToolTip(str(record.get("review_notes") or ""))
+                    table.setItem(row, col, item)
+            table.setFixedHeight(min(175, 35 + len(history[:20]) * 30))
+            body_l.addWidget(table)
+            if data.get("more"):
+                body_l.addWidget(QLabel(
+                    "Only the latest 20 reviews are displayed."
+                ))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+
+        footer = QHBoxLayout()
+        self.crm_tax_confirm = QCheckBox(
+            "I confirm this is a manual research record, not a tax determination."
+        )
+        footer.addWidget(self.crm_tax_confirm)
+        footer.addStretch()
+        cancel = QPushButton("Close")
+        cancel.clicked.connect(dialog.reject)
+        footer.addWidget(cancel)
+        self.crm_tax_save = QPushButton("Record research")
+        self.crm_tax_save.setObjectName("primary")
+        self.crm_tax_save.clicked.connect(self.save_proposal_tax_review)
+        footer.addWidget(self.crm_tax_save)
+        layout.addLayout(footer)
+
+        self.crm_tax_dialog = dialog
+        self.crm_tax_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"]
+        }
+        dialog.open()
+
+    def save_proposal_tax_review(self):
+        dialog = self.crm_tax_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_tax_context:
+            return
+        notes = self.crm_tax_notes.toPlainText().strip()
+        country = self.crm_tax_country.text().strip().upper()
+        business = self.crm_tax_business_evidence.toPlainText().strip()
+        location = self.crm_tax_location_evidence.toPlainText().strip()
+        if not 30 <= len(notes) <= 2000:
+            QMessageBox.warning(
+                dialog, "Review incomplete",
+                "Explain the current tax questions in 30–2000 characters."
+            )
+            return
+        if country and not re.fullmatch(r"[A-Z]{2}", country):
+            QMessageBox.warning(
+                dialog, "Invalid country", "Use a two-letter ISO country code."
+            )
+            return
+        if country and not 10 <= len(location) <= 1000:
+            QMessageBox.warning(
+                dialog, "Location evidence needed",
+                "Document the source establishing the customer's location."
+            )
+            return
+        if self.crm_tax_buyer.currentData() == "business" and (
+            not 10 <= len(business) <= 1000
+        ):
+            QMessageBox.warning(
+                dialog, "Business evidence needed",
+                "Document why this customer qualifies as a business."
+            )
+            return
+        if not self.crm_tax_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirm research", "Confirm this is your own research note."
+            )
+            return
+        self.crm_tax_save.setEnabled(False)
+        payload = {
+            **self.crm_tax_context,
+            "buyer_type": self.crm_tax_buyer.currentData(),
+            "buyer_country": country,
+            "service_mode": self.crm_tax_mode.currentData(),
+            "uk_vat_registration": self.crm_tax_uk_status.currentData(),
+            "overseas_withholding": self.crm_tax_withholding.currentData(),
+            "business_evidence": business,
+            "location_evidence": location,
+            "review_notes": notes,
+            "source_reference": self.crm_tax_source.text().strip(),
+            "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_tax_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Research not recorded",
+                    error or "Unable to record this review."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Research saved",
+                "The review was added to the proposal history. "
+                "No VAT treatment, invoice or overseas tax has been calculated."
+            )
+
+        self.bridge.call("crm-tax-record", payload=payload, callback=received)
+
     def open_selected_quote_lines(self):
         row = self.crm_proposal_table.currentRow()
         if row < 0 or row >= len(self.crm_proposal_items):
