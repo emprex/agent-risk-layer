@@ -250,6 +250,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_dialog = None
         self.crm_invoice_prepare_context = None
         self.crm_invoice_prepare_ready = False
+        self.crm_invoice_prepare_prospect_id = None
         self.crm_invoice_prepare_steps = []
         self.crm_invoice_detail_dialog = None
         self.crm_invoice_issue_dialog = None
@@ -264,6 +265,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
+        self.crm_invoice_link_return_proposal_id = None
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -3884,6 +3886,7 @@ class EnkyronWindow(QMainWindow):
         fee.setTextFormat(Qt.TextFormat.PlainText)
         body_l.addWidget(fee)
         self.crm_invoice_prepare_ready = bool(data.get("can_prepare"))
+        self.crm_invoice_prepare_prospect_id = data.get("prospect_id")
         self.crm_invoice_prepare_steps = list(data.get("steps") or [])
         if self.crm_invoice_prepare_ready:
             gate_text = (
@@ -4013,7 +4016,7 @@ class EnkyronWindow(QMainWindow):
             return
         routes = {
             "issuer": self.open_issuing_company_profile,
-            "research": lambda: self.crm_tabs.setCurrentIndex(1),
+            "research": self.open_proposal_prospect_association,
             "buyer": self.open_proposal_buyer_review,
             "terms": self.open_proposal_commercial_terms,
             "tax": self.open_proposal_tax_review,
@@ -4026,6 +4029,19 @@ class EnkyronWindow(QMainWindow):
             return
         dialog.reject()
         action()
+
+    def open_proposal_prospect_association(self):
+        """Open the exact prospect, not a search or guessed company name."""
+        proposal_id = (self.crm_invoice_prepare_context or {}).get("proposal_id")
+        prospect_id = self.crm_invoice_prepare_prospect_id
+        if not proposal_id or not prospect_id:
+            QMessageBox.warning(
+                self, "Prospect origin unavailable",
+                "The selected proposal has no usable research prospect identifier."
+            )
+            return
+        self.crm_invoice_link_return_proposal_id = proposal_id
+        self.open_prospect_review_for_id(prospect_id)
 
     def update_invoice_draft_save_state(self):
         dialog = self.crm_invoice_prepare_dialog
@@ -5736,10 +5752,15 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_table.currentRow()
         if row < 0 or row >= len(self.crm_items):
             return
+        self.open_prospect_review_for_id(self.crm_items[row]["id"])
+
+    def open_prospect_review_for_id(self, candidate_id):
+        """Review a specific prospect ID returned by a scoped backend read."""
+        if not isinstance(candidate_id, str) or not candidate_id:
+            return
         if self.crm_review_dialog and self.crm_review_dialog.isVisible():
             self.crm_review_dialog.raise_()
             return
-        candidate_id = self.crm_items[row]["id"]
         self.crm_review_button.setEnabled(False)
 
         def received(data, error):
@@ -5751,7 +5772,18 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             self.crm_review_button.setEnabled(True)
+            if (not isinstance(data.get("prospect"), dict) or
+                    data["prospect"].get("id") != candidate_id):
+                self.crm_invoice_link_return_proposal_id = None
+                QMessageBox.warning(
+                    self, "Prospect mismatch",
+                    "The prospect preview does not match the requested record."
+                )
+                return
             dialog = QDialog(self)
+            dialog.rejected.connect(
+                lambda: setattr(self, "crm_invoice_link_return_proposal_id", None)
+            )
             dialog.setWindowTitle("ENKYRON · Review historical prospect")
             dialog.setMinimumWidth(620)
             layout = QVBoxLayout(dialog)
@@ -5907,6 +5939,19 @@ class EnkyronWindow(QMainWindow):
             self.crm_pending_company_id = data["company_id"]
             self.crm_company_search.clear()
             self.load_companies()
+            guided_proposal_id = self.crm_invoice_link_return_proposal_id
+            self.crm_invoice_link_return_proposal_id = None
+            if guided_proposal_id:
+                row = self.crm_proposal_table.currentRow()
+                if (0 <= row < len(self.crm_proposal_items) and
+                        self.crm_proposal_items[row].get("id") == guided_proposal_id):
+                    self.open_proposal_invoice_preparation()
+                else:
+                    QMessageBox.information(
+                        self, "Association saved",
+                        "Select the commercial proposal again to refresh its "
+                        "invoice preparation checklist."
+                    )
 
         self.bridge.call("crm-prospect-link", payload=payload, callback=received)
 
