@@ -2,7 +2,7 @@
 // A term record is bound to one proposal revision, immutable, operator-entered.
 // Never implies customer acceptance, contract, tax decision, sending or assessment.
 import {randomUUID} from 'node:crypto';
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[0-9a-f]{12}$/;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CONTROL=/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 function owner(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
