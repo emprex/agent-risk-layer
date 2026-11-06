@@ -175,6 +175,16 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-COMPANY-360-01 — fiche entreprise consolidée (2026-11-06) :**
+- Dans **CRM → Companies & Contacts**, sélectionner une entreprise et ouvrir **Open company dossier**. La fenêtre Qt indépendante (non modale) contient six vues compactes : **Contacts**, **Research links**, **Tickets**, **Opportunities**, **Activity notes**, **Email drafts**, avec compteurs et tableaux consultatifs. Les autres fonctions existantes restent disponibles.
+- Backend `crm-company-dossier` : transaction **REPEATABLE READ / READ ONLY**, toujours sous `workspace_key` local de l'opérateur ; compteurs exacts et **20 enregistrements affichés maximum par rubrique**, avec un avertissement explicite si des enregistrements restent masqués. Aucun changement de schéma ni mutation de données.
+- Les tickets ne remontent **que** par une association humaine `enkyron_crm_ticket_links` ; les opportunités, notes et brouillons remontent **uniquement** par un prospect auparavant relié à l'entreprise via `enkyron_crm_prospect_links`. Aucun rapprochement silencieux par nom, domaine, contact ou email. Les enregistrements commerciaux et leurs stades ne deviennent pas des preuves de vente, de paiement ou de consentement.
+- Les champs de texte provenant de la base sont affichés en **texte brut Qt**. Ne pas confondre l'opportunité du prospect associée à la fiche avec un engagement de la personne morale. Le statut `prospect` de l'entreprise reste inchangé.
+- Test unitaire + test natif Qt + PostgreSQL synthétique : même nom pour deux entreprises, prospect lié/non lié, ticket explicitement lié, contact, brouillon, activité, 21 contacts (aperçu tronqué), isolation entre espaces opérateur, absence de réécriture des prospects.
+- **Limites :** aucun client créé automatiquement ; entreprises non enregistrées non visibles dans ce dossier ; pas d'envoi, pas de changement de statut, pas de consultation exhaustive quand une rubrique dépasse 20 éléments. La validation visuelle sur Debian suit la validation GitHub HEAD exact.
+
+
+
 **Incrément E02-PIPELINE-01 — tableau commercial 5 colonnes (2026-11-06) :**
 - Nouvel onglet **CRM → Pipeline** : Prospecting (research, qualified), Engagement (contact_planned, contacted, discovery), Proposals (proposal, negotiation), Won, Lost. Ce classement **représente les neuf états existants**, sans nouvelle définition des ventes ni modification du schéma PostgreSQL.
 - Chaque colonne affiche son **nombre exact d'opportunités** et ses 30 éléments récents au maximum. Si elle en contient plus, l'interface avertit que la vue est un aperçu et renvoie à la recherche **Follow-ups**. Pas de chiffre fictif, pas de disparition silencieuse.
