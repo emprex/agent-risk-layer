@@ -30,10 +30,11 @@ function workspace(actor) {
 function websiteField(input) {
   const website = value(input, 'website', 500);
   if (website) {
+    const hint = 'CRM website must be a web address (e.g. https://example.com), not an email. Leave it empty if unknown.';
     let url;
-    try { url = new URL(website); } catch { throw new Error('CRM invalid website'); }
+    try { url = new URL(website); } catch { throw new Error(hint); }
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !url.hostname) {
-      throw new Error('CRM invalid website');
+      throw new Error(hint);
     }
   }
   return website;
