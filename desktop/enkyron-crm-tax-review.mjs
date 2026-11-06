@@ -41,9 +41,16 @@ export function validateTaxReview(input){
     throw new Error('CRM invalid review classification');
   if(input.confirmed!==true)
     throw new Error('CRM manual tax review confirmation required');
-  const buyer_country=(input.buyer_country??'').trim().toUpperCase()||null;
-  if(buyer_country!==null&&!/^[A-Z]{2}$/.test(buyer_country))
-    throw new Error('CRM buyer country must be a 2-letter ISO code');
+  const rawCountry=input.buyer_country??'';
+  if(typeof rawCountry!=='string'||rawCountry.length>4)
+    throw new Error('CRM buyer country must be a 2-letter country code');
+  const buyer_country=rawCountry.trim().toUpperCase()||null;
+  // EU is a supranational area, UK is not the official ISO 3166-1 GB code,
+  // and ZZ/UN/EZ are not verified customer countries.
+  if(buyer_country!==null&&(
+    !/^[A-Z]{2}$/.test(buyer_country)||
+    ['EU','UK','ZZ','UN','EZ','XA','XB'].includes(buyer_country)
+  ))throw new Error('CRM buyer country must be a 2-letter ISO country code');
   const business_evidence=notes(input.business_evidence,'business evidence',10,1000,true);
   const location_evidence=notes(input.location_evidence,'location evidence',10,1000,true);
   const review_notes=notes(input.review_notes,'tax review notes',30,2000);
