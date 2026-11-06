@@ -54,7 +54,8 @@ export function validateTaxReview(input){
   const business_evidence=notes(input.business_evidence,'business evidence',10,1000,true);
   const location_evidence=notes(input.location_evidence,'location evidence',10,1000,true);
   const review_notes=notes(input.review_notes,'tax review notes',30,2000);
-  const source_reference=notes(input.source_reference,'source reference',5,500,true);
+  // Short official acronyms such as ICO and HMRC are valid references.
+  const source_reference=notes(input.source_reference,'source reference (3–500 characters)',3,500,true);
   if(input.buyer_type==='business'&&!business_evidence)
     throw new Error('CRM B2B status requires independent business evidence');
   if(buyer_country&&!location_evidence)
