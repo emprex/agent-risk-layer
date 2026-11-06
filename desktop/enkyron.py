@@ -2597,7 +2597,7 @@ class EnkyronWindow(QMainWindow):
                 "Provide a title, scope (at least 20 characters) and currency."
             )
             return
-        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,6})(?:\\.[0-9]{1,2})?", fee):
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,6})(?:\.[0-9]{1,2})?", fee):
             QMessageBox.warning(
                 dialog, "Invalid proposed fee",
                 "Enter a positive amount such as 1250.50, with up to two decimals."
