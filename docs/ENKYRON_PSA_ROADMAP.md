@@ -589,3 +589,8 @@ La couverture PSA est inspirée des grandes familles reconnues dans HaloPSA (tic
 - HaloPSA : https://usehalo.com/halopsa/
 - ConnectWise PSA : https://www.connectwise.com/platform/psa/request-pricing
 
+
+
+## ENKYRON E02 — Issuing company legal & billing profile (2026-11-06)
+
+The operator's issuing-company identity is separate from customer CRM companies. A local-operator-scoped, append-only profile records manually entered legal identity, VAT registration status, billing contact and currency, source reference and verification notes. Revision conflicts are refused. Migration `076_enkyron_operator_company_profiles.sql` requires an independent backup-and-check installation after 075; it does not change CRM customer records. The native Qt entry is `CRM → Issuing company profile…`. No invoice, tax determination or proposal is issued or changed by saving. **Status: implemented on GitHub; CI and operator Debian acceptance are separate gates.**

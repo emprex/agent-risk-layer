@@ -36,7 +36,7 @@ test('validation requires real operator entry, source and strict format, without
     {...base,vat_status:'registered'},
     {...base,vat_status:'unknown',vat_number:'GB111'},
     {...base,vat_status:'registered',vat_number:'GB123',vat_effective_date:'2026-02-30'},
-    {...base,legal_name:'Synthetic\\u0000Injected'}]){
+    {...base,legal_name:'Synthetic'+String.fromCharCode(0)+'Injected'}]){
       assert.throws(()=>validateCompanyProfile(invalid),/ENKYRON/);
   }
 });
