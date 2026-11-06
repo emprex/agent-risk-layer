@@ -1411,6 +1411,166 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-contacts", company_id, callback=received)
 
+    def open_company_dossier(self):
+        if not self.crm_company_id:
+            return
+        if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
+            self.crm_dossier_dialog.raise_()
+            self.crm_dossier_dialog.activateWindow()
+            return
+        company_id = self.crm_company_id
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Company dossier")
+        dialog.resize(880, 620)
+        dialog.setMinimumSize(720, 500)
+        layout = QVBoxLayout(dialog)
+        heading = QLabel("COMPANY DOSSIER")
+        heading.setStyleSheet("font-size: 18px; font-weight: bold;")
+        layout.addWidget(heading)
+        self.crm_dossier_summary = QLabel("Loading company details…")
+        self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_dossier_summary.setWordWrap(True)
+        layout.addWidget(self.crm_dossier_summary)
+        self.crm_dossier_notice = QLabel(
+            "Only reviewed links appear here. Similar company names do not "
+            "establish an association."
+        )
+        self.crm_dossier_notice.setWordWrap(True)
+        layout.addWidget(self.crm_dossier_notice)
+        self.crm_dossier_tabs = QTabWidget()
+        layout.addWidget(self.crm_dossier_tabs, 1)
+        footer = QHBoxLayout()
+        footer.addStretch()
+        refresh = QPushButton("Refresh dossier")
+        refresh.clicked.connect(self.refresh_company_dossier)
+        footer.addWidget(refresh)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        layout.addLayout(footer)
+        self.crm_dossier_dialog = dialog
+        self.crm_dossier_company_id = company_id
+        dialog.open()
+        self.refresh_company_dossier()
+
+    def refresh_company_dossier(self):
+        dialog = self.crm_dossier_dialog
+        company_id = self.crm_dossier_company_id
+        if not dialog or not dialog.isVisible() or not company_id:
+            return
+        self.crm_dossier_seq += 1
+        seq = self.crm_dossier_seq
+        self.crm_dossier_notice.setText("Loading company records…")
+
+        def received(data, error):
+            if (not dialog.isVisible() or seq != self.crm_dossier_seq
+                    or company_id != self.crm_dossier_company_id):
+                return
+            if error or not data or not data.get("available"):
+                self.crm_dossier_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "Company dossier is unavailable."
+                    )
+                )
+                return
+            company = data["company"]
+            detail = ", ".join(filter(None, [
+                company.get("city"), company.get("country")
+            ]))
+            self.crm_dossier_summary.setText(
+                "{}\nRelationship: {}  ·  Sector: {}  ·  Location: {}\n"
+                "Legal name: {}  ·  Website: {}".format(
+                    company.get("name") or "Company",
+                    company.get("relationship_state") or "Unknown",
+                    company.get("sector") or "Not recorded",
+                    detail or "Not recorded",
+                    company.get("legal_name") or "Not recorded",
+                    company.get("website") or "Not recorded"
+                )
+            )
+            sections = data.get("sections", {})
+            definitions = [
+                ("contacts", "Contacts", [
+                    ("Name", "full_name"), ("Role", "job_title"),
+                    ("Email", "email"), ("Permission", "marketing_permission")
+                ]),
+                ("prospects", "Research links", [
+                    ("Candidate", "candidate_name"), ("Source", "source"),
+                    ("Website", "website"), ("Linked", "linked_at")
+                ]),
+                ("tickets", "Tickets", [
+                    ("Ticket", "ticket_number"), ("Title", "title"),
+                    ("Status", "status"), ("Recorded client", "client_name")
+                ]),
+                ("opportunities", "Opportunities", [
+                    ("Stage", "stage"), ("Next action", "next_action"),
+                    ("Due date", "due_date"), ("Updated", "updated_at")
+                ]),
+                ("activities", "Activity notes", [
+                    ("Type", "activity_type"), ("Details", "detail"),
+                    ("Operator", "recorded_by"), ("Recorded", "recorded_at")
+                ]),
+                ("drafts", "Email drafts", [
+                    ("Subject", "subject"), ("Recipient", "recipient_email"),
+                    ("Revision", "revision"), ("Updated", "updated_at")
+                ])
+            ]
+            self.crm_dossier_tabs.clear()
+            summaries = []
+            for section_id, title, columns in definitions:
+                section = sections.get(section_id, {})
+                rows = section.get("items", [])
+                count = int(section.get("total", 0))
+                summaries.append("{}: {}".format(title, count))
+                page = QWidget()
+                page_layout = QVBoxLayout(page)
+                if section.get("more"):
+                    limit_notice = QLabel(
+                        "Showing first {} of {} records. "
+                        "Use the corresponding CRM view for more.".format(
+                            len(rows), count
+                        )
+                    )
+                    page_layout.addWidget(limit_notice)
+                table = QTableWidget(len(rows), len(columns))
+                table.setHorizontalHeaderLabels(
+                    [heading for heading, _ in columns]
+                )
+                table.setAlternatingRowColors(True)
+                table.setSelectionBehavior(
+                    QAbstractItemView.SelectionBehavior.SelectRows
+                )
+                table.setEditTriggers(
+                    QAbstractItemView.EditTrigger.NoEditTriggers
+                )
+                for row_index, record in enumerate(rows):
+                    for column_index, (_heading, key) in enumerate(columns):
+                        value = record.get(key)
+                        if key in ("updated_at", "recorded_at", "linked_at"):
+                            value = display_date(value)
+                        elif key == "due_date":
+                            value = str(value or "")[:10]
+                        cell = QTableWidgetItem(
+                            str(value) if value is not None else ""
+                        )
+                        cell.setToolTip(cell.text())
+                        table.setItem(row_index, column_index, cell)
+                table.horizontalHeader().setSectionResizeMode(
+                    0, QHeaderView.ResizeMode.ResizeToContents
+                )
+                table.horizontalHeader().setSectionResizeMode(
+                    1, QHeaderView.ResizeMode.Stretch
+                )
+                page_layout.addWidget(table, 1)
+                self.crm_dossier_tabs.addTab(page, "{} ({})".format(title, count))
+            self.crm_dossier_notice.setText(
+                " · ".join(summaries) + "\n"
+                "Only explicitly associated records; notes and stages are "
+                "operator-entered, not independently verified."
+            )
+
+        self.bridge.call("crm-company-dossier", company_id, callback=received)
+
     def load_company_tickets(self, company_id):
         self.crm_ticket_seq += 1
         seq = self.crm_ticket_seq
