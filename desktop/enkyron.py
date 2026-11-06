@@ -221,6 +221,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
+        self.imap_config = None
+        self.imap_seq = 0
+        self.imap_messages = []
+        self.imap_login_dialog = None
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -910,6 +914,77 @@ class EnkyronWindow(QMainWindow):
         draft_footer.addWidget(self.crm_edit_draft)
         drafts_l.addLayout(draft_footer)
         self.crm_tabs.addTab(drafts_page, "Mail drafts")
+
+        # IMAP is explicit/opt-in, read-only and transient. Nothing is synced
+        # into PostgreSQL. All message content renders as plain text.
+        inbox_page = QWidget()
+        inbox_l = QVBoxLayout(inbox_page)
+        inbox_l.setSpacing(12)
+        inbox_l.addWidget(section_title("CRM · LIVE READ-ONLY INBOX"))
+        imap_explain = QLabel(
+            "Connect explicitly to your professional IMAP server over verified TLS. "
+            "Only the latest 30 headers are previewed; email bodies are fetched on "
+            "selection without marking messages read. No SMTP, send, local cache, "
+            "automatic contact association or stored account password."
+        )
+        imap_explain.setWordWrap(True)
+        inbox_l.addWidget(imap_explain)
+        inbox_toolbar = QHBoxLayout()
+        self.imap_status = QLabel("Not connected")
+        self.imap_status.setWordWrap(True)
+        inbox_toolbar.addWidget(self.imap_status, 1)
+        self.imap_connect = QPushButton("Connect inbox…")
+        self.imap_connect.clicked.connect(self.open_imap_connect)
+        inbox_toolbar.addWidget(self.imap_connect)
+        self.imap_refresh = QPushButton("Refresh")
+        self.imap_refresh.setEnabled(False)
+        self.imap_refresh.clicked.connect(self.load_imap_inbox)
+        inbox_toolbar.addWidget(self.imap_refresh)
+        self.imap_disconnect = QPushButton("Disconnect")
+        self.imap_disconnect.setEnabled(False)
+        self.imap_disconnect.clicked.connect(self.disconnect_imap)
+        inbox_toolbar.addWidget(self.imap_disconnect)
+        inbox_l.addLayout(inbox_toolbar)
+        self.imap_table = QTableWidget(0, 3)
+        self.imap_table.setHorizontalHeaderLabels(
+            ["From", "Subject", "Date (mail header)"]
+        )
+        self.imap_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.imap_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.imap_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.imap_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.imap_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.imap_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.imap_table.setAlternatingRowColors(True)
+        self.imap_table.itemSelectionChanged.connect(self.imap_selected)
+        inbox_l.addWidget(self.imap_table, 2)
+        preview_heading = QHBoxLayout()
+        preview_heading.addWidget(section_title("SELECTED MESSAGE · PLAIN TEXT"))
+        preview_heading.addStretch()
+        self.imap_open = QPushButton("Read selected message")
+        self.imap_open.setEnabled(False)
+        self.imap_open.clicked.connect(self.read_imap_message)
+        preview_heading.addWidget(self.imap_open)
+        inbox_l.addLayout(preview_heading)
+        self.imap_preview = make_text_area()
+        self.imap_preview.setPlaceholderText(
+            "Select a message to read its plain-text content. HTML and attachments "
+            "are never rendered or downloaded for large messages."
+        )
+        inbox_l.addWidget(self.imap_preview, 1)
+        self.crm_tabs.addTab(inbox_page, "Inbox")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
