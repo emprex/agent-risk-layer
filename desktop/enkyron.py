@@ -2521,8 +2521,13 @@ class EnkyronWindow(QMainWindow):
         suggestion = "ENKYRON_DRAFT_{}_R{}.pdf".format(
             proposal_id[:8], revision
         )
+        # Qt otherwise resolves a relative filename against the launch directory.
+        # On Debian this can be /home (not writable by a regular user).
+        documents = Path.home() / "Documents"
+        folder = documents if documents.is_dir() else Path.home()
         filename, _chosen_filter = QFileDialog.getSaveFileName(
-            self, "Save internal draft PDF", suggestion, "PDF documents (*.pdf)"
+            self, "Save internal draft PDF",
+            str(folder / suggestion), "PDF documents (*.pdf)"
         )
         return filename
 
@@ -2578,6 +2583,13 @@ class EnkyronWindow(QMainWindow):
                     return
             try:
                 pages = export_draft_pdf(path, snapshot)
+            except PermissionError:
+                QMessageBox.warning(
+                    self, "PDF not saved",
+                    "You do not have permission to save in this folder. "
+                    "Choose a folder inside your home directory, such as Documents."
+                )
+                return
             except (OSError, ValueError, RuntimeError) as exc:
                 QMessageBox.warning(self, "PDF not saved", str(exc))
                 return
