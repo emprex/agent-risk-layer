@@ -2902,13 +2902,19 @@ class EnkyronWindow(QMainWindow):
         body = QWidget()
         body_l = QVBoxLayout(body)
         candidate = data.get("research_candidate") or "Unknown research prospect"
-        body_l.addWidget(QLabel("Research candidate: " + candidate))
+        candidate_label = QLabel("Research candidate: " + candidate)
+        candidate_label.setTextFormat(Qt.TextFormat.PlainText)
+        candidate_label.setWordWrap(True)
+        body_l.addWidget(candidate_label)
         linked = data.get("linked_company")
         if linked:
             company_text = (
                 "Explicitly linked CRM company: " + (linked.get("name") or "")
             )
-            body_l.addWidget(QLabel(company_text))
+            linked_label = QLabel(company_text)
+            linked_label.setTextFormat(Qt.TextFormat.PlainText)
+            linked_label.setWordWrap(True)
+            body_l.addWidget(linked_label)
         else:
             missing = QLabel(
                 "No CRM company has been explicitly linked to this research prospect. "
@@ -2945,6 +2951,15 @@ class EnkyronWindow(QMainWindow):
         body_l.addLayout(form)
         current = data.get("current")
         if current:
+            # The saved record is immutable: reopen it for inspection,
+            # never as editable input or an implied independent verification.
+            self.crm_buyer_legal_name.setText(current.get("legal_name") or "")
+            self.crm_buyer_address.setPlainText(current.get("registered_address") or "")
+            self.crm_buyer_source.setText(current.get("source_reference") or "")
+            self.crm_buyer_notes.setPlainText(current.get("review_note") or "")
+            for widget in (self.crm_buyer_legal_name, self.crm_buyer_address,
+                           self.crm_buyer_source, self.crm_buyer_notes):
+                widget.setReadOnly(True)
             status = QLabel(
                 "A buyer documentary record already exists for proposal revision "
                 + str(current["proposal_revision"])
