@@ -250,6 +250,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_dialog = None
         self.crm_invoice_prepare_context = None
         self.crm_invoice_detail_dialog = None
+        self.crm_invoice_issue_dialog = None
+        self.crm_invoice_issue_context = None
         self.crm_invoice_items = []
         self.crm_invoice_loaded = False
         self.crm_invoice_seq = 0
@@ -1253,9 +1255,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
-        self.crm_invoice_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch
-        )
+        invoice_header = self.crm_invoice_table.horizontalHeader()
+        invoice_header.setMinimumSectionSize(100)
+        for column in (0, 1, 3, 4, 5):
+            invoice_header.setSectionResizeMode(
+                column, QHeaderView.ResizeMode.ResizeToContents
+            )
+        invoice_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.crm_invoice_table.itemSelectionChanged.connect(
             self.invoice_draft_selected
         )
@@ -1266,6 +1272,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_open.setEnabled(False)
         self.crm_invoice_open.clicked.connect(self.open_selected_invoice_draft)
         invoice_buttons.addWidget(self.crm_invoice_open)
+        self.crm_invoice_issue_button = QPushButton("Issue documentation review…")
+        self.crm_invoice_issue_button.setEnabled(False)
+        self.crm_invoice_issue_button.clicked.connect(self.open_invoice_issue_review)
+        invoice_buttons.addWidget(self.crm_invoice_issue_button)
         invoice_l.addLayout(invoice_buttons)
         self.crm_tabs.addTab(invoice_page, "Invoices")
         self.pages.addWidget(crm_page)
@@ -3990,6 +4000,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_loaded = False
         self.crm_invoice_items = []
         self.crm_invoice_open.setEnabled(False)
+        self.crm_invoice_issue_button.setEnabled(False)
         self.crm_invoice_notice.setText("Loading unissued invoice drafts…")
         self.crm_invoice_table.blockSignals(True)
         self.crm_invoice_table.setRowCount(0)
@@ -4031,7 +4042,9 @@ class EnkyronWindow(QMainWindow):
 
     def invoice_draft_selected(self):
         row = self.crm_invoice_table.currentRow()
-        self.crm_invoice_open.setEnabled(0 <= row < len(self.crm_invoice_items))
+        available = 0 <= row < len(self.crm_invoice_items)
+        self.crm_invoice_open.setEnabled(available)
+        self.crm_invoice_issue_button.setEnabled(available)
 
     def open_selected_invoice_draft(self):
         row = self.crm_invoice_table.currentRow()
@@ -4058,6 +4071,237 @@ class EnkyronWindow(QMainWindow):
             self.show_invoice_draft_detail(data["draft"])
 
         self.bridge.call("crm-invoice-draft", draft_id, callback=received)
+
+
+    def open_invoice_issue_review(self):
+        row = self.crm_invoice_table.currentRow()
+        if not 0 <= row < len(self.crm_invoice_items):
+            return
+        if (self.crm_invoice_issue_dialog and
+                self.crm_invoice_issue_dialog.isVisible()):
+            self.crm_invoice_issue_dialog.raise_()
+            self.crm_invoice_issue_dialog.activateWindow()
+            return
+        draft_id = self.crm_invoice_items[row]["id"]
+        self.crm_invoice_issue_button.setEnabled(False)
+
+        def received(data, error):
+            self.invoice_draft_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Documentary checklist unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not read invoice review history."
+                    )
+                )
+                return
+            if data.get("invoice_draft_id") != draft_id:
+                QMessageBox.warning(
+                    self, "Invoice draft changed", "Refresh the Invoices register."
+                )
+                return
+            self.show_invoice_issue_review(data)
+
+        self.bridge.call("crm-invoice-issue-review", draft_id, callback=received)
+
+    def show_invoice_issue_review(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Invoice documentary review (NOT ISSUED)")
+        dialog.resize(800, 660)
+        dialog.setMinimumSize(620, 470)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("HUMAN DOCUMENTARY CHECK · NO INVOICE ISSUANCE"))
+        warning = QLabel(
+            "Document sources for customer authorisation, supply date, "
+            "tax examination and payment terms. Recording this checklist "
+            "does NOT verify tax law, determine VAT, approve payment, "
+            "allocate an invoice number or issue a bill."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        draft = data.get("draft") or {}
+        header = QLabel(
+            "Draft: " + str(draft.get("id") or "") + " · " +
+            str(draft.get("service_description") or "")
+        )
+        header.setTextFormat(Qt.TextFormat.PlainText)
+        header.setWordWrap(True)
+        body_l.addWidget(header)
+        vat_label = QLabel(
+            "Issuer VAT status (operator-reported): " +
+            str(data.get("issuer_vat_status") or "unavailable")
+        )
+        vat_label.setTextFormat(Qt.TextFormat.PlainText)
+        body_l.addWidget(vat_label)
+        blockers = data.get("blockers") or []
+        if blockers:
+            label = QLabel(
+                "Missing / unresolved: " + "; ".join(str(x) for x in blockers)
+            )
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            body_l.addWidget(label)
+        else:
+            label = QLabel(
+                "No automated source-field blockers found. This is NOT "
+                "a legal or tax verification, and issuance remains disabled."
+            )
+            label.setWordWrap(True)
+            body_l.addWidget(label)
+        form = QFormLayout()
+        self.crm_issue_outcome = QComboBox()
+        self.crm_issue_outcome.addItem(
+            "Needs changes / documentation missing", "needs_changes"
+        )
+        self.crm_issue_outcome.addItem(
+            "Sources documented (NOT approved to issue)", "documents_logged"
+        )
+        form.addRow("Human documentation status *", self.crm_issue_outcome)
+        latest = data.get("latest") or {}
+        self.crm_issue_supply_date = QLineEdit()
+        self.crm_issue_supply_date.setMaxLength(10)
+        self.crm_issue_supply_date.setPlaceholderText(
+            "YYYY-MM-DD · documented supply date, not invoice issue date"
+        )
+        self.crm_issue_supply_date.setText(latest.get("supply_date") or "")
+        form.addRow("Supply date (if evidenced)", self.crm_issue_supply_date)
+        self.crm_issue_sources = {}
+        for key, title, hint in (
+            ("customer_authorisation_reference", "Client authority source",
+             "Contract / accepted order / approved scope documentary reference"),
+            ("tax_evidence_reference", "VAT / tax research source",
+             "Human-reviewed legislation or accountant source, not a VAT calculation"),
+            ("payment_terms_reference", "Payment terms source",
+             "Signed terms / documented agreement and due-date basis")
+        ):
+            field = QLineEdit()
+            field.setMaxLength(500)
+            field.setPlaceholderText(hint)
+            field.setText(latest.get(key) or "")
+            self.crm_issue_sources[key] = field
+            form.addRow(title, field)
+        self.crm_issue_note = QPlainTextEdit()
+        self.crm_issue_note.setMaximumHeight(120)
+        self.crm_issue_note.setPlaceholderText(
+            "Explain findings and what is still unresolved (30–2000 characters)"
+        )
+        self.crm_issue_note.setPlainText(latest.get("review_note") or "")
+        form.addRow("Human review note *", self.crm_issue_note)
+        body_l.addLayout(form)
+        body_l.addWidget(section_title("IMMUTABLE CHECKLIST HISTORY"))
+        history = data.get("history") or []
+        table = QTableWidget(len(history), 3)
+        table.setHorizontalHeaderLabels(
+            ["Recorded", "Documentary status", "Operator"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(history):
+            for col, value in enumerate((
+                display_date(item.get("recorded_at")),
+                item.get("outcome"),
+                item.get("recorded_by")
+            )):
+                table.setItem(row, col, QTableWidgetItem(str(value or "")))
+        table.setMinimumHeight(min(225, 44 + len(history) * 28))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 events are shown."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_issue_confirm = QCheckBox(
+            "I confirm this is evidence logging, NOT tax approval or invoice issue."
+        )
+        footer.addWidget(self.crm_issue_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_issue_save = QPushButton("Record documentary check")
+        self.crm_issue_save.setObjectName("primary")
+        self.crm_issue_save.clicked.connect(self.save_invoice_issue_review)
+        footer.addWidget(self.crm_issue_save)
+        layout.addLayout(footer)
+        self.crm_invoice_issue_dialog = dialog
+        self.crm_invoice_issue_context = {"invoice_draft_id": data["invoice_draft_id"]}
+        dialog.open()
+
+    def save_invoice_issue_review(self):
+        dialog = self.crm_invoice_issue_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_invoice_issue_context:
+            return
+        outcome = self.crm_issue_outcome.currentData()
+        supply_date = self.crm_issue_supply_date.text().strip()
+        references = {
+            name: field.text().strip()
+            for name, field in self.crm_issue_sources.items()
+        }
+        notes = self.crm_issue_note.toPlainText().strip()
+        if not 30 <= len(notes) <= 2000:
+            QMessageBox.warning(
+                dialog, "Explanation required", "Enter 30–2000 characters."
+            )
+            return
+        if supply_date:
+            qt_date = QDate.fromString(supply_date, "yyyy-MM-dd")
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", supply_date) or not qt_date.isValid():
+                QMessageBox.warning(
+                    dialog, "Supply date invalid",
+                    "Enter a real supply date in YYYY-MM-DD format."
+                )
+                return
+        if any(value and not 3 <= len(value) <= 500 for value in references.values()):
+            QMessageBox.warning(
+                dialog, "Source reference invalid",
+                "Each entered source reference must be 3–500 characters."
+            )
+            return
+        if outcome == "documents_logged" and (
+                not supply_date or not all(references.values())):
+            QMessageBox.warning(
+                dialog, "Documentation incomplete",
+                "Supply date and all three documentary references are required."
+            )
+            return
+        if not self.crm_issue_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm this records evidence only and does not issue a bill."
+            )
+            return
+        self.crm_issue_save.setEnabled(False)
+        payload = {
+            **self.crm_invoice_issue_context,
+            "outcome": outcome, "supply_date": supply_date,
+            **references, "review_note": notes, "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_issue_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Documentary event not recorded",
+                    error or "Could not save review evidence."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Documentary event recorded",
+                "Evidence history saved. Invoice issuance, VAT determination, "
+                "posting and payment remain disabled."
+            )
+
+        self.bridge.call("crm-invoice-issue-record", payload=payload, callback=received)
 
     def show_invoice_draft_detail(self, draft):
         dialog = QDialog(self)
