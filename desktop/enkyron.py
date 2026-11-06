@@ -867,7 +867,19 @@ class EnkyronWindow(QMainWindow):
             ["Opportunity", "Recipient (manual)", "Subject", "Revision", "Updated"]
         )
         self.crm_draft_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.crm_draft_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.crm_draft_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_draft_table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.crm_draft_table.horizontalHeader().setSectionResizeMode(
+            4, QHeaderView.ResizeMode.ResizeToContents
         )
         self.crm_draft_table.setAlternatingRowColors(True)
         self.crm_draft_table.setSelectionBehavior(
