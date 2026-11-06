@@ -61,7 +61,7 @@ test('real PG international tax research: immutable, linked, no VAT calculation 
       business_evidence:'Verified commercial register evidence for synthetic buyer',
       location_evidence:'Synthetic company office in France evidenced by registry',
       review_notes:'Human operator collected evidence; final VAT classification requires review.',
-      source_reference:'HMRC VAT Notice 741A / EU VAT services guidance',
+      source_reference:'HMRC',
       confirmed:true
     },actor);
     assert.equal(result.proposal_revision,1);
@@ -73,12 +73,14 @@ test('real PG international tax research: immutable, linked, no VAT calculation 
       business_evidence:'',
       location_evidence:'',
       review_notes:'Additional research required before any jurisdiction or tax treatment is concluded.',
-      confirmed:true
+      source_reference:'ICO',confirmed:true
     },actor);
     assert.ok(second.id!==result.id);
     const records=await getTaxReviews(pool,draft.id,actor);
     assert.equal(records.items.length,2);
     assert.ok(records.items.some(x=>x.buyer_country==='FR'));
+    assert.deepEqual(new Set(records.items.map(x=>x.source_reference)),
+      new Set(['HMRC','ICO']));
     assert.ok(records.items.some(x=>x.buyer_type==='unknown'));
     assert.ok(records.items.every(x=>!('uk_vat_rate' in x)));
     assert.ok(records.items.every(x=>!('amount_due_minor' in x)));
