@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QInputDialog,
-    QPlainTextEdit, QPushButton, QSplitter, QSpinBox, QDateEdit, QTabWidget,
+    QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QSpinBox, QDateEdit, QTabWidget,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -1644,7 +1644,17 @@ class EnkyronWindow(QMainWindow):
                     page_layout.addLayout(review_footer)
                 else:
                     page_layout.addWidget(table, 1)
-                self.crm_dossier_tabs.addTab(page, "{} ({})".format(title, count))
+                if section_id == "qualifications":
+                    scroll = QScrollArea()
+                    scroll.setWidgetResizable(True)
+                    scroll.setWidget(page)
+                    self.crm_dossier_tabs.addTab(
+                        scroll, "{} ({})".format(title, count)
+                    )
+                else:
+                    self.crm_dossier_tabs.addTab(
+                        page, "{} ({})".format(title, count)
+                    )
             self.crm_dossier_notice.setText(
                 " · ".join(summaries) + "\n"
                 "Only explicitly associated records; notes and stages are "
