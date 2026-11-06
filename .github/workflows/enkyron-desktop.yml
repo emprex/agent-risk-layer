@@ -213,7 +213,7 @@ jobs:
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
           }, None)
-          assert window.crm_tabs.count() == 6
+          assert window.crm_tabs.count() == 7
           assert hasattr(window, "crm_buyer_button")
           assert not window.crm_buyer_button.isEnabled()
           window.crm_company_profile_button.click()
@@ -388,7 +388,7 @@ jobs:
 
           # Follow-ups are available with no registered CRM company.
           assert window.crm_plan_followup.isEnabled()
-          assert window.crm_tabs.count() == 6
+          assert window.crm_tabs.count() == 7
           window.open_prospect_followup()
           assert calls[-1][0] == "crm-prospect-opportunity"
           assert calls[-1][1] == "ARL-P-000001"
@@ -912,6 +912,91 @@ jobs:
           assert window.crm_billing_note.isReadOnly()
           assert not window.crm_billing_save.isEnabled()
           window.crm_billing_dialog.reject()
+          assert window.crm_tabs.tabText(6) == "Invoices"
+          assert window.crm_invoice_prepare_button.isEnabled()
+          window.crm_invoice_prepare_button.click()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Service",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": None, "can_prepare": False,
+              "blockers": ["No current billing worksheet"],
+              "issuer": None, "buyer": None
+          }, None)
+          assert window.crm_invoice_prepare_dialog.isVisible()
+          assert not window.crm_invoice_prepare_save.isEnabled()
+          window.crm_invoice_prepare_dialog.reject()
+          window.open_proposal_invoice_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted proposal</b>",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "can_prepare": True, "blockers": [], "current_draft_id": None,
+              "issuer": {"legal_name": "<b>Untrusted issuer</b>",
+                          "registered_office": "10 Example Avenue, London"},
+              "buyer": {"legal_name": "Synthetic Buyer Ltd",
+                         "registered_address": "20 Fake Street, London"}
+          }, None)
+          assert window.crm_invoice_prepare_dialog.isVisible()
+          assert window.crm_invoice_prepare_save.isEnabled()
+          assert not window.crm_invoice_prepare_confirm.isChecked()
+          window.crm_invoice_prepare_note.setPlainText(
+              "Synthetic unissued invoice draft. Tax and amount due not determined."
+          )
+          window.crm_invoice_prepare_confirm.setChecked(True)
+          window.save_invoice_draft_preparation()
+          assert calls[-1][0] == "crm-invoice-record"
+          assert calls[-1][2]["worksheet_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["confirmed"] is True
+          assert "invoice_number" not in calls[-1][2]
+          assert "vat_amount_minor" not in calls[-1][2]
+          window.crm_invoice_prepare_dialog.reject()
+          window.crm_tabs.setCurrentIndex(6)
+          assert calls[-1][0] == "crm-invoice-drafts"
+          draft_id = "eeeeeeee-ffff-4aaa-8bbb-cccccccccccc"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": draft_id, "buyer_legal_name": "Synthetic Buyer Ltd",
+                  "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "vat_treatment": "undetermined",
+                  "recorded_at": "2026-11-06T17:00:00Z"
+              }]
+          }, None)
+          assert window.crm_invoice_table.rowCount() == 1
+          assert "1,250.50" in window.crm_invoice_table.item(0, 3).text()
+          window.crm_invoice_table.selectRow(0)
+          assert window.crm_invoice_open.isEnabled()
+          window.crm_invoice_open.click()
+          assert calls[-1][0] == "crm-invoice-draft"
+          assert calls[-1][1] == draft_id
+          calls[-1][3]({
+              "available": True,
+              "draft": {
+                  "id": draft_id, "proposal_revision": 1,
+                  "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "issuer_legal_name": "Synthetic Issuer Ltd",
+                  "issuer_registered_office": "10 Fake Avenue, London",
+                  "buyer_legal_name": "Synthetic Buyer Ltd",
+                  "buyer_registered_address": "20 Fake Street, London",
+                  "status": "unissued_tax_review_required",
+                  "vat_amount_minor": None, "invoice_number": None,
+                  "invoice_total_minor": None, "preparation_note": "Synthetic draft",
+                  "recorded_by": "operator", "recorded_at": "2026-11-06"
+              }
+          }, None)
+          assert window.crm_invoice_detail_dialog.isVisible()
+          window.crm_invoice_detail_dialog.reject()
+          window.crm_tabs.setCurrentIndex(5)
           window.crm_terms_button.click()
           assert calls[-1][0] == "crm-commercial-terms"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
