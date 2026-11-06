@@ -2506,6 +2506,250 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
 
+    def open_selected_quote_lines(self):
+        row = self.crm_proposal_table.currentRow()
+        if row < 0 or row >= len(self.crm_proposal_items):
+            return
+        if self.crm_quote_dialog and self.crm_quote_dialog.isVisible():
+            self.crm_quote_dialog.raise_()
+            return
+        proposal_id = self.crm_proposal_items[row]["id"]
+        self.crm_edit_lines.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available", False):
+                QMessageBox.warning(
+                    self, "Line items unavailable",
+                    error or (data or {}).get(
+                        "notice", "Cannot load detailed quote lines."
+                    )
+                )
+                return
+            self.show_quote_lines_dialog(data)
+
+        self.bridge.call("crm-proposal-lines", proposal_id, callback=received)
+
+    def show_quote_lines_dialog(self, quote):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Detailed proposal lines")
+        dialog.resize(900, 560)
+        dialog.setMinimumSize(690, 460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("DETAILED PROPOSAL · INTERNAL DRAFT"))
+        note = QLabel(
+            "Enter each service, whole-number quantity and unit fee. "
+            "ENKYRON calculates the total precisely. Taxes and terms are not "
+            "calculated; nothing is sent or issued."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        self.crm_quote_table = QTableWidget(0, 4)
+        self.crm_quote_table.setHorizontalHeaderLabels(
+            ["Service / deliverable", "Qty", "Unit fee", "Line total"]
+        )
+        self.crm_quote_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        for column in (1, 2, 3):
+            self.crm_quote_table.horizontalHeader().setSectionResizeMode(
+                column, QHeaderView.ResizeMode.ResizeToContents
+            )
+        self.crm_quote_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_quote_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_quote_table.setAlternatingRowColors(True)
+        layout.addWidget(self.crm_quote_table, 1)
+        actions = QHBoxLayout()
+        add = QPushButton("+ Add line")
+        add.clicked.connect(self.add_quote_line)
+        actions.addWidget(add)
+        remove = QPushButton("Remove selected")
+        remove.clicked.connect(self.remove_quote_line)
+        actions.addWidget(remove)
+        actions.addStretch()
+        self.crm_quote_total = QLabel("")
+        self.crm_quote_total.setStyleSheet("font-weight: bold;")
+        actions.addWidget(self.crm_quote_total)
+        layout.addLayout(actions)
+        footer = QHBoxLayout()
+        footer.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        footer.addWidget(cancel)
+        self.crm_quote_save = QPushButton("Save detailed draft")
+        self.crm_quote_save.setObjectName("primary")
+        self.crm_quote_save.clicked.connect(self.save_quote_lines)
+        footer.addWidget(self.crm_quote_save)
+        layout.addLayout(footer)
+        self.crm_quote_context = {
+            "proposal_id": quote["id"],
+            "expected_revision": quote["revision"],
+            "currency": quote["currency"]
+        }
+        self.crm_quote_dialog = dialog
+        self.crm_quote_table.blockSignals(True)
+        for line in quote.get("lines", []):
+            self.add_quote_line(
+                line.get("description") or "",
+                str(line.get("quantity") or 1),
+                self._quote_format_minor(int(line["unit_price_minor"]))
+            )
+        self.crm_quote_table.blockSignals(False)
+        self.crm_quote_table.itemChanged.connect(self.recalculate_quote_lines)
+        self.recalculate_quote_lines()
+        dialog.open()
+
+    @staticmethod
+    def _quote_format_minor(amount):
+        whole, fraction = divmod(amount, 100)
+        return "{}.{:02d}".format(whole, fraction)
+
+    @staticmethod
+    def _quote_parse_minor(text):
+        text = text.strip()
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,6})(?:\.[0-9]{1,2})?", text):
+            return None
+        whole, _, fraction = text.partition(".")
+        return int(whole) * 100 + int((fraction + "00")[:2])
+
+    def add_quote_line(self, description="", quantity="1", price=""):
+        table = self.crm_quote_table
+        if table.rowCount() >= 25:
+            QMessageBox.information(
+                self.crm_quote_dialog, "Maximum reached",
+                "A detailed draft can contain up to 25 lines."
+            )
+            return
+        table.blockSignals(True)
+        row = table.rowCount()
+        table.insertRow(row)
+        for col, value in enumerate((description, quantity, price, "")):
+            item = QTableWidgetItem(value)
+            if col == 3:
+                item.setFlags(
+                    item.flags() & ~Qt.ItemFlag.ItemIsEditable
+                )
+            table.setItem(row, col, item)
+        table.blockSignals(False)
+        self.recalculate_quote_lines()
+
+    def remove_quote_line(self):
+        row = self.crm_quote_table.currentRow()
+        if row < 0:
+            return
+        self.crm_quote_table.removeRow(row)
+        self.recalculate_quote_lines()
+
+    def _quote_validated_lines(self):
+        table = self.crm_quote_table
+        if not 1 <= table.rowCount() <= 25:
+            return None
+        lines = []
+        total = 0
+        for row in range(table.rowCount()):
+            values = [
+                table.item(row, col).text().strip()
+                if table.item(row, col) is not None else ""
+                for col in (0, 1, 2)
+            ]
+            description, raw_quantity, raw_price = values
+            if (not 5 <= len(description) <= 500 or
+                    any(ord(ch) < 32 or ord(ch) == 127 for ch in description) or
+                    not re.fullmatch(r"[1-9][0-9]{0,4}", raw_quantity)):
+                return None
+            quantity = int(raw_quantity)
+            if quantity > 10000:
+                return None
+            price = self._quote_parse_minor(raw_price)
+            if price is None or not 1 <= price <= 999999999:
+                return None
+            value = quantity * price
+            total += value
+            if total > 999999999:
+                return None
+            lines.append({
+                "description": description, "quantity": quantity,
+                "unit_price_minor": price
+            })
+        return (lines, total)
+
+    def recalculate_quote_lines(self, *_args):
+        if not self.crm_quote_context:
+            return
+        parsed = self._quote_validated_lines()
+        currency = self.crm_quote_context["currency"]
+        table = self.crm_quote_table
+        table.blockSignals(True)
+        for row in range(table.rowCount()):
+            item = table.item(row, 3)
+            if item is None:
+                item = QTableWidgetItem("")
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                table.setItem(row, 3, item)
+            item.setText("")
+            raw_qty = table.item(row, 1)
+            raw_price = table.item(row, 2)
+            if raw_qty is not None and raw_price is not None:
+                quantity = raw_qty.text().strip()
+                unit = self._quote_parse_minor(raw_price.text())
+                if (re.fullmatch(r"[1-9][0-9]{0,4}", quantity) and
+                        int(quantity) <= 10000 and unit and unit > 0):
+                    item.setText(
+                        self._quote_format_minor(int(quantity) * unit)
+                    )
+        table.blockSignals(False)
+        if parsed is None:
+            self.crm_quote_total.setText("Complete all lines to calculate the total")
+            self.crm_quote_save.setEnabled(False)
+        else:
+            self.crm_quote_total.setText(
+                "Draft total: {} {}".format(
+                    currency, self._quote_format_minor(parsed[1])
+                )
+            )
+            self.crm_quote_save.setEnabled(True)
+
+    def save_quote_lines(self):
+        dialog = self.crm_quote_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_quote_context:
+            return
+        validated = self._quote_validated_lines()
+        if validated is None:
+            QMessageBox.warning(
+                dialog, "Incomplete lines",
+                "Enter a service (at least 5 characters), positive whole-number "
+                "quantity and positive unit fee on every line."
+            )
+            return
+        lines, _total = validated
+        context = self.crm_quote_context
+        self.crm_quote_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_quote_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Detailed draft not saved",
+                    error or "Could not save the quote lines."
+                )
+                return
+            dialog.accept()
+            self.load_proposals()
+
+        self.bridge.call(
+            "crm-proposal-lines-save", payload={
+                "proposal_id": context["proposal_id"],
+                "expected_revision": context["expected_revision"],
+                "lines": lines
+            }, callback=received
+        )
+
     def show_proposal_dialog(self, proposal):
         existing = bool(proposal.get("id"))
         dialog = QDialog(self)
