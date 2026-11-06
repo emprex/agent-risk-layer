@@ -21,6 +21,16 @@ test('company creation requires a real name and starts as an unverified prospect
   ])assert.throws(()=>validateCompany(input),/CRM/);
 });
 
+test('company website is optional but email cannot be entered as website',()=>{
+  const company={name:'Test Ltd',legal_name:'Testman Ships',
+    sector:'sell',city:'New York',country:'USA'};
+  assert.equal(validateCompany(company).website,'');
+  assert.equal(validateCompany({...company,website:'https://test.com'}).website,
+    'https://test.com');
+  assert.throws(()=>validateCompany({...company,website:'testships@test.com'}),
+    /CRM website.*web address.*not an email/);
+});
+
 test('contact must belong to an identified company; unknown marketing permission by default',()=>{
   assert.equal(validateContact({company_id:companyId,full_name:'  Alice  '}).full_name,'Alice');
   for(const input of [
