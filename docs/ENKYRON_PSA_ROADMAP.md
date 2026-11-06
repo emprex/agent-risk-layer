@@ -624,3 +624,12 @@ Une proposition commerciale ne doit pas devenir un devis officiel sur la seule b
 - Présentation dans une fenêtre native Qt, historique consultatif, lecture seule de l'enregistrement sauvegardé. Barre de commandes CRM répartie sur trois lignes pour éviter les boutons tronqués sur un écran étroit.
 - Ne crée **aucune** facture, offre officiellement émise, approbation, signature, envoi, engagement ou assessment ; ces documents sont des conditions préparatoires non validées juridiquement. **Pas de modification du PDF existant** dans cet incrément.
 - Validation : tests de schéma/validation, base PostgreSQL synthétique et Qt. La recette sur Debian reste distincte de la CI.
+
+
+## E07-INTERNAL-DRAFT-REVIEW-01 — decision interne sur les propositions (2026-11-06)
+
+Le circuit interne est lie a la revision exacte d'une proposition. Il enregistre une decision humaine `needs_changes` ou `internal_draft_approved`, avec justification et historique append-only. La decision n'est PAS une autorisation d'emission de devis, de signature, de TVA, de facture, de contrat ou de test de securite.
+
+La preparation pour une approbation de brouillon exige un prix positif, un profil emetteur, une revue documentaire acheteur de la revision, des conditions commerciales non expirees et une note de recherche fiscale de la revision. Il s'agit de documents disponibles, pas d'une verification de leurs veracite juridique/fiscale. Les references immuables sont conservees dans l'evenement. Mono-operateur local : pas de RBAC ni de double approbation.
+
+Migration additive 080_enkyron_crm_proposal_internal_decisions.sql, script d'installation avec sauvegarde scripts/enkyron-crm-internal-review-schema.mjs. Une decision par revision. Recette CI et Debian sont distinctes. Aucun PDF modifie.
