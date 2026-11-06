@@ -1,0 +1,100 @@
+// Company dossier 360: one read-only, repeatable snapshot of EXPLICIT links.
+// No client inference by name/domain, no legacy imports, no status changes or emails.
+// Local OS operator scoping is NOT remotely authenticated multi-tenant RBAC.
+import {requireCompanyId} from './enkyron-crm-tickets.mjs';
+
+const MAX_ITEMS=20;
+const ownerKey=(actor)=>{
+  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw new Error('CRM invalid local operator');
+  return 'local:'+actor;
+};
+function preview(rows){
+  if(!Array.isArray(rows))throw new Error('CRM invalid dossier results');
+  const count=rows.length?Number(rows[0].total_rows):0;
+  if(!Number.isSafeInteger(count)||count<rows.length||count<0||
+    rows.length>MAX_ITEMS+1)throw new Error('CRM invalid dossier count');
+  const items=rows.slice(0,MAX_ITEMS).map(({total_rows,...item})=>item);
+  return {total:count,items,more:count>MAX_ITEMS};
+}
+const LISTS={
+  contacts:
+    'SELECT id,full_name,job_title,email,marketing_permission,'
+    +'count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_contacts WHERE workspace_key=$1 AND company_id=$2 '
+    +'ORDER BY created_at DESC,id DESC LIMIT 21',
+  prospects:
+    'SELECT p.id AS prospect_id,p.company_name AS candidate_name,'
+    +'p.source,p.website,l.linked_at,l.linked_by,'
+    +'count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_prospect_links l '
+    +'JOIN sales_prospects p ON p.id=l.prospect_id '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 21',
+  tickets:
+    'SELECT t.id AS ticket_id,t.ticket_number,t.title,t.status,t.client_name,'
+    +'l.linked_at,count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_ticket_links l '
+    +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 21',
+  opportunities:
+    'SELECT o.id AS opportunity_id,o.prospect_id,o.stage,o.next_action,'
+    +'o.due_date,o.version,o.updated_at,'
+    +'count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_prospect_links l '
+    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
+    +'AND o.workspace_key=l.workspace_key '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'ORDER BY o.updated_at DESC,o.id DESC LIMIT 21',
+  activities:
+    'SELECT a.id,a.activity_type,a.detail,a.recorded_by,a.recorded_at,'
+    +'count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_prospect_links l '
+    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
+    +'AND o.workspace_key=l.workspace_key '
+    +'JOIN enkyron_crm_activities a ON a.opportunity_id=o.id '
+    +'AND a.workspace_key=o.workspace_key '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'ORDER BY a.recorded_at DESC,a.id DESC LIMIT 21',
+  drafts:
+    'SELECT d.id,d.subject,d.recipient_email,d.revision,d.updated_at,'
+    +'count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_prospect_links l '
+    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
+    +'AND o.workspace_key=l.workspace_key '
+    +'JOIN enkyron_crm_mail_drafts d ON d.opportunity_id=o.id '
+    +'AND d.workspace_key=o.workspace_key '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21'
+};
+export async function getCompanyDossier(pool,id,operator){
+  const companyId=requireCompanyId(id),key=ownerKey(operator);
+  const client=await pool.connect();
+  let inTx=false;
+  try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    inTx=true;
+    const company=(await client.query(
+      'SELECT id,name,legal_name,website,sector,city,country,'
+      +'relationship_state,created_at,updated_at '
+      +'FROM enkyron_crm_companies WHERE workspace_key=$1 AND id=$2',
+      [key,companyId]
+    )).rows[0];
+    if(!company)throw new Error('CRM company not found in local workspace');
+    const sections={};
+    for(const [name,sql] of Object.entries(LISTS)){
+      sections[name]=preview((await client.query(sql,[key,companyId])).rows);
+    }
+    await client.query('COMMIT');
+    inTx=false;
+    return {available:true,company,sections,
+      notice:'Only recorded company contacts and explicitly reviewed links are included. '
+        +'Commercial stages and manual notes are not independently verified.'};
+  }catch(error){
+    if(inTx)await client.query('ROLLBACK').catch(()=>{});
+    if(error?.code==='42P01')return {available:false,
+      notice:'Some CRM modules are not installed. Review local setup before opening this dossier.'};
+    throw error;
+  }finally{client.release();}
+}
