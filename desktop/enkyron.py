@@ -2397,6 +2397,252 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_button.setEnabled(selected)
         self.crm_compose_button.setEnabled(selected)
 
+    def proposal_search_changed(self, _value):
+        self.crm_proposal_seq += 1
+        self.crm_proposal_search_timer.start()
+
+    def load_proposals(self):
+        self.crm_proposal_seq += 1
+        seq = self.crm_proposal_seq
+        search = self.crm_proposal_search.text()
+        self.crm_proposal_notice.setText("Loading proposals…")
+        self.crm_open_proposal.setEnabled(False)
+        self.crm_proposal_table.blockSignals(True)
+        self.crm_proposal_table.setRowCount(0)
+        self.crm_proposal_table.blockSignals(False)
+        self.crm_proposal_items = []
+
+        def received(data, error):
+            if seq != self.crm_proposal_seq or search != self.crm_proposal_search.text():
+                return
+            self.crm_proposal_loaded = True
+            if error or not data or not data.get("available", False):
+                self.crm_proposal_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "Commercial proposals are unavailable."
+                    )
+                )
+                return
+            self.crm_proposal_items = data.get("items", [])
+            self.crm_proposal_table.blockSignals(True)
+            self.crm_proposal_table.setRowCount(len(self.crm_proposal_items))
+            for row, item in enumerate(self.crm_proposal_items):
+                amount = int(item.get("amount_minor") or 0)
+                whole, cents = divmod(amount, 100)
+                fields = [
+                    item.get("company_name_at_creation") or "",
+                    item.get("title") or "",
+                    "{} {:,}.{:02d}".format(
+                        item.get("currency") or "", whole, cents
+                    ),
+                    item.get("revision") or 1,
+                    display_date(item.get("updated_at"))
+                ]
+                for column, value in enumerate(fields):
+                    self.crm_proposal_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+            self.crm_proposal_table.blockSignals(False)
+            extra = " Showing first 100; refine search." if data.get("more") else ""
+            self.crm_proposal_notice.setText(
+                "{} proposal draft(s).{}".format(len(self.crm_proposal_items), extra)
+            )
+
+        self.bridge.call("crm-proposals", search, callback=received)
+
+    def proposal_selected(self):
+        row = self.crm_proposal_table.currentRow()
+        self.crm_open_proposal.setEnabled(
+            0 <= row < len(self.crm_proposal_items)
+        )
+
+    def open_pipeline_proposal(self):
+        selected = self.crm_pipeline_selected
+        if not selected:
+            return
+        if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
+            self.crm_proposal_dialog.raise_()
+            return
+        lane, row = selected
+        cards = self.crm_pipeline_cards.get(lane, [])
+        if row < 0 or row >= len(cards):
+            return
+        opportunity = cards[row]
+        self.show_proposal_dialog({
+            "opportunity_id": opportunity["id"],
+            "company_name_at_creation": opportunity.get(
+                "company_name_at_creation", ""
+            )
+        })
+
+    def open_selected_proposal(self):
+        row = self.crm_proposal_table.currentRow()
+        if row < 0 or row >= len(self.crm_proposal_items):
+            return
+        if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
+            self.crm_proposal_dialog.raise_()
+            return
+        proposal_id = self.crm_proposal_items[row]["id"]
+        self.crm_open_proposal.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available", False):
+                QMessageBox.warning(
+                    self, "Proposal unavailable",
+                    error or (data or {}).get(
+                        "notice", "Unable to open the proposal."
+                    )
+                )
+                return
+            self.show_proposal_dialog(data["proposal"])
+
+        self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def show_proposal_dialog(self, proposal):
+        existing = bool(proposal.get("id"))
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            "ENKYRON · Edit proposal draft" if existing
+            else "ENKYRON · New proposal draft"
+        )
+        dialog.resize(760, 560)
+        dialog.setMinimumSize(640, 480)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title(
+            "EDIT COMMERCIAL PROPOSAL" if existing
+            else "NEW COMMERCIAL PROPOSAL"
+        ))
+        subject = QLabel(
+            "Opportunity: {}".format(
+                proposal.get("company_name_at_creation") or "Unknown"
+            )
+        )
+        subject.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(subject)
+        note = QLabel(
+            "Internal draft only. A prospect name is not proof of legal identity. "
+            "You enter the proposed fee; taxes, approval, signature and delivery "
+            "are not handled here."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        form = QFormLayout()
+        self.crm_proposal_title = QLineEdit()
+        self.crm_proposal_title.setMaxLength(160)
+        self.crm_proposal_title.setText(proposal.get("title") or "")
+        self.crm_proposal_title.setPlaceholderText(
+            "e.g. Security review proposal — draft"
+        )
+        form.addRow("Title *", self.crm_proposal_title)
+        self.crm_proposal_currency = QComboBox()
+        self.crm_proposal_currency.addItem("Choose currency…", None)
+        for code in ("GBP", "EUR", "USD"):
+            self.crm_proposal_currency.addItem(code, code)
+        if existing:
+            self.crm_proposal_currency.setCurrentIndex(
+                self.crm_proposal_currency.findData(proposal.get("currency"))
+            )
+        form.addRow("Currency *", self.crm_proposal_currency)
+        self.crm_proposal_price = QLineEdit()
+        self.crm_proposal_price.setMaxLength(11)
+        self.crm_proposal_price.setPlaceholderText("0.00")
+        if existing:
+            amount = int(proposal.get("amount_minor") or 0)
+            whole, minor = divmod(amount, 100)
+            self.crm_proposal_price.setText("{}.{}".format(
+                whole, str(minor).zfill(2)
+            ))
+        form.addRow("Proposed fee *", self.crm_proposal_price)
+        layout.addLayout(form)
+        self.crm_proposal_scope = QPlainTextEdit()
+        self.crm_proposal_scope.setPlaceholderText(
+            "Describe the proposed services, scope and deliverables "
+            "(20–5000 characters)."
+        )
+        self.crm_proposal_scope.setPlainText(proposal.get("scope_text") or "")
+        layout.addWidget(section_title("SCOPE AND DELIVERABLES"))
+        layout.addWidget(self.crm_proposal_scope, 1)
+        footer = QHBoxLayout()
+        cancel = QPushButton("Close without saving")
+        cancel.clicked.connect(dialog.reject)
+        footer.addWidget(cancel)
+        footer.addStretch()
+        self.crm_proposal_save = QPushButton("Save proposal draft")
+        self.crm_proposal_save.setObjectName("primary")
+        self.crm_proposal_save.clicked.connect(self.save_proposal)
+        footer.addWidget(self.crm_proposal_save)
+        layout.addLayout(footer)
+        self.crm_proposal_context = {
+            "id": proposal.get("id"),
+            "expected_revision": proposal.get("revision"),
+            "opportunity_id": proposal["opportunity_id"]
+        }
+        self.crm_proposal_dialog = dialog
+        dialog.open()
+
+    def save_proposal(self):
+        dialog = self.crm_proposal_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_proposal_context:
+            return
+        title = self.crm_proposal_title.text().strip()
+        scope = self.crm_proposal_scope.toPlainText().strip()
+        currency = self.crm_proposal_currency.currentData()
+        fee = self.crm_proposal_price.text().strip()
+        if (not 5 <= len(title) <= 160 or
+                not 20 <= len(scope) <= 5000 or
+                currency not in ("GBP", "EUR", "USD")):
+            QMessageBox.warning(
+                dialog, "Incomplete proposal",
+                "Provide a title, scope (at least 20 characters) and currency."
+            )
+            return
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,6})(?:\\.[0-9]{1,2})?", fee):
+            QMessageBox.warning(
+                dialog, "Invalid proposed fee",
+                "Enter a positive amount such as 1250.50, with up to two decimals."
+            )
+            return
+        whole, _, decimals = fee.partition(".")
+        amount_minor = int(whole) * 100 + int((decimals + "00")[:2])
+        if not 1 <= amount_minor <= 999999999:
+            QMessageBox.warning(
+                dialog, "Invalid proposed fee", "The proposed fee must be positive."
+            )
+            return
+        context = self.crm_proposal_context
+        fields = {
+            "title": title, "scope_text": scope,
+            "currency": currency, "amount_minor": amount_minor
+        }
+        if context.get("id"):
+            command = "crm-proposal-update"
+            payload = {
+                **fields, "id": context["id"],
+                "expected_revision": context["expected_revision"]
+            }
+        else:
+            command = "crm-proposal-create"
+            payload = {**fields, "opportunity_id": context["opportunity_id"]}
+        self.crm_proposal_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_proposal_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Proposal not saved",
+                    error or "Unable to save this proposal draft."
+                )
+                return
+            dialog.accept()
+            self.crm_tabs.setCurrentIndex(5)
+            self.crm_proposal_search.clear()
+            self.load_proposals()
+
+        self.bridge.call(command, payload=payload, callback=received)
+
     def mail_draft_search_changed(self, _value):
         self.crm_drafts_seq += 1
         self.crm_draft_search_timer.start()
