@@ -125,10 +125,10 @@ test('edits update price and append new immutable revision fingerprint',async()=
   });
   assert.equal(updated.revision,2);
   assert.deepEqual(statements.map(x=>x.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','UPDATE','INSERT','COMMIT'
+    'BEGIN','SELECT','SELECT','UPDATE','INSERT','COMMIT'
   ]);
-  assert.equal(statements[2].params[5],130055);
-  assert.equal(statements[2].params[8],1);
-  assert.match(statements[3].params[4],/^[a-f0-9]{64}$/);
-  assert.ok(!statements[3].params.includes(next.scope_text));
+  assert.equal(statements[3].params[5],130055);
+  assert.equal(statements[3].params[8],1);
+  assert.match(statements[4].params[4],/^[a-f0-9]{64}$/);
+  assert.ok(!statements[4].params.includes(next.scope_text));
 });
