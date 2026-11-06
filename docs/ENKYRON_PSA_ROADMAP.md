@@ -174,6 +174,12 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 **État d'archivage au 2026-11-05 :** l'opérateur a affiché `ARL-2026-000003` comme `CLOSED · ARCHIVED` avec le filtre activé; le fonctionnement de l'archivage et du filtrage est visible en capture. En revanche la capture de l'événement `archived` dans History après archivage n'a pas été fournie : le critère de conservation des événements est couvert par la CI PostgreSQL synthétique, **pas encore par une preuve locale complète**. L'ergonomie de la sélection des transitions et du filtre a été corrigée, CI verte au commit `e3f9cf6ad27134ce50e90f535234dc9b606c006d`; recette locale des nouveaux widgets à faire.
 
 ### Bloc 02 — CRM — entreprises et contacts
+**Incrément E02-INT-TAX-SOURCE-FIX — références fiscales courtes (2026-11-06) :**
+- Le champ facultatif **Reference** accepte maintenant 3–500 caractères, notamment `ICO` et `HMRC`; auparavant le minimum de 5 bloquait les acronymes officiels.
+- UI : contrôle explicite avant soumission avec message ciblé. Backend : validation identique. PostgreSQL : migration additive `075_enkyron_crm_tax_source_reference.sql` modifiant uniquement la contrainte de longueur ; ne pas modifier la migration `074` déjà installée chez l'utilisateur. Sauvegarde locale via `scripts/enkyron-crm-tax-source-schema.mjs` (modes `--check`, puis `--apply`).
+- Tests : Qt `HMRC`, unitaires `ICO/HMRC`, rejet des références de 2 caractères, tests PostgreSQL persistance sous ancien périmètre d'opportunité. Aucune classification fiscale ou taux produit automatiquement.
+
+
 
 **Incrément E02-INT-TAX-01 — dossier de recherche fiscale par proposition (2026-11-06) :**
 - Sources officielles et analyse contextualisée dans `docs/ENKYRON_INTERNATIONAL_TAX_RESEARCH_2026-11-06.md` ; activité prévue : **UK LTD vendant services de cybersécurité humain-led globalement**. Différencier les règles B2B/B2C, les prestations professionnelles et les e-services automatisés. £90k (seuil en vigueur) concerne le chiffre d'affaires *taxable au UK*, pas arbitrairement toutes les ventes mondiales ; taux UK standard 20 % pour fournitures taxables le cas échéant. Pas de statut TVA présumé.
