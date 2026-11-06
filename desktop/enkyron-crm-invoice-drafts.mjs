@@ -89,7 +89,7 @@ function readinessSteps(checks,worksheet,existing){
     {key:'buyer',action:'buyer',label:'Buyer identity review',
       ready:checks?.buyer_review===true,
       detail:'Document the linked company for the current proposal revision.'},
-    {key:'terms',action:checks?.terms_recorded===true?'proposal':'terms',label:'Commercial terms',
+    {key:'terms',action:checks?.terms_recorded===true&&checks?.terms_valid!==true?'proposal':'terms',label:'Commercial terms',
       ready:checks?.terms_valid===true,
       detail:checks?.terms_recorded===true
         ?'Commercial validity has expired; revise the proposal and terms.'
