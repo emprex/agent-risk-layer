@@ -45,6 +45,7 @@ jobs:
           node --check desktop/enkyron-crm-buyer-review.mjs
           node --check desktop/enkyron-crm-commercial-terms.mjs
           node --check desktop/enkyron-crm-internal-review.mjs
+          node --check desktop/enkyron-crm-billing-worksheet.mjs
           node --check desktop/enkyron-crm-tax-review.mjs
           node --check desktop/enkyron-company-profile.mjs
           node --check desktop/enkyron-db-errors.mjs
@@ -55,6 +56,7 @@ jobs:
           node --check scripts/enkyron-crm-buyer-review-schema.mjs
           node --check scripts/enkyron-crm-commercial-terms-schema.mjs
           node --check scripts/enkyron-crm-internal-review-schema.mjs
+          node --check scripts/enkyron-crm-billing-worksheet-schema.mjs
           node --check scripts/enkyron-crm-proposal-lines-schema.mjs
           node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
@@ -70,7 +72,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |

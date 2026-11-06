@@ -633,3 +633,8 @@ Le circuit interne est lie a la revision exacte d'une proposition. Il enregistre
 La preparation pour une approbation de brouillon exige un prix positif, un profil emetteur, une revue documentaire acheteur de la revision, des conditions commerciales non expirees et une note de recherche fiscale de la revision. Il s'agit de documents disponibles, pas d'une verification de leurs veracite juridique/fiscale. Les references immuables sont conservees dans l'evenement. Mono-operateur local : pas de RBAC ni de double approbation.
 
 Migration additive 080_enkyron_crm_proposal_internal_decisions.sql, script d'installation avec sauvegarde scripts/enkyron-crm-internal-review-schema.mjs. Une decision par revision. Recette CI et Debian sont distinctes. Aucun PDF modifie.
+
+
+## E09-BILLING-WORKSHEET-01 — internal pre-billing preparation (2026-11-06)
+
+A first **non-issuing** pre-billing worksheet is an append-only record of the exact approved internal commercial proposal revision, including its fee and currency snapshot, source internal decision and referenced issuer/buyer/terms/tax evidence. It does not claim an invoice number, VAT calculation, issue date, invoice approval, receipt, bank reconciliation, ledger entry, customer signature or assessment. The human-entered note is mandatory. Schema `081_enkyron_crm_billing_worksheets.sql` is additive, backup-before-change script `scripts/enkyron-crm-billing-worksheet-schema.mjs`; no existing commercial data is mutated. A new proposal revision requires a new internal decision and new worksheet. UI: CRM → Proposals → Billing worksheet… . See CI and separate Debian acceptance before treating the module as locally validated.
