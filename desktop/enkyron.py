@@ -230,6 +230,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_items = []
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
+        self.crm_quote_dialog = None
+        self.crm_quote_context = None
         self.sales_overview_seq = 0
         self.sales_overview_loaded = False
         self.crm_review_dialog = None
@@ -1129,6 +1131,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_proposal.setEnabled(False)
         self.crm_open_proposal.clicked.connect(self.open_selected_proposal)
         proposal_footer.addWidget(self.crm_open_proposal)
+        self.crm_edit_lines = QPushButton("Edit line items…")
+        self.crm_edit_lines.setEnabled(False)
+        self.crm_edit_lines.clicked.connect(self.open_selected_quote_lines)
+        proposal_footer.addWidget(self.crm_edit_lines)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
@@ -2407,6 +2413,7 @@ class EnkyronWindow(QMainWindow):
         search = self.crm_proposal_search.text()
         self.crm_proposal_notice.setText("Loading proposals…")
         self.crm_open_proposal.setEnabled(False)
+        self.crm_edit_lines.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2452,9 +2459,9 @@ class EnkyronWindow(QMainWindow):
 
     def proposal_selected(self):
         row = self.crm_proposal_table.currentRow()
-        self.crm_open_proposal.setEnabled(
-            0 <= row < len(self.crm_proposal_items)
-        )
+        available = 0 <= row < len(self.crm_proposal_items)
+        self.crm_open_proposal.setEnabled(available)
+        self.crm_edit_lines.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -2554,6 +2561,12 @@ class EnkyronWindow(QMainWindow):
                 whole, str(minor).zfill(2)
             ))
         form.addRow("Proposed fee *", self.crm_proposal_price)
+        if existing and proposal.get("has_lines"):
+            self.crm_proposal_price.setReadOnly(True)
+            self.crm_proposal_price.setToolTip(
+                "This total is calculated from the detailed quote lines. "
+                "Choose Edit line items from the Proposals list to change it."
+            )
         layout.addLayout(form)
         self.crm_proposal_scope = QPlainTextEdit()
         self.crm_proposal_scope.setPlaceholderText(
