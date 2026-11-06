@@ -782,6 +782,71 @@ jobs:
           assert window.crm_open_proposal.isEnabled()
           assert window.crm_export_draft_pdf.isEnabled()
           assert window.crm_terms_button.isEnabled()
+          assert window.crm_internal_button.isEnabled()
+          window.crm_internal_button.click()
+          assert calls[-1][0] == "crm-internal-review"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted title</b>",
+              "amount_minor": "125050", "currency": "GBP",
+              "blockers": [
+                  "Current revision lacks an explicitly linked buyer documentary record",
+                  "Current revision has no recorded commercial terms"
+              ],
+              "can_approve_internal": False,
+              "legal_notice": "Documentary entries are not independently verified.",
+              "tax_notice": "Research is not a tax ruling.",
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_internal_dialog.isVisible()
+          assert window.crm_internal_decision.count() == 1
+          assert window.crm_internal_decision.currentData() == "needs_changes"
+          assert window.crm_internal_save.isEnabled()
+          window.crm_internal_notes.setPlainText(
+              "Missing required buyer identity documents and commercial terms."
+          )
+          window.crm_internal_confirm.setChecked(True)
+          window.save_internal_draft_review()
+          assert calls[-1][0] == "crm-internal-decision"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["decision"] == "needs_changes"
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_internal_dialog.reject()
+          # A saved decision must not be writable again on the same revision.
+          window.open_internal_draft_review()
+          assert calls[-1][0] == "crm-internal-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic proposal",
+              "can_approve_internal": False,
+              "blockers": ["Missing buyer review"],
+              "current": {
+                  "proposal_revision": 1, "decision": "needs_changes",
+                  "review_note": "Missing required buyer identity documents and commercial terms."
+              },
+              "history": [], "more": False
+          }, None)
+          assert not window.crm_internal_save.isEnabled()
+          assert window.crm_internal_notes.isReadOnly()
+          assert not window.crm_internal_decision.isEnabled()
+          window.crm_internal_dialog.reject()
+          # A complete preflight may expose internal-draft approval, not issuance.
+          window.show_internal_draft_review({
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 2, "proposal_title": "Synthetic revised proposal",
+              "can_approve_internal": True, "blockers": [],
+              "current": None, "history": [], "more": False,
+              "legal_notice": "Still unverified", "tax_notice": "Not a tax determination"
+          })
+          assert window.crm_internal_decision.count() == 2
+          assert window.crm_internal_decision.itemData(1) == "internal_draft_approved"
+          assert window.crm_internal_confirm.isChecked() is False
+          window.crm_internal_dialog.reject()
           window.crm_terms_button.click()
           assert calls[-1][0] == "crm-commercial-terms"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
