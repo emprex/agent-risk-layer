@@ -215,6 +215,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
+        self.sales_overview_seq = 0
+        self.sales_overview_loaded = False
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -275,7 +277,44 @@ class EnkyronWindow(QMainWindow):
         go_tickets = QPushButton("Open Client Desk")
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
         home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
-        home_l.addStretch()
+
+        overview_header = QHBoxLayout()
+        overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
+        overview_header.addStretch()
+        refresh_overview = QPushButton("Refresh")
+        refresh_overview.clicked.connect(self.load_sales_overview)
+        overview_header.addWidget(refresh_overview)
+        home_l.addLayout(overview_header)
+        self.sales_overview_metrics = QLabel("Open Home to load commercial activity.")
+        self.sales_overview_metrics.setWordWrap(True)
+        home_l.addWidget(self.sales_overview_metrics)
+        self.sales_overview_attention = QLabel("")
+        self.sales_overview_attention.setWordWrap(True)
+        home_l.addWidget(self.sales_overview_attention)
+        home_l.addWidget(section_title("UPCOMING FOLLOW-UPS"))
+        self.sales_overview_table = QTableWidget(0, 4)
+        self.sales_overview_table.setHorizontalHeaderLabels(
+            ["Prospect", "Stage", "Next action", "Due"]
+        )
+        self.sales_overview_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.sales_overview_table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.sales_overview_table.setAlternatingRowColors(True)
+        self.sales_overview_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.sales_overview_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        home_l.addWidget(self.sales_overview_table, 1)
+        open_followups = QPushButton("Open CRM follow-ups")
+        open_followups.clicked.connect(self.open_sales_followups)
+        home_l.addWidget(
+            open_followups, alignment=Qt.AlignmentFlag.AlignRight
+        )
         self.pages.addWidget(home)
 
         ticket_page = QWidget()
@@ -969,6 +1008,8 @@ class EnkyronWindow(QMainWindow):
         if index < 0 or index >= self.pages.count():
             return
         self.pages.setCurrentIndex(index)
+        if index == 0:
+            self.load_sales_overview()
         if index == 2:
             if not self.crm_company_loaded:
                 self.load_companies()
@@ -978,6 +1019,64 @@ class EnkyronWindow(QMainWindow):
                 self.load_followups()
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
+
+    def load_sales_overview(self):
+        self.sales_overview_seq += 1
+        seq = self.sales_overview_seq
+        self.sales_overview_metrics.setText("Loading commercial overview…")
+        self.sales_overview_attention.clear()
+        self.sales_overview_table.setRowCount(0)
+
+        def received(data, error):
+            if seq != self.sales_overview_seq:
+                return
+            self.sales_overview_loaded = True
+            if error or not data or not data.get("available"):
+                self.sales_overview_metrics.setText(
+                    error or (data or {}).get(
+                        "notice", "Commercial overview is unavailable."
+                    )
+                )
+                return
+            numbers = data["overview"]
+            self.sales_overview_metrics.setText(
+                "Research prospects: {}  ·  Registered companies: {}  ·  "
+                "Active opportunities: {}  ·  Saved drafts: {}".format(
+                    numbers["researched_prospects"],
+                    numbers["registered_companies"],
+                    numbers["active_opportunities"],
+                    numbers["saved_drafts"]
+                )
+            )
+            self.sales_overview_attention.setText(
+                "Follow-ups: {} overdue  ·  {} due today  ·  "
+                "{} due in the next 7 days  |  As of {}".format(
+                    numbers["overdue"], numbers["due_today"],
+                    numbers["due_next_week"], numbers["as_of"]
+                )
+            )
+            priorities = numbers.get("priority_items", [])
+            self.sales_overview_table.setRowCount(len(priorities))
+            for row, item in enumerate(priorities):
+                values = [
+                    item.get("company_name_at_creation") or "",
+                    (item.get("stage") or "").replace("_", " ").title(),
+                    item.get("next_action") or "",
+                    format_followup_due(
+                        item.get("due_date"), item.get("stage")
+                    )
+                ]
+                for column, value in enumerate(values):
+                    self.sales_overview_table.setItem(
+                        row, column, QTableWidgetItem(str(value))
+                    )
+
+        self.bridge.call("crm-sales-overview", callback=received)
+
+    def open_sales_followups(self):
+        self.navigation.setCurrentRow(2)
+        self.crm_tabs.setCurrentIndex(2)
+        self.load_followups()
 
     def show_ticket_index(self):
         # Reset the selection so clicking the same record opens it again.
