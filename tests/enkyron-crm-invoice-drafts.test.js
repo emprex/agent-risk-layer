@@ -20,7 +20,7 @@ test('requires explicit draft-only confirmation, no tax or invoice number',()=>{
  }
 });
 function mock({withWorksheet=true,stale=false,existing=false,
-  malformed=false,otherWorkspace=false,missingStep=null,decision='internal_draft_approved'}={}){
+  malformed=false,otherWorkspace=false,missingStep=null,decision='internal_draft_approved',expiredTerms=false}={}){
  const calls=[];let released=false;
  const proposal={id,revision:stale?3:2,title:'Synthetic draft service',
    currency:'GBP',amount_minor:'50000'};
@@ -38,7 +38,7 @@ function mock({withWorksheet=true,stale=false,existing=false,
   if(sql.startsWith('SELECT\n  EXISTS'))return {rows:[{
     issuer_profile:missingStep!=='issuer',company_link:missingStep!=='link',
     buyer_review:missingStep!=='buyer',terms_recorded:missingStep!=='terms',
-    terms_valid:missingStep!=='terms',tax_review:missingStep!=='tax',
+    terms_valid:missingStep!=='terms'&&!expiredTerms,tax_review:missingStep!=='tax',
     internal_decision:missingStep==='internal'?'needs_changes':decision
   }]};
   if(sql.startsWith('SELECT id,proposal_revision,source_approval_id'))return {rows:withWorksheet?[worksheet]:[]};
@@ -90,6 +90,13 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  const changes=await readInvoicePreparation(
    mock({missingStep:'internal'}).pool,id,'local-operator');
  assert.match(changes.steps.find(x=>x.key==='internal').detail,/revise the proposal/);
+ const expired=mock({expiredTerms:true});
+ const status=await readInvoicePreparation(expired.pool,id,'local-operator');
+ assert.equal(status.can_prepare,false);
+ assert.equal(status.steps.find(x=>x.key==='terms').action,'proposal');
+ assert.match(status.steps.find(x=>x.key==='terms').detail,/expired/);
+ await assert.rejects(()=>recordInvoiceDraft(
+   expired.pool,input,'local-operator'),/incomplete current-revision prerequisites/);
 });
 test('write is transactional and refuses staleness, missing buyer and duplicate',async()=>{
  const a=mock();
