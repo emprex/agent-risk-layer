@@ -1568,8 +1568,8 @@ class EnkyronWindow(QMainWindow):
                     1, QHeaderView.ResizeMode.Stretch
                 )
                 if section_id == "qualifications":
-                    table.setMaximumHeight(190)
-                    page_layout.addWidget(table)
+                    # Keep the editor immediately usable. With zero reviews,
+                    # a blank 190px history table obscured the save controls.
                     qualification_hint = QLabel(
                         "Record your commercial assessment and the reason. "
                         "This does not verify identity, grant marketing permission "
@@ -1643,6 +1643,19 @@ class EnkyronWindow(QMainWindow):
                     )
                     review_footer.addWidget(self.crm_qualification_save)
                     page_layout.addLayout(review_footer)
+                    if rows:
+                        previous_reviews = QLabel("PREVIOUS REVIEWS")
+                        previous_reviews.setStyleSheet("font-weight: bold;")
+                        page_layout.addWidget(previous_reviews)
+                        table.setFixedHeight(
+                            min(180, 35 + min(len(rows), 4) * 30)
+                        )
+                        page_layout.addWidget(table)
+                    else:
+                        page_layout.addWidget(
+                            QLabel("No qualification reviews recorded yet.")
+                        )
+                    page_layout.addStretch()
                 else:
                     page_layout.addWidget(table, 1)
                 if section_id == "qualifications":
