@@ -779,6 +779,57 @@ jobs:
           window.crm_proposal_table.selectRow(0)
           assert window.crm_open_proposal.isEnabled()
           assert window.crm_export_draft_pdf.isEnabled()
+          assert window.crm_terms_button.isEnabled()
+          window.crm_terms_button.click()
+          assert calls[-1][0] == "crm-commercial-terms"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted proposal</b>",
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_terms_dialog.isVisible()
+          assert window.crm_terms_save.isEnabled()
+          assert not window.crm_terms_confirm.isChecked()
+          window.crm_terms_valid.setText("2026-12-31")
+          for key, widget in window.crm_terms_fields.items():
+              widget.setPlainText(
+                  "Synthetic operator-proposed conditions, not approved, for " + key
+              )
+          window.crm_terms_source.setText("Synthetic manual draft")
+          window.crm_terms_confirm.setChecked(True)
+          window.save_proposal_commercial_terms()
+          assert calls[-1][0] == "crm-commercial-record"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["valid_until"] == "2026-12-31"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_rate" not in calls[-1][2]
+          window.crm_terms_dialog.reject()
+          # Existing revision: read-only, never overwrite immutable terms.
+          window.open_proposal_commercial_terms()
+          assert calls[-1][0] == "crm-commercial-terms"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "Synthetic proposal",
+              "current": {
+                  "proposal_revision": 1,"valid_until": "2026-12-31",
+                  "payment_terms": "Payment terms remain for review by a human.",
+                  "delivery_terms": "No delivery is authorized by this draft.",
+                  "exclusions": "All live security testing is excluded at this stage.",
+                  "assumptions": "Explicit customer permission required before testing.",
+                  "source_reference": "Synthetic manual draft"
+              },
+              "history": [], "more": False
+          }, None)
+          assert not window.crm_terms_save.isEnabled()
+          assert window.crm_terms_valid.isReadOnly()
+          assert window.crm_terms_fields["payment_terms"].isReadOnly()
+          assert window.crm_terms_valid.text() == "2026-12-31"
+          window.crm_terms_dialog.reject()
           # The chooser must start in the operator's own writable home area,
           # never in the process launch directory (/home on some Debian setups).
           with patch("desktop.enkyron.QFileDialog.getSaveFileName", return_value=("", "")) as chooser:
