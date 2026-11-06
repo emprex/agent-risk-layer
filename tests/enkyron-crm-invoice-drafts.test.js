@@ -20,7 +20,7 @@ test('requires explicit draft-only confirmation, no tax or invoice number',()=>{
  }
 });
 function mock({withWorksheet=true,stale=false,existing=false,
-  malformed=false,otherWorkspace=false}={}){
+  malformed=false,otherWorkspace=false,missingStep=null,decision='internal_draft_approved'}={}){
  const calls=[];let released=false;
  const proposal={id,revision:stale?3:2,title:'Synthetic draft service',
    currency:'GBP',amount_minor:'50000'};
@@ -35,6 +35,12 @@ function mock({withWorksheet=true,stale=false,existing=false,
  const q=async(sql,params)=>{
   calls.push({sql,params});
   if(sql.startsWith('SELECT id,title,revision'))return {rows:otherWorkspace?[]:[proposal]};
+  if(sql.startsWith('SELECT\n  EXISTS'))return {rows:[{
+    issuer_profile:missingStep!=='issuer',company_link:missingStep!=='link',
+    buyer_review:missingStep!=='buyer',terms_recorded:missingStep!=='terms',
+    terms_valid:missingStep!=='terms',tax_review:missingStep!=='tax',
+    internal_decision:missingStep==='internal'?'needs_changes':decision
+  }]};
   if(sql.startsWith('SELECT id,proposal_revision,source_approval_id'))return {rows:withWorksheet?[worksheet]:[]};
   if(sql.startsWith('SELECT id,legal_name,registration_number'))return {rows:[issuer]};
   if(sql.startsWith('SELECT id,legal_name,registered_address'))return {rows:malformed?[]:[buyer]};
@@ -52,6 +58,9 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  assert.equal(r.can_prepare,false);
  assert.equal(r.worksheet_id,null);
  assert.match(r.blockers.join(' '),/worksheet/);
+ assert.deepEqual(r.steps.map(s=>s.key),
+   ['issuer','link','buyer','terms','tax','internal','worksheet']);
+ assert.equal(r.steps.find(s=>s.key==='worksheet').ready,false);
  assert.deepEqual(a.calls[1].params,['local:local-operator',id]);
  assert.equal(a.calls[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
  assert.equal(a.calls.at(-1).sql,'COMMIT');
@@ -62,10 +71,25 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  assert.equal(ready.issuer.legal_name,'Synthetic Issuer Ltd');
  assert.equal(ready.buyer.legal_name,'Synthetic Buyer Ltd');
  assert.equal(ready.current_draft_id,null);
+ assert.equal(ready.steps.length,7);
+ assert.ok(ready.steps.every(step=>step.ready));
+ assert.ok(ready.steps.every(step=>!('company_utr' in step)));
  const c=mock({existing:true});
  assert.equal((await readInvoicePreparation(c.pool,id,'local-operator')).can_prepare,false);
  const d=mock({otherWorkspace:true});
  await assert.rejects(()=>readInvoicePreparation(d.pool,id,'local-operator'),/not found/);
+ for(const key of ['issuer','link','buyer','terms','tax','internal']){
+   const blocked=mock({missingStep:key});
+   const status=await readInvoicePreparation(blocked.pool,id,'local-operator');
+   assert.equal(status.can_prepare,false);
+   assert.equal(status.steps.find(step=>step.key===key).ready,false);
+   assert.ok(status.blockers.length>0);
+   await assert.rejects(()=>recordInvoiceDraft(
+     blocked.pool,input,'local-operator'),/incomplete current-revision prerequisites/);
+ }
+ const changes=await readInvoicePreparation(
+   mock({missingStep:'internal'}).pool,id,'local-operator');
+ assert.match(changes.steps.find(x=>x.key==='internal').detail,/revise the proposal/);
 });
 test('write is transactional and refuses staleness, missing buyer and duplicate',async()=>{
  const a=mock();

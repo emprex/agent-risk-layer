@@ -51,6 +51,62 @@ const BUYER='SELECT id,legal_name,registered_address '
   +'FROM enkyron_crm_proposal_buyer_reviews WHERE workspace_key=$1 AND id=$2';
 const EXISTING='SELECT id FROM enkyron_crm_invoice_drafts '
   +'WHERE workspace_key=$1 AND source_worksheet_id=$2';
+// A scoped, single-snapshot preflight. These are the actual tables used by
+// each stage; never infer readiness from the research prospect's display name.
+const CHECKLIST=`SELECT
+  EXISTS(SELECT 1 FROM enkyron_operator_company_profiles i
+    WHERE i.workspace_key=$1) AS issuer_profile,
+  EXISTS(SELECT 1 FROM enkyron_crm_proposal_drafts d
+    JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id
+      AND o.workspace_key=d.workspace_key
+    JOIN enkyron_crm_prospect_links l ON l.workspace_key=d.workspace_key
+      AND l.prospect_id=o.prospect_id
+    WHERE d.workspace_key=$1 AND d.id=$2) AS company_link,
+  EXISTS(SELECT 1 FROM enkyron_crm_proposal_buyer_reviews b
+    WHERE b.workspace_key=$1 AND b.proposal_id=$2
+      AND b.proposal_revision=$3) AS buyer_review,
+  EXISTS(SELECT 1 FROM enkyron_crm_proposal_commercial_terms t
+    WHERE t.workspace_key=$1 AND t.proposal_id=$2
+      AND t.proposal_revision=$3) AS terms_recorded,
+  EXISTS(SELECT 1 FROM enkyron_crm_proposal_commercial_terms t
+    WHERE t.workspace_key=$1 AND t.proposal_id=$2
+      AND t.proposal_revision=$3 AND t.valid_until>=CURRENT_DATE) AS terms_valid,
+  EXISTS(SELECT 1 FROM enkyron_crm_proposal_tax_reviews x
+    WHERE x.workspace_key=$1 AND x.proposal_id=$2
+      AND x.proposal_revision=$3) AS tax_review,
+  (SELECT a.decision FROM enkyron_crm_proposal_internal_decisions a
+    WHERE a.workspace_key=$1 AND a.proposal_id=$2
+      AND a.proposal_revision=$3 LIMIT 1) AS internal_decision`;
+function readinessSteps(checks,worksheet,existing){
+  const decision=checks?.internal_decision??null;
+  return [
+    {key:'issuer',label:'Issuing company profile',
+      ready:checks?.issuer_profile===true,
+      detail:'Enter the operator-issued legal profile; it remains unverified.'},
+    {key:'link',label:'Associate prospect with a CRM company',
+      ready:checks?.company_link===true,
+      detail:'Explicit operator link required; similar names are not proof.'},
+    {key:'buyer',label:'Buyer identity review',
+      ready:checks?.buyer_review===true,
+      detail:'Document the linked company for the current proposal revision.'},
+    {key:'terms',label:'Commercial terms',
+      ready:checks?.terms_valid===true,
+      detail:checks?.terms_recorded===true
+        ?'Commercial validity has expired; revise the proposal and terms.'
+        :'Record payment, delivery and exclusions for this revision.'},
+    {key:'tax',label:'International tax review',
+      ready:checks?.tax_review===true,
+      detail:'Record human tax research; this is not a tax determination.'},
+    {key:'internal',label:'Internal draft review',
+      ready:decision==='internal_draft_approved',
+      detail:decision==='needs_changes'
+        ?'Changes requested: revise the proposal before a new decision.'
+        :'Human internal-draft decision required; not permission to issue.'},
+    {key:'worksheet',label:'Billing worksheet',
+      ready:Boolean(worksheet),
+      detail:'Record pre-billing preparation for the approved revision.'}
+  ];
+}
 function safeParty(name,address,label){
   if(typeof name!=='string'||name.trim().length<2||name.length>160||
      typeof address!=='string'||address.trim().length<10||address.length>600)
@@ -82,6 +138,9 @@ export async function readInvoicePreparation(pool,proposalId,actor){
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const proposal=(await client.query(PROPOSAL,[person.key,id])).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
+    const checks=(await client.query(
+      CHECKLIST,[person.key,id,proposal.revision])).rows[0];
+    if(!checks)throw new Error('CRM invoice prerequisite status unavailable');
     const worksheet=(await client.query(WORKSHEET,[person.key,id,proposal.revision])).rows[0]??null;
     let issuer=null,buyer=null,existing=null;
     if(worksheet){
@@ -90,14 +149,18 @@ export async function readInvoicePreparation(pool,proposalId,actor){
       existing=(await client.query(EXISTING,[person.key,worksheet.id])).rows[0]??null;
     }
     const blocker=eligible(proposal,worksheet,issuer,buyer);
+    const steps=readinessSteps(checks,worksheet,existing);
+    const incomplete=steps.filter(step=>!step.ready);
     await client.query('COMMIT');
     return {
       available:true,proposal_id:id,proposal_revision:proposal.revision,
       proposal_title:proposal.title,currency:proposal.currency,
       proposed_fee_minor:amountMinor(proposal.amount_minor),
       worksheet_id:worksheet?.id??null,
-      can_prepare:!blocker&&!existing,
-      blockers:[...(blocker?[blocker]:[]),
+      can_prepare:!blocker&&!existing&&!incomplete.length,
+      steps,
+      blockers:[...incomplete.map(s=>s.label+': '+s.detail),
+        ...(blocker?[blocker]:[]),
         ...(existing?['Invoice draft already exists for this worksheet']:[])],
       current_draft_id:existing?.id??null,
       ...(issuer&&buyer?publicSnapshot(issuer,buyer):{issuer:null,buyer:null}),
@@ -126,6 +189,10 @@ export async function recordInvoiceDraft(pool,input,actor,options={}){
       [person.key,data.proposal_id,data.expected_revision])).rows[0];
     if(!worksheet||worksheet.id!==data.worksheet_id)
       throw new Error('CRM invoice draft requires current approved billing worksheet');
+    const checks=(await client.query(
+      CHECKLIST,[person.key,data.proposal_id,data.expected_revision])).rows[0];
+    if(!checks||readinessSteps(checks,worksheet,null).some(step=>!step.ready))
+      throw new Error('CRM invoice draft blocked by incomplete current-revision prerequisites');
     const [issuer,buyer,prior]=await Promise.all([
       client.query(ISSUER+' FOR KEY SHARE',[person.key,worksheet.issuer_profile_id]),
       client.query(BUYER+' FOR KEY SHARE',[person.key,worksheet.buyer_review_id]),
