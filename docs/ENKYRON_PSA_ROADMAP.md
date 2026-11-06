@@ -175,6 +175,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-PIPELINE-01 — tableau commercial 5 colonnes (2026-11-06) :**
+- Nouvel onglet **CRM → Pipeline** : Prospecting (research, qualified), Engagement (contact_planned, contacted, discovery), Proposals (proposal, negotiation), Won, Lost. Ce classement **représente les neuf états existants**, sans nouvelle définition des ventes ni modification du schéma PostgreSQL.
+- Chaque colonne affiche son **nombre exact d'opportunités** et ses 30 éléments récents au maximum. Si elle en contient plus, l'interface avertit que la vue est un aperçu et renvoie à la recherche **Follow-ups**. Pas de chiffre fictif, pas de disparition silencieuse.
+- Une opportunité est sélectionnable et s'ouvre avec le **formulaire d'édition existant** ; toute modification passe par le contrôle de révision `expected_version` et le journal de transitions de la migration 068. Pas de glisser-déposer capable de changer une étape sans validation humaine.
+- Une seule requête SQL avec `workspace_key` paramétré, partition/rang et décompte fenêtré ; réponse read-only. Le chargement Qt protège des réponses obsolètes et rafraîchit après une édition.
+- Aucun email envoyé, contrat signé, paiement confirmé, client promu ou ticket modifié automatiquement. **« Won » est une déclaration commerciale**, non une preuve de facture réglée.
+- Pas de migration requise (068 déjà appliquée). CI unitaire + PostgreSQL synthétique avec 35 affaires (31 dans une colonne) + test natif Qt ; recette visuelle sur Debian après validation exacte du commit.
+
+
 **Incrément E02-MAIL-SHELL + SALES-OVERVIEW-01 (2026-11-06) :**
 - **Mail** : un seul onglet du CRM avec **Inbox**, **Sent**, **Drafts**. Les vrais brouillons de la migration 070 restent éditables ; Inbox/Sent affichent explicitement **Mailbox not connected**. Aucun compte email réel, synchronisation, SMTP/IMAP, message reçu ou envoyé n'est simulé. Configuration du fournisseur volontairement reportée.
 - Interface non technique ; protocoles, méthodes d'authentification et stockages ne sont pas exposés comme paramètres d'usage courant. Aucune donnée de connexion ou destinataire déduit des prospects.
