@@ -2,7 +2,6 @@
 // A single transaction replaces lines and updates the stored proposal total
 // and optimistic revision. No tax inference, external action or client promotion.
 import {createHash,randomUUID} from 'node:crypto';
-import {requireOpportunityId} from './enkyron-crm-activities.mjs';
 const ID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_TOTAL=999999999;
 function owner(actor){
