@@ -603,3 +603,10 @@ User Debian screenshot: initial issuing-company profile save reported a generic 
 Migration `077_enkyron_operator_tax_references.sql` adds optional `company_utr` (HMRC Corporation Tax UTR, 10 digits) and `tax_office_number` (3 digits) to the existing append-only issuer profile. Historical migration 076 remains unchanged; history lists no UTR. The native Qt UTR field masks typed digits. Company UTR is not a VAT registration number and is never auto-populated from the company's registration number. For operator confirmation, do not assert `not_registered` VAT status without supporting evidence. UK invoicing default GBP can be chosen by the user. A copied "Copier" label in the source reference is rejected before persistence.
 
 **Local follow-up:** install 077 using its explicit backup-before-change script after verifying prior migrations; reproduce the save; check the sanitized SQLSTATE if it fails; verify readback. No customer assessment is involved.
+
+
+## E02-ISSUER-PDF-01 — Profil émetteur dans les PDF de proposition internes (2026-11-06)
+
+Le backend `crm-proposal-export` lit la dernière révision du profil émetteur enregistré sous le même `workspace_key` et la même transaction `REPEATABLE READ READ ONLY` que la proposition. Il ne sélectionne que le nom juridique, le numéro Companies House, l'adresse enregistrée, la révision et l'état `operator_entered_unverified`. **Jamais de Company UTR, Tax Office Number, VAT number, note ni source privée dans l'export.** Le rendu PDF Qt accepte une liste fermée de champs émetteur, échappe le texte et présente son statut de saisie manuelle/non vérifiée. Sans profil, le brouillon affiche explicitement « issuer profile not yet loaded ».
+
+Aucune migration nouvelle, pas d'émission officielle, d'envoi, de facture ni d'assessment. Contrôles unitaires, PostgreSQL et rendu de PDF réel ajoutés. Statuts GitHub CI et recette Debian évalués séparément.

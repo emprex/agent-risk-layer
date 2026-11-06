@@ -48,6 +48,30 @@ def validate_pdf_snapshot(snapshot: dict) -> dict:
     if not isinstance(snapshot.get("revision"), int) or snapshot["revision"] < 1:
         raise ValueError("Invalid proposal revision")
     _money(snapshot.get("amount_minor"), snapshot["currency"])
+    issuer = snapshot.get("issuer")
+    if issuer is not None:
+        # Strict allowlist: an HMRC number is NEVER an approved PDF field.
+        allowed = {
+            "legal_name", "registration_number", "registered_office",
+            "revision", "verification_status",
+        }
+        if not isinstance(issuer, dict) or set(issuer) != allowed:
+            raise ValueError("Invalid draft issuer identity")
+        for key, minimum, maximum in (
+            ("legal_name", 2, 160),
+            ("registered_office", 10, 600),
+        ):
+            value = issuer.get(key)
+            if not isinstance(value, str) or not minimum <= len(value.strip()) <= maximum:
+                raise ValueError("Invalid draft issuer identity")
+        number = issuer.get("registration_number")
+        if number is not None and (
+            not isinstance(number, str) or not 1 <= len(number.strip()) <= 80
+        ):
+            raise ValueError("Invalid draft issuer registration number")
+        if (type(issuer.get("revision")) is not int or issuer["revision"] < 1 or
+                issuer.get("verification_status") != "operator_entered_unverified"):
+            raise ValueError("Invalid draft issuer verification state")
     lines = snapshot.get("lines")
     if not isinstance(lines, list) or len(lines) > 25:
         raise ValueError("Invalid proposal line items")
@@ -79,6 +103,28 @@ def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
     generated = now.astimezone(timezone.utc).strftime("%d %B %Y, %H:%M UTC")
     title, candidate = _text(s["title"]), _text(s["research_candidate"])
     scope = _text(s["scope_text"]).replace("\n", "<br />")
+    issuer = s.get("issuer")
+    if issuer is None:
+        issuer_html = (
+            "<p><b>Prepared by:</b> AGENTRISKLAYER LTD "
+            "(issuer profile not yet loaded)</p>"
+        )
+    else:
+        number = issuer["registration_number"]
+        number_html = (
+            "<p><b>Company registration number (operator-entered):</b> "
+            + _text(number) + "</p>" if number else ""
+        )
+        issuer_html = (
+            "<p><b>Prepared by:</b> " + _text(issuer["legal_name"]) + "</p>"
+            + number_html
+            + "<p><b>Registered office (operator-entered):</b> "
+            + _text(issuer["registered_office"]).replace("\n", "<br />")
+            + "</p>"
+            + "<p style='color:#6a5360'><b>Issuer record:</b> local revision "
+            + str(issuer["revision"])
+            + " - operator-entered; NOT independently verified.</p>"
+        )
     rows = ""
     if s["lines"]:
         rows = """
@@ -113,7 +159,7 @@ def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
     <body style="font-family:'DejaVu Sans';font-size:10pt;color:#20354a">
       <h1 style="font-size:20pt;color:#10263b;margin:0">Commercial proposal</h1>
       <p style="font-size:15pt;color:#176e81"><b>DRAFT - NOT SENT</b></p>
-      <p><b>Prepared by:</b> AGENTRISKLAYER LTD</p>
+      {issuer_html}
       <p><b>Research candidate (not a verified legal buyer):</b> {candidate}</p>
       <p><b>Proposal:</b> {title}</p>
       <p><b>Document reference:</b> {escape(s["id"])} &nbsp; <b>Revision:</b> {s["revision"]}</p>

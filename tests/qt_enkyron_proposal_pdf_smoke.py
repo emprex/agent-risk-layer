@@ -23,6 +23,13 @@ def fixture():
                       "No service has been authorised or delivered.",
         "research_candidate": "Research candidate <Not verified>",
         "currency": "GBP", "amount_minor": 30125,
+        "issuer": {
+            "legal_name": "Synthetic Issuer <Ltd>",
+            "registration_number": "00000000",
+            "registered_office": "10 Example <Road> & Suite, Test City",
+            "revision": 1,
+            "verification_status": "operator_entered_unverified",
+        },
         "lines": [
             {"position": 1, "description": "Manual review <tools> & boundaries",
              "quantity": 2, "unit_price_minor": 12550, "line_total_minor": 25100},
@@ -40,6 +47,11 @@ class DraftPdfTest(unittest.TestCase):
     def test_html_escape_and_exact_line_total(self):
         html = draft_html(fixture())
         self.assertIn("&lt;script&gt;", html)
+        self.assertIn("Synthetic Issuer &lt;Ltd&gt;", html)
+        self.assertIn("10 Example &lt;Road&gt; &amp; Suite", html)
+        self.assertIn("operator-entered", html)
+        self.assertNotIn("Company UTR", html)
+        self.assertNotIn("Tax Office Number", html)
         self.assertIn("&amp;", html)
         self.assertNotIn("<script>", html)
         self.assertIn("GBP 301.25", html)
@@ -54,6 +66,9 @@ class DraftPdfTest(unittest.TestCase):
                          "quantity": 1, "unit_price_minor": 3,
                          "line_total_minor": 4}]},
             {"currency": "BTC"},
+            {"issuer": {**fixture()["issuer"], "company_utr": "0123456789"}},
+            {"issuer": {**fixture()["issuer"], "verification_status": "verified"}},
+
         ):
             value = copy.deepcopy(fixture())
             value.update(mutation)
@@ -78,6 +93,11 @@ class DraftPdfTest(unittest.TestCase):
                 self.assertIn("DRAFT", extracted)
                 self.assertIn("NOT SENT", extracted)
                 self.assertIn("AGENTRISKLAYER LTD", extracted)
+                self.assertIn("Synthetic Issuer <Ltd>", extracted)
+                self.assertIn("00000000", extracted)
+                self.assertIn("Registered office", extracted)
+                self.assertNotIn("0123456789", extracted)
+                self.assertNotIn("Company UTR", extracted)
                 self.assertIn("GBP 301.25", extracted)
                 self.assertIn("Research candidate", extracted)
                 self.assertIn("Manual review", extracted)
@@ -86,6 +106,13 @@ class DraftPdfTest(unittest.TestCase):
                 info = subprocess.check_output(["pdfinfo", str(path)], text=True)
                 self.assertIn("Page size:       595", info)
                 self.assertRegex(info, rf"(?m)^Pages:\s+{pages}\s*$")
+
+    def test_no_issuer_profile_keeps_safe_fallback(self):
+        value = fixture()
+        value.pop("issuer")
+        text = draft_html(value)
+        self.assertIn("issuer profile not yet loaded", text)
+        self.assertNotIn("Registered office (operator-entered)", text)
 
     def test_long_quote_can_render_multiple_a4_pages(self):
         value = fixture()
