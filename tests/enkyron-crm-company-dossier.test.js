@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const company='11111111-2222-4333-8444-555555555555';
-const names=['contacts','prospects','tickets','opportunities','activities','drafts'];
+const names=['contacts','prospects','tickets','opportunities','qualifications','activities','drafts'];
 function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
   const statements=[];
   let releases=0;
@@ -36,7 +36,7 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.equal(m.released(),1);
@@ -44,9 +44,9 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   for(const q of m.statements.filter(q=>q.params)){
     assert.deepEqual(q.params,['local:ci-operator',company]);
   }
-  assert.ok(m.statements.slice(2,8).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.ok(m.statements.slice(2,9).every(q=>/LIMIT 21/.test(q.sql)));
   // Opportunity, notes and drafts are linked through explicit prospect association.
-  for(const sql of m.statements.slice(5,8).map(q=>q.sql)){
+  for(const sql of [m.statements[5],m.statements[7],m.statements[8]].map(q=>q.sql)){
     assert.match(sql,/enkyron_crm_prospect_links/);
     assert.match(sql,/workspace_key/);
   }
