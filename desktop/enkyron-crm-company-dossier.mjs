@@ -57,6 +57,15 @@ const LISTS={
     +'AND a.workspace_key=o.workspace_key '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
     +'ORDER BY a.recorded_at DESC,a.id DESC LIMIT 21',
+  qualifications:
+    'SELECT r.id,r.contact_id,COALESCE(c.full_name,\'Company\') AS subject,'
+    +'r.fit_status,r.priority,r.rationale,r.next_action,r.source_reference,'
+    +'r.recorded_by,r.recorded_at,count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_qualification_reviews r '
+    +'LEFT JOIN enkyron_crm_contacts c ON c.id=r.contact_id '
+    +'AND c.workspace_key=r.workspace_key AND c.company_id=r.company_id '
+    +'WHERE r.workspace_key=$1 AND r.company_id=$2 '
+    +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21',
   drafts:
     'SELECT d.id,d.subject,d.recipient_email,d.revision,d.updated_at,'
     +'count(*) OVER() AS total_rows '
