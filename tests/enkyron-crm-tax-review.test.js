@@ -39,6 +39,9 @@ test('tax review stores facts and does NOT infer an exempt or zero-rate treatmen
     {...valid,uk_vat_registration:'yes'},
     {...valid,overseas_withholding:'none'},
     {...valid,buyer_country:'EU'},
+    {...valid,buyer_country:'UK'},
+    {...valid,buyer_country:'ZZ'},
+    {...valid,buyer_country:1},
     {...valid,buyer_country:'FRA'},
     {...valid,business_evidence:''},
     {...valid,business_evidence:'short'},
@@ -49,9 +52,6 @@ test('tax review stores facts and does NOT infer an exempt or zero-rate treatmen
     {...valid,source_reference:'bad'},
     {...valid,location_evidence:'verified\u0000'}
   ]){
-    // EU is a 2-letter string and cannot be excluded by shape checks alone:
-    // explicitly skip it here; real ISO validation is a later enhancement.
-    if(attempt?.buyer_country==='EU')continue;
     assert.throws(()=>validateTaxReview(attempt),/CRM/);
   }
 });
