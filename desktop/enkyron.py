@@ -196,6 +196,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_pending_company_id = None
         self.crm_company_dialog = None
         self.crm_contact_dialog = None
+        self.crm_dossier_dialog = None
+        self.crm_dossier_company_id = None
+        self.crm_dossier_seq = 0
         self.crm_ticket_seq = 0
         self.crm_ticket_items = []
         self.crm_link_dialog = None
@@ -633,6 +636,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_add.setEnabled(False)
         self.crm_company_add.clicked.connect(self.open_new_company)
         company_toolbar.addWidget(self.crm_company_add)
+        self.crm_company_dossier_open = QPushButton("Open company dossier")
+        self.crm_company_dossier_open.setEnabled(False)
+        self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
+        company_toolbar.addWidget(self.crm_company_dossier_open)
         company_l.addLayout(company_toolbar)
         self.crm_company_notice = QLabel(
             "Structured CRM has not been loaded. Historic prospects remain separate."
@@ -1288,6 +1295,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.setRowCount(0)
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
+            self.crm_company_dossier_open.setEnabled(False)
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
@@ -1352,6 +1360,7 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_company_table.currentRow()
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
+            self.crm_company_dossier_open.setEnabled(False)
             self.crm_contact_add.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             self.crm_ticket_seq += 1
@@ -1362,6 +1371,7 @@ class EnkyronWindow(QMainWindow):
         company = self.crm_company_items[row]
         company_id = company["id"]
         self.crm_company_id = company_id
+        self.crm_company_dossier_open.setEnabled(True)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
