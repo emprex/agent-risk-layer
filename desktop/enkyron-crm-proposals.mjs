@@ -77,7 +77,9 @@ export async function readProposalDraft(pool,id,actor){
   try{
     const row=(await pool.query(
       'SELECT d.id,d.opportunity_id,d.title,d.scope_text,d.currency,d.amount_minor,'
-      +'d.revision,d.updated_at,o.company_name_at_creation '
+      +'d.revision,d.updated_at,o.company_name_at_creation,'
+      +'EXISTS(SELECT 1 FROM enkyron_crm_proposal_lines l '
+      +'WHERE l.workspace_key=d.workspace_key AND l.proposal_id=d.id) AS has_lines '
       +'FROM enkyron_crm_proposal_drafts d '
       +'JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
