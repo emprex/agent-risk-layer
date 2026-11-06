@@ -175,6 +175,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-QUALIFY-01 — qualification commerciale manuelle (2026-11-06) :**
+- **CRM → Companies & Contacts → Open company dossier → Qualification** : qualification de l'entreprise ou d'un de ses contacts déjà enregistrés ; statut d'intérêt commercial (**Needs research / Potential fit / Not a fit / On hold**), priorité, justification obligatoire, référence de source facultative, prochaine action facultative et confirmation explicite. Le formulaire ne déclenche aucune prise de contact.
+- Migration additive `071_enkyron_crm_qualification_reviews.sql` : journal **append-only** horodaté, associé à la société et, facultativement, à un contact. Références composées avec `workspace_key` et `company_id` pour refuser les contacts appartenant à une autre société. Aucun changement des statuts `prospect/client`, de `relationship_state`, de `marketing_permission`, des anciens prospects, tickets ou brouillons.
+- Affichage de la revue et de son historique dans la fiche entreprise, avec compteur réel et aperçu borné à 20 lignes. Une nouvelle revue ne réécrit jamais l'ancienne, et les qualifications ne constituent **ni preuve d'identité, ni consentement, ni signature, ni commande**.
+- Installation contrôlée : `node scripts/enkyron-crm-qualification-schema.mjs --check` puis `--apply`, backup PostgreSQL `arl_local`, vérification des checksums et migration transactionnelle ; aucune migration implicite au démarrage.
+- Tests : validation des champs, appartenance réelle du contact à l'entreprise et à l'opérateur, société homonyme séparée, immutabilité, données historiques inchangées, ouverture de l'interface native. Prévoir la recette locale après validation GitHub sur le commit exact.
+
+
+
 **Incrément E02-COMPANY-360-01 — fiche entreprise consolidée (2026-11-06) :**
 - Dans **CRM → Companies & Contacts**, sélectionner une entreprise et ouvrir **Open company dossier**. La fenêtre Qt indépendante (non modale) contient six vues compactes : **Contacts**, **Research links**, **Tickets**, **Opportunities**, **Activity notes**, **Email drafts**, avec compteurs et tableaux consultatifs. Les autres fonctions existantes restent disponibles.
 - Backend `crm-company-dossier` : transaction **REPEATABLE READ / READ ONLY**, toujours sous `workspace_key` local de l'opérateur ; compteurs exacts et **20 enregistrements affichés maximum par rubrique**, avec un avertissement explicite si des enregistrements restent masqués. Aucun changement de schéma ni mutation de données.
