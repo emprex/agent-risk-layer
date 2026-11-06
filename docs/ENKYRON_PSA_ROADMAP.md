@@ -175,6 +175,14 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-MAIL-SHELL + SALES-OVERVIEW-01 (2026-11-06) :**
+- **Mail** : un seul onglet du CRM avec **Inbox**, **Sent**, **Drafts**. Les vrais brouillons de la migration 070 restent éditables ; Inbox/Sent affichent explicitement **Mailbox not connected**. Aucun compte email réel, synchronisation, SMTP/IMAP, message reçu ou envoyé n'est simulé. Configuration du fournisseur volontairement reportée.
+- Interface non technique ; protocoles, méthodes d'authentification et stockages ne sont pas exposés comme paramètres d'usage courant. Aucune donnée de connexion ou destinataire déduit des prospects.
+- **Home → Commercial overview** : requête PostgreSQL unique, lecture seule, avec nombre de prospects documentaires, entreprises enregistrées, opportunités actives et brouillons ; alertes **overdue/today/next 7 days** selon le jour local `Europe/London` et six échéances prioritaires au maximum. Le bouton **Open CRM follow-ups** mène à la liste existante.
+- Limites : les opportunités restent des **déclarations commerciales** ; les prospects ne deviennent ni clients, ni contacts vérifiés par ce tableau ; les étapes gagnées ne sont pas des preuves de paiement. Les compteurs sont calculés sur les enregistrements PostgreSQL disponibles, pas sur des données synthétiques en production.
+- Aucune migration de base supplémentaire : cela réutilise les schémas 065–070. Tests unitaires, smoke Qt et PostgreSQL isolé requis. Ne pas présenter Inbox/Sent comme fonctionnels avant configuration effective d'un fournisseur.
+
+
 **Incrément E02-MAIL-DRAFT-01 — brouillons commerciaux locaux (2026-11-05) :**
 - Migration additive `070_enkyron_crm_mail_drafts.sql` : brouillons de texte brut rattachés **explicitement** à une opportunité existante via clé composite `(workspace_key,opportunity_id)`. Destinataire facultatif, sujet, corps, auteur, révision optimiste et horodatages.
 - `enkyron_crm_mail_draft_events` : journal append-only des révisions (création / modification) contenant un **hachage SHA-256 du contenu** et le nom de l'opérateur, sans stocker une deuxième copie des adresses et textes personnels. En cas d'édition obsolète, la modification est refusée et doit être rechargée.
