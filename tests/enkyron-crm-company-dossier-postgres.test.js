@@ -109,7 +109,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,activities:1,drafts:1});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
