@@ -997,6 +997,20 @@ jobs:
           assert window.crm_invoice_detail_dialog.isVisible()
           window.crm_invoice_detail_dialog.reject()
           window.crm_tabs.setCurrentIndex(5)
+          assert calls[-1][0] == "crm-proposals"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "currency": "GBP", "amount_minor": "125050",
+                  "revision": 1, "updated_at": "2026-11-06"
+              }]
+          }, None)
+          window.crm_proposal_table.selectRow(0)
+          assert window.crm_terms_button.isEnabled()
           window.crm_terms_button.click()
           assert calls[-1][0] == "crm-commercial-terms"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
