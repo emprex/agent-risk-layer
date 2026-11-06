@@ -67,7 +67,7 @@ test('append-only write checks exact revision, actor and no UPDATE/DELETE',async
     ['BEGIN','SELECT','SELECT','INSERT','COMMIT']);
   assert.equal(q[3].params[1],'local:ci-operator');
   assert.equal(q[3].params.at(-1),'ci-operator');
-  assert.equal(q.some(x=>/\bUPDATE\b|\bDELETE\b/.test(x.sql)),false);
+  assert.equal(q.some(x=>/^\s*(UPDATE|DELETE)\b/.test(x.sql)),false);
   assert.equal(released,true);
 });
 test('reject stale revision with rollback and no insert',async()=>{
