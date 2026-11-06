@@ -10,11 +10,16 @@ from pathlib import Path
 from PySide6.QtCore import QDate, QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QFileDialog,
     QInputDialog,
     QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QSpinBox, QDateEdit, QTabWidget,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView, QStackedWidget, QVBoxLayout, QWidget,
 )
+
+if __package__:
+    from .enkyron_proposal_pdf import export_draft_pdf
+else:
+    from enkyron_proposal_pdf import export_draft_pdf
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -1135,6 +1140,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_lines.setEnabled(False)
         self.crm_edit_lines.clicked.connect(self.open_selected_quote_lines)
         proposal_footer.addWidget(self.crm_edit_lines)
+        self.crm_export_draft_pdf = QPushButton("Export draft PDF…")
+        self.crm_export_draft_pdf.setEnabled(False)
+        self.crm_export_draft_pdf.clicked.connect(self.export_selected_draft_pdf)
+        proposal_footer.addWidget(self.crm_export_draft_pdf)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
@@ -2414,6 +2423,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_notice.setText("Loading proposals…")
         self.crm_open_proposal.setEnabled(False)
         self.crm_edit_lines.setEnabled(False)
+        self.crm_export_draft_pdf.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2462,6 +2472,7 @@ class EnkyronWindow(QMainWindow):
         available = 0 <= row < len(self.crm_proposal_items)
         self.crm_open_proposal.setEnabled(available)
         self.crm_edit_lines.setEnabled(available)
+        self.crm_export_draft_pdf.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -2505,6 +2516,78 @@ class EnkyronWindow(QMainWindow):
             self.show_proposal_dialog(data["proposal"])
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def select_proposal_pdf_path(self, proposal_id, revision):
+        suggestion = "ENKYRON_DRAFT_{}_R{}.pdf".format(
+            proposal_id[:8], revision
+        )
+        filename, _chosen_filter = QFileDialog.getSaveFileName(
+            self, "Save internal draft PDF", suggestion, "PDF documents (*.pdf)"
+        )
+        return filename
+
+    def export_selected_draft_pdf(self):
+        row = self.crm_proposal_table.currentRow()
+        if row < 0 or row >= len(self.crm_proposal_items):
+            return
+        selected = dict(self.crm_proposal_items[row])
+        proposal_id = selected["id"]
+        revision = selected["revision"]
+        self.crm_export_draft_pdf.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available", False):
+                QMessageBox.warning(
+                    self, "Draft unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not retrieve the proposal draft."
+                    )
+                )
+                return
+            snapshot = data.get("proposal")
+            if not isinstance(snapshot, dict):
+                QMessageBox.warning(self, "Export cancelled", "Invalid draft data.")
+                return
+            if snapshot.get("id") != proposal_id or snapshot.get("revision") != revision:
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "This proposal has changed. Refresh the list before exporting."
+                )
+                self.load_proposals()
+                return
+            destination = self.select_proposal_pdf_path(proposal_id, revision)
+            if not destination:
+                return
+            path = Path(destination)
+            if path.suffix.lower() != ".pdf":
+                path = path.with_suffix(".pdf")
+            if path.is_symlink():
+                QMessageBox.warning(
+                    self, "Export cancelled", "A symbolic link cannot be overwritten."
+                )
+                return
+            if path.exists():
+                answer = QMessageBox.question(
+                    self, "Replace existing PDF?",
+                    "This file already exists. Replace it with the current draft?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
+            try:
+                pages = export_draft_pdf(path, snapshot)
+            except (OSError, ValueError, RuntimeError) as exc:
+                QMessageBox.warning(self, "PDF not saved", str(exc))
+                return
+            QMessageBox.information(
+                self, "Draft PDF saved",
+                "Saved {} page(s) of the internal, unissued proposal draft. "
+                "No email was sent.".format(pages)
+            )
+
+        self.bridge.call("crm-proposal-export", proposal_id, callback=received)
 
     def open_selected_quote_lines(self):
         row = self.crm_proposal_table.currentRow()
