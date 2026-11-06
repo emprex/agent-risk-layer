@@ -902,7 +902,34 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_draft.clicked.connect(self.open_selected_draft)
         draft_footer.addWidget(self.crm_edit_draft)
         drafts_l.addLayout(draft_footer)
-        self.crm_tabs.addTab(drafts_page, "Mail drafts")
+        # Mail workspace is structurally ready, but no provider is configured.
+        # Do not invent received/sent messages or enable transport controls.
+        mail_page = QWidget()
+        mail_l = QVBoxLayout(mail_page)
+        mail_l.setSpacing(10)
+        mail_head = QHBoxLayout()
+        mail_head.addWidget(section_title("EMAIL"))
+        mail_head.addStretch()
+        self.crm_mail_connection = QLabel("Mailbox not connected")
+        mail_head.addWidget(self.crm_mail_connection)
+        mail_l.addLayout(mail_head)
+        self.crm_mail_folders = QTabWidget()
+        mail_l.addWidget(self.crm_mail_folders, 1)
+        for folder, explanation in (
+            ("Inbox", "Connect a professional mailbox later to receive messages here."),
+            ("Sent", "Sent messages will appear after a mailbox is connected.")
+        ):
+            folder_page = QWidget()
+            folder_layout = QVBoxLayout(folder_page)
+            folder_layout.setContentsMargins(16, 18, 16, 18)
+            title = QLabel(explanation)
+            title.setWordWrap(True)
+            folder_layout.addWidget(title)
+            folder_layout.addStretch()
+            self.crm_mail_folders.addTab(folder_page, folder)
+        self.crm_mail_folders.addTab(drafts_page, "Drafts")
+        self.crm_mail_folders.setCurrentIndex(2)
+        self.crm_tabs.addTab(mail_page, "Mail")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -1869,6 +1896,7 @@ class EnkyronWindow(QMainWindow):
                 return
             dialog.accept()
             self.crm_tabs.setCurrentIndex(3)
+            self.crm_mail_folders.setCurrentIndex(2)
             self.crm_draft_search.clear()
             self.load_mail_drafts()
 
