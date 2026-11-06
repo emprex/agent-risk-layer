@@ -175,6 +175,15 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-INT-TAX-01 — dossier de recherche fiscale par proposition (2026-11-06) :**
+- Sources officielles et analyse contextualisée dans `docs/ENKYRON_INTERNATIONAL_TAX_RESEARCH_2026-11-06.md` ; activité prévue : **UK LTD vendant services de cybersécurité humain-led globalement**. Différencier les règles B2B/B2C, les prestations professionnelles et les e-services automatisés. £90k (seuil en vigueur) concerne le chiffre d'affaires *taxable au UK*, pas arbitrairement toutes les ventes mondiales ; taux UK standard 20 % pour fournitures taxables le cas échéant. Pas de statut TVA présumé.
+- `CRM → Proposals → International tax review…` : collecte manuelle d'identité B2B/B2C/unknown, pays de l'acheteur avec source, nature humain-led/automatisée/mixte, statut UK VAT déclaré, possible retenue à la source, références et notes. Preuve commerciale exigée si l'opérateur coche B2B ; preuve de localisation exigée si un pays est renseigné. Avis **append-only** toujours lié à la révision d'une proposition.
+- Migration additive `074_enkyron_crm_proposal_tax_reviews.sql` + `scripts/enkyron-crm-tax-review-schema.mjs` (contrôle historique et sauvegarde locale avant déploiement).
+- Aucun calcul de TVA, régime automatique reverse charge, taux étranger, tax ID présumé, devis TTC, confirmation de conformité, facture ou envoi. Aucun changement des devis PDF / tarifications existants.
+- Suivants : profil émetteur AGENTRISKLAYER LTD (registered number/address/VAT status avec justificatifs), acheteur vérifié, validation fiscale par juriste/comptable, options d'édition officielle, documents contractuels et facturation.
+
+
+
 **Incrément E02-DRAFT-PDF-01 — export PDF local d'une proposition non émise (2026-11-06) :**
 - **CRM → Proposals → sélectionner une proposition → Export draft PDF…** : l'application récupère une image cohérente de la proposition (révision, candidat commercial non vérifié, portée, devises, lignes et total), propose un nom de fichier local et permet explicitement de confirmer tout écrasement. Aucun envoi réseau ni écriture sur la base par l'export.
 - Backend `crm-proposal-export` : transaction PostgreSQL `REPEATABLE READ READ ONLY` sous `workspace_key` local, validation du nombre et de l'ordre de lignes, des montants mineurs entiers et du total ; erreurs et associations étrangères refusées avant génération du fichier. Une révision périmée dans la table impose d'actualiser la sélection.
