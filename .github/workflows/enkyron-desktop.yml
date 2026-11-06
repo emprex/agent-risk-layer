@@ -39,6 +39,8 @@ jobs:
           node --check desktop/enkyron-crm-tickets.mjs
           node --check desktop/enkyron-crm-company-dossier.mjs
           node --check desktop/enkyron-crm-qualification.mjs
+          node --check desktop/enkyron-crm-proposals.mjs
+          node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check desktop/enkyron-crm-activities.mjs
@@ -52,7 +54,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -184,7 +186,7 @@ jobs:
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
           }, None)
-          assert window.crm_tabs.count() == 5
+          assert window.crm_tabs.count() == 6
           assert window.crm_tabs.tabText(3) == "Mail"
           assert [window.crm_mail_folders.tabText(i) for i in range(3)] == [
               "Inbox", "Sent", "Drafts"
@@ -349,7 +351,7 @@ jobs:
 
           # Follow-ups are available with no registered CRM company.
           assert window.crm_plan_followup.isEnabled()
-          assert window.crm_tabs.count() == 5
+          assert window.crm_tabs.count() == 6
           window.open_prospect_followup()
           assert calls[-1][0] == "crm-prospect-opportunity"
           assert calls[-1][1] == "ARL-P-000001"
@@ -708,6 +710,64 @@ jobs:
           assert not window.crm_pipeline_edit.isEnabled()
           window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
           assert window.crm_pipeline_edit.isEnabled()
+          assert window.crm_pipeline_proposal.isEnabled()
+          window.open_pipeline_proposal()
+          assert window.crm_proposal_dialog.isVisible()
+          assert window.crm_proposal_context["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert window.crm_proposal_currency.currentData() is None
+          window.crm_proposal_title.setText("Synthetic ARL proposal")
+          window.crm_proposal_scope.setPlainText(
+              "A manually reviewed scope for a proposed agent security engagement."
+          )
+          window.crm_proposal_currency.setCurrentIndex(
+              window.crm_proposal_currency.findData("GBP")
+          )
+          window.crm_proposal_price.setText("1250.50")
+          window.save_proposal()
+          assert calls[-1][0] == "crm-proposal-create"
+          assert calls[-1][2]["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["amount_minor"] == 125050
+          assert calls[-1][2]["currency"] == "GBP"
+          window.crm_proposal_dialog.reject()
+          assert window.crm_tabs.tabText(5) == "Proposals"
+          window.crm_tabs.setCurrentIndex(5)
+          assert calls[-1][0] == "crm-proposals"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "currency": "GBP", "amount_minor": "125050",
+                  "revision": 1, "updated_at": "2026-11-06"
+              }]
+          }, None)
+          assert window.crm_proposal_table.rowCount() == 1
+          assert "1,250.50" in window.crm_proposal_table.item(0, 2).text()
+          window.crm_proposal_table.selectRow(0)
+          assert window.crm_open_proposal.isEnabled()
+          window.open_selected_proposal()
+          assert calls[-1][0] == "crm-proposal"
+          calls[-1][3]({
+              "available": True,
+              "proposal": {
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "scope_text": "A manually reviewed scope for a proposed agent security engagement.",
+                  "currency": "GBP", "amount_minor": "125050", "revision": 1
+              }
+          }, None)
+          assert window.crm_proposal_price.text() == "1250.50"
+          window.crm_proposal_price.setText("1300.75")
+          window.save_proposal()
+          assert calls[-1][0] == "crm-proposal-update"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["amount_minor"] == 130075
+          window.crm_proposal_dialog.reject()
+          window.crm_tabs.setCurrentIndex(4)
           window.open_pipeline_opportunity()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.currentData() == "research"
