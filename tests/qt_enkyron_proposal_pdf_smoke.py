@@ -95,7 +95,7 @@ class DraftPdfTest(unittest.TestCase):
                 self.assertIn("AGENTRISKLAYER LTD", extracted)
                 self.assertIn("Synthetic Issuer <Ltd>", extracted)
                 self.assertIn("00000000", extracted)
-                self.assertIn("Registered office", extracted)
+                self.assertIn("10 Example <Road> & Suite, Test City", extracted)
                 self.assertNotIn("0123456789", extracted)
                 self.assertNotIn("Company UTR", extracted)
                 self.assertIn("GBP 301.25", extracted)
