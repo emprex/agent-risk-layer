@@ -925,12 +925,42 @@ jobs:
               "proposal_revision": 1, "proposal_title": "Synthetic Service",
               "currency": "GBP", "proposed_fee_minor": 125050,
               "worksheet_id": None, "can_prepare": False,
-              "blockers": ["No current billing worksheet"],
-              "issuer": None, "buyer": None
+              "blockers": ["Current revision has no billing worksheet"],
+              "issuer": None, "buyer": None,
+              "steps": [
+                  {"key": "issuer", "action": "issuer",
+                   "label": "Issuing company profile", "ready": True},
+                  {"key": "link", "action": "research",
+                   "label": "Associate prospect with a CRM company", "ready": True},
+                  {"key": "buyer", "action": "buyer",
+                   "label": "Buyer identity review", "ready": False,
+                   "detail": "No buyer documentary record for this revision."},
+                  {"key": "terms", "action": "terms",
+                   "label": "Commercial terms", "ready": False,
+                   "detail": "No terms for the current revision."},
+                  {"key": "tax", "action": "tax",
+                   "label": "International tax review", "ready": False,
+                   "detail": "Tax research pending."},
+                  {"key": "internal", "action": "internal",
+                   "label": "Internal draft review", "ready": False,
+                   "detail": "Human decision required."},
+                  {"key": "worksheet", "action": "worksheet",
+                   "label": "Billing worksheet", "ready": False,
+                   "detail": "No approved worksheet recorded."}
+              ]
           }, None)
           assert window.crm_invoice_prepare_dialog.isVisible()
           assert not window.crm_invoice_prepare_save.isEnabled()
-          window.crm_invoice_prepare_dialog.reject()
+          assert window.crm_invoice_prepare_save.isHidden()
+          assert not window.crm_invoice_prepare_note.isEnabled()
+          assert not window.crm_invoice_prepare_confirm.isEnabled()
+          assert window.crm_invoice_next_button.isVisible()
+          assert "Buyer identity review" in window.crm_invoice_next_button.text()
+          window.save_invoice_draft_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          window.crm_invoice_next_button.click()
+          assert not window.crm_invoice_prepare_dialog.isVisible()
+          assert calls[-1][0] == "crm-buyer-review"
           window.open_proposal_invoice_preparation()
           assert calls[-1][0] == "crm-invoice-prepare"
           calls[-1][3]({
@@ -941,18 +971,26 @@ jobs:
               "currency": "GBP", "proposed_fee_minor": 125050,
               "worksheet_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
               "can_prepare": True, "blockers": [], "current_draft_id": None,
+              "steps": [
+                  {"key": key, "ready": True, "label": key}
+                  for key in ("issuer","link","buyer","terms","tax",
+                              "internal","worksheet")
+              ],
               "issuer": {"legal_name": "<b>Untrusted issuer</b>",
                           "registered_office": "10 Example Avenue, London"},
               "buyer": {"legal_name": "Synthetic Buyer Ltd",
                          "registered_address": "20 Fake Street, London"}
           }, None)
           assert window.crm_invoice_prepare_dialog.isVisible()
-          assert window.crm_invoice_prepare_save.isEnabled()
+          assert window.crm_invoice_prepare_save.isVisible()
+          assert not window.crm_invoice_prepare_save.isEnabled()
           assert not window.crm_invoice_prepare_confirm.isChecked()
           window.crm_invoice_prepare_note.setPlainText(
               "Synthetic unissued invoice draft. Tax and amount due not determined."
           )
+          assert not window.crm_invoice_prepare_save.isEnabled()
           window.crm_invoice_prepare_confirm.setChecked(True)
+          assert window.crm_invoice_prepare_save.isEnabled()
           window.save_invoice_draft_preparation()
           assert calls[-1][0] == "crm-invoice-record"
           assert calls[-1][2]["worksheet_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"

@@ -63,6 +63,10 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     assert.equal(first.can_prepare,false);
     assert.equal(first.worksheet_id,null);
     assert.equal(first.proposed_fee_minor,68525);
+    assert.equal(first.steps.length,7);
+    assert.equal(first.steps.find(x=>x.key==='link').ready,false);
+    assert.equal(first.steps.find(x=>x.key==='buyer').ready,false);
+    assert.equal(first.steps.find(x=>x.key==='worksheet').ready,false);
     await assert.rejects(
       ()=>readInvoicePreparation(db,proposal.id,foreign),/not found/);
 
@@ -134,6 +138,10 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     assert.equal(ready.issuer.legal_name,'Synthetic Invoicing Company Ltd');
     assert.equal(ready.buyer.legal_name,'Synthetic Customer Ltd');
     assert.equal(ready.vat_treatment,'undetermined');
+    assert.equal(ready.steps.length,7);
+    assert.ok(ready.steps.every(x=>x.ready));
+    assert.deepEqual(ready.steps.map(x=>x.action),
+      ['issuer','research','buyer','terms','tax','internal','worksheet']);
     assert.doesNotMatch(JSON.stringify(ready),/0123456789|company_utr|tax_office_number/);
     const note='Internal invoice drafting only; VAT, invoice issue and amount due pending.';
     const request={proposal_id:proposal.id,worksheet_id:worksheet.id,
@@ -223,6 +231,8 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     const blocked=await readInvoicePreparation(db,proposal.id,actor);
     assert.equal(blocked.can_prepare,false);
     assert.equal(blocked.worksheet_id,null);
+    assert.equal(blocked.steps.find(x=>x.key==='buyer').ready,false);
+    assert.equal(blocked.steps.find(x=>x.key==='internal').ready,false);
     await assert.rejects(()=>recordInvoiceDraft(db,request,actor),/proposal changed/);
     const frozen=(await readInvoiceDraft(db,created.id,actor)).draft;
     assert.equal(frozen.proposed_fee_minor,'68525');
