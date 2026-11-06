@@ -102,7 +102,12 @@ class DesktopBridge:
     def call(self, action, arg="", payload=None, callback=None):
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
-        if action in ("operator-state", "evidence-summary", "evidence-pack"):
+        if action in ("mail-imap-list", "mail-imap-read"):
+            # Isolated Python worker, with account secrets ONLY on local stdin.
+            # No IMAP password is ever passed through argv or persisted to CRM.
+            process.setProgram(sys.executable)
+            process.setArguments(["-m", "desktop.enkyron_imap_inbox"])
+        elif action in ("operator-state", "evidence-summary", "evidence-pack"):
             # Reuse existing ARL Operator adapters; do not start a second engine.
             process.setProgram(sys.executable)
             module = ("desktop.enkyron_operator_state" if action == "operator-state"
@@ -162,6 +167,7 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action == "operator-state" else
                     60000 if action in ("evidence-summary", "evidence-pack") else
+                    45000 if action in ("mail-imap-list", "mail-imap-read") else
                     15000)
 
 
