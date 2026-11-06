@@ -1460,6 +1460,7 @@ class EnkyronWindow(QMainWindow):
             return
         self.crm_dossier_seq += 1
         seq = self.crm_dossier_seq
+        selected_tab = self.crm_dossier_tabs.currentIndex()
         self.crm_dossier_notice.setText("Loading company records…")
 
         def received(data, error):
@@ -1655,6 +1656,8 @@ class EnkyronWindow(QMainWindow):
                     self.crm_dossier_tabs.addTab(
                         page, "{} ({})".format(title, count)
                     )
+            if selected_tab >= 0 and selected_tab < self.crm_dossier_tabs.count():
+                self.crm_dossier_tabs.setCurrentIndex(selected_tab)
             self.crm_dossier_notice.setText(
                 " · ".join(summaries) + "\n"
                 "Only explicitly associated records; notes and stages are "
