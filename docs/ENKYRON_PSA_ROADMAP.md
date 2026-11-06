@@ -175,6 +175,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-PROPOSALS-01 — devis/propositions commerciales en brouillon (2026-11-06) :**
+- Dans **CRM → Pipeline**, sélectionner une opportunité puis **New proposal draft…**. Éditeur natif : titre, périmètre et livrables, devise choisie par l'opérateur et montant proposé saisi avec deux décimales. Vue **CRM → Proposals** pour rechercher, ouvrir et réviser les propositions.
+- Le montant est sauvegardé en **unités monétaires mineures entières** (pence/cents) pour éviter toute approximation flottante. Devises admises : GBP, EUR, USD. **Aucun tarif catalogue, TVA, acompte, réduction, date d'expiration ou condition juridique n'est déduit automatiquement.** Le prix est saisi par un humain, sans détermination fiscale.
+- Migration additive `072_enkyron_crm_proposal_drafts.sql` : enregistrements reliés à une opportunité de suivi existante dans le même `workspace_key`, version optimiste, auteur, dates de création/modification et **journal append-only de hachages SHA-256 par révision**. Aucun statut « envoyé » ou « accepté » : exclusivement **DRAFT**.
+- **Aucun email envoyé, facture créée, contrat signé, paiement confirmé, client promu, ticket modifié ni assessment déclenché.** Le nom de l'opportunité provient d'un prospect historique ; son identité juridique n'est pas automatiquement vérifiée. Aucun PDF officiel n'est émis à ce stade.
+- Installation via `node scripts/enkyron-crm-proposals-schema.mjs --check` puis `--apply`, avec vérification des migrations antérieures et sauvegarde locale. Aucun changement automatique au démarrage.
+- Vérifications : validation de montants et devise, isolation par opérateur, refus des écritures obsolètes, conservation des historiques, tests Qt des actions créer/rouvrir/modifier et non-régression sur PostgreSQL synthétique.
+- **Restant pour devis réellement émissibles :** identité juridique de l'acheteur, paramètres fiscaux vérifiés, lignes de devis et chiffrage détaillé, validité/conditions, génération PDF documentée, approbation, envoi contrôlé et suivi d'acceptation.
+
+
+
 **Incrément E02-QUALIFY-01 — qualification commerciale manuelle (2026-11-06) :**
 - **CRM → Companies & Contacts → Open company dossier → Qualification** : qualification de l'entreprise ou d'un de ses contacts déjà enregistrés ; statut d'intérêt commercial (**Needs research / Potential fit / Not a fit / On hold**), priorité, justification obligatoire, référence de source facultative, prochaine action facultative et confirmation explicite. Le formulaire ne déclenche aucune prise de contact.
 - Migration additive `071_enkyron_crm_qualification_reviews.sql` : journal **append-only** horodaté, associé à la société et, facultativement, à un contact. Références composées avec `workspace_key` et `company_id` pour refuser les contacts appartenant à une autre société. Aucun changement des statuts `prospect/client`, de `relationship_state`, de `marketing_permission`, des anciens prospects, tickets ou brouillons.
