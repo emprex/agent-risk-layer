@@ -11,6 +11,8 @@ import {recordCommercialTerms} from '../desktop/enkyron-crm-commercial-terms.mjs
 import {recordTaxReview} from '../desktop/enkyron-crm-tax-review.mjs';
 import {recordInternalDecision} from '../desktop/enkyron-crm-internal-review.mjs';
 import {recordBillingWorksheet} from '../desktop/enkyron-crm-billing-worksheet.mjs';
+import {readInvoiceIssueReview,recordInvoiceIssueReview}
+  from '../desktop/enkyron-crm-invoice-issue-review.mjs';
 import {listInvoiceDrafts,readInvoiceDraft,readInvoicePreparation,recordInvoiceDraft}
   from '../desktop/enkyron-crm-invoice-drafts.mjs';
 
@@ -164,6 +166,53 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     await assert.rejects(()=>db.query(
       'DELETE FROM enkyron_crm_invoice_drafts WHERE id=$1',[created.id]
     ),/cannot be changed or deleted/);
+
+    // Issue documentary checks NEVER issue an invoice, even with all sources logged.
+    const initialReview=await readInvoiceIssueReview(db,created.id,actor);
+    assert.equal(initialReview.issue_authorised,false);
+    assert.equal(initialReview.issuer_vat_status,'unknown');
+    assert.match(initialReview.blockers.join(' '),/VAT status/);
+    assert.equal(initialReview.history.length,0);
+    assert.doesNotMatch(JSON.stringify(initialReview),/0123456789|company_utr|tax_office_number/);
+    await assert.rejects(()=>readInvoiceIssueReview(db,created.id,foreign),/not found/);
+    const reviewBase={
+      invoice_draft_id:created.id,outcome:'needs_changes',confirmed:true,
+      review_note:'No verified VAT position or customer order exists in synthetic test data.'
+    };
+    const needs=await recordInvoiceIssueReview(db,reviewBase,actor);
+    assert.equal(needs.issue_authorised,false);
+    const documented=await recordInvoiceIssueReview(db,{
+      ...reviewBase,outcome:'documents_logged',supply_date:'2026-11-06',
+      customer_authorisation_reference:'Synthetic customer order only',
+      tax_evidence_reference:'Synthetic independent accountant research',
+      payment_terms_reference:'Synthetic accepted terms only',
+      review_note:'All references are synthetic and remain unverified by the software.'
+    },actor);
+    assert.equal(documented.issue_authorised,false);
+    const reviewed=await readInvoiceIssueReview(db,created.id,actor);
+    assert.equal(reviewed.issue_authorised,false);
+    assert.equal(reviewed.history.length,2);
+    assert.equal(reviewed.latest.outcome,'documents_logged');
+    assert.deepEqual(reviewed.history.map(x=>x.outcome),
+      ['documents_logged','needs_changes']);
+    assert.deepEqual((await db.query(
+      'SELECT count(*)::int AS n FROM enkyron_crm_invoice_issue_reviews '
+      +'WHERE workspace_key=$1 AND invoice_draft_id=$2',
+      ['local:'+foreign,created.id]
+    )).rows[0].n,0);
+    await assert.rejects(()=>recordInvoiceIssueReview(db,reviewBase,foreign),/not found/);
+    await assert.rejects(()=>db.query(
+      'UPDATE enkyron_crm_invoice_issue_reviews SET review_note=$1 WHERE id=$2',
+      ['Tampered',needs.id]),/cannot be changed or deleted/);
+    await assert.rejects(()=>db.query(
+      'DELETE FROM enkyron_crm_invoice_issue_reviews WHERE id=$1',
+      [needs.id]),/cannot be changed or deleted/);
+    const stillUnissued=(await readInvoiceDraft(db,created.id,actor)).draft;
+    assert.equal(stillUnissued.invoice_number,null);
+    assert.equal(stillUnissued.vat_amount_minor,null);
+    assert.equal(stillUnissued.invoice_total_minor,null);
+    assert.equal(stillUnissued.status,'unissued_tax_review_required');
+
     const revised=await updateProposalDraft(db,{
       id:proposal.id,expected_revision:1,
       title:'Revised invoice draft source service',

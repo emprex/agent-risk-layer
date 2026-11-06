@@ -96,7 +96,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
@@ -998,6 +998,68 @@ jobs:
           }, None)
           assert window.crm_invoice_detail_dialog.isVisible()
           window.crm_invoice_detail_dialog.reject()
+          assert window.crm_invoice_issue_button.isEnabled()
+          assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
+              0
+          ) == QHeaderView.ResizeMode.ResizeToContents
+          assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
+              1
+          ) == QHeaderView.ResizeMode.ResizeToContents
+          window.crm_invoice_issue_button.click()
+          assert calls[-1][0] == "crm-invoice-issue-review"
+          assert calls[-1][1] == draft_id
+          calls[-1][3]({
+              "available": True,
+              "invoice_draft_id": draft_id,
+              "draft": {
+                  "id": draft_id, "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "status": "unissued_tax_review_required"
+              },
+              "issuer_vat_status": "unknown",
+              "issuer_has_vat_number": False,
+              "issuer_has_company_email": True,
+              "blockers": ["Issuing company VAT status is not established"],
+              "latest": None, "history": [], "more": False,
+              "issue_authorised": False
+          }, None)
+          assert window.crm_invoice_issue_dialog.isVisible()
+          assert window.crm_issue_outcome.currentData() == "needs_changes"
+          assert not window.crm_issue_confirm.isChecked()
+          window.crm_issue_note.setPlainText(
+              "Synthetic review: VAT classification remains unconfirmed by evidence."
+          )
+          window.crm_issue_confirm.setChecked(True)
+          window.save_invoice_issue_review()
+          assert calls[-1][0] == "crm-invoice-issue-record"
+          assert calls[-1][2]["invoice_draft_id"] == draft_id
+          assert calls[-1][2]["outcome"] == "needs_changes"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_amount_minor" not in calls[-1][2]
+          assert "invoice_number" not in calls[-1][2]
+          window.crm_invoice_issue_dialog.reject()
+          # Documented references do not confer issue authority.
+          window.show_invoice_issue_review({
+              "available": True, "invoice_draft_id": draft_id,
+              "draft": {
+                  "id": draft_id, "service_description": "Synthetic Service"
+              },
+              "issuer_vat_status": "registered", "blockers": [],
+              "latest": None, "history": [], "more": False
+          })
+          window.crm_issue_outcome.setCurrentIndex(1)
+          window.crm_issue_supply_date.setText("2026-11-06")
+          for key, widget in window.crm_issue_sources.items():
+              widget.setText("Synthetic human source fixture for " + key)
+          window.crm_issue_note.setPlainText(
+              "Synthetic documentary references only, not authorisation to issue."
+          )
+          window.crm_issue_confirm.setChecked(True)
+          window.save_invoice_issue_review()
+          assert calls[-1][0] == "crm-invoice-issue-record"
+          assert calls[-1][2]["outcome"] == "documents_logged"
+          assert calls[-1][2]["supply_date"] == "2026-11-06"
+          window.crm_invoice_issue_dialog.reject()
           window.crm_tabs.setCurrentIndex(5)
           assert calls[-1][0] == "crm-proposals"
           calls[-1][3]({
