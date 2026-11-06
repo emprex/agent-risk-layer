@@ -793,6 +793,53 @@ jobs:
           window.export_selected_draft_pdf()
           assert calls[-1][0] == "crm-proposal-export"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert window.crm_buyer_button.isEnabled()
+          window.crm_buyer_button.click()
+          assert calls[-1][0] == "crm-buyer-review"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          # No linked company: never silently select a similar name.
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "Synthetic Research Co.",
+              "linked_company": None, "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert not window.crm_buyer_save.isEnabled()
+          window.crm_buyer_dialog.reject()
+          # Only an explicitly linked CRM company is eligible.
+          window.open_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "Synthetic Research Co.",
+              "linked_company": {
+                  "id": "11111111-2222-4333-8444-555555555555",
+                  "name": "Synthetic Company",
+                  "crm_legal_name": "Synthetic Company Ltd"
+              },
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert window.crm_buyer_save.isEnabled()
+          assert window.crm_buyer_legal_name.text() == ""
+          window.crm_buyer_legal_name.setText("Synthetic Company Ltd")
+          window.crm_buyer_address.setPlainText(
+              "10 Fictional Avenue, Test City, AB1 2CD"
+          )
+          window.crm_buyer_source.setText("Synthetic registry reference")
+          window.crm_buyer_notes.setPlainText(
+              "Manually entered for CI; buyer identity has not been independently verified."
+          )
+          window.crm_buyer_confirm.setChecked(True)
+          window.save_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-record"
+          assert calls[-1][2]["company_id"] == "11111111-2222-4333-8444-555555555555"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_buyer_dialog.reject()
           # Country and B2B status are operator-entered evidence; no VAT inferred.
           assert window.crm_tax_review_button.isEnabled()
           window.open_proposal_tax_review()
