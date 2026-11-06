@@ -181,7 +181,7 @@ jobs:
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
           }, None)
-          assert window.crm_tabs.count() == 4
+          assert window.crm_tabs.count() == 5
           assert window.crm_tabs.tabText(3) == "Mail"
           assert [window.crm_mail_folders.tabText(i) for i in range(3)] == [
               "Inbox", "Sent", "Drafts"
@@ -278,7 +278,7 @@ jobs:
 
           # Follow-ups are available with no registered CRM company.
           assert window.crm_plan_followup.isEnabled()
-          assert window.crm_tabs.count() == 4
+          assert window.crm_tabs.count() == 5
           window.open_prospect_followup()
           assert calls[-1][0] == "crm-prospect-opportunity"
           assert calls[-1][1] == "ARL-P-000001"
