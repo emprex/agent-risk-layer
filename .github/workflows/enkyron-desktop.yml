@@ -41,6 +41,7 @@ jobs:
           node --check desktop/enkyron-crm-activities.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
           node --check desktop/enkyron-crm-overview.mjs
+          node --check desktop/enkyron-crm-pipeline.mjs
           node --check scripts/enkyron-crm-mail-schema.mjs
           node --check scripts/enkyron-crm-activity-schema.mjs
           node --check scripts/enkyron-crm-opportunities-schema.mjs
@@ -48,7 +49,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -602,6 +603,52 @@ jobs:
           window.open_sales_followups()
           assert window.navigation.currentRow() == 2
           assert window.crm_tabs.currentIndex() == 2
+
+          # Real five-lane pipeline is a bounded read-only snapshot.
+          assert window.crm_tabs.tabText(4) == "Pipeline"
+          window.crm_tabs.setCurrentIndex(4)
+          assert calls[-1][0] == "crm-sales-pipeline"
+          calls[-1][3]({
+              "available": True,
+              "total": 1, "preview_per_lane": 30,
+              "lanes": [
+                  {"id":"prospecting","title":"Prospecting","total":1,
+                   "more":False,"items":[{
+                       "id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                       "prospect_id":"ARL-P-000001",
+                       "company_name_at_creation":"Synthetic Research Co.",
+                       "stage":"research","version":1,
+                       "next_action":"Review public company background",
+                       "due_date":"2026-11-12"
+                   }]},
+                  {"id":"engagement","title":"Engagement","total":0,
+                   "more":False,"items":[]},
+                  {"id":"proposal","title":"Proposals","total":0,
+                   "more":False,"items":[]},
+                  {"id":"won","title":"Won","total":0,
+                   "more":False,"items":[]},
+                  {"id":"lost","title":"Lost","total":0,
+                   "more":False,"items":[]}
+              ]
+          }, None)
+          assert window.crm_pipeline_lists["prospecting"].count() == 1
+          assert window.crm_pipeline_labels["prospecting"].text() == "Prospecting · 1"
+          assert window.crm_pipeline_lists["won"].count() == 0
+          assert not window.crm_pipeline_edit.isEnabled()
+          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+          assert window.crm_pipeline_edit.isEnabled()
+          window.open_pipeline_opportunity()
+          assert window.crm_followup_dialog.isVisible()
+          assert window.crm_followup_stage.currentData() == "research"
+          window.crm_followup_stage.setCurrentIndex(
+              window.crm_followup_stage.findData("qualified")
+          )
+          window.crm_followup_action.setPlainText("Operator qualified research lead")
+          window.save_followup()
+          assert calls[-1][0] == "crm-update-opportunity"
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["stage"] == "qualified"
+          window.crm_followup_dialog.reject()
           window.close()
           app.quit()
           PY
