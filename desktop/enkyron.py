@@ -237,6 +237,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_context = None
         self.crm_tax_dialog = None
         self.crm_tax_context = None
+        self.crm_company_profile_dialog = None
+        self.crm_company_profile_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -631,7 +633,13 @@ class EnkyronWindow(QMainWindow):
         crm_page = QWidget()
         crm_l = QVBoxLayout(crm_page)
         crm_l.setContentsMargins(25, 18, 25, 18)
-        crm_l.addWidget(section_title("CRM · COMPANIES, CONTACTS AND RESEARCH"))
+        crm_header = QHBoxLayout()
+        crm_header.addWidget(section_title("CRM · COMPANIES, CONTACTS AND RESEARCH"))
+        crm_header.addStretch()
+        self.crm_company_profile_button = QPushButton("Issuing company profile…")
+        self.crm_company_profile_button.clicked.connect(self.open_issuing_company_profile)
+        crm_header.addWidget(self.crm_company_profile_button)
+        crm_l.addLayout(crm_header)
         self.crm_tabs = QTabWidget()
         crm_l.addWidget(self.crm_tabs, 1)
 
@@ -2608,6 +2616,194 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-proposal-export", proposal_id, callback=received)
+
+    def open_issuing_company_profile(self):
+        if (self.crm_company_profile_dialog and
+                self.crm_company_profile_dialog.isVisible()):
+            self.crm_company_profile_dialog.raise_()
+            self.crm_company_profile_dialog.activateWindow()
+            return
+        self.crm_company_profile_button.setEnabled(False)
+
+        def received(data, error):
+            self.crm_company_profile_button.setEnabled(True)
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Company profile unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not read the issuing company profile."
+                    )
+                )
+                return
+            self.show_issuing_company_profile(data)
+
+        self.bridge.call("crm-own-profile", callback=received)
+
+    def show_issuing_company_profile(self, data):
+        current = data.get("current") or {}
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Issuing company legal & billing profile")
+        dialog.resize(800, 660)
+        dialog.setMinimumSize(600, 480)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("ISSUING COMPANY · LEGAL AND BILLING PROFILE"))
+        disclaimer = QLabel(
+            "This is your issuing company's identity, not a customer record. "
+            "All values remain operator-entered and UNVERIFIED until independent "
+            "documentary review. Saving does not change quotes or determine tax."
+        )
+        disclaimer.setWordWrap(True)
+        layout.addWidget(disclaimer)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        form = QFormLayout()
+        self.company_profile_inputs = {}
+
+        def field(key, label, limit, multiline=False, hint=""):
+            widget = QPlainTextEdit() if multiline else QLineEdit()
+            if multiline:
+                widget.setMaximumHeight(76)
+                widget.setPlainText(str(current.get(key) or ""))
+            else:
+                widget.setMaxLength(limit)
+                widget.setText(str(current.get(key) or ""))
+            if hint:
+                widget.setPlaceholderText(hint)
+            form.addRow(label, widget)
+            self.company_profile_inputs[key] = widget
+
+        field("legal_name", "Legal company name *", 160)
+        field("trading_name", "Trading name", 160)
+        field("registration_number", "Company registration number", 80)
+        field("incorporation_country", "Country of incorporation *", 2,
+              hint="ISO code, e.g. GB")
+        field("registered_office", "Registered office address *", 600, True)
+        field("business_address", "Business address (if different)", 600, True)
+        field("company_email", "Company email", 254)
+        field("telephone", "Company telephone", 80)
+        field("website", "Website", 500, hint="https://example.com")
+        vat = QComboBox()
+        for title, status in (
+            ("Unknown / not checked", "unknown"),
+            ("Registered (operator-reported)", "registered"),
+            ("Not registered (operator-reported)", "not_registered"),
+            ("Application pending (operator-reported)", "application_pending")
+        ):
+            vat.addItem(title, status)
+        vat.setCurrentIndex(max(0, vat.findData(current.get("vat_status", "unknown"))))
+        form.addRow("VAT registration status", vat)
+        self.company_profile_inputs["vat_status"] = vat
+        field("vat_number", "VAT number (if registered)", 80)
+        field("vat_effective_date", "VAT effective date (if known)", 10,
+              hint="YYYY-MM-DD")
+        currency = QComboBox()
+        currency.addItem("Select a currency…", "")
+        for code in ("GBP", "EUR", "USD"):
+            currency.addItem(code, code)
+        currency.setCurrentIndex(max(0, currency.findData(current.get("default_currency") or "")))
+        form.addRow("Default billing currency *", currency)
+        self.company_profile_inputs["default_currency"] = currency
+        field("billing_contact", "Billing contact", 300)
+        field("source_reference", "Document / registry reference *", 500,
+              hint="Where these details came from")
+        field("verification_notes", "Evidence / review notes *", 2000, True,
+              "What was checked? What is still unverified? (20–2000 characters)")
+        body_l.addLayout(form)
+        history = data.get("history") or []
+        body_l.addWidget(section_title("IMMUTABLE REVISION HISTORY"))
+        if not history:
+            body_l.addWidget(QLabel("No issuing-company profile recorded yet."))
+        else:
+            table = QTableWidget(len(history), 4)
+            table.setHorizontalHeaderLabels(
+                ["Revision", "Recorded", "Operator", "Source"]
+            )
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.horizontalHeader().setSectionResizeMode(
+                3, QHeaderView.ResizeMode.Stretch
+            )
+            for row, item in enumerate(history):
+                values = (
+                    item.get("revision"), display_date(item.get("recorded_at")),
+                    item.get("recorded_by"), item.get("source_reference")
+                )
+                for col, value in enumerate(values):
+                    table.setItem(row, col, QTableWidgetItem(str(value or "")))
+            table.setMinimumHeight(min(220, 45 + len(history) * 27))
+            body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 revisions are shown."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.company_profile_confirm = QCheckBox(
+            "I confirm these entries are manual and not independently verified."
+        )
+        footer.addWidget(self.company_profile_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.company_profile_save = QPushButton("Save new revision")
+        self.company_profile_save.setObjectName("primary")
+        self.company_profile_save.clicked.connect(self.save_issuing_company_profile)
+        footer.addWidget(self.company_profile_save)
+        layout.addLayout(footer)
+        self.crm_company_profile_dialog = dialog
+        self.crm_company_profile_context = {
+            "expected_revision": int(current.get("revision") or 0)
+        }
+        dialog.open()
+
+    def save_issuing_company_profile(self):
+        dialog = self.crm_company_profile_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_company_profile_context:
+            return
+        payload = dict(self.crm_company_profile_context)
+        for key, widget in self.company_profile_inputs.items():
+            if isinstance(widget, QComboBox):
+                payload[key] = widget.currentData()
+            elif isinstance(widget, QPlainTextEdit):
+                payload[key] = widget.toPlainText().strip()
+            else:
+                payload[key] = widget.text().strip()
+        if not all(payload.get(key) for key in (
+            "legal_name", "incorporation_country", "registered_office",
+            "default_currency", "source_reference", "verification_notes"
+        )):
+            QMessageBox.warning(
+                dialog, "Missing information",
+                "Enter the required identity, billing currency and source fields."
+            )
+            return
+        if not self.company_profile_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm that these are operator-entered, unverified details."
+            )
+            return
+        payload["confirmed"] = True
+        self.company_profile_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("revision"):
+                self.company_profile_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Profile not saved", error or "Could not save the revision."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Company profile saved",
+                "Revision {} saved. Legal and tax details still require "
+                "independent verification.".format(data["revision"])
+            )
+        self.bridge.call("crm-own-profile-save", payload=payload, callback=received)
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()
