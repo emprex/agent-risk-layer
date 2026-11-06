@@ -41,6 +41,7 @@ jobs:
           node --check desktop/enkyron-crm-qualification.mjs
           node --check desktop/enkyron-crm-proposals.mjs
           node --check desktop/enkyron-crm-proposal-lines.mjs
+          node --check desktop/enkyron-crm-proposal-export.mjs
           node --check scripts/enkyron-crm-proposal-lines-schema.mjs
           node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
@@ -56,16 +57,21 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libegl1 libopengl0 libxkbcommon0
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libegl1 libopengl0 libxkbcommon0 poppler-utils
       - name: Install isolated Qt runtime
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native draft PDF renderer smoke (synthetic, offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest desktop.test_enkyron_proposal_pdf
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen
@@ -749,6 +755,10 @@ jobs:
           assert "1,250.50" in window.crm_proposal_table.item(0, 2).text()
           window.crm_proposal_table.selectRow(0)
           assert window.crm_open_proposal.isEnabled()
+          assert window.crm_export_draft_pdf.isEnabled()
+          window.export_selected_draft_pdf()
+          assert calls[-1][0] == "crm-proposal-export"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           window.open_selected_proposal()
           assert calls[-1][0] == "crm-proposal"
           calls[-1][3]({
