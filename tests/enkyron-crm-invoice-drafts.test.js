@@ -1,0 +1,102 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateInvoiceDraft,readInvoicePreparation,recordInvoiceDraft,
+  listInvoiceDrafts,readInvoiceDraft} from '../desktop/enkyron-crm-invoice-drafts.mjs';
+const id='11111111-2222-4333-8444-555555555555';
+const worksheetId='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const input={proposal_id:id,worksheet_id:worksheetId,expected_revision:2,
+  preparation_note:'Synthetic invoice draft. Tax and legal issue status still unresolved.',
+  confirmed:true};
+test('requires explicit draft-only confirmation, no tax or invoice number',()=>{
+ const v=validateInvoiceDraft(input);
+ assert.equal(v.worksheet_id,worksheetId);
+ assert.deepEqual(Object.keys(v).sort(),
+  ['proposal_id','worksheet_id','expected_revision','preparation_note'].sort());
+ for(const bad of [null,{},[],{...input,confirmed:false},
+  {...input,worksheet_id:'wrong'},{...input,expected_revision:0},
+  {...input,preparation_note:'short'},
+  {...input,preparation_note:'ab'+String.fromCharCode(0)+'test'}]){
+  assert.throws(()=>validateInvoiceDraft(bad),/CRM/);
+ }
+});
+function mock({withWorksheet=true,stale=false,existing=false,
+  malformed=false,otherWorkspace=false}={}){
+ const calls=[];let released=false;
+ const proposal={id,revision:stale?3:2,title:'Synthetic draft service',
+   currency:'GBP',amount_minor:'50000'};
+ const worksheet={id:worksheetId,proposal_revision:2,
+   source_approval_id:'approval',issuer_profile_id:'issuer',buyer_review_id:'buyer',
+   terms_id:'terms',tax_review_id:'tax',proposal_title:proposal.title,
+   currency:'GBP',proposed_fee_minor:'50000'};
+ const issuer={id:'issuer',legal_name:'Synthetic Issuer Ltd',
+   registration_number:'00000000',registered_office:'10 Example Road, London'};
+ const buyer={id:'buyer',legal_name:'Synthetic Buyer Ltd',
+   registered_address:'20 Fictional Avenue, London'};
+ const q=async(sql,params)=>{
+  calls.push({sql,params});
+  if(sql.startsWith('SELECT id,title,revision'))return {rows:otherWorkspace?[]:[proposal]};
+  if(sql.startsWith('SELECT id,proposal_revision,source_approval_id'))return {rows:withWorksheet?[worksheet]:[]};
+  if(sql.startsWith('SELECT id,legal_name,registration_number'))return {rows:[issuer]};
+  if(sql.startsWith('SELECT id,legal_name,registered_address'))return {rows:malformed?[]:[buyer]};
+  if(sql.startsWith('SELECT id FROM enkyron_crm_invoice_drafts'))
+    return {rows:existing?[{id:'old'}]:[]};
+  if(sql.startsWith('SELECT id,proposal_id,proposal_revision'))return {rows:[]};
+  return {rows:[]};
+ };
+ return {pool:{connect:async()=>({query:q,release(){released=true;}}),query:q},
+  calls,get released(){return released;}};
+}
+test('read preparation is consistent, scoped and blocks unapproved worksheets',async()=>{
+ const a=mock({withWorksheet:false});
+ const r=await readInvoicePreparation(a.pool,id,'local-operator');
+ assert.equal(r.can_prepare,false);
+ assert.equal(r.worksheet_id,null);
+ assert.match(r.blockers.join(' '),/worksheet/);
+ assert.deepEqual(a.calls[1].params,['local:local-operator',id]);
+ assert.equal(a.calls[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+ assert.equal(a.calls.at(-1).sql,'COMMIT');
+ const b=mock();
+ const ready=await readInvoicePreparation(b.pool,id,'local-operator');
+ assert.equal(ready.can_prepare,true);
+ assert.equal(ready.vat_treatment,'undetermined');
+ assert.equal(ready.issuer.legal_name,'Synthetic Issuer Ltd');
+ assert.equal(ready.buyer.legal_name,'Synthetic Buyer Ltd');
+ assert.equal(ready.current_draft_id,null);
+ const c=mock({existing:true});
+ assert.equal((await readInvoicePreparation(c.pool,id,'local-operator')).can_prepare,false);
+ const d=mock({otherWorkspace:true});
+ await assert.rejects(()=>readInvoicePreparation(d.pool,id,'local-operator'),/not found/);
+});
+test('write is transactional and refuses staleness, missing buyer and duplicate',async()=>{
+ const a=mock();
+ const r=await recordInvoiceDraft(a.pool,input,'local-operator',{uuid:()=>id});
+ assert.equal(r.status,'unissued_tax_review_required');
+ const insert=a.calls.find(x=>x.sql.startsWith('INSERT'));
+ assert.equal(insert.params[1],'local:local-operator');
+ assert.equal(insert.params[17],50000);
+ assert.equal(insert.params[10],'Synthetic Issuer Ltd');
+ assert.equal(insert.params[13],'Synthetic Buyer Ltd');
+ assert.equal(a.calls.at(-1).sql,'COMMIT');
+ assert.equal(a.calls.some(x=>/^\s*(UPDATE|DELETE)\b/.test(x.sql)),false);
+ assert.equal(a.released,true);
+ for(const option of [{stale:true},{withWorksheet:false},
+   {existing:true},{malformed:true},{otherWorkspace:true}]){
+  const b=mock(option);
+  await assert.rejects(()=>recordInvoiceDraft(b.pool,input,'local-operator'),/CRM/);
+  assert.equal(b.calls.at(-1).sql,'ROLLBACK');
+  assert.equal(b.calls.some(x=>x.sql.startsWith('INSERT')),false);
+ }
+});
+test('invoice draft list and read do not introduce computed VAT',async()=>{
+ const pool={query:async(sql,params)=>{
+  if(sql.startsWith('SELECT id,proposal_id,proposal_revision,service_description'))
+    return {rows:[]};
+  return {rows:[{id,status:'unissued_tax_review_required',vat_amount_minor:null,
+    invoice_number:null,invoice_total_minor:null}]};
+ }};
+ const listed=await listInvoiceDrafts(pool,'','local-operator');
+ assert.equal(listed.items.length,0);
+ const d=await readInvoiceDraft(pool,id,'local-operator');
+ assert.equal(d.draft.invoice_total_minor,null);
+ assert.equal(d.draft.invoice_number,null);
+});

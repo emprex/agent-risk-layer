@@ -1,0 +1,210 @@
+// ENKYRON invoice DRAFT register. Not an invoice issuing or payment system.
+// Every record is an immutable snapshot of an existing approved billing worksheet.
+// Tax treatment remains undetermined: no VAT amount, invoice number or total is invented.
+import {randomUUID} from 'node:crypto';
+import {boundedSearch} from './enkyron-contract.mjs';
+
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CONTROL=/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+function scope(actor){
+  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
+    throw new Error('CRM invalid local operator');
+  return {key:'local:'+actor,actor};
+}
+function uuid(value,label){
+  if(typeof value!=='string'||!UUID.test(value))
+    throw new Error('CRM invalid '+label);
+  return value;
+}
+function amountMinor(value){
+  const amount=Number(value);
+  if(!Number.isSafeInteger(amount)||amount<1||amount>999999999)
+    throw new Error('CRM invoice draft fee is invalid');
+  return amount;
+}
+export function validateInvoiceDraft(input){
+  if(!input||typeof input!=='object'||Array.isArray(input))
+    throw new Error('CRM invalid invoice draft request');
+  if(input.confirmed!==true)
+    throw new Error('CRM human invoice draft confirmation required');
+  if(!Number.isSafeInteger(input.expected_revision)||input.expected_revision<1)
+    throw new Error('CRM invalid invoice draft proposal revision');
+  if(typeof input.preparation_note!=='string'||input.preparation_note.length>1500||
+     CONTROL.test(input.preparation_note)||input.preparation_note.trim().length<30)
+    throw new Error('CRM invoice draft note requires 30 to 1500 characters');
+  return {
+    proposal_id:uuid(input.proposal_id,'proposal ID'),
+    worksheet_id:uuid(input.worksheet_id,'worksheet ID'),
+    expected_revision:input.expected_revision,
+    preparation_note:input.preparation_note.trim()
+  };
+}
+const PROPOSAL='SELECT id,title,revision,currency,amount_minor '
+  +'FROM enkyron_crm_proposal_drafts WHERE workspace_key=$1 AND id=$2';
+const WORKSHEET='SELECT id,proposal_revision,source_approval_id,issuer_profile_id,'
+  +'buyer_review_id,terms_id,tax_review_id,proposal_title,currency,proposed_fee_minor '
+  +'FROM enkyron_crm_billing_worksheets '
+  +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3';
+const ISSUER='SELECT id,legal_name,registration_number,registered_office '
+  +'FROM enkyron_operator_company_profiles WHERE workspace_key=$1 AND id=$2';
+const BUYER='SELECT id,legal_name,registered_address '
+  +'FROM enkyron_crm_proposal_buyer_reviews WHERE workspace_key=$1 AND id=$2';
+const EXISTING='SELECT id FROM enkyron_crm_invoice_drafts '
+  +'WHERE workspace_key=$1 AND source_worksheet_id=$2';
+function safeParty(name,address,label){
+  if(typeof name!=='string'||name.trim().length<2||name.length>160||
+     typeof address!=='string'||address.trim().length<10||address.length>600)
+    throw new Error('CRM invoice draft '+label+' documentary fields are incomplete');
+}
+function eligible(proposal,worksheet,issuer,buyer){
+  if(!worksheet)return 'Current proposal has no approved billing worksheet';
+  if(worksheet.proposal_revision!==proposal.revision)
+    return 'Billing worksheet is for a different proposal revision';
+  if(worksheet.currency!==proposal.currency||
+     amountMinor(worksheet.proposed_fee_minor)!==amountMinor(proposal.amount_minor))
+    return 'Billing worksheet fee or currency does not match current proposal';
+  if(!issuer)return 'Recorded issuer profile is not available in this local workspace';
+  if(!buyer)return 'Recorded buyer dossier is not available in this local workspace';
+  safeParty(issuer.legal_name,issuer.registered_office,'issuer');
+  safeParty(buyer.legal_name,buyer.registered_address,'buyer');
+  return null;
+}
+function publicSnapshot(issuer,buyer){
+  return {
+    issuer:{legal_name:issuer.legal_name,registration_number:issuer.registration_number,
+      registered_office:issuer.registered_office},
+    buyer:{legal_name:buyer.legal_name,registered_address:buyer.registered_address}
+  };
+}
+export async function readInvoicePreparation(pool,proposalId,actor){
+  const id=uuid(proposalId,'proposal ID'),person=scope(actor),client=await pool.connect();
+  try{
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const proposal=(await client.query(PROPOSAL,[person.key,id])).rows[0];
+    if(!proposal)throw new Error('CRM proposal not found in local workspace');
+    const worksheet=(await client.query(WORKSHEET,[person.key,id,proposal.revision])).rows[0]??null;
+    let issuer=null,buyer=null,existing=null;
+    if(worksheet){
+      issuer=(await client.query(ISSUER,[person.key,worksheet.issuer_profile_id])).rows[0]??null;
+      buyer=(await client.query(BUYER,[person.key,worksheet.buyer_review_id])).rows[0]??null;
+      existing=(await client.query(EXISTING,[person.key,worksheet.id])).rows[0]??null;
+    }
+    const blocker=eligible(proposal,worksheet,issuer,buyer);
+    await client.query('COMMIT');
+    return {
+      available:true,proposal_id:id,proposal_revision:proposal.revision,
+      proposal_title:proposal.title,currency:proposal.currency,
+      proposed_fee_minor:amountMinor(proposal.amount_minor),
+      worksheet_id:worksheet?.id??null,
+      can_prepare:!blocker&&!existing,
+      blockers:[...(blocker?[blocker]:[]),
+        ...(existing?['Invoice draft already exists for this worksheet']:[])],
+      current_draft_id:existing?.id??null,
+      ...(issuer&&buyer?publicSnapshot(issuer,buyer):{issuer:null,buyer:null}),
+      vat_treatment:'undetermined',
+      notice:'INTERNAL UNISSUED draft only. Tax, invoice number, amount due and '
+        +'payment status are NOT determined. Identities remain operator-entered.'
+    };
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    if(error?.code==='42P01')return {available:false,
+      notice:'ENKYRON invoice draft schema 082 is not installed or a prerequisite is missing.'};
+    throw error;
+  }finally{client.release();}
+}
+export async function recordInvoiceDraft(pool,input,actor,options={}){
+  const data=validateInvoiceDraft(input),person=scope(actor),client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    // Serialize with proposal revisions to prevent stale fee or buyer snapshots.
+    const proposal=(await client.query(PROPOSAL+' FOR UPDATE',
+      [person.key,data.proposal_id])).rows[0];
+    if(!proposal)throw new Error('CRM proposal not found in local workspace');
+    if(proposal.revision!==data.expected_revision)
+      throw new Error('CRM proposal changed; reopen invoice preparation');
+    const worksheet=(await client.query(WORKSHEET+' FOR KEY SHARE',
+      [person.key,data.proposal_id,data.expected_revision])).rows[0];
+    if(!worksheet||worksheet.id!==data.worksheet_id)
+      throw new Error('CRM invoice draft requires current approved billing worksheet');
+    const [issuer,buyer,prior]=await Promise.all([
+      client.query(ISSUER+' FOR KEY SHARE',[person.key,worksheet.issuer_profile_id]),
+      client.query(BUYER+' FOR KEY SHARE',[person.key,worksheet.buyer_review_id]),
+      client.query(EXISTING,[person.key,worksheet.id])
+    ]);
+    const sourceIssuer=issuer.rows[0]??null,sourceBuyer=buyer.rows[0]??null;
+    const blocker=eligible(proposal,worksheet,sourceIssuer,sourceBuyer);
+    if(blocker)throw new Error('CRM invoice draft blocked: '+blocker);
+    if(prior.rows.length)
+      throw new Error('CRM invoice draft already recorded for this worksheet');
+    if(!['GBP','EUR','USD'].includes(proposal.currency))
+      throw new Error('CRM invalid draft currency');
+    const fee=amountMinor(proposal.amount_minor);
+    const snapshot=publicSnapshot(sourceIssuer,sourceBuyer);
+    const id=(options.uuid??randomUUID)();
+    await client.query(
+      'INSERT INTO enkyron_crm_invoice_drafts ('
+      +'id,workspace_key,source_worksheet_id,proposal_id,proposal_revision,'
+      +'source_approval_id,issuer_profile_id,buyer_review_id,terms_id,tax_review_id,'
+      +'issuer_legal_name,issuer_registration_number,issuer_registered_office,'
+      +'buyer_legal_name,buyer_registered_address,service_description,'
+      +'currency,proposed_fee_minor,preparation_note,recorded_by'
+      +') VALUES('+Array.from({length:20},(_,i)=>'$'+(i+1)).join(',')+')',
+      [id,person.key,worksheet.id,data.proposal_id,data.expected_revision,
+       worksheet.source_approval_id,worksheet.issuer_profile_id,
+       worksheet.buyer_review_id,worksheet.terms_id,worksheet.tax_review_id,
+       snapshot.issuer.legal_name,snapshot.issuer.registration_number,
+       snapshot.issuer.registered_office,snapshot.buyer.legal_name,
+       snapshot.buyer.registered_address,proposal.title,proposal.currency,
+       fee,data.preparation_note,person.actor]
+    );
+    await client.query('COMMIT');
+    return {id,status:'unissued_tax_review_required',
+      notice:'Internal invoice draft recorded. No invoice number, tax calculation, '
+       +'amount due, external send, payment or assessment was created.'};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{client.release();}
+}
+export async function listInvoiceDrafts(pool,search,actor){
+  const query=boundedSearch(search),person=scope(actor);
+  try{
+    const rows=(await pool.query(
+      'SELECT id,proposal_id,proposal_revision,service_description,'
+      +'issuer_legal_name,buyer_legal_name,currency,proposed_fee_minor,'
+      +'status,vat_treatment,recorded_at '
+      +'FROM enkyron_crm_invoice_drafts WHERE workspace_key=$1 '
+      +"AND ($2='' OR POSITION(lower($2) IN lower(buyer_legal_name))>0 "
+      +'OR POSITION(lower($2) IN lower(service_description))>0) '
+      +'ORDER BY recorded_at DESC,id DESC LIMIT 101',[person.key,query]
+    )).rows;
+    return {available:true,items:rows.slice(0,100),more:rows.length>100,
+      notice:'Unissued invoice drafts only. No official invoice number, amount due or payment balance.'};
+  }catch(error){
+    if(error?.code==='42P01')return {available:false,items:[],
+      notice:'Invoice draft schema 082 has not been installed.'};
+    throw error;
+  }
+}
+export async function readInvoiceDraft(pool,draftId,actor){
+  const id=uuid(draftId,'invoice draft ID'),person=scope(actor);
+  try{
+    const row=(await pool.query(
+      'SELECT id,proposal_id,proposal_revision,source_worksheet_id,'
+      +'issuer_legal_name,issuer_registration_number,issuer_registered_office,'
+      +'buyer_legal_name,buyer_registered_address,service_description,'
+      +'currency,proposed_fee_minor,vat_treatment,vat_amount_minor,'
+      +'invoice_total_minor,invoice_number,issued_at,status,preparation_note,'
+      +'recorded_by,recorded_at '
+      +'FROM enkyron_crm_invoice_drafts WHERE workspace_key=$1 AND id=$2',
+      [person.key,id]
+    )).rows[0];
+    if(!row)throw new Error('CRM invoice draft not found in local workspace');
+    return {available:true,draft:row,
+      notice:'This document is unissued and NOT a tax invoice or payment request.'};
+  }catch(error){
+    if(error?.code==='42P01')return {available:false,
+      notice:'Invoice draft schema 082 is not installed.'};
+    throw error;
+  }
+}
