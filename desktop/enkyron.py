@@ -243,6 +243,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_buyer_context = None
         self.crm_terms_dialog = None
         self.crm_terms_context = None
+        self.crm_internal_dialog = None
+        self.crm_internal_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1179,6 +1181,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_tax_review_button.setEnabled(False)
         self.crm_tax_review_button.clicked.connect(self.open_proposal_tax_review)
         proposal_reviews.addWidget(self.crm_tax_review_button)
+        self.crm_internal_button = QPushButton("Internal draft review…")
+        self.crm_internal_button.setEnabled(False)
+        self.crm_internal_button.clicked.connect(self.open_internal_draft_review)
+        proposal_reviews.addWidget(self.crm_internal_button)
         proposal_reviews.addStretch()
         proposal_footer.addLayout(proposal_reviews)
         proposals_l.addLayout(proposal_footer)
@@ -2464,6 +2470,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_tax_review_button.setEnabled(False)
         self.crm_buyer_button.setEnabled(False)
         self.crm_terms_button.setEnabled(False)
+        self.crm_internal_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2516,6 +2523,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_tax_review_button.setEnabled(available)
         self.crm_buyer_button.setEnabled(available)
         self.crm_terms_button.setEnabled(available)
+        self.crm_internal_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -3294,6 +3302,204 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-commercial-record", payload=payload, callback=received)
+
+
+    def open_internal_draft_review(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if self.crm_internal_dialog and self.crm_internal_dialog.isVisible():
+            self.crm_internal_dialog.raise_()
+            self.crm_internal_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_internal_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Internal review unavailable",
+                    error or (data or {}).get("notice", "Could not read internal review.")
+                )
+                return
+            if data.get("proposal_id") != proposal_id or data.get("proposal_revision") != revision:
+                QMessageBox.warning(
+                    self, "Proposal changed", "Refresh and open the current proposal revision."
+                )
+                self.load_proposals()
+                return
+            self.show_internal_draft_review(data)
+
+        self.bridge.call("crm-internal-review", proposal_id, callback=received)
+
+    def show_internal_draft_review(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Internal proposal draft review")
+        dialog.resize(780, 610)
+        dialog.setMinimumSize(620, 460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("INTERNAL DRAFT REVIEW · NOT ISSUED"))
+        warning = QLabel(
+            "This is a local operator's INTERNAL CONTENT decision only. "
+            "It is not a verified legal or tax offer, a customer acceptance, "
+            "an invoice, contract, signature or testing authorisation."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        heading = QLabel(
+            "Proposal: " + str(data.get("proposal_title") or "")
+            + " · Revision " + str(data.get("proposal_revision") or "")
+        )
+        heading.setWordWrap(True)
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        body_l.addWidget(heading)
+        can_approve = bool(data.get("can_approve_internal"))
+        if can_approve:
+            text = (
+                "Documentary prerequisites are PRESENT for this revision. "
+                "Their legal or tax correctness has NOT been established."
+            )
+        else:
+            text = "Draft approval BLOCKED: " + "; ".join(data.get("blockers") or [])
+        status = QLabel(text)
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        body_l.addWidget(status)
+        for key in ("legal_notice", "tax_notice"):
+            note = QLabel(str(data.get(key) or ""))
+            note.setWordWrap(True)
+            note.setTextFormat(Qt.TextFormat.PlainText)
+            body_l.addWidget(note)
+        form = QFormLayout()
+        self.crm_internal_decision = QComboBox()
+        self.crm_internal_decision.addItem(
+            "Needs changes / return to draft", "needs_changes"
+        )
+        if can_approve:
+            self.crm_internal_decision.addItem(
+                "Approve INTERNAL draft content only", "internal_draft_approved"
+            )
+        form.addRow("Human decision *", self.crm_internal_decision)
+        self.crm_internal_notes = QPlainTextEdit()
+        self.crm_internal_notes.setMaximumHeight(120)
+        self.crm_internal_notes.setPlaceholderText(
+            "Explain your decision, evidence and remaining blockers (30–2000 characters)."
+        )
+        form.addRow("Decision rationale *", self.crm_internal_notes)
+        body_l.addLayout(form)
+        current = data.get("current")
+        if current:
+            index = self.crm_internal_decision.findData(current.get("decision"))
+            if index < 0:
+                self.crm_internal_decision.addItem(
+                    "Recorded: " + str(current.get("decision") or ""),
+                    current.get("decision")
+                )
+                index = self.crm_internal_decision.count() - 1
+            self.crm_internal_decision.setCurrentIndex(index)
+            self.crm_internal_decision.setEnabled(False)
+            self.crm_internal_notes.setPlainText(current.get("review_note") or "")
+            self.crm_internal_notes.setReadOnly(True)
+            notice = QLabel(
+                "The recorded decision is immutable. A different decision "
+                "requires a new revision of this proposal."
+            )
+            notice.setWordWrap(True)
+            body_l.addWidget(notice)
+        body_l.addWidget(section_title("IMMUTABLE REVIEW HISTORY"))
+        history = data.get("history") or []
+        table = QTableWidget(len(history), 3)
+        table.setHorizontalHeaderLabels(
+            ["Proposal revision", "Internal decision", "Operator"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(history):
+            values = (
+                item.get("proposal_revision"), item.get("decision"), item.get("recorded_by")
+            )
+            for column, value in enumerate(values):
+                table.setItem(row, column, QTableWidgetItem(str(value or "")))
+        table.setMinimumHeight(min(220, 45 + len(history) * 29))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 decisions are displayed."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_internal_confirm = QCheckBox(
+            "I confirm this is an INTERNAL DRAFT decision, not approval to issue."
+        )
+        footer.addWidget(self.crm_internal_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_internal_save = QPushButton("Record internal decision")
+        self.crm_internal_save.setObjectName("primary")
+        self.crm_internal_save.setEnabled(not bool(current))
+        self.crm_internal_save.clicked.connect(self.save_internal_draft_review)
+        footer.addWidget(self.crm_internal_save)
+        layout.addLayout(footer)
+        self.crm_internal_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"]
+        }
+        self.crm_internal_dialog = dialog
+        dialog.open()
+
+    def save_internal_draft_review(self):
+        dialog = self.crm_internal_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_internal_context:
+            return
+        note = self.crm_internal_notes.toPlainText().strip()
+        if not 30 <= len(note) <= 2000:
+            QMessageBox.warning(
+                dialog, "Incomplete review", "Enter a rationale of 30–2000 characters."
+            )
+            return
+        if not self.crm_internal_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm that this does not authorise sending a quote."
+            )
+            return
+        payload = {
+            **self.crm_internal_context,
+            "decision": self.crm_internal_decision.currentData(),
+            "review_note": note, "confirmed": True
+        }
+        self.crm_internal_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_internal_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Decision not recorded",
+                    error or "Could not record the internal review."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Internal review recorded",
+                "Decision recorded for revision {}. No quote was sent, "
+                "no contract, invoice or assessment was created.".format(
+                    data["proposal_revision"]
+                )
+            )
+
+        self.bridge.call("crm-internal-decision", payload=payload, callback=received)
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()
