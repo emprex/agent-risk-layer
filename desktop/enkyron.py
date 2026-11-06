@@ -1506,6 +1506,11 @@ class EnkyronWindow(QMainWindow):
                     ("Stage", "stage"), ("Next action", "next_action"),
                     ("Due date", "due_date"), ("Updated", "updated_at")
                 ]),
+                ("qualifications", "Qualification", [
+                    ("Subject", "subject"), ("Fit", "fit_status"),
+                    ("Priority", "priority"), ("Review note", "rationale"),
+                    ("Recorded", "recorded_at")
+                ]),
                 ("activities", "Activity notes", [
                     ("Type", "activity_type"), ("Details", "detail"),
                     ("Operator", "recorded_by"), ("Recorded", "recorded_at")
@@ -1561,7 +1566,84 @@ class EnkyronWindow(QMainWindow):
                 table.horizontalHeader().setSectionResizeMode(
                     1, QHeaderView.ResizeMode.Stretch
                 )
-                page_layout.addWidget(table, 1)
+                if section_id == "qualifications":
+                    table.setMaximumHeight(190)
+                    page_layout.addWidget(table)
+                    qualification_hint = QLabel(
+                        "Record your commercial assessment and the reason. "
+                        "This does not verify identity, grant marketing permission "
+                        "or create a client."
+                    )
+                    qualification_hint.setWordWrap(True)
+                    page_layout.addWidget(qualification_hint)
+                    review_form = QFormLayout()
+                    self.crm_qualification_subject = QComboBox()
+                    self.crm_qualification_subject.addItem(
+                        "Company — {}".format(company.get("name") or "Company"), None
+                    )
+                    contact_section = sections.get("contacts", {})
+                    for contact in contact_section.get("items", []):
+                        self.crm_qualification_subject.addItem(
+                            contact.get("full_name") or "Contact", contact.get("id")
+                        )
+                    review_form.addRow("Review", self.crm_qualification_subject)
+                    if contact_section.get("more"):
+                        limits = QLabel(
+                            "Only displayed contacts can be selected here. "
+                            "Contact list has more entries."
+                        )
+                        limits.setWordWrap(True)
+                        page_layout.addWidget(limits)
+                    self.crm_qualification_fit = QComboBox()
+                    for text, key in (
+                        ("Needs research", "needs_research"),
+                        ("Potential fit", "potential_fit"),
+                        ("Not a fit", "not_fit"),
+                        ("On hold", "on_hold")
+                    ):
+                        self.crm_qualification_fit.addItem(text, key)
+                    review_form.addRow("Commercial fit", self.crm_qualification_fit)
+                    self.crm_qualification_priority = QComboBox()
+                    for text, key in (
+                        ("Normal", "normal"), ("Low", "low"), ("High", "high")
+                    ):
+                        self.crm_qualification_priority.addItem(text, key)
+                    review_form.addRow("Priority", self.crm_qualification_priority)
+                    self.crm_qualification_rationale = QPlainTextEdit()
+                    self.crm_qualification_rationale.setMaximumHeight(75)
+                    self.crm_qualification_rationale.setPlaceholderText(
+                        "Why is this prospect relevant or not? "
+                        "Document the basis of the human review (20–1500 characters)."
+                    )
+                    review_form.addRow("Review note *", self.crm_qualification_rationale)
+                    self.crm_qualification_source = QLineEdit()
+                    self.crm_qualification_source.setMaxLength(500)
+                    self.crm_qualification_source.setPlaceholderText(
+                        "Optional source or reference (not automatically verified)"
+                    )
+                    review_form.addRow("Source", self.crm_qualification_source)
+                    self.crm_qualification_next = QLineEdit()
+                    self.crm_qualification_next.setMaxLength(500)
+                    self.crm_qualification_next.setPlaceholderText(
+                        "Optional next action"
+                    )
+                    review_form.addRow("Next action", self.crm_qualification_next)
+                    page_layout.addLayout(review_form)
+                    review_footer = QHBoxLayout()
+                    self.crm_qualification_confirm = QCheckBox(
+                        "I confirm this is my commercial review."
+                    )
+                    review_footer.addWidget(self.crm_qualification_confirm)
+                    review_footer.addStretch()
+                    self.crm_qualification_save = QPushButton("Record review")
+                    self.crm_qualification_save.setObjectName("primary")
+                    self.crm_qualification_save.clicked.connect(
+                        self.record_company_qualification
+                    )
+                    review_footer.addWidget(self.crm_qualification_save)
+                    page_layout.addLayout(review_footer)
+                else:
+                    page_layout.addWidget(table, 1)
                 self.crm_dossier_tabs.addTab(page, "{} ({})".format(title, count))
             self.crm_dossier_notice.setText(
                 " · ".join(summaries) + "\n"
@@ -1570,6 +1652,52 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
+
+    def record_company_qualification(self):
+        dialog = self.crm_dossier_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_dossier_company_id:
+            return
+        rationale = self.crm_qualification_rationale.toPlainText().strip()
+        if not 20 <= len(rationale) <= 1500:
+            QMessageBox.warning(
+                dialog, "Review note required",
+                "Explain the commercial decision in 20–1500 characters."
+            )
+            return
+        if not self.crm_qualification_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Please confirm that this is your own commercial review."
+            )
+            return
+        payload = {
+            "company_id": self.crm_dossier_company_id,
+            "contact_id": self.crm_qualification_subject.currentData(),
+            "fit_status": self.crm_qualification_fit.currentData(),
+            "priority": self.crm_qualification_priority.currentData(),
+            "rationale": rationale,
+            "source_reference": self.crm_qualification_source.text().strip(),
+            "next_action": self.crm_qualification_next.text().strip(),
+            "confirmed": True
+        }
+        self.crm_qualification_save.setEnabled(False)
+        company_id = self.crm_dossier_company_id
+
+        def received(data, error):
+            if not dialog.isVisible() or company_id != self.crm_dossier_company_id:
+                return
+            if error or not data or not data.get("id"):
+                self.crm_qualification_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Review not saved",
+                    error or "Unable to record the qualification."
+                )
+                return
+            self.refresh_company_dossier()
+
+        self.bridge.call(
+            "crm-record-qualification", payload=payload, callback=received
+        )
 
     def load_company_tickets(self, company_id):
         self.crm_ticket_seq += 1
