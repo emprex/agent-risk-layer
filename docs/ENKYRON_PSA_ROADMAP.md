@@ -175,6 +175,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-DRAFT-PDF-01 — export PDF local d'une proposition non émise (2026-11-06) :**
+- **CRM → Proposals → sélectionner une proposition → Export draft PDF…** : l'application récupère une image cohérente de la proposition (révision, candidat commercial non vérifié, portée, devises, lignes et total), propose un nom de fichier local et permet explicitement de confirmer tout écrasement. Aucun envoi réseau ni écriture sur la base par l'export.
+- Backend `crm-proposal-export` : transaction PostgreSQL `REPEATABLE READ READ ONLY` sous `workspace_key` local, validation du nombre et de l'ordre de lignes, des montants mineurs entiers et du total ; erreurs et associations étrangères refusées avant génération du fichier. Une révision périmée dans la table impose d'actualiser la sélection.
+- Rendu PySide6 / Qt `QPdfWriter`, A4, pagination automatique, titre et détails échappés (sans exécuter du HTML injecté), en-tête/pied **DRAFT - NOT SENT sur chaque page**. Sortie dans un fichier temporaire du dossier choisi puis remplacement atomique ; aucun package de génération PDF additionnel.
+- L'émetteur est marqué « AGENTRISKLAYER LTD » sans supposer d'adresse ou numéro d'enregistrement. Le destinataire est libellé **research candidate (not a verified legal buyer)**, jamais société cliente légalement validée par simple similarité. Sans lignes détaillées, le document montre le montant proposé manuellement, sans inventer des lignes.
+- Le document mentionne : **aucune identité acheteur validée, aucune fiscalité / TVA déterminée, pas de conditions contractuelles ni de signature, pas d'offre émise ou acceptée**. Le PDF est un aperçu de travail, pas un devis officiel ou une facture. Aucune action sur ticket, assessment, email ou activité commerciale n'est déclenchée.
+- Tests : snapshot SQL isolé + PostgreSQL CI, Qt natif hors ligne avec vrais PDF et vérification textuelle `pdftotext`/`pdfinfo` sur PDF simple et multi-pages, vérification d'échappement des champs et de l'absence de fichier généré sur données incohérentes.
+- **Travail ultérieur nécessaire pour une émission officielle :** identité juridique vérifiée de l'acheteur, numérotation métier, conditions de validité, politique d'approbation, TVA / traitement fiscal déterminés par un responsable compétent, affichage détaillé et signature / envoi explicitement autorisés. Ne pas simuler ces étapes.
+
+
+
 **Incrément E02-QUOTE-LINES-01 — devis détaillés internes (2026-11-06) :**
 - Après enregistrement d'une proposition, sélectionner son entrée dans **CRM → Proposals → Edit line items…**. Ajouter de 1 à 25 prestations avec description (5–500 caractères), quantité entière positive (1–10000), prix unitaire positif à deux décimales. Totaux des lignes et total du brouillon calculés en unités monétaires mineures entières (sans arrondi flottant).
 - L'ancienne zone « Proposed fee » reste destinée aux propositions non détaillées ; lorsqu'une proposition possède des lignes, son prix total devient **dérivé des lignes** et ne peut plus être modifié directement. Les propositions historiques non détaillées sont inchangées.
