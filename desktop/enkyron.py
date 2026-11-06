@@ -245,6 +245,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_terms_context = None
         self.crm_internal_dialog = None
         self.crm_internal_context = None
+        self.crm_billing_dialog = None
+        self.crm_billing_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1187,6 +1189,17 @@ class EnkyronWindow(QMainWindow):
         proposal_reviews.addWidget(self.crm_internal_button)
         proposal_reviews.addStretch()
         proposal_footer.addLayout(proposal_reviews)
+        billing_actions = QHBoxLayout()
+        billing_explanation = QLabel(
+            "Billing preparation: internal worksheet only; no invoice or VAT calculation."
+        )
+        billing_explanation.setWordWrap(True)
+        billing_actions.addWidget(billing_explanation, 1)
+        self.crm_billing_button = QPushButton("Billing worksheet…")
+        self.crm_billing_button.setEnabled(False)
+        self.crm_billing_button.clicked.connect(self.open_proposal_billing_worksheet)
+        billing_actions.addWidget(self.crm_billing_button)
+        proposal_footer.addLayout(billing_actions)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
@@ -2471,6 +2484,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_buyer_button.setEnabled(False)
         self.crm_terms_button.setEnabled(False)
         self.crm_internal_button.setEnabled(False)
+        self.crm_billing_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2524,6 +2538,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_buyer_button.setEnabled(available)
         self.crm_terms_button.setEnabled(available)
         self.crm_internal_button.setEnabled(available)
+        self.crm_billing_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -3500,6 +3515,212 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-internal-decision", payload=payload, callback=received)
+
+    def open_proposal_billing_worksheet(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if self.crm_billing_dialog and self.crm_billing_dialog.isVisible():
+            self.crm_billing_dialog.raise_()
+            self.crm_billing_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_billing_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Billing worksheet unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not load internal billing preparation."
+                    )
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh Proposals before preparing a billing worksheet."
+                )
+                self.load_proposals()
+                return
+            self.show_proposal_billing_worksheet(data)
+
+        self.bridge.call("crm-billing-preparation", proposal_id, callback=received)
+
+    def show_proposal_billing_worksheet(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Pre-billing worksheet (INTERNAL)")
+        dialog.resize(760, 570)
+        dialog.setMinimumSize(600, 450)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("PRE-BILLING WORKSHEET · NOT AN INVOICE"))
+        explanation = QLabel(
+            "This is an internal fee snapshot, NOT a tax invoice, pro-forma "
+            "invoice, payment request, receipt or accounting entry. "
+            "No VAT has been calculated or verified. No invoice number is allocated."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        heading = QLabel(
+            "Proposal: " + str(data.get("proposal_title") or "")
+            + " · Revision " + str(data.get("proposal_revision") or "")
+        )
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        heading.setWordWrap(True)
+        body_l.addWidget(heading)
+        amount = int(data.get("proposed_fee_minor") or 0)
+        whole, cents = divmod(amount, 100)
+        fee = QLabel(
+            "Proposed fee: {} {:,}.{:02d} (tax not determined)".format(
+                data.get("currency") or "", whole, cents
+            )
+        )
+        fee.setTextFormat(Qt.TextFormat.PlainText)
+        body_l.addWidget(fee)
+        if data.get("can_prepare"):
+            gate = QLabel(
+                "Internal draft approval is present for this exact revision. "
+                "A separate tax and invoice issuance decision is still required."
+            )
+        else:
+            gate = QLabel(
+                "WORKSHEET BLOCKED: " + "; ".join(
+                    data.get("blockers") or ["No internal approval"]
+                )
+            )
+        gate.setTextFormat(Qt.TextFormat.PlainText)
+        gate.setWordWrap(True)
+        body_l.addWidget(gate)
+        current = data.get("current")
+        form = QFormLayout()
+        self.crm_billing_note = QPlainTextEdit()
+        self.crm_billing_note.setMaximumHeight(120)
+        self.crm_billing_note.setPlaceholderText(
+            "Internal preparation rationale and unresolved tax/billing items "
+            "(30–1500 characters). Do not claim an invoice was issued."
+        )
+        self.crm_billing_note.setPlainText(
+            (current or {}).get("preparation_note") or ""
+        )
+        form.addRow("Preparation note *", self.crm_billing_note)
+        body_l.addLayout(form)
+        if current:
+            self.crm_billing_note.setReadOnly(True)
+            saved = QLabel(
+                "This worksheet was recorded for the current revision. "
+                "It is immutable. To change the commercial source, revise "
+                "the proposal and complete its review again."
+            )
+            saved.setWordWrap(True)
+            body_l.addWidget(saved)
+        body_l.addWidget(section_title("PRE-BILLING WORKSHEET HISTORY"))
+        history = data.get("history") or []
+        table = QTableWidget(len(history), 3)
+        table.setHorizontalHeaderLabels(
+            ["Proposal revision", "Working fee", "Operator"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(history):
+            unit = int(item.get("proposed_fee_minor") or 0)
+            major, minor = divmod(unit, 100)
+            values = (
+                item.get("proposal_revision"),
+                "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
+                item.get("recorded_by")
+            )
+            for col, value in enumerate(values):
+                table.setItem(row, col, QTableWidgetItem(str(value or "")))
+        table.setMinimumHeight(min(210, 44 + len(history) * 28))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 worksheets are displayed."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_billing_confirm = QCheckBox(
+            "I confirm this is an INTERNAL worksheet and NOT an invoice."
+        )
+        footer.addWidget(self.crm_billing_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_billing_save = QPushButton("Record billing worksheet")
+        self.crm_billing_save.setObjectName("primary")
+        self.crm_billing_save.setEnabled(
+            bool(data.get("can_prepare")) and not bool(current)
+        )
+        self.crm_billing_save.clicked.connect(self.save_proposal_billing_worksheet)
+        footer.addWidget(self.crm_billing_save)
+        layout.addLayout(footer)
+        self.crm_billing_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "approval_id": data.get("approval_id")
+        }
+        self.crm_billing_dialog = dialog
+        dialog.open()
+
+    def save_proposal_billing_worksheet(self):
+        dialog = self.crm_billing_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_billing_context:
+            return
+        note = self.crm_billing_note.toPlainText().strip()
+        if not 30 <= len(note) <= 1500:
+            QMessageBox.warning(
+                dialog, "Incomplete worksheet",
+                "Enter a preparation note of 30–1500 characters."
+            )
+            return
+        if not self.crm_billing_context.get("approval_id"):
+            QMessageBox.warning(
+                dialog, "Internal approval missing",
+                "Complete the internal draft review for the current proposal revision."
+            )
+            return
+        if not self.crm_billing_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm this is not an invoice or payment request."
+            )
+            return
+        self.crm_billing_save.setEnabled(False)
+        payload = {
+            **self.crm_billing_context,
+            "preparation_note": note, "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_billing_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Worksheet not saved",
+                    error or "Unable to record billing worksheet."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Worksheet saved",
+                "Internal billing worksheet recorded for proposal revision {}. "
+                "No invoice, payment request or accounting entry was generated.".format(
+                    data["proposal_revision"]
+                )
+            )
+
+        self.bridge.call("crm-billing-record", payload=payload, callback=received)
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()
