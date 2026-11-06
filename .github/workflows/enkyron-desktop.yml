@@ -40,6 +40,7 @@ jobs:
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check desktop/enkyron-crm-activities.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
+          node --check desktop/enkyron-crm-overview.mjs
           node --check scripts/enkyron-crm-mail-schema.mjs
           node --check scripts/enkyron-crm-activity-schema.mjs
           node --check scripts/enkyron-crm-opportunities-schema.mjs
@@ -47,7 +48,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
