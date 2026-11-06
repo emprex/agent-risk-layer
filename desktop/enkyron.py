@@ -206,6 +206,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_loaded = False
         self.crm_followup_dialog = None
         self.crm_followup_context = None
+        self.crm_pipeline_seq = 0
+        self.crm_pipeline_loaded = False
+        self.crm_pipeline_cards = {}
+        self.crm_pipeline_selected = None
+        self.crm_pipeline_lists = {}
+        self.crm_pipeline_labels = {}
         self.crm_activity_dialog = None
         self.crm_activity_opportunity_id = None
         self.crm_activity_seq = 0
@@ -969,6 +975,80 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
         self.crm_mail_folders.setCurrentIndex(2)
         self.crm_tabs.addTab(mail_page, "Mail")
+
+        # Pipeline is an overview of the existing human-owned opportunities;
+        # the only write path is the existing audited Update follow-up dialog.
+        pipeline_page = QWidget()
+        pipeline_l = QVBoxLayout(pipeline_page)
+        pipeline_l.setSpacing(12)
+        pipeline_header = QHBoxLayout()
+        pipeline_header.addWidget(section_title("SALES PIPELINE"))
+        pipeline_header.addStretch()
+        refresh_pipeline = QPushButton("Refresh pipeline")
+        refresh_pipeline.clicked.connect(self.load_pipeline)
+        pipeline_header.addWidget(refresh_pipeline)
+        pipeline_l.addLayout(pipeline_header)
+        pipeline_intro = QLabel(
+            "Track opportunities from research to a proposal or closure. "
+            "These stages are set by you; they do not prove a sale or send messages."
+        )
+        pipeline_intro.setWordWrap(True)
+        pipeline_l.addWidget(pipeline_intro)
+        self.crm_pipeline_notice = QLabel(
+            "Open this view to load your commercial opportunities."
+        )
+        self.crm_pipeline_notice.setWordWrap(True)
+        pipeline_l.addWidget(self.crm_pipeline_notice)
+        pipeline_columns = QHBoxLayout()
+        pipeline_columns.setSpacing(8)
+        for code, title in [
+            ("prospecting", "Prospecting"),
+            ("engagement", "Engagement"),
+            ("proposal", "Proposals"),
+            ("won", "Won"),
+            ("lost", "Lost")
+        ]:
+            pane = QFrame()
+            pane.setObjectName("pipelineLane")
+            pane.setStyleSheet(
+                "QFrame#pipelineLane { background: #f8fafc; "
+                "border: 1px solid #d6e2eb; border-radius: 5px; }"
+            )
+            pane_l = QVBoxLayout(pane)
+            pane_l.setContentsMargins(8, 10, 8, 8)
+            label = QLabel("{} · 0".format(title))
+            label.setStyleSheet("font-weight: bold;")
+            pane_l.addWidget(label)
+            cards = QListWidget()
+            cards.setWordWrap(True)
+            cards.setSelectionMode(
+                QAbstractItemView.SelectionMode.SingleSelection
+            )
+            cards.currentRowChanged.connect(
+                lambda _row, lane=code: self.pipeline_selected(lane)
+            )
+            pane_l.addWidget(cards, 1)
+            self.crm_pipeline_lists[code] = cards
+            self.crm_pipeline_labels[code] = label
+            self.crm_pipeline_cards[code] = []
+            pipeline_columns.addWidget(pane, 1)
+        pipeline_l.addLayout(pipeline_columns, 1)
+        pipeline_footer = QHBoxLayout()
+        pipeline_footer.addWidget(QLabel(
+            "Add a new opportunity from Existing prospect research."
+        ))
+        pipeline_footer.addStretch()
+        open_research = QPushButton("Find prospects")
+        open_research.clicked.connect(
+            lambda: self.crm_tabs.setCurrentIndex(1)
+        )
+        pipeline_footer.addWidget(open_research)
+        self.crm_pipeline_edit = QPushButton("Update selected opportunity")
+        self.crm_pipeline_edit.setEnabled(False)
+        self.crm_pipeline_edit.clicked.connect(self.open_pipeline_opportunity)
+        pipeline_footer.addWidget(self.crm_pipeline_edit)
+        pipeline_l.addLayout(pipeline_footer)
+        self.crm_tabs.addTab(pipeline_page, "Pipeline")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -986,6 +1066,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_search_timer.setInterval(300)
         self.crm_draft_search_timer.timeout.connect(self.load_mail_drafts)
         self.crm_draft_search.textChanged.connect(self.mail_draft_search_changed)
+        self.crm_tabs.currentChanged.connect(self.crm_tab_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
         self.crm_company_search_timer.setInterval(300)
