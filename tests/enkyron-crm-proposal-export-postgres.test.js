@@ -6,6 +6,7 @@ import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {createProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {replaceProposalLines} from '../desktop/enkyron-crm-proposal-lines.mjs';
 import {readProposalForDraftPdf} from '../desktop/enkyron-crm-proposal-export.mjs';
+import {recordCompanyProfile} from '../desktop/enkyron-company-profile.mjs';
 
 const uri=process.env.ARL_CI_POSTGRES_URL||'';
 function isolated(){
@@ -55,6 +56,16 @@ test('PostgreSQL PDF snapshot reads saved proposal lines and does not change com
         +'WHERE workspace_key=$1 AND proposal_id=$2',['local:'+actor,created.id]),
       db.query('SELECT * FROM enkyron_crm_opportunities WHERE id=$1',[opportunity.id])
     ])).map(x=>x.rows[0]);
+    const profile=await recordCompanyProfile(db,{
+      expected_revision:0,confirmed:true,legal_name:'Synthetic Issuer Ltd',
+      registration_number:'00000000',incorporation_country:'GB',
+      registered_office:'10 Synthetic Avenue, Testing, EX1 1AB',
+      vat_status:'unknown',default_currency:'GBP',
+      company_utr:'0123456789',tax_office_number:'001',
+      source_reference:'Synthetic fixture only',
+      verification_notes:'Test-only issuer identity without documentary verification.'
+    },actor);
+    assert.equal(profile.revision,1);
     const pdf=await readProposalForDraftPdf(db,created.id,actor);
     assert.equal(pdf.available,true);
     assert.equal(pdf.proposal.id,created.id);
@@ -62,6 +73,12 @@ test('PostgreSQL PDF snapshot reads saved proposal lines and does not change com
     assert.equal(pdf.proposal.research_candidate,'Research candidate - UNVERIFIED');
     assert.equal(pdf.proposal.currency,'GBP');
     assert.equal(pdf.proposal.amount_minor,50100);
+    assert.deepEqual(pdf.proposal.issuer,{
+      legal_name:'Synthetic Issuer Ltd',registration_number:'00000000',
+      registered_office:'10 Synthetic Avenue, Testing, EX1 1AB',
+      revision:1,verification_status:'operator_entered_unverified'
+    });
+    assert.doesNotMatch(JSON.stringify(pdf),/0123456789|tax_office_number|company_utr/);
     assert.deepEqual(pdf.proposal.lines.map(x=>[x.quantity,x.unit_price_minor,x.line_total_minor]),[
       [2,10025,20050],[1,30050,30050]
     ]);

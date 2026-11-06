@@ -61,6 +61,32 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
     });
     if(lines.length&&total!==price)
       throw new Error('CRM proposal total does not match saved line items');
+    // One read-only snapshot for the proposal and current operator issuer.
+    // Only public-facing identity fields are selected; never read UTR, VAT,
+    // Tax Office Number, source notes or private financial details for a PDF.
+    const issuerRows=(await client.query(
+      'SELECT legal_name,registration_number,registered_office,revision,verification_status '
+      +'FROM enkyron_operator_company_profiles '
+      +'WHERE workspace_key=$1 ORDER BY revision DESC LIMIT 1',[owner]
+    )).rows;
+    const source=issuerRows[0]??null;
+    let issuer=null;
+    if(source){
+      if(typeof source.legal_name!=='string'||
+          source.legal_name.trim().length<2||source.legal_name.length>160||
+          typeof source.registered_office!=='string'||
+          source.registered_office.trim().length<10||source.registered_office.length>600||
+          (source.registration_number!==null&&
+            (typeof source.registration_number!=='string'||
+             !source.registration_number.trim()||source.registration_number.length>80))||
+          !Number.isSafeInteger(source.revision)||source.revision<1||
+          source.verification_status!=='operator_entered_unverified')
+        throw new Error('CRM issuer profile must be reviewed before PDF export');
+      issuer={legal_name:source.legal_name,
+        registration_number:source.registration_number,
+        registered_office:source.registered_office,revision:source.revision,
+        verification_status:'operator_entered_unverified'};
+    }
     await client.query('COMMIT');
     tx=false;
     return {available:true,proposal:{
@@ -68,8 +94,9 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       currency:proposal.currency,amount_minor:price,
       revision:proposal.revision,updated_at:proposal.updated_at,
       research_candidate:proposal.company_name_at_creation,
+      issuer,
       lines
-    },notice:'Internal draft only; no legal buyer identity, VAT or approval verified.'};
+    },notice:'Internal draft only. Issuer profile is operator-entered, not independently verified. No buyer identity, VAT or approval verified.'};
   }catch(error){
     if(tx)await client.query('ROLLBACK').catch(()=>{});
     if(error?.code==='42P01')return {available:false,
