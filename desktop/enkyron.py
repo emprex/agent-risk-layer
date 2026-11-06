@@ -239,6 +239,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_tax_context = None
         self.crm_company_profile_dialog = None
         self.crm_company_profile_context = None
+        self.crm_buyer_dialog = None
+        self.crm_buyer_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1146,6 +1148,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_proposal.setEnabled(False)
         self.crm_open_proposal.clicked.connect(self.open_selected_proposal)
         proposal_footer.addWidget(self.crm_open_proposal)
+        self.crm_buyer_button = QPushButton("Buyer identity review…")
+        self.crm_buyer_button.setEnabled(False)
+        self.crm_buyer_button.clicked.connect(self.open_proposal_buyer_review)
+        proposal_footer.addWidget(self.crm_buyer_button)
         self.crm_edit_lines = QPushButton("Edit line items…")
         self.crm_edit_lines.setEnabled(False)
         self.crm_edit_lines.clicked.connect(self.open_selected_quote_lines)
@@ -2439,6 +2445,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_lines.setEnabled(False)
         self.crm_export_draft_pdf.setEnabled(False)
         self.crm_tax_review_button.setEnabled(False)
+        self.crm_buyer_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2489,6 +2496,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_lines.setEnabled(available)
         self.crm_export_draft_pdf.setEnabled(available)
         self.crm_tax_review_button.setEnabled(available)
+        self.crm_buyer_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -2841,6 +2849,204 @@ class EnkyronWindow(QMainWindow):
                 "independent verification.".format(data["revision"])
             )
         self.bridge.call("crm-own-profile-save", payload=payload, callback=received)
+
+    def open_proposal_buyer_review(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if self.crm_buyer_dialog and self.crm_buyer_dialog.isVisible():
+            self.crm_buyer_dialog.raise_()
+            self.crm_buyer_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id = selected["id"]
+        revision = selected["revision"]
+        self.crm_buyer_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Buyer review unavailable",
+                    error or (data or {}).get("notice", "Could not load buyer dossier.")
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh the proposals list and open the current revision."
+                )
+                self.load_proposals()
+                return
+            self.show_proposal_buyer_dialog(data)
+
+        self.bridge.call("crm-buyer-review", proposal_id, callback=received)
+
+    def show_proposal_buyer_dialog(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Buyer identity review (internal draft)")
+        dialog.resize(760, 620)
+        dialog.setMinimumSize(620, 470)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("PROPOSAL BUYER · DOCUMENTARY RECORD"))
+        disclaimer = QLabel(
+            "This review records operator-entered buyer details for the selected "
+            "proposal revision only. It is NOT independent legal identity verification "
+            "and does not issue a quote, sign a contract or contact the buyer."
+        )
+        disclaimer.setWordWrap(True)
+        layout.addWidget(disclaimer)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        candidate = data.get("research_candidate") or "Unknown research prospect"
+        body_l.addWidget(QLabel("Research candidate: " + candidate))
+        linked = data.get("linked_company")
+        if linked:
+            company_text = (
+                "Explicitly linked CRM company: " + (linked.get("name") or "")
+            )
+            body_l.addWidget(QLabel(company_text))
+        else:
+            missing = QLabel(
+                "No CRM company has been explicitly linked to this research prospect. "
+                "Create or select a company in Companies & Contacts, then use the "
+                "prospect association workflow before reviewing the buyer."
+            )
+            missing.setWordWrap(True)
+            body_l.addWidget(missing)
+        form = QFormLayout()
+        self.crm_buyer_legal_name = QLineEdit()
+        self.crm_buyer_legal_name.setMaxLength(160)
+        self.crm_buyer_legal_name.setPlaceholderText(
+            "Manually transcribe the legal name from a reliable source"
+        )
+        form.addRow("Buyer legal name *", self.crm_buyer_legal_name)
+        self.crm_buyer_address = QPlainTextEdit()
+        self.crm_buyer_address.setMaximumHeight(78)
+        self.crm_buyer_address.setPlaceholderText(
+            "Registered address from your documentary source (10–600 characters)"
+        )
+        form.addRow("Registered / billing address *", self.crm_buyer_address)
+        self.crm_buyer_source = QLineEdit()
+        self.crm_buyer_source.setMaxLength(500)
+        self.crm_buyer_source.setPlaceholderText(
+            "Official registry / document reference, not a guessed identity"
+        )
+        form.addRow("Document reference *", self.crm_buyer_source)
+        self.crm_buyer_notes = QPlainTextEdit()
+        self.crm_buyer_notes.setMaximumHeight(110)
+        self.crm_buyer_notes.setPlaceholderText(
+            "Document what was checked and what remains unverified (30–2000 characters)"
+        )
+        form.addRow("Review notes *", self.crm_buyer_notes)
+        body_l.addLayout(form)
+        current = data.get("current")
+        if current:
+            status = QLabel(
+                "A buyer documentary record already exists for proposal revision "
+                + str(current["proposal_revision"])
+                + ". It cannot be edited or deleted. To correct a review, "
+                "first revise the proposal and record a new buyer review."
+            )
+            status.setWordWrap(True)
+            body_l.addWidget(status)
+        history = data.get("history") or []
+        body_l.addWidget(section_title("IMMUTABLE BUYER REVIEW HISTORY"))
+        table = QTableWidget(len(history), 3)
+        table.setHorizontalHeaderLabels(
+            ["Proposal revision", "Recorded", "Operator-entered legal name"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(history):
+            for col, value in enumerate((
+                item.get("proposal_revision"),
+                display_date(item.get("recorded_at")),
+                item.get("legal_name") or ""
+            )):
+                table.setItem(row, col, QTableWidgetItem(str(value)))
+        table.setMinimumHeight(min(220, 46 + len(history) * 28))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 reviews are displayed."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_buyer_confirm = QCheckBox(
+            "I confirm this is manual documentary input, NOT independent verification."
+        )
+        footer.addWidget(self.crm_buyer_confirm)
+        footer.addStretch()
+        cancel = QPushButton("Close")
+        cancel.clicked.connect(dialog.reject)
+        footer.addWidget(cancel)
+        self.crm_buyer_save = QPushButton("Record buyer review")
+        self.crm_buyer_save.setObjectName("primary")
+        self.crm_buyer_save.clicked.connect(self.save_proposal_buyer_review)
+        self.crm_buyer_save.setEnabled(bool(linked) and not bool(current))
+        footer.addWidget(self.crm_buyer_save)
+        layout.addLayout(footer)
+        self.crm_buyer_dialog = dialog
+        self.crm_buyer_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "company_id": linked.get("id") if linked else None
+        }
+        dialog.open()
+
+    def save_proposal_buyer_review(self):
+        dialog = self.crm_buyer_dialog
+        context = self.crm_buyer_context
+        if not dialog or not dialog.isVisible() or not context:
+            return
+        legal_name = self.crm_buyer_legal_name.text().strip()
+        address = self.crm_buyer_address.toPlainText().strip()
+        source = self.crm_buyer_source.text().strip()
+        notes = self.crm_buyer_notes.toPlainText().strip()
+        if not (2 <= len(legal_name) <= 160 and 10 <= len(address) <= 600
+                and 3 <= len(source) <= 500 and 30 <= len(notes) <= 2000):
+            QMessageBox.warning(
+                dialog, "Incomplete buyer dossier",
+                "Enter the legal name, registered/billing address, source "
+                "reference and review explanation in the requested lengths."
+            )
+            return
+        if not self.crm_buyer_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm that this is operator-entered, not independently verified."
+            )
+            return
+        self.crm_buyer_save.setEnabled(False)
+        payload = {
+            **context, "legal_name": legal_name, "registered_address": address,
+            "source_reference": source, "review_note": notes, "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_buyer_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Buyer review not saved",
+                    error or "Unable to record buyer review."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Buyer review recorded",
+                "A documentary record is saved for proposal revision {}. "
+                "Independent buyer verification and quote issuance remain "
+                "outstanding.".format(data["proposal_revision"])
+            )
+        self.bridge.call("crm-buyer-record", payload=payload, callback=received)
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()
