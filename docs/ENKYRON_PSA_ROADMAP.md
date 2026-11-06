@@ -175,6 +175,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 ### Bloc 02 — CRM — entreprises et contacts
 
+**Incrément E02-QUOTE-LINES-01 — devis détaillés internes (2026-11-06) :**
+- Après enregistrement d'une proposition, sélectionner son entrée dans **CRM → Proposals → Edit line items…**. Ajouter de 1 à 25 prestations avec description (5–500 caractères), quantité entière positive (1–10000), prix unitaire positif à deux décimales. Totaux des lignes et total du brouillon calculés en unités monétaires mineures entières (sans arrondi flottant).
+- L'ancienne zone « Proposed fee » reste destinée aux propositions non détaillées ; lorsqu'une proposition possède des lignes, son prix total devient **dérivé des lignes** et ne peut plus être modifié directement. Les propositions historiques non détaillées sont inchangées.
+- Migration additive `073_enkyron_crm_proposal_lines.sql` : lignes courantes liées par clé composite (workspace_key,proposal_id) ; snapshots complets immuables des lignes par révision ; transaction unique de remplacement/total/revision/hash d'audit. Contrôle de révision et périmètre local pour éviter écrasement ou fuite entre opérateurs.
+- Aucune TVA déterminée, aucun montant TTC garanti, aucun devis officiel émis, aucune condition ou identité légale déduite, aucun paiement, email, ticket, client ou assessment créé. Les lignes sont des **propositions commerciales non envoyées**.
+- `node scripts/enkyron-crm-proposal-lines-schema.mjs --check` puis `--apply` avec backup PostgreSQL local, vérification de migration antérieure et application transactionnelle contrôlée ; jamais à l'ouverture de l'application.
+- Tests unitaires du calcul exact et des bornes, Qt pour ajouter deux lignes et vérifier leurs montants, intégration PostgreSQL pour isolation, refus des versions obsolètes et conservation des snapshots anciens.
+- **À développer ensuite :** devis imprimables / PDF marqués brouillon, identification juridique validée des parties, règles fiscales applicables, validité et conditions, approbation et envoi explicites ; ce jalon ne les simule pas.
+
+
+
 **Incrément E02-PROPOSALS-01 — devis/propositions commerciales en brouillon (2026-11-06) :**
 - Dans **CRM → Pipeline**, sélectionner une opportunité puis **New proposal draft…**. Éditeur natif : titre, périmètre et livrables, devise choisie par l'opérateur et montant proposé saisi avec deux décimales. Vue **CRM → Proposals** pour rechercher, ouvrir et réviser les propositions.
 - Le montant est sauvegardé en **unités monétaires mineures entières** (pence/cents) pour éviter toute approximation flottante. Devises admises : GBP, EUR, USD. **Aucun tarif catalogue, TVA, acompte, réduction, date d'expiration ou condition juridique n'est déduit automatiquement.** Le prix est saisi par un humain, sans détermination fiscale.
