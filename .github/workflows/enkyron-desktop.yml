@@ -248,6 +248,14 @@ jobs:
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
           assert window.crm_dossier_tabs.tabText(4) == "Qualification (0)"
+          window.crm_dossier_tabs.setCurrentIndex(4)
+          qualification_page = window.crm_dossier_tabs.widget(4).widget()
+          qualification_labels = [
+              child.text() for child in qualification_page.findChildren(QLabel)
+          ]
+          assert "No qualification reviews recorded yet." in qualification_labels
+          assert window.crm_qualification_save.isVisible()
+          assert window.crm_qualification_rationale.isVisible()
           assert window.crm_qualification_subject.currentData() is None
           window.crm_qualification_fit.setCurrentIndex(
               window.crm_qualification_fit.findData("potential_fit")
