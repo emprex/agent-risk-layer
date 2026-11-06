@@ -2565,7 +2565,7 @@ class EnkyronWindow(QMainWindow):
         layout.addWidget(self.crm_quote_table, 1)
         actions = QHBoxLayout()
         add = QPushButton("+ Add line")
-        add.clicked.connect(self.add_quote_line)
+        add.clicked.connect(lambda: self.add_quote_line())
         actions.addWidget(add)
         remove = QPushButton("Remove selected")
         remove.clicked.connect(self.remove_quote_line)
