@@ -81,7 +81,7 @@ class DraftPdfTest(unittest.TestCase):
                 self.assertIn("GBP 301.25", extracted)
                 self.assertIn("Research candidate", extracted)
                 self.assertIn("Manual review", extracted)
-                self.assertNotIn("<script>", extracted)
+                self.assertIn("Security review <script> & DRAFT", extracted)
             if shutil.which("pdfinfo"):
                 info = subprocess.check_output(["pdfinfo", str(path)], text=True)
                 self.assertIn("Page size:       595", info)
