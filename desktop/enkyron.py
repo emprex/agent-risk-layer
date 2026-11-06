@@ -249,6 +249,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_billing_context = None
         self.crm_invoice_prepare_dialog = None
         self.crm_invoice_prepare_context = None
+        self.crm_invoice_prepare_ready = False
+        self.crm_invoice_prepare_steps = []
         self.crm_invoice_detail_dialog = None
         self.crm_invoice_issue_dialog = None
         self.crm_invoice_issue_context = None
@@ -3881,19 +3883,57 @@ class EnkyronWindow(QMainWindow):
         )
         fee.setTextFormat(Qt.TextFormat.PlainText)
         body_l.addWidget(fee)
-        if data.get("can_prepare"):
-            gate = QLabel(
-                "READY TO DRAFT: approved billing worksheet found. "
-                "Tax treatment and invoice issue remain BLOCKED."
+        self.crm_invoice_prepare_ready = bool(data.get("can_prepare"))
+        self.crm_invoice_prepare_steps = list(data.get("steps") or [])
+        if self.crm_invoice_prepare_ready:
+            gate_text = (
+                "READY TO PREPARE an internal invoice draft. "
+                "VAT, amount due and invoice issuance remain UNDETERMINED."
+            )
+        elif data.get("current_draft_id"):
+            gate_text = (
+                "An immutable invoice draft already exists for this worksheet. "
+                "Open it in the Invoices register."
             )
         else:
-            gate = QLabel(
-                "DRAFT CREATION BLOCKED: " +
-                "; ".join(data.get("blockers") or ["Missing current worksheet"])
+            gate_text = (
+                "PREPARATION BLOCKED. Complete the required steps below. "
+                "No invoice draft can be recorded until the prerequisites are saved."
             )
+        gate = QLabel(gate_text)
         gate.setTextFormat(Qt.TextFormat.PlainText)
         gate.setWordWrap(True)
         body_l.addWidget(gate)
+        if self.crm_invoice_prepare_steps:
+            body_l.addWidget(section_title("PREPARATION CHECKLIST · CURRENT REVISION"))
+            for number, step in enumerate(self.crm_invoice_prepare_steps, 1):
+                state = "COMPLETE" if step.get("ready") else "REQUIRED"
+                line = "{}. {} — {}".format(
+                    number, state, step.get("label") or "Unknown step"
+                )
+                if not step.get("ready"):
+                    line += "\n     " + str(step.get("detail") or "")
+                label = QLabel(line)
+                label.setTextFormat(Qt.TextFormat.PlainText)
+                label.setWordWrap(True)
+                body_l.addWidget(label)
+        missing_step = next(
+            (x for x in self.crm_invoice_prepare_steps if not x.get("ready")),
+            None
+        )
+        if missing_step:
+            self.crm_invoice_next_button = QPushButton(
+                "Open next required step: " + str(missing_step.get("label") or "")
+            )
+            self.crm_invoice_next_button.clicked.connect(
+                self.open_next_invoice_requirement
+            )
+            body_l.addWidget(self.crm_invoice_next_button)
+        elif not self.crm_invoice_prepare_ready:
+            reason = QLabel("; ".join(data.get("blockers") or []))
+            reason.setTextFormat(Qt.TextFormat.PlainText)
+            reason.setWordWrap(True)
+            body_l.addWidget(reason)
         for label, party, address_key in (
             ("Issuer (operator-entered)", data.get("issuer"), "registered_office"),
             ("Buyer (operator-entered)", data.get("buyer"), "registered_address")
@@ -3908,6 +3948,7 @@ class EnkyronWindow(QMainWindow):
                 body_l.addWidget(party_label)
         self.crm_invoice_prepare_note = QPlainTextEdit()
         self.crm_invoice_prepare_note.setMaximumHeight(130)
+        self.crm_invoice_prepare_note.setEnabled(self.crm_invoice_prepare_ready)
         self.crm_invoice_prepare_note.setPlaceholderText(
             "Human preparation note and unresolved tax/issuer/buyer issues "
             "(30–1500 characters). This is NOT a payment request."
@@ -3928,6 +3969,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_confirm = QCheckBox(
             "I confirm this is UNISSUED and that VAT / amount due are unknown."
         )
+        self.crm_invoice_prepare_confirm.setEnabled(self.crm_invoice_prepare_ready)
         footer.addWidget(self.crm_invoice_prepare_confirm)
         footer.addStretch()
         close = QPushButton("Close")
@@ -3935,9 +3977,20 @@ class EnkyronWindow(QMainWindow):
         footer.addWidget(close)
         self.crm_invoice_prepare_save = QPushButton("Record invoice draft")
         self.crm_invoice_prepare_save.setObjectName("primary")
-        self.crm_invoice_prepare_save.setEnabled(bool(data.get("can_prepare")))
+        self.crm_invoice_prepare_save.setEnabled(False)
+        self.crm_invoice_prepare_save.setVisible(self.crm_invoice_prepare_ready)
+        self.crm_invoice_prepare_save.setToolTip(
+            "Requires a current approved billing worksheet, "
+            "a 30–1500 character note and manual confirmation."
+        )
         self.crm_invoice_prepare_save.clicked.connect(self.save_invoice_draft_preparation)
         footer.addWidget(self.crm_invoice_prepare_save)
+        self.crm_invoice_prepare_note.textChanged.connect(
+            self.update_invoice_draft_save_state
+        )
+        self.crm_invoice_prepare_confirm.toggled.connect(
+            self.update_invoice_draft_save_state
+        )
         layout.addLayout(footer)
         self.crm_invoice_prepare_dialog = dialog
         self.crm_invoice_prepare_context = {
@@ -3946,10 +3999,53 @@ class EnkyronWindow(QMainWindow):
             "worksheet_id": data.get("worksheet_id")
         }
         dialog.open()
+        self.update_invoice_draft_save_state()
+
+    def open_next_invoice_requirement(self):
+        dialog = self.crm_invoice_prepare_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        missing = next(
+            (step for step in self.crm_invoice_prepare_steps
+             if not step.get("ready")), None
+        )
+        if not missing:
+            return
+        routes = {
+            "issuer": self.open_issuing_company_profile,
+            "research": lambda: self.crm_tabs.setCurrentIndex(1),
+            "buyer": self.open_proposal_buyer_review,
+            "terms": self.open_proposal_commercial_terms,
+            "tax": self.open_proposal_tax_review,
+            "internal": self.open_internal_draft_review,
+            "worksheet": self.open_proposal_billing_worksheet,
+            "proposal": self.open_selected_proposal
+        }
+        action = routes.get(missing.get("action"))
+        if action is None:
+            return
+        dialog.reject()
+        action()
+
+    def update_invoice_draft_save_state(self):
+        dialog = self.crm_invoice_prepare_dialog
+        if not dialog or not self.crm_invoice_prepare_context:
+            return
+        valid_note = 30 <= len(
+            self.crm_invoice_prepare_note.toPlainText().strip()
+        ) <= 1500
+        self.crm_invoice_prepare_save.setEnabled(
+            self.crm_invoice_prepare_ready
+            and bool(self.crm_invoice_prepare_context.get("worksheet_id"))
+            and valid_note
+            and self.crm_invoice_prepare_confirm.isChecked()
+        )
 
     def save_invoice_draft_preparation(self):
         dialog = self.crm_invoice_prepare_dialog
-        if not dialog or not dialog.isVisible() or not self.crm_invoice_prepare_context:
+        if (not dialog or not dialog.isVisible() or
+                not self.crm_invoice_prepare_context or
+                not self.crm_invoice_prepare_ready):
             return
         note = self.crm_invoice_prepare_note.toPlainText().strip()
         if not 30 <= len(note) <= 1500:
@@ -3980,7 +4076,7 @@ class EnkyronWindow(QMainWindow):
             if not dialog.isVisible():
                 return
             if error or not data or not data.get("id"):
-                self.crm_invoice_prepare_save.setEnabled(True)
+                self.update_invoice_draft_save_state()
                 QMessageBox.warning(
                     dialog, "Invoice draft not saved",
                     error or "Could not save the unissued invoice draft."
