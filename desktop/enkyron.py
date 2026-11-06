@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -224,6 +225,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
+        self.crm_proposal_seq = 0
+        self.crm_proposal_loaded = False
+        self.crm_proposal_items = []
+        self.crm_proposal_dialog = None
+        self.crm_proposal_context = None
         self.sales_overview_seq = 0
         self.sales_overview_loaded = False
         self.crm_review_dialog = None
@@ -1050,12 +1056,81 @@ class EnkyronWindow(QMainWindow):
             lambda: self.crm_tabs.setCurrentIndex(1)
         )
         pipeline_footer.addWidget(open_research)
+        self.crm_pipeline_proposal = QPushButton("New proposal draft…")
+        self.crm_pipeline_proposal.setEnabled(False)
+        self.crm_pipeline_proposal.clicked.connect(self.open_pipeline_proposal)
+        pipeline_footer.addWidget(self.crm_pipeline_proposal)
         self.crm_pipeline_edit = QPushButton("Update selected opportunity")
         self.crm_pipeline_edit.setEnabled(False)
         self.crm_pipeline_edit.clicked.connect(self.open_pipeline_opportunity)
         pipeline_footer.addWidget(self.crm_pipeline_edit)
         pipeline_l.addLayout(pipeline_footer)
         self.crm_tabs.addTab(pipeline_page, "Pipeline")
+
+        proposals_page = QWidget()
+        proposals_l = QVBoxLayout(proposals_page)
+        proposals_l.setSpacing(10)
+        proposals_l.addWidget(section_title("COMMERCIAL PROPOSALS"))
+        proposals_hint = QLabel(
+            "Prepare priced proposal drafts linked to opportunities. "
+            "No proposal is sent, approved or signed here. "
+            "Prices are entered by the operator; taxes are not calculated."
+        )
+        proposals_hint.setWordWrap(True)
+        proposals_l.addWidget(proposals_hint)
+        proposal_toolbar = QHBoxLayout()
+        self.crm_proposal_search = QLineEdit()
+        self.crm_proposal_search.setMaxLength(100)
+        self.crm_proposal_search.setPlaceholderText("Search opportunity or proposal title…")
+        proposal_toolbar.addWidget(self.crm_proposal_search, 1)
+        proposal_refresh = QPushButton("Refresh proposals")
+        proposal_refresh.clicked.connect(self.load_proposals)
+        proposal_toolbar.addWidget(proposal_refresh)
+        proposals_l.addLayout(proposal_toolbar)
+        self.crm_proposal_notice = QLabel("No proposals loaded.")
+        self.crm_proposal_notice.setWordWrap(True)
+        proposals_l.addWidget(self.crm_proposal_notice)
+        self.crm_proposal_table = QTableWidget(0, 5)
+        self.crm_proposal_table.setHorizontalHeaderLabels(
+            ["Opportunity", "Proposal title", "Fee", "Revision", "Updated"]
+        )
+        for index in (0, 2, 3, 4):
+            self.crm_proposal_table.horizontalHeader().setSectionResizeMode(
+                index, QHeaderView.ResizeMode.ResizeToContents
+            )
+        self.crm_proposal_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_proposal_table.setAlternatingRowColors(True)
+        self.crm_proposal_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_proposal_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_proposal_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_proposal_table.itemSelectionChanged.connect(
+            self.proposal_selected
+        )
+        proposals_l.addWidget(self.crm_proposal_table, 1)
+        proposal_footer = QHBoxLayout()
+        proposal_footer.addWidget(QLabel(
+            "To create a new draft, select an opportunity in Pipeline."
+        ))
+        proposal_footer.addStretch()
+        to_pipeline = QPushButton("Open Pipeline")
+        to_pipeline.clicked.connect(
+            lambda: self.crm_tabs.setCurrentIndex(4)
+        )
+        proposal_footer.addWidget(to_pipeline)
+        self.crm_open_proposal = QPushButton("Open selected proposal")
+        self.crm_open_proposal.setEnabled(False)
+        self.crm_open_proposal.clicked.connect(self.open_selected_proposal)
+        proposal_footer.addWidget(self.crm_open_proposal)
+        proposals_l.addLayout(proposal_footer)
+        self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -1073,6 +1148,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_search_timer.setInterval(300)
         self.crm_draft_search_timer.timeout.connect(self.load_mail_drafts)
         self.crm_draft_search.textChanged.connect(self.mail_draft_search_changed)
+        self.crm_proposal_search_timer = QTimer(self)
+        self.crm_proposal_search_timer.setSingleShot(True)
+        self.crm_proposal_search_timer.setInterval(300)
+        self.crm_proposal_search_timer.timeout.connect(self.load_proposals)
+        self.crm_proposal_search.textChanged.connect(self.proposal_search_changed)
         self.crm_tabs.currentChanged.connect(self.crm_tab_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
@@ -1107,10 +1187,14 @@ class EnkyronWindow(QMainWindow):
                 self.load_followups()
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
+            if not self.crm_proposal_loaded:
+                self.load_proposals()
 
     def crm_tab_changed(self, index):
         if index == 4 and self.navigation.currentRow() == 2:
             self.load_pipeline()
+        if index == 5 and self.navigation.currentRow() == 2:
+            self.load_proposals()
 
     def load_pipeline(self):
         self.crm_pipeline_seq += 1
@@ -1118,6 +1202,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_pipeline_loaded = False
         self.crm_pipeline_selected = None
         self.crm_pipeline_edit.setEnabled(False)
+        self.crm_pipeline_proposal.setEnabled(False)
         self.crm_pipeline_notice.setText("Loading opportunities…")
         for code, widget in self.crm_pipeline_lists.items():
             widget.blockSignals(True)
@@ -1185,6 +1270,7 @@ class EnkyronWindow(QMainWindow):
             if self.crm_pipeline_selected and self.crm_pipeline_selected[0] == lane:
                 self.crm_pipeline_selected = None
                 self.crm_pipeline_edit.setEnabled(False)
+                self.crm_pipeline_proposal.setEnabled(False)
             return
         for code, other in self.crm_pipeline_lists.items():
             if code != lane:
@@ -1194,6 +1280,7 @@ class EnkyronWindow(QMainWindow):
                 other.blockSignals(False)
         self.crm_pipeline_selected = (lane, selected)
         self.crm_pipeline_edit.setEnabled(True)
+        self.crm_pipeline_proposal.setEnabled(True)
 
     def open_pipeline_opportunity(self):
         selection = self.crm_pipeline_selected
