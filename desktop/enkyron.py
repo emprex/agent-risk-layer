@@ -247,6 +247,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_internal_context = None
         self.crm_billing_dialog = None
         self.crm_billing_context = None
+        self.crm_invoice_prepare_dialog = None
+        self.crm_invoice_prepare_context = None
+        self.crm_invoice_detail_dialog = None
+        self.crm_invoice_items = []
+        self.crm_invoice_loaded = False
+        self.crm_invoice_seq = 0
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1199,9 +1205,69 @@ class EnkyronWindow(QMainWindow):
         self.crm_billing_button.setEnabled(False)
         self.crm_billing_button.clicked.connect(self.open_proposal_billing_worksheet)
         billing_actions.addWidget(self.crm_billing_button)
+        self.crm_invoice_prepare_button = QPushButton("Prepare invoice draft…")
+        self.crm_invoice_prepare_button.setEnabled(False)
+        self.crm_invoice_prepare_button.clicked.connect(self.open_proposal_invoice_preparation)
+        billing_actions.addWidget(self.crm_invoice_prepare_button)
         proposal_footer.addLayout(billing_actions)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
+
+        invoice_page = QWidget()
+        invoice_l = QVBoxLayout(invoice_page)
+        invoice_l.addWidget(section_title("INVOICES · INTERNAL UNISSUED DRAFT REGISTER"))
+        invoice_disclaimer = QLabel(
+            "These are preparation records, NOT issued invoices. "
+            "No invoice number, VAT amount, payable balance, banking or payment "
+            "entries are created. Customer identity is operator-entered."
+        )
+        invoice_disclaimer.setWordWrap(True)
+        invoice_l.addWidget(invoice_disclaimer)
+        invoice_controls = QHBoxLayout()
+        self.crm_invoice_search = QLineEdit()
+        self.crm_invoice_search.setPlaceholderText(
+            "Search drafted service or buyer name…"
+        )
+        invoice_controls.addWidget(self.crm_invoice_search, 1)
+        self.crm_invoice_refresh = QPushButton("Refresh invoice drafts")
+        self.crm_invoice_refresh.clicked.connect(self.load_invoice_drafts)
+        invoice_controls.addWidget(self.crm_invoice_refresh)
+        invoice_l.addLayout(invoice_controls)
+        self.crm_invoice_notice = QLabel(
+            "Choose Proposals → Prepare invoice draft… to create a record "
+            "after internal approval and billing worksheet."
+        )
+        self.crm_invoice_notice.setWordWrap(True)
+        invoice_l.addWidget(self.crm_invoice_notice)
+        self.crm_invoice_table = QTableWidget(0, 6)
+        self.crm_invoice_table.setHorizontalHeaderLabels([
+            "Internal draft ID", "Buyer (unverified)", "Service",
+            "Proposed fee", "VAT", "Recorded"
+        ])
+        self.crm_invoice_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_invoice_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_invoice_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_invoice_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.crm_invoice_table.itemSelectionChanged.connect(
+            self.invoice_draft_selected
+        )
+        invoice_l.addWidget(self.crm_invoice_table, 1)
+        invoice_buttons = QHBoxLayout()
+        invoice_buttons.addStretch()
+        self.crm_invoice_open = QPushButton("Open selected draft…")
+        self.crm_invoice_open.setEnabled(False)
+        self.crm_invoice_open.clicked.connect(self.open_selected_invoice_draft)
+        invoice_buttons.addWidget(self.crm_invoice_open)
+        invoice_l.addLayout(invoice_buttons)
+        self.crm_tabs.addTab(invoice_page, "Invoices")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -1224,6 +1290,13 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_search_timer.setInterval(300)
         self.crm_proposal_search_timer.timeout.connect(self.load_proposals)
         self.crm_proposal_search.textChanged.connect(self.proposal_search_changed)
+        self.crm_invoice_search_timer = QTimer(self)
+        self.crm_invoice_search_timer.setSingleShot(True)
+        self.crm_invoice_search_timer.setInterval(300)
+        self.crm_invoice_search_timer.timeout.connect(self.load_invoice_drafts)
+        self.crm_invoice_search.textChanged.connect(
+            lambda _: self.crm_invoice_search_timer.start()
+        )
         self.crm_tabs.currentChanged.connect(self.crm_tab_changed)
         self.crm_company_search_timer = QTimer(self)
         self.crm_company_search_timer.setSingleShot(True)
@@ -1266,6 +1339,8 @@ class EnkyronWindow(QMainWindow):
             self.load_pipeline()
         if index == 5 and self.navigation.currentRow() == 2:
             self.load_proposals()
+        if index == 6 and self.navigation.currentRow() == 2:
+            self.load_invoice_drafts()
 
     def load_pipeline(self):
         self.crm_pipeline_seq += 1
@@ -2485,6 +2560,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_terms_button.setEnabled(False)
         self.crm_internal_button.setEnabled(False)
         self.crm_billing_button.setEnabled(False)
+        self.crm_invoice_prepare_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2539,6 +2615,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_terms_button.setEnabled(available)
         self.crm_internal_button.setEnabled(available)
         self.crm_billing_button.setEnabled(available)
+        self.crm_invoice_prepare_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
@@ -3721,6 +3798,316 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-billing-record", payload=payload, callback=received)
+
+
+    def open_proposal_invoice_preparation(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if (self.crm_invoice_prepare_dialog
+                and self.crm_invoice_prepare_dialog.isVisible()):
+            self.crm_invoice_prepare_dialog.raise_()
+            self.crm_invoice_prepare_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_invoice_prepare_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Invoice draft preparation unavailable",
+                    error or (data or {}).get("notice", "Could not load invoice preparation.")
+                )
+                return
+            if data.get("proposal_id") != proposal_id or data.get("proposal_revision") != revision:
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh Proposals before creating a new invoice draft."
+                )
+                self.load_proposals()
+                return
+            self.show_invoice_draft_preparation(data)
+
+        self.bridge.call("crm-invoice-prepare", proposal_id, callback=received)
+
+    def show_invoice_draft_preparation(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Prepare UNISSUED invoice draft")
+        dialog.resize(760, 620)
+        dialog.setMinimumSize(580, 460)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("INVOICE DRAFT · TAX REVIEW REQUIRED"))
+        warning = QLabel(
+            "No official invoice number, invoice date, VAT amount, amount due, "
+            "payment request, accounting transaction or customer delivery will be "
+            "created. Issuer and buyer identities are operator-entered."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        title = QLabel(
+            "Proposal: " + str(data.get("proposal_title") or "")
+            + " · revision " + str(data.get("proposal_revision") or "")
+        )
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setWordWrap(True)
+        body_l.addWidget(title)
+        amount = int(data.get("proposed_fee_minor") or 0)
+        major, minor = divmod(amount, 100)
+        fee = QLabel(
+            "Proposed fee before VAT determination: {} {:,}.{:02d}".format(
+                data.get("currency") or "", major, minor
+            )
+        )
+        fee.setTextFormat(Qt.TextFormat.PlainText)
+        body_l.addWidget(fee)
+        if data.get("can_prepare"):
+            gate = QLabel(
+                "READY TO DRAFT: approved billing worksheet found. "
+                "Tax treatment and invoice issue remain BLOCKED."
+            )
+        else:
+            gate = QLabel(
+                "DRAFT CREATION BLOCKED: " +
+                "; ".join(data.get("blockers") or ["Missing current worksheet"])
+            )
+        gate.setTextFormat(Qt.TextFormat.PlainText)
+        gate.setWordWrap(True)
+        body_l.addWidget(gate)
+        for label, party, address_key in (
+            ("Issuer (operator-entered)", data.get("issuer"), "registered_office"),
+            ("Buyer (operator-entered)", data.get("buyer"), "registered_address")
+        ):
+            if party:
+                value = str(party.get("legal_name") or "") + "\n" + str(
+                    party.get(address_key) or ""
+                )
+                party_label = QLabel(label + ":\n" + value)
+                party_label.setTextFormat(Qt.TextFormat.PlainText)
+                party_label.setWordWrap(True)
+                body_l.addWidget(party_label)
+        self.crm_invoice_prepare_note = QPlainTextEdit()
+        self.crm_invoice_prepare_note.setMaximumHeight(130)
+        self.crm_invoice_prepare_note.setPlaceholderText(
+            "Human preparation note and unresolved tax/issuer/buyer issues "
+            "(30–1500 characters). This is NOT a payment request."
+        )
+        form = QFormLayout()
+        form.addRow("Preparation note *", self.crm_invoice_prepare_note)
+        body_l.addLayout(form)
+        existing = data.get("current_draft_id")
+        if existing:
+            label = QLabel("Existing immutable draft ID: " + str(existing))
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            body_l.addWidget(label)
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_invoice_prepare_confirm = QCheckBox(
+            "I confirm this is UNISSUED and that VAT / amount due are unknown."
+        )
+        footer.addWidget(self.crm_invoice_prepare_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_invoice_prepare_save = QPushButton("Record invoice draft")
+        self.crm_invoice_prepare_save.setObjectName("primary")
+        self.crm_invoice_prepare_save.setEnabled(bool(data.get("can_prepare")))
+        self.crm_invoice_prepare_save.clicked.connect(self.save_invoice_draft_preparation)
+        footer.addWidget(self.crm_invoice_prepare_save)
+        layout.addLayout(footer)
+        self.crm_invoice_prepare_dialog = dialog
+        self.crm_invoice_prepare_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "worksheet_id": data.get("worksheet_id")
+        }
+        dialog.open()
+
+    def save_invoice_draft_preparation(self):
+        dialog = self.crm_invoice_prepare_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_invoice_prepare_context:
+            return
+        note = self.crm_invoice_prepare_note.toPlainText().strip()
+        if not 30 <= len(note) <= 1500:
+            QMessageBox.warning(
+                dialog, "Missing preparation note",
+                "Enter a rationale of 30–1500 characters."
+            )
+            return
+        if not self.crm_invoice_prepare_context.get("worksheet_id"):
+            QMessageBox.warning(
+                dialog, "Billing worksheet missing",
+                "Complete the billing worksheet for the current proposal revision."
+            )
+            return
+        if not self.crm_invoice_prepare_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Confirmation required",
+                "Confirm this is an unissued draft with tax yet to be determined."
+            )
+            return
+        self.crm_invoice_prepare_save.setEnabled(False)
+        payload = {
+            **self.crm_invoice_prepare_context,
+            "preparation_note": note, "confirmed": True
+        }
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_invoice_prepare_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Invoice draft not saved",
+                    error or "Could not save the unissued invoice draft."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "Invoice draft recorded",
+                "An INTERNAL invoice draft has been recorded. "
+                "No official invoice number, VAT determination, payment "
+                "or customer delivery has been created."
+            )
+            self.crm_tabs.setCurrentIndex(6)
+            self.load_invoice_drafts()
+
+        self.bridge.call("crm-invoice-record", payload=payload, callback=received)
+
+    def load_invoice_drafts(self):
+        self.crm_invoice_seq += 1
+        sequence = self.crm_invoice_seq
+        search = self.crm_invoice_search.text().strip()
+        self.crm_invoice_loaded = False
+        self.crm_invoice_items = []
+        self.crm_invoice_open.setEnabled(False)
+        self.crm_invoice_notice.setText("Loading unissued invoice drafts…")
+        self.crm_invoice_table.blockSignals(True)
+        self.crm_invoice_table.setRowCount(0)
+        self.crm_invoice_table.blockSignals(False)
+
+        def received(data, error):
+            if sequence != self.crm_invoice_seq or search != self.crm_invoice_search.text().strip():
+                return
+            self.crm_invoice_loaded = True
+            if error or not data or not data.get("available"):
+                self.crm_invoice_notice.setText(
+                    error or (data or {}).get("notice", "Invoice drafts unavailable.")
+                )
+                return
+            self.crm_invoice_items = data.get("items") or []
+            self.crm_invoice_table.blockSignals(True)
+            self.crm_invoice_table.setRowCount(len(self.crm_invoice_items))
+            for row, item in enumerate(self.crm_invoice_items):
+                amount = int(item.get("proposed_fee_minor") or 0)
+                major, minor = divmod(amount, 100)
+                values = [
+                    str(item.get("id") or "")[:8].upper(),
+                    item.get("buyer_legal_name") or "",
+                    item.get("service_description") or "",
+                    "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
+                    "Undetermined", display_date(item.get("recorded_at"))
+                ]
+                for col, value in enumerate(values):
+                    self.crm_invoice_table.setItem(
+                        row, col, QTableWidgetItem(str(value))
+                    )
+            self.crm_invoice_table.blockSignals(False)
+            extra = " Showing first 100; refine search." if data.get("more") else ""
+            self.crm_invoice_notice.setText(
+                "{} unissued draft(s).{}".format(len(self.crm_invoice_items), extra)
+            )
+
+        self.bridge.call("crm-invoice-drafts", search, callback=received)
+
+    def invoice_draft_selected(self):
+        row = self.crm_invoice_table.currentRow()
+        self.crm_invoice_open.setEnabled(0 <= row < len(self.crm_invoice_items))
+
+    def open_selected_invoice_draft(self):
+        row = self.crm_invoice_table.currentRow()
+        if not 0 <= row < len(self.crm_invoice_items):
+            return
+        if self.crm_invoice_detail_dialog and self.crm_invoice_detail_dialog.isVisible():
+            self.crm_invoice_detail_dialog.raise_()
+            self.crm_invoice_detail_dialog.activateWindow()
+            return
+        draft_id = self.crm_invoice_items[row]["id"]
+        self.crm_invoice_open.setEnabled(False)
+
+        def received(data, error):
+            self.invoice_draft_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Invoice draft unavailable",
+                    error or (data or {}).get("notice", "Could not read invoice draft.")
+                )
+                return
+            if data.get("draft", {}).get("id") != draft_id:
+                QMessageBox.warning(self, "Draft mismatch", "Refresh the invoice register.")
+                return
+            self.show_invoice_draft_detail(data["draft"])
+
+        self.bridge.call("crm-invoice-draft", draft_id, callback=received)
+
+    def show_invoice_draft_detail(self, draft):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Internal invoice draft · NOT ISSUED")
+        dialog.resize(750, 610)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("INVOICE DRAFT SNAPSHOT · READ ONLY"))
+        warning = QLabel(
+            "No invoice number, date of issue, VAT amount or payable total "
+            "has been determined. Do not send this as a customer invoice."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        form = QFormLayout()
+        fee = int(draft.get("proposed_fee_minor") or 0)
+        major, minor = divmod(fee, 100)
+        fields = [
+            ("Internal draft ID (not invoice #)", draft.get("id")),
+            ("Status", draft.get("status")),
+            ("Proposal revision", draft.get("proposal_revision")),
+            ("Service / scope headline", draft.get("service_description")),
+            ("Proposed fee, not amount due",
+             "{} {:,}.{:02d}".format(draft.get("currency") or "", major, minor)),
+            ("VAT treatment", "UNDETERMINED"),
+            ("Issuer (operator-entered)",
+             str(draft.get("issuer_legal_name") or "") + "\n"
+             + str(draft.get("issuer_registered_office") or "")),
+            ("Buyer (operator-entered)",
+             str(draft.get("buyer_legal_name") or "") + "\n"
+             + str(draft.get("buyer_registered_address") or "")),
+            ("Preparation note", draft.get("preparation_note")),
+            ("Recorded by", draft.get("recorded_by")),
+            ("Recorded at", display_date(draft.get("recorded_at")))
+        ]
+        for title, value in fields:
+            label = QLabel(str(value if value is not None else "Not assigned"))
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            form.addRow(title, label)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body.setLayout(form)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+        self.crm_invoice_detail_dialog = dialog
+        dialog.open()
 
     def open_proposal_tax_review(self):
         row = self.crm_proposal_table.currentRow()
