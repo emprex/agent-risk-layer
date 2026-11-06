@@ -235,6 +235,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_items = []
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
+        self.crm_tax_dialog = None
+        self.crm_tax_context = None
         self.crm_quote_dialog = None
         self.crm_quote_context = None
         self.sales_overview_seq = 0
@@ -1144,6 +1146,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_export_draft_pdf.setEnabled(False)
         self.crm_export_draft_pdf.clicked.connect(self.export_selected_draft_pdf)
         proposal_footer.addWidget(self.crm_export_draft_pdf)
+        self.crm_tax_review_button = QPushButton("International tax review…")
+        self.crm_tax_review_button.setEnabled(False)
+        self.crm_tax_review_button.clicked.connect(self.open_proposal_tax_review)
+        proposal_footer.addWidget(self.crm_tax_review_button)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
         self.pages.addWidget(crm_page)
@@ -2424,6 +2430,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_proposal.setEnabled(False)
         self.crm_edit_lines.setEnabled(False)
         self.crm_export_draft_pdf.setEnabled(False)
+        self.crm_tax_review_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
         self.crm_proposal_table.setRowCount(0)
         self.crm_proposal_table.blockSignals(False)
@@ -2473,6 +2480,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_proposal.setEnabled(available)
         self.crm_edit_lines.setEnabled(available)
         self.crm_export_draft_pdf.setEnabled(available)
+        self.crm_tax_review_button.setEnabled(available)
 
     def open_pipeline_proposal(self):
         selected = self.crm_pipeline_selected
