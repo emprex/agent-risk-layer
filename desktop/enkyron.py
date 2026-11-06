@@ -2731,7 +2731,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_tax_source = QLineEdit()
         self.crm_tax_source.setMaxLength(500)
         self.crm_tax_source.setPlaceholderText(
-            "Optional HMRC guidance, accountant or other reference"
+            "Optional source, e.g. HMRC, ICO or guidance URL (3–500 characters)"
         )
         form.addRow("Reference", self.crm_tax_source)
         body_l.addLayout(form)
@@ -2834,6 +2834,14 @@ class EnkyronWindow(QMainWindow):
                 "Document why this customer qualifies as a business."
             )
             return
+        reference = self.crm_tax_source.text().strip()
+        if reference and not 3 <= len(reference) <= 500:
+            QMessageBox.warning(
+                dialog, "Invalid reference",
+                "The optional source reference must contain at least 3 characters "
+                "(for example ICO or HMRC), or be left blank."
+            )
+            return
         if not self.crm_tax_confirm.isChecked():
             QMessageBox.warning(
                 dialog, "Confirm research", "Confirm this is your own research note."
@@ -2850,7 +2858,7 @@ class EnkyronWindow(QMainWindow):
             "business_evidence": business,
             "location_evidence": location,
             "review_notes": notes,
-            "source_reference": self.crm_tax_source.text().strip(),
+            "source_reference": reference,
             "confirmed": True
         }
 
