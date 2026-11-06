@@ -38,6 +38,8 @@ jobs:
           node --check desktop/enkyron-crm-link.mjs
           node --check desktop/enkyron-crm-tickets.mjs
           node --check desktop/enkyron-crm-company-dossier.mjs
+          node --check desktop/enkyron-crm-qualification.mjs
+          node --check scripts/enkyron-crm-qualification-schema.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check desktop/enkyron-crm-activities.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
@@ -50,7 +52,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -235,15 +237,32 @@ jobs:
                   "tickets": {"total": 0, "more": False, "items": []},
                   "opportunities": {"total": 0, "more": False, "items": []},
                   "activities": {"total": 0, "more": False, "items": []},
+                  "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []}
               }
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
-          assert window.crm_dossier_tabs.count() == 6
+          assert window.crm_dossier_tabs.count() == 7
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
+          assert window.crm_dossier_tabs.tabText(4) == "Qualification (0)"
+          assert window.crm_qualification_subject.currentData() is None
+          window.crm_qualification_fit.setCurrentIndex(
+              window.crm_qualification_fit.findData("potential_fit")
+          )
+          window.crm_qualification_rationale.setPlainText(
+              "Research suggests commercial relevance but client identity is unverified."
+          )
+          window.crm_qualification_next.setText("Review technical scope manually")
+          window.crm_qualification_confirm.setChecked(True)
+          window.record_company_qualification()
+          assert calls[-1][0] == "crm-record-qualification"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["contact_id"] is None
+          assert calls[-1][2]["fit_status"] == "potential_fit"
+          assert calls[-1][2]["confirmed"] is True
           window.crm_dossier_dialog.reject()
           ticket_links_call = next(item for item in calls if item[0] == "crm-company-tickets")
           assert ticket_links_call[1] == company_id
