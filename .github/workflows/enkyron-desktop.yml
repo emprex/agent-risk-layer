@@ -37,6 +37,7 @@ jobs:
           node --check desktop/enkyron-crm.mjs
           node --check desktop/enkyron-crm-link.mjs
           node --check desktop/enkyron-crm-tickets.mjs
+          node --check desktop/enkyron-crm-company-dossier.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check desktop/enkyron-crm-activities.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
@@ -49,7 +50,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -201,6 +202,49 @@ jobs:
           }, None)
           assert window.crm_contacts_table.rowCount() == 1
           assert window.crm_company_detail_tabs.count() == 2
+          assert window.crm_company_dossier_open.isEnabled()
+          window.open_company_dossier()
+          assert window.crm_dossier_dialog.isVisible()
+          assert calls[-1][0] == "crm-company-dossier"
+          assert calls[-1][1] == company_id
+          calls[-1][3]({
+              "available": True,
+              "company": {
+                  "id": company_id, "name": "Synthetic Company",
+                  "relationship_state": "prospect",
+                  "sector": "Cybersecurity", "city": "London",
+                  "country": "UK"
+              },
+              "sections": {
+                  "contacts": {
+                      "total": 1, "more": False,
+                      "items": [{
+                          "full_name": "Synthetic Contact",
+                          "job_title": "Engineering",
+                          "email": "contact@example.invalid",
+                          "marketing_permission": "unknown"
+                      }]
+                  },
+                  "prospects": {
+                      "total": 1, "more": False,
+                      "items": [{
+                          "candidate_name": "Reviewed candidate",
+                          "source": "synthetic-ci"
+                      }]
+                  },
+                  "tickets": {"total": 0, "more": False, "items": []},
+                  "opportunities": {"total": 0, "more": False, "items": []},
+                  "activities": {"total": 0, "more": False, "items": []},
+                  "drafts": {"total": 0, "more": False, "items": []}
+              }
+          }, None)
+          assert "Synthetic Company" in window.crm_dossier_summary.text()
+          assert "Relationship: prospect" in window.crm_dossier_summary.text()
+          assert window.crm_dossier_tabs.count() == 6
+          assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
+          assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
+          assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
+          window.crm_dossier_dialog.reject()
           ticket_links_call = next(item for item in calls if item[0] == "crm-company-tickets")
           assert ticket_links_call[1] == company_id
           example_ticket_id = "22222222-3333-4444-8555-666666666666"
