@@ -45,11 +45,18 @@ test('issuing profile: real PG append-only history, workspace isolation and no C
     assert.equal((await readCompanyProfile(pool,other)).current,null);
     await assert.rejects(()=>recordCompanyProfile(pool,{...base,expected_revision:0},user),/changed/);
     const two=await recordCompanyProfile(pool,{
-      ...base,expected_revision:1,legal_name:'Synthetic Updated Legal Ltd'
+      ...base,expected_revision:1,legal_name:'Synthetic Updated Legal Ltd',
+      company_utr:'0123456789',tax_office_number:'001'
     },user);
     assert.equal(two.revision,2);
     const revised=await readCompanyProfile(pool,user);
     assert.equal(revised.current.legal_name,'Synthetic Updated Legal Ltd');
+    assert.equal(revised.current.company_utr,'0123456789');
+    assert.equal(revised.current.tax_office_number,'001');
+    assert.equal(first.company_utr,null);
+    assert.equal(first.tax_office_number,null);
+    assert.ok(!Object.keys(revised.history[0]).includes('company_utr'));
+    assert.ok(!Object.keys(revised.history[0]).includes('tax_office_number'));
     assert.deepEqual(revised.history.map(x=>x.revision),[2,1]);
     await assert.rejects(()=>pool.query(
       'UPDATE enkyron_operator_company_profiles SET legal_name=$1 WHERE id=$2',

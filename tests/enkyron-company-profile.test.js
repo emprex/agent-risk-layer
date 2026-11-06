@@ -19,6 +19,8 @@ test('validation requires real operator entry, source and strict format, without
   const value=validateCompanyProfile(base);
   assert.equal(value.incorporation_country,'GB');
   assert.equal(value.vat_status,'unknown');
+  assert.equal(validateCompanyProfile({...base,company_utr:'01234 56789'}).company_utr,'0123456789');
+  assert.equal(validateCompanyProfile({...base,tax_office_number:'001'}).tax_office_number,'001');
   assert.ok(!('vat_rate' in value));
   assert.ok(!('verified' in value));
   assert.equal(validateCompanyProfile({...base,vat_status:'registered',vat_number:'GB000000000'}).vat_status,'registered');
@@ -34,6 +36,9 @@ test('validation requires real operator entry, source and strict format, without
     {...base,company_email:'not-email'},
     {...base,website:'file:///etc/passwd'},
     {...base,vat_status:'registered'},
+    {...base,company_utr:'123456789'}, {...base,company_utr:'12345678900'},
+    {...base,company_utr:'12345a7890'}, {...base,tax_office_number:'AB1'},
+    {...base,tax_office_number:'1234'},
     {...base,vat_status:'unknown',vat_number:'GB111'},
     {...base,vat_status:'registered',vat_number:'GB123',vat_effective_date:'2026-02-30'},
     {...base,legal_name:'Synthetic'+String.fromCharCode(0)+'Injected'}]){

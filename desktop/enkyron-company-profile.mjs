@@ -3,13 +3,13 @@
 import {randomUUID} from 'node:crypto';
 
 const FIELDS = Object.freeze([
-  'legal_name','trading_name','registration_number','incorporation_country',
+  'legal_name','trading_name','registration_number','company_utr','tax_office_number','incorporation_country',
   'registered_office','business_address','company_email','telephone','website',
   'vat_status','vat_number','vat_effective_date','default_currency',
   'billing_contact','source_reference','verification_notes'
 ]);
 const LIMITS = Object.freeze({
-  legal_name:160,trading_name:160,registration_number:80,
+  legal_name:160,trading_name:160,registration_number:80,company_utr:20,tax_office_number:10,
   registered_office:600,business_address:600,company_email:254,
   telephone:80,website:500,vat_number:80,billing_contact:300,
   source_reference:500,verification_notes:2000
@@ -45,6 +45,15 @@ export function validateCompanyProfile(input){
     if(f==='incorporation_country'||f==='vat_status'||f==='vat_effective_date'||f==='default_currency')continue;
     data[f]=string(input[f],f,['legal_name','registered_office','source_reference','verification_notes'].includes(f));
   }
+  // HMRC Corporation Tax identifiers are NOT VAT registration identifiers.
+  // Accept only their textual digit form, preserve leading zeros, never derive values.
+  if(data.company_utr){
+    data.company_utr=data.company_utr.replace(/[ -]/g,'');
+    if(!/^[0-9]{10}$/.test(data.company_utr))
+      throw new Error('ENKYRON Company UTR must contain exactly 10 digits');
+  }
+  if(data.tax_office_number&&!/^[0-9]{3}$/.test(data.tax_office_number))
+    throw new Error('ENKYRON Tax Office Number must contain exactly 3 digits');
   if(data.legal_name.length<2)throw new Error('ENKYRON legal name too short');
   if(data.registered_office.length<10)throw new Error('ENKYRON registered office requires full address');
   if(data.source_reference.length<3)throw new Error('ENKYRON source reference too short');
