@@ -31,6 +31,9 @@ test('tax review stores facts and does NOT infer an exempt or zero-rate treatmen
     location_evidence:'',source_reference:''
   }).buyer_country,null);
   assert.equal(validateTaxReview({...valid,buyer_country:'fr'}).buyer_country,'FR');
+  assert.equal(validateTaxReview({...valid,source_reference:'HMRC'}).source_reference,'HMRC');
+  assert.equal(validateTaxReview({...valid,source_reference:'ICO'}).source_reference,'ICO');
+  assert.equal(validateTaxReview({...valid,source_reference:'hmrc'}).source_reference,'hmrc');
   for(const attempt of [
     null,{},[],{...valid,proposal_id:'not-a-proposal'},
     {...valid,expected_revision:0},{...valid,expected_revision:'2'},
@@ -49,7 +52,7 @@ test('tax review stores facts and does NOT infer an exempt or zero-rate treatmen
     {...valid,location_evidence:'short'},
     {...valid,review_notes:'no idea'},
     {...valid,review_notes:'x'.repeat(2001)},
-    {...valid,source_reference:'bad'},
+    {...valid,source_reference:'ab'},
     {...valid,location_evidence:'verified\u0000'}
   ]){
     assert.throws(()=>validateTaxReview(attempt),/CRM/);
