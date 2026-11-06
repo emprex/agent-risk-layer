@@ -35,6 +35,7 @@ function mock({withWorksheet=true,stale=false,existing=false,
  const q=async(sql,params)=>{
   calls.push({sql,params});
   if(sql.startsWith('SELECT id,title,revision'))return {rows:otherWorkspace?[]:[proposal]};
+  if(sql.startsWith('SELECT o.prospect_id'))return {rows:[{prospect_id:'ARL-P-000001'}]};
   if(sql.startsWith('SELECT\n  EXISTS'))return {rows:[{
     issuer_profile:missingStep!=='issuer',company_link:missingStep!=='link',
     buyer_review:missingStep!=='buyer',terms_recorded:missingStep!=='terms',
@@ -57,11 +58,13 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  const r=await readInvoicePreparation(a.pool,id,'local-operator');
  assert.equal(r.can_prepare,false);
  assert.equal(r.worksheet_id,null);
+ assert.equal(r.prospect_id,'ARL-P-000001');
  assert.match(r.blockers.join(' '),/worksheet/);
  assert.deepEqual(r.steps.map(s=>s.key),
    ['issuer','link','buyer','terms','tax','internal','worksheet']);
  assert.equal(r.steps.find(s=>s.key==='worksheet').ready,false);
  assert.deepEqual(a.calls[1].params,['local:local-operator',id]);
+ assert.deepEqual(a.calls[2].params,['local:local-operator',id]);
  assert.equal(a.calls[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
  assert.equal(a.calls.at(-1).sql,'COMMIT');
  const b=mock();

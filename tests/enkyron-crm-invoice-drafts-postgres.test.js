@@ -62,6 +62,7 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     const first=await readInvoicePreparation(db,proposal.id,actor);
     assert.equal(first.can_prepare,false);
     assert.equal(first.worksheet_id,null);
+    assert.equal(first.prospect_id,lead);
     assert.equal(first.proposed_fee_minor,68525);
     assert.equal(first.steps.length,7);
     assert.equal(first.steps.find(x=>x.key==='link').ready,false);

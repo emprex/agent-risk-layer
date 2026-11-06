@@ -45,6 +45,12 @@ const WORKSHEET='SELECT id,proposal_revision,source_approval_id,issuer_profile_i
   +'buyer_review_id,terms_id,tax_review_id,proposal_title,currency,proposed_fee_minor '
   +'FROM enkyron_crm_billing_worksheets '
   +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3';
+// Provenance for the exact selected proposal. No name matching, prospect
+// creation, or buyer verification is performed in this read-only lookup.
+const PROSPECT_FOR_PROPOSAL='SELECT o.prospect_id FROM enkyron_crm_proposal_drafts d '
+  +'JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id '
+  +'AND o.workspace_key=d.workspace_key '
+  +'WHERE d.workspace_key=$1 AND d.id=$2';
 const ISSUER='SELECT id,legal_name,registration_number,registered_office '
   +'FROM enkyron_operator_company_profiles WHERE workspace_key=$1 AND id=$2';
 const BUYER='SELECT id,legal_name,registered_address '
@@ -138,6 +144,10 @@ export async function readInvoicePreparation(pool,proposalId,actor){
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const proposal=(await client.query(PROPOSAL,[person.key,id])).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
+    const prospect=(await client.query(
+      PROSPECT_FOR_PROPOSAL,[person.key,id])).rows[0];
+    if(!prospect?.prospect_id)
+      throw new Error('CRM selected proposal has no source research prospect');
     const checks=(await client.query(
       CHECKLIST,[person.key,id,proposal.revision])).rows[0];
     if(!checks)throw new Error('CRM invoice prerequisite status unavailable');
@@ -154,6 +164,7 @@ export async function readInvoicePreparation(pool,proposalId,actor){
     await client.query('COMMIT');
     return {
       available:true,proposal_id:id,proposal_revision:proposal.revision,
+      prospect_id:prospect.prospect_id,
       proposal_title:proposal.title,currency:proposal.currency,
       proposed_fee_minor:amountMinor(proposal.amount_minor),
       worksheet_id:worksheet?.id??null,
