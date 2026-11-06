@@ -16,6 +16,7 @@ import { getCompanyDossier } from './enkyron-crm-company-dossier.mjs';
 import { recordQualificationReview, validateQualificationReview } from './enkyron-crm-qualification.mjs';
 import { listProposalDrafts, readProposalDraft, createProposalDraft, updateProposalDraft, validateProposalCreate, validateProposalUpdate } from './enkyron-crm-proposals.mjs';
 import { readProposalLines, replaceProposalLines, validateProposalLines } from './enkyron-crm-proposal-lines.mjs';
+import { readProposalForDraftPdf } from './enkyron-crm-proposal-export.mjs';
 import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicketToCompany, validateTicketLink, requireCompanyId } from './enkyron-crm-tickets.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
@@ -169,14 +170,14 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts'].includes(command)) boundedSearch(arg);
   if (command === 'crm-company-tickets') requireCompanyId(arg);
   if (command === 'crm-company-dossier') requireCompanyId(arg);
-  if (['crm-proposal','crm-proposal-lines'].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM proposal ID');
+  if (['crm-proposal','crm-proposal-lines','crm-proposal-export'].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM proposal ID');
   if (command === 'crm-ticket-company') requireTicketId(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
   if (command === 'crm-prospect-review') requireProspectId(arg);
@@ -228,6 +229,7 @@ async function main() {
       command === 'crm-proposal-update' ? await updateProposalDraft(pool, payload, os.userInfo().username) :
       command === 'crm-proposal-lines' ? await readProposalLines(pool, arg, os.userInfo().username) :
       command === 'crm-proposal-lines-save' ? await replaceProposalLines(pool, payload, os.userInfo().username) :
+      command === 'crm-proposal-export' ? await readProposalForDraftPdf(pool, arg, os.userInfo().username) :
       command === 'crm-ticket-options' ? await listLinkableTickets(pool, arg, os.userInfo().username) :
       command === 'crm-ticket-company' ? await ticketLinkedCompany(pool, arg, os.userInfo().username) :
       command === 'crm-link-ticket' ? await linkTicketToCompany(pool, payload, os.userInfo().username) :
