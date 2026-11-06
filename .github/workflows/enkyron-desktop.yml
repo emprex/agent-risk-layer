@@ -71,7 +71,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest desktop.test_enkyron_proposal_pdf
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p qt_enkyron_proposal_pdf_smoke.py
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen
