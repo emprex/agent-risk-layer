@@ -849,6 +849,67 @@ jobs:
           assert window.crm_internal_decision.itemData(1) == "internal_draft_approved"
           assert window.crm_internal_confirm.isChecked() is False
           window.crm_internal_dialog.reject()
+          assert window.crm_billing_button.isEnabled()
+          window.crm_billing_button.click()
+          assert calls[-1][0] == "crm-billing-preparation"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "<b>Untrusted proposal</b>",
+              "research_candidate": "Synthetic Prospect",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": False, "approval_id": None,
+              "blockers": ["Current revision has no internal draft approval"],
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_billing_dialog.isVisible()
+          assert not window.crm_billing_save.isEnabled()
+          assert not window.crm_billing_confirm.isChecked()
+          window.crm_billing_dialog.reject()
+          window.open_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-preparation"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Approved Draft",
+              "research_candidate": "Synthetic Prospect",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": True,
+              "approval_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "blockers": [], "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_billing_dialog.isVisible()
+          assert window.crm_billing_save.isEnabled()
+          window.crm_billing_note.setPlainText(
+              "Internal synthetic billing worksheet; no invoice or tax determination."
+          )
+          window.crm_billing_confirm.setChecked(True)
+          window.save_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-record"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["approval_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_rate" not in calls[-1][2]
+          assert "invoice_number" not in calls[-1][2]
+          window.crm_billing_dialog.reject()
+          window.open_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-preparation"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Approved Draft",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": True,
+              "approval_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "blockers": [],
+              "current": {
+                  "proposal_revision": 1,
+                  "preparation_note": "The synthetic worksheet was recorded and cannot be changed.",
+                  "proposed_fee_minor": 125050, "currency": "GBP"
+              },
+              "history": [], "more": False
+          }, None)
+          assert window.crm_billing_note.isReadOnly()
+          assert not window.crm_billing_save.isEnabled()
+          window.crm_billing_dialog.reject()
           window.crm_terms_button.click()
           assert calls[-1][0] == "crm-commercial-terms"
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
