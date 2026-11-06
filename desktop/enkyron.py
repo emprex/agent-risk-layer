@@ -102,12 +102,7 @@ class DesktopBridge:
     def call(self, action, arg="", payload=None, callback=None):
         process = QProcess(self.owner)
         process.setWorkingDirectory(str(ROOT))
-        if action in ("mail-imap-list", "mail-imap-read"):
-            # Isolated Python worker, with account secrets ONLY on local stdin.
-            # No IMAP password is ever passed through argv or persisted to CRM.
-            process.setProgram(sys.executable)
-            process.setArguments(["-m", "desktop.enkyron_imap_inbox"])
-        elif action in ("operator-state", "evidence-summary", "evidence-pack"):
+        if action in ("operator-state", "evidence-summary", "evidence-pack"):
             # Reuse existing ARL Operator adapters; do not start a second engine.
             process.setProgram(sys.executable)
             module = ("desktop.enkyron_operator_state" if action == "operator-state"
@@ -167,7 +162,6 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action == "operator-state" else
                     60000 if action in ("evidence-summary", "evidence-pack") else
-                    45000 if action in ("mail-imap-list", "mail-imap-read") else
                     15000)
 
 
@@ -221,10 +215,6 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
-        self.imap_config = None
-        self.imap_seq = 0
-        self.imap_messages = []
-        self.imap_login_dialog = None
         self.crm_review_dialog = None
         self.crm_review_id = None
         self.crm_review_digest = None
@@ -914,77 +904,6 @@ class EnkyronWindow(QMainWindow):
         draft_footer.addWidget(self.crm_edit_draft)
         drafts_l.addLayout(draft_footer)
         self.crm_tabs.addTab(drafts_page, "Mail drafts")
-
-        # IMAP is explicit/opt-in, read-only and transient. Nothing is synced
-        # into PostgreSQL. All message content renders as plain text.
-        inbox_page = QWidget()
-        inbox_l = QVBoxLayout(inbox_page)
-        inbox_l.setSpacing(12)
-        inbox_l.addWidget(section_title("CRM · LIVE READ-ONLY INBOX"))
-        imap_explain = QLabel(
-            "Connect explicitly to your professional IMAP server over verified TLS. "
-            "Only the latest 30 headers are previewed; email bodies are fetched on "
-            "selection without marking messages read. No SMTP, send, local cache, "
-            "automatic contact association or stored account password."
-        )
-        imap_explain.setWordWrap(True)
-        inbox_l.addWidget(imap_explain)
-        inbox_toolbar = QHBoxLayout()
-        self.imap_status = QLabel("Not connected")
-        self.imap_status.setWordWrap(True)
-        inbox_toolbar.addWidget(self.imap_status, 1)
-        self.imap_connect = QPushButton("Connect inbox…")
-        self.imap_connect.clicked.connect(self.open_imap_connect)
-        inbox_toolbar.addWidget(self.imap_connect)
-        self.imap_refresh = QPushButton("Refresh")
-        self.imap_refresh.setEnabled(False)
-        self.imap_refresh.clicked.connect(self.load_imap_inbox)
-        inbox_toolbar.addWidget(self.imap_refresh)
-        self.imap_disconnect = QPushButton("Disconnect")
-        self.imap_disconnect.setEnabled(False)
-        self.imap_disconnect.clicked.connect(self.disconnect_imap)
-        inbox_toolbar.addWidget(self.imap_disconnect)
-        inbox_l.addLayout(inbox_toolbar)
-        self.imap_table = QTableWidget(0, 3)
-        self.imap_table.setHorizontalHeaderLabels(
-            ["From", "Subject", "Date (mail header)"]
-        )
-        self.imap_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.imap_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
-        )
-        self.imap_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.ResizeToContents
-        )
-        self.imap_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self.imap_table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
-        self.imap_table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
-        )
-        self.imap_table.setAlternatingRowColors(True)
-        self.imap_table.itemSelectionChanged.connect(self.imap_selected)
-        inbox_l.addWidget(self.imap_table, 2)
-        preview_heading = QHBoxLayout()
-        preview_heading.addWidget(section_title("SELECTED MESSAGE · PLAIN TEXT"))
-        preview_heading.addStretch()
-        self.imap_open = QPushButton("Read selected message")
-        self.imap_open.setEnabled(False)
-        self.imap_open.clicked.connect(self.read_imap_message)
-        preview_heading.addWidget(self.imap_open)
-        inbox_l.addLayout(preview_heading)
-        self.imap_preview = make_text_area()
-        self.imap_preview.setPlaceholderText(
-            "Select a message to read its plain-text content. HTML and attachments "
-            "are never rendered or downloaded for large messages."
-        )
-        inbox_l.addWidget(self.imap_preview, 1)
-        self.crm_tabs.addTab(inbox_page, "Inbox")
         self.pages.addWidget(crm_page)
 
         self.crm_search_timer = QTimer(self)
@@ -1755,184 +1674,6 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_followup.setEnabled(selected)
         self.crm_activity_button.setEnabled(selected)
         self.crm_compose_button.setEnabled(selected)
-
-    def open_imap_connect(self):
-        if self.imap_login_dialog and self.imap_login_dialog.isVisible():
-            self.imap_login_dialog.raise_()
-            return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · Connect read-only IMAP inbox")
-        dialog.setMinimumWidth(550)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(section_title("READ-ONLY IMAP · VERIFIED TLS"))
-        info = QLabel(
-            "Enter the server settings supplied by your email provider. "
-            "Port 993 with certificate validation is mandatory. "
-            "Some providers require an app password or OAuth, which is "
-            "not yet supported here. The password stays in memory during "
-            "this app session and is never stored in PostgreSQL."
-        )
-        info.setWordWrap(True)
-        layout.addWidget(info)
-        form = QFormLayout()
-        self.imap_host_input = QLineEdit()
-        self.imap_host_input.setMaxLength(253)
-        self.imap_host_input.setPlaceholderText("imap.your-provider.example")
-        form.addRow("IMAP server", self.imap_host_input)
-        self.imap_user_input = QLineEdit()
-        self.imap_user_input.setMaxLength(254)
-        self.imap_user_input.setPlaceholderText("Mailbox username")
-        form.addRow("Account", self.imap_user_input)
-        self.imap_password_input = QLineEdit()
-        self.imap_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.imap_password_input.setPlaceholderText("Password or app password")
-        form.addRow("Secret", self.imap_password_input)
-        form.addRow("TLS port", QLabel("993 (required)"))
-        layout.addLayout(form)
-        buttons = QHBoxLayout()
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(dialog.reject)
-        buttons.addWidget(cancel)
-        buttons.addStretch()
-        connect = QPushButton("Connect read-only")
-        connect.setObjectName("primary")
-        connect.clicked.connect(self.connect_imap)
-        buttons.addWidget(connect)
-        layout.addLayout(buttons)
-        self.imap_login_dialog = dialog
-        dialog.open()
-
-    def connect_imap(self):
-        dialog = self.imap_login_dialog
-        if not dialog or not dialog.isVisible():
-            return
-        host = self.imap_host_input.text().strip()
-        username = self.imap_user_input.text().strip()
-        password = self.imap_password_input.text()
-        if not host or not username or not password:
-            QMessageBox.warning(
-                dialog, "IMAP settings required",
-                "Enter an IMAP server, account and password/app password."
-            )
-            return
-        # Explicit operator action only. Credentials are never written to files,
-        # tables, logs, command arguments or any mail contact record.
-        self.disconnect_imap()
-        self.imap_config = {
-            "host": host, "port": 993,
-            "username": username, "password": password
-        }
-        self.imap_password_input.clear()
-        dialog.accept()
-        self.imap_connect.setText("Change account…")
-        self.imap_disconnect.setEnabled(True)
-        self.load_imap_inbox()
-
-    def disconnect_imap(self):
-        # Invalidate asynchronous results, including responses from a completed
-        # subprocess whose request was started before disconnect.
-        self.imap_seq += 1
-        self.imap_config = None
-        self.imap_messages = []
-        self.imap_table.blockSignals(True)
-        self.imap_table.setRowCount(0)
-        self.imap_table.blockSignals(False)
-        self.imap_preview.clear()
-        self.imap_status.setText("Not connected")
-        self.imap_connect.setText("Connect inbox…")
-        self.imap_refresh.setEnabled(False)
-        self.imap_open.setEnabled(False)
-        self.imap_disconnect.setEnabled(False)
-
-    def load_imap_inbox(self):
-        config = self.imap_config
-        if not config:
-            return
-        self.imap_seq += 1
-        seq = self.imap_seq
-        self.imap_refresh.setEnabled(False)
-        self.imap_open.setEnabled(False)
-        self.imap_status.setText("Connecting to read-only IMAP…")
-
-        def received(data, error):
-            if seq != self.imap_seq or self.imap_config is not config:
-                return
-            if error or not data or not data.get("readonly"):
-                self.imap_status.setText(
-                    error or "Read-only IMAP preview was not available."
-                )
-                self.imap_refresh.setEnabled(True)
-                return
-            self.imap_messages = data.get("messages", [])
-            self.imap_table.blockSignals(True)
-            self.imap_table.setRowCount(len(self.imap_messages))
-            for row, msg in enumerate(self.imap_messages):
-                for col, key in enumerate(("from", "subject", "date")):
-                    self.imap_table.setItem(
-                        row, col, QTableWidgetItem(str(msg.get(key) or ""))
-                    )
-            self.imap_table.blockSignals(False)
-            self.imap_preview.clear()
-            self.imap_refresh.setEnabled(True)
-            self.imap_status.setText(
-                "Connected read-only · showing {} newest of {} message(s). "
-                "No messages marked read or stored.".format(
-                    len(self.imap_messages), data.get("total_in_inbox", 0)
-                )
-            )
-
-        self.bridge.call(
-            "mail-imap-list", payload={**config, "action": "list"},
-            callback=received
-        )
-
-    def imap_selected(self):
-        row = self.imap_table.currentRow()
-        self.imap_open.setEnabled(
-            bool(self.imap_config) and 0 <= row < len(self.imap_messages)
-        )
-        self.imap_preview.clear()
-
-    def read_imap_message(self):
-        row = self.imap_table.currentRow()
-        if not self.imap_config or row < 0 or row >= len(self.imap_messages):
-            return
-        config = self.imap_config
-        uid = self.imap_messages[row]["uid"]
-        self.imap_seq += 1
-        seq = self.imap_seq
-        self.imap_open.setEnabled(False)
-        self.imap_preview.setPlainText(
-            "Reading a limited-size plain-text message without marking it read…"
-        )
-
-        def received(data, error):
-            if seq != self.imap_seq or self.imap_config is not config:
-                return
-            current = self.imap_table.currentRow()
-            if (current < 0 or current >= len(self.imap_messages) or
-                    self.imap_messages[current].get("uid") != uid):
-                return
-            self.imap_open.setEnabled(True)
-            if error or not data or not data.get("readonly") or data.get("uid") != uid:
-                self.imap_preview.setPlainText(
-                    error or "Unable to read this message."
-                )
-                return
-            header = self.imap_messages[current]
-            self.imap_preview.setPlainText(
-                "From: {}\nSubject: {}\nDate: {}\n\n{}".format(
-                    data.get("from") or header.get("from") or "",
-                    data.get("subject") or header.get("subject") or "",
-                    data.get("date") or header.get("date") or "",
-                    data.get("body_text") or "(No plain-text body)"
-                )
-            )
-
-        self.bridge.call(
-            "mail-imap-read", payload={**config, "action": "read", "uid": uid},
-            callback=received
-        )
 
     def mail_draft_search_changed(self, _value):
         self.crm_drafts_seq += 1
