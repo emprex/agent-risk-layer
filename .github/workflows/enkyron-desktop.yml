@@ -923,6 +923,7 @@ jobs:
               "available": True,
               "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
               "proposal_revision": 1, "proposal_title": "Synthetic Service",
+              "prospect_id": "ARL-P-000001",
               "currency": "GBP", "proposed_fee_minor": 125050,
               "worksheet_id": None, "can_prepare": False,
               "blockers": ["Current revision has no billing worksheet"],
@@ -931,7 +932,8 @@ jobs:
                   {"key": "issuer", "action": "issuer",
                    "label": "Issuing company profile", "ready": True},
                   {"key": "link", "action": "research",
-                   "label": "Associate prospect with a CRM company", "ready": True},
+                   "label": "Associate prospect with a CRM company", "ready": False,
+                   "detail": "Research prospect has no explicit human-reviewed company link."},
                   {"key": "buyer", "action": "buyer",
                    "label": "Buyer identity review", "ready": False,
                    "detail": "No buyer documentary record for this revision."},
@@ -955,11 +957,57 @@ jobs:
           assert not window.crm_invoice_prepare_note.isEnabled()
           assert not window.crm_invoice_prepare_confirm.isEnabled()
           assert window.crm_invoice_next_button.isVisible()
-          assert "Buyer identity review" in window.crm_invoice_next_button.text()
+          assert "Associate prospect with a CRM company" in window.crm_invoice_next_button.text()
           window.save_invoice_draft_preparation()
           assert calls[-1][0] == "crm-invoice-prepare"
           window.crm_invoice_next_button.click()
           assert not window.crm_invoice_prepare_dialog.isVisible()
+          assert calls[-1][0] == "crm-prospect-review"
+          assert calls[-1][1] == "ARL-P-000001"
+          calls[-1][3]({
+              "available": True,
+              "prospect": {
+                  "id": "ARL-P-000001",
+                  "company_name": "Synthetic Research Co.",
+                  "source": "synthetic-ci",
+                  "website": "https://example.invalid",
+                  "buyer_name": "Unconfirmed Contact"
+              },
+              "source_digest": "a" * 64,
+              "linked": None, "matches": [], "more_matches": False
+          }, None)
+          assert window.crm_review_dialog.isVisible()
+          assert window.crm_review_choice.currentData() == {"mode": "create"}
+          assert not window.crm_review_check.isChecked()
+          assert window.crm_invoice_link_return_proposal_id == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_review_dialog.reject()
+          assert window.crm_invoice_link_return_proposal_id is None
+          assert calls[-1][0] == "crm-prospect-review"
+          # A completed link allows the checklist to proceed to buyer review.
+          window.open_proposal_invoice_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "prospect_id": "ARL-P-000001",
+              "proposal_revision": 1, "proposal_title": "Synthetic Service",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": None, "can_prepare": False,
+              "blockers": ["Buyer review missing"],
+              "steps": [
+                  {"key": "issuer", "action": "issuer", "label": "Issuer", "ready": True},
+                  {"key": "link", "action": "research", "label": "Association", "ready": True},
+                  {"key": "buyer", "action": "buyer", "label": "Buyer identity review",
+                   "ready": False, "detail": "Review the linked company"},
+                  {"key": "terms", "action": "terms", "label": "Terms", "ready": False},
+                  {"key": "tax", "action": "tax", "label": "Tax", "ready": False},
+                  {"key": "internal", "action": "internal", "label": "Internal", "ready": False},
+                  {"key": "worksheet", "action": "worksheet", "label": "Worksheet",
+                   "ready": False}
+              ]
+          }, None)
+          assert "Buyer identity review" in window.crm_invoice_next_button.text()
+          window.crm_invoice_next_button.click()
           assert calls[-1][0] == "crm-buyer-review"
           window.open_proposal_invoice_preparation()
           assert calls[-1][0] == "crm-invoice-prepare"
