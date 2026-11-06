@@ -768,6 +768,22 @@ jobs:
           assert calls[-1][2]["amount_minor"] == 130075
           window.crm_proposal_dialog.reject()
           window.crm_tabs.setCurrentIndex(4)
+          assert calls[-1][0] == "crm-sales-pipeline"
+          calls[-1][3]({
+              "available": True, "total": 1,
+              "lanes": [{
+                  "id": "prospecting", "title": "Prospecting", "total": 1,
+                  "more": False, "items": [{
+                      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                      "prospect_id": "ARL-P-000001",
+                      "company_name_at_creation": "Synthetic Research Co.",
+                      "stage": "research", "version": 1,
+                      "next_action": "Review public company background",
+                      "due_date": "2026-11-12"
+                  }]
+              }]
+          }, None)
+          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
           window.open_pipeline_opportunity()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.currentData() == "research"
