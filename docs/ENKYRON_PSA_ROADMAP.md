@@ -594,3 +594,12 @@ La couverture PSA est inspirée des grandes familles reconnues dans HaloPSA (tic
 ## ENKYRON E02 — Issuing company legal & billing profile (2026-11-06)
 
 The operator's issuing-company identity is separate from customer CRM companies. A local-operator-scoped, append-only profile records manually entered legal identity, VAT registration status, billing contact and currency, source reference and verification notes. Revision conflicts are refused. Migration `076_enkyron_operator_company_profiles.sql` requires an independent backup-and-check installation after 075; it does not change CRM customer records. The native Qt entry is `CRM → Issuing company profile…`. No invoice, tax determination or proposal is issued or changed by saving. **Status: implemented on GitHub; CI and operator Debian acceptance are separate gates.**
+
+
+## ENKYRON issuer legal profile — HMRC reference separation / SQLSTATE diagnosis (2026-11-06)
+
+User Debian screenshot: initial issuing-company profile save reported a generic PostgreSQL failure despite successful read and green synthetic CI. Actual database SQLSTATE is not available from the screenshot, so no root cause is asserted. The bridge now returns a fixed, **redacted** SQLSTATE category for issuer-profile operations while keeping arbitrary SQL, values and addresses private. **Never claim local save success without a confirmed roundtrip.**
+
+Migration `077_enkyron_operator_tax_references.sql` adds optional `company_utr` (HMRC Corporation Tax UTR, 10 digits) and `tax_office_number` (3 digits) to the existing append-only issuer profile. Historical migration 076 remains unchanged; history lists no UTR. The native Qt UTR field masks typed digits. Company UTR is not a VAT registration number and is never auto-populated from the company's registration number. For operator confirmation, do not assert `not_registered` VAT status without supporting evidence. UK invoicing default GBP can be chosen by the user. A copied "Copier" label in the source reference is rejected before persistence.
+
+**Local follow-up:** install 077 using its explicit backup-before-change script after verifying prior migrations; reproduce the save; check the sanitized SQLSTATE if it fails; verify readback. No customer assessment is involved.

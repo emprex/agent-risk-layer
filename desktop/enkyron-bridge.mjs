@@ -19,6 +19,7 @@ import { readProposalLines, replaceProposalLines, validateProposalLines } from '
 import { readProposalForDraftPdf } from './enkyron-crm-proposal-export.mjs';
 import { getTaxReviews, recordTaxReview, validateTaxReview } from './enkyron-crm-tax-review.mjs';
 import {readCompanyProfile,recordCompanyProfile,validateCompanyProfile} from './enkyron-company-profile.mjs';
+import {explainLocalError} from './enkyron-db-errors.mjs';
 import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicketToCompany, validateTicketLink, requireCompanyId } from './enkyron-crm-tickets.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
@@ -273,7 +274,10 @@ main().catch(error => {
   const message = String(error?.message || '');
   const expected =
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Only the assigned|CRM )/.test(message);
-  emit({ ok: false, error: expected ? message.slice(0, 250) :
-    'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
+  const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(process.argv[2]);
+  emit({ ok: false, error: profileOperation
+    ? explainLocalError(error)
+    : expected ? message.slice(0, 250)
+    : 'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;
 });

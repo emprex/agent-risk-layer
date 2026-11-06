@@ -44,9 +44,11 @@ jobs:
           node --check desktop/enkyron-crm-proposal-export.mjs
           node --check desktop/enkyron-crm-tax-review.mjs
           node --check desktop/enkyron-company-profile.mjs
+          node --check desktop/enkyron-db-errors.mjs
           node --check scripts/enkyron-crm-tax-review-schema.mjs
           node --check scripts/enkyron-crm-tax-source-schema.mjs
           node --check scripts/enkyron-company-profile-schema.mjs
+          node --check scripts/enkyron-company-tax-references-schema.mjs
           node --check scripts/enkyron-crm-proposal-lines-schema.mjs
           node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
@@ -62,7 +64,7 @@ jobs:
           node --check scripts/enkyron-crm-link-schema.mjs
           node --check scripts/enkyron-crm-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -82,7 +84,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
@@ -206,6 +208,9 @@ jobs:
           assert calls[-1][0] == "crm-own-profile"
           calls[-1][3]({"available":True,"current":None,"history":[]}, None)
           assert window.crm_company_profile_dialog.isVisible()
+          assert "company_utr" in window.company_profile_inputs
+          assert "tax_office_number" in window.company_profile_inputs
+          assert window.company_profile_inputs["company_utr"].echoMode() == QLineEdit.EchoMode.Password
           window.crm_company_profile_dialog.reject()
           assert window.crm_tabs.tabText(3) == "Mail"
           assert [window.crm_mail_folders.tabText(i) for i in range(3)] == [

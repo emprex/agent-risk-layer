@@ -2677,6 +2677,20 @@ class EnkyronWindow(QMainWindow):
         field("legal_name", "Legal company name *", 160)
         field("trading_name", "Trading name", 160)
         field("registration_number", "Company registration number", 80)
+        tax_hint = QLabel(
+            "Corporation Tax references (HMRC): UTR is 10 digits, Tax Office "
+            "Number is 3 digits if supplied. These are NOT VAT numbers. "
+            "Keep the UTR out of document references and review notes."
+        )
+        tax_hint.setWordWrap(True)
+        form.addRow("", tax_hint)
+        field("company_utr", "Company UTR (Corporation Tax)", 20,
+              hint="HMRC 10-digit UTR — stored locally")
+        self.company_profile_inputs["company_utr"].setEchoMode(
+            QLineEdit.EchoMode.Password
+        )
+        field("tax_office_number", "Tax Office Number (optional)", 3,
+              hint="HMRC 3-digit office code")
         field("incorporation_country", "Country of incorporation *", 2,
               hint="ISO code, e.g. GB")
         field("registered_office", "Registered office address *", 600, True)
@@ -2707,9 +2721,10 @@ class EnkyronWindow(QMainWindow):
         self.company_profile_inputs["default_currency"] = currency
         field("billing_contact", "Billing contact", 300)
         field("source_reference", "Document / registry reference *", 500,
-              hint="Where these details came from")
+              hint="Document or registry reference only — omit copied button labels")
         field("verification_notes", "Evidence / review notes *", 2000, True,
-              "What was checked? What is still unverified? (20–2000 characters)")
+              "State which source was checked and what remains unverified; do "
+              "not insert confidential tax numbers (20–2000 characters).")
         body_l.addLayout(form)
         history = data.get("history") or []
         body_l.addWidget(section_title("IMMUTABLE REVISION HISTORY"))
@@ -2770,6 +2785,28 @@ class EnkyronWindow(QMainWindow):
                 payload[key] = widget.toPlainText().strip()
             else:
                 payload[key] = widget.text().strip()
+        if re.search(r"\bCopier\s*$", payload.get("source_reference", ""), re.I):
+            QMessageBox.warning(
+                dialog, "Reference contains clipboard text",
+                "Remove the word 'Copier' from the end of the registry reference."
+            )
+            return
+        if payload.get("company_utr") and not re.fullmatch(
+            r"(?:\d[ -]?){9}\d", payload["company_utr"]
+        ):
+            QMessageBox.warning(
+                dialog, "Invalid Company UTR",
+                "The HMRC Company UTR must contain exactly 10 digits."
+            )
+            return
+        if payload.get("tax_office_number") and not re.fullmatch(
+            r"\d{3}", payload["tax_office_number"]
+        ):
+            QMessageBox.warning(
+                dialog, "Invalid Tax Office Number",
+                "The HMRC Tax Office Number must contain 3 digits."
+            )
+            return
         if not all(payload.get(key) for key in (
             "legal_name", "incorporation_country", "registered_office",
             "default_currency", "source_reference", "verification_notes"
