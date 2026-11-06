@@ -1101,6 +1101,110 @@ class EnkyronWindow(QMainWindow):
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
 
+    def crm_tab_changed(self, index):
+        if index == 4 and self.navigation.currentRow() == 2:
+            self.load_pipeline()
+
+    def load_pipeline(self):
+        self.crm_pipeline_seq += 1
+        sequence = self.crm_pipeline_seq
+        self.crm_pipeline_loaded = False
+        self.crm_pipeline_selected = None
+        self.crm_pipeline_edit.setEnabled(False)
+        self.crm_pipeline_notice.setText("Loading opportunities…")
+        for code, widget in self.crm_pipeline_lists.items():
+            widget.blockSignals(True)
+            widget.clear()
+            widget.blockSignals(False)
+            self.crm_pipeline_cards[code] = []
+            self.crm_pipeline_labels[code].setText(
+                self.crm_pipeline_labels[code].text().split(" · ")[0] + " · 0"
+            )
+
+        def received(data, error):
+            if sequence != self.crm_pipeline_seq:
+                return
+            if error or not data or not data.get("available", False):
+                self.crm_pipeline_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "The sales pipeline is not available."
+                    )
+                )
+                return
+            self.crm_pipeline_loaded = True
+            any_truncated = False
+            for lane in data.get("lanes", []):
+                code = lane.get("id")
+                if code not in self.crm_pipeline_lists:
+                    continue
+                widget = self.crm_pipeline_lists[code]
+                entries = lane.get("items", [])
+                self.crm_pipeline_cards[code] = entries
+                self.crm_pipeline_labels[code].setText(
+                    "{} · {}".format(lane.get("title", code), lane.get("total", 0))
+                )
+                widget.blockSignals(True)
+                for entry in entries:
+                    title = (entry.get("company_name_at_creation") or "Untitled")
+                    stage = (entry.get("stage") or "").replace("_", " ").title()
+                    next_action = entry.get("next_action") or ""
+                    if len(next_action) > 70:
+                        next_action = next_action[:67] + "…"
+                    due = format_followup_due(
+                        entry.get("due_date"), entry.get("stage")
+                    )
+                    card = QListWidgetItem(
+                        "{}\n{}\n{}\n{}".format(title, stage, next_action, due)
+                    )
+                    widget.addItem(card)
+                widget.blockSignals(False)
+                any_truncated = any_truncated or bool(lane.get("more"))
+            message = "{} opportunity/opportunities across five stages.".format(
+                data.get("total", 0)
+            )
+            if any_truncated:
+                message += (
+                    " Some columns display their first 30 items only. "
+                    "Use Follow-ups to search all records."
+                )
+            self.crm_pipeline_notice.setText(message)
+
+        self.bridge.call("crm-sales-pipeline", callback=received)
+
+    def pipeline_selected(self, lane):
+        cards = self.crm_pipeline_lists[lane]
+        selected = cards.currentRow()
+        if selected < 0 or selected >= len(self.crm_pipeline_cards[lane]):
+            if self.crm_pipeline_selected and self.crm_pipeline_selected[0] == lane:
+                self.crm_pipeline_selected = None
+                self.crm_pipeline_edit.setEnabled(False)
+            return
+        for code, other in self.crm_pipeline_lists.items():
+            if code != lane:
+                other.blockSignals(True)
+                other.setCurrentRow(-1)
+                other.clearSelection()
+                other.blockSignals(False)
+        self.crm_pipeline_selected = (lane, selected)
+        self.crm_pipeline_edit.setEnabled(True)
+
+    def open_pipeline_opportunity(self):
+        selection = self.crm_pipeline_selected
+        if not selection:
+            return
+        if self.crm_followup_dialog and self.crm_followup_dialog.isVisible():
+            self.crm_followup_dialog.raise_()
+            return
+        lane, row = selection
+        entries = self.crm_pipeline_cards.get(lane, [])
+        if row < 0 or row >= len(entries):
+            return
+        existing = dict(entries[row])
+        self.build_followup_dialog({
+            "id": existing["prospect_id"],
+            "company_name": existing.get("company_name_at_creation") or ""
+        }, existing)
+
     def load_sales_overview(self):
         self.sales_overview_seq += 1
         seq = self.sales_overview_seq
@@ -2429,7 +2533,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_followup_context = {
             "prospect_id": prospect["id"],
             "company_name": prospect.get("company_name") or "",
-            "existing": existing
+            "existing": existing,
+            "return_tab": self.crm_tabs.currentIndex()
         }
         self.crm_followup_dialog = dialog
         dialog.open()
@@ -2478,7 +2583,11 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             dialog.accept()
-            self.crm_tabs.setCurrentIndex(2)
+            if self.crm_followup_context.get("return_tab") == 4:
+                self.crm_tabs.setCurrentIndex(4)
+                self.load_pipeline()
+            else:
+                self.crm_tabs.setCurrentIndex(2)
             self.crm_followup_search.clear()
             self.load_followups()
 
