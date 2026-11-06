@@ -12,6 +12,7 @@ import { listActivityTimeline, recordActivity, validateActivity, requireOpportun
 import { listMailDrafts, readMailDraft, createMailDraft, updateMailDraft, validateDraftCreate, validateDraftUpdate } from './enkyron-crm-mail-drafts.mjs';
 import { getSalesOverview } from './enkyron-crm-overview.mjs';
 import { getSalesPipeline } from './enkyron-crm-pipeline.mjs';
+import { getCompanyDossier } from './enkyron-crm-company-dossier.mjs';
 import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicketToCompany, validateTicketLink, requireCompanyId } from './enkyron-crm-tickets.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
@@ -165,12 +166,13 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts'].includes(command)) boundedSearch(arg);
   if (command === 'crm-company-tickets') requireCompanyId(arg);
+  if (command === 'crm-company-dossier') requireCompanyId(arg);
   if (command === 'crm-ticket-company') requireTicketId(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
   if (command === 'crm-prospect-review') requireProspectId(arg);
@@ -210,6 +212,7 @@ async function main() {
       command === 'crm-companies' ? await listCompanies(pool, arg, os.userInfo().username) :
       command === 'crm-contacts' ? await listContacts(pool, arg, os.userInfo().username) :
       command === 'crm-company-tickets' ? await listCompanyTickets(pool, arg, os.userInfo().username) :
+      command === 'crm-company-dossier' ? await getCompanyDossier(pool, arg, os.userInfo().username) :
       command === 'crm-ticket-options' ? await listLinkableTickets(pool, arg, os.userInfo().username) :
       command === 'crm-ticket-company' ? await ticketLinkedCompany(pool, arg, os.userInfo().username) :
       command === 'crm-link-ticket' ? await linkTicketToCompany(pool, payload, os.userInfo().username) :
