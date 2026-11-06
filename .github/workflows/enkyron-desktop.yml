@@ -44,6 +44,7 @@ jobs:
           node --check desktop/enkyron-crm-proposal-export.mjs
           node --check desktop/enkyron-crm-tax-review.mjs
           node --check scripts/enkyron-crm-tax-review-schema.mjs
+          node --check scripts/enkyron-crm-tax-source-schema.mjs
           node --check scripts/enkyron-crm-proposal-lines-schema.mjs
           node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
@@ -807,6 +808,7 @@ jobs:
           window.crm_tax_notes.setPlainText(
               "Confirm tax treatment and any French reverse-charge or local rules with a specialist."
           )
+          window.crm_tax_source.setText("HMRC")
           window.crm_tax_confirm.setChecked(True)
           window.save_proposal_tax_review()
           assert calls[-1][0] == "crm-tax-record"
@@ -814,6 +816,7 @@ jobs:
           assert calls[-1][2]["expected_revision"] == 1
           assert calls[-1][2]["buyer_type"] == "business"
           assert calls[-1][2]["buyer_country"] == "FR"
+          assert calls[-1][2]["source_reference"] == "HMRC"
           assert calls[-1][2]["service_mode"] == "human_led_advisory"
           assert calls[-1][2]["uk_vat_registration"] == "unknown"
           assert "vat_rate" not in calls[-1][2]
