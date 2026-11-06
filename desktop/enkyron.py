@@ -235,7 +235,7 @@ class EnkyronWindow(QMainWindow):
         top_layout.addSpacing(24)
         top_layout.addWidget(QLabel("AgentRiskLayer · Client Desk & Security Operations"))
         top_layout.addStretch()
-        top_layout.addWidget(QLabel("LOCAL OPERATOR  |  PostgreSQL"))
+        top_layout.addWidget(QLabel("LOCAL WORKSPACE"))
         outer.addWidget(top)
 
         # Application-level navigation; the ticket list is no longer the main menu.
@@ -823,7 +823,7 @@ class EnkyronWindow(QMainWindow):
             "Create a follow-up from a selected prospect in Existing prospect research."
         ))
         footer.addStretch()
-        self.crm_compose_button = QPushButton("Compose mail draft…")
+        self.crm_compose_button = QPushButton("Write email…")
         self.crm_compose_button.setEnabled(False)
         self.crm_compose_button.clicked.connect(self.open_compose_draft)
         footer.addWidget(self.crm_compose_button)
@@ -840,11 +840,10 @@ class EnkyronWindow(QMainWindow):
         drafts_page = QWidget()
         drafts_l = QVBoxLayout(drafts_page)
         drafts_l.setSpacing(12)
-        drafts_l.addWidget(section_title("CRM · LOCAL UNSENT MAIL DRAFTS"))
+        drafts_l.addWidget(section_title("EMAIL · DRAFTS"))
         drafts_info = QLabel(
-            "These are plain-text drafts stored in local PostgreSQL. "
-            "They are not messages in an email inbox, and ENKYRON cannot send them. "
-            "Unverified research contacts are never inserted as recipients automatically."
+            "Write and manage email drafts linked to your opportunities. "
+            "Sending is not available yet. Check recipient details before using them."
         )
         drafts_info.setWordWrap(True)
         drafts_l.addWidget(drafts_info)
@@ -1683,7 +1682,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_drafts_seq += 1
         seq = self.crm_drafts_seq
         search = self.crm_draft_search.text()
-        self.crm_draft_notice.setText("Reading local unsent drafts…")
+        self.crm_draft_notice.setText("Loading drafts…")
         self.crm_edit_draft.setEnabled(False)
 
         def received(data, error):
@@ -1695,12 +1694,12 @@ class EnkyronWindow(QMainWindow):
             self.crm_draft_table.setRowCount(0)
             self.crm_draft_table.blockSignals(False)
             if error:
-                self.crm_draft_notice.setText("Cannot read local draft list.")
+                self.crm_draft_notice.setText("Unable to load drafts.")
                 self.show_error(error)
                 return
             if not data or not data.get("available", True):
                 self.crm_draft_notice.setText(
-                    (data or {}).get("notice", "Local mail draft migration 070 is required.")
+                    (data or {}).get("notice", "Drafts are currently unavailable. Check the application setup.")
                 )
                 return
             self.crm_draft_items = data.get("items", [])
@@ -1721,7 +1720,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_draft_table.blockSignals(False)
             suffix = " First 100; refine search." if data.get("more") else ""
             self.crm_draft_notice.setText(
-                "{} local unsent draft(s).{}".format(len(self.crm_draft_items), suffix)
+                "{} draft(s) saved.{}".format(len(self.crm_draft_items), suffix)
             )
 
         self.bridge.call("crm-mail-drafts", search, callback=received)
@@ -1771,14 +1770,14 @@ class EnkyronWindow(QMainWindow):
         dialog = QDialog(self)
         existing = bool(draft.get("id"))
         dialog.setWindowTitle(
-            "ENKYRON · Edit unsent mail draft" if existing
-            else "ENKYRON · New unsent mail draft"
+            "ENKYRON · Edit draft" if existing
+            else "ENKYRON · New draft"
         )
         dialog.resize(720, 590)
         dialog.setMinimumSize(610, 500)
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
-            "EDIT LOCAL MAIL DRAFT" if existing else "COMPOSE LOCAL MAIL DRAFT"
+            "EDIT DRAFT" if existing else "NEW DRAFT"
         ))
         prospect = QLabel(
             "Opportunity: {}".format(draft.get("company_name_at_creation") or "Unknown")
@@ -1786,9 +1785,8 @@ class EnkyronWindow(QMainWindow):
         prospect.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(prospect)
         warning = QLabel(
-            "Unsent local plain-text draft. Recipient addresses must be entered "
-            "manually and checked against applicable permission and outreach rules. "
-            "ENKYRON is not connected to a mailbox and has no send capability."
+            "This message is a draft, not a sent email. "
+            "Enter a recipient only after checking their contact details."
         )
         warning.setWordWrap(True)
         layout.addWidget(warning)
@@ -1808,7 +1806,7 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(form)
         self.crm_mail_body = QPlainTextEdit()
         self.crm_mail_body.setPlaceholderText(
-            "Write your plain-text email draft here. Do not include secrets."
+            "Write your message here."
         )
         self.crm_mail_body.setPlainText(draft.get("body_text") or "")
         layout.addWidget(self.crm_mail_body, 1)
@@ -1817,7 +1815,7 @@ class EnkyronWindow(QMainWindow):
         close.clicked.connect(dialog.reject)
         buttons.addWidget(close)
         buttons.addStretch()
-        self.crm_mail_save = QPushButton("Save local draft")
+        self.crm_mail_save = QPushButton("Save draft")
         self.crm_mail_save.setObjectName("primary")
         self.crm_mail_save.clicked.connect(self.save_mail_draft)
         buttons.addWidget(self.crm_mail_save)
