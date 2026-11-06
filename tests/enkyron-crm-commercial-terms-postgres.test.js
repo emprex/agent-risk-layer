@@ -104,7 +104,7 @@ test('commercial proposal terms: revision binding, immutable history and isolati
     assert.equal(await count('arl_workbench_tickets'),before.tickets);
     assert.equal(await count('enkyron_crm_companies'),before.companies);
     const original=(await db.query(
-      'SELECT revision,payment_terms FROM enkyron_crm_proposal_commercial_terms '
+      'SELECT proposal_revision,payment_terms FROM enkyron_crm_proposal_commercial_terms '
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=1',
       ['local:'+actor,proposal.id]
     )).rows[0];
