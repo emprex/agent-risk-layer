@@ -80,29 +80,29 @@ const CHECKLIST=`SELECT
 function readinessSteps(checks,worksheet,existing){
   const decision=checks?.internal_decision??null;
   return [
-    {key:'issuer',label:'Issuing company profile',
+    {key:'issuer',action:'issuer',label:'Issuing company profile',
       ready:checks?.issuer_profile===true,
       detail:'Enter the operator-issued legal profile; it remains unverified.'},
-    {key:'link',label:'Associate prospect with a CRM company',
+    {key:'link',action:'research',label:'Associate prospect with a CRM company',
       ready:checks?.company_link===true,
       detail:'Explicit operator link required; similar names are not proof.'},
-    {key:'buyer',label:'Buyer identity review',
+    {key:'buyer',action:'buyer',label:'Buyer identity review',
       ready:checks?.buyer_review===true,
       detail:'Document the linked company for the current proposal revision.'},
-    {key:'terms',label:'Commercial terms',
+    {key:'terms',action:checks?.terms_recorded===true?'proposal':'terms',label:'Commercial terms',
       ready:checks?.terms_valid===true,
       detail:checks?.terms_recorded===true
         ?'Commercial validity has expired; revise the proposal and terms.'
         :'Record payment, delivery and exclusions for this revision.'},
-    {key:'tax',label:'International tax review',
+    {key:'tax',action:'tax',label:'International tax review',
       ready:checks?.tax_review===true,
       detail:'Record human tax research; this is not a tax determination.'},
-    {key:'internal',label:'Internal draft review',
+    {key:'internal',action:decision==='needs_changes'?'proposal':'internal',label:'Internal draft review',
       ready:decision==='internal_draft_approved',
       detail:decision==='needs_changes'
         ?'Changes requested: revise the proposal before a new decision.'
         :'Human internal-draft decision required; not permission to issue.'},
-    {key:'worksheet',label:'Billing worksheet',
+    {key:'worksheet',action:'worksheet',label:'Billing worksheet',
       ready:Boolean(worksheet),
       detail:'Record pre-billing preparation for the approved revision.'}
   ];
