@@ -215,3 +215,27 @@ require manual review. The imported contact status and provenance remain
 observable, but a dedicated signed, authorized export receipt is not yet
 present. CI tests and any successful Debian acceptance must be recorded
 separately. E02-08 is not closed until these gates pass.
+
+
+## E02-08D — Append-only CSV export attempts and receipts (2026-11-07)
+Migration **089** adds an append-only export-event register with **started**,
+**completed**, and **failed** events. Only the local workspace, company ID,
+source company revision, expected contact count, operator, timestamp, export
+ID and (after creation) SHA-256/byte count/record count are recorded. No
+filename, storage path, email, phone, contact name, file contents or free-text
+review rationale is stored in the receipt table. The two-stage protocol
+records intent **before** creating a file. On success, Python reopens the
+new owner-only CSV with a no-symlink safeguard, computes SHA-256 of actual
+bytes, compares with the pre-serialized snapshot and records completion.
+On failure, it attempts to record a failed outcome. A crash or database
+outage may leave a started event with no outcome: treat this as an
+**unresolved export**, not proof of no file.
+
+The **CRM CSV…** menu reuses its existing button for export, reviewed import
+and a read-only **View CSV export history** view. No new toolbar button.
+Generated files are bounded to 1 MiB and cannot overwrite a destination.
+The operator must still restrict recipients, protect exported contact
+names and manage exported files independently; a local receipt is NOT a
+customer authorization, legal GDPR DSAR response or cryptographic
+remote attestation. Authentic multi-user RBAC and actual retention/deletion
+remain OPEN. All CI results and Debian acceptance are tracked separately.

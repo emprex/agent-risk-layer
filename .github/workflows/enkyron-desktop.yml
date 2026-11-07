@@ -41,6 +41,8 @@ jobs:
           node --check desktop/enkyron-crm-retention.mjs
           node --check desktop/enkyron-crm-csv.mjs
           node --check desktop/enkyron-crm-csv-import.mjs
+          node --check desktop/enkyron-crm-csv-export-audit.mjs
+          node --check scripts/enkyron-crm-csv-export-audit-schema.mjs
           node --check scripts/enkyron-crm-csv-import-schema.mjs
           node --check desktop/enkyron-crm-link.mjs
           node --check desktop/enkyron-crm-tickets.mjs
@@ -87,7 +89,7 @@ jobs:
           node --check scripts/enkyron-crm-privacy-schema.mjs
           node --check scripts/enkyron-crm-retention-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -271,6 +273,72 @@ jobs:
               window.crm_company_csv_button.click()
           assert calls[-1][0] == "crm-company-csv"
           assert calls[-1][1] == company_id
+          import tempfile
+          import uuid
+          from desktop.enkyron_crm_csv import write_company_csv, csv_file_receipt
+          from PySide6.QtWidgets import QMessageBox
+          with tempfile.TemporaryDirectory() as audit_dir:
+              output = Path(audit_dir) / "audited-export.csv"
+              with patch("desktop.enkyron.QMessageBox.question",
+                         return_value=QMessageBox.StandardButton.Yes), patch(
+                         "desktop.enkyron.QFileDialog.getSaveFileName",
+                         return_value=(str(output), "CSV files (*.csv)")):
+                  calls[-1][3]({
+                      "available": True,
+                      "company": {
+                          "id": company_id, "name": "Synthetic Company",
+                          "record_version": 1, "sector": "Research",
+                          "city": "London", "country": "UK",
+                          "relationship_state": "prospect"
+                      },
+                      "contacts": [{
+                          "id": "22222222-3333-4444-8555-666666666666",
+                          "full_name": "Synthetic Contact",
+                          "job_title": "Engineering",
+                          "marketing_permission": "unknown", "record_version": 1
+                      }], "contact_count": 1
+                  }, None)
+              assert calls[-1][0] == "crm-csv-export-start"
+              assert calls[-1][2]["company_id"] == company_id
+              assert calls[-1][2]["company_version"] == 1
+              assert calls[-1][2]["contact_count"] == 1
+              assert not output.exists()
+              audit_id = "33333333-4444-4555-8666-777777777777"
+              calls[-1][3]({
+                  "export_id": audit_id, "company_id": company_id,
+                  "contact_count": 1
+              }, None)
+              assert output.exists()
+              file_sha, file_size = csv_file_receipt(output)
+              assert calls[-1][0] == "crm-csv-export-finish"
+              assert calls[-1][2]["event_type"] == "completed"
+              assert calls[-1][2]["export_id"] == audit_id
+              assert calls[-1][2]["file_sha256"] == file_sha
+              assert calls[-1][2]["file_bytes"] == file_size
+              assert calls[-1][2]["record_count"] == 2
+              with patch("desktop.enkyron.QMessageBox.information"):
+                  calls[-1][3]({
+                      "export_id": audit_id, "company_id": company_id,
+                      "status": "completed"
+                  }, None)
+              assert output.exists()
+          with patch("desktop.enkyron.QInputDialog.getItem",
+                     return_value=("View CSV export history", True)):
+              window.crm_company_csv_button.click()
+          assert calls[-1][0] == "crm-csv-export-history"
+          assert calls[-1][1] == company_id
+          calls[-1][3]({
+              "available": True, "company_id": company_id, "more": False,
+              "items": [{
+                  "export_id": "33333333-4444-4555-8666-777777777777",
+                  "event_type": "completed", "expected_contact_count": 1,
+                  "file_bytes": 241, "file_sha256": "a" * 64,
+                  "recorded_at": "2026-11-07T11:00:00Z"
+              }]
+          }, None)
+          assert window.crm_csv_export_history_dialog.isVisible()
+          assert window.crm_csv_export_history_dialog.findChildren(QTableWidget)[0].rowCount() == 1
+          window.crm_csv_export_history_dialog.reject()
           # New workflow reuses the same CSV entrypoint. No extra toolbar button.
           import tempfile
           import uuid
