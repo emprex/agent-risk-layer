@@ -104,6 +104,20 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
        'Synthetic scoped work for explicitly linked company; no customer approval.',
        'GBP',1000,actor]
     );
+    // E02-03: source-linked commercial TERMS are only an internal draft.
+    // No buyer acceptance, legal contract, or external sending.
+    const termsId=randomUUID();
+    const privateCommercialTerms='CONFIDENTIAL_TERMS_NOT_IN_COMPANY_SUMMARY';
+    await pool.query(
+      'INSERT INTO enkyron_crm_proposal_commercial_terms '
+      +'(id,workspace_key,proposal_id,proposal_revision,valid_until,'
+      +'payment_terms,delivery_terms,exclusions,assumptions,source_reference,recorded_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+      [termsId,'local:'+actor,proposalId,1,'2027-01-31',
+       privateCommercialTerms,'Delivery plan subject to manual customer agreement',
+       'Customer acceptance is not recorded', 'No signed contract is present',
+       'synthetic-ci-only',actor]
+    );
     const ticket=randomUUID();
     await pool.query(
       'INSERT INTO arl_workbench_tickets '
@@ -138,17 +152,26 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:1,ticket_history:2,audit_events:4,audit_changes:0});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:2,ticket_history:2,audit_events:4,audit_changes:0});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
     assert.equal(dossier.sections.opportunities.items[0].opportunity_id,linkedOpportunity.id);
     assert.equal(dossier.sections.tickets.items[0].ticket_id,ticket);
     assert.equal(dossier.sections.drafts.items[0].subject,'Draft for linked opportunity');
-    assert.equal(dossier.sections.commercial_docs.items[0].document_id,proposalId);
-    assert.equal(dossier.sections.commercial_docs.items[0].proposal_id,proposalId);
-    assert.equal(dossier.sections.commercial_docs.items[0].document_kind,'proposal_draft');
-    assert.equal(dossier.sections.commercial_docs.items[0].status,'internal_unaccepted_draft');
+    const docs=dossier.sections.commercial_docs.items;
+    const proposal=docs.find(x=>x.document_kind==='proposal_draft');
+    const terms=docs.find(x=>x.document_kind==='commercial_terms_draft');
+    assert.equal(proposal?.document_id,proposalId);
+    assert.equal(proposal?.proposal_id,proposalId);
+    assert.equal(proposal?.status,'internal_unaccepted_draft');
+    assert.equal(terms?.document_id,termsId);
+    assert.equal(terms?.proposal_id,proposalId);
+    assert.equal(terms?.revision,1);
+    assert.equal(terms?.status,'operator_draft_unapproved');
+    assert.equal(docs.length,2);
+    assert.ok(!JSON.stringify(docs).includes(privateCommercialTerms));
+    assert.ok(!docs.some(x=>/accepted|signed|contract_issued/.test(x.status)));
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
     assert.deepEqual(new Set(dossier.sections.ticket_history.items.map(x=>x.source_id)),
       new Set([eventId,noteId]));

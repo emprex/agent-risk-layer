@@ -11,7 +11,7 @@ assertion of legal compliance or production readiness.
 |---|---|---|
 | E02-01 Companies | Create/edit versioning and history; synthetic Debian create/edit demonstrated | Entire A–Z reconciliation and ownership checks |
 | E02-02 Contacts | Create/edit and durable synthetic contact demonstrated | Negative stale-version/consent acceptance on Debian |
-| E02-03 Company 360 | Nine sections observed previously on Debian; commercial drafts are CI-validated, and a new bounded internal ticket history view is in development (eleven total tabs) | New exact-head CI and Debian acceptance; signed contracts, delivered projects, independent documents and real external exchanges are not implemented |
+| E02-03 Company 360 | Nine sections observed previously on Debian; CI validates internal commercial source records and ticket history. This development slice adds unapproved commercial terms to the existing Commercial drafts view (still eleven tabs) | Exact-head CI and Debian acceptance of additions; signed contracts, delivered projects, independent documents and external exchanges are not implemented |
 | E02-04 Search/deduplicate | E02-04A company duplicate warning seen on Debian 2026-11-07. E02-04B manual creation transaction-time recheck, advisory serialization and override audit in development. | Exact-head CI and Debian synthetic acceptance of override/refusal; contact duplicate confirmation; other creation and edit entrypoints require separate consistency review. |
 | E02-05 Many-to-many | Contact–ticket link persisted on Debian. E02-05R revocation of synthetic ticket ARL-2026-000004 persisted after restart. E02-05S first reviewed reassignment from `Test` to `ARL CRM Import Test 3d5a49b4` visibly succeeded; operator confirmed restart test PASS on 2026-11-07. Exact-head CI for E02-05S passed on `a90b756`. | E02-05 as a whole remains OPEN: verify historical lineage and separate contact associations in redacted local DB evidence; any further transfer needs separately reviewed correction; real ARL tickets 000001/000002 require explicit operator decision; E02-06 access controls unresolved. |
 | E02-06 Audit/access | E02-06A event/field-change views shown in Debian | Authenticated users, roles, isolation and privilege-negative tests |
@@ -64,3 +64,17 @@ is the canonical link. No inference from company name, migration, separate
 service, additional main menu action or external communication. A note is
 not a customer email or an approved contract. The previous nine-tab Debian
 acceptance does not cover this slice. Local acceptance remains open.
+
+## E02-03 commercial terms source-link increment (2026-11-07, CI pending)
+
+Inspection confirmed the existing `079_enkyron_crm_proposal_commercial_terms.sql`
+table stores one immutable `operator_draft_unapproved` terms record per proposal
+revision. No approved or signed contract is modelled there. The existing
+read-only company 360 Commercial drafts SQL now includes the terms record ID,
+proposal ID, revision, recorded date and explicit draft status. Links follow
+company -> reviewed prospect -> opportunity -> proposal -> terms, with the
+operator's workspace key at every edge. No term bodies, payment details,
+exclusions, assumptions or source references are exposed in the overview.
+No migration, acceptance flag, status promotion or new UI button. Contract
+and service-project features remain planned (E07/E08); CI tests and local
+Debian acceptance have different evidence gates.

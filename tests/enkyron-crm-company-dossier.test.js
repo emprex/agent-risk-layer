@@ -62,6 +62,9 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.match(m.statements[9].sql,/enkyron_crm_proposal_drafts/);
   assert.match(m.statements[9].sql,/enkyron_crm_billing_worksheets/);
   assert.match(m.statements[9].sql,/enkyron_crm_invoice_drafts/);
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_commercial_terms/);
+  assert.match(m.statements[9].sql,/commercial_terms_draft/);
+  assert.doesNotMatch(m.statements[9].sql,/t[.]payment_terms|t[.]delivery_terms|t[.]source_reference|t[.]exclusions|t[.]assumptions/);
   assert.match(m.statements[9].sql,/internal_unaccepted_draft/);
   for(const sql of [m.statements[5],m.statements[6],m.statements[8],m.statements[9]].map(q=>q.sql)){
     assert.match(sql,/enkyron_crm_prospect_links/);
