@@ -558,6 +558,13 @@ jobs:
                   "activities": {"total": 0, "more": False, "items": []},
                   "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []},
+                   "commercial_docs": {"total": 1, "more": False, "items": [{
+                       "document_kind": "proposal_draft",
+                       "title": "Synthetic internal draft",
+                       "status": "internal_unaccepted_draft",
+                       "revision": 1, "proposal_id": "prop-synthetic",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }]},
                    "audit_events": {"total": 1, "more": False, "items": [{
                        "resource_kind": "company", "event_type": "created",
                        "resource_id": company_id, "actor_local": "ci-local",
@@ -568,9 +575,10 @@ jobs:
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
-          assert window.crm_dossier_tabs.count() == 9
-          assert window.crm_dossier_tabs.tabText(7) == "CRM audit (1)"
-          assert window.crm_dossier_tabs.tabText(8) == "Field changes (0)"
+          assert window.crm_dossier_tabs.count() == 10
+          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (1)"
+          assert window.crm_dossier_tabs.tabText(8) == "CRM audit (1)"
+          assert window.crm_dossier_tabs.tabText(9) == "Field changes (0)"
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
