@@ -266,7 +266,9 @@ jobs:
           assert window.crm_contacts_table.rowCount() == 1
           assert window.crm_company_edit.isEnabled()
           assert window.crm_company_csv_button.isEnabled()
-          window.crm_company_csv_button.click()
+          with patch("desktop.enkyron.QInputDialog.getItem",
+                     return_value=("Export selected company", True)):
+              window.crm_company_csv_button.click()
           assert calls[-1][0] == "crm-company-csv"
           assert calls[-1][1] == company_id
           assert not window.crm_contact_edit.isEnabled()

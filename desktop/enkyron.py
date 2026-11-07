@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
     from .enkyron_crm_csv import write_company_csv
+    from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_crm_csv import write_company_csv
+    from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -207,6 +209,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
+        self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
         self.crm_dossier_seq = 0
         self.crm_ticket_seq = 0
@@ -691,9 +694,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_dossier_open.setEnabled(False)
         self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
         company_toolbar.addWidget(self.crm_company_dossier_open)
-        self.crm_company_csv_button = QPushButton("Export CRM CSV…")
-        self.crm_company_csv_button.setEnabled(False)
-        self.crm_company_csv_button.clicked.connect(self.export_company_csv)
+        self.crm_company_csv_button = QPushButton("CRM CSV…")
+        self.crm_company_csv_button.setEnabled(True)
+        self.crm_company_csv_button.clicked.connect(self.open_crm_csv_tools)
         company_toolbar.addWidget(self.crm_company_csv_button)
         company_l.addLayout(company_toolbar)
         self.crm_company_notice = QLabel(
@@ -1582,7 +1585,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
-            self.crm_company_csv_button.setEnabled(False)
+            self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
@@ -1653,7 +1656,7 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
-            self.crm_company_csv_button.setEnabled(False)
+            self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
@@ -2381,14 +2384,211 @@ class EnkyronWindow(QMainWindow):
             "crm-record-changes", kind + ":" + record_id, callback=received
         )
 
+    def open_crm_csv_tools(self):
+        choices = ["Export selected company", "Import CSV with human review"]
+        selected, accepted = QInputDialog.getItem(
+            self, "ENKYRON · CRM CSV",
+            "Choose the CSV workflow. Imports create new records only.",
+            choices, 0, False
+        )
+        if not accepted:
+            return
+        if selected == choices[0]:
+            if not self.crm_company_id:
+                QMessageBox.information(
+                    self, "Select a company", "Select a CRM company to export."
+                )
+                return
+            self.export_company_csv()
+        elif selected == choices[1]:
+            self.import_company_csv()
+
+    def import_company_csv(self):
+        folder = Path.home() / "Documents"
+        folder = folder if folder.is_dir() else Path.home()
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Preview untrusted CRM CSV", str(folder), "CSV files (*.csv)"
+        )
+        if not filename:
+            return
+        try:
+            preview = preview_company_csv(filename)
+        except (OSError, ValueError, CsvPreflightError) as exc:
+            QMessageBox.warning(self, "CSV rejected", str(exc))
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Reviewed CSV import")
+        dialog.setMinimumWidth(690)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("NEW COMPANY IMPORT · HUMAN REVIEW"))
+        instructions = QLabel(
+            "This import creates a NEW prospect company and NEW unverified contacts. "
+            "Source identifiers are preserved in audit provenance only. "
+            "Existing CRM records are never merged or overwritten; source client status "
+            "and marketing consent are NOT imported as authority."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        company = preview["company"]
+        summary = QLabel(
+            "Source company: {}  ·  Contacts: {}  ·  File SHA-256: {}…".format(
+                company["name"], preview["contact_count"], preview["sha256"][:16]
+            )
+        )
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+        source_label = QLabel(
+            "Source claims: relationship={} (will become prospect). "
+            "Any contact consent will become unknown.".format(
+                company.get("relationship_state", "unknown")
+            )
+        )
+        source_label.setWordWrap(True)
+        layout.addWidget(source_label)
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels(["Contact name (preview)", "Role"])
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        entries = preview.get("contacts") or []
+        table.setRowCount(min(len(entries), 12))
+        for row, entry in enumerate(entries[:12]):
+            table.setItem(row, 0, QTableWidgetItem(str(entry["name"])))
+            table.setItem(row, 1, QTableWidgetItem(str(entry["role"])))
+        table.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(table)
+        if len(entries) > 12:
+            layout.addWidget(QLabel("First 12 contacts shown; all will be validated."))
+        notice = QLabel("Checking collisions and provenance against local PostgreSQL…")
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        note = QPlainTextEdit()
+        note.setPlaceholderText(
+            "Explain the source, processing purpose and why creating NEW records "
+            "is appropriate (30–500 characters)."
+        )
+        note.setMaximumHeight(90)
+        layout.addWidget(note)
+        approved = QCheckBox(
+            "I reviewed the source and understand that no identity, client "
+            "status or marketing consent is verified by this import."
+        )
+        layout.addWidget(approved)
+        buttons = QHBoxLayout()
+        close = QPushButton("Cancel")
+        close.clicked.connect(dialog.reject)
+        buttons.addWidget(close)
+        buttons.addStretch()
+        submit = QPushButton("Create new records")
+        submit.setObjectName("primary")
+        submit.setEnabled(False)
+        buttons.addWidget(submit)
+        layout.addLayout(buttons)
+        self.crm_csv_import_dialog = dialog
+        state = {"eligible": False, "busy": False}
+
+        def checked(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("available", False):
+                notice.setText(
+                    error or (data or {}).get("notice", "Import review unavailable.")
+                )
+                state["eligible"] = False
+                submit.setEnabled(False)
+                return
+            if (data.get("source_sha256") != preview["sha256"]
+                    or data.get("company_name") != company["name"]
+                    or data.get("contact_count") != preview["contact_count"]):
+                notice.setText("Import review returned a mismatched source.")
+                submit.setEnabled(False)
+                return
+            conflicts = data.get("conflicts") or []
+            state["eligible"] = bool(data.get("eligible")) and not conflicts
+            if conflicts:
+                notice.setText(
+                    "IMPORT BLOCKED — " + ", ".join(map(str, conflicts))
+                    + ". No existing record will be changed."
+                )
+            elif state["eligible"]:
+                notice.setText(
+                    "Preliminary checks passed. This is a new-company import; "
+                    "database conflicts will be rechecked transactionally."
+                )
+            else:
+                notice.setText("Import blocked by local review.")
+            submit.setEnabled(state["eligible"])
+
+        def save():
+            if not dialog.isVisible() or state["busy"] or not state["eligible"]:
+                return
+            rationale = note.toPlainText().strip()
+            if not 30 <= len(rationale) <= 500 or not approved.isChecked():
+                QMessageBox.warning(
+                    dialog, "Human review required",
+                    "Provide a 30–500 character reason and confirm the new-record scope."
+                )
+                return
+            # Reopen the file with O_NOFOLLOW, recalculate the digest, then submit
+            # ONLY the already reviewed bytes. No filename is passed to PostgreSQL.
+            try:
+                reread = preview_company_csv(filename)
+            except (OSError, ValueError, CsvPreflightError) as exc:
+                QMessageBox.warning(dialog, "Source file changed or unsafe", str(exc))
+                return
+            if reread["sha256"] != preview["sha256"] or reread != preview:
+                QMessageBox.warning(
+                    dialog, "Source file changed",
+                    "CSV bytes or validated content changed after review. Start again."
+                )
+                state["eligible"] = False
+                submit.setEnabled(False)
+                return
+            if QMessageBox.question(
+                dialog, "Confirm reviewed import",
+                "Create {} new contacts under one NEW prospect company? "
+                "Existing records remain untouched; statuses and consent are "
+                "not elevated.".format(preview["contact_count"]),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            state["busy"] = True
+            submit.setEnabled(False)
+
+            def saved(data, error):
+                if not dialog.isVisible():
+                    return
+                state["busy"] = False
+                if error or not data or not data.get("batch_id"):
+                    notice.setText(error or "Import refused. No partial changes accepted.")
+                    # Require another collision check rather than blindly resubmitting.
+                    state["eligible"] = False
+                    return
+                dialog.accept()
+                QMessageBox.information(
+                    self, "Reviewed CRM import recorded",
+                    "New company created with {} contact(s). "
+                    "Provenance batch: {}. Existing records were not changed.".format(
+                        data.get("contact_count", 0), data["batch_id"]
+                    )
+                )
+                self.load_companies()
+
+            self.bridge.call("crm-csv-import-commit", payload={
+                "preview": preview, "review_note": rationale, "confirmed": True
+            }, callback=saved)
+
+        submit.clicked.connect(save)
+        dialog.open()
+        self.bridge.call("crm-csv-import-check", payload=preview, callback=checked)
+
     def export_company_csv(self):
         company_id = self.crm_company_id
         if not company_id:
             return
-        self.crm_company_csv_button.setEnabled(False)
+        self.crm_company_csv_button.setEnabled(True)
 
         def received(data, error):
-            self.crm_company_csv_button.setEnabled(bool(self.crm_company_id))
+            self.crm_company_csv_button.setEnabled(True)
             if company_id != self.crm_company_id:
                 return
             if error or not data or not data.get("available", False):
