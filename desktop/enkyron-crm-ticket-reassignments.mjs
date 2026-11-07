@@ -41,6 +41,13 @@ export function validateTicketReassignment(input){
   destination_record_version:input.destination_record_version,
   review_note:input.review_note.trim()};
 }
+export function validateReassignmentLookup(input){
+ if(!input||typeof input!=='object'||Array.isArray(input)||
+   Object.keys(input).some(k=>!['destination_company_id','search'].includes(k)))
+  throw new Error('CRM invalid reassignment lookup');
+ return {destination_company_id:requireCompanyId(input.destination_company_id),
+  search:boundedSearch(input.search??'')};
+}
 export async function listReassignmentCandidates(pool,companyId,search,actor){
  const destination_company_id=requireCompanyId(companyId),key=scope(actor),q=boundedSearch(search);
  const company=(await pool.query(
