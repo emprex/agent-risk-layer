@@ -148,3 +148,18 @@ No contract registry, inbox, billing, external account or database migration is
 a prerequisite for this bounded local CRM/Client Desk test. The test is an
 operator acceptance milestone, NOT closure of E02-03 full 360 (signed contracts,
 client messages and missions remain unavailable) or E02-06 RBAC.
+
+## E2E local screenshot follow-up — field clarity and ticket table (2026-11-07)
+
+The operator screenshot for `ARL E2E Test 0711` demonstrates one linked ticket
+`E2E onboarding test` with status `new`, but its original recorded client
+name is `Alex Test` (likely the person's name), unlike the CRM company.
+This is **not** evidence that the reviewed company-ticket association is wrong,
+and never authorises automatic mutation of the original intake. Qt now labels
+`Organisation / client *` separately from `Contact person`, explicitly
+states that ticket creation is not an automatic CRM association, and shows
+fuller ticket number/recorded-client columns with tooltip access. When names
+differ, it displays a nonblocking review notice in the linked tickets panel.
+No PostgreSQL migration or source ticket update. Exact-head CI and a new Debian
+visual check are distinct acceptance gates. End-to-end contact-to-ticket link
+and persistence after application restart still need local operator evidence.

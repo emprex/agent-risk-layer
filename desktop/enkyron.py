@@ -799,11 +799,19 @@ class EnkyronWindow(QMainWindow):
         company_tickets_l.addWidget(self.crm_company_tickets_notice)
         self.crm_company_tickets_table = QTableWidget(0, 4)
         self.crm_company_tickets_table.setHorizontalHeaderLabels(
-            ["Ticket", "Title", "Recorded client name", "Status"]
+            ["Ticket", "Title", "Recorded client (as entered)", "Status"]
         )
-        self.crm_company_tickets_table.horizontalHeader().setSectionResizeMode(
+        ticket_header = self.crm_company_tickets_table.horizontalHeader()
+        for column in (0, 2, 3):
+            ticket_header.setSectionResizeMode(
+                column, QHeaderView.ResizeMode.Interactive
+            )
+        ticket_header.setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
+        self.crm_company_tickets_table.setColumnWidth(0, 170)
+        self.crm_company_tickets_table.setColumnWidth(2, 235)
+        self.crm_company_tickets_table.setColumnWidth(3, 105)
         self.crm_company_tickets_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -3223,16 +3231,30 @@ class EnkyronWindow(QMainWindow):
                     ticket.get("status") or "",
                 ]
                 for column, value in enumerate(values):
-                    self.crm_company_tickets_table.setItem(
-                        row, column, QTableWidgetItem(str(value))
-                    )
+                    cell = QTableWidgetItem(str(value))
+                    cell.setToolTip(cell.text())
+                    self.crm_company_tickets_table.setItem(row, column, cell)
             self.crm_company_tickets_table.blockSignals(False)
-            self.crm_company_tickets_notice.setText(
-                "{} ticket(s) linked with recorded human review.{}".format(
-                    len(self.crm_ticket_items),
-                    " First 100; further pagination pending." if data.get("more") else ""
-                )
+            # This is an operator's source field, not the reviewed CRM identity.
+            # Names may differ legitimately; flag differences without unlinking,
+            # overwriting or asserting that the client is legally verified.
+            company_name = str((data.get("company") or {}).get("name") or "").strip()
+            differing = sum(
+                1 for item in self.crm_ticket_items
+                if company_name and str(item.get("client_name") or "").strip().casefold()
+                != company_name.casefold()
             )
+            notice = "{} ticket(s) linked with recorded human review.{}".format(
+                len(self.crm_ticket_items),
+                " First 100; further pagination pending." if data.get("more") else ""
+            )
+            if differing:
+                notice += (
+                    " {} ticket(s) have a different recorded client name. "
+                    "Review the original intake; this does not invalidate or "
+                    "change the manually reviewed CRM association."
+                ).format(differing)
+            self.crm_company_tickets_notice.setText(notice)
 
         self.bridge.call("crm-company-tickets", company_id, callback=received)
 
@@ -7542,8 +7564,10 @@ class EnkyronWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title("NEW CUSTOMER REQUEST"))
         hint = QLabel(
-            "Record a telephone conversation or manually received request. "
-            "This creates only a ticket in NEMORYTH; no security assessment is started."
+            "Enter the organisation/client name separately from the contact "
+            "person. This records a ticket only: it does NOT automatically "
+            "associate the ticket with a CRM company or launch an assessment. "
+            "Review the association later in CRM → Companies → Tickets."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -7554,10 +7578,11 @@ class EnkyronWindow(QMainWindow):
         form.addRow("Received via", self.intake_source)
         self.intake_client = QLineEdit()
         self.intake_client.setMaxLength(160)
-        self.intake_client.setPlaceholderText("Customer / organisation")
-        form.addRow("Client *", self.intake_client)
+        self.intake_client.setPlaceholderText("Organisation or client name, not contact person")
+        form.addRow("Organisation / client *", self.intake_client)
         self.intake_contact = QLineEdit()
         self.intake_contact.setMaxLength(160)
+        self.intake_contact.setPlaceholderText("Person who contacted us (optional)")
         form.addRow("Contact person", self.intake_contact)
         self.intake_phone = QLineEdit()
         self.intake_phone.setMaxLength(80)
@@ -7603,7 +7628,8 @@ class EnkyronWindow(QMainWindow):
             "request_text": self.intake_description.toPlainText(),
         }
         if not all(data[key].strip() for key in ("client_name", "title", "request_text")):
-            QMessageBox.warning(dialog, "Required fields", "Client, subject and request are required.")
+            QMessageBox.warning(dialog, "Required fields",
+                "Organisation/client, subject and request are required.")
             return
         self.intake_submit.setEnabled(False)
 

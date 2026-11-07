@@ -153,6 +153,10 @@ jobs:
           window.open_new_ticket()
           assert window.new_ticket_dialog is not None
           assert window.new_ticket_dialog.isVisible()
+          assert window.intake_client.placeholderText().startswith(
+              "Organisation or client name")
+          assert any("Enter the organisation/client name separately" in label.text()
+                     for label in window.new_ticket_dialog.findChildren(QLabel))
           window.intake_client.setText("Synthetic Customer")
           window.intake_contact.setText("Caller")
           window.intake_phone.setText("+44 0000 000000")
@@ -670,6 +674,11 @@ jobs:
               }], "more": False,
           }, None)
           assert window.crm_company_tickets_table.rowCount() == 1
+          assert window.crm_company_tickets_table.columnWidth(0) >= 165
+          assert window.crm_company_tickets_table.columnWidth(2) >= 230
+          assert "as entered" in window.crm_company_tickets_table.horizontalHeaderItem(2).text()
+          assert "different recorded client name" in window.crm_company_tickets_notice.text()
+          assert window.crm_company_tickets_table.item(0, 2).toolTip() == "Historical customer name"
           window.crm_company_tickets_table.selectRow(0)
           assert window.crm_open_company_ticket_button.isEnabled()
           assert window.crm_revoke_ticket_button.isEnabled()
