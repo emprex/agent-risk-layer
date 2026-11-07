@@ -1,6 +1,9 @@
 """E02-08A: bounded local CSV writer, with spreadsheet formula defanging."""
 import csv
+import hashlib
+import io
 import os
+import stat
 from pathlib import Path
 
 FORMAT = "ENKYRON_CRM_SELECTED_COMPANY_V1"
@@ -56,9 +59,41 @@ def csv_rows(snapshot):
     return [[csv_cell(value) for value in row] for row in rows]
 
 
+MAX_CSV_BYTES = 1024 * 1024
+
+
+def csv_export_bytes(snapshot):
+    rows = csv_rows(snapshot)
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+    writer.writerows(rows)
+    data = b"\xef\xbb\xbf" + output.getvalue().encode("utf-8")
+    if len(data) > MAX_CSV_BYTES:
+        raise ValueError("CSV export exceeds 1 MiB limit")
+    return data, len(rows) - 1
+
+
+def csv_file_receipt(filename):
+    """Hash verified regular file bytes, not pathname or untrusted metadata."""
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(Path(filename), flags)
+    try:
+        mode = os.fstat(fd).st_mode
+        if not stat.S_ISREG(mode):
+            raise ValueError("Export receipt requires a regular file")
+        raw = os.read(fd, MAX_CSV_BYTES + 1)
+        if len(raw) > MAX_CSV_BYTES:
+            raise ValueError("Exported CSV exceeds receipt size limit")
+    finally:
+        os.close(fd)
+    return hashlib.sha256(raw).hexdigest(), len(raw)
+
+
 def write_company_csv(snapshot, filename):
-    """Create a new owner-only file; never overwrite existing data or follow symlink."""
-    rows = csv_rows(snapshot)  # Validate every row before any filesystem write.
+    """Create a new owner-only CSV file, never clobber or follow symlink."""
+    data, count = csv_export_bytes(snapshot)
     destination = Path(filename).expanduser()
     if destination.suffix.lower() != ".csv" or not destination.parent.is_dir():
         raise ValueError("Choose a new .csv file in an existing folder")
@@ -67,9 +102,8 @@ def write_company_csv(snapshot, filename):
         flags |= os.O_NOFOLLOW
     fd = os.open(destination, flags, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as output:
-            writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
-            writer.writerows(rows)
+        with os.fdopen(fd, "wb") as output:
+            output.write(data)
             output.flush()
             os.fsync(output.fileno())
     except BaseException:
@@ -78,4 +112,4 @@ def write_company_csv(snapshot, filename):
         except OSError:
             pass
         raise
-    return len(rows) - 1
+    return count
