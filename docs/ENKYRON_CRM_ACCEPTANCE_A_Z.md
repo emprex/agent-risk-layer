@@ -267,3 +267,24 @@ E02-05 remains OPEN after E02-05R: reviewed reassignment, retention effects,
 contact-link reassignment, true multi-user controls and full A→Z acceptance
 are separate closure gates. Exact-head CI and Debian human acceptance must
 be recorded separately.
+
+
+## E02-05S — First reviewed reallocation after audited revocation (development)
+Migration **091** introduces one-time append-only reassignment and new
+post-reassignment contact associations. It never overwrites the original
+ticket, old company link, revocation, or old contact relationships.
+An `enkyron_crm_effective_ticket_links` view resolves the active
+company from either the unrevoked original link or the reviewed new
+destination. The existing **+ Link existing ticket** workflow gains a
+mode **Reassign a revoked ticket**, requiring manual choice, full
+review rationale, source-revocation ID, historical ticket name and current
+destination-company revision. Old contacts are not transferred implicitly;
+new contact links require their own reviewed selection.
+
+**Limitations:** only the first reviewed reassignment is supported; no
+additional transfer can be silently performed. An incorrectly reassigned
+ticket needs another explicitly designed append-only correction. Operator
+identity remains local OS user scope rather than authenticated multi-user
+RBAC. Original ARL tickets and old contact links must never be implicitly
+changed. The migration must be verified, backed up and installed only after
+exact-head CI is green. CI does not count as Debian acceptance.

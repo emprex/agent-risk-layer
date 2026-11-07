@@ -13,7 +13,7 @@ assertion of legal compliance or production readiness.
 | E02-02 Contacts | Create/edit and durable synthetic contact demonstrated | Negative stale-version/consent acceptance on Debian |
 | E02-03 Company 360 | Nine sections shown in Debian including audit | Contracts/projects/documents remain outside current dossier |
 | E02-04 Search/deduplicate | Bounded search and reviewed prospect linkage in CI | Independent duplicate/no-merge scenarios |
-| E02-05 Many-to-many | Contact–ticket association persisted on Debian; E02-05R audited revocation implemented on development branch | Exact-head CI, synthetic Debian revocation, controlled reassignment and human-reviewed correction of historic mislinks |
+| E02-05 Many-to-many | Contact–ticket association persisted on Debian; E02-05R revoked link ARL-2026-000004 remains revoked after restart; E02-05S reviewed one-time reassignment under development | E02-05S exact-head CI and Debian synthetic proof; original ARL 000001/000002 corrections only with explicit operator review; further transfer design and E02-06 access policy |
 | E02-06 Audit/access | E02-06A event/field-change views shown in Debian | Authenticated users, roles, isolation and privilege-negative tests |
 | E02-07 Privacy/retention | E02-07A request persisted across restart; E02-07B review recorded and read locally | Complete lawful workflows, approved retention schedule, hold handling and Debian restart of 087 |
 | E02-08 CSV | E02-08A export verified locally; E02-08B strict preflight CI; E02-08C reviewed import and anti-duplicate/pass after restart in Debian; E02-08D attempt/receipt audit in development | E02-08D exact-head CI and Debian export audit receipt, broader duplicate rules and A–Z reconciliation |
