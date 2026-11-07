@@ -30,7 +30,10 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
   try{
     const name='Synthetic dossier '+randomUUID().slice(0,8);
     const a=await createCompany(pool,{name,city:'London'},actor);
-    const twin=await createCompany(pool,{name,city:'London'},actor);
+    const twin=await createCompany(pool,{name,city:'London',duplicate_review:{
+      match_ids:[a.id],confirmed:true,
+      review_note:'Separate synthetic CRM company to verify explicit dossier boundaries.'
+    }},actor);
     const contact=await createContact(pool,{company_id:a.id,full_name:'Verified only as manually recorded',
       job_title:'Research',email:'ci-person@example.invalid'},actor);
     // 21 contacts in total: previews show 20, but counts do not lose a record.
