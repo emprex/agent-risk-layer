@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {requireTicketId} from './enkyron-contract.mjs';
 import {requireCompanyId} from './enkyron-crm-tickets.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const CONTROL=/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]/;
+const CONTROL=/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 function owner(actor){
  if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
    throw new Error('CRM invalid local operator');
