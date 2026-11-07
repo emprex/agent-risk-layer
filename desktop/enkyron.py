@@ -3701,10 +3701,10 @@ class EnkyronWindow(QMainWindow):
                 )
                 decision = QMessageBox.question(
                     dialog, "Possible duplicate companies",
-                    "{} possible existing companies:\n{}\n\n"
-                    "A matching name or domain does NOT prove the same legal entity. "
-                    "Review the companies first. Create a separate prospect anyway? "
-                    "No automatic merge occurs.".format(len(matches), summary),
+                    ("{} possible existing companies:\n{}\n\n"
+                     "A matching name or domain does NOT prove the same legal entity. "
+                     "Review the companies first. Create a separate prospect anyway? "
+                     "No automatic merge occurs.").format(len(matches), summary),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No
                 )
@@ -3834,10 +3834,10 @@ class EnkyronWindow(QMainWindow):
                 )
                 decision = QMessageBox.question(
                     dialog, "Possible duplicate contacts",
-                    "{} possible contacts:\n{}\n\n"
-                    "A matching name or email does NOT verify identity. "
-                    "Create another unverified contact anyway? "
-                    "No marketing permission is inferred.".format(len(matches), summary),
+                    ("{} possible contacts:\n{}\n\n"
+                     "A matching name or email does NOT verify identity. "
+                     "Create another unverified contact anyway? "
+                     "No marketing permission is inferred.").format(len(matches), summary),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No
                 )
