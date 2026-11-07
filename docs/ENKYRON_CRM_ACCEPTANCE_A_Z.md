@@ -132,3 +132,27 @@ owner-only backup, review recording and readback after restart.
 automated purge, actual legal holds, privacy request resolution, data export,
 erasure or cross-system deletion are implemented. A review entry is not
 authorisation for indefinite retention.
+
+
+## E02-08A — Selected company CSV export, no bulk import (2026-11-07)
+The new **Export CRM CSV…** button exports only the exact selected company and
+up to 500 directly associated contacts. The PostgreSQL read uses a single
+`REPEATABLE READ READ ONLY` snapshot and the local operator workspace scope.
+The response excludes emails, phone numbers, tickets, assessment records,
+research sources, invoice contents and free-text rationales. The CSV includes
+company identity/status and each contact's name, role, marketing-permission
+label and record version. Contact names are personal data; the operator must
+explicitly confirm the export and select the local destination.
+
+The Python CSV writer uses UTF-8 BOM, quoted cells and spreadsheet-formula
+neutralisation for data starting with `=`, `+`, `-` or `@` after common
+leading whitespace/zero-width characters. It refuses incomplete snapshots
+(above 500 contacts), unsupported values and existing destinations; newly
+created files are owner-only (0600 on Linux) and are never transmitted.
+There is **no CSV import** in this increment. No database migration required.
+
+**Not a finished E02-08 implementation:** no logged export receipt, approved
+recipient/right-to-export workflow, general multi-company export, secure CSV
+import/provenance or round-trip migration. Debian operator acceptance is
+NOT-VERIFIED until manually tested on synthetic data. Exported contact names
+remain subject to GDPR/privacy handling.

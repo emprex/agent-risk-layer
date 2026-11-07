@@ -18,8 +18,10 @@ from PySide6.QtWidgets import (
 
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
+    from .enkyron_crm_csv import write_company_csv
 else:
     from enkyron_proposal_pdf import export_draft_pdf
+    from enkyron_crm_csv import write_company_csv
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -689,6 +691,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_dossier_open.setEnabled(False)
         self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
         company_toolbar.addWidget(self.crm_company_dossier_open)
+        self.crm_company_csv_button = QPushButton("Export CRM CSV…")
+        self.crm_company_csv_button.setEnabled(False)
+        self.crm_company_csv_button.clicked.connect(self.export_company_csv)
+        company_toolbar.addWidget(self.crm_company_csv_button)
         company_l.addLayout(company_toolbar)
         self.crm_company_notice = QLabel(
             "Structured CRM has not been loaded. Historic prospects remain separate."
@@ -1576,6 +1582,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_csv_button.setEnabled(False)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
@@ -1646,6 +1653,7 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_csv_button.setEnabled(False)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
@@ -1662,6 +1670,7 @@ class EnkyronWindow(QMainWindow):
         company_id = company["id"]
         self.crm_company_id = company_id
         self.crm_company_dossier_open.setEnabled(True)
+        self.crm_company_csv_button.setEnabled(True)
         self.crm_company_edit.setEnabled(
             isinstance(company.get("record_version"), int)
             and company["record_version"] >= 1
@@ -2371,6 +2380,58 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call(
             "crm-record-changes", kind + ":" + record_id, callback=received
         )
+
+    def export_company_csv(self):
+        company_id = self.crm_company_id
+        if not company_id:
+            return
+        self.crm_company_csv_button.setEnabled(False)
+
+        def received(data, error):
+            self.crm_company_csv_button.setEnabled(bool(self.crm_company_id))
+            if company_id != self.crm_company_id:
+                return
+            if error or not data or not data.get("available", False):
+                QMessageBox.warning(self, "CRM export unavailable",
+                    error or (data or {}).get("notice", "CSV snapshot unavailable."))
+                return
+            if ((data.get("company") or {}).get("id") != company_id
+                    or data.get("contact_count") != len(data.get("contacts") or [])):
+                QMessageBox.warning(self, "CRM export refused",
+                    "Company selection or contact count has changed.")
+                return
+            if QMessageBox.question(
+                self, "Confirm local CRM export",
+                "Export one selected company and its contact names and roles? "
+                "Contact names are personal data. No emails, phone numbers, "
+                "tickets or financial details are included. This release "
+                "does not yet record an audit receipt for the exported file. "
+                "Store the file securely and choose a NEW filename.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            folder = Path.home() / "Documents"
+            folder = folder if folder.is_dir() else Path.home()
+            suggestion = "ENKYRON_CRM_{}.csv".format(company_id[:8])
+            destination, _ = QFileDialog.getSaveFileName(
+                self, "Save new CRM CSV (will not overwrite)",
+                str(folder / suggestion), "CSV files (*.csv)"
+            )
+            if not destination or company_id != self.crm_company_id:
+                return
+            try:
+                count = write_company_csv(data, destination)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "CRM export refused", str(exc))
+                return
+            QMessageBox.information(
+                self, "Local CRM CSV created",
+                "{} record(s) saved in a new owner-only CSV file. "
+                "No network transmission or database change occurred.".format(count)
+            )
+
+        self.bridge.call("crm-company-csv", company_id, callback=received)
 
     def open_company_dossier(self):
         if not self.crm_company_id:
