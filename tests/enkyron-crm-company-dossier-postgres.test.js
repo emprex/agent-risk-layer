@@ -119,12 +119,26 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
       review_note:'Manually reviewed the ticket and selected company identity.',
       reviewed:true
     },actor);
+    // Distinct internal activity sources, linked only through the reviewed ticket.
+    // Raw text deliberately contains a marker which must never enter the 360 view.
+    const privateMarker='CONFIDENTIAL_DOSSIER_TEXT_NOT_FOR_COMPANY_SUMMARY';
+    const eventId=randomUUID(),noteId=randomUUID();
+    await pool.query(
+      'INSERT INTO arl_workbench_ticket_events '
+      +'(id,ticket_id,event_type,detail,actor) VALUES($1,$2,$3,$4,$5)',
+      [eventId,ticket,'status_changed',privateMarker,actor]
+    );
+    await pool.query(
+      'INSERT INTO arl_workbench_notes '
+      +'(id,ticket_id,body,source_type,entered_by) VALUES($1,$2,$3,$4,$5)',
+      [noteId,ticket,privateMarker,'manual',actor]
+    );
     const dossier=await getCompanyDossier(pool,a.id,actor);
     assert.equal(dossier.available,true);
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:1,audit_events:4,audit_changes:0});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:1,ticket_history:2,audit_events:4,audit_changes:0});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
@@ -136,6 +150,13 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.sections.commercial_docs.items[0].document_kind,'proposal_draft');
     assert.equal(dossier.sections.commercial_docs.items[0].status,'internal_unaccepted_draft');
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
+    assert.deepEqual(new Set(dossier.sections.ticket_history.items.map(x=>x.source_id)),
+      new Set([eventId,noteId]));
+    assert.deepEqual(new Set(dossier.sections.ticket_history.items.map(x=>x.record_kind)),
+      new Set(['ticket_event','internal_note']));
+    assert.ok(dossier.sections.ticket_history.items.every(x=>x.ticket_id===ticket));
+    assert.ok(!JSON.stringify(dossier.sections.ticket_history).includes(privateMarker),
+      'Do not publish internal note bodies or event detail in company overview');
     const review='Synthetic correction reviewed against the originally entered source.';
     await updateCompany(pool,{
       id:a.id,expected_version:1,confirmed:true,review_note:review,

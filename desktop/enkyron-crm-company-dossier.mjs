@@ -110,6 +110,29 @@ const LISTS={
     +'SELECT document_kind,document_id,title,status,revision,recorded_at,'
     +'proposal_id,count(*) OVER() AS total_rows FROM docs '
     +'ORDER BY recorded_at DESC,document_kind,document_id LIMIT 21',
+  // Existing ticket activity ONLY, not an email conversation or client approval.
+  // Historical note bodies, event detail and technical/source payload are excluded.
+  // Effective reviewed company links exclude revoked links and include reviewed
+  // reassignments; the original source ticket is never updated by this view.
+  ticket_history:
+    'WITH linked_tickets AS ('
+    +'SELECT t.id,t.ticket_number FROM enkyron_crm_effective_ticket_links l '
+    +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2), '
+    +'history AS ('
+    +"SELECT t.ticket_number,t.id AS ticket_id,'ticket_event'::text AS record_kind,"
+    +'e.event_type AS record_type,e.actor AS actor,e.created_at AS recorded_at,'
+    +'e.id AS source_id '
+    +'FROM arl_workbench_ticket_events e '
+    +'JOIN linked_tickets t ON t.id=e.ticket_id UNION ALL '
+    +"SELECT t.ticket_number,t.id AS ticket_id,'internal_note'::text AS record_kind,"
+    +'n.source_type AS record_type,n.entered_by AS actor,'
+    +'n.created_at AS recorded_at,n.id AS source_id '
+    +'FROM arl_workbench_notes n '
+    +'JOIN linked_tickets t ON t.id=n.ticket_id) '
+    +'SELECT ticket_number,ticket_id,record_kind,record_type,actor,recorded_at,'
+    +'source_id,count(*) OVER() AS total_rows FROM history '
+    +'ORDER BY recorded_at DESC,source_id DESC LIMIT 21',
   audit_events:
     'SELECT e.resource_kind,e.resource_id,e.event_type,e.actor_local,e.created_at,'
     +'count(*) OVER() AS total_rows FROM enkyron_crm_events e '
@@ -153,7 +176,8 @@ export async function getCompanyDossier(pool,id,operator){
       notice:'Only recorded company contacts and explicitly reviewed links are included. '
         +'Commercial stages and manual notes are not independently verified. '
         +'Commercial document entries are internal drafts, not accepted contracts, '
-        +'issued invoices, completed projects or exchanged emails.'};
+        +'issued invoices, completed projects or exchanged emails. '
+        +'Ticket history is internal event and note metadata, not message contents.'};
   }catch(error){
     if(inTx)await client.query('ROLLBACK').catch(()=>{});
     if(error?.code==='42P01')return {available:false,

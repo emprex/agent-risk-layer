@@ -565,6 +565,12 @@ jobs:
                        "revision": 1, "proposal_id": "prop-synthetic",
                        "recorded_at": "2026-11-07T05:00:00Z"
                    }]},
+                   "ticket_history": {"total": 1, "more": False, "items": [{
+                       "ticket_number": "CI-TICKET-SYNTHETIC",
+                       "record_kind": "internal_note", "record_type": "manual",
+                       "actor": "ci-local", "source_id": "note-synthetic",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }]},
                    "audit_events": {"total": 1, "more": False, "items": [{
                        "resource_kind": "company", "event_type": "created",
                        "resource_id": company_id, "actor_local": "ci-local",
@@ -575,10 +581,11 @@ jobs:
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
-          assert window.crm_dossier_tabs.count() == 10
+          assert window.crm_dossier_tabs.count() == 11
           assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (1)"
-          assert window.crm_dossier_tabs.tabText(8) == "CRM audit (1)"
-          assert window.crm_dossier_tabs.tabText(9) == "Field changes (0)"
+          assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
+          assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
+          assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"

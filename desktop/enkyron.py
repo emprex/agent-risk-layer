@@ -2897,6 +2897,11 @@ class EnkyronWindow(QMainWindow):
                     ("Status", "status"), ("Revision", "revision"),
                     ("Recorded", "recorded_at"), ("Proposal ID", "proposal_id")
                 ]),
+                ("ticket_history", "Ticket history", [
+                    ("Ticket", "ticket_number"), ("Record", "record_kind"),
+                    ("Type", "record_type"), ("Operator", "actor"),
+                    ("Recorded", "recorded_at"), ("Source ID", "source_id")
+                ]),
                 ("audit_events", "CRM audit", [
                     ("Record", "resource_kind"), ("Action", "event_type"),
                     ("Record ID", "resource_id"), ("Operator", "actor_local"),
