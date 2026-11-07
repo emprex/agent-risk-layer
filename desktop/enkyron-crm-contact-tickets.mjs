@@ -76,19 +76,36 @@ export async function linkContactToTicket(pool,input,actor,options={}){
      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
      +'FOR SHARE OF l,t',
      [scope.key,req.company_id,req.ticket_id])).rows[0];
-   if(!ticket)throw new Error('CRM ticket is not reviewed for this company');
-   if(ticket.archived_at)throw new Error('CRM archived ticket cannot be linked to a contact');
+   const reassigned=ticket ? null : (await client.query(
+     'SELECT ra.ticket_id,t.archived_at FROM enkyron_crm_ticket_reassignments ra '
+     +'JOIN arl_workbench_tickets t ON t.id=ra.ticket_id '
+     +'WHERE ra.workspace_key=$1 AND ra.destination_company_id=$2 AND ra.ticket_id=$3 '
+     +'FOR SHARE OF ra,t',
+     [scope.key,req.company_id,req.ticket_id])).rows[0];
+   const effective=ticket||reassigned;
+   if(!effective)throw new Error('CRM ticket is not reviewed for this company');
+   if(effective.archived_at)throw new Error('CRM archived ticket cannot be linked to a contact');
    if((await client.query(
      'SELECT id FROM enkyron_crm_contact_ticket_links '
+     +'WHERE workspace_key=$1 AND contact_id=$2 AND ticket_id=$3 '
+     +'UNION ALL SELECT id FROM enkyron_crm_reassigned_contact_ticket_links '
      +'WHERE workspace_key=$1 AND contact_id=$2 AND ticket_id=$3',
      [scope.key,req.contact_id,req.ticket_id])).rows.length)
      throw new Error('CRM contact already linked to ticket');
    const id=newId();
-   await client.query(
-     'INSERT INTO enkyron_crm_contact_ticket_links '
-     +'(id,workspace_key,company_id,contact_id,ticket_id,review_note,linked_by) '
-     +'VALUES($1,$2,$3,$4,$5,$6,$7)',
-     [id,scope.key,req.company_id,req.contact_id,req.ticket_id,req.review_note,scope.actor]);
+   if(ticket){
+     await client.query(
+       'INSERT INTO enkyron_crm_contact_ticket_links '
+       +'(id,workspace_key,company_id,contact_id,ticket_id,review_note,linked_by) '
+       +'VALUES($1,$2,$3,$4,$5,$6,$7)',
+       [id,scope.key,req.company_id,req.contact_id,req.ticket_id,req.review_note,scope.actor]);
+   }else{
+     await client.query(
+       'INSERT INTO enkyron_crm_reassigned_contact_ticket_links '
+       +'(id,workspace_key,destination_company_id,contact_id,ticket_id,review_note,linked_by) '
+       +'VALUES($1,$2,$3,$4,$5,$6,$7)',
+       [id,scope.key,req.company_id,req.contact_id,req.ticket_id,req.review_note,scope.actor]);
+   }
    await client.query(
      'INSERT INTO enkyron_crm_events '
      +'(id,workspace_key,resource_kind,resource_id,event_type,actor_local) '
