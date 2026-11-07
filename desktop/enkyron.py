@@ -2793,8 +2793,8 @@ class EnkyronWindow(QMainWindow):
         company_id = self.crm_company_id
         dialog = QDialog(self)
         dialog.setWindowTitle("ENKYRON · Company dossier")
-        dialog.resize(880, 620)
-        dialog.setMinimumSize(720, 500)
+        dialog.resize(1090, 710)
+        dialog.setMinimumSize(770, 520)
         layout = QVBoxLayout(dialog)
         heading = QLabel("COMPANY DOSSIER")
         heading.setStyleSheet("font-size: 18px; font-weight: bold;")
@@ -2802,6 +2802,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_summary.setWordWrap(True)
+        self.crm_dossier_summary.setStyleSheet(
+            "background: #f5f9fc; border: 1px solid #dbe6ed; "
+            "border-radius: 6px; padding: 9px 12px; line-height: 1.3;"
+        )
         layout.addWidget(self.crm_dossier_summary)
         self.crm_dossier_notice = QLabel(
             "Only reviewed links appear here. Similar company names do not "
@@ -2809,8 +2813,37 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_dossier_notice.setWordWrap(True)
         layout.addWidget(self.crm_dossier_notice)
+        # Fixed left-side section list: all eleven entries remain visible
+        # without horizontal tab arrows. Keep QTabWidget as the page stack so
+        # existing qualification forms and keyboard navigation still work.
+        dossier_body = QHBoxLayout()
+        dossier_body.setSpacing(10)
+        self.crm_dossier_nav = QListWidget()
+        self.crm_dossier_nav.setObjectName("companyDossierNavigation")
+        self.crm_dossier_nav.setFixedWidth(215)
+        self.crm_dossier_nav.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.crm_dossier_nav.setSpacing(2)
+        self.crm_dossier_nav.setStyleSheet(
+            "QListWidget#companyDossierNavigation { background: #f5f9fc; "
+            "border: 1px solid #d8e2ea; border-radius: 6px; padding: 5px; }"
+            "QListWidget#companyDossierNavigation::item { "
+            "padding: 6px 8px; border-radius: 4px; }"
+            "QListWidget#companyDossierNavigation::item:selected { "
+            "background: #176e81; color: white; font-weight: bold; }"
+        )
         self.crm_dossier_tabs = QTabWidget()
-        layout.addWidget(self.crm_dossier_tabs, 1)
+        self.crm_dossier_tabs.tabBar().hide()
+        self.crm_dossier_nav.currentRowChanged.connect(
+            self.crm_dossier_tabs.setCurrentIndex
+        )
+        self.crm_dossier_tabs.currentChanged.connect(
+            self.crm_dossier_nav.setCurrentRow
+        )
+        dossier_body.addWidget(self.crm_dossier_nav)
+        dossier_body.addWidget(self.crm_dossier_tabs, 1)
+        layout.addLayout(dossier_body, 1)
         footer = QHBoxLayout()
         footer.addStretch()
         refresh = QPushButton("Refresh dossier")
@@ -2851,8 +2884,10 @@ class EnkyronWindow(QMainWindow):
                 company.get("city"), company.get("country")
             ]))
             self.crm_dossier_summary.setText(
-                "{}\nRelationship: {}  ·  Sector: {}  ·  Location: {}\n"
-                "Legal name: {}  ·  Website: {}".format(
+                "{}\n"
+                "Relationship: {}    ·    Sector: {}\n"
+                "Location: {}    ·    Legal name: {}\n"
+                "Website: {}".format(
                     company.get("name") or "Company",
                     company.get("relationship_state") or "Unknown",
                     company.get("sector") or "Not recorded",
@@ -2914,12 +2949,11 @@ class EnkyronWindow(QMainWindow):
                 ])
             ]
             self.crm_dossier_tabs.clear()
-            summaries = []
+            self.crm_dossier_nav.clear()
             for section_id, title, columns in definitions:
                 section = sections.get(section_id, {})
                 rows = section.get("items", [])
                 count = int(section.get("total", 0))
-                summaries.append("{}: {}".format(title, count))
                 page = QWidget()
                 page_layout = QVBoxLayout(page)
                 if section.get("more"):
@@ -2955,11 +2989,19 @@ class EnkyronWindow(QMainWindow):
                         )
                         cell.setToolTip(cell.text())
                         table.setItem(row_index, column_index, cell)
-                table.horizontalHeader().setSectionResizeMode(
-                    0, QHeaderView.ResizeMode.ResizeToContents
-                )
-                table.horizontalHeader().setSectionResizeMode(
-                    1, QHeaderView.ResizeMode.Stretch
+                # Preserve readable email/identifier columns; a wide source
+                # table scrolls horizontally instead of crushing data cells.
+                header = table.horizontalHeader()
+                header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+                table.resizeColumnsToContents()
+                for column_index in range(len(columns)):
+                    table.setColumnWidth(
+                        column_index,
+                        min(260, max(112, table.columnWidth(column_index) + 12))
+                    )
+                header.setStretchLastSection(True)
+                table.setHorizontalScrollMode(
+                    QAbstractItemView.ScrollMode.ScrollPerPixel
                 )
                 if section_id == "qualifications":
                     # Keep the editor immediately usable. With zero reviews,
@@ -3063,13 +3105,18 @@ class EnkyronWindow(QMainWindow):
                     self.crm_dossier_tabs.addTab(
                         page, "{} ({})".format(title, count)
                     )
-            if selected_tab >= 0 and selected_tab < self.crm_dossier_tabs.count():
-                self.crm_dossier_tabs.setCurrentIndex(selected_tab)
+                self.crm_dossier_nav.addItem(
+                    "{} ({})".format(title, count)
+                )
+            # Qt may expose its tab bar again as tabs are inserted.
+            self.crm_dossier_tabs.tabBar().hide()
+            index = selected_tab if 0 <= selected_tab < self.crm_dossier_tabs.count() else 0
+            self.crm_dossier_tabs.setCurrentIndex(index)
+            self.crm_dossier_nav.setCurrentRow(index)
             self.crm_dossier_notice.setText(
-                " · ".join(summaries) + "\n"
-                "Only explicitly associated records; notes and stages are "
-                "operator-entered, not independently verified. Commercial "
-                "drafts are not contracts, sent messages or issued invoices."
+                "Only explicitly reviewed company links. Internal notes and "
+                "commercial drafts are not verified customer communications, "
+                "signed contracts or issued invoices."
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)

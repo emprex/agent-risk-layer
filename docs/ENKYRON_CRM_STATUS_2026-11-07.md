@@ -78,3 +78,18 @@ exclusions, assumptions or source references are exposed in the overview.
 No migration, acceptance flag, status promotion or new UI button. Contract
 and service-project features remain planned (E07/E08); CI tests and local
 Debian acceptance have different evidence gates.
+
+## E02-03 dossier legibility — desktop Qt navigation (development, 2026-11-07)
+
+Operator screenshot after Debian fast-forward to `937424f` showed a correctly
+loaded 11-section dossier but horizontally overflowing tab titles and a cramped
+company summary. The Qt-only change keeps the existing `QTabWidget` pages and
+qualification form, hides the horizontal tab strip, and adds an explicit left
+`QListWidget` with all eleven section names and record counts. Selection stays
+synchronised in both directions and preserves the currently selected section
+across refresh. The summary is broken into distinct labelled lines; the notice
+is no longer a duplicate list of counts, and tables use bounded user-resizable
+columns with horizontal scroll rather than compressing email/ID columns.
+No bridge/SQL/migration changes, no altered records or CRM permissions. The
+previous screenshot proves data loading, not the new layout: exact-head CI
+and updated Debian visual acceptance remain separate gates.

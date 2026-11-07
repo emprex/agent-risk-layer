@@ -582,6 +582,15 @@ jobs:
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
           assert window.crm_dossier_tabs.count() == 11
+          assert window.crm_dossier_nav.count() == 11
+          assert not window.crm_dossier_tabs.tabBar().isVisible()
+          assert window.crm_dossier_nav.currentRow() == 0
+          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (1)"
+          assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
+          window.crm_dossier_nav.setCurrentRow(8)
+          assert window.crm_dossier_tabs.currentIndex() == 8
+          window.crm_dossier_tabs.setCurrentIndex(4)
+          assert window.crm_dossier_nav.currentRow() == 4
           assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (1)"
           assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
           assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
@@ -591,6 +600,7 @@ jobs:
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
           assert window.crm_dossier_tabs.tabText(4) == "Qualification (0)"
           window.crm_dossier_tabs.setCurrentIndex(4)
+          assert window.crm_dossier_nav.currentRow() == 4
           qualification_page = window.crm_dossier_tabs.widget(4).widget()
           qualification_labels = [
               child.text() for child in qualification_page.findChildren(QLabel)
