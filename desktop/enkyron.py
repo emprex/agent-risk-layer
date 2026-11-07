@@ -3711,8 +3711,25 @@ class EnkyronWindow(QMainWindow):
                 if decision != QMessageBox.StandardButton.Yes:
                     self.crm_company_submit.setEnabled(True)
                     return
-            # This is a read-only preflight (E02-04A). Transaction-time
-            # duplicate checks and recorded override rationale remain open.
+                note, accepted = QInputDialog.getMultiLineText(
+                    dialog, "Explain distinct company",
+                    "Why is a separate prospect appropriate despite these matches? "
+                    "30–500 characters. Do not include personal information."
+                )
+                if not accepted or not 30 <= len(note.strip()) <= 500:
+                    self.crm_company_submit.setEnabled(True)
+                    if accepted:
+                        QMessageBox.warning(
+                            dialog, "Reason required",
+                            "Provide 30–500 characters explaining the distinct company."
+                        )
+                    return
+                payload["duplicate_review"] = {
+                    "match_ids": [item["id"] for item in matches],
+                    "review_note": note.strip(), "confirmed": True
+                }
+            # PostgreSQL rechecks every match inside the creation transaction.
+            # Any unseen new match fails closed and requires another preview.
             self.bridge.call("crm-create-company", payload=payload, callback=received)
 
         self.bridge.call("crm-company-duplicates", payload=payload, callback=checked)
@@ -3844,6 +3861,23 @@ class EnkyronWindow(QMainWindow):
                 if decision != QMessageBox.StandardButton.Yes:
                     self.crm_contact_submit.setEnabled(True)
                     return
+                note, accepted = QInputDialog.getMultiLineText(
+                    dialog, "Explain distinct contact",
+                    "Why should this be a separate unverified contact despite these "
+                    "matches? 30–500 characters. Do not enter personal details."
+                )
+                if not accepted or not 30 <= len(note.strip()) <= 500:
+                    self.crm_contact_submit.setEnabled(True)
+                    if accepted:
+                        QMessageBox.warning(
+                            dialog, "Reason required",
+                            "Provide 30–500 characters explaining the distinct contact."
+                        )
+                    return
+                payload["duplicate_review"] = {
+                    "match_ids": [item["id"] for item in matches],
+                    "review_note": note.strip(), "confirmed": True
+                }
             self.bridge.call("crm-create-contact", payload=payload, callback=received)
 
         self.bridge.call("crm-contact-duplicates", payload=payload, callback=checked)
