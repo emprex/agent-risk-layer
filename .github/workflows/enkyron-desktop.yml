@@ -496,12 +496,30 @@ jobs:
               "more": False
           }, None)
           assert window.crm_contact_ticket_dialog.isVisible()
-          assert "1 eligible tickets" in [
-              x.text() for x in window.crm_contact_ticket_dialog.findChildren(QLabel)
-          ][-1] or any(
-              "1 eligible tickets" in x.text()
-              for x in window.crm_contact_ticket_dialog.findChildren(QLabel)
-          )
+          assert any("1 other company ticket(s) available" in x.text()
+                     for x in window.crm_contact_ticket_dialog.findChildren(QLabel))
+          # Simulate the ticket having already been linked to the contact.
+          # It MUST be visible as existing, with no new-link action.
+          contact_callback = calls[-2][3]
+          contact_callback({
+              "available": True,
+              "contact": {"id": "22222222-3333-4444-8555-666666666666",
+                          "company_id": company_id},
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000005", "linked_by": "ci-local"
+              }], "more": False
+          }, None)
+          contact_dialog = window.crm_contact_ticket_dialog
+          link_table = contact_dialog.findChildren(QTableWidget)[0]
+          assert link_table.rowCount() == 1
+          assert link_table.columnWidth(0) >= 210
+          assert link_table.item(0, 0).text() == "ARL-2026-000005"
+          assert link_table.item(0, 0).toolTip() == "ARL-2026-000005"
+          assert any("ALREADY RECORDED" in x.text()
+                     for x in contact_dialog.findChildren(QLabel))
+          assert any(b.text() == "No new link needed" and not b.isEnabled()
+                     for b in contact_dialog.findChildren(QPushButton))
           window.crm_contact_ticket_dialog.reject()
           assert window.crm_contact_edit.isEnabled()
           window.crm_contact_edit.click()
