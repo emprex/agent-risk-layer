@@ -115,7 +115,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
