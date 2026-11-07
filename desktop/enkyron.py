@@ -2,6 +2,7 @@
 """ENKYRON native operator desktop. No browser, web views, or active security testing."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -18,11 +19,11 @@ from PySide6.QtWidgets import (
 
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
-    from .enkyron_crm_csv import write_company_csv
+    from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
-    from enkyron_crm_csv import write_company_csv
+    from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -2386,7 +2387,7 @@ class EnkyronWindow(QMainWindow):
         )
 
     def open_crm_csv_tools(self):
-        choices = ["Export selected company", "Import CSV with human review"]
+        choices = ["Export selected company", "Import CSV with human review", "View CSV export history"]
         selected, accepted = QInputDialog.getItem(
             self, "ENKYRON · CRM CSV",
             "Choose the CSV workflow. Imports create new records only.",
@@ -2403,6 +2404,13 @@ class EnkyronWindow(QMainWindow):
             self.export_company_csv()
         elif selected == choices[1]:
             self.import_company_csv()
+        elif selected == choices[2]:
+            if not self.crm_company_id:
+                QMessageBox.information(
+                    self, "Select a company", "Select a company to view its export history."
+                )
+                return
+            self.show_company_csv_exports()
 
     def import_company_csv(self):
         folder = Path.home() / "Documents"
@@ -2582,32 +2590,103 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
         self.bridge.call("crm-csv-import-check", payload=preview, callback=checked)
 
+    def show_company_csv_exports(self):
+        company_id = self.crm_company_id
+        if not company_id:
+            return
+
+        def received(data, error):
+            if self.crm_company_id != company_id:
+                return
+            if error or not data or not data.get("available", False):
+                QMessageBox.warning(
+                    self, "Export history unavailable",
+                    error or (data or {}).get("notice", "Export history unavailable.")
+                )
+                return
+            if data.get("company_id") != company_id:
+                QMessageBox.warning(self, "Export history", "Unexpected company scope.")
+                return
+            dialog = QDialog(self)
+            dialog.setWindowTitle("ENKYRON · CSV export history")
+            dialog.resize(790, 450)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(section_title("CSV EXPORT ATTEMPTS & OUTCOMES"))
+            note = QLabel(
+                "Metadata only. No filenames, file locations or contact details. "
+                "An unfinished attempt can mean that the application closed before "
+                "the file outcome could be recorded. A completed receipt is not "
+                "proof of recipient authorization or delivery."
+            )
+            note.setWordWrap(True)
+            layout.addWidget(note)
+            items = data.get("items") or []
+            if data.get("more"):
+                layout.addWidget(QLabel("First 50 events shown; older records omitted."))
+            table = QTableWidget(len(items), 6)
+            table.setHorizontalHeaderLabels([
+                "Event", "Export ID", "Contacts", "Bytes", "SHA-256", "Recorded"
+            ])
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            for row, item in enumerate(items):
+                values = (
+                    item.get("event_type"),
+                    item.get("export_id"),
+                    item.get("expected_contact_count"),
+                    item.get("file_bytes"),
+                    item.get("file_sha256"),
+                    display_date(item.get("recorded_at"))
+                )
+                for col, value in enumerate(values):
+                    cell = QTableWidgetItem(
+                        str(value) if value is not None else ""
+                    )
+                    cell.setToolTip(cell.text())
+                    table.setItem(row, col, cell)
+            table.horizontalHeader().setStretchLastSection(True)
+            layout.addWidget(table, 1)
+            close = QPushButton("Close")
+            close.clicked.connect(dialog.reject)
+            layout.addWidget(close)
+            self.crm_csv_export_history_dialog = dialog
+            dialog.open()
+
+        self.bridge.call("crm-csv-export-history", company_id, callback=received)
+
     def export_company_csv(self):
         company_id = self.crm_company_id
         if not company_id:
             return
-        self.crm_company_csv_button.setEnabled(True)
 
         def received(data, error):
-            self.crm_company_csv_button.setEnabled(True)
             if company_id != self.crm_company_id:
                 return
             if error or not data or not data.get("available", False):
-                QMessageBox.warning(self, "CRM export unavailable",
-                    error or (data or {}).get("notice", "CSV snapshot unavailable."))
+                QMessageBox.warning(
+                    self, "CRM export unavailable",
+                    error or (data or {}).get("notice", "CSV snapshot unavailable.")
+                )
                 return
-            if ((data.get("company") or {}).get("id") != company_id
+            company = data.get("company") or {}
+            if (company.get("id") != company_id
                     or data.get("contact_count") != len(data.get("contacts") or [])):
-                QMessageBox.warning(self, "CRM export refused",
-                    "Company selection or contact count has changed.")
+                QMessageBox.warning(
+                    self, "CRM export refused",
+                    "Company selection or contact count has changed."
+                )
+                return
+            try:
+                planned_bytes, planned_count = csv_export_bytes(data)
+                expected_sha = hashlib.sha256(planned_bytes).hexdigest()
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "CRM export refused", str(exc))
                 return
             if QMessageBox.question(
                 self, "Confirm local CRM export",
-                "Export one selected company and its contact names and roles? "
-                "Contact names are personal data. No emails, phone numbers, "
-                "tickets or financial details are included. This release "
-                "does not yet record an audit receipt for the exported file. "
-                "Store the file securely and choose a NEW filename.",
+                "Export this company's name and associated contact names and roles? "
+                "No email, phone, assessment or financial records are exported. "
+                "The export attempt and file outcome will be recorded without "
+                "filename or contact details. Protect the file and use a NEW filename.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             ) != QMessageBox.StandardButton.Yes:
@@ -2621,16 +2700,76 @@ class EnkyronWindow(QMainWindow):
             )
             if not destination or company_id != self.crm_company_id:
                 return
-            try:
-                count = write_company_csv(data, destination)
-            except (OSError, ValueError) as exc:
-                QMessageBox.warning(self, "CRM export refused", str(exc))
-                return
-            QMessageBox.information(
-                self, "Local CRM CSV created",
-                "{} record(s) saved in a new owner-only CSV file. "
-                "No network transmission or database change occurred.".format(count)
-            )
+
+            def started(result, start_error):
+                if (start_error or not result
+                        or result.get("company_id") != company_id
+                        or result.get("contact_count") != data["contact_count"]
+                        or not result.get("export_id")):
+                    QMessageBox.warning(
+                        self, "CSV export not started",
+                        start_error or "Could not record export intent; no file written."
+                    )
+                    return
+                export_id = result["export_id"]
+                outcome = {
+                    "export_id": export_id,
+                    "company_id": company_id
+                }
+                failure = None
+                try:
+                    count = write_company_csv(data, destination)
+                    sha, size = csv_file_receipt(destination)
+                    if (count != planned_count or sha != expected_sha
+                            or size != len(planned_bytes)):
+                        failure = "verification_error"
+                        raise ValueError("Exported bytes differ from the reviewed snapshot")
+                    outcome.update({
+                        "event_type": "completed", "file_sha256": sha,
+                        "file_bytes": size, "record_count": count
+                    })
+                except (OSError, ValueError) as exc:
+                    if failure is None:
+                        failure = "file_error"
+                    outcome.update({
+                        "event_type": "failed", "failure_category": failure
+                    })
+                    warning = str(exc)
+                else:
+                    warning = None
+
+                def finished(saved, finish_error):
+                    if (finish_error or not saved
+                            or saved.get("export_id") != export_id
+                            or saved.get("status") != outcome["event_type"]):
+                        QMessageBox.warning(
+                            self, "Export audit unresolved",
+                            "The export outcome could not be recorded. "
+                            "Check the chosen directory for a possibly created "
+                            "personal-data file before proceeding. "
+                            + str(finish_error or "")
+                        )
+                        return
+                    if warning:
+                        QMessageBox.warning(self, "CSV export failed",
+                            warning + " (failed attempt recorded in export history)")
+                    else:
+                        QMessageBox.information(
+                            self, "Audited local CSV created",
+                            "{} record(s) saved locally. "
+                            "Attempt and SHA-256 completion receipt recorded. "
+                            "No network transmission occurred.".format(count)
+                        )
+
+                self.bridge.call("crm-csv-export-finish",
+                    payload=outcome, callback=finished)
+
+            self.bridge.call("crm-csv-export-start", payload={
+                "company_id": company_id,
+                "company_version": company.get("record_version"),
+                "contact_count": data["contact_count"],
+                "confirmed": True
+            }, callback=started)
 
         self.bridge.call("crm-company-csv", company_id, callback=received)
 
