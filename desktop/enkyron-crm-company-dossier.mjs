@@ -37,7 +37,7 @@ const LISTS={
     +'FROM enkyron_crm_effective_ticket_links l '
     +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
-    +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 21',
+    +'ORDER BY l.linked_at DESC,l.ticket_id DESC LIMIT 21',
   opportunities:
     'SELECT o.id AS opportunity_id,o.prospect_id,o.stage,o.next_action,'
     +'o.due_date,o.version,o.updated_at,'
