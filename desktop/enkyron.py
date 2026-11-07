@@ -822,10 +822,20 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_company_ticket_button.clicked.connect(
             self.open_selected_company_ticket
         )
-        company_tickets_l.addWidget(
-            self.crm_open_company_ticket_button,
-            alignment=Qt.AlignmentFlag.AlignRight
+        company_tickets_actions = QHBoxLayout()
+        company_tickets_actions.addStretch()
+        self.crm_revoke_ticket_button = QPushButton("Correct selected link…")
+        self.crm_revoke_ticket_button.setEnabled(False)
+        self.crm_revoke_ticket_button.clicked.connect(self.open_ticket_link_correction)
+        company_tickets_actions.addWidget(self.crm_revoke_ticket_button)
+        company_tickets_actions.addWidget(self.crm_open_company_ticket_button)
+        company_tickets_l.addLayout(company_tickets_actions)
+        self.crm_ticket_corrections_notice = QLabel(
+            "No ticket-link correction history loaded."
         )
+        self.crm_ticket_corrections_notice.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_ticket_corrections_notice.setWordWrap(True)
+        company_tickets_l.addWidget(self.crm_ticket_corrections_notice)
         self.crm_company_detail_tabs.addTab(company_tickets_page, "Tickets")
         self.crm_tabs.addTab(companies_page, "Companies && Contacts")
 
@@ -3105,6 +3115,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_ticket_items = []
         self.crm_company_tickets_table.setRowCount(0)
         self.crm_open_company_ticket_button.setEnabled(False)
+        self.crm_revoke_ticket_button.setEnabled(False)
+        self.crm_ticket_corrections_notice.setText("Reading correction history…")
         self.crm_company_tickets_notice.setText("Reading associated tickets…")
 
         def received(data, error):
@@ -3146,11 +3158,146 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-company-tickets", company_id, callback=received)
 
+        def corrections_loaded(data, error):
+            if seq != self.crm_ticket_seq or company_id != self.crm_company_id:
+                return
+            if error or not data or not data.get("available", False):
+                self.crm_ticket_corrections_notice.setText(
+                    "Correction history unavailable: "
+                    + str(error or (data or {}).get("notice", "Unknown error"))
+                )
+                return
+            if data.get("company_id") != company_id:
+                self.crm_ticket_corrections_notice.setText("Correction scope mismatch.")
+                return
+            records = data.get("items") or []
+            if not records:
+                self.crm_ticket_corrections_notice.setText(
+                    "No ticket-link revocations recorded for this company."
+                )
+                return
+            summaries = [
+                str(row.get("ticket_number") or row.get("ticket_id") or "ticket")
+                for row in records[:8]
+            ]
+            suffix = " (first 8 displayed)" if len(records) > 8 or data.get("more") else ""
+            self.crm_ticket_corrections_notice.setText(
+                "{} revoked association(s) retained in audit history: {}{}".format(
+                    len(records), ", ".join(summaries), suffix
+                )
+            )
+
+        self.bridge.call(
+            "crm-ticket-revocations", company_id, callback=corrections_loaded
+        )
+
     def company_ticket_selected(self):
         row = self.crm_company_tickets_table.currentRow()
-        self.crm_open_company_ticket_button.setEnabled(
-            0 <= row < len(self.crm_ticket_items)
+        active = 0 <= row < len(self.crm_ticket_items)
+        self.crm_open_company_ticket_button.setEnabled(active)
+        self.crm_revoke_ticket_button.setEnabled(active)
+
+    def open_ticket_link_correction(self):
+        row = self.crm_company_tickets_table.currentRow()
+        if (not self.crm_company_id or
+                not 0 <= row < len(self.crm_ticket_items)):
+            return
+        company_id = self.crm_company_id
+        ticket = self.crm_ticket_items[row]
+        ticket_id = ticket.get("ticket_id")
+        expected_client = ticket.get("client_name")
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Correct ticket association")
+        dialog.setMinimumWidth(610)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("REVOKE AN INCORRECT COMPANY–TICKET LINK"))
+        warning = QLabel(
+            "Ticket {}. This revokes ONLY its current CRM company association. "
+            "The original ticket, immutable link and contact-link history remain "
+            "in the database; the revoked link and its contact links will no "
+            "longer be presented as active. This does not reassign the ticket "
+            "to another company. Only correct a verified mistake.".format(
+                ticket.get("ticket_number") or ticket_id or ""
+            )
         )
+        warning.setWordWrap(True)
+        warning.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(warning)
+        note = QPlainTextEdit()
+        note.setPlaceholderText(
+            "Describe what was incorrect, how you verified the mismatch and why "
+            "revocation is justified (30–1000 characters)."
+        )
+        note.setMaximumHeight(110)
+        layout.addWidget(note)
+        confirmed = QCheckBox(
+            "I independently reviewed the selected company and ticket, "
+            "and authorise revoking only this association."
+        )
+        layout.addWidget(confirmed)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        submit = QPushButton("Record link correction")
+        submit.setObjectName("primary")
+        buttons.addWidget(submit)
+        layout.addLayout(buttons)
+        self.crm_ticket_correction_dialog = dialog
+
+        def save():
+            if (not dialog.isVisible() or self.crm_company_id != company_id
+                    or not confirmed.isChecked()):
+                return
+            rationale = note.toPlainText().strip()
+            if not 30 <= len(rationale) <= 1000:
+                QMessageBox.warning(
+                    dialog, "Review required",
+                    "Enter a 30–1000 character correction rationale."
+                )
+                return
+            if QMessageBox.question(
+                dialog, "Confirm audited revocation",
+                "Stop treating this ticket and linked contacts as associated with "
+                "this CRM company? The original evidence is retained and the "
+                "ticket cannot be reassigned through the current link dialog.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            submit.setEnabled(False)
+
+            def saved(data, error):
+                if not dialog.isVisible():
+                    return
+                if (error or not data or data.get("company_id") != company_id
+                        or data.get("ticket_id") != ticket_id):
+                    QMessageBox.warning(
+                        dialog, "Correction refused",
+                        error or "Ticket association was not corrected."
+                    )
+                    submit.setEnabled(True)
+                    return
+                dialog.accept()
+                if self.crm_company_id == company_id:
+                    self.load_company_tickets(company_id)
+                if self.current_id == ticket_id:
+                    self.load_current_ticket_company(ticket_id)
+                QMessageBox.information(
+                    self, "Association corrected",
+                    "The old association is no longer active. Original ticket "
+                    "and link evidence remain available in audit history."
+                )
+
+            self.bridge.call("crm-revoke-ticket-link", payload={
+                "company_id": company_id, "ticket_id": ticket_id,
+                "expected_client_name": expected_client,
+                "review_note": rationale, "confirmed": True
+            }, callback=saved)
+
+        submit.clicked.connect(save)
+        dialog.open()
 
     def open_selected_company_ticket(self):
         row = self.crm_company_tickets_table.currentRow()
