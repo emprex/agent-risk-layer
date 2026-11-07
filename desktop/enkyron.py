@@ -201,6 +201,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_id = None
         self.crm_pending_company_id = None
         self.crm_company_dialog = None
+        self.crm_record_edit_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.crm_dossier_company_id = None
@@ -679,6 +680,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_add.setEnabled(False)
         self.crm_company_add.clicked.connect(self.open_new_company)
         company_toolbar.addWidget(self.crm_company_add)
+        self.crm_company_edit = QPushButton("Edit company…")
+        self.crm_company_edit.setEnabled(False)
+        self.crm_company_edit.clicked.connect(self.open_edit_company)
+        company_toolbar.addWidget(self.crm_company_edit)
         self.crm_company_dossier_open = QPushButton("Open company dossier")
         self.crm_company_dossier_open.setEnabled(False)
         self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
@@ -720,6 +725,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_add.setEnabled(False)
         self.crm_contact_add.clicked.connect(self.open_new_contact)
         contacts_heading.addWidget(self.crm_contact_add)
+        self.crm_contact_edit = QPushButton("Edit selected contact…")
+        self.crm_contact_edit.setEnabled(False)
+        self.crm_contact_edit.clicked.connect(self.open_edit_contact)
+        contacts_heading.addWidget(self.crm_contact_edit)
         contacts_l.addLayout(contacts_heading)
         self.crm_contacts_notice = QLabel(
             "Select a company to view its contacts. Email consent starts as unknown."
@@ -736,6 +745,12 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_contacts_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_contacts_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_contacts_table.itemSelectionChanged.connect(
+            self.contact_selected
         )
         self.crm_contacts_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
@@ -1548,6 +1563,8 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_edit.setEnabled(False)
+            self.crm_contact_edit.setEnabled(False)
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
@@ -1613,6 +1630,8 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_edit.setEnabled(False)
+            self.crm_contact_edit.setEnabled(False)
             self.crm_contact_add.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             self.crm_ticket_seq += 1
@@ -1624,6 +1643,11 @@ class EnkyronWindow(QMainWindow):
         company_id = company["id"]
         self.crm_company_id = company_id
         self.crm_company_dossier_open.setEnabled(True)
+        self.crm_company_edit.setEnabled(
+            isinstance(company.get("record_version"), int)
+            and company["record_version"] >= 1
+        )
+        self.crm_contact_edit.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
@@ -1638,12 +1662,14 @@ class EnkyronWindow(QMainWindow):
             if seq != self.crm_contact_seq or company_id != self.crm_company_id:
                 return
             self.crm_contact_items = []
+            self.crm_contact_edit.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             if error:
                 self.crm_contacts_notice.setText("Contacts unavailable.")
                 self.show_error(error)
                 return
             self.crm_contact_items = data.get("items", [])
+            self.crm_contacts_table.blockSignals(True)
             self.crm_contacts_table.setRowCount(len(self.crm_contact_items))
             for index, contact in enumerate(self.crm_contact_items):
                 for col, val in enumerate([
@@ -1655,6 +1681,8 @@ class EnkyronWindow(QMainWindow):
                     self.crm_contacts_table.setItem(
                         index, col, QTableWidgetItem(str(val))
                     )
+            self.crm_contacts_table.blockSignals(False)
+            self.crm_contact_edit.setEnabled(False)
             more = " First 100; paging pending." if data.get("more") else ""
             self.crm_contacts_notice.setText(
                 f"{len(self.crm_contact_items)} contact(s). "
@@ -1662,6 +1690,152 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-contacts", company_id, callback=received)
+
+
+    def contact_selected(self):
+        row = self.crm_contacts_table.currentRow()
+        selected = 0 <= row < len(self.crm_contact_items)
+        self.crm_contact_edit.setEnabled(
+            bool(self.crm_company_id) and selected and
+            isinstance(self.crm_contact_items[row].get("record_version"), int)
+            and self.crm_contact_items[row]["record_version"] >= 1
+            if selected else False
+        )
+
+    def open_edit_company(self):
+        row = self.crm_company_table.currentRow()
+        if not 0 <= row < len(self.crm_company_items):
+            return
+        company = self.crm_company_items[row]
+        if company.get("id") != self.crm_company_id:
+            return
+        self.open_crm_record_editor("company", company)
+
+    def open_edit_contact(self):
+        row = self.crm_contacts_table.currentRow()
+        if not 0 <= row < len(self.crm_contact_items):
+            return
+        contact = self.crm_contact_items[row]
+        if not self.crm_company_id:
+            return
+        self.open_crm_record_editor("contact", contact)
+
+    def open_crm_record_editor(self, kind, record):
+        if self.crm_record_edit_dialog and self.crm_record_edit_dialog.isVisible():
+            self.crm_record_edit_dialog.raise_()
+            return
+        expected = record.get("record_version")
+        if not isinstance(expected, int) or expected < 1:
+            QMessageBox.warning(self, "Correction unavailable",
+                                "Refresh after installing CRM migration 084.")
+            return
+        if kind == "company":
+            fields = [
+                ("name", "Company name *", 160),
+                ("legal_name", "Legal name", 160),
+                ("sector", "Sector", 120),
+                ("city", "City", 120),
+                ("country", "Country", 90),
+                ("website", "Website", 500)
+            ]
+        else:
+            fields = [
+                ("full_name", "Contact name *", 160),
+                ("job_title", "Job title", 160),
+                ("email", "Email", 254),
+                ("phone", "Phone", 80)
+            ]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Correct " + kind + " record")
+        dialog.setMinimumWidth(580)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("VERSIONED CRM CORRECTION"))
+        notice = QLabel(
+            "Only operator-entered fields can change. Company legal identity, "
+            "marketing consent and client status are NOT independently verified. "
+            "Changes are audited and earlier commercial snapshots are preserved."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        form = QFormLayout()
+        inputs = {}
+        for key, label, maximum in fields:
+            editor = QLineEdit()
+            editor.setMaxLength(maximum)
+            editor.setText(str(record.get(key) or ""))
+            inputs[key] = editor
+            form.addRow(label, editor)
+        rationale = QPlainTextEdit()
+        rationale.setPlaceholderText(
+            "Why was this correction necessary and what source was consulted? "
+            "(20–1000 characters)"
+        )
+        rationale.setMaximumHeight(100)
+        form.addRow("Correction rationale *", rationale)
+        layout.addLayout(form)
+        confirmed = QCheckBox(
+            "I confirm these corrections do not prove identity or marketing consent."
+        )
+        layout.addWidget(confirmed)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        submit = QPushButton("Save versioned correction")
+        submit.setObjectName("primary")
+        buttons.addWidget(submit)
+        layout.addLayout(buttons)
+        record_id = record["id"]
+        company_id = self.crm_company_id
+
+        def save():
+            if kind == "company" and company_id != self.crm_company_id:
+                QMessageBox.warning(dialog, "Selection changed",
+                                    "Reopen the company editor.")
+                return
+            if kind == "contact" and company_id != self.crm_company_id:
+                QMessageBox.warning(dialog, "Selection changed",
+                                    "Reopen the contact editor.")
+                return
+            note = rationale.toPlainText().strip()
+            if not 20 <= len(note) <= 1000 or not confirmed.isChecked():
+                QMessageBox.warning(dialog, "Confirmation required",
+                                    "Enter 20–1000 characters and confirm.")
+                return
+            payload = {
+                "id": record_id, "expected_version": expected,
+                "review_note": note, "confirmed": True,
+                **{k: editor.text() for k, editor in inputs.items()}
+            }
+            if kind == "contact":
+                payload["company_id"] = company_id
+            submit.setEnabled(False)
+
+            def received(data, error):
+                if not dialog.isVisible():
+                    return
+                if error or not data or data.get("record_version") != expected + 1:
+                    submit.setEnabled(True)
+                    QMessageBox.warning(
+                        dialog, "Correction refused",
+                        error or "The record changed. Refresh before retrying."
+                    )
+                    return
+                dialog.accept()
+                if kind == "company":
+                    self.crm_pending_company_id = record_id
+                    self.load_companies()
+                elif self.crm_company_id == company_id:
+                    self.company_selected()
+
+            self.bridge.call(
+                "crm-edit-company" if kind == "company" else "crm-edit-contact",
+                payload=payload, callback=received
+            )
+
+        submit.clicked.connect(save)
+        self.crm_record_edit_dialog = dialog
+        dialog.open()
 
     def open_company_dossier(self):
         if not self.crm_company_id:
