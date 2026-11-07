@@ -163,3 +163,16 @@ differ, it displays a nonblocking review notice in the linked tickets panel.
 No PostgreSQL migration or source ticket update. Exact-head CI and a new Debian
 visual check are distinct acceptance gates. End-to-end contact-to-ticket link
 and persistence after application restart still need local operator evidence.
+
+## E03-01/02 manual ticket classification (development, 2026-11-07)
+
+The local synthetic ticket `ARL-2026-000005` already has reviewed CRM
+associations. E03 introduces an append-only, human-entered triage review (new
+migration 093), with six request types, manually selected impact, urgency and
+priority, a rationale, an operator and timestamp. Old triage is never overwritten.
+The write path locks the ticket, rejects closed/archived records, verifies the
+expected previous triage ID and never launches a security assessment, signs a
+contract or sends an invoice. Uninstalled migration is reported without
+preventing ordinary ticket reads. Applying the migration requires an intentional
+operator-run backup-first script. The CI and Debian acceptance gates are
+separate. E03-02 generic tags, SLA and broader operations remain OPEN.

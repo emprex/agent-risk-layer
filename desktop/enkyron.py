@@ -478,6 +478,17 @@ class EnkyronWindow(QMainWindow):
         assignment.addWidget(self.archive_button)
         assignment.addStretch()
         overview_l.addLayout(assignment)
+        triage_row = QHBoxLayout()
+        self.ticket_triage_label = QLabel("Business triage: Not loaded")
+        self.ticket_triage_label.setWordWrap(True)
+        triage_row.addWidget(self.ticket_triage_label, 1)
+        self.ticket_triage_button = QPushButton("Qualify request…")
+        self.ticket_triage_button.setEnabled(False)
+        self.ticket_triage_button.clicked.connect(self.open_ticket_triage)
+        triage_row.addWidget(self.ticket_triage_button)
+        overview_l.addLayout(triage_row)
+        self.ticket_triage_latest_id = None
+        self.ticket_triage_dialog = None
         self.crm_ticket_company_label = QLabel("CRM company: Not loaded")
         self.crm_ticket_company_label.setWordWrap(True)
         overview_l.addWidget(self.crm_ticket_company_label)
@@ -7692,6 +7703,121 @@ class EnkyronWindow(QMainWindow):
         )
         self.update_status_button.setEnabled(can_change)
 
+    def open_ticket_triage(self):
+        ticket_id = self.current_id
+        if (not ticket_id or not self.current_ticket or
+                not self.ticket_triage_button.isEnabled()):
+            return
+        if self.ticket_triage_dialog and self.ticket_triage_dialog.isVisible():
+            self.ticket_triage_dialog.raise_()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Ticket business qualification")
+        dialog.setMinimumWidth(600)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("E03 · HUMAN BUSINESS TRIAGE"))
+        info = QLabel(
+            "Review the ticket's recorded request before classifying it. "
+            "Impact, urgency and priority are operator choices, not security "
+            "verdicts or a customer authorisation to perform tests."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        form = QFormLayout()
+        self.triage_type = QComboBox()
+        for label, code in (
+            ("Commercial question", "commercial_question"),
+            ("Assessment request", "assessment_request"),
+            ("Security incident", "security_incident"),
+            ("Support request", "support_request"),
+            ("Change request", "change_request"),
+            ("Consultation", "consultation"),
+        ):
+            self.triage_type.addItem(label, code)
+        form.addRow("Request type *", self.triage_type)
+        self.triage_impact = QComboBox()
+        self.triage_urgency = QComboBox()
+        for level in ("low", "medium", "high"):
+            self.triage_impact.addItem(level.title(), level)
+            self.triage_urgency.addItem(level.title(), level)
+        form.addRow("Impact *", self.triage_impact)
+        form.addRow("Urgency *", self.triage_urgency)
+        self.triage_priority = QComboBox()
+        for level in ("low", "normal", "high", "critical"):
+            self.triage_priority.addItem(level.title(), level)
+        form.addRow("Priority (human judgment) *", self.triage_priority)
+        layout.addLayout(form)
+        self.triage_note = QPlainTextEdit()
+        self.triage_note.setMaximumHeight(100)
+        self.triage_note.setPlaceholderText(
+            "Record your reasons (30–500 characters). No implicit client "
+            "approval, testing authorisation or invoice."
+        )
+        layout.addWidget(self.triage_note)
+        self.triage_confirm = QCheckBox(
+            "I reviewed this request and confirm my internal classification."
+        )
+        layout.addWidget(self.triage_confirm)
+        self.triage_submit = QPushButton("Record qualification")
+        self.triage_submit.setObjectName("primary")
+        layout.addWidget(self.triage_submit)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        layout.addWidget(cancel)
+        self.ticket_triage_dialog = dialog
+        expected_latest_id = self.ticket_triage_latest_id
+
+        def submit():
+            if ticket_id != self.current_id or not dialog.isVisible():
+                return
+            note = self.triage_note.toPlainText().strip()
+            if not 30 <= len(note) <= 500 or not self.triage_confirm.isChecked():
+                QMessageBox.warning(
+                    dialog, "Review required",
+                    "Enter a 30–500 character rationale and confirm the review."
+                )
+                return
+            if QMessageBox.question(
+                dialog, "Confirm business triage",
+                "Record this classification without creating an assessment, "
+                "contract, customer message or invoice?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            payload = {
+                "ticket_id": ticket_id,
+                "request_type": self.triage_type.currentData(),
+                "impact": self.triage_impact.currentData(),
+                "urgency": self.triage_urgency.currentData(),
+                "priority": self.triage_priority.currentData(),
+                "review_note": note,
+                "expected_latest_id": expected_latest_id,
+                "confirmed": True,
+            }
+            self.triage_submit.setEnabled(False)
+
+            def received(data, error):
+                if ticket_id != self.current_id or not dialog.isVisible():
+                    return
+                if error or not isinstance(data, dict) or not data.get("id"):
+                    self.triage_submit.setEnabled(True)
+                    QMessageBox.warning(
+                        dialog, "Qualification not recorded",
+                        error or "Refresh this ticket and review the latest triage."
+                    )
+                    return
+                dialog.accept()
+                self.status.setText("Business triage saved; refreshing ticket.")
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, ticket_id)
+                self.ticket_changed(item, None)
+
+            self.bridge.call("ticket-triage-save", payload=payload, callback=received)
+
+        self.triage_submit.clicked.connect(submit)
+        dialog.open()
+
     def change_ticket_status(self):
         if not self.current_ticket or not self.current_id:
             return
@@ -7883,6 +8009,9 @@ class EnkyronWindow(QMainWindow):
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
         self.current_status_label.setText("Current: loading…")
+        self.ticket_triage_label.setText("Business triage: Loading…")
+        self.ticket_triage_latest_id = None
+        self.ticket_triage_button.setEnabled(False)
         self.owner_label.setText("Assigned to: Unassigned")
         self.assign_button.setEnabled(False)
         self.archive_button.setEnabled(False)
@@ -7968,6 +8097,26 @@ class EnkyronWindow(QMainWindow):
                 active and ticket["status"] != "closed" and is_local_owner
             )
             self.archive_button.setEnabled(active and ticket["status"] == "closed")
+            triage = data.get("triage") or {}
+            review = triage.get("current") or {}
+            self.ticket_triage_latest_id = review.get("id")
+            if not triage.get("available"):
+                self.ticket_triage_label.setText(
+                    "Business triage unavailable: migration 093 not installed."
+                )
+                self.ticket_triage_button.setEnabled(False)
+            else:
+                self.ticket_triage_label.setText(
+                    "Business triage: {} · Impact {} · Urgency {} · Priority {}".format(
+                        str(review.get("request_type") or "NOT YET REVIEWED").replace("_", " "),
+                        str(review.get("impact") or "—").upper(),
+                        str(review.get("urgency") or "—").upper(),
+                        str(review.get("priority") or "—").upper()
+                    )
+                )
+                self.ticket_triage_button.setEnabled(
+                    active and ticket["status"] != "closed"
+                )
             if not active:
                 self.meta.setText(self.meta.text() + " · ARCHIVED")
             self.engine_button.setEnabled(
