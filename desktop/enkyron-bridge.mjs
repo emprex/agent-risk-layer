@@ -30,6 +30,7 @@ import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicke
 import {listContactTickets,linkContactToTicket,validateContactTicketLink,requireContactId} from './enkyron-crm-contact-tickets.mjs';
 import {listPrivacyRequests,recordPrivacyRequest,validatePrivacyIntake} from './enkyron-crm-privacy.mjs';
 import {listRetentionReviews,recordRetentionReview,validateRetentionReview} from './enkyron-crm-retention.mjs';
+import {readCompanyCsv} from './enkyron-crm-csv.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
 import {updateCompany,updateContact,validateCompanyEdit,validateContactEdit,listRecordChanges} from './enkyron-crm-edit.mjs';
@@ -183,7 +184,7 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-csv', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
@@ -194,6 +195,7 @@ async function main() {
   if (command === 'crm-retention-reviews') requireContactId(arg);
   if (command === 'crm-record-changes' && !/^(company|contact):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM record history request');
   if (command === 'crm-company-dossier') requireCompanyId(arg);
+  if (command === 'crm-company-csv') requireCompanyId(arg);
   if (['crm-proposal','crm-proposal-lines','crm-proposal-export','crm-tax-reviews','crm-buyer-review','crm-commercial-terms','crm-internal-review','crm-billing-preparation','crm-invoice-draft','crm-invoice-prepare','crm-invoice-issue-review'].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM proposal ID');
   if (command === 'crm-ticket-company') requireTicketId(arg);
   if (['ticket', 'master'].includes(command)) requireTicketId(arg);
@@ -255,6 +257,7 @@ async function main() {
       command === 'crm-privacy-requests' ? await listPrivacyRequests(pool, arg, os.userInfo().username) :
       command === 'crm-retention-reviews' ? await listRetentionReviews(pool, arg, os.userInfo().username) :
       command === 'crm-company-dossier' ? await getCompanyDossier(pool, arg, os.userInfo().username) :
+      command === 'crm-company-csv' ? await readCompanyCsv(pool, arg, os.userInfo().username) :
       command === 'crm-record-qualification' ? await recordQualificationReview(pool, payload, os.userInfo().username) :
       command === 'crm-proposals' ? await listProposalDrafts(pool, arg, os.userInfo().username) :
       command === 'crm-proposal' ? await readProposalDraft(pool, arg, os.userInfo().username) :
