@@ -610,6 +610,24 @@ jobs:
           assert window.crm_company_tickets_table.rowCount() == 1
           window.crm_company_tickets_table.selectRow(0)
           assert window.crm_open_company_ticket_button.isEnabled()
+          assert window.crm_revoke_ticket_button.isEnabled()
+          window.crm_revoke_ticket_button.click()
+          correction = window.crm_ticket_correction_dialog
+          assert correction.isVisible()
+          correction.findChildren(QPlainTextEdit)[0].setPlainText(
+              "Synthetic operator review confirmed the company association was incorrect.")
+          correction.findChildren(QCheckBox)[0].setChecked(True)
+          button = next(b for b in correction.findChildren(QPushButton)
+                        if b.text() == "Record link correction")
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes):
+              button.click()
+          assert calls[-1][0] == "crm-revoke-ticket-link"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["ticket_id"] == example_ticket_id
+          assert calls[-1][2]["expected_client_name"] == "Historical customer name"
+          assert calls[-1][2]["confirmed"] is True
+          correction.reject()
           window.crm_company_detail_tabs.setCurrentIndex(1)
           window.open_ticket_link_dialog()
           assert window.crm_link_dialog.isVisible()
