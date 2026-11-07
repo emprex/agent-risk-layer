@@ -2078,7 +2078,6 @@ class EnkyronWindow(QMainWindow):
             "This is my manual review only. It does not authorise retention, "
             "erasure or a legal hold."
         )
-        checked.setWordWrap(True)
         layout.addWidget(checked)
         actions = QHBoxLayout()
         close = QPushButton("Close")
