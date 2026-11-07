@@ -202,6 +202,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_pending_company_id = None
         self.crm_company_dialog = None
         self.crm_record_edit_dialog = None
+        self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.crm_dossier_company_id = None
@@ -1787,6 +1788,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         record_id = record["id"]
         company_id = self.crm_company_id
+        history = QPushButton("View correction history…")
+        history.clicked.connect(
+            lambda: self.open_crm_record_history(kind, record_id)
+        )
+        buttons.insertWidget(1, history)
 
         def save():
             if kind == "company" and company_id != self.crm_company_id:
@@ -1836,6 +1842,61 @@ class EnkyronWindow(QMainWindow):
         submit.clicked.connect(save)
         self.crm_record_edit_dialog = dialog
         dialog.open()
+
+
+    def open_crm_record_history(self, kind, record_id):
+        if self.crm_record_history_dialog and self.crm_record_history_dialog.isVisible():
+            self.crm_record_history_dialog.raise_()
+            return
+
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Correction history unavailable",
+                    error or (data or {}).get("notice", "Could not read revision history.")
+                )
+                return
+            dialog = QDialog(self)
+            dialog.setWindowTitle("ENKYRON · CRM correction history")
+            dialog.resize(720, 440)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(section_title("IMMUTABLE FIELD-CORRECTION HISTORY"))
+            statement = QLabel(
+                "Recorded field names, operator and rationale. "
+                "Historical contact values are not reproduced here."
+            )
+            statement.setWordWrap(True)
+            layout.addWidget(statement)
+            items = data.get("items") or []
+            table = QTableWidget(len(items), 4)
+            table.setHorizontalHeaderLabels(
+                ["Version", "Changed fields", "Operator", "Review rationale"]
+            )
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.horizontalHeader().setSectionResizeMode(
+                3, QHeaderView.ResizeMode.Stretch
+            )
+            for row, entry in enumerate(items):
+                values = [
+                    entry.get("new_version"),
+                    ", ".join(entry.get("changed_fields") or []),
+                    entry.get("actor_local"),
+                    entry.get("review_note")
+                ]
+                for col, value in enumerate(values):
+                    table.setItem(row, col, QTableWidgetItem(str(value or "")))
+            layout.addWidget(table, 1)
+            if data.get("more"):
+                layout.addWidget(QLabel("Only the latest 50 corrections are shown."))
+            close = QPushButton("Close")
+            close.clicked.connect(dialog.reject)
+            layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+            self.crm_record_history_dialog = dialog
+            dialog.open()
+
+        self.bridge.call(
+            "crm-record-changes", kind + ":" + record_id, callback=received
+        )
 
     def open_company_dossier(self):
         if not self.crm_company_id:
