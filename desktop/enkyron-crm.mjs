@@ -86,7 +86,7 @@ export async function listCompanies(pool, search, actor) {
   try {
     const result = await pool.query(
       `SELECT id,name,legal_name,sector,city,country,website,relationship_state,
-              source_type,created_at,updated_at
+              source_type,record_version,created_at,updated_at
        FROM enkyron_crm_companies
        WHERE workspace_key=$1 AND
         ($2='' OR POSITION(LOWER($2) IN LOWER(name))>0
@@ -119,7 +119,7 @@ export async function listContacts(pool, companyId, actor) {
   if (!company) throw new Error('CRM company not found for local operator');
   const rows=(await pool.query(
     `SELECT id,full_name,job_title,email,phone,relationship_state,marketing_permission,
-            created_at
+            record_version,created_at
      FROM enkyron_crm_contacts
      WHERE company_id=$1 AND workspace_key=$2 ORDER BY created_at DESC,id LIMIT 101`,
     [companyId,key]

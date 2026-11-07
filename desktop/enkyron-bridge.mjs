@@ -29,6 +29,7 @@ import {readInvoiceIssueReview,recordInvoiceIssueReview,validateInvoiceIssueRevi
 import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicketToCompany, validateTicketLink, requireCompanyId } from './enkyron-crm-tickets.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
+import {updateCompany,updateContact,validateCompanyEdit,validateContactEdit,listRecordChanges} from './enkyron-crm-edit.mjs';
 import {
   createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
   assignDeskTicket, archiveDeskTicket, validateAssignment, validateArchive,
@@ -179,12 +180,13 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts'].includes(command)) boundedSearch(arg);
   if (command === 'crm-company-tickets') requireCompanyId(arg);
+  if (command === 'crm-record-changes' && !/^(company|contact):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM record history request');
   if (command === 'crm-company-dossier') requireCompanyId(arg);
   if (['crm-proposal','crm-proposal-lines','crm-proposal-export','crm-tax-reviews','crm-buyer-review','crm-commercial-terms','crm-internal-review','crm-billing-preparation','crm-invoice-draft','crm-invoice-prepare','crm-invoice-issue-review'].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM proposal ID');
   if (command === 'crm-ticket-company') requireTicketId(arg);
@@ -193,7 +195,7 @@ async function main() {
   if (command === 'crm-prospect-opportunity') requireProspectId(arg);
   if (command === 'crm-activity-timeline') requireOpportunityId(arg);
   if (command === 'crm-mail-draft' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM draft ID');
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson() : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
@@ -202,6 +204,8 @@ async function main() {
   if (command === 'ticket-archive') validateArchive(payload);
   if (command === 'crm-create-company') validateCompany(payload);
   if (command === 'crm-create-contact') validateContact(payload);
+  if (command === 'crm-edit-company') validateCompanyEdit(payload);
+  if (command === 'crm-edit-contact') validateContactEdit(payload);
   if (command === 'crm-prospect-link') validateProspectLink(payload);
   if (command === 'crm-prospects-page') validateProspectPage(payload);
   if (command === 'crm-link-ticket') validateTicketLink(payload);
@@ -222,7 +226,7 @@ async function main() {
   if (command === 'crm-billing-record') validateBillingWorksheet(payload);
   if (command === 'crm-invoice-record') validateInvoiceDraft(payload);
   if (command === 'crm-invoice-issue-record') validateInvoiceIssueReview(payload);
-  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -284,6 +288,9 @@ async function main() {
       command === 'crm-prospect-link' ? await associateProspect(pool, payload, os.userInfo().username) :
       command === 'crm-create-company' ? await createCompany(pool, payload, os.userInfo().username) :
       command === 'crm-create-contact' ? await createContact(pool, payload, os.userInfo().username) :
+      command === 'crm-edit-company' ? await updateCompany(pool, payload, os.userInfo().username) :
+      command === 'crm-edit-contact' ? await updateContact(pool, payload, os.userInfo().username) :
+      command === 'crm-record-changes' ? await listRecordChanges(pool, arg.split(':',1)[0], arg.slice(arg.indexOf(':')+1), os.userInfo().username) :
       command === 'ticket' ? await ticketDetails(pool, arg) :
       command === 'master' ? await masterDetails(pool, arg) :
       command === 'evidence-register' ? await evidenceRegister(pool, payload) :
