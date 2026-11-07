@@ -103,6 +103,9 @@ jobs:
       - name: Python CSV formula-injection and no-clobber tests
         run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv.py' -v
 
+      - name: Python CSV import preflight (read-only, hostile files)
+        run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv_import.py' -v
+
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen

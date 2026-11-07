@@ -156,3 +156,23 @@ recipient/right-to-export workflow, general multi-company export, secure CSV
 import/provenance or round-trip migration. Debian operator acceptance is
 NOT-VERIFIED until manually tested on synthetic data. Exported contact names
 remain subject to GDPR/privacy handling.
+
+
+## E02-08B — CSV import preflight, zero database writes (2026-11-07)
+The offline `desktop/enkyron_crm_csv_import.py` parser validates the **exact**
+selected-company V1 CSV schema and record order. It checks UTF-8 decoding,
+1 MiB size, 500-contact bound, unique canonical identifiers, exact company
+ownership, versions, fixed headers and cell sizes, hostile spreadsheet
+formula cells, malformed quotes and control characters. It returns a SHA-256
+digest and a **read-only preview**; no SQL access, consent promotion, customer
+identity matching, overwrite, import or remote transmission.
+The existing export CSV writer remains unchanged. No new UI button and no
+database migration is added in E02-08B.
+
+This is a validation foundation **not a working importer**. A later reviewed
+import flow must bind the preview digest to the exact file bytes, require an
+explicit human mapping/approval, preserve provenance and event history, enforce
+company ownership and existing-record conflicts transactionally, and prove
+negative tests against disposable PostgreSQL. Do not copy CSV relationship
+or marketing labels into authority-bearing fields. Debian acceptance is
+NOT-VERIFIED until a GUI import/preview is available.
