@@ -24,7 +24,10 @@ test('PostgreSQL human qualification history is scoped and never promotes client
   try{
     const companyName='Synthetic same-name '+randomUUID().slice(0,8);
     const a=await createCompany(db,{name:companyName,city:'London'},owner);
-    const b=await createCompany(db,{name:companyName,city:'London'},owner);
+    const b=await createCompany(db,{name:companyName,city:'London',duplicate_review:{
+       match_ids:[a.id],confirmed:true,
+       review_note:'Separately reviewed synthetic company with intentionally similar name.'
+     }},owner);
     const c1=await createContact(db,{company_id:a.id,full_name:'Synthetic Person A',
       email:'person-a@example.invalid'},owner);
     const c2=await createContact(db,{company_id:b.id,full_name:'Synthetic Person B',
