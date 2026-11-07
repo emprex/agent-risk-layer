@@ -181,6 +181,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-crm-csv-postgres.test.js
 
+      - name: ENKYRON E02-08C reviewed transactional CSV import PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-csv-import-postgres.test.js
+
       - name: ENKYRON CRM manual opportunity and follow-up PostgreSQL checks
         env:
           CI: 'true'
