@@ -57,7 +57,9 @@ test('buyer review: explicit link, immutable revision, cross-workspace rejection
     const second=await createCompany(db,{
       name:'Unrelated homonym',
       legal_name:'Synthetic Legal Client Ltd',city:'London',country:'GB',
-      website:'https://other.example.invalid',sector:'Other'
+      website:'https://other.example.invalid',sector:'Other',
+      duplicate_review:{match_ids:[crm.id],confirmed:true,
+        review_note:'Distinct synthetic legal buyer homonym reviewed without merging entities.'}
     },actor);
     const payload={proposal_id:proposal.id,expected_revision:1,
       company_id:crm.id,confirmed:true,
