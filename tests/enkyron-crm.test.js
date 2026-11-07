@@ -88,10 +88,12 @@ test('transaction creates company and event under the same operator, or rolls ba
   assert.equal(out.relationship_state,'prospect');
   assert.equal(out.id,companyId);
   assert.equal(calls[0].sql,'BEGIN');
-  assert.match(calls[1].sql,/INSERT INTO enkyron_crm_companies/);
-  assert.equal(calls[1].params[1],'local:ci-operator');
-  assert.match(calls[2].sql,/INSERT INTO enkyron_crm_events/);
-  assert.equal(calls[3].sql,'COMMIT');
+  assert.ok(calls.some(x=>x.sql.includes('pg_advisory_xact_lock')));
+  assert.ok(calls.some(x=>x.sql.includes('ORDER BY c.name,c.id LIMIT 26')));
+  const companyInsert=calls.find(x=>x.sql.includes('INSERT INTO enkyron_crm_companies'));
+  assert.equal(companyInsert.params[1],'local:ci-operator');
+  assert.equal(calls.filter(x=>x.sql.includes('INSERT INTO enkyron_crm_events')).length,1);
+  assert.equal(calls.at(-2).sql,'COMMIT');
   const failing={
     connect:async()=>({
       query:async sql=>{

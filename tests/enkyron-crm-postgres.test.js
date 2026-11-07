@@ -35,7 +35,10 @@ test('PostgreSQL CRM E02-01/02: distinct companies, scoped contacts, immutable a
       website:'https://example.invalid'
     },'ci-operator');
     const second=await createCompany(pool,{
-      name:'Synthetic Acme',city:'Manchester'
+      name:'Synthetic Acme',city:'Manchester',duplicate_review:{
+        match_ids:[first.id],confirmed:true,
+        review_note:'Separately verified synthetic entity. Keep as distinct CRM prospect.'
+      }
     },'ci-operator');
     assert.notEqual(first.id,second.id);
     assert.equal(first.relationship_state,'prospect');

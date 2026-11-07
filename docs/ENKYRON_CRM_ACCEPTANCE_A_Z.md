@@ -315,3 +315,27 @@ concurrency tests before E02-04 can close. Approximate/fuzzy names, aliases,
 internationalised or port-qualified hostnames may evade these simple
 heuristics; no claim of exhaustive deduplication. CI and Debian acceptance
 must be recorded separately. No migration required by E02-04A.
+
+
+## E02-04B — Duplicate recheck and documented human override (2026-11-07, CI pending)
+Migration **092** adds an append-only override register containing resource
+kind/ID, exact IDs of matches seen in the review, operator and 30–500-character
+human rationale. The core manual creation transaction obtains a
+workspace-scoped PostgreSQL advisory transaction lock **before** running the
+same bounded matching query as the Qt preview. If no matches exist, it creates
+a normal prospect/unverified contact. If any candidates exist, creation is
+refused unless the explicit reviewed `duplicate_review` contains the *exact
+same set of candidate IDs*, confirmation and a bounded reason. Newly appearing
+or removed candidates invalidate the review. More than 25 candidates blocks.
+The company/contact row, ordinary creation event and override record share
+one transaction: failure rolls back all three. No merger, promotion or
+marketing consent is inferred. Two same-workspace simultaneous manual
+creations must not both succeed without review.
+
+This is local OS-user coordination, **not** an authenticated RBAC boundary.
+It covers these core manual creation functions. Existing edit, legacy prospect
+link and CSV-import flows have their own different checks and are not
+automatically covered by this advisory lock. Candidate matching is heuristic,
+not legal identity verification. Future edits and all creation entrypoints
+must be audited for consistency before declaring global deduplication.
+Debian acceptance is still required; CI does not close E02-04.

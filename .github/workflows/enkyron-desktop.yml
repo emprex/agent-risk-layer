@@ -35,6 +35,8 @@ jobs:
           node --check desktop/enkyron-ticket-intake.mjs
           node --check desktop/enkyron-crm-prospects.mjs
           node --check desktop/enkyron-crm.mjs
+          node --check desktop/enkyron-crm-duplicate-queries.mjs
+          node --check scripts/enkyron-crm-duplicate-reviews-schema.mjs
           node --check desktop/enkyron-crm-duplicates.mjs
           node --check desktop/enkyron-crm-edit.mjs
           node --check desktop/enkyron-crm-contact-tickets.mjs
@@ -704,6 +706,20 @@ jobs:
           calls[-1][3]({"available": True, "kind": "company",
                         "matches": [], "more": False}, None)
           assert calls[-1][0] == "crm-create-company"
+          assert "duplicate_review" not in calls[-1][2]
+          window.crm_company_dialog.reject()
+          window.open_new_company()
+          window.crm_name_input.setText("Known Separate Company")
+          window.create_company()
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes), patch(
+                     "desktop.enkyron.QInputDialog.getMultiLineText",
+                     return_value=("Independently reviewed synthetic distinct legal entity.", True)):
+              calls[-1][3]({"available": True, "kind": "company", "more": False,
+                  "matches": [{"id": company_id, "name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-create-company"
+          assert calls[-1][2]["duplicate_review"]["match_ids"] == [company_id]
+          assert calls[-1][2]["duplicate_review"]["confirmed"] is True
           window.crm_company_dialog.reject()
           window.open_new_contact()
           assert window.crm_contact_dialog.isVisible()
@@ -725,6 +741,22 @@ jobs:
                         "company_id": company_id, "matches": [],
                         "more": False}, None)
           assert calls[-1][0] == "crm-create-contact"
+          assert "duplicate_review" not in calls[-1][2]
+          window.crm_contact_dialog.reject()
+          window.open_new_contact()
+          window.crm_contact_name_input.setText("Separate Synthetic Contact")
+          window.create_contact()
+          existing_id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes), patch(
+                     "desktop.enkyron.QInputDialog.getMultiLineText",
+                     return_value=("Distinct synthetic person reviewed independently with no marketing consent.", True)):
+              calls[-1][3]({"available": True, "kind": "contact",
+                  "company_id": company_id, "more": False,
+                  "matches": [{"id": existing_id, "full_name": "Synthetic Contact",
+                               "company_name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-create-contact"
+          assert calls[-1][2]["duplicate_review"]["match_ids"] == [existing_id]
           window.crm_contact_dialog.reject()
           window.crm_table.selectRow(0)
           assert "NOT A VERIFIED CUSTOMER" in window.crm_details.toPlainText()
