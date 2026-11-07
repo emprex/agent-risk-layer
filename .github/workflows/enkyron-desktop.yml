@@ -302,8 +302,9 @@ jobs:
                           "company_id": company_id},
               "items": [], "more": False
           }, None)
+          # Simulate pre-fix backend success without an explicit available flag.
+          # Qt must not mistake a valid result for an unavailable ticket list.
           calls[-1][3]({
-              "available": True,
               "items": [{"ticket_id": "33333333-4444-4555-8666-777777777777",
                          "ticket_number": "CI-CONTACT-001",
                          "title": "Synthetic client enquiry",

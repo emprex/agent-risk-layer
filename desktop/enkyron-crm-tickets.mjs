@@ -49,7 +49,7 @@ export async function listCompanyTickets(pool,companyId,actor){
       +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
       [scope.key,company_id]
     );
-    return {company,items:result.rows.slice(0,100),more:result.rows.length>100};
+    return {available:true,company,items:result.rows.slice(0,100),more:result.rows.length>100};
   }catch(error){
     if(error?.code==='42P01')return {available:false,items:[],
       notice:'CRM ticket association schema 067 is not installed locally.'};

@@ -38,6 +38,7 @@ test('candidate lookup is read-only and scoped by local operator',async()=>{
     query:async(sql)=>({rows:sql.includes('SELECT id,name')?
       [{id:companyId,name:'Example'}]:[{ticket_id:ticketId,title:'Test'}]})
   },companyId,'ci-operator');
+  assert.equal(companyResult.available,true);
   assert.equal(companyResult.items.length,1);
   const detail=await ticketLinkedCompany({
     query:async()=>({rows:[{company_id:companyId,company_name:'Example'}]})

@@ -1778,9 +1778,16 @@ class EnkyronWindow(QMainWindow):
                         str(ticket.get("ticket_number") or "") + " · "
                         + str(ticket.get("title") or ""), ticket
                     )
-            notice.setText(
-                "{} linked; {} eligible tickets.".format(len(already), choice.count())
-            )
+            if choice.count() == 0:
+                notice.setText(
+                    "{} linked; no further company tickets are eligible. "
+                    "First use Companies & Contacts → Tickets → "
+                    "Link existing ticket if needed.".format(len(already))
+                )
+            else:
+                notice.setText(
+                    "{} linked; {} eligible tickets.".format(len(already), choice.count())
+                )
             save.setEnabled(choice.count() > 0)
 
         def got_links(data, error):
@@ -1799,7 +1806,7 @@ class EnkyronWindow(QMainWindow):
         def got_tickets(data, error):
             if not dialog.isVisible() or not selected():
                 return
-            if error or not data or not data.get("available", False):
+            if error or not data or data.get("available", True) is False:
                 notice.setText(error or (data or {}).get("notice", "Tickets unavailable."))
                 save.setEnabled(False)
                 return
