@@ -44,10 +44,8 @@ export async function listCompanyTickets(pool,companyId,actor){
     const result=await pool.query(
       'SELECT t.id AS ticket_id,t.ticket_number,t.title,t.client_name,t.status,'
       +'t.archived_at,l.review_note,l.linked_by,l.linked_at '
-      +'FROM enkyron_crm_ticket_links l JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
+      +'FROM enkyron_crm_effective_ticket_links l JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
       +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
-      +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
-      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
       +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
       [scope.key,company_id]
     );
@@ -90,12 +88,10 @@ export async function ticketLinkedCompany(pool,ticketId,actor){
     const result=await pool.query(
       'SELECT c.id AS company_id,c.name AS company_name,c.relationship_state,'
       +'l.linked_at,l.linked_by '
-      +'FROM enkyron_crm_ticket_links l '
+      +'FROM enkyron_crm_effective_ticket_links l '
       +'JOIN enkyron_crm_companies c '
       +'ON c.id=l.company_id AND c.workspace_key=l.workspace_key '
-      +'WHERE l.workspace_key=$1 AND l.ticket_id=$2 '
-      +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
-      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id)',
+      +'WHERE l.workspace_key=$1 AND l.ticket_id=$2',
       [scope.key,id]
     );
     return {available:true,link:result.rows[0]??null};

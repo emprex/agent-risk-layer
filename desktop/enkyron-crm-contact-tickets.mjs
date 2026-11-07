@@ -41,7 +41,12 @@ export async function listContactTickets(pool,contactId,actor){
      +'WHERE l.workspace_key=$1 AND l.company_id=$2 AND l.contact_id=$3 '
      +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
-     +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
+     +'UNION ALL SELECT ra.ticket_id,t.ticket_number,t.title,t.status,t.archived_at,'
+     +'ra.review_note,ra.linked_by,ra.linked_at '
+     +'FROM enkyron_crm_reassigned_contact_ticket_links ra '
+     +'JOIN arl_workbench_tickets t ON t.id=ra.ticket_id '
+     +'WHERE ra.workspace_key=$1 AND ra.destination_company_id=$2 AND ra.contact_id=$3 '
+     +'ORDER BY linked_at DESC,ticket_id DESC LIMIT 101',
      [scope.key,contact.company_id,id])).rows;
    return {available:true,contact,items:rows.slice(0,100),more:rows.length>100,
      notice:'Manual association only: no verified identity or consent inferred.'};
