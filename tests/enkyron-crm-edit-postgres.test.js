@@ -33,7 +33,9 @@ test('E02 CRM editing: immutable provenance, optimistic versions, strict workspa
       sector:'Services',city:'London',country:'UK',website:'https://example.invalid'
     },actor);
     const b=await createCompany(db,{
-      name:'Synthetic Alpha Limited',city:'Bristol'
+      name:'Synthetic Alpha Limited',city:'Bristol',
+      duplicate_review:{match_ids:[a.id],confirmed:true,
+        review_note:'Separately confirmed synthetic company; do not merge these distinct legal entities.'}
     },actor);
     assert.notEqual(a.id,b.id);
     let companies=await listCompanies(db,'Synthetic Alpha Limited',actor);
