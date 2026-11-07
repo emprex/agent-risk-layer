@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const company='11111111-2222-4333-8444-555555555555';
-const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts'];
+const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','audit_events','audit_changes'];
 function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
   const statements=[];
   let releases=0;
@@ -16,7 +16,7 @@ function mockDatabase({total='1',badSection='',missing=false,notFound=false}={})
         }
         if(sql.startsWith('SELECT')&&!sql.startsWith('SELECT id,name,legal_name')){
           if(missing){const e=new Error('not installed');e.code='42P01';throw e;}
-          if(sql.includes('FROM enkyron_crm_contacts'))return {rows:[{id:'contact',total_rows:badSection==='contacts'?'-2':total}]};
+          if(sql.startsWith('SELECT id,full_name,job_title,email'))return {rows:[{id:'contact',total_rows:badSection==='contacts'?'-2':total}]};
           return {rows:[]};
         }
         return {rows:[]};
@@ -36,7 +36,7 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.equal(m.released(),1);
@@ -44,7 +44,14 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   for(const q of m.statements.filter(q=>q.params)){
     assert.deepEqual(q.params,['local:ci-operator',company]);
   }
-  assert.ok(m.statements.slice(2,9).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.ok(m.statements.slice(2,11).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.match(m.statements[9].sql,/FROM enkyron_crm_events/);
+  assert.match(m.statements[10].sql,/FROM enkyron_crm_record_changes/);
+  for(const sql of [m.statements[9].sql,m.statements[10].sql]){
+    assert.match(sql,/c\\.workspace_key/);
+    assert.match(sql,/c\\.company_id=\\$2/);
+    assert.doesNotMatch(sql,/review_note|recipient_email|phone|source_reference/);
+  }
   // Opportunity, notes and drafts are linked through explicit prospect association.
   for(const sql of [m.statements[5],m.statements[6],m.statements[8]].map(q=>q.sql)){
     assert.match(sql,/enkyron_crm_prospect_links/);
@@ -78,7 +85,7 @@ test('preview is capped at twenty entries while retaining exact counts',async()=
       queries.push(sql);
       if(sql.startsWith('SELECT id,name,legal_name'))
         return {rows:[{id:company,name:'Capped Company'}]};
-      if(sql.includes('FROM enkyron_crm_contacts'))
+      if(sql.startsWith('SELECT id,full_name,job_title,email'))
         return {rows:Array.from({length:21},(_,i)=>({
           id:'c'+i,full_name:'Person '+i,total_rows:'22'
         }))};

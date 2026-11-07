@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createCompany,createContact} from '../desktop/enkyron-crm.mjs';
+import {updateCompany,updateContact} from '../desktop/enkyron-crm-edit.mjs';
 import {previewProspectLink,associateProspect} from '../desktop/enkyron-crm-link.mjs';
 import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
 import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
@@ -30,7 +31,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     const name='Synthetic dossier '+randomUUID().slice(0,8);
     const a=await createCompany(pool,{name,city:'London'},actor);
     const twin=await createCompany(pool,{name,city:'London'},actor);
-    await createContact(pool,{company_id:a.id,full_name:'Verified only as manually recorded',
+    const contact=await createContact(pool,{company_id:a.id,full_name:'Verified only as manually recorded',
       job_title:'Research',email:'ci-person@example.invalid'},actor);
     // 21 contacts in total: previews show 20, but counts do not lose a record.
     const vals=[],placeholders=[];
@@ -109,7 +110,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,audit_events:4,audit_changes:0});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
@@ -117,8 +118,31 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.sections.tickets.items[0].ticket_id,ticket);
     assert.equal(dossier.sections.drafts.items[0].subject,'Draft for linked opportunity');
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
+    const review='Synthetic correction reviewed against the originally entered source.';
+    await updateCompany(pool,{
+      id:a.id,expected_version:1,confirmed:true,review_note:review,
+      name,legal_name:'',sector:'Research services',city:'London',country:'',website:''
+    },actor);
+    await updateContact(pool,{
+      id:contact.id,company_id:a.id,expected_version:1,confirmed:true,
+      review_note:review,full_name:'Verified only as manually recorded',
+      job_title:'Updated researcher',email:'ci-person@example.invalid',phone:''
+    },actor);
+    const audited=await getCompanyDossier(pool,a.id,actor);
+    assert.equal(audited.sections.audit_events.total,6);
+    assert.equal(audited.sections.audit_changes.total,2);
+    assert.deepEqual(audited.sections.audit_changes.items.map(x=>x.resource_kind).sort(),
+      ['company','contact']);
+    const auditText=JSON.stringify({
+      events:audited.sections.audit_events,changes:audited.sections.audit_changes
+    });
+    assert.ok(!auditText.includes('ci-person@example.invalid'));
+    assert.ok(!auditText.includes(review));
     const noAutoMatch=await getCompanyDossier(pool,twin.id,actor);
-    assert.ok(Object.values(noAutoMatch.sections).every(section=>section.total===0),
+    assert.equal(noAutoMatch.sections.audit_events.total,1);
+    assert.equal(noAutoMatch.sections.audit_changes.total,0);
+    assert.ok(Object.entries(noAutoMatch.sections).filter(([id])=>
+      !id.startsWith('audit_')).every(([,section])=>section.total===0),
       'Identical names must not imply common legal identity');
     await assert.rejects(()=>getCompanyDossier(pool,a.id,'ci-other-operator'),
       /not found in local workspace/);

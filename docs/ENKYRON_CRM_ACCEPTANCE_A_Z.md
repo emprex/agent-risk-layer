@@ -64,3 +64,23 @@ The matrix tracks **tests**, not completion of all product features. Scenarios E
 ## Local acceptance sequence after migration 084
 
 Run `node scripts/enkyron-crm-record-edits-schema.mjs --check` and, only on the intended local installation, `--apply` (backup-before-change), then start `python3 desktop/enkyron.py`. Using a **synthetic company and contact only**, verify create → edit → refresh → relaunch → readback. Check a second stale edit is rejected, that contact consent remains `unknown`, and that a real buyer link is **never inferred**. Collect non-sensitive screenshots and confirm no unrelated ticket/prospect/invoice changed. This is a first acceptance slice, not all A→Z scenarios at once.
+
+
+## E02-06A — CRM dossier audit metadata (2026-11-07)
+Two new **read-only** tabs in the existing company dossier: **CRM audit**
+(company and current contacts: creation, link, update event metadata) and
+**Field changes** (versions, field *names*, operator and timestamp). These are
+read in the same PostgreSQL REPEATABLE READ READ ONLY transaction as the other
+seven dossier sections, scoped to the exact company and local workspace.
+Each preview shows 20 records maximum; no old contact field values or human
+free-text rationale is selected in the new audit views. Existing append-only
+triggers are reused without alteration; no migration is required.
+
+Qt, unit and isolated PostgreSQL validations are separate from operator
+acceptance on Debian (NOT-VERIFIED). E02-06 remains OPEN: true accounts,
+RBAC/ABAC, database role enforcement and real multi-organisation tenant
+isolation have not been implemented. `local:OS-username` is not auth.
+
+Known limitation: historical ARL assessment tickets were manually associated
+with synthetic company Test. Association is an operator assertion, not
+verified legal identity, and audited unlink/reassignment is not yet supported.

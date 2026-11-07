@@ -2159,6 +2159,16 @@ class EnkyronWindow(QMainWindow):
                 ("drafts", "Email drafts", [
                     ("Subject", "subject"), ("Recipient", "recipient_email"),
                     ("Revision", "revision"), ("Updated", "updated_at")
+                ]),
+                ("audit_events", "CRM audit", [
+                    ("Record", "resource_kind"), ("Action", "event_type"),
+                    ("Record ID", "resource_id"), ("Operator", "actor_local"),
+                    ("Recorded", "created_at")
+                ]),
+                ("audit_changes", "Field changes", [
+                    ("Record", "resource_kind"), ("Record ID", "resource_id"),
+                    ("Version", "new_version"), ("Fields", "changed_fields"),
+                    ("Operator", "actor_local"), ("Recorded", "recorded_at")
                 ])
             ]
             self.crm_dossier_tabs.clear()
@@ -2192,7 +2202,9 @@ class EnkyronWindow(QMainWindow):
                 for row_index, record in enumerate(rows):
                     for column_index, (_heading, key) in enumerate(columns):
                         value = record.get(key)
-                        if key in ("updated_at", "recorded_at", "linked_at"):
+                        if key == "changed_fields":
+                            value = ", ".join(value or [])
+                        if key in ("updated_at", "recorded_at", "linked_at", "created_at"):
                             value = display_date(value)
                         elif key == "due_date":
                             value = str(value or "")[:10]

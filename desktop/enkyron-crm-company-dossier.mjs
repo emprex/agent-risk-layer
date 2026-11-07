@@ -75,7 +75,25 @@ const LISTS={
     +'JOIN enkyron_crm_mail_drafts d ON d.opportunity_id=o.id '
     +'AND d.workspace_key=o.workspace_key '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
-    +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21'
+    +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
+  audit_events:
+    'SELECT e.resource_kind,e.resource_id,e.event_type,e.actor_local,e.created_at,'
+    +'count(*) OVER() AS total_rows FROM enkyron_crm_events e '
+    +'WHERE e.workspace_key=$1 AND ('
+    +"(e.resource_kind='company' AND e.resource_id=$2) OR "
+    +"(e.resource_kind='contact' AND EXISTS("
+    +'SELECT 1 FROM enkyron_crm_contacts c WHERE c.workspace_key=e.workspace_key '
+    +'AND c.id=e.resource_id AND c.company_id=$2))) '
+    +'ORDER BY e.created_at DESC,e.id DESC LIMIT 21',
+  audit_changes:
+    'SELECT r.resource_kind,r.resource_id,r.old_version,r.new_version,'
+    +'r.changed_fields,r.actor_local,r.recorded_at,count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_record_changes r WHERE r.workspace_key=$1 AND ('
+    +"(r.resource_kind='company' AND r.resource_id=$2) OR "
+    +"(r.resource_kind='contact' AND EXISTS("
+    +'SELECT 1 FROM enkyron_crm_contacts c WHERE c.workspace_key=r.workspace_key '
+    +'AND c.id=r.resource_id AND c.company_id=$2))) '
+    +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21'
 };
 export async function getCompanyDossier(pool,id,operator){
   const companyId=requireCompanyId(id),key=ownerKey(operator);

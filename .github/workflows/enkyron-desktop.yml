@@ -377,12 +377,20 @@ jobs:
                   "opportunities": {"total": 0, "more": False, "items": []},
                   "activities": {"total": 0, "more": False, "items": []},
                   "qualifications": {"total": 0, "more": False, "items": []},
-                  "drafts": {"total": 0, "more": False, "items": []}
+                  "drafts": {"total": 0, "more": False, "items": []},
+                   "audit_events": {"total": 1, "more": False, "items": [{
+                       "resource_kind": "company", "event_type": "created",
+                       "resource_id": company_id, "actor_local": "ci-local",
+                       "created_at": "2026-11-07T05:00:00Z"
+                   }]},
+                   "audit_changes": {"total": 0, "more": False, "items": []}
               }
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
-          assert window.crm_dossier_tabs.count() == 7
+          assert window.crm_dossier_tabs.count() == 9
+          assert window.crm_dossier_tabs.tabText(7) == "CRM audit (1)"
+          assert window.crm_dossier_tabs.tabText(8) == "Field changes (0)"
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
           assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
