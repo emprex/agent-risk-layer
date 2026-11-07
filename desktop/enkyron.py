@@ -1782,7 +1782,14 @@ class EnkyronWindow(QMainWindow):
         notice = QLabel("Loading links and eligible company tickets…")
         layout.addWidget(notice)
         history = QTableWidget(0, 2)
-        history.setHorizontalHeaderLabels(["Ticket", "Linked by"])
+        history.setHorizontalHeaderLabels(["Full ticket number", "Linked by"])
+        history.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Interactive
+        )
+        history.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        history.setColumnWidth(0, 215)
         layout.addWidget(history)
         choice = QComboBox()
         layout.addWidget(choice)
@@ -1821,7 +1828,9 @@ class EnkyronWindow(QMainWindow):
                     record.get("ticket_number") or "",
                     record.get("linked_by") or "",
                 )):
-                    history.setItem(i, col, QTableWidgetItem(str(value)))
+                    item = QTableWidgetItem(str(value))
+                    item.setToolTip(item.text())
+                    history.setItem(i, col, item)
             choice.clear()
             for ticket in state["tickets"]:
                 if ticket.get("ticket_id") not in already and not ticket.get("archived_at"):
@@ -1829,17 +1838,29 @@ class EnkyronWindow(QMainWindow):
                         str(ticket.get("ticket_number") or "") + " · "
                         + str(ticket.get("title") or ""), ticket
                     )
-            if choice.count() == 0:
+            can_add = choice.count() > 0
+            if not can_add and already:
                 notice.setText(
-                    "{} linked; no further company tickets are eligible. "
-                    "First use Companies & Contacts → Tickets → "
-                    "Link existing ticket if needed.".format(len(already))
+                    "{} contact–ticket link(s) ALREADY RECORDED below. "
+                    "No other company ticket is available to link. "
+                    "No further action is required.".format(len(already))
+                )
+            elif not can_add:
+                notice.setText(
+                    "No eligible company tickets. First associate an existing "
+                    "ticket under Companies & Contacts → Tickets."
                 )
             else:
                 notice.setText(
-                    "{} linked; {} eligible tickets.".format(len(already), choice.count())
+                    "{} already linked; {} other company ticket(s) available.".format(
+                        len(already), choice.count()
+                    )
                 )
-            save.setEnabled(choice.count() > 0)
+            choice.setEnabled(can_add)
+            reason.setEnabled(can_add)
+            checked.setEnabled(can_add)
+            save.setText("Record link" if can_add else "No new link needed")
+            save.setEnabled(can_add)
 
         def got_links(data, error):
             if not dialog.isVisible() or not selected():
