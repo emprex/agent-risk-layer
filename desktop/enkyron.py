@@ -734,6 +734,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_tickets_button.setEnabled(False)
         self.crm_contact_tickets_button.clicked.connect(self.open_contact_ticket_links)
         contacts_heading.addWidget(self.crm_contact_tickets_button)
+        self.crm_privacy_button = QPushButton("Privacy requests…")
+        self.crm_privacy_button.setEnabled(False)
+        self.crm_privacy_button.clicked.connect(self.open_privacy_requests)
+        contacts_heading.addWidget(self.crm_privacy_button)
         contacts_l.addLayout(contacts_heading)
         self.crm_contacts_notice = QLabel(
             "Select a company to view its contacts. Email consent starts as unknown."
@@ -1571,6 +1575,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
+            self.crm_privacy_button.setEnabled(False)
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
@@ -1638,6 +1643,8 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
+            self.crm_contact_tickets_button.setEnabled(False)
+            self.crm_privacy_button.setEnabled(False)
             self.crm_contact_add.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             self.crm_ticket_seq += 1
@@ -1655,6 +1662,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_contact_edit.setEnabled(False)
         self.crm_contact_tickets_button.setEnabled(False)
+        self.crm_privacy_button.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
@@ -1671,6 +1679,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_contact_items = []
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
+            self.crm_privacy_button.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             if error:
                 self.crm_contacts_notice.setText("Contacts unavailable.")
@@ -1704,6 +1713,7 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_contacts_table.currentRow()
         selected = 0 <= row < len(self.crm_contact_items)
         self.crm_contact_tickets_button.setEnabled(bool(self.crm_company_id) and selected)
+        self.crm_privacy_button.setEnabled(bool(self.crm_company_id) and selected)
         self.crm_contact_edit.setEnabled(
             bool(self.crm_company_id) and selected and
             isinstance(self.crm_contact_items[row].get("record_version"), int)
@@ -1851,6 +1861,149 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
         self.bridge.call("crm-contact-tickets", contact_id, callback=got_links)
         self.bridge.call("crm-company-tickets", company_id, callback=got_tickets)
+
+    def open_privacy_requests(self):
+        row = self.crm_contacts_table.currentRow()
+        if not self.crm_company_id or not 0 <= row < len(self.crm_contact_items):
+            return
+        company_id = self.crm_company_id
+        contact_id = self.crm_contact_items[row]["id"]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Privacy requests")
+        dialog.setMinimumWidth(660)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("PRIVACY REQUESTS · INTAKE ONLY"))
+        description = QLabel(
+            "Records a request for human review only. Identity, lawful basis, "
+            "scope, deadlines and retention must be assessed separately. "
+            "This does not export, disclose or erase personal information."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        notice = QLabel("Loading privacy intake history…")
+        layout.addWidget(notice)
+        history = QTableWidget(0, 5)
+        history.setHorizontalHeaderLabels(
+            ["Type", "Channel", "Received", "Status", "Operator"]
+        )
+        history.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        history.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(history, 1)
+        form = QFormLayout()
+        kind = QComboBox()
+        for title, value in (
+            ("Access / SAR", "access"), ("Rectification", "rectification"),
+            ("Erasure", "erasure"), ("Restriction", "restriction"),
+            ("Objection", "objection"), ("Portability", "portability")
+        ):
+            kind.addItem(title, value)
+        form.addRow("Request", kind)
+        channel = QComboBox()
+        for title, value in (
+            ("Email", "email"), ("Phone", "phone"), ("Post", "post"),
+            ("In person", "in_person"), ("Other", "other")
+        ):
+            channel.addItem(title, value)
+        form.addRow("Received via", channel)
+        date = QDateEdit(QDate.currentDate())
+        date.setDisplayFormat("yyyy-MM-dd")
+        date.setCalendarPopup(True)
+        date.setMaximumDate(QDate.currentDate())
+        form.addRow("Date received", date)
+        layout.addLayout(form)
+        confirm = QCheckBox(
+            "I confirm that I received this request, or this is a synthetic test. "
+            "No identity or legal outcome is verified."
+        )
+        layout.addWidget(confirm)
+        actions = QHBoxLayout()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        actions.addWidget(close)
+        actions.addStretch()
+        submit = QPushButton("Record intake")
+        submit.setObjectName("primary")
+        submit.setEnabled(False)
+        actions.addWidget(submit)
+        layout.addLayout(actions)
+        self.crm_privacy_dialog = dialog
+
+        def same_contact():
+            selected = self.crm_contacts_table.currentRow()
+            return (dialog.isVisible() and self.crm_company_id == company_id
+                    and 0 <= selected < len(self.crm_contact_items)
+                    and self.crm_contact_items[selected].get("id") == contact_id)
+
+        def received_history(data, error):
+            if not same_contact():
+                return
+            if error or not data or not data.get("available", False):
+                notice.setText(
+                    error or (data or {}).get("notice", "Privacy register unavailable.")
+                )
+                submit.setEnabled(False)
+                return
+            if (data.get("contact") or {}).get("company_id") != company_id:
+                notice.setText("Company selection changed; reopen this window.")
+                submit.setEnabled(False)
+                return
+            items = data.get("items") or []
+            history.setRowCount(len(items))
+            for index, item in enumerate(items):
+                for column, value in enumerate((
+                    item.get("request_kind"), item.get("source_channel"),
+                    str(item.get("received_on") or "")[:10],
+                    item.get("processing_state"), item.get("recorded_by")
+                )):
+                    history.setItem(index, column, QTableWidgetItem(str(value or "")))
+            notice.setText(
+                "{} request(s) recorded. All require human review.{}".format(
+                    len(items), " First 50 shown." if data.get("more") else ""
+                )
+            )
+            submit.setEnabled(True)
+
+        def save():
+            if not same_contact() or not submit.isEnabled():
+                return
+            if not confirm.isChecked():
+                QMessageBox.warning(
+                    dialog, "Confirmation required",
+                    "Confirm the request was received or that it is a synthetic test."
+                )
+                return
+            if QMessageBox.question(
+                dialog, "Confirm privacy intake",
+                "Record as pending human review without changing any contact information?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            submit.setEnabled(False)
+
+            def saved(data, error):
+                if not same_contact():
+                    return
+                if error or not data or data.get("contact_id") != contact_id:
+                    notice.setText(error or "Privacy intake was refused.")
+                    submit.setEnabled(True)
+                    return
+                confirm.setChecked(False)
+                self.bridge.call(
+                    "crm-privacy-requests", contact_id, callback=received_history
+                )
+
+            self.bridge.call("crm-record-privacy-request", payload={
+                "company_id": company_id, "contact_id": contact_id,
+                "request_kind": kind.currentData(),
+                "source_channel": channel.currentData(),
+                "received_on": date.date().toString("yyyy-MM-dd"),
+                "confirmed": True
+            }, callback=saved)
+
+        submit.clicked.connect(save)
+        dialog.open()
+        self.bridge.call("crm-privacy-requests", contact_id, callback=received_history)
 
     def open_edit_company(self):
         row = self.crm_company_table.currentRow()

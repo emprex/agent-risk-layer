@@ -84,3 +84,24 @@ isolation have not been implemented. `local:OS-username` is not auth.
 Known limitation: historical ARL assessment tickets were manually associated
 with synthetic company Test. Association is an operator assertion, not
 verified legal identity, and audited unlink/reassignment is not yet supported.
+
+
+## E02-07A — Append-only privacy request intake (development 2026-11-07)
+Migration 086 creates contact-specific append-only records for access, rectification,
+erasure, restriction, objection and portability requests. A human can record an
+intake date and channel through Contacts → Privacy requests. Every case stays
+`pending_human_review`; it is not approved or fulfilled by saving.
+No source record, buyer review, ticket, marketing permission, message,
+invoice or audit record is modified, exported, anonymised or erased.
+A local PostgreSQL backup and checksum verification are required before
+manually installing 086. Operators must not enter real unverified subject
+requests for functional acceptance; use synthetic data.
+
+The ICO confirms that UK GDPR does not establish one universal retention
+period; controller-specific purposes must justify preservation and deletion:
+https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-protection-principles/a-guide-to-the-data-protection-principles/storage-limitation/
+
+E02-07 is NOT COMPLETE: identity and third-party authority verification,
+deadline assessment, lawful basis/exceptions, legal holds, retention schedule,
+request resolution, data export, erasure/redaction and communication all need
+further design and human governance. CI is not Debian acceptance.
