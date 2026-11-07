@@ -127,3 +127,24 @@ project, legal assertion, permissions, email or navigation is created. Source
 read remains read-only/repeatable, capped to 20 and count-preserving; local
 Debian acceptance remains separate from GitHub CI. E02-03/E07-05/E07-08/E08-01
 remain OPEN.
+
+## E2E operator onboarding checkpoint (2026-11-07)
+
+The Qt/bridge functions for company creation, contact creation, manual/phone
+ticket intake, reviewed company-ticket association, reviewed contact-ticket
+association and dossier display already exist. They do not automatically
+create a verified customer, signed contract, ARL security project or assessment.
+
+A disposable CI PostgreSQL regression now calls these same backend functions
+as ONE scenario: unique synthetic company + contact + manual ticket; no
+implicit name-based ticket link; deliberate company and contact association;
+new -> scoping status; dossier history; database pool reconnect; isolation and
+no assessment/project launch. The local Debian acceptance is a DIFFERENT gate:
+create one new synthetic company/contact/ticket through the native GUI, associate
+them explicitly, verify links/status/history, restart ENKYRON, verify persistence.
+
+**Number of prerequisite feature increments before that local E2E test: ZERO.**
+No contract registry, inbox, billing, external account or database migration is
+a prerequisite for this bounded local CRM/Client Desk test. The test is an
+operator acceptance milestone, NOT closure of E02-03 full 360 (signed contracts,
+client messages and missions remain unavailable) or E02-06 RBAC.
