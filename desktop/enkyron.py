@@ -3357,22 +3357,31 @@ class EnkyronWindow(QMainWindow):
         dialog.setWindowTitle("ENKYRON · Associate existing ticket")
         dialog.setMinimumWidth(640)
         layout = QVBoxLayout(dialog)
-        layout.addWidget(section_title("LINK EXISTING TICKET TO CRM COMPANY"))
+        layout.addWidget(section_title("ASSOCIATE OR REASSIGN AN EXISTING TICKET"))
         warning = QLabel(
             "CRM company: {}. This action records one human-reviewed link; "
             "the original ticket, its recorded client name and status stay unchanged. "
             "Do not assume that similar names prove an identical customer. "
-            "The link cannot yet be reassigned through the UI.".format(
+            "Previously revoked links require a separate reviewed reassignment; "
+            "historic contacts are never moved automatically.".format(
                 company.get("name") or ""
             )
         )
         warning.setTextFormat(Qt.TextFormat.PlainText)
         warning.setWordWrap(True)
         layout.addWidget(warning)
+        self.crm_link_ticket_mode = QComboBox()
+        self.crm_link_ticket_mode.addItem("Associate a never-linked ticket", "new")
+        self.crm_link_ticket_mode.addItem("Reassign a revoked ticket", "reassign")
+        layout.addWidget(self.crm_link_ticket_mode)
+        self.crm_link_ticket_mode.currentIndexChanged.connect(
+            self.load_ticket_link_options
+        )
+        self.crm_link_reassignment_company_version = None
         search_row = QHBoxLayout()
         self.crm_link_ticket_search = QLineEdit()
         self.crm_link_ticket_search.setPlaceholderText(
-            "Find available tickets by number, title or recorded client…"
+            "Find tickets by number, title or recorded client…"
         )
         self.crm_link_ticket_search.setMaxLength(100)
         search_row.addWidget(self.crm_link_ticket_search, 1)
@@ -3426,13 +3435,22 @@ class EnkyronWindow(QMainWindow):
             return
         search = self.crm_link_ticket_search.text()
         self.crm_link_ticket_submit.setEnabled(False)
-        self.crm_link_ticket_notice.setText("Searching unlinked tickets…")
+        mode = self.crm_link_ticket_mode.currentData()
+        self.crm_link_ticket_notice.setText(
+            "Searching revoked tickets…" if mode == "reassign" else "Searching unlinked tickets…"
+        )
         self.crm_link_options = []
+        self.crm_link_reassignment_company_version = None
         self.crm_link_ticket_choice.clear()
+        self.crm_link_ticket_submit.setText(
+            "Record reviewed reassignment" if mode == "reassign"
+            else "Record ticket association"
+        )
 
         def received(data, error):
             if (not dialog.isVisible() or company_id != self.crm_company_id
-                    or search != self.crm_link_ticket_search.text()):
+                    or search != self.crm_link_ticket_search.text()
+                    or mode != self.crm_link_ticket_mode.currentData()):
                 return
             if error or not data.get("available", True):
                 self.crm_link_ticket_notice.setText(
@@ -3440,6 +3458,15 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             self.crm_link_options = data.get("items", [])
+            if mode == "reassign":
+                target = data.get("company") or {}
+                if (target.get("id") != company_id
+                        or not isinstance(target.get("record_version"), int)):
+                    self.crm_link_ticket_notice.setText(
+                        "Reassignment company revision could not be verified."
+                    )
+                    return
+                self.crm_link_reassignment_company_version = target["record_version"]
             for ticket in self.crm_link_options:
                 label = "{} · {} · {} [{}]".format(
                     ticket.get("ticket_number") or "",
@@ -3447,16 +3474,26 @@ class EnkyronWindow(QMainWindow):
                     ticket.get("client_name") or "",
                     ticket.get("status") or ""
                 )
+                if mode == "reassign":
+                    label += " · previously linked to {}".format(
+                        ticket.get("source_company_name") or "another company"
+                    )
                 self.crm_link_ticket_choice.addItem(label, ticket)
             count = len(self.crm_link_options)
             self.crm_link_ticket_submit.setEnabled(count > 0)
             self.crm_link_ticket_notice.setText(
-                "{} unlinked ticket(s) available.{}".format(
-                    count, " First 100; refine search." if data.get("more") else ""
+                "{} {} ticket(s) available.{}".format(
+                    count, "revoked" if mode == "reassign" else "unlinked",
+                    " First 100; refine search." if data.get("more") else ""
                 )
             )
 
-        self.bridge.call("crm-ticket-options", search, callback=received)
+        if mode == "reassign":
+            self.bridge.call("crm-ticket-reassignment-options", payload={
+                "destination_company_id": company_id, "search": search
+            }, callback=received)
+        else:
+            self.bridge.call("crm-ticket-options", search, callback=received)
 
     def confirm_ticket_link(self):
         dialog = self.crm_link_dialog
@@ -3467,10 +3504,23 @@ class EnkyronWindow(QMainWindow):
             return
         ticket = self.crm_link_ticket_choice.currentData()
         rationale = self.crm_link_ticket_note.toPlainText().strip()
-        if not ticket or len(rationale) < 20 or len(rationale) > 1000:
+        mode = self.crm_link_ticket_mode.currentData()
+        minimum = 30 if mode == "reassign" else 20
+        if not ticket or len(rationale) < minimum or len(rationale) > 1000:
             QMessageBox.warning(
                 dialog, "Review required",
-                "Select one existing ticket and enter a 20–1000 character explanation."
+                "Select one ticket and enter a {}–1000 character explanation.".format(
+                    minimum
+                )
+            )
+            return
+        if mode == "reassign" and (
+                not ticket.get("revocation_id")
+                or not ticket.get("source_company_id")
+                or not self.crm_link_reassignment_company_version):
+            QMessageBox.warning(
+                dialog, "Reassignment unavailable",
+                "The previous revocation or destination version was not verified."
             )
             return
         if not self.crm_link_ticket_checked.isChecked():
@@ -3479,22 +3529,40 @@ class EnkyronWindow(QMainWindow):
                 "Confirm that you reviewed the company and the ticket identity."
             )
             return
+        question = (
+            "Reassign this previously revoked ticket to the selected company? "
+            "Previous company/contact associations remain immutable history; "
+            "NO contact is moved automatically. The destination contact links "
+            "must be reviewed separately."
+            if mode == "reassign" else
+            "Link only this never-linked ticket to the selected CRM company? "
+            "No ticket fields or client status will change."
+        )
         accepted = QMessageBox.question(
-            dialog, "Confirm association",
-            "Link only this ticket to the selected CRM company? "
-            "No ticket fields or client status will change.",
+            dialog, "Confirm reviewed association", question,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         if accepted != QMessageBox.StandardButton.Yes:
             return
-        payload = {
-            "company_id": self.crm_link_dialog_company_id,
-            "ticket_id": ticket["ticket_id"],
-            "ticket_client_name_at_review": ticket["client_name"],
-            "review_note": rationale,
-            "reviewed": True
-        }
+        if mode == "reassign":
+            payload = {
+                "ticket_id": ticket["ticket_id"],
+                "destination_company_id": self.crm_link_dialog_company_id,
+                "expected_source_company_id": ticket["source_company_id"],
+                "expected_revocation_id": ticket["revocation_id"],
+                "expected_client_name": ticket["client_name"],
+                "destination_record_version":
+                    self.crm_link_reassignment_company_version,
+                "review_note": rationale, "confirmed": True
+            }
+        else:
+            payload = {
+                "company_id": self.crm_link_dialog_company_id,
+                "ticket_id": ticket["ticket_id"],
+                "ticket_client_name_at_review": ticket["client_name"],
+                "review_note": rationale, "reviewed": True
+            }
         self.crm_link_ticket_submit.setEnabled(False)
 
         def received(data, error):
@@ -3507,7 +3575,10 @@ class EnkyronWindow(QMainWindow):
             if self.crm_company_id == data["company_id"]:
                 self.load_company_tickets(data["company_id"])
 
-        self.bridge.call("crm-link-ticket", payload=payload, callback=received)
+        self.bridge.call(
+            "crm-ticket-reassign" if mode == "reassign" else "crm-link-ticket",
+            payload=payload, callback=received
+        )
 
     def open_new_company(self):
         if not self.crm_company_add.isEnabled():
