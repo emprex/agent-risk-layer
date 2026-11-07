@@ -3,6 +3,7 @@
 // The OS-local workspace key is NOT multi-user authentication or an Internet boundary.
 import { randomUUID } from 'node:crypto';
 import { boundedSearch } from './enkyron-contract.mjs';
+import {queryCompanyCandidates,queryContactCandidates} from './enkyron-crm-duplicate-queries.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NO_CONTROLS = /[\x00-\x1f\x7f]/;
@@ -140,11 +141,58 @@ async function transaction(pool, work) {
   } finally { client.release(); }
 }
 
+
+const reviewUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export function validateDuplicateReview(review) {
+ if(review===undefined||review===null) return null;
+ if(!review||typeof review!=='object'||Array.isArray(review)||
+    Object.keys(review).some(k=>!['match_ids','review_note','confirmed'].includes(k)))
+  throw new Error('CRM invalid duplicate review');
+ if(review.confirmed!==true||!Array.isArray(review.match_ids)||
+    review.match_ids.length<1||review.match_ids.length>25||
+    review.match_ids.some(x=>typeof x!=='string'||!reviewUuid.test(x))||
+    new Set(review.match_ids).size!==review.match_ids.length)
+  throw new Error('CRM duplicate review requires confirmed matching record IDs');
+ const note=value(review.review_note,'duplicate review rationale',500,true);
+ if(note.length<30)throw new Error('CRM duplicate override requires 30-500 characters');
+ return {match_ids:[...review.match_ids].sort(),review_note:note};
+}
+async function enforceDuplicateReview(client,kind,data,owner,review,uuid) {
+ // This workspace-level advisory transaction lock serializes all core
+ // manual company/contact creates. Run the candidate query AFTER obtaining it.
+ await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',
+  [owner.key+':crm-manual-create']);
+ const rows=kind==='company'
+   ?await queryCompanyCandidates(client,data,owner.key)
+   :await queryContactCandidates(client,data,owner.key);
+ if(rows.length>25)throw new Error('CRM duplicate review exceeds 25 candidates; no record created');
+ const current=rows.map(row=>row.id).sort();
+ if(current.length===0){
+  if(review)throw new Error('CRM duplicate review is stale; refresh before creating');
+  return null;
+ }
+ if(!review)throw new Error('CRM possible duplicate found; human review required');
+ if(JSON.stringify(current)!==JSON.stringify(review.match_ids))
+  throw new Error('CRM duplicate matches changed; review new candidates before creating');
+ return {matched_record_ids:current,review_note:review.review_note};
+}
+async function saveDuplicateReview(client,kind,id,owner,review,uuid) {
+ if(!review)return;
+ await client.query(
+  'INSERT INTO enkyron_crm_duplicate_reviews '
+  +'(id,workspace_key,resource_kind,resource_id,matched_record_ids,review_note,actor_local) '
+  +'VALUES($1,$2,$3,$4,$5,$6,$7)',
+  [uuid(),owner.key,kind,id,review.matched_record_ids,review.review_note,owner.actor]
+ );
+}
+
 export async function createCompany(pool, input, actor, options={}) {
   const data=validateCompany(input);
   const owner=workspace(actor);
   const uuid=options.uuid ?? randomUUID;
+  const review=validateDuplicateReview(input?.duplicate_review);
   return transaction(pool,async client=>{
+    const duplicate=await enforceDuplicateReview(client,'company',data,owner,review,uuid);
     const id=uuid();
     await client.query(
       `INSERT INTO enkyron_crm_companies
@@ -161,6 +209,7 @@ export async function createCompany(pool, input, actor, options={}) {
        VALUES ($1,$2,'company',$3,'created',$4)`,
       [uuid(),owner.key,id,owner.actor]
     );
+    await saveDuplicateReview(client,'company',id,owner,duplicate,uuid);
     return {id,name:data.name,relationship_state:'prospect'};
   });
 }
@@ -168,6 +217,7 @@ export async function createCompany(pool, input, actor, options={}) {
 export async function createContact(pool, input, actor, options={}) {
   const data=validateContact(input);
   const owner=workspace(actor);
+  const review=validateDuplicateReview(input?.duplicate_review);
   const uuid=options.uuid ?? randomUUID;
   return transaction(pool,async client=>{
     const company=(await client.query(
@@ -175,6 +225,7 @@ export async function createContact(pool, input, actor, options={}) {
       [data.company_id,owner.key]
     )).rows[0];
     if (!company) throw new Error('CRM company not found for local operator');
+    const duplicate=await enforceDuplicateReview(client,'contact',data,owner,review,uuid);
     const id=uuid();
     await client.query(
       `INSERT INTO enkyron_crm_contacts
@@ -189,6 +240,7 @@ export async function createContact(pool, input, actor, options={}) {
        VALUES ($1,$2,'contact',$3,'created',$4)`,
       [uuid(),owner.key,id,owner.actor]
     );
+    await saveDuplicateReview(client,'contact',id,owner,duplicate,uuid);
     return {id,company_id:data.company_id,full_name:data.full_name,
       relationship_state:'unverified',marketing_permission:'unknown'};
   });
