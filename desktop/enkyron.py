@@ -172,6 +172,7 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action == "operator-state" else
                     60000 if action in ("evidence-summary", "evidence-pack") else
+                    45000 if action == "crm-csv-import-commit" else
                     15000)
 
 

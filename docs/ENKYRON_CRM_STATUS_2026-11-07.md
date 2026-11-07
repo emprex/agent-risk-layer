@@ -16,7 +16,7 @@ assertion of legal compliance or production readiness.
 | E02-05 Many-to-many | Contact–ticket association persisted after Debian restart, plus CI negatives | Correct wrongly associated historical ARL tickets with audited rectification; no silent unlink |
 | E02-06 Audit/access | E02-06A event/field-change views shown in Debian | Authenticated users, roles, isolation and privilege-negative tests |
 | E02-07 Privacy/retention | E02-07A request persisted across restart; E02-07B review recorded and read locally | Complete lawful workflows, approved retention schedule, hold handling and Debian restart of 087 |
-| E02-08 CSV | E02-08A export content verified locally; E02-08B parsing foundation in CI | Reviewed import workflow, export audit receipt and round-trip validation |
+| E02-08 CSV | E02-08A export verified locally; E02-08B strict preflight in CI; E02-08C reviewed *new-record-only* transaction and provenance in development | Exact-head CI, Debian reviewed import acceptance, richer duplicate governance and export audit receipt |
 
 **Commercial E07/E09 boundary:** Opportunity, proposal draft, line pricing,
 PDF draft, tax review, buyer/commercial-terms gates and invoice-preparation
@@ -28,7 +28,7 @@ ARL-2026-000001 and ARL-2026-000002 were manually associated with synthetic
 company Test during acceptance. An audited correction workflow is needed.
 Do not destroy immutable audit history.
 
-**Next:** E02-08B preview parser → reviewed E02-08C import and provenance →
+**Next:** validate reviewed E02-08C import and provenance in CI + Debian →
 E02-06/E02-07 security/privacy closures → full CRM A→Z local acceptance →
 commercial opportunity → proposal → invoice-preparation walkthrough.
 Avoid adding new buttons where a unified CSV workflow can reuse the existing

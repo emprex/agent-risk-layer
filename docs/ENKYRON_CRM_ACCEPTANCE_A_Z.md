@@ -176,3 +176,42 @@ company ownership and existing-record conflicts transactionally, and prove
 negative tests against disposable PostgreSQL. Do not copy CSV relationship
 or marketing labels into authority-bearing fields. Debian acceptance is
 NOT-VERIFIED until a GUI import/preview is available.
+
+
+## E02-08C — Reviewed new-record CSV import (2026-11-07; local operator only)
+**Source format:** the strict UTF-8 CSV selected-company V1 parser from
+E02-08B. A single existing toolbar control **CRM CSV…** now offers
+**Export selected company** or **Import CSV with human review**.
+
+The importer presents the parsed company, up to 12 preview contact names,
+source SHA-256, source client-status label and explicit warnings before
+any database write. A read-only PostgreSQL precheck detects an already-imported
+file/source company, source-ID reuse and exact normalized company-name
+collisions. The operator must provide a 30–500-character reason, confirm
+that only NEW records will be created, then confirm again. The CSV is re-read
+from disk and its hash/parsed contents verified immediately before the
+commit request. The server independently validates all structured fields and
+rechecks collisions after a transaction-scoped advisory lock. It uses new
+UUIDs, and creates company, contacts, append-only events, batch provenance
+and per-contact mappings inside ONE PostgreSQL transaction. Any error rolls
+back all related inserts. Migration **088** adds
+`source_type=csv_reviewed_import` plus append-only provenance tables.
+Backups/checksum verification are required before applying 088 locally.
+
+Source `client` status always imports as `prospect`.
+Source contact identity always imports as `unverified`, and source
+marketing labels `opt_in/opt_out` import as `unknown`. Contact
+email/phone are absent from CSV V1 and remain unset. No merge, deletion,
+outreach, authority promotion, ticket/assessment or invoicing changes.
+A source exported from the SAME database has already-used source UUIDs and
+must be **rejected**, not duplicated. Test real import only with a wholly
+separate synthetic source dataset.
+
+**Boundaries / follow-up:** The SHA-256 is checked against file bytes in
+the trusted local Qt operator process, not attested by an external signer.
+Local OS user identity does not enforce multi-user tenant isolation.
+Approximate/fuzzy duplicates beyond exact name and UUID matches still
+require manual review. The imported contact status and provenance remain
+observable, but a dedicated signed, authorized export receipt is not yet
+present. CI tests and any successful Debian acceptance must be recorded
+separately. E02-08 is not closed until these gates pass.

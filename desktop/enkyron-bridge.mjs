@@ -52,11 +52,11 @@ function emit(payload) {
   process.stdout.write(JSON.stringify(payload) + '\n');
 }
 
-async function stdinJson() {
+async function stdinJson(maxBytes=16000) {
   let raw = '';
   for await (const chunk of process.stdin) {
     raw += chunk.toString('utf8');
-    if (Buffer.byteLength(raw, 'utf8') > 16000) throw new Error('Request exceeds size limit');
+    if (Buffer.byteLength(raw, 'utf8') > maxBytes) throw new Error('Request exceeds size limit');
   }
   try { return JSON.parse(raw); }
   catch { throw new Error('Malformed note request'); }
@@ -204,7 +204,7 @@ async function main() {
   if (command === 'crm-prospect-opportunity') requireProspectId(arg);
   if (command === 'crm-activity-timeline') requireOpportunityId(arg);
   if (command === 'crm-mail-draft' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM draft ID');
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson() : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson(['crm-csv-import-check','crm-csv-import-commit'].includes(command) ? 350000 : 16000) : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);

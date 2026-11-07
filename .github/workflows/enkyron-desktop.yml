@@ -271,6 +271,61 @@ jobs:
               window.crm_company_csv_button.click()
           assert calls[-1][0] == "crm-company-csv"
           assert calls[-1][1] == company_id
+          # New workflow reuses the same CSV entrypoint. No extra toolbar button.
+          import tempfile
+          import uuid
+          from desktop.enkyron_crm_csv import write_company_csv
+          from desktop.enkyron_crm_csv_import import preview_company_csv
+          from PySide6.QtWidgets import QMessageBox
+          with tempfile.TemporaryDirectory() as tempdir:
+              csv_file = Path(tempdir) / "synthetic-source.csv"
+              source_company = str(uuid.uuid4())
+              source_contact = str(uuid.uuid4())
+              source = {
+                  "format": "ENKYRON_CRM_SELECTED_COMPANY_V1",
+                  "company": {
+                      "id": source_company, "name": "Synthetic CSV Sample",
+                      "sector": "Research", "city": "London", "country": "UK",
+                      "relationship_state": "prospect", "record_version": 1
+                  },
+                  "contacts": [{
+                      "id": source_contact, "full_name": "Synthetic Person",
+                      "job_title": "Reviewer",
+                      "marketing_permission": "unknown", "record_version": 1
+                  }],
+                  "contact_count": 1
+              }
+              write_company_csv(source, csv_file)
+              digest = preview_company_csv(csv_file)["sha256"]
+              with patch("desktop.enkyron.QInputDialog.getItem",
+                         return_value=("Import CSV with human review", True)), patch(
+                         "desktop.enkyron.QFileDialog.getOpenFileName",
+                         return_value=(str(csv_file), "CSV files (*.csv)")):
+                  window.crm_company_csv_button.click()
+              assert calls[-1][0] == "crm-csv-import-check"
+              assert calls[-1][2]["sha256"] == digest
+              calls[-1][3]({
+                  "available": True, "eligible": True, "conflicts": [],
+                  "source_sha256": digest,
+                  "company_name": "Synthetic CSV Sample", "contact_count": 1
+              }, None)
+              assert window.crm_csv_import_dialog.isVisible()
+              import_dialog = window.crm_csv_import_dialog
+              rationale_box = import_dialog.findChildren(QPlainTextEdit)[0]
+              rationale_box.setPlainText(
+                  "Synthetic operator-reviewed import; only new records and no consent.")
+              import_dialog.findChildren(QCheckBox)[0].setChecked(True)
+              import_button = next(
+                  btn for btn in import_dialog.findChildren(QPushButton)
+                  if btn.text() == "Create new records"
+              )
+              with patch("desktop.enkyron.QMessageBox.question",
+                         return_value=QMessageBox.StandardButton.Yes):
+                  import_button.click()
+              assert calls[-1][0] == "crm-csv-import-commit"
+              assert calls[-1][2]["preview"]["sha256"] == digest
+              assert calls[-1][2]["confirmed"] is True
+              import_dialog.reject()
           assert not window.crm_contact_edit.isEnabled()
           window.crm_company_edit.click()
           assert window.crm_record_edit_dialog.isVisible()
