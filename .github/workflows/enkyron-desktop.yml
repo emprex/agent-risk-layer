@@ -98,7 +98,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
@@ -213,6 +213,7 @@ jobs:
               "available": True, "more": False,
               "items": [{
                   "id": company_id, "name": "Synthetic Company",
+                  "record_version": 1,
                   "relationship_state": "prospect", "sector": "Cybersecurity",
                   "city": "London", "country": "UK", "updated_at": "2026-11-05",
               }]
@@ -241,11 +242,62 @@ jobs:
           calls[-1][3]({
               "company": {"id": company_id, "name": "Synthetic Company"},
               "items": [{
+                  "id": "22222222-3333-4444-8555-666666666666",
+                  "record_version": 1,
                   "full_name": "Synthetic Contact", "job_title": "Engineering",
                   "email": "contact@example.invalid", "phone": "",
               }], "more": False
           }, None)
           assert window.crm_contacts_table.rowCount() == 1
+          assert window.crm_company_edit.isEnabled()
+          assert not window.crm_contact_edit.isEnabled()
+          window.crm_company_edit.click()
+          assert window.crm_record_edit_dialog.isVisible()
+          fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
+          assert len(fields) == 6
+          fields[2].setText("Cybersecurity services")
+          rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
+          rationale.setPlainText(
+              "Correcting an operator-entered sector after checking the original source."
+          )
+          confirmation = window.crm_record_edit_dialog.findChildren(QCheckBox)[0]
+          confirmation.setChecked(True)
+          save_button = next(
+              b for b in window.crm_record_edit_dialog.findChildren(QPushButton)
+              if b.text() == "Save versioned correction"
+          )
+          save_button.click()
+          assert calls[-1][0] == "crm-edit-company"
+          assert calls[-1][2]["id"] == company_id
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["sector"] == "Cybersecurity services"
+          assert calls[-1][2]["confirmed"] is True
+          assert "relationship_state" not in calls[-1][2]
+          window.crm_record_edit_dialog.reject()
+          window.crm_contacts_table.selectRow(0)
+          assert window.crm_contact_edit.isEnabled()
+          window.crm_contact_edit.click()
+          assert window.crm_record_edit_dialog.isVisible()
+          fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
+          assert len(fields) == 4
+          fields[2].setText("corrected@example.invalid")
+          rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
+          rationale.setPlainText(
+              "Correcting a locally entered email from a manually checked contact record."
+          )
+          confirmation = window.crm_record_edit_dialog.findChildren(QCheckBox)[0]
+          confirmation.setChecked(True)
+          save_button = next(
+              b for b in window.crm_record_edit_dialog.findChildren(QPushButton)
+              if b.text() == "Save versioned correction"
+          )
+          save_button.click()
+          assert calls[-1][0] == "crm-edit-contact"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["email"] == "corrected@example.invalid"
+          assert "marketing_permission" not in calls[-1][2]
+          window.crm_record_edit_dialog.reject()
           assert window.crm_company_detail_tabs.count() == 2
           assert window.crm_company_dossier_open.isEnabled()
           window.open_company_dossier()
