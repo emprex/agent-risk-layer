@@ -76,6 +76,40 @@ const LISTS={
     +'AND d.workspace_key=o.workspace_key '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
     +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
+
+  // Existing commercial source records only. Drafts are NOT contracts, accepted
+  // offers, invoices, payments, delivered projects or customer communications.
+  // The linkage is reviewed prospect -> scoped opportunity -> source records.
+  commercial_docs:
+    'WITH linked_opportunities AS ('
+    +'SELECT o.id FROM enkyron_crm_prospect_links l '
+    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
+    +'AND o.workspace_key=l.workspace_key '
+    +'WHERE l.workspace_key=$1 AND l.company_id=$2), '
+    +'docs AS ('
+    +"SELECT 'proposal_draft'::text AS document_kind,p.id AS document_id,"
+    +"p.title AS title,'internal_unaccepted_draft'::text AS status,"
+    +'p.revision,p.updated_at AS recorded_at,p.id AS proposal_id '
+    +'FROM enkyron_crm_proposal_drafts p '
+    +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
+    +'WHERE p.workspace_key=$1 UNION ALL '
+    +"SELECT 'prebilling_worksheet',w.id,w.proposal_title,w.status,"
+    +'w.proposal_revision,w.recorded_at,w.proposal_id '
+    +'FROM enkyron_crm_billing_worksheets w '
+    +'JOIN enkyron_crm_proposal_drafts p ON p.id=w.proposal_id '
+    +'AND p.workspace_key=w.workspace_key '
+    +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
+    +'WHERE w.workspace_key=$1 UNION ALL '
+    +"SELECT 'unissued_invoice_draft',i.id,i.service_description,i.status,"
+    +'i.proposal_revision,i.recorded_at,i.proposal_id '
+    +'FROM enkyron_crm_invoice_drafts i '
+    +'JOIN enkyron_crm_proposal_drafts p ON p.id=i.proposal_id '
+    +'AND p.workspace_key=i.workspace_key '
+    +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
+    +'WHERE i.workspace_key=$1) '
+    +'SELECT document_kind,document_id,title,status,revision,recorded_at,'
+    +'proposal_id,count(*) OVER() AS total_rows FROM docs '
+    +'ORDER BY recorded_at DESC,document_kind,document_id LIMIT 21',
   audit_events:
     'SELECT e.resource_kind,e.resource_id,e.event_type,e.actor_local,e.created_at,'
     +'count(*) OVER() AS total_rows FROM enkyron_crm_events e '
@@ -117,7 +151,9 @@ export async function getCompanyDossier(pool,id,operator){
     inTx=false;
     return {available:true,company,sections,
       notice:'Only recorded company contacts and explicitly reviewed links are included. '
-        +'Commercial stages and manual notes are not independently verified.'};
+        +'Commercial stages and manual notes are not independently verified. '
+        +'Commercial document entries are internal drafts, not accepted contracts, '
+        +'issued invoices, completed projects or exchanged emails.'};
   }catch(error){
     if(inTx)await client.query('ROLLBACK').catch(()=>{});
     if(error?.code==='42P01')return {available:false,

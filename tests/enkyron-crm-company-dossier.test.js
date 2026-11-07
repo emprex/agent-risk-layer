@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const company='11111111-2222-4333-8444-555555555555';
-const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','audit_events','audit_changes'];
+const names=['contacts','prospects','tickets','opportunities','activities','qualifications','drafts','commercial_docs','audit_events','audit_changes'];
 function mockDatabase({total='1',badSection='',missing=false,notFound=false}={}){
   const statements=[];
   let releases=0;
@@ -36,7 +36,7 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.equal(m.released(),1);
@@ -44,16 +44,21 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   for(const q of m.statements.filter(q=>q.params)){
     assert.deepEqual(q.params,['local:ci-operator',company]);
   }
-  assert.ok(m.statements.slice(2,11).every(q=>/LIMIT 21/.test(q.sql)));
-  assert.match(m.statements[9].sql,/FROM enkyron_crm_events/);
-  assert.match(m.statements[10].sql,/FROM enkyron_crm_record_changes/);
-  for(const sql of [m.statements[9].sql,m.statements[10].sql]){
+  assert.ok(m.statements.slice(2,12).every(q=>/LIMIT 21/.test(q.sql)));
+  assert.match(m.statements[10].sql,/FROM enkyron_crm_events/);
+  assert.match(m.statements[11].sql,/FROM enkyron_crm_record_changes/);
+  for(const sql of [m.statements[10].sql,m.statements[11].sql]){
     assert.match(sql,/c[.]workspace_key/);
     assert.match(sql,/c[.]company_id=[$]2/);
     assert.doesNotMatch(sql,/review_note|recipient_email|phone|source_reference/);
   }
-  // Opportunity, notes and drafts are linked through explicit prospect association.
-  for(const sql of [m.statements[5],m.statements[6],m.statements[8]].map(q=>q.sql)){
+  // Opportunities, notes, drafts and commercial source rows are linked through
+  // the manually reviewed prospect association, never by company name.
+  assert.match(m.statements[9].sql,/enkyron_crm_proposal_drafts/);
+  assert.match(m.statements[9].sql,/enkyron_crm_billing_worksheets/);
+  assert.match(m.statements[9].sql,/enkyron_crm_invoice_drafts/);
+  assert.match(m.statements[9].sql,/internal_unaccepted_draft/);
+  for(const sql of [m.statements[5],m.statements[6],m.statements[8],m.statements[9]].map(q=>q.sql)){
     assert.match(sql,/enkyron_crm_prospect_links/);
     assert.match(sql,/workspace_key/);
   }

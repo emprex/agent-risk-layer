@@ -93,6 +93,17 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
       subject:'Draft for linked opportunity',
       body_text:'This is not sent.'
     },actor);
+    // Existing internal commercial document only; no signed contract or issue.
+    const proposalId=randomUUID();
+    await pool.query(
+      'INSERT INTO enkyron_crm_proposal_drafts '
+      +'(id,workspace_key,opportunity_id,title,scope_text,currency,amount_minor,'
+      +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)',
+      [proposalId,'local:'+actor,linkedOpportunity.id,
+       'Unaccepted synthetic proposal',
+       'Synthetic scoped work for explicitly linked company; no customer approval.',
+       'GBP',1000,actor]
+    );
     const ticket=randomUUID();
     await pool.query(
       'INSERT INTO arl_workbench_tickets '
@@ -113,13 +124,17 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,audit_events:4,audit_changes:0});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:1,audit_events:4,audit_changes:0});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
     assert.equal(dossier.sections.opportunities.items[0].opportunity_id,linkedOpportunity.id);
     assert.equal(dossier.sections.tickets.items[0].ticket_id,ticket);
     assert.equal(dossier.sections.drafts.items[0].subject,'Draft for linked opportunity');
+    assert.equal(dossier.sections.commercial_docs.items[0].document_id,proposalId);
+    assert.equal(dossier.sections.commercial_docs.items[0].proposal_id,proposalId);
+    assert.equal(dossier.sections.commercial_docs.items[0].document_kind,'proposal_draft');
+    assert.equal(dossier.sections.commercial_docs.items[0].status,'internal_unaccepted_draft');
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
     const review='Synthetic correction reviewed against the originally entered source.';
     await updateCompany(pool,{

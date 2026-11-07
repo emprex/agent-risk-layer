@@ -2892,6 +2892,11 @@ class EnkyronWindow(QMainWindow):
                     ("Subject", "subject"), ("Recipient", "recipient_email"),
                     ("Revision", "revision"), ("Updated", "updated_at")
                 ]),
+                ("commercial_docs", "Commercial drafts", [
+                    ("Record", "document_kind"), ("Title", "title"),
+                    ("Status", "status"), ("Revision", "revision"),
+                    ("Recorded", "recorded_at"), ("Proposal ID", "proposal_id")
+                ]),
                 ("audit_events", "CRM audit", [
                     ("Record", "resource_kind"), ("Action", "event_type"),
                     ("Record ID", "resource_id"), ("Operator", "actor_local"),
@@ -3058,7 +3063,8 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_notice.setText(
                 " · ".join(summaries) + "\n"
                 "Only explicitly associated records; notes and stages are "
-                "operator-entered, not independently verified."
+                "operator-entered, not independently verified. Commercial "
+                "drafts are not contracts, sent messages or issued invoices."
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)

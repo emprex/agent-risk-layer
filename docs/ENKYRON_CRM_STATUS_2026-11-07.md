@@ -11,7 +11,7 @@ assertion of legal compliance or production readiness.
 |---|---|---|
 | E02-01 Companies | Create/edit versioning and history; synthetic Debian create/edit demonstrated | Entire A–Z reconciliation and ownership checks |
 | E02-02 Contacts | Create/edit and durable synthetic contact demonstrated | Negative stale-version/consent acceptance on Debian |
-| E02-03 Company 360 | Nine sections shown in Debian including audit | Contracts/projects/documents remain outside current dossier |
+| E02-03 Company 360 | Nine sections observed on Debian including audit; development slice adds read-only internal commercial draft records through explicit reviewed prospect links | Exact-head CI and Debian acceptance of new slice; signed contracts, delivered projects, independent documents and real exchanges remain out of scope/unfinished |
 | E02-04 Search/deduplicate | E02-04A company duplicate warning seen on Debian 2026-11-07. E02-04B manual creation transaction-time recheck, advisory serialization and override audit in development. | Exact-head CI and Debian synthetic acceptance of override/refusal; contact duplicate confirmation; other creation and edit entrypoints require separate consistency review. |
 | E02-05 Many-to-many | Contact–ticket link persisted on Debian. E02-05R revocation of synthetic ticket ARL-2026-000004 persisted after restart. E02-05S first reviewed reassignment from `Test` to `ARL CRM Import Test 3d5a49b4` visibly succeeded; operator confirmed restart test PASS on 2026-11-07. Exact-head CI for E02-05S passed on `a90b756`. | E02-05 as a whole remains OPEN: verify historical lineage and separate contact associations in redacted local DB evidence; any further transfer needs separately reviewed correction; real ARL tickets 000001/000002 require explicit operator decision; E02-06 access controls unresolved. |
 | E02-06 Audit/access | E02-06A event/field-change views shown in Debian | Authenticated users, roles, isolation and privilege-negative tests |
@@ -40,3 +40,14 @@ export control. Do not merge PR #520 based only on CI.
 Operator reported a successful restart check after moving synthetic ticket `ARL-2026-000004` from revoked `Test` association to `ARL CRM Import Test 3d5a49b4`. The previous screenshot showed the target company with one active ticket; a separate older screenshot showed the original company with two active ARL tickets and the immutable revocation metadata. This establishes the limited **DONE-LOCAL** user-confirmed test of reassignment and restart persistence; it is not independent verification of PostgreSQL row integrity or broader permission enforcement.
 
 E02-05 parent criterion remains open. Historical ARL tickets `ARL-2026-000001` and `ARL-2026-000002` must not be modified without explicit human review. E02-04 next scope is a read-only, bounded, operator-scoped duplicate preview for company and contact identity clues, coupled to deliberate review, with no automatic merge, company promotion, or consent inference.
+
+## E02-03 commercial draft provenance slice (development)
+
+The existing company dossier reuses three already-stored types: proposal drafts (072),
+pre-billing worksheets (081) and unissued invoice drafts (082). A single bounded,
+read-only snapshot query follows **explicit** company–prospect–opportunity joins,
+not similar legal names or email domains. It shows record type, title, recorded
+status/revision/date and proposal ID; it never reclassifies drafts as accepted
+contracts, delivered projects, sent messages, tax invoices or customer decisions.
+No migration, extra main navigation or assessment action. Exact-head CI and
+real Debian acceptance are separate gates. E02-03 remains OPEN.
