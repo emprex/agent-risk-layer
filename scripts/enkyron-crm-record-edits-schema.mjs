@@ -11,7 +11,7 @@ import pg from 'pg';
 
 const mode=process.argv[2];
 if (!['--check','--apply'].includes(mode) || process.argv.length!==3) {
-  throw new Error('Usage: node scripts/enkyron-crm-crm-record-edits-schema.mjs --check | --apply');
+  throw new Error('Usage: node scripts/enkyron-crm-record-edits-schema.mjs --check | --apply');
 }
 const version='084_enkyron_crm_record_edits.sql';
 const dir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','migrations');
