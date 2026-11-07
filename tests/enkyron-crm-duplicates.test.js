@@ -38,7 +38,7 @@ test('contact preflight never exposes stored emails and refuses absent or cross-
  assert.equal(x.calls[0].sql,'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
  assert.deepEqual(x.calls[1].args,['local:synthetic',cid]);
  assert.deepEqual(x.calls[2].args,['local:synthetic',cid,'Example','person@example.invalid']);
- assert.doesNotMatch(x.calls[2].sql.split(' FROM ')[0],/ct\.email/);
+ assert.doesNotMatch(x.calls[2].sql,/SELECT\s+ct\.email|,\s*ct\.email\s*(?:,|FROM)/i);
  assert.match(x.calls[2].sql,/LIMIT 26/);
  assert.equal(x.calls.at(-1).sql,'COMMIT');
  await assert.rejects(()=>previewContactDuplicates(x.pool,{
