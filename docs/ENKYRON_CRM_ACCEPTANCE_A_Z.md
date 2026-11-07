@@ -288,3 +288,30 @@ identity remains local OS user scope rather than authenticated multi-user
 RBAC. Original ARL tickets and old contact links must never be implicitly
 changed. The migration must be verified, backed up and installed only after
 exact-head CI is green. CI does not count as Debian acceptance.
+
+
+## E02-04A — Read-only duplicate candidate previews (development, 2026-11-07)
+
+The existing **Add company** and **Add contact** dialogs now request a bounded,
+workspace-scoped read-only PostgreSQL preview before any manual create command.
+Company clues: case/punctuation-normalised name, legal name or website host.
+Contact clues: normalised full name **within that company**, or equal case-folded
+email **within that operator's workspace**. The contact preview does not return
+stored email/phone values. At most 25 matches are exposed (26th flags
+truncation). No implicit merge, contact confirmation, client promotion,
+consent promotion, email sending, ticket or assessment mutation is performed.
+A matching name/domain/email is only a **potential duplicate**, never legal
+identity evidence. The operator sees a warning and may cancel or deliberately
+continue creating a distinct, still-unverified record. Backend errors,
+missing schema, stale form selections and truncated result sets fail closed
+at the UI preflight.
+
+**Important unfinished gate:** E02-04A is a *read-only preflight*, NOT yet
+transaction-time enforcement. Another transaction or direct legacy create
+command could create a matching record after the preview. Its override
+decision is not yet an immutable database audit entry. E02-04B must add a
+transactional recheck, reviewed override provenance and explicit negative
+concurrency tests before E02-04 can close. Approximate/fuzzy names, aliases,
+internationalised or port-qualified hostnames may evade these simple
+heuristics; no claim of exhaustive deduplication. CI and Debian acceptance
+must be recorded separately. No migration required by E02-04A.
