@@ -11,7 +11,10 @@ import stat
 import uuid
 from pathlib import Path
 
-from enkyron_crm_csv import HEADER, MAX_CONTACTS
+if __package__:
+    from .enkyron_crm_csv import HEADER, MAX_CONTACTS
+else:
+    from enkyron_crm_csv import HEADER, MAX_CONTACTS
 
 MAX_BYTES = 1024 * 1024
 MAX_FIELD_BYTES = 2048
