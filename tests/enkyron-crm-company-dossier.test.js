@@ -36,7 +36,7 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.equal(result.sections.tickets.total,0);
   assert.equal(result.sections.prospects.total,0);
   assert.deepEqual(m.statements.map(s=>s.sql.match(/^[A-Z]+/)[0]),[
-    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','COMMIT'
+    'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','SELECT','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
   assert.equal(m.released(),1);
