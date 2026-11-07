@@ -52,6 +52,15 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
     assert.match(sql,/c[.]company_id=[$]2/);
     assert.doesNotMatch(sql,/review_note|recipient_email|phone|source_reference/);
   }
+  assert.match(m.statements[4].sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(m.statements[4].sql,/enkyron_crm_ticket_reassignments/);
+  assert.match(m.statements[4].sql,/r[.]workspace_key=l[.]workspace_key/);
+  assert.match(m.statements[4].sql,/r[.]destination_company_id=l[.]company_id/);
+  assert.match(m.statements[4].sql,/reviewed_initial_link/);
+  assert.match(m.statements[4].sql,/reviewed_reassignment/);
+  assert.match(m.statements[4].sql,/t[.]linked_project_id AS arl_project_ref/);
+  assert.match(m.statements[4].sql,/t[.]linked_assessment_id AS arl_assessment_ref/);
+  assert.doesNotMatch(m.statements[4].sql,/l[.]review_note|t[.]scope_text|t[.]permission_reference/);
   assert.match(m.statements[10].sql,/enkyron_crm_effective_ticket_links/);
   assert.match(m.statements[10].sql,/arl_workbench_ticket_events/);
   assert.match(m.statements[10].sql,/arl_workbench_notes/);

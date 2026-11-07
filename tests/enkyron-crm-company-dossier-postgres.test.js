@@ -157,7 +157,14 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
     assert.equal(dossier.sections.opportunities.items[0].opportunity_id,linkedOpportunity.id);
-    assert.equal(dossier.sections.tickets.items[0].ticket_id,ticket);
+    const firstTicket=dossier.sections.tickets.items[0];
+    assert.equal(firstTicket.ticket_id,ticket);
+    assert.equal(firstTicket.link_origin,'reviewed_initial_link');
+    assert.equal(firstTicket.linked_by,actor);
+    assert.equal(firstTicket.arl_project_ref,null);
+    assert.equal(firstTicket.arl_assessment_ref,null);
+    assert.ok(firstTicket.linked_at);
+    assert.ok(!('review_note' in firstTicket));
     assert.equal(dossier.sections.drafts.items[0].subject,'Draft for linked opportunity');
     const docs=dossier.sections.commercial_docs.items;
     const proposal=docs.find(x=>x.document_kind==='proposal_draft');
@@ -208,6 +215,49 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
       'Identical names must not imply common legal identity');
     await assert.rejects(()=>getCompanyDossier(pool,a.id,'ci-other-operator'),
       /not found in local workspace/);
+    // A reviewed revocation and reassignment must remove the ticket/history
+    // from the former company, even when the destination has the same name.
+    const sourceLink=(await pool.query(
+      'SELECT l.id,t.client_name FROM enkyron_crm_ticket_links l '
+      +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
+      +'WHERE l.workspace_key=$1 AND l.ticket_id=$2',
+      ['local:'+actor,ticket]
+    )).rows[0];
+    const destVersion=(await pool.query(
+      'SELECT record_version FROM enkyron_crm_companies WHERE id=$1',
+      [twin.id]
+    )).rows[0].record_version;
+    const revocationId=randomUUID();
+    await pool.query(
+      'INSERT INTO enkyron_crm_ticket_link_revocations '
+      +'(id,workspace_key,link_id,company_id,ticket_id,'
+      +'ticket_client_name_at_review,review_note,revoked_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [revocationId,'local:'+actor,sourceLink.id,a.id,ticket,
+       sourceLink.client_name,
+       'Synthetic reviewed correction to verify former company visibility is revoked.',
+       actor]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_crm_ticket_reassignments '
+      +'(id,workspace_key,ticket_id,revocation_id,source_company_id,'
+      +'destination_company_id,ticket_client_name_at_review,'
+      +'destination_version_at_review,review_note,assigned_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [randomUUID(),'local:'+actor,ticket,revocationId,a.id,twin.id,
+       sourceLink.client_name,destVersion,
+       'CI human reviewed reassignment to separate synthetic twin company.',
+       actor]
+    );
+    const oldDossier=await getCompanyDossier(pool,a.id,actor);
+    const newDossier=await getCompanyDossier(pool,twin.id,actor);
+    assert.equal(oldDossier.sections.tickets.total,0);
+    assert.equal(oldDossier.sections.ticket_history.total,0);
+    assert.equal(newDossier.sections.tickets.total,1);
+    assert.equal(newDossier.sections.ticket_history.total,2);
+    assert.equal(newDossier.sections.tickets.items[0].link_origin,'reviewed_reassignment');
+    assert.equal(newDossier.sections.tickets.items[0].linked_by,actor);
+    assert.equal(newDossier.sections.tickets.items[0].ticket_id,ticket);
     assert.deepEqual((await pool.query(
       'SELECT * FROM sales_prospects WHERE id=$1',[linkedProspect]
     )).rows[0],sourceBefore);

@@ -33,7 +33,14 @@ const LISTS={
     +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 21',
   tickets:
     'SELECT t.id AS ticket_id,t.ticket_number,t.title,t.status,t.client_name,'
-    +'l.linked_at,count(*) OVER() AS total_rows '
+    +'t.linked_project_id AS arl_project_ref,'
+    +'t.linked_assessment_id AS arl_assessment_ref,'
+    +'l.linked_at,l.linked_by,'
+    +"CASE WHEN EXISTS (SELECT 1 FROM enkyron_crm_ticket_reassignments r "
+    +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id '
+    +"AND r.destination_company_id=l.company_id) THEN 'reviewed_reassignment' "
+    +"ELSE 'reviewed_initial_link' END AS link_origin,"
+    +'count(*) OVER() AS total_rows '
     +'FROM enkyron_crm_effective_ticket_links l '
     +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
@@ -185,7 +192,9 @@ export async function getCompanyDossier(pool,id,operator){
         +'Commercial stages and manual notes are not independently verified. '
         +'Commercial document entries (including terms) are internal drafts, not accepted contracts, '
         +'issued invoices, completed projects or exchanged emails. '
-        +'Ticket history is internal event and note metadata, not message contents.'};
+        +'Ticket history is internal event and note metadata, not message contents. '
+        +'ARL project and assessment references on tickets are technical links, '
+        +'not evidence of signed customer contracts or delivered missions.'};
   }catch(error){
     if(inTx)await client.query('ROLLBACK').catch(()=>{});
     if(error?.code==='42P01')return {available:false,

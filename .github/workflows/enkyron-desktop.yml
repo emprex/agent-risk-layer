@@ -553,7 +553,13 @@ jobs:
                           "source": "synthetic-ci"
                       }]
                   },
-                  "tickets": {"total": 0, "more": False, "items": []},
+                  "tickets": {"total": 1, "more": False, "items": [{
+                      "ticket_number": "CI-SYN-0001", "title": "Test scope",
+                      "status": "scoping", "client_name": "Unverified name",
+                      "link_origin": "reviewed_initial_link",
+                      "linked_by": "ci-local", "linked_at": "2026-11-07T05:00:00Z",
+                      "arl_project_ref": None, "arl_assessment_ref": None
+                  }]},
                   "opportunities": {"total": 0, "more": False, "items": []},
                   "activities": {"total": 0, "more": False, "items": []},
                   "qualifications": {"total": 0, "more": False, "items": []},
@@ -597,7 +603,16 @@ jobs:
           assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"
           assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
           assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
-          assert window.crm_dossier_tabs.tabText(2) == "Tickets (0)"
+          assert window.crm_dossier_tabs.tabText(2) == "Tickets (1)"
+          ticket_table = window.crm_dossier_tabs.widget(2).findChildren(QTableWidget)[0]
+          assert ticket_table.rowCount() == 1
+          assert ticket_table.columnCount() == 9
+          assert ticket_table.item(0, 3).text() == "reviewed_initial_link"
+          assert ticket_table.item(0, 4).text() == "ci-local"
+          assert ticket_table.item(0, 6).text() == ""
+          assert ticket_table.item(0, 7).text() == ""
+          assert any("not accepted commercial missions" in child.text()
+                     for child in window.crm_dossier_tabs.widget(2).findChildren(QLabel))
           assert window.crm_dossier_tabs.tabText(4) == "Qualification (0)"
           window.crm_dossier_tabs.setCurrentIndex(4)
           assert window.crm_dossier_nav.currentRow() == 4

@@ -2908,7 +2908,11 @@ class EnkyronWindow(QMainWindow):
                 ]),
                 ("tickets", "Tickets", [
                     ("Ticket", "ticket_number"), ("Title", "title"),
-                    ("Status", "status"), ("Recorded client", "client_name")
+                    ("Status", "status"), ("CRM link", "link_origin"),
+                    ("Reviewed by", "linked_by"), ("Linked", "linked_at"),
+                    ("ARL project ref", "arl_project_ref"),
+                    ("ARL assessment ref", "arl_assessment_ref"),
+                    ("Recorded client", "client_name")
                 ]),
                 ("opportunities", "Opportunities", [
                     ("Stage", "stage"), ("Next action", "next_action"),
@@ -2956,6 +2960,14 @@ class EnkyronWindow(QMainWindow):
                 count = int(section.get("total", 0))
                 page = QWidget()
                 page_layout = QVBoxLayout(page)
+                if section_id == "tickets":
+                    ticket_notice = QLabel(
+                        "CRM links are operator-reviewed, not independent client "
+                        "identity checks. ARL project/assessment IDs are technical "
+                        "references, not accepted commercial missions."
+                    )
+                    ticket_notice.setWordWrap(True)
+                    page_layout.addWidget(ticket_notice)
                 if section.get("more"):
                     limit_notice = QLabel(
                         "Showing first {} of {} records. "
