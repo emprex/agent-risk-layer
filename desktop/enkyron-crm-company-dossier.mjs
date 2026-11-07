@@ -37,6 +37,8 @@ const LISTS={
     +'FROM enkyron_crm_ticket_links l '
     +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
+    +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
     +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 21',
   opportunities:
     'SELECT o.id AS opportunity_id,o.prospect_id,o.stage,o.next_action,'

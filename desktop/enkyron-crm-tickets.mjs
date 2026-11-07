@@ -46,6 +46,8 @@ export async function listCompanyTickets(pool,companyId,actor){
       +'t.archived_at,l.review_note,l.linked_by,l.linked_at '
       +'FROM enkyron_crm_ticket_links l JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
       +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+      +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
+      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
       +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
       [scope.key,company_id]
     );
@@ -74,7 +76,7 @@ export async function listLinkableTickets(pool,search,actor){
     );
     return {available:true,items:result.rows.slice(0,100),
       more:result.rows.length>100,
-      notice:'Ticket client names are historical text, not verified CRM identities.'};
+      notice:'Only never-linked tickets are listed. Revoked links stay historical and cannot be reassigned in this dialog.'};
   }catch(error){
     if(error?.code==='42P01')return {available:false,items:[],
       notice:'CRM ticket association schema 067 is not installed locally.'};
@@ -91,7 +93,9 @@ export async function ticketLinkedCompany(pool,ticketId,actor){
       +'FROM enkyron_crm_ticket_links l '
       +'JOIN enkyron_crm_companies c '
       +'ON c.id=l.company_id AND c.workspace_key=l.workspace_key '
-      +'WHERE l.workspace_key=$1 AND l.ticket_id=$2',
+      +'WHERE l.workspace_key=$1 AND l.ticket_id=$2 '
+      +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
+      +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id)',
       [scope.key,id]
     );
     return {available:true,link:result.rows[0]??null};

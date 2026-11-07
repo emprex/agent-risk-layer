@@ -39,6 +39,8 @@ export async function listContactTickets(pool,contactId,actor){
      +'l.review_note,l.linked_by,l.linked_at FROM enkyron_crm_contact_ticket_links l '
      +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
      +'WHERE l.workspace_key=$1 AND l.company_id=$2 AND l.contact_id=$3 '
+     +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
+     +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
      +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
      [scope.key,contact.company_id,id])).rows;
    return {available:true,contact,items:rows.slice(0,100),more:rows.length>100,
@@ -65,6 +67,8 @@ export async function linkContactToTicket(pool,input,actor,options={}){
      'SELECT l.ticket_id,t.archived_at FROM enkyron_crm_ticket_links l '
      +'JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
      +'WHERE l.workspace_key=$1 AND l.company_id=$2 AND l.ticket_id=$3 '
+     +'AND NOT EXISTS (SELECT 1 FROM enkyron_crm_ticket_link_revocations r '
+     +'WHERE r.workspace_key=l.workspace_key AND r.ticket_id=l.ticket_id) '
      +'FOR SHARE OF l,t',
      [scope.key,req.company_id,req.ticket_id])).rows[0];
    if(!ticket)throw new Error('CRM ticket is not reviewed for this company');
