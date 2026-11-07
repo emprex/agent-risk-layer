@@ -48,8 +48,8 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
   assert.match(m.statements[9].sql,/FROM enkyron_crm_events/);
   assert.match(m.statements[10].sql,/FROM enkyron_crm_record_changes/);
   for(const sql of [m.statements[9].sql,m.statements[10].sql]){
-    assert.match(sql,/c\\.workspace_key/);
-    assert.match(sql,/c\\.company_id=\\$2/);
+    assert.match(sql,/c[.]workspace_key/);
+    assert.match(sql,/c[.]company_id=[$]2/);
     assert.doesNotMatch(sql,/review_note|recipient_email|phone|source_reference/);
   }
   // Opportunity, notes and drafts are linked through explicit prospect association.
