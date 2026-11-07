@@ -46,7 +46,7 @@ export async function listCompanyTickets(pool,companyId,actor){
       +'t.archived_at,l.review_note,l.linked_by,l.linked_at '
       +'FROM enkyron_crm_effective_ticket_links l JOIN arl_workbench_tickets t ON t.id=l.ticket_id '
       +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
-      +'ORDER BY l.linked_at DESC,l.id DESC LIMIT 101',
+      +'ORDER BY l.linked_at DESC,l.ticket_id DESC LIMIT 101',
       [scope.key,company_id]
     );
     return {available:true,company,items:result.rows.slice(0,100),more:result.rows.length>100};
