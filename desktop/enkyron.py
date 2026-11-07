@@ -3654,7 +3654,68 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_search.clear()
             self.load_companies()
 
-        self.bridge.call("crm-create-company", payload=payload, callback=received)
+        def checked(data, error):
+            if not dialog.isVisible():
+                return
+            current = {
+                "name": self.crm_name_input.text(),
+                "legal_name": self.crm_legal_input.text(),
+                "sector": self.crm_sector_input.text(),
+                "city": self.crm_city_input.text(),
+                "country": self.crm_country_input.text(),
+                "website": self.crm_website_input.text()
+            }
+            if current != payload:
+                self.crm_company_submit.setEnabled(True)
+                QMessageBox.information(
+                    dialog, "Review again",
+                    "Company details changed during the duplicate search."
+                )
+                return
+            if (error or not isinstance(data, dict)
+                    or not data.get("available") or data.get("kind") != "company"
+                    or not isinstance(data.get("matches"), list)):
+                self.crm_company_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Duplicate search unavailable",
+                    str(error or (data or {}).get("notice", "No validated result"))
+                    + ". Company was not created."
+                )
+                return
+            matches = data["matches"]
+            if data.get("more"):
+                self.crm_company_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "More than 25 possible matches",
+                    "This name/domain produces too many matches to review here. "
+                    "No company was created."
+                )
+                return
+            if matches:
+                summary = "\n".join(
+                    "{} · {}".format(
+                        str(item.get("name", "Unknown"))[:90].replace("<", "‹").replace(">", "›"),
+                        str(item.get("id", ""))[:36]
+                    )
+                    for item in matches[:10]
+                )
+                decision = QMessageBox.question(
+                    dialog, "Possible duplicate companies",
+                    "{} possible existing companies:\n{}\n\n"
+                    "A matching name or domain does NOT prove the same legal entity. "
+                    "Review the companies first. Create a separate prospect anyway? "
+                    "No automatic merge occurs.".format(len(matches), summary),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if decision != QMessageBox.StandardButton.Yes:
+                    self.crm_company_submit.setEnabled(True)
+                    return
+            # This is a read-only preflight (E02-04A). Transaction-time
+            # duplicate checks and recorded override rationale remain open.
+            self.bridge.call("crm-create-company", payload=payload, callback=received)
+
+        self.bridge.call("crm-company-duplicates", payload=payload, callback=checked)
 
     def open_new_contact(self):
         if not self.crm_company_id or not self.crm_contact_add.isEnabled():
@@ -3726,7 +3787,66 @@ class EnkyronWindow(QMainWindow):
             if company_id == self.crm_company_id:
                 self.company_selected()
 
-        self.bridge.call("crm-create-contact", payload=payload, callback=received)
+        def checked(data, error):
+            if not dialog.isVisible():
+                return
+            current = {
+                "company_id": self.crm_contact_dialog_company_id,
+                "full_name": self.crm_contact_name_input.text(),
+                "job_title": self.crm_contact_job_input.text(),
+                "email": self.crm_contact_email_input.text(),
+                "phone": self.crm_contact_phone_input.text()
+            }
+            if current != payload or company_id != self.crm_company_id:
+                self.crm_contact_submit.setEnabled(True)
+                QMessageBox.information(
+                    dialog, "Review again",
+                    "Contact details or selected company changed during review."
+                )
+                return
+            if (error or not isinstance(data, dict)
+                    or not data.get("available") or data.get("kind") != "contact"
+                    or data.get("company_id") != company_id
+                    or not isinstance(data.get("matches"), list)):
+                self.crm_contact_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Duplicate search unavailable",
+                    str(error or (data or {}).get("notice", "No validated result"))
+                    + ". Contact was not created."
+                )
+                return
+            matches = data["matches"]
+            if data.get("more"):
+                self.crm_contact_submit.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "More than 25 possible matches",
+                    "Too many possible contacts to review here. "
+                    "No contact was created."
+                )
+                return
+            if matches:
+                summary = "\n".join(
+                    "{} · {}".format(
+                        str(item.get("full_name", "Unknown"))[:90].replace("<", "‹").replace(">", "›"),
+                        str(item.get("company_name", ""))[:90].replace("<", "‹").replace(">", "›")
+                    )
+                    for item in matches[:10]
+                )
+                decision = QMessageBox.question(
+                    dialog, "Possible duplicate contacts",
+                    "{} possible contacts:\n{}\n\n"
+                    "A matching name or email does NOT verify identity. "
+                    "Create another unverified contact anyway? "
+                    "No marketing permission is inferred.".format(len(matches), summary),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if decision != QMessageBox.StandardButton.Yes:
+                    self.crm_contact_submit.setEnabled(True)
+                    return
+            self.bridge.call("crm-create-contact", payload=payload, callback=received)
+
+        self.bridge.call("crm-contact-duplicates", payload=payload, callback=checked)
 
     def prospect_search_changed(self, _value):
         # Invalidate pending replies immediately, even during the debounce.
