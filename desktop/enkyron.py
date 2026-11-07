@@ -738,6 +738,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_privacy_button.setEnabled(False)
         self.crm_privacy_button.clicked.connect(self.open_privacy_requests)
         contacts_heading.addWidget(self.crm_privacy_button)
+        self.crm_retention_button = QPushButton("Retention reviews…")
+        self.crm_retention_button.setEnabled(False)
+        self.crm_retention_button.clicked.connect(self.open_retention_reviews)
+        contacts_heading.addWidget(self.crm_retention_button)
         contacts_l.addLayout(contacts_heading)
         self.crm_contacts_notice = QLabel(
             "Select a company to view its contacts. Email consent starts as unknown."
@@ -1576,6 +1580,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
             self.crm_privacy_button.setEnabled(False)
+            self.crm_retention_button.setEnabled(False)
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
@@ -1645,6 +1650,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
             self.crm_privacy_button.setEnabled(False)
+            self.crm_retention_button.setEnabled(False)
             self.crm_contact_add.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             self.crm_ticket_seq += 1
@@ -1663,6 +1669,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_edit.setEnabled(False)
         self.crm_contact_tickets_button.setEnabled(False)
         self.crm_privacy_button.setEnabled(False)
+        self.crm_retention_button.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
@@ -1680,6 +1687,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_contact_edit.setEnabled(False)
             self.crm_contact_tickets_button.setEnabled(False)
             self.crm_privacy_button.setEnabled(False)
+            self.crm_retention_button.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             if error:
                 self.crm_contacts_notice.setText("Contacts unavailable.")
@@ -1714,6 +1722,7 @@ class EnkyronWindow(QMainWindow):
         selected = 0 <= row < len(self.crm_contact_items)
         self.crm_contact_tickets_button.setEnabled(bool(self.crm_company_id) and selected)
         self.crm_privacy_button.setEnabled(bool(self.crm_company_id) and selected)
+        self.crm_retention_button.setEnabled(bool(self.crm_company_id) and selected)
         self.crm_contact_edit.setEnabled(
             bool(self.crm_company_id) and selected and
             isinstance(self.crm_contact_items[row].get("record_version"), int)
@@ -2004,6 +2013,166 @@ class EnkyronWindow(QMainWindow):
         submit.clicked.connect(save)
         dialog.open()
         self.bridge.call("crm-privacy-requests", contact_id, callback=received_history)
+
+    def open_retention_reviews(self):
+        row = self.crm_contacts_table.currentRow()
+        if not self.crm_company_id or not 0 <= row < len(self.crm_contact_items):
+            return
+        company_id = self.crm_company_id
+        contact_id = self.crm_contact_items[row]["id"]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Retention reviews")
+        dialog.setMinimumWidth(700)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("CONTACT RETENTION · HUMAN REVIEW REGISTER"))
+        disclaimer = QLabel(
+            "Record the processing purpose, possible preservation concern and next "
+            "review date. This is NOT a deletion date, approved legal hold, "
+            "retention policy or permission to keep data indefinitely. "
+            "No source records are changed."
+        )
+        disclaimer.setWordWrap(True)
+        layout.addWidget(disclaimer)
+        notice = QLabel("Loading retention reviews…")
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        history = QTableWidget(0, 5)
+        history.setHorizontalHeaderLabels(
+            ["Purpose", "Hold check", "Review again", "Operator", "Recorded"]
+        )
+        history.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        history.horizontalHeader().setStretchLastSection(True)
+        layout.addWidget(history, 1)
+        form = QFormLayout()
+        purpose = QComboBox()
+        for label, code in (
+            ("Prospect research", "prospect_research"),
+            ("Service delivery", "service_delivery"),
+            ("Support", "support"),
+            ("Compliance records", "compliance_records"),
+            ("Other (human review)", "other"),
+        ):
+            purpose.addItem(label, code)
+        form.addRow("Purpose", purpose)
+        hold = QComboBox()
+        for label, code in (
+            ("Not assessed", "not_assessed"),
+            ("Potential hold — investigate", "potential_hold"),
+            ("None identified (not legal approval)", "none_identified"),
+        ):
+            hold.addItem(label, code)
+        form.addRow("Preservation check", hold)
+        next_date = QDateEdit(QDate.currentDate())
+        next_date.setDisplayFormat("yyyy-MM-dd")
+        next_date.setCalendarPopup(True)
+        form.addRow("Next human review", next_date)
+        layout.addLayout(form)
+        rationale = QPlainTextEdit()
+        rationale.setMaximumHeight(85)
+        rationale.setPlaceholderText(
+            "Document the processing purpose and why another review is needed "
+            "(30–500 characters). Do not enter sensitive personal information."
+        )
+        layout.addWidget(rationale)
+        checked = QCheckBox(
+            "This is my manual review only. It does not authorise retention, "
+            "erasure or a legal hold."
+        )
+        checked.setWordWrap(True)
+        layout.addWidget(checked)
+        actions = QHBoxLayout()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        actions.addWidget(close)
+        actions.addStretch()
+        save = QPushButton("Record review")
+        save.setObjectName("primary")
+        save.setEnabled(False)
+        actions.addWidget(save)
+        layout.addLayout(actions)
+        self.crm_retention_dialog = dialog
+
+        def same_contact():
+            selected = self.crm_contacts_table.currentRow()
+            return (dialog.isVisible() and company_id == self.crm_company_id
+                    and 0 <= selected < len(self.crm_contact_items)
+                    and self.crm_contact_items[selected].get("id") == contact_id)
+
+        def received_history(data, error):
+            if not same_contact():
+                return
+            if error or not data or not data.get("available", False):
+                notice.setText(error or (data or {}).get(
+                    "notice", "Retention register unavailable."
+                ))
+                save.setEnabled(False)
+                return
+            if (data.get("contact") or {}).get("company_id") != company_id:
+                notice.setText("Contact company changed; reopen.")
+                save.setEnabled(False)
+                return
+            items = data.get("items") or []
+            history.setRowCount(len(items))
+            for i, item in enumerate(items):
+                for col, value in enumerate((
+                    item.get("purpose_code"), item.get("hold_check"),
+                    str(item.get("next_review_on") or "")[:10],
+                    item.get("recorded_by"), display_date(item.get("recorded_at"))
+                )):
+                    history.setItem(i, col, QTableWidgetItem(str(value or "")))
+            notice.setText(
+                "{} review(s) recorded; no automated lifecycle action.{}".format(
+                    len(items), " First 50 shown." if data.get("more") else ""
+                )
+            )
+            save.setEnabled(True)
+
+        def submit():
+            if not same_contact() or not save.isEnabled():
+                return
+            note = rationale.toPlainText().strip()
+            if not 30 <= len(note) <= 500 or not checked.isChecked():
+                QMessageBox.warning(
+                    dialog, "Human review required",
+                    "Write a 30–500 character rationale and confirm the scope."
+                )
+                return
+            if QMessageBox.question(
+                dialog, "Confirm retention review",
+                "Record the review for this contact? No data will be deleted, "
+                "retained automatically or placed under a legal hold.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            save.setEnabled(False)
+
+            def saved(data, error):
+                if not same_contact():
+                    return
+                if error or not data or data.get("contact_id") != contact_id:
+                    notice.setText(error or "Retention review refused.")
+                    save.setEnabled(True)
+                    return
+                rationale.clear()
+                checked.setChecked(False)
+                self.bridge.call(
+                    "crm-retention-reviews", contact_id, callback=received_history
+                )
+
+            self.bridge.call("crm-record-retention-review", payload={
+                "company_id": company_id,
+                "contact_id": contact_id,
+                "purpose_code": purpose.currentData(),
+                "hold_check": hold.currentData(),
+                "next_review_on": next_date.date().toString("yyyy-MM-dd"),
+                "review_note": note,
+                "confirmed": True
+            }, callback=saved)
+
+        save.clicked.connect(submit)
+        dialog.open()
+        self.bridge.call("crm-retention-reviews", contact_id, callback=received_history)
 
     def open_edit_company(self):
         row = self.crm_company_table.currentRow()

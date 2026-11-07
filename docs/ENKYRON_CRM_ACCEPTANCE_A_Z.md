@@ -105,3 +105,30 @@ E02-07 is NOT COMPLETE: identity and third-party authority verification,
 deadline assessment, lawful basis/exceptions, legal holds, retention schedule,
 request resolution, data export, erasure/redaction and communication all need
 further design and human governance. CI is not Debian acceptance.
+
+
+## E02-07B — Human retention review register (2026-11-07, limited)
+Additive migration **087** adds an append-only, local workspace-scoped
+review history per CRM contact. Each human entry requires a selected processing
+purpose, a *potential preservation concern check* (not assessed, potential,
+none identified), a next review date and a 30–500-character rationale.
+The Qt **Retention reviews…** dialog lists existing metadata and records
+further reviews, never edits earlier reviews. A next review date is NOT a
+retention expiry or deletion date. A potential hold is NOT an approved legal
+hold; none identified is NOT a legal clearance. No lifecycle action is
+executed, no customer information is automatically exported or altered.
+
+The UK ICO storage limitation guidance states that retention varies by
+purpose and must be justified, documented and reviewed; no fixed universal
+UK GDPR retention period exists:
+https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-protection-principles/a-guide-to-the-data-protection-principles/storage-limitation/
+
+CI tests use disposable synthetic PostgreSQL, deny out-of-workspace access,
+block update/delete of reviews and verify no original contact mutation.
+Debian operator acceptance remains NOT-VERIFIED until migration check,
+owner-only backup, review recording and readback after restart.
+
+**E02-07 remains OPEN.** No retention schedules have been approved, no
+automated purge, actual legal holds, privacy request resolution, data export,
+erasure or cross-system deletion are implemented. A review entry is not
+authorisation for indefinite retention.
