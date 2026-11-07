@@ -1856,7 +1856,11 @@ class EnkyronWindow(QMainWindow):
                     error or (data or {}).get("notice", "Could not read revision history.")
                 )
                 return
-            dialog = QDialog(self)
+            dialog = QDialog(
+                self.crm_record_edit_dialog
+                if self.crm_record_edit_dialog and self.crm_record_edit_dialog.isVisible()
+                else self
+            )
             dialog.setWindowTitle("ENKYRON · CRM correction history")
             dialog.resize(720, 440)
             layout = QVBoxLayout(dialog)
