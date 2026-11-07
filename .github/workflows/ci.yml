@@ -127,6 +127,210 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/postgres-ci-integration.test.js
 
+      - name: ENKYRON client desk PostgreSQL owner/archive roundtrip
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-client-desk-postgres.test.js
+
+      - name: ENKYRON E03 ticket triage PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-ticket-triage-postgres.test.js
+
+      - name: ENKYRON CRM E02 structured company/contact PostgreSQL checks
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-postgres.test.js
+
+      - name: ENKYRON E02-04B serialized duplicate review PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-duplicate-reviews-postgres.test.js
+
+      - name: ENKYRON E02-04A read-only duplicate preview PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-duplicates-postgres.test.js
+
+      - name: ENKYRON CRM reviewed prospect link PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-link-postgres.test.js
+
+      - name: ENKYRON CRM full 344-candidate PostgreSQL pagination
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-pagination-postgres.test.js
+
+      - name: ENKYRON CRM company-ticket PostgreSQL integration
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-tickets-postgres.test.js
+
+      - name: ENKYRON E02-05R ticket-link correction PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-ticket-corrections-postgres.test.js
+
+      - name: ENKYRON E02-05S reviewed ticket reassignment PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-ticket-reassignments-postgres.test.js
+
+      - name: ENKYRON E02-05 contact-ticket PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-contact-tickets-postgres.test.js
+
+      - name: ENKYRON E02-07A privacy intake PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-privacy-postgres.test.js
+
+      - name: ENKYRON E02-07B append-only retention review PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-retention-postgres.test.js
+
+      - name: ENKYRON E02-08A selected company CSV PostgreSQL read isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-csv-postgres.test.js
+
+      - name: ENKYRON E02-08C reviewed transactional CSV import PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-csv-import-postgres.test.js
+
+      - name: ENKYRON E02-08D CSV export attempt and receipt PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-csv-export-audit-postgres.test.js
+
+      - name: ENKYRON CRM manual opportunity and follow-up PostgreSQL checks
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-opportunities-postgres.test.js
+
+      - name: ENKYRON CRM manual activity journal PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-activities-postgres.test.js
+
+      - name: ENKYRON CRM local unsent mail draft PostgreSQL integration
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-mail-drafts-postgres.test.js
+
+      - name: ENKYRON commercial overview read-only PostgreSQL checks
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-overview-postgres.test.js
+
+      - name: ENKYRON commercial pipeline PostgreSQL stage isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-pipeline-postgres.test.js
+
+      - name: ENKYRON reviewed company 360 dossier PostgreSQL checks
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-company-dossier-postgres.test.js
+
+      - name: ENKYRON manually reviewed company-contact qualification PostgreSQL integration
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-qualification-postgres.test.js
+
+      - name: ENKYRON priced commercial proposal draft PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-proposals-postgres.test.js
+
+      - name: ENKYRON itemized quote lines and immutable revision snapshots
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-proposal-lines-postgres.test.js
+
+      - name: ENKYRON PDF export consistent PostgreSQL snapshot
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-proposal-export-postgres.test.js
+
+      - name: ENKYRON international VAT evidence research PostgreSQL boundary
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-tax-review-postgres.test.js
+
+      - name: ENKYRON issuing-company legal profile PostgreSQL isolation
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-company-profile-postgres.test.js
+
+      - name: ENKYRON buyer identity review on isolated PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-buyer-review-postgres.test.js
+
+      - name: ENKYRON commercial draft terms isolated PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-commercial-terms-postgres.test.js
+
+      - name: ENKYRON internal draft review isolated PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-internal-review-postgres.test.js
+
+      - name: ENKYRON prebilling worksheet isolated PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-billing-worksheet-postgres.test.js
+
+      - name: ENKYRON unissued invoice draft isolated PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-invoice-drafts-postgres.test.js
+
+      - name: ENKYRON versioned CRM correction PostgreSQL
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-edit-postgres.test.js
+
       - name: External black-box candidate PostgreSQL import boundary
         env:
           CI: 'true'

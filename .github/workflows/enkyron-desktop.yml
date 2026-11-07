@@ -1,0 +1,1935 @@
+name: ENKYRON Desktop
+
+on:
+  push:
+    branches:
+      - 'feat/enkyron-desktop-*'
+  pull_request:
+    paths:
+      - 'desktop/enkyron*'
+      - 'tests/enkyron-desktop.test.js'
+      - '.github/workflows/enkyron-desktop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Node dependencies
+        run: npm ci --ignore-scripts
+      - name: Desktop bridge and contract tests
+        run: |
+          node --check desktop/enkyron-contract.mjs
+          node --check desktop/enkyron-bridge.mjs
+          node --check desktop/enkyron-evidence-register.mjs
+          node --check desktop/enkyron-ticket-intake.mjs
+          node --check desktop/enkyron-ticket-triage.mjs
+          node --check scripts/enkyron-ticket-triage-schema.mjs
+          node --check desktop/enkyron-crm-prospects.mjs
+          node --check desktop/enkyron-crm.mjs
+          node --check desktop/enkyron-crm-duplicate-queries.mjs
+          node --check scripts/enkyron-crm-duplicate-reviews-schema.mjs
+          node --check desktop/enkyron-crm-duplicates.mjs
+          node --check desktop/enkyron-crm-edit.mjs
+          node --check desktop/enkyron-crm-contact-tickets.mjs
+          node --check desktop/enkyron-crm-ticket-corrections.mjs
+          node --check desktop/enkyron-crm-ticket-reassignments.mjs
+          node --check scripts/enkyron-crm-ticket-reassignments-schema.mjs
+          node --check scripts/enkyron-crm-ticket-corrections-schema.mjs
+          node --check desktop/enkyron-crm-privacy.mjs
+          node --check desktop/enkyron-crm-retention.mjs
+          node --check desktop/enkyron-crm-csv.mjs
+          node --check desktop/enkyron-crm-csv-import.mjs
+          node --check desktop/enkyron-crm-csv-export-audit.mjs
+          node --check scripts/enkyron-crm-csv-export-audit-schema.mjs
+          node --check scripts/enkyron-crm-csv-import-schema.mjs
+          node --check desktop/enkyron-crm-link.mjs
+          node --check desktop/enkyron-crm-tickets.mjs
+          node --check desktop/enkyron-crm-company-dossier.mjs
+          node --check desktop/enkyron-crm-qualification.mjs
+          node --check desktop/enkyron-crm-proposals.mjs
+          node --check desktop/enkyron-crm-proposal-lines.mjs
+          node --check desktop/enkyron-crm-proposal-export.mjs
+          node --check desktop/enkyron-crm-buyer-review.mjs
+          node --check desktop/enkyron-crm-commercial-terms.mjs
+          node --check desktop/enkyron-crm-internal-review.mjs
+          node --check desktop/enkyron-crm-billing-worksheet.mjs
+          node --check desktop/enkyron-crm-invoice-drafts.mjs
+          node --check desktop/enkyron-crm-invoice-issue-review.mjs
+          node --check desktop/enkyron-crm-tax-review.mjs
+          node --check desktop/enkyron-company-profile.mjs
+          node --check desktop/enkyron-db-errors.mjs
+          node --check scripts/enkyron-crm-tax-review-schema.mjs
+          node --check scripts/enkyron-crm-tax-source-schema.mjs
+          node --check scripts/enkyron-company-profile-schema.mjs
+          node --check scripts/enkyron-company-tax-references-schema.mjs
+          node --check scripts/enkyron-crm-buyer-review-schema.mjs
+          node --check scripts/enkyron-crm-commercial-terms-schema.mjs
+          node --check scripts/enkyron-crm-internal-review-schema.mjs
+          node --check scripts/enkyron-crm-billing-worksheet-schema.mjs
+          node --check scripts/enkyron-crm-invoice-draft-schema.mjs
+          node --check scripts/enkyron-crm-invoice-issue-review-schema.mjs
+          node --check scripts/enkyron-crm-proposal-lines-schema.mjs
+          node --check scripts/enkyron-crm-proposals-schema.mjs
+          node --check scripts/enkyron-crm-qualification-schema.mjs
+          node --check desktop/enkyron-crm-opportunities.mjs
+          node --check desktop/enkyron-crm-activities.mjs
+          node --check desktop/enkyron-crm-mail-drafts.mjs
+          node --check desktop/enkyron-crm-overview.mjs
+          node --check desktop/enkyron-crm-pipeline.mjs
+          node --check scripts/enkyron-crm-mail-schema.mjs
+          node --check scripts/enkyron-crm-activity-schema.mjs
+          node --check scripts/enkyron-crm-opportunities-schema.mjs
+          node --check scripts/enkyron-crm-ticket-schema.mjs
+          node --check scripts/enkyron-crm-link-schema.mjs
+          node --check scripts/enkyron-crm-schema.mjs
+          node --check scripts/enkyron-crm-record-edits-schema.mjs
+          node --check scripts/enkyron-crm-contact-ticket-links-schema.mjs
+          node --check scripts/enkyron-crm-privacy-schema.mjs
+          node --check scripts/enkyron-crm-retention-schema.mjs
+          node --check scripts/enkyron-client-desk-schema.mjs
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
+      - name: Install native Qt system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libegl1 libopengl0 libxkbcommon0 poppler-utils
+      - name: Install isolated Qt runtime
+        run: |
+          python3 -m venv "$RUNNER_TEMP/enkyron-venv"
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native draft PDF renderer smoke (synthetic, offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p qt_enkyron_proposal_pdf_smoke.py
+      - name: Python CSV formula-injection and no-clobber tests
+        run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv.py' -v
+
+      - name: Python CSV import preflight (read-only, hostile files)
+        run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv_import.py' -v
+
+      - name: Native window smoke without PostgreSQL
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget
+          from PySide6.QtCore import Qt, QDate
+          from pathlib import Path
+          from unittest.mock import patch
+          from desktop.enkyron import DesktopBridge, EnkyronWindow, format_followup_due
+
+          # Verify Qt widget construction without connecting to a DB or running ARL.
+          DesktopBridge.call = lambda *_args, **_kwargs: None
+          app = QApplication([])
+          window = EnkyronWindow()
+          assert isinstance(window, QMainWindow)
+          assert window.tabs.count() == 7
+          assert window.tabs.tabText(4) == 'ARL Engine'
+          assert window.tabs.tabText(5) == 'Evidence Requests'
+          assert window.tabs.tabText(6) == 'Evidence Register'
+          assert window.windowTitle().startswith("ENKYRON")
+          assert window.pages.count() == 3
+          assert [window.navigation.item(i).text() for i in range(3)] == [
+              "Home", "Tickets", "CRM"
+          ]
+          assert window.pages.currentIndex() == 1
+          assert window.ticket_views.count() == 2
+          assert window.ticket_views.currentIndex() == 0
+          assert window.ticket_list.parentWidget() is not window.tabs.parentWidget()
+          assert window.ticket_list.count() == 0
+          assert not window.show_archived.isChecked()
+          assert not window.assign_button.isEnabled()
+          assert not window.archive_button.isEnabled()
+          window.open_new_ticket()
+          assert window.new_ticket_dialog is not None
+          assert window.new_ticket_dialog.isVisible()
+          assert window.intake_client.placeholderText().startswith(
+              "Organisation or client name")
+          assert any("Enter the organisation/client name separately" in label.text()
+                     for label in window.new_ticket_dialog.findChildren(QLabel))
+          window.intake_client.setText("Synthetic Customer")
+          window.intake_contact.setText("Caller")
+          window.intake_phone.setText("+44 0000 000000")
+          window.intake_title.setText("Telephone enquiry")
+          window.intake_description.setPlainText("Customer requests a consultation")
+          # The actual bridge is stubbed: verify the native callback and payload.
+          intake_calls = []
+          DesktopBridge.call = lambda _self,action,arg="",payload=None,callback=None: intake_calls.append(
+              (action, arg, payload, callback)
+          )
+          window.create_ticket()
+          assert intake_calls[-1][0] == "create-ticket"
+          assert intake_calls[-1][2]["source"] == "phone"
+          assert intake_calls[-1][2]["client_name"] == "Synthetic Customer"
+          assert "consultation" in intake_calls[-1][2]["request_text"]
+          window.new_ticket_dialog.reject()
+          # Exercise the real Qt callback path using a stubbed local IPC process.
+          calls = []
+          def fake_call(_self, action, arg="", payload=None, callback=None):
+              calls.append((action, arg, payload, callback))
+          DesktopBridge.call = fake_call
+          window.navigation.setCurrentRow(2)
+          prospect_page_call = next(x for x in calls if x[0] == "crm-prospects-page")
+          assert prospect_page_call[2] == {"search": "", "page": 1}
+          # CRM now opens three independent views; the follow-up lookup may be last.
+          assert any(x[0] == "crm-opportunities" for x in calls)
+          prospect_page_call[3]({
+              "available": True, "more": True, "total": 344,
+              "page": 1, "page_size": 100,
+              "items": [{
+                  "id": "ARL-P-000001",
+                  "company_name": "Synthetic Research Co.",
+                  "buyer_name": "Unconfirmed Contact",
+                  "buyer_role": "Research",
+                  "buyer_email": None,
+                  "website": "https://example.invalid",
+                  "stage": "research",
+                  "source": "synthetic-ci",
+                  "updated_at": "2026-11-05T10:00:00Z",
+              }]
+          }, None)
+          assert window.crm_table.rowCount() == 1
+          assert window.crm_page_label.text() == "Page 1 / 4"
+          assert not window.crm_previous.isEnabled()
+          assert window.crm_next.isEnabled()
+          window.crm_next.click()
+          assert calls[-1][0] == "crm-prospects-page"
+          assert calls[-1][2] == {"search": "", "page": 2}
+          calls[-1][3]({
+              "available": True, "more": True, "total": 344,
+              "page": 2, "page_size": 100,
+              "items": [{
+                  "id": "ARL-P-000101",
+                  "company_name": "Page Two Synthetic",
+                  "buyer_name": None, "stage": "research",
+                  "source": "synthetic-ci", "updated_at": "2026-11-05",
+              }],
+          }, None)
+          assert window.crm_page_label.text() == "Page 2 / 4"
+          assert window.crm_previous.isEnabled()
+          assert window.crm_next.isEnabled()
+          window.crm_previous.click()
+          assert calls[-1][2] == {"search": "", "page": 1}
+          calls[-1][3]({
+              "available": True, "more": True, "total": 344,
+              "page": 1, "page_size": 100,
+              "items": [{
+                  "id": "ARL-P-000001",
+                  "company_name": "Synthetic Research Co.",
+                  "buyer_name": "Unconfirmed Contact",
+                  "buyer_role": "Research",
+                  "buyer_email": None,
+                  "website": "https://example.invalid",
+                  "stage": "research",
+                  "source": "synthetic-ci", "updated_at": "2026-11-05",
+              }],
+          }, None)
+          assert window.crm_page_label.text() == "Page 1 / 4"
+          company_call = next(item for item in calls if item[0] == "crm-companies")
+          company_id = "11111111-2222-4333-8444-555555555555"
+          company_call[3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": company_id, "name": "Synthetic Company",
+                  "record_version": 1,
+                  "relationship_state": "prospect", "sector": "Cybersecurity",
+                  "city": "London", "country": "UK", "updated_at": "2026-11-05",
+              }]
+          }, None)
+          assert window.crm_tabs.count() == 7
+          assert hasattr(window, "crm_buyer_button")
+          assert not window.crm_buyer_button.isEnabled()
+          window.crm_company_profile_button.click()
+          assert calls[-1][0] == "crm-own-profile"
+          calls[-1][3]({"available":True,"current":None,"history":[]}, None)
+          assert window.crm_company_profile_dialog.isVisible()
+          assert "company_utr" in window.company_profile_inputs
+          assert "tax_office_number" in window.company_profile_inputs
+          assert window.company_profile_inputs["company_utr"].echoMode() == QLineEdit.EchoMode.Password
+          window.crm_company_profile_dialog.reject()
+          assert window.crm_tabs.tabText(3) == "Mail"
+          assert [window.crm_mail_folders.tabText(i) for i in range(3)] == [
+              "Inbox", "Sent", "Drafts"
+          ]
+          assert "not connected" in window.crm_mail_connection.text().lower()
+          assert window.crm_company_table.rowCount() == 1
+          assert window.crm_company_add.isEnabled()
+          window.crm_company_table.selectRow(0)
+          assert calls[-1][0] == "crm-contacts"
+          assert calls[-1][1] == company_id
+          calls[-1][3]({
+              "company": {"id": company_id, "name": "Synthetic Company"},
+              "items": [{
+                  "id": "22222222-3333-4444-8555-666666666666",
+                  "record_version": 1,
+                  "full_name": "Synthetic Contact", "job_title": "Engineering",
+                  "email": "contact@example.invalid", "phone": "",
+              }], "more": False
+          }, None)
+          assert window.crm_contacts_table.rowCount() == 1
+          assert window.crm_company_edit.isEnabled()
+          assert window.crm_company_csv_button.isEnabled()
+          with patch("desktop.enkyron.QInputDialog.getItem",
+                     return_value=("Export selected company", True)):
+              window.crm_company_csv_button.click()
+          assert calls[-1][0] == "crm-company-csv"
+          assert calls[-1][1] == company_id
+          import tempfile
+          import uuid
+          from desktop.enkyron_crm_csv import write_company_csv, csv_file_receipt
+          from PySide6.QtWidgets import QMessageBox
+          with patch("desktop.enkyron.QMessageBox.warning",
+                     side_effect=AssertionError("Unexpected CSV export warning")):
+              with tempfile.TemporaryDirectory() as audit_dir:
+                  output = Path(audit_dir) / "audited-export.csv"
+                  with patch("desktop.enkyron.QMessageBox.question",
+                             return_value=QMessageBox.StandardButton.Yes), patch(
+                             "desktop.enkyron.QFileDialog.getSaveFileName",
+                             return_value=(str(output), "CSV files (*.csv)")):
+                      calls[-1][3]({
+                          "available": True,
+                          "format": "ENKYRON_CRM_SELECTED_COMPANY_V1",
+                          "company": {
+                              "id": company_id, "name": "Synthetic Company",
+                              "record_version": 1, "sector": "Research",
+                              "city": "London", "country": "UK",
+                              "relationship_state": "prospect"
+                          },
+                          "contacts": [{
+                              "id": "22222222-3333-4444-8555-666666666666",
+                              "full_name": "Synthetic Contact",
+                              "job_title": "Engineering",
+                              "marketing_permission": "unknown", "record_version": 1
+                          }], "contact_count": 1
+                      }, None)
+                  assert calls[-1][0] == "crm-csv-export-start"
+                  assert calls[-1][2]["company_id"] == company_id
+                  assert calls[-1][2]["company_version"] == 1
+                  assert calls[-1][2]["contact_count"] == 1
+                  assert not output.exists()
+                  audit_id = "33333333-4444-4555-8666-777777777777"
+                  calls[-1][3]({
+                      "export_id": audit_id, "company_id": company_id,
+                      "contact_count": 1
+                  }, None)
+                  assert output.exists()
+                  file_sha, file_size = csv_file_receipt(output)
+                  assert calls[-1][0] == "crm-csv-export-finish"
+                  assert calls[-1][2]["event_type"] == "completed"
+                  assert calls[-1][2]["export_id"] == audit_id
+                  assert calls[-1][2]["file_sha256"] == file_sha
+                  assert calls[-1][2]["file_bytes"] == file_size
+                  assert calls[-1][2]["record_count"] == 2
+                  with patch("desktop.enkyron.QMessageBox.information"):
+                      calls[-1][3]({
+                          "export_id": audit_id, "company_id": company_id,
+                          "status": "completed"
+                      }, None)
+                  assert output.exists()
+              with patch("desktop.enkyron.QInputDialog.getItem",
+                         return_value=("View CSV export history", True)):
+                  window.crm_company_csv_button.click()
+              assert calls[-1][0] == "crm-csv-export-history"
+              assert calls[-1][1] == company_id
+              calls[-1][3]({
+                  "available": True, "company_id": company_id, "more": False,
+                  "items": [{
+                      "export_id": "33333333-4444-4555-8666-777777777777",
+                      "event_type": "completed", "expected_contact_count": 1,
+                      "file_bytes": 241, "file_sha256": "a" * 64,
+                      "recorded_at": "2026-11-07T11:00:00Z"
+                  }]
+              }, None)
+              assert window.crm_csv_export_history_dialog.isVisible()
+              assert window.crm_csv_export_history_dialog.findChildren(QTableWidget)[0].rowCount() == 1
+              window.crm_csv_export_history_dialog.reject()
+          # New workflow reuses the same CSV entrypoint. No extra toolbar button.
+          import tempfile
+          import uuid
+          from desktop.enkyron_crm_csv import write_company_csv
+          from desktop.enkyron_crm_csv_import import preview_company_csv
+          from PySide6.QtWidgets import QMessageBox
+          with tempfile.TemporaryDirectory() as tempdir:
+              csv_file = Path(tempdir) / "synthetic-source.csv"
+              source_company = str(uuid.uuid4())
+              source_contact = str(uuid.uuid4())
+              source = {
+                  "format": "ENKYRON_CRM_SELECTED_COMPANY_V1",
+                  "company": {
+                      "id": source_company, "name": "Synthetic CSV Sample",
+                      "sector": "Research", "city": "London", "country": "UK",
+                      "relationship_state": "prospect", "record_version": 1
+                  },
+                  "contacts": [{
+                      "id": source_contact, "full_name": "Synthetic Person",
+                      "job_title": "Reviewer",
+                      "marketing_permission": "unknown", "record_version": 1
+                  }],
+                  "contact_count": 1
+              }
+              write_company_csv(source, csv_file)
+              digest = preview_company_csv(csv_file)["sha256"]
+              with patch("desktop.enkyron.QInputDialog.getItem",
+                         return_value=("Import CSV with human review", True)), patch(
+                         "desktop.enkyron.QFileDialog.getOpenFileName",
+                         return_value=(str(csv_file), "CSV files (*.csv)")):
+                  window.crm_company_csv_button.click()
+              assert calls[-1][0] == "crm-csv-import-check"
+              assert calls[-1][2]["sha256"] == digest
+              calls[-1][3]({
+                  "available": True, "eligible": True, "conflicts": [],
+                  "source_sha256": digest,
+                  "company_name": "Synthetic CSV Sample", "contact_count": 1
+              }, None)
+              assert window.crm_csv_import_dialog.isVisible()
+              import_dialog = window.crm_csv_import_dialog
+              rationale_box = import_dialog.findChildren(QPlainTextEdit)[0]
+              rationale_box.setPlainText(
+                  "Synthetic operator-reviewed import; only new records and no consent.")
+              import_dialog.findChildren(QCheckBox)[0].setChecked(True)
+              import_button = next(
+                  btn for btn in import_dialog.findChildren(QPushButton)
+                  if btn.text() == "Create new records"
+              )
+              with patch("desktop.enkyron.QMessageBox.question",
+                         return_value=QMessageBox.StandardButton.Yes):
+                  import_button.click()
+              assert calls[-1][0] == "crm-csv-import-commit"
+              assert calls[-1][2]["preview"]["sha256"] == digest
+              assert calls[-1][2]["confirmed"] is True
+              import_dialog.reject()
+          assert not window.crm_contact_edit.isEnabled()
+          window.crm_company_edit.click()
+          assert window.crm_record_edit_dialog.isVisible()
+          history_button = next(
+              b for b in window.crm_record_edit_dialog.findChildren(QPushButton)
+              if b.text() == "View correction history…"
+          )
+          history_button.click()
+          assert calls[-1][0] == "crm-record-changes"
+          assert calls[-1][1] == "company:" + company_id
+          calls[-1][3]({
+              "available": True, "record_version": 1, "more": False,
+              "items": []
+          }, None)
+          assert window.crm_record_history_dialog.isVisible()
+          window.crm_record_history_dialog.reject()
+          fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
+          assert len(fields) == 6
+          fields[2].setText("Cybersecurity services")
+          rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
+          rationale.setPlainText(
+              "Correcting an operator-entered sector after checking the original source."
+          )
+          confirmation = window.crm_record_edit_dialog.findChildren(QCheckBox)[0]
+          confirmation.setChecked(True)
+          save_button = next(
+              b for b in window.crm_record_edit_dialog.findChildren(QPushButton)
+              if b.text() == "Save versioned correction"
+          )
+          save_button.click()
+          assert calls[-1][0] == "crm-edit-company"
+          assert calls[-1][2]["id"] == company_id
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["sector"] == "Cybersecurity services"
+          assert calls[-1][2]["confirmed"] is True
+          assert "relationship_state" not in calls[-1][2]
+          window.crm_record_edit_dialog.reject()
+          window.crm_contacts_table.selectRow(0)
+          assert window.crm_privacy_button.isEnabled()
+          window.crm_privacy_button.click()
+          assert calls[-1][0] == "crm-privacy-requests"
+          assert calls[-1][1] == "22222222-3333-4444-8555-666666666666"
+          calls[-1][3]({
+              "available": True, "contact": {
+                  "id": "22222222-3333-4444-8555-666666666666",
+                  "company_id": company_id
+              }, "items": [], "more": False
+          }, None)
+          assert window.crm_privacy_dialog.isVisible()
+          assert any("human review" in x.text().lower()
+                     for x in window.crm_privacy_dialog.findChildren(QLabel))
+          window.crm_privacy_dialog.reject()
+          assert window.crm_retention_button.isEnabled()
+          window.crm_retention_button.click()
+          assert calls[-1][0] == "crm-retention-reviews"
+          assert calls[-1][1] == "22222222-3333-4444-8555-666666666666"
+          calls[-1][3]({
+              "available": True, "contact": {
+                  "id": "22222222-3333-4444-8555-666666666666",
+                  "company_id": company_id
+              }, "items": [], "more": False
+          }, None)
+          assert window.crm_retention_dialog.isVisible()
+          assert any("no automated lifecycle action" in child.text().lower()
+                     for child in window.crm_retention_dialog.findChildren(QLabel))
+          window.crm_retention_dialog.reject()
+          assert window.crm_contact_tickets_button.isEnabled()
+          window.crm_contact_tickets_button.click()
+          assert calls[-2][0] == "crm-contact-tickets"
+          assert calls[-2][1] == "22222222-3333-4444-8555-666666666666"
+          assert calls[-1][0] == "crm-company-tickets"
+          assert calls[-1][1] == company_id
+          calls[-2][3]({
+              "available": True,
+              "contact": {"id": "22222222-3333-4444-8555-666666666666",
+                          "company_id": company_id},
+              "items": [], "more": False
+          }, None)
+          # Simulate pre-fix backend success without an explicit available flag.
+          # Qt must not mistake a valid result for an unavailable ticket list.
+          calls[-1][3]({
+              "items": [{"ticket_id": "33333333-4444-4555-8666-777777777777",
+                         "ticket_number": "CI-CONTACT-001",
+                         "title": "Synthetic client enquiry",
+                         "archived_at": None}],
+              "more": False
+          }, None)
+          assert window.crm_contact_ticket_dialog.isVisible()
+          assert any("1 other company ticket(s) available" in x.text()
+                     for x in window.crm_contact_ticket_dialog.findChildren(QLabel))
+          # Simulate the ticket having already been linked to the contact.
+          # It MUST be visible as existing, with no new-link action.
+          contact_callback = calls[-2][3]
+          contact_callback({
+              "available": True,
+              "contact": {"id": "22222222-3333-4444-8555-666666666666",
+                          "company_id": company_id},
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000005", "linked_by": "ci-local"
+              }], "more": False
+          }, None)
+          contact_dialog = window.crm_contact_ticket_dialog
+          link_table = contact_dialog.findChildren(QTableWidget)[0]
+          assert link_table.rowCount() == 1
+          assert link_table.columnWidth(0) >= 210
+          assert link_table.item(0, 0).text() == "ARL-2026-000005"
+          assert link_table.item(0, 0).toolTip() == "ARL-2026-000005"
+          assert any("ALREADY RECORDED" in x.text()
+                     for x in contact_dialog.findChildren(QLabel))
+          assert any(b.text() == "No new link needed" and not b.isEnabled()
+                     for b in contact_dialog.findChildren(QPushButton))
+          window.crm_contact_ticket_dialog.reject()
+          assert window.crm_contact_edit.isEnabled()
+          window.crm_contact_edit.click()
+          assert window.crm_record_edit_dialog.isVisible()
+          fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
+          assert len(fields) == 4
+          fields[2].setText("corrected@example.invalid")
+          rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
+          rationale.setPlainText(
+              "Correcting a locally entered email from a manually checked contact record."
+          )
+          confirmation = window.crm_record_edit_dialog.findChildren(QCheckBox)[0]
+          confirmation.setChecked(True)
+          save_button = next(
+              b for b in window.crm_record_edit_dialog.findChildren(QPushButton)
+              if b.text() == "Save versioned correction"
+          )
+          save_button.click()
+          assert calls[-1][0] == "crm-edit-contact"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["email"] == "corrected@example.invalid"
+          assert "marketing_permission" not in calls[-1][2]
+          window.crm_record_edit_dialog.reject()
+          assert window.crm_company_detail_tabs.count() == 2
+          assert window.crm_company_dossier_open.isEnabled()
+          window.open_company_dossier()
+          assert window.crm_dossier_dialog.isVisible()
+          assert calls[-1][0] == "crm-company-dossier"
+          assert calls[-1][1] == company_id
+          calls[-1][3]({
+              "available": True,
+              "company": {
+                  "id": company_id, "name": "Synthetic Company",
+                  "relationship_state": "prospect",
+                  "sector": "Cybersecurity", "city": "London",
+                  "country": "UK"
+              },
+              "sections": {
+                  "contacts": {
+                      "total": 1, "more": False,
+                      "items": [{
+                          "full_name": "Synthetic Contact",
+                          "job_title": "Engineering",
+                          "email": "contact@example.invalid",
+                          "marketing_permission": "unknown"
+                      }]
+                  },
+                  "prospects": {
+                      "total": 1, "more": False,
+                      "items": [{
+                          "candidate_name": "Reviewed candidate",
+                          "source": "synthetic-ci"
+                      }]
+                  },
+                  "tickets": {"total": 1, "more": False, "items": [{
+                      "ticket_number": "CI-SYN-0001", "title": "Test scope",
+                      "status": "scoping", "client_name": "Unverified name",
+                      "link_origin": "reviewed_initial_link",
+                      "linked_by": "ci-local", "linked_at": "2026-11-07T05:00:00Z",
+                      "arl_project_ref": None, "arl_assessment_ref": None
+                  }]},
+                  "opportunities": {"total": 0, "more": False, "items": []},
+                  "activities": {"total": 0, "more": False, "items": []},
+                  "qualifications": {"total": 0, "more": False, "items": []},
+                  "drafts": {"total": 0, "more": False, "items": []},
+                   "commercial_docs": {"total": 3, "more": False, "items": [{
+                       "document_kind": "proposal_draft",
+                       "title": "Synthetic internal draft",
+                       "status": "internal_unaccepted_draft",
+                       "revision": 1, "proposal_id": "prop-synthetic",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }, {
+                       "document_kind": "buyer_documentary_review",
+                       "title": "Buyer identity (operator documentary record)",
+                       "status": "operator_documented_unverified",
+                       "revision": 1, "proposal_id": "prop-synthetic"
+                   }, {
+                       "document_kind": "internal_proposal_decision",
+                       "title": "Proposal decision (internal only)",
+                       "status": "needs_changes",
+                       "revision": 1, "proposal_id": "prop-synthetic"
+                   }]},
+                   "ticket_history": {"total": 1, "more": False, "items": [{
+                       "ticket_number": "CI-TICKET-SYNTHETIC",
+                       "record_kind": "internal_note", "record_type": "manual",
+                       "actor": "ci-local", "source_id": "note-synthetic",
+                       "recorded_at": "2026-11-07T05:00:00Z"
+                   }]},
+                   "audit_events": {"total": 1, "more": False, "items": [{
+                       "resource_kind": "company", "event_type": "created",
+                       "resource_id": company_id, "actor_local": "ci-local",
+                       "created_at": "2026-11-07T05:00:00Z"
+                   }]},
+                   "audit_changes": {"total": 0, "more": False, "items": []}
+              }
+          }, None)
+          assert "Synthetic Company" in window.crm_dossier_summary.text()
+          assert "Relationship: prospect" in window.crm_dossier_summary.text()
+          assert window.crm_dossier_tabs.count() == 11
+          assert window.crm_dossier_nav.count() == 11
+          assert not window.crm_dossier_tabs.tabBar().isVisible()
+          assert window.crm_dossier_nav.currentRow() == 0
+          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (3)"
+          assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
+          window.crm_dossier_nav.setCurrentRow(8)
+          assert window.crm_dossier_tabs.currentIndex() == 8
+          window.crm_dossier_tabs.setCurrentIndex(4)
+          assert window.crm_dossier_nav.currentRow() == 4
+          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (3)"
+          commercial_page = window.crm_dossier_tabs.widget(7)
+          commercial_table = commercial_page.findChildren(QTableWidget)[0]
+          assert commercial_table.rowCount() == 3
+          assert commercial_table.item(1, 2).text() == "operator_documented_unverified"
+          assert commercial_table.item(2, 2).text() == "needs_changes"
+          assert any("not customer acceptance" in child.text()
+                     for child in commercial_page.findChildren(QLabel))
+          assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
+          assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
+          assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"
+          assert window.crm_dossier_tabs.tabText(0) == "Contacts (1)"
+          assert window.crm_dossier_tabs.tabText(1) == "Research links (1)"
+          assert window.crm_dossier_tabs.tabText(2) == "Tickets (1)"
+          ticket_table = window.crm_dossier_tabs.widget(2).findChildren(QTableWidget)[0]
+          assert ticket_table.rowCount() == 1
+          assert ticket_table.columnCount() == 9
+          assert ticket_table.item(0, 3).text() == "reviewed_initial_link"
+          assert ticket_table.item(0, 4).text() == "ci-local"
+          assert ticket_table.item(0, 6).text() == ""
+          assert ticket_table.item(0, 7).text() == ""
+          assert any("not accepted commercial missions" in child.text()
+                     for child in window.crm_dossier_tabs.widget(2).findChildren(QLabel))
+          assert window.crm_dossier_tabs.tabText(4) == "Qualification (0)"
+          window.crm_dossier_tabs.setCurrentIndex(4)
+          assert window.crm_dossier_nav.currentRow() == 4
+          qualification_page = window.crm_dossier_tabs.widget(4).widget()
+          qualification_labels = [
+              child.text() for child in qualification_page.findChildren(QLabel)
+          ]
+          assert "No qualification reviews recorded yet." in qualification_labels
+          assert window.crm_qualification_save.isVisible()
+          assert window.crm_qualification_rationale.isVisible()
+          assert window.crm_qualification_subject.currentData() is None
+          window.crm_qualification_fit.setCurrentIndex(
+              window.crm_qualification_fit.findData("potential_fit")
+          )
+          window.crm_qualification_rationale.setPlainText(
+              "Research suggests commercial relevance but client identity is unverified."
+          )
+          window.crm_qualification_next.setText("Review technical scope manually")
+          window.crm_qualification_confirm.setChecked(True)
+          window.record_company_qualification()
+          assert calls[-1][0] == "crm-record-qualification"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["contact_id"] is None
+          assert calls[-1][2]["fit_status"] == "potential_fit"
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_dossier_dialog.reject()
+          ticket_links_call = next(item for item in calls if item[0] == "crm-company-tickets")
+          assert ticket_links_call[1] == company_id
+          example_ticket_id = "22222222-3333-4444-8555-666666666666"
+          ticket_links_call[3]({
+              "company": {"id": company_id, "name": "Synthetic Company"},
+              "items": [{
+                  "ticket_id": example_ticket_id,
+                  "ticket_number": "ARL-2026-000009",
+                  "title": "Synthetic support request",
+                  "client_name": "Historical customer name",
+                  "status": "new"
+              }], "more": False,
+          }, None)
+          assert window.crm_company_tickets_table.rowCount() == 1
+          assert window.crm_company_tickets_table.columnWidth(0) >= 165
+          assert window.crm_company_tickets_table.columnWidth(2) >= 230
+          assert "as entered" in window.crm_company_tickets_table.horizontalHeaderItem(2).text()
+          assert "different recorded client name" in window.crm_company_tickets_notice.text()
+          assert window.crm_company_tickets_table.item(0, 2).toolTip() == "Historical customer name"
+          window.crm_company_tickets_table.selectRow(0)
+          assert window.crm_open_company_ticket_button.isEnabled()
+          assert window.crm_revoke_ticket_button.isEnabled()
+          window.crm_revoke_ticket_button.click()
+          correction = window.crm_ticket_correction_dialog
+          assert correction.isVisible()
+          correction.findChildren(QPlainTextEdit)[0].setPlainText(
+              "Synthetic operator review confirmed the company association was incorrect.")
+          correction.findChildren(QCheckBox)[0].setChecked(True)
+          button = next(b for b in correction.findChildren(QPushButton)
+                        if b.text() == "Record link correction")
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes):
+              button.click()
+          assert calls[-1][0] == "crm-revoke-ticket-link"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["ticket_id"] == example_ticket_id
+          assert calls[-1][2]["expected_client_name"] == "Historical customer name"
+          assert calls[-1][2]["confirmed"] is True
+          correction.reject()
+          window.crm_company_detail_tabs.setCurrentIndex(1)
+          window.open_ticket_link_dialog()
+          assert window.crm_link_dialog.isVisible()
+          assert calls[-1][0] == "crm-ticket-options"
+          assert calls[-1][1] == ""
+          calls[-1][3]({
+              "available": True,
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000010",
+                  "title": "Unlinked synthetic ticket",
+                  "client_name": "Unverified customer",
+                  "status": "scoping",
+              }], "more": False,
+          }, None)
+          assert window.crm_link_ticket_choice.count() == 1
+          assert window.crm_link_ticket_submit.isEnabled()
+          assert not window.crm_link_ticket_checked.isChecked()
+          # The same dialog permits reviewed reassignment without a new toolbar button.
+          window.crm_link_ticket_mode.setCurrentIndex(1)
+          assert calls[-1][0] == "crm-ticket-reassignment-options"
+          assert calls[-1][2]["destination_company_id"] == company_id
+          assert calls[-1][2]["search"] == ""
+          calls[-1][3]({
+              "available": True, "company": {
+                  "id": company_id, "name": "Synthetic Company",
+                  "record_version": 2
+              },
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000010",
+                  "title": "Previously revoked synthetic ticket",
+                  "client_name": "Old unverified customer",
+                  "status": "scoping",
+                  "revocation_id": "44444444-5555-4666-8777-888888888888",
+                  "source_company_id": "55555555-6666-4777-8888-999999999999",
+                  "source_company_name": "Prior synthetic company"
+              }], "more": False
+          }, None)
+          assert window.crm_link_ticket_choice.count() == 1
+          assert window.crm_link_ticket_submit.isEnabled()
+          window.crm_link_ticket_note.setPlainText(
+              "Synthetic human review confirmed this ticket should belong to the new company."
+          )
+          window.crm_link_ticket_checked.setChecked(True)
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes):
+              window.confirm_ticket_link()
+          assert calls[-1][0] == "crm-ticket-reassign"
+          assert calls[-1][2]["destination_company_id"] == company_id
+          assert calls[-1][2]["destination_record_version"] == 2
+          assert calls[-1][2]["expected_revocation_id"] == (
+              "44444444-5555-4666-8777-888888888888"
+          )
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_link_dialog.reject()
+          window.open_new_company()
+          assert window.crm_company_dialog.isVisible()
+          window.crm_name_input.setText("Another Synthetic Company")
+          window.create_company()
+          assert calls[-1][0] == "crm-company-duplicates"
+          assert calls[-1][2]["name"] == "Another Synthetic Company"
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.No):
+              calls[-1][3]({"available": True, "kind": "company", "more": False,
+                  "matches": [{"id": company_id, "name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-company-duplicates"
+          assert window.crm_company_submit.isEnabled()
+          window.create_company()
+          assert calls[-1][0] == "crm-company-duplicates"
+          calls[-1][3]({"available": True, "kind": "company",
+                        "matches": [], "more": False}, None)
+          assert calls[-1][0] == "crm-create-company"
+          assert "duplicate_review" not in calls[-1][2]
+          window.crm_company_dialog.reject()
+          window.open_new_company()
+          window.crm_name_input.setText("Known Separate Company")
+          window.create_company()
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes), patch(
+                     "desktop.enkyron.QInputDialog.getMultiLineText",
+                     return_value=("Independently reviewed synthetic distinct legal entity.", True)):
+              calls[-1][3]({"available": True, "kind": "company", "more": False,
+                  "matches": [{"id": company_id, "name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-create-company"
+          assert calls[-1][2]["duplicate_review"]["match_ids"] == [company_id]
+          assert calls[-1][2]["duplicate_review"]["confirmed"] is True
+          window.crm_company_dialog.reject()
+          window.open_new_contact()
+          assert window.crm_contact_dialog.isVisible()
+          window.crm_contact_name_input.setText("Another Synthetic Contact")
+          window.create_contact()
+          assert calls[-1][0] == "crm-contact-duplicates"
+          assert calls[-1][2]["company_id"] == company_id
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.No):
+              calls[-1][3]({"available": True, "kind": "contact",
+                  "company_id": company_id, "more": False,
+                  "matches": [{"id": "existing", "full_name": "Synthetic Contact",
+                               "company_name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-contact-duplicates"
+          assert window.crm_contact_submit.isEnabled()
+          window.create_contact()
+          assert calls[-1][0] == "crm-contact-duplicates"
+          calls[-1][3]({"available": True, "kind": "contact",
+                        "company_id": company_id, "matches": [],
+                        "more": False}, None)
+          assert calls[-1][0] == "crm-create-contact"
+          assert "duplicate_review" not in calls[-1][2]
+          window.crm_contact_dialog.reject()
+          window.open_new_contact()
+          window.crm_contact_name_input.setText("Separate Synthetic Contact")
+          window.create_contact()
+          existing_id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes), patch(
+                     "desktop.enkyron.QInputDialog.getMultiLineText",
+                     return_value=("Distinct synthetic person reviewed independently with no marketing consent.", True)):
+              calls[-1][3]({"available": True, "kind": "contact",
+                  "company_id": company_id, "more": False,
+                  "matches": [{"id": existing_id, "full_name": "Synthetic Contact",
+                               "company_name": "Synthetic Company"}]}, None)
+          assert calls[-1][0] == "crm-create-contact"
+          assert calls[-1][2]["duplicate_review"]["match_ids"] == [existing_id]
+          window.crm_contact_dialog.reject()
+          window.crm_table.selectRow(0)
+          assert "NOT A VERIFIED CUSTOMER" in window.crm_details.toPlainText()
+          assert window.crm_review_button.isEnabled()
+          window.open_prospect_review()
+          assert calls[-1][0] == "crm-prospect-review"
+          assert calls[-1][1] == "ARL-P-000001"
+          calls[-1][3]({
+              "available": True,
+              "prospect": {
+                  "id": "ARL-P-000001",
+                  "company_name": "Synthetic Research Co.",
+                  "website": "https://example.invalid",
+                  "source": "synthetic-ci",
+                  "buyer_name": "Unconfirmed Contact",
+              },
+              "source_digest": "a" * 64,
+              "linked": None, "matches": [], "more_matches": False,
+          }, None)
+          assert window.crm_review_dialog.isVisible()
+          summaries = [x.text() for x in window.crm_review_dialog.findChildren(QLabel)]
+          assert any("Research candidate: Synthetic Research Co." in x and
+                     "Buyer (not verified): Unconfirmed Contact" in x for x in summaries)
+          assert window.crm_review_choice.currentData() == {"mode": "create"}
+          assert not window.crm_review_check.isChecked()
+          window.crm_review_dialog.reject()
+
+          # Follow-ups are available with no registered CRM company.
+          assert window.crm_plan_followup.isEnabled()
+          assert window.crm_tabs.count() == 7
+          window.open_prospect_followup()
+          assert calls[-1][0] == "crm-prospect-opportunity"
+          assert calls[-1][1] == "ARL-P-000001"
+          calls[-1][3]({"available": True, "opportunity": None}, None)
+          assert window.crm_followup_dialog.isVisible()
+          window.crm_followup_action.setPlainText(
+              "Review company technical background before a manual follow-up"
+          )
+          window.save_followup()
+          assert calls[-1][0] == "crm-create-opportunity"
+          assert calls[-1][2]["prospect_id"] == "ARL-P-000001"
+          assert calls[-1][2]["due_date"] is None
+          window.crm_followup_dialog.reject()
+
+          # The third CRM tab lists saved manual actions and supports editing.
+          opportunity_call = next(item for item in calls if item[0] == "crm-opportunities")
+          opportunity_call[3]({
+              "available": True,
+              "items": [{
+                  "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "prospect_id": "ARL-P-000001",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "stage": "research", "version": 1,
+                  "next_action": "Review published company website",
+                  "due_date": "2026-11-12",
+                  "updated_at": "2026-11-05"
+              }], "more": False,
+          }, None)
+          assert window.crm_followup_table.rowCount() == 1
+          assert format_followup_due(
+              "2026-11-06", "research", QDate(2026, 11, 5)
+          ).endswith("Tomorrow")
+          assert format_followup_due(
+              "2026-11-04", "research", QDate(2026, 11, 5)
+          ).endswith("Overdue")
+          assert format_followup_due(
+              "2026-11-04", "won", QDate(2026, 11, 5)
+          ).endswith("Closed")
+          window.crm_followup_table.selectRow(0)
+          assert window.crm_edit_followup.isEnabled()
+          assert window.crm_activity_button.isEnabled()
+          window.open_activity_history()
+          assert window.crm_activity_dialog.isVisible()
+          assert calls[-1][0] == "crm-activity-timeline"
+          assert calls[-1][1] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True, "more": False, "items": [{
+                  "id": "event-ci", "entry_kind": "change",
+                  "event_type": "created", "old_stage": None,
+                  "new_stage": "research", "old_next_action": None,
+                  "new_next_action": "Review published company website",
+                  "actor_local": "ci-operator", "recorded_at": "2026-11-05"
+              }], "opportunity": {"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+          }, None)
+          assert window.crm_activity_table.rowCount() == 1
+          assert window.crm_activity_save.isEnabled()
+          window.crm_activity_table.selectRow(0)
+          assert "MANUAL OPPORTUNITY CHANGE" in window.crm_activity_details.toPlainText()
+          window.crm_activity_type.setCurrentIndex(1)
+          window.crm_activity_detail_input.setPlainText(
+              "Operator recorded a research-only call note."
+          )
+          window.crm_activity_confirm.setChecked(True)
+          window.save_activity_note()
+          assert calls[-1][0] == "crm-record-activity"
+          assert calls[-1][2]["activity_type"] == "call_note"
+          assert calls[-1][2]["reviewed"] is True
+          assert "research-only call note" in calls[-1][2]["detail"]
+          window.crm_activity_dialog.reject()
+
+          # Mail drafts belong to the selected opportunity. No mailbox or send.
+          assert window.crm_compose_button.isEnabled()
+          window.open_compose_draft()
+          assert window.crm_draft_dialog.isVisible()
+          assert window.crm_mail_to.text() == ""
+          assert window.crm_draft_context["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_mail_subject.setText("Synthetic proposal draft")
+          window.crm_mail_body.setPlainText(
+              "Hello, this is a local draft, not a sent communication."
+          )
+          window.save_mail_draft()
+          assert calls[-1][0] == "crm-mail-create"
+          assert calls[-1][2]["recipient_email"] == ""
+          assert calls[-1][2]["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_draft_dialog.reject()
+
+          draft_call = next(x for x in calls if x[0] == "crm-mail-drafts")
+          draft_call[3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "recipient_email": None, "subject": "Synthetic proposal draft",
+                  "revision": 1, "updated_at": "2026-11-05"
+              }]
+          }, None)
+          assert window.crm_draft_table.rowCount() == 1
+          window.crm_draft_table.selectRow(0)
+          assert window.crm_edit_draft.isEnabled()
+          window.open_selected_draft()
+          assert calls[-1][0] == "crm-mail-draft"
+          assert calls[-1][1] == "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "draft": {
+                  "id": "dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "recipient_email": None, "subject": "Synthetic proposal draft",
+                  "body_text": "Hello, this is a local draft.",
+                  "revision": 1
+              }
+          }, None)
+          assert window.crm_draft_dialog.isVisible()
+          assert window.crm_mail_body.toPlainText().startswith("Hello")
+          window.crm_mail_body.setPlainText("Updated locally, still not sent.")
+          window.save_mail_draft()
+          assert calls[-1][0] == "crm-mail-update"
+          assert calls[-1][2]["expected_revision"] == 1
+          window.crm_draft_dialog.reject()
+
+          window.open_followup_update()
+          assert window.crm_followup_dialog.isVisible()
+          assert window.crm_followup_stage.isEnabled()
+          assert window.crm_followup_has_date.isChecked()
+          window.crm_followup_stage.setCurrentIndex(
+              window.crm_followup_stage.findData("qualified")
+          )
+          window.crm_followup_action.setPlainText("Prepare an approved outreach draft")
+          window.save_followup()
+          assert calls[-1][0] == "crm-update-opportunity"
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["stage"] == "qualified"
+          window.crm_followup_dialog.reject()
+          window.navigation.setCurrentRow(1)
+          assert window.pages.currentIndex() == 1
+          ticket_id = "1111111a-2222-4333-8444-555555555555"
+          window.current_id = ticket_id
+          window.current_ticket = {
+              "target_kind": "git", "target_reference": "/tmp/agent",
+              "linked_project_id": "prj_test", "linked_assessment_id": "asm_test",
+          }
+          window.inspect_engine()
+          assert calls[-1][0] == "master"
+          assert calls[-1][1] == ticket_id
+          calls[-1][3]({
+              "available": True, "snapshot_status": "current",
+              "target_sha": "a" * 40, "snapshot_id": "sys_test",
+          }, None)
+          assert calls[-1][0] == "operator-state"
+          assert calls[-1][2]["assessment_id"] == "asm_test"
+          assert calls[-1][2]["target_sha"] == "a" * 40
+          calls[-1][3]({
+              "available": True, "project_id": "prj_test",
+              "assessment_id": "asm_test", "snapshot_id": "sys_test",
+              "target_sha": "a" * 40, "environment": "test",
+              "evidence_state": "not_inspected", "control_outcomes": "not_inspected",
+              "security_verdict": "not_assessed", "readiness_decision": "not_evaluated",
+              "notice": "No test or verdict.",
+          }, None)
+          assert "not_assessed" in window.engine_view.toPlainText()
+          window.inspect_evidence()
+          assert calls[-1][0] == "master"
+          calls[-1][3]({
+              "available": True, "snapshot_status": "current",
+              "target_sha": "a" * 40, "snapshot_id": "sys_test",
+          }, None)
+          assert calls[-1][0] == "evidence-summary"
+          assert calls[-1][2]["snapshot_id"] == "sys_test"
+          calls[-1][3]({
+              "available": True, "kind": "summary",
+              "assessment_controls": 99, "other_workflow_controls": 9,
+              "criterion_count": 208,
+              "counts": {
+                  "staticCandidates": 1, "staticMissing": 2,
+                  "humanRequirements": 3, "runtimeRequirements": 4,
+                  "sourceLineageIssues": 5,
+              },
+              "packs": [{
+                  "number": 1, "category": "manual_review",
+                  "requirement_instances": 2, "affected_controls": 2
+              }],
+          }, None)
+          assert "ARL CONTROL REGISTER: 108" in window.evidence_summary.toPlainText()
+          assert window.evidence_packs.count() == 1
+          window.open_evidence_pack()
+          assert calls[-1][0] == "evidence-pack"
+          assert calls[-1][2]["pack_number"] == 1
+          calls[-1][3]({
+              "available": True, "kind": "pack", "pack_number": 1,
+              "page_number": 1, "page_count": 1, "task_count": 1,
+              "tasks": [{
+                  "control_id": "ARL-KB-013", "requirement_index": 1,
+                  "review_state": "manual_triage_required",
+                  "candidate_count": 0, "expected_collectors": [],
+                  "requirement": "Document approved egress destinations",
+              }],
+          }, None)
+          assert "ARL-KB-013" in window.evidence_details.toPlainText()
+          assert not window.evidence_next.isEnabled()
+          window.inspect_records()
+          assert calls[-1][0] == "evidence-register"
+          assert calls[-1][2] == {
+              "ticket_id": ticket_id, "control_id": "ARL-KB-013"
+          }
+          calls[-1][3]({
+              "available": True, "control_id": "ARL-KB-013",
+              "integrity": "master_verified", "snapshot_id": "sys_test",
+              "more": False,
+              "items": [{
+                  "id": "ev_1", "entry_id": "ARL-KB-013",
+                  "snapshot_id": "sys_test", "verification_state": "unverified",
+                  "retention_status": "active", "evidence_class": "observed",
+                  "source_type": "runtime_log", "observed_at": "2026-11-05",
+                  "created_at": "2026-11-05", "test_execution_id": "test_1",
+                  "runtime_event_id": None, "approval_id": None,
+                  "recorded_integrity_digest": "b" * 64,
+              }],
+              "tests": [{
+                  "id": "test_1", "entry_id": "ARL-KB-013",
+                  "snapshot_id": "sys_test", "execution_kind": "initial",
+                  "recorded_result": "passed",
+                  "started_at": "2026-11-05", "completed_at": "2026-11-05",
+                  "retest_of_execution_id": None, "original_snapshot_id": None,
+                  "finding_id": None, "remediation_id": None,
+                  "recorded_content_digest": "c" * 64,
+              }],
+              "more_tests": False,
+          }, None)
+          assert window.records_table.rowCount() == 1
+          assert window.records_table.item(0, 1).text() == "unverified"
+          assert "not recomputed" in window.record_details.toPlainText()
+          assert window.tests_table.rowCount() == 1
+          assert window.record_views.tabText(1) == "Test history (1)"
+          window.record_views.setCurrentIndex(1)
+          window.tests_table.selectRow(0)
+          assert "Recorded test result: passed" in window.record_details.toPlainText()
+          assert "NOT a control PASS" in window.record_details.toPlainText()
+          window.record_control.setValue(14)
+          assert window.records_table.rowCount() == 0
+          assert window.tests_table.rowCount() == 0
+          # Check assignment IPC does not authorise assigning other employees.
+          window.current_id = ticket_id
+          window.current_ticket = {
+              "status": "scoping", "assigned_to": None, "archived_at": None
+          }
+          window.change_ticket_assignment()
+          assert calls[-1][0] == "ticket-assignment"
+          assert calls[-1][2] == {"ticket_id": ticket_id, "action": "self"}
+          # The status picker never presents a candidate as the current state:
+          # the operator must explicitly choose a valid transition.
+          synthetic = QListWidgetItem("Synthetic Client Desk ticket")
+          synthetic.setData(Qt.ItemDataRole.UserRole, ticket_id)
+          window.ticket_changed(synthetic, None)
+          assert calls[-1][0] == "ticket"
+          calls[-1][3]({
+              "ticket": {
+                  "ticket_number": "ARL-2026-000999", "title": "Synthetic ticket",
+                  "client_name": "Example", "status": "in_progress",
+                  "assessor_name": "ci-operator", "system_owner": "not assigned",
+                  "target_reference": "intake:phone", "target_kind": "other",
+                  "scope_text": "Synthetic request", "assigned_to": None,
+                  "archived_at": None,
+              },
+              "notes": [], "events": [],
+              "triage": {"available": True, "current": None},
+              "allowed_statuses": ["waiting", "pending_review"],
+              "local_operator": "ci-operator",
+          }, None)
+          assert window.current_status_label.text() == "Current: IN PROGRESS"
+          assert window.ticket_triage_button.isEnabled()
+          assert "NOT YET REVIEWED" in window.ticket_triage_label.text()
+          window.ticket_triage_button.click()
+          assert window.ticket_triage_dialog.isVisible()
+          window.triage_type.setCurrentIndex(5)
+          window.triage_impact.setCurrentIndex(0)
+          window.triage_urgency.setCurrentIndex(0)
+          window.triage_priority.setCurrentIndex(1)
+          window.triage_note.setPlainText(
+              "Synthetic qualification reviewed by local operator, not client authorisation."
+          )
+          window.triage_confirm.setChecked(True)
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes):
+              window.triage_submit.click()
+          assert calls[-1][0] == "ticket-triage-save"
+          assert calls[-1][2]["ticket_id"] == ticket_id
+          assert calls[-1][2]["request_type"] == "consultation"
+          assert calls[-1][2]["impact"] == "low"
+          assert calls[-1][2]["priority"] == "normal"
+          assert calls[-1][2]["expected_latest_id"] is None
+          assert calls[-1][2]["confirmed"] is True
+          window.ticket_triage_dialog.reject()
+          assert window.ticket_status.currentData() is None
+          assert window.ticket_status.itemData(1) == "pending_review"
+          assert not window.update_status_button.isEnabled()
+          window.ticket_status.setCurrentIndex(1)
+          assert window.update_status_button.isEnabled()
+          window.change_ticket_status()
+          assert calls[-1][0] == "ticket-status"
+          assert calls[-1][2] == {
+              "ticket_id": ticket_id, "status": "pending_review"
+          }
+          # Full-width ticket detail closes with Back, and reopening the same
+          # item reuses the original callbacks, without a second fixed column.
+          assert window.ticket_views.currentIndex() == 1
+          window.back_to_tickets.click()
+          assert window.ticket_views.currentIndex() == 0
+          assert window.current_id is None
+          window.ticket_changed(synthetic, None)
+          assert window.ticket_views.currentIndex() == 1
+          assert calls[-1][0] == "ticket"
+          # A visibly latched archive filter reports ON/OFF unambiguously.
+          assert not window.show_archived.isChecked()
+          assert "☐" in window.show_archived.text()
+          window.show_archived.setChecked(True)
+          assert calls[-1][0] == "tickets-archived"
+          assert window.show_archived.isChecked()
+          assert "☑" in window.show_archived.text()
+          window.show_archived.setChecked(False)
+          assert calls[-1][0] == "tickets"
+          assert "☐" in window.show_archived.text()
+          # Homepage sales summary uses a separate read-only backend query.
+          window.navigation.setCurrentRow(0)
+          assert calls[-1][0] == "crm-sales-overview"
+          calls[-1][3]({
+              "available": True, "overview": {
+                  "researched_prospects": 344,
+                  "registered_companies": 0, "saved_drafts": 1,
+                  "opportunities": 1, "active_opportunities": 1,
+                  "overdue": 0, "due_today": 1, "due_next_week": 0,
+                  "as_of": "2026-11-06",
+                  "priority_items": [{
+                      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                      "company_name_at_creation": "Synthetic Research Co.",
+                      "stage": "research",
+                      "next_action": "Review an approved proposal",
+                      "due_date": "2026-11-06"
+                  }]
+              }
+          }, None)
+          assert "344" in window.sales_overview_metrics.text()
+          assert "due today" in window.sales_overview_attention.text()
+          assert window.sales_overview_table.rowCount() == 1
+          window.open_sales_followups()
+          assert window.navigation.currentRow() == 2
+          assert window.crm_tabs.currentIndex() == 2
+
+          # Real five-lane pipeline is a bounded read-only snapshot.
+          assert window.crm_tabs.tabText(4) == "Pipeline"
+          window.crm_tabs.setCurrentIndex(4)
+          assert calls[-1][0] == "crm-sales-pipeline"
+          calls[-1][3]({
+              "available": True,
+              "total": 1, "preview_per_lane": 30,
+              "lanes": [
+                  {"id":"prospecting","title":"Prospecting","total":1,
+                   "more":False,"items":[{
+                       "id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                       "prospect_id":"ARL-P-000001",
+                       "company_name_at_creation":"Synthetic Research Co.",
+                       "stage":"research","version":1,
+                       "next_action":"Review public company background",
+                       "due_date":"2026-11-12"
+                   }]},
+                  {"id":"engagement","title":"Engagement","total":0,
+                   "more":False,"items":[]},
+                  {"id":"proposal","title":"Proposals","total":0,
+                   "more":False,"items":[]},
+                  {"id":"won","title":"Won","total":0,
+                   "more":False,"items":[]},
+                  {"id":"lost","title":"Lost","total":0,
+                   "more":False,"items":[]}
+              ]
+          }, None)
+          assert window.crm_pipeline_lists["prospecting"].count() == 1
+          assert window.crm_pipeline_labels["prospecting"].text() == "Prospecting · 1"
+          assert window.crm_pipeline_lists["won"].count() == 0
+          assert not window.crm_pipeline_edit.isEnabled()
+          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+          assert window.crm_pipeline_edit.isEnabled()
+          assert window.crm_pipeline_proposal.isEnabled()
+          window.open_pipeline_proposal()
+          assert window.crm_proposal_dialog.isVisible()
+          assert window.crm_proposal_context["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert window.crm_proposal_currency.currentData() is None
+          window.crm_proposal_title.setText("Synthetic ARL proposal")
+          window.crm_proposal_scope.setPlainText(
+              "A manually reviewed scope for a proposed agent security engagement."
+          )
+          window.crm_proposal_currency.setCurrentIndex(
+              window.crm_proposal_currency.findData("GBP")
+          )
+          window.crm_proposal_price.setText("1250.50")
+          window.save_proposal()
+          assert calls[-1][0] == "crm-proposal-create"
+          assert calls[-1][2]["opportunity_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["amount_minor"] == 125050
+          assert calls[-1][2]["currency"] == "GBP"
+          window.crm_proposal_dialog.reject()
+          assert window.crm_tabs.tabText(5) == "Proposals"
+          window.crm_tabs.setCurrentIndex(5)
+          assert calls[-1][0] == "crm-proposals"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "currency": "GBP", "amount_minor": "125050",
+                  "revision": 1, "updated_at": "2026-11-06"
+              }]
+          }, None)
+          assert window.crm_proposal_table.rowCount() == 1
+          assert "1,250.50" in window.crm_proposal_table.item(0, 2).text()
+          window.crm_proposal_table.selectRow(0)
+          assert window.crm_open_proposal.isEnabled()
+          assert window.crm_export_draft_pdf.isEnabled()
+          assert window.crm_terms_button.isEnabled()
+          assert window.crm_internal_button.isEnabled()
+          window.crm_internal_button.click()
+          assert calls[-1][0] == "crm-internal-review"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted title</b>",
+              "amount_minor": "125050", "currency": "GBP",
+              "blockers": [
+                  "Current revision lacks an explicitly linked buyer documentary record",
+                  "Current revision has no recorded commercial terms"
+              ],
+              "can_approve_internal": False,
+              "legal_notice": "Documentary entries are not independently verified.",
+              "tax_notice": "Research is not a tax ruling.",
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_internal_dialog.isVisible()
+          assert window.crm_internal_decision.count() == 1
+          assert window.crm_internal_decision.currentData() == "needs_changes"
+          assert window.crm_internal_save.isEnabled()
+          window.crm_internal_notes.setPlainText(
+              "Missing required buyer identity documents and commercial terms."
+          )
+          window.crm_internal_confirm.setChecked(True)
+          window.save_internal_draft_review()
+          assert calls[-1][0] == "crm-internal-decision"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["decision"] == "needs_changes"
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_internal_dialog.reject()
+          # A saved decision must not be writable again on the same revision.
+          window.open_internal_draft_review()
+          assert calls[-1][0] == "crm-internal-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic proposal",
+              "can_approve_internal": False,
+              "blockers": ["Missing buyer review"],
+              "current": {
+                  "proposal_revision": 1, "decision": "needs_changes",
+                  "review_note": "Missing required buyer identity documents and commercial terms."
+              },
+              "history": [], "more": False
+          }, None)
+          assert not window.crm_internal_save.isEnabled()
+          assert window.crm_internal_notes.isReadOnly()
+          assert not window.crm_internal_decision.isEnabled()
+          window.crm_internal_dialog.reject()
+          # A complete preflight may expose internal-draft approval, not issuance.
+          window.show_internal_draft_review({
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 2, "proposal_title": "Synthetic revised proposal",
+              "can_approve_internal": True, "blockers": [],
+              "current": None, "history": [], "more": False,
+              "legal_notice": "Still unverified", "tax_notice": "Not a tax determination"
+          })
+          assert window.crm_internal_decision.count() == 2
+          assert window.crm_internal_decision.itemData(1) == "internal_draft_approved"
+          assert window.crm_internal_confirm.isChecked() is False
+          window.crm_internal_dialog.reject()
+          assert window.crm_billing_button.isEnabled()
+          window.crm_billing_button.click()
+          assert calls[-1][0] == "crm-billing-preparation"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "<b>Untrusted proposal</b>",
+              "research_candidate": "Synthetic Prospect",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": False, "approval_id": None,
+              "blockers": ["Current revision has no internal draft approval"],
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_billing_dialog.isVisible()
+          assert not window.crm_billing_save.isEnabled()
+          assert not window.crm_billing_confirm.isChecked()
+          window.crm_billing_dialog.reject()
+          window.open_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-preparation"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Approved Draft",
+              "research_candidate": "Synthetic Prospect",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": True,
+              "approval_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "blockers": [], "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_billing_dialog.isVisible()
+          assert window.crm_billing_save.isEnabled()
+          window.crm_billing_note.setPlainText(
+              "Internal synthetic billing worksheet; no invoice or tax determination."
+          )
+          window.crm_billing_confirm.setChecked(True)
+          window.save_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-record"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["approval_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_rate" not in calls[-1][2]
+          assert "invoice_number" not in calls[-1][2]
+          window.crm_billing_dialog.reject()
+          window.open_proposal_billing_worksheet()
+          assert calls[-1][0] == "crm-billing-preparation"
+          calls[-1][3]({
+              "available": True, "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Approved Draft",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "can_prepare": True,
+              "approval_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "blockers": [],
+              "current": {
+                  "proposal_revision": 1,
+                  "preparation_note": "The synthetic worksheet was recorded and cannot be changed.",
+                  "proposed_fee_minor": 125050, "currency": "GBP"
+              },
+              "history": [], "more": False
+          }, None)
+          assert window.crm_billing_note.isReadOnly()
+          assert not window.crm_billing_save.isEnabled()
+          window.crm_billing_dialog.reject()
+          assert window.crm_tabs.tabText(6) == "Invoices"
+          assert window.crm_invoice_prepare_button.isEnabled()
+          window.crm_invoice_prepare_button.click()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic Service",
+              "prospect_id": "ARL-P-000001",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": None, "can_prepare": False,
+              "blockers": ["Current revision has no billing worksheet"],
+              "issuer": None, "buyer": None,
+              "steps": [
+                  {"key": "issuer", "action": "issuer",
+                   "label": "Issuing company profile", "ready": True},
+                  {"key": "link", "action": "research",
+                   "label": "Associate prospect with a CRM company", "ready": False,
+                   "detail": "Research prospect has no explicit human-reviewed company link."},
+                  {"key": "buyer", "action": "buyer",
+                   "label": "Buyer identity review", "ready": False,
+                   "detail": "No buyer documentary record for this revision."},
+                  {"key": "terms", "action": "terms",
+                   "label": "Commercial terms", "ready": False,
+                   "detail": "No terms for the current revision."},
+                  {"key": "tax", "action": "tax",
+                   "label": "International tax review", "ready": False,
+                   "detail": "Tax research pending."},
+                  {"key": "internal", "action": "internal",
+                   "label": "Internal draft review", "ready": False,
+                   "detail": "Human decision required."},
+                  {"key": "worksheet", "action": "worksheet",
+                   "label": "Billing worksheet", "ready": False,
+                   "detail": "No approved worksheet recorded."}
+              ]
+          }, None)
+          assert window.crm_invoice_prepare_dialog.isVisible()
+          assert not window.crm_invoice_prepare_save.isEnabled()
+          assert window.crm_invoice_prepare_save.isHidden()
+          assert not window.crm_invoice_prepare_note.isEnabled()
+          assert not window.crm_invoice_prepare_confirm.isEnabled()
+          assert window.crm_invoice_next_button.isVisible()
+          assert "Associate prospect with a CRM company" in window.crm_invoice_next_button.text()
+          window.save_invoice_draft_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          window.crm_invoice_next_button.click()
+          assert not window.crm_invoice_prepare_dialog.isVisible()
+          assert calls[-1][0] == "crm-prospect-review"
+          assert calls[-1][1] == "ARL-P-000001"
+          calls[-1][3]({
+              "available": True,
+              "prospect": {
+                  "id": "ARL-P-000001",
+                  "company_name": "Synthetic Research Co.",
+                  "source": "synthetic-ci",
+                  "website": "https://example.invalid",
+                  "buyer_name": "Unconfirmed Contact"
+              },
+              "source_digest": "a" * 64,
+              "linked": None, "matches": [], "more_matches": False
+          }, None)
+          assert window.crm_review_dialog.isVisible()
+          assert window.crm_review_choice.currentData() == {"mode": "create"}
+          assert not window.crm_review_check.isChecked()
+          assert window.crm_invoice_link_return_proposal_id == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          window.crm_review_dialog.reject()
+          assert window.crm_invoice_link_return_proposal_id is None
+          assert calls[-1][0] == "crm-prospect-review"
+          # A completed link allows the checklist to proceed to buyer review.
+          window.open_proposal_invoice_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "prospect_id": "ARL-P-000001",
+              "proposal_revision": 1, "proposal_title": "Synthetic Service",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": None, "can_prepare": False,
+              "blockers": ["Buyer review missing"],
+              "steps": [
+                  {"key": "issuer", "action": "issuer", "label": "Issuer", "ready": True},
+                  {"key": "link", "action": "research", "label": "Association", "ready": True},
+                  {"key": "buyer", "action": "buyer", "label": "Buyer identity review",
+                   "ready": False, "detail": "Review the linked company"},
+                  {"key": "terms", "action": "terms", "label": "Terms", "ready": False},
+                  {"key": "tax", "action": "tax", "label": "Tax", "ready": False},
+                  {"key": "internal", "action": "internal", "label": "Internal", "ready": False},
+                  {"key": "worksheet", "action": "worksheet", "label": "Worksheet",
+                   "ready": False}
+              ]
+          }, None)
+          assert "Buyer identity review" in window.crm_invoice_next_button.text()
+          window.crm_invoice_next_button.click()
+          assert calls[-1][0] == "crm-buyer-review"
+          window.open_proposal_invoice_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted proposal</b>",
+              "currency": "GBP", "proposed_fee_minor": 125050,
+              "worksheet_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "can_prepare": True, "blockers": [], "current_draft_id": None,
+              "steps": [
+                  {"key": key, "ready": True, "label": key}
+                  for key in ("issuer","link","buyer","terms","tax",
+                              "internal","worksheet")
+              ],
+              "issuer": {"legal_name": "<b>Untrusted issuer</b>",
+                          "registered_office": "10 Example Avenue, London"},
+              "buyer": {"legal_name": "Synthetic Buyer Ltd",
+                         "registered_address": "20 Fake Street, London"}
+          }, None)
+          assert window.crm_invoice_prepare_dialog.isVisible()
+          assert window.crm_invoice_prepare_save.isVisible()
+          assert not window.crm_invoice_prepare_save.isEnabled()
+          assert not window.crm_invoice_prepare_confirm.isChecked()
+          window.crm_invoice_prepare_note.setPlainText(
+              "Synthetic unissued invoice draft. Tax and amount due not determined."
+          )
+          assert not window.crm_invoice_prepare_save.isEnabled()
+          window.crm_invoice_prepare_confirm.setChecked(True)
+          assert window.crm_invoice_prepare_save.isEnabled()
+          window.save_invoice_draft_preparation()
+          assert calls[-1][0] == "crm-invoice-record"
+          assert calls[-1][2]["worksheet_id"] == "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["confirmed"] is True
+          assert "invoice_number" not in calls[-1][2]
+          assert "vat_amount_minor" not in calls[-1][2]
+          window.crm_invoice_prepare_dialog.reject()
+          window.crm_tabs.setCurrentIndex(6)
+          assert calls[-1][0] == "crm-invoice-drafts"
+          draft_id = "eeeeeeee-ffff-4aaa-8bbb-cccccccccccc"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": draft_id, "buyer_legal_name": "Synthetic Buyer Ltd",
+                  "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "vat_treatment": "undetermined",
+                  "recorded_at": "2026-11-06T17:00:00Z"
+              }]
+          }, None)
+          assert window.crm_invoice_table.rowCount() == 1
+          assert "1,250.50" in window.crm_invoice_table.item(0, 3).text()
+          window.crm_invoice_table.selectRow(0)
+          assert window.crm_invoice_open.isEnabled()
+          window.crm_invoice_open.click()
+          assert calls[-1][0] == "crm-invoice-draft"
+          assert calls[-1][1] == draft_id
+          calls[-1][3]({
+              "available": True,
+              "draft": {
+                  "id": draft_id, "proposal_revision": 1,
+                  "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "issuer_legal_name": "Synthetic Issuer Ltd",
+                  "issuer_registered_office": "10 Fake Avenue, London",
+                  "buyer_legal_name": "Synthetic Buyer Ltd",
+                  "buyer_registered_address": "20 Fake Street, London",
+                  "status": "unissued_tax_review_required",
+                  "vat_amount_minor": None, "invoice_number": None,
+                  "invoice_total_minor": None, "preparation_note": "Synthetic draft",
+                  "recorded_by": "operator", "recorded_at": "2026-11-06"
+              }
+          }, None)
+          assert window.crm_invoice_detail_dialog.isVisible()
+          window.crm_invoice_detail_dialog.reject()
+          assert window.crm_invoice_issue_button.isEnabled()
+          assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
+              0
+          ) == QHeaderView.ResizeMode.ResizeToContents
+          assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
+              1
+          ) == QHeaderView.ResizeMode.ResizeToContents
+          window.crm_invoice_issue_button.click()
+          assert calls[-1][0] == "crm-invoice-issue-review"
+          assert calls[-1][1] == draft_id
+          calls[-1][3]({
+              "available": True,
+              "invoice_draft_id": draft_id,
+              "draft": {
+                  "id": draft_id, "service_description": "Synthetic Service",
+                  "currency": "GBP", "proposed_fee_minor": "125050",
+                  "status": "unissued_tax_review_required"
+              },
+              "issuer_vat_status": "unknown",
+              "issuer_has_vat_number": False,
+              "issuer_has_company_email": True,
+              "blockers": ["Issuing company VAT status is not established"],
+              "latest": None, "history": [], "more": False,
+              "issue_authorised": False
+          }, None)
+          assert window.crm_invoice_issue_dialog.isVisible()
+          assert window.crm_issue_outcome.currentData() == "needs_changes"
+          assert not window.crm_issue_confirm.isChecked()
+          window.crm_issue_note.setPlainText(
+              "Synthetic review: VAT classification remains unconfirmed by evidence."
+          )
+          window.crm_issue_confirm.setChecked(True)
+          window.save_invoice_issue_review()
+          assert calls[-1][0] == "crm-invoice-issue-record"
+          assert calls[-1][2]["invoice_draft_id"] == draft_id
+          assert calls[-1][2]["outcome"] == "needs_changes"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_amount_minor" not in calls[-1][2]
+          assert "invoice_number" not in calls[-1][2]
+          window.crm_invoice_issue_dialog.reject()
+          # Documented references do not confer issue authority.
+          window.show_invoice_issue_review({
+              "available": True, "invoice_draft_id": draft_id,
+              "draft": {
+                  "id": draft_id, "service_description": "Synthetic Service"
+              },
+              "issuer_vat_status": "registered", "blockers": [],
+              "latest": None, "history": [], "more": False
+          })
+          window.crm_issue_outcome.setCurrentIndex(1)
+          window.crm_issue_supply_date.setText("2026-11-06")
+          for key, widget in window.crm_issue_sources.items():
+              widget.setText("Synthetic human source fixture for " + key)
+          window.crm_issue_note.setPlainText(
+              "Synthetic documentary references only, not authorisation to issue."
+          )
+          window.crm_issue_confirm.setChecked(True)
+          window.save_invoice_issue_review()
+          assert calls[-1][0] == "crm-invoice-issue-record"
+          assert calls[-1][2]["outcome"] == "documents_logged"
+          assert calls[-1][2]["supply_date"] == "2026-11-06"
+          window.crm_invoice_issue_dialog.reject()
+          window.crm_tabs.setCurrentIndex(5)
+          assert calls[-1][0] == "crm-proposals"
+          calls[-1][3]({
+              "available": True, "more": False,
+              "items": [{
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "currency": "GBP", "amount_minor": "125050",
+                  "revision": 1, "updated_at": "2026-11-06"
+              }]
+          }, None)
+          window.crm_proposal_table.selectRow(0)
+          assert window.crm_terms_button.isEnabled()
+          window.crm_terms_button.click()
+          assert calls[-1][0] == "crm-commercial-terms"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "<b>Untrusted proposal</b>",
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_terms_dialog.isVisible()
+          assert window.crm_terms_save.isEnabled()
+          assert not window.crm_terms_confirm.isChecked()
+          window.crm_terms_valid.setText("2026-12-31")
+          for key, widget in window.crm_terms_fields.items():
+              widget.setPlainText(
+                  "Synthetic operator-proposed conditions, not approved, for " + key
+              )
+          window.crm_terms_source.setText("Synthetic manual draft")
+          window.crm_terms_confirm.setChecked(True)
+          window.save_proposal_commercial_terms()
+          assert calls[-1][0] == "crm-commercial-record"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["valid_until"] == "2026-12-31"
+          assert calls[-1][2]["confirmed"] is True
+          assert "vat_rate" not in calls[-1][2]
+          window.crm_terms_dialog.reject()
+          # Existing revision: read-only, never overwrite immutable terms.
+          window.open_proposal_commercial_terms()
+          assert calls[-1][0] == "crm-commercial-terms"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "proposal_title": "Synthetic proposal",
+              "current": {
+                  "proposal_revision": 1,"valid_until": "2026-12-31",
+                  "payment_terms": "Payment terms remain for review by a human.",
+                  "delivery_terms": "No delivery is authorized by this draft.",
+                  "exclusions": "All live security testing is excluded at this stage.",
+                  "assumptions": "Explicit customer permission required before testing.",
+                  "source_reference": "Synthetic manual draft"
+              },
+              "history": [], "more": False
+          }, None)
+          assert not window.crm_terms_save.isEnabled()
+          assert window.crm_terms_valid.isReadOnly()
+          assert window.crm_terms_fields["payment_terms"].isReadOnly()
+          assert window.crm_terms_valid.text() == "2026-12-31"
+          window.crm_terms_dialog.reject()
+          # The chooser must start in the operator's own writable home area,
+          # never in the process launch directory (/home on some Debian setups).
+          with patch("desktop.enkyron.QFileDialog.getSaveFileName", return_value=("", "")) as chooser:
+              assert window.select_proposal_pdf_path(
+                  "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee", 2
+              ) == ""
+              suggested = Path(chooser.call_args.args[2])
+              expected_folder = Path.home() / "Documents"
+              if not expected_folder.is_dir():
+                  expected_folder = Path.home()
+              assert suggested.is_absolute()
+              assert suggested.parent == expected_folder
+              assert suggested.name == "ENKYRON_DRAFT_bbbbbbbb_R2.pdf"
+          window.export_selected_draft_pdf()
+          assert calls[-1][0] == "crm-proposal-export"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert window.crm_buyer_button.isEnabled()
+          window.crm_buyer_button.click()
+          assert calls[-1][0] == "crm-buyer-review"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          # No linked company: never silently select a similar name.
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "Synthetic Research Co.",
+              "linked_company": None, "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert not window.crm_buyer_save.isEnabled()
+          window.crm_buyer_dialog.reject()
+          # Only an explicitly linked CRM company is eligible.
+          window.open_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "Synthetic Research Co.",
+              "linked_company": {
+                  "id": "11111111-2222-4333-8444-555555555555",
+                  "name": "Synthetic Company",
+                  "crm_legal_name": "Synthetic Company Ltd"
+              },
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert window.crm_buyer_save.isEnabled()
+          assert window.crm_buyer_legal_name.text() == ""
+          window.crm_buyer_legal_name.setText("Synthetic Company Ltd")
+          window.crm_buyer_address.setPlainText(
+              "10 Fictional Avenue, Test City, AB1 2CD"
+          )
+          window.crm_buyer_source.setText("Synthetic registry reference")
+          window.crm_buyer_notes.setPlainText(
+              "Manually entered for CI; buyer identity has not been independently verified."
+          )
+          window.crm_buyer_confirm.setChecked(True)
+          window.save_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-record"
+          assert calls[-1][2]["company_id"] == "11111111-2222-4333-8444-555555555555"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["confirmed"] is True
+          window.crm_buyer_dialog.reject()
+          # Reopen saved documentary evidence: it is visible but immutable.
+          window.open_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "research_candidate": "<b>Untrusted Research Co.</b>",
+              "linked_company": {
+                  "id": "11111111-2222-4333-8444-555555555555",
+                  "name": "<b>Untrusted CRM name</b>",
+                  "crm_legal_name": None
+              },
+              "current": {
+                  "proposal_revision": 1, "legal_name": "Synthetic Company Ltd",
+                  "registered_address": "10 Fictional Avenue, Test City, AB1 2CD",
+                  "source_reference": "Synthetic registry reference",
+                  "review_note": "Manually entered for CI; not independently verified."
+              },
+              "history": [], "more": False
+          }, None)
+          assert not window.crm_buyer_save.isEnabled()
+          assert window.crm_buyer_legal_name.isReadOnly()
+          assert window.crm_buyer_address.isReadOnly()
+          assert window.crm_buyer_legal_name.text() == "Synthetic Company Ltd"
+          labels = window.crm_buyer_dialog.findChildren(QLabel)
+          assert any("Research candidate: <b>Untrusted Research Co.</b>" == label.text()
+                     and label.textFormat() == Qt.TextFormat.PlainText for label in labels)
+          window.crm_buyer_dialog.reject()
+          # Country and B2B status are operator-entered evidence; no VAT inferred.
+          assert window.crm_tax_review_button.isEnabled()
+          window.open_proposal_tax_review()
+          assert calls[-1][0] == "crm-tax-reviews"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1,
+              "items": [], "more": False
+          }, None)
+          assert window.crm_tax_dialog.isVisible()
+          assert window.crm_tax_buyer.currentData() == "unknown"
+          assert window.crm_tax_mode.currentData() == "unknown"
+          assert not window.crm_tax_confirm.isChecked()
+          window.crm_tax_buyer.setCurrentIndex(
+              window.crm_tax_buyer.findData("business")
+          )
+          window.crm_tax_country.setText("FR")
+          window.crm_tax_mode.setCurrentIndex(
+              window.crm_tax_mode.findData("human_led_advisory")
+          )
+          window.crm_tax_business_evidence.setPlainText(
+              "Synthetic verified corporate registration evidence."
+          )
+          window.crm_tax_location_evidence.setPlainText(
+              "Synthetic buyer office location documented in France."
+          )
+          window.crm_tax_notes.setPlainText(
+              "Confirm tax treatment and any French reverse-charge or local rules with a specialist."
+          )
+          window.crm_tax_source.setText("HMRC")
+          window.crm_tax_confirm.setChecked(True)
+          window.save_proposal_tax_review()
+          assert calls[-1][0] == "crm-tax-record"
+          assert calls[-1][2]["proposal_id"] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["buyer_type"] == "business"
+          assert calls[-1][2]["buyer_country"] == "FR"
+          assert calls[-1][2]["source_reference"] == "HMRC"
+          assert calls[-1][2]["service_mode"] == "human_led_advisory"
+          assert calls[-1][2]["uk_vat_registration"] == "unknown"
+          assert "vat_rate" not in calls[-1][2]
+          window.crm_tax_dialog.reject()
+          window.open_selected_proposal()
+          assert calls[-1][0] == "crm-proposal"
+          calls[-1][3]({
+              "available": True,
+              "proposal": {
+                  "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "opportunity_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                  "company_name_at_creation": "Synthetic Research Co.",
+                  "title": "Synthetic ARL proposal",
+                  "scope_text": "A manually reviewed scope for a proposed agent security engagement.",
+                  "currency": "GBP", "amount_minor": "125050", "revision": 1
+              }
+          }, None)
+          assert window.crm_proposal_price.text() == "1250.50"
+          window.crm_proposal_price.setText("1300.75")
+          window.save_proposal()
+          assert calls[-1][0] == "crm-proposal-update"
+          assert calls[-1][2]["expected_revision"] == 1
+          assert calls[-1][2]["amount_minor"] == 130075
+          window.crm_proposal_dialog.reject()
+
+          # Itemized quote editor reuses the saved draft, no new customer or send.
+          assert window.crm_edit_lines.isEnabled()
+          window.open_selected_quote_lines()
+          assert calls[-1][0] == "crm-proposal-lines"
+          assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          calls[-1][3]({
+              "available": True, "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "revision": 2, "currency": "GBP", "amount_minor": 130075,
+              "uses_lines": False, "lines": []
+          }, None)
+          assert window.crm_quote_dialog.isVisible()
+          assert window.crm_quote_table.rowCount() == 0
+          assert not window.crm_quote_save.isEnabled()
+          window.add_quote_line("Bounded manual tool review", "2", "125.50")
+          window.add_quote_line("Report and human validation", "1", "50.25")
+          assert window.crm_quote_table.rowCount() == 2
+          assert "301.25" in window.crm_quote_total.text()
+          assert window.crm_quote_table.item(0, 3).text() == "251.00"
+          assert window.crm_quote_save.isEnabled()
+          window.save_quote_lines()
+          assert calls[-1][0] == "crm-proposal-lines-save"
+          assert calls[-1][2]["expected_revision"] == 2
+          assert calls[-1][2]["lines"][0]["quantity"] == 2
+          assert calls[-1][2]["lines"][0]["unit_price_minor"] == 12550
+          assert calls[-1][2]["lines"][1]["unit_price_minor"] == 5025
+          window.crm_quote_dialog.reject()
+
+          window.crm_tabs.setCurrentIndex(4)
+          assert calls[-1][0] == "crm-sales-pipeline"
+          calls[-1][3]({
+              "available": True, "total": 1,
+              "lanes": [{
+                  "id": "prospecting", "title": "Prospecting", "total": 1,
+                  "more": False, "items": [{
+                      "id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                      "prospect_id": "ARL-P-000001",
+                      "company_name_at_creation": "Synthetic Research Co.",
+                      "stage": "research", "version": 1,
+                      "next_action": "Review public company background",
+                      "due_date": "2026-11-12"
+                  }]
+              }]
+          }, None)
+          window.crm_pipeline_lists["prospecting"].setCurrentRow(0)
+          window.open_pipeline_opportunity()
+          assert window.crm_followup_dialog.isVisible()
+          assert window.crm_followup_stage.currentData() == "research"
+          window.crm_followup_stage.setCurrentIndex(
+              window.crm_followup_stage.findData("qualified")
+          )
+          window.crm_followup_action.setPlainText("Operator qualified research lead")
+          window.save_followup()
+          assert calls[-1][0] == "crm-update-opportunity"
+          assert calls[-1][2]["expected_version"] == 1
+          assert calls[-1][2]["stage"] == "qualified"
+          window.crm_followup_dialog.reject()
+          window.close()
+          app.quit()
+          PY

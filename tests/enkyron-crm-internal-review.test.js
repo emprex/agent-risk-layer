@@ -1,0 +1,76 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateInternalDecision,readInternalReview,recordInternalDecision}
+  from '../desktop/enkyron-crm-internal-review.mjs';
+const id='11111111-2222-4333-8444-555555555555';
+const base={proposal_id:id,expected_revision:2,confirmed:true,
+ decision:'needs_changes',
+ review_note:'Rework the buyer and pricing details before any further internal approval.'};
+test('internal review rejects malformed requests and no human confirmation',()=>{
+ assert.equal(validateInternalDecision(base).decision,'needs_changes');
+ for(const bad of [null,{},[],{...base,confirmed:false},
+ {...base,proposal_id:'invalid'},{...base,expected_revision:0},
+ {...base,decision:'issue_quote'},{...base,decision:'approved'},
+ {...base,review_note:'short'},
+ {...base,review_note:'foo'+String.fromCharCode(0)+'bar'}]){
+   assert.throws(()=>validateInternalDecision(bad),/CRM/);
+ }
+});
+function mock({missing=[],revision=2,existing=false,hasProposal=true}={}){
+ const queries=[];let released=false;
+ const proposal={id,revision,title:'Synthetic internal draft',amount_minor:'50000',currency:'GBP'};
+ const rows={
+  enkyron_operator_company_profiles:{id:'issuer-1',revision:1,legal_name:'Synthetic Ltd'},
+  enkyron_crm_proposal_buyer_reviews:{id:'buyer-1',company_id:'company-1'},
+  enkyron_crm_proposal_commercial_terms:{id:'terms-1',valid_until:'2099-01-01',still_valid:true},
+  enkyron_crm_proposal_tax_reviews:{id:'tax-1',buyer_type:'unknown',uk_vat_registration:'unknown'}
+ };
+ const query=async(sql,params)=>{
+  queries.push({sql,params});
+  if(sql.startsWith('SELECT id,revision,title,amount_minor'))return {rows:hasProposal?[proposal]:[]};
+  if(sql.startsWith('SELECT id FROM enkyron_crm_proposal_internal_decisions'))
+    return {rows:existing?[{id:'previous'}]:[]};
+  if(sql.startsWith('SELECT id,proposal_revision,decision,review_note'))return {rows:[]};
+  for(const [table,row] of Object.entries(rows)){
+   if(sql.includes('FROM '+table+' '))return {rows:missing.includes(table)?[]:[row]};
+  }
+  return {rows:[]};
+ };
+ return {db:{connect:async()=>({query,release:()=>{released=true;}})},queries,
+  get released(){return released;}};
+}
+test('preflight is read-only, scoped and lists missing documents',async()=>{
+ const m=mock({missing:['enkyron_crm_proposal_buyer_reviews']});
+ const r=await readInternalReview(m.db,id,'ci-operator');
+ assert.equal(r.can_approve_internal,false);
+ assert.match(r.blockers.join(' '),/buyer/i);
+ assert.equal(r.current,null);
+ assert.deepEqual(m.queries[1].params,['local:ci-operator',id]);
+ assert.ok(m.queries[0].sql.includes('READ ONLY'));
+ assert.equal(m.queries.at(-1).sql,'COMMIT');
+ assert.equal(m.released,true);
+});
+test('needs_changes is recorded despite blockers; approval requires current evidence',async()=>{
+ const m=mock({missing:['enkyron_crm_proposal_buyer_reviews']});
+ const result=await recordInternalDecision(m.db,base,'ci-operator',{uuid:()=>id});
+ assert.equal(result.decision,'needs_changes');
+ assert.equal(m.queries.at(-1).sql,'COMMIT');
+ assert.ok(!m.queries.some(x=>/^\s*(UPDATE|DELETE)\b/.test(x.sql)));
+ const a=mock({missing:['enkyron_crm_proposal_buyer_reviews']});
+ await assert.rejects(()=>recordInternalDecision(a.db,{
+  ...base,decision:'internal_draft_approved'},'ci-operator'),/blocked/);
+ assert.equal(a.queries.at(-1).sql,'ROLLBACK');
+ assert.ok(!a.queries.some(x=>x.sql.startsWith('INSERT')));
+ const b=mock();
+ const approved=await recordInternalDecision(b.db,{
+  ...base,decision:'internal_draft_approved'},'ci-operator',{uuid:()=>id});
+ assert.equal(approved.decision,'internal_draft_approved');
+ const insert=b.queries.find(x=>x.sql.startsWith('INSERT'));
+ assert.equal(insert.params[1],'local:ci-operator');
+ assert.deepEqual(insert.params.slice(6,10),['issuer-1','buyer-1','terms-1','tax-1']);
+ for(const c of [{revision:3},{existing:true},{hasProposal:false}]){
+   const x=mock(c);
+   await assert.rejects(()=>recordInternalDecision(x.db,base,'ci-operator'),/CRM/);
+   assert.equal(x.queries.at(-1).sql,'ROLLBACK');
+ }
+});
