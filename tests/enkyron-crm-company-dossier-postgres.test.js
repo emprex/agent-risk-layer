@@ -171,7 +171,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(terms?.status,'operator_draft_unapproved');
     assert.equal(docs.length,2);
     assert.ok(!JSON.stringify(docs).includes(privateCommercialTerms));
-    assert.ok(!docs.some(x=>/accepted|signed|contract_issued/.test(x.status)));
+    assert.ok(!docs.some(x=>['accepted','signed','contract_issued','issued'].includes(x.status)));
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
     assert.deepEqual(new Set(dossier.sections.ticket_history.items.map(x=>x.source_id)),
       new Set([eventId,noteId]));
