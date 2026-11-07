@@ -239,3 +239,31 @@ names and manage exported files independently; a local receipt is NOT a
 customer authorization, legal GDPR DSAR response or cryptographic
 remote attestation. Authentic multi-user RBAC and actual retention/deletion
 remain OPEN. All CI results and Debian acceptance are tracked separately.
+
+
+## E02-05R — Audited revocation of mistaken company–ticket assertions (2026-11-07)
+Migration **090** adds append-only ticket association revocation records.
+The operator explicitly selects a currently linked ticket in the CRM Tickets
+pane, supplies a 30–1000-character human rationale, checks the human review
+acknowledgment and confirms again. The server checks the exact local workspace,
+company, ticket and the ticket's current historical name under a database row
+lock, refuses cross-workspace and duplicate requests, and inserts revocation
+plus a `corrected` company audit event in ONE transaction.
+
+After revocation, active company/ticket views, the ticket's CRM company view,
+the company 360 dossier and affected contact/ticket views all EXCLUDE the
+invalidated association. The original ticket, original association, contact
+association, human rationales and audit records remain immutable and untouched.
+Read-only correction metadata (ticket numbers/operator/timestamp) is shown
+beneath the CRM Tickets pane. **Revocation is NOT deletion and NOT transfer**;
+this version deliberately refuses to re-link a revoked ticket through the
+legacy linking dialog. A future, separately reviewed reassignment flow must
+supply immutable lineage and correctly constrain contact associations.
+No historic ARL pilot ticket may be automatically revoked. All revocations
+must originate in deliberate human operator review. Local acceptance
+must be performed on synthetic fixtures first.
+
+E02-05 remains OPEN after E02-05R: reviewed reassignment, retention effects,
+contact-link reassignment, true multi-user controls and full A→Z acceptance
+are separate closure gates. Exact-head CI and Debian human acceptance must
+be recorded separately.

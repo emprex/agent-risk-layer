@@ -157,6 +157,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-crm-tickets-postgres.test.js
 
+      - name: ENKYRON E02-05R ticket-link correction PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-ticket-corrections-postgres.test.js
+
       - name: ENKYRON E02-05 contact-ticket PostgreSQL acceptance
         env:
           CI: 'true'
