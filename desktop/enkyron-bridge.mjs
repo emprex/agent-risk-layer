@@ -37,6 +37,7 @@ import {beginCsvExport,finishCsvExport,listCsvExportEvents,validateExportStart,v
 import {inspectCsvImport,commitCsvImport,validateCsvPreview,validateCsvCommit} from './enkyron-crm-csv-import.mjs';
 import { previewProspectLink, associateProspect, validateProspectLink, requireProspectId } from './enkyron-crm-link.mjs';
 import { listCompanies, listContacts, createCompany, createContact, validateCompany, validateContact } from './enkyron-crm.mjs';
+import {previewCompanyDuplicates,previewContactDuplicates} from './enkyron-crm-duplicates.mjs';
 import {updateCompany,updateContact,validateCompanyEdit,validateContactEdit,listRecordChanges} from './enkyron-crm-edit.mjs';
 import {
   createDeskTicket, updateDeskTicketStatus, validateIntake, validateStatusChange,
@@ -188,7 +189,7 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
@@ -209,15 +210,15 @@ async function main() {
   if (command === 'crm-prospect-opportunity') requireProspectId(arg);
   if (command === 'crm-activity-timeline') requireOpportunityId(arg);
   if (command === 'crm-mail-draft' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM draft ID');
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson(['crm-csv-import-check','crm-csv-import-commit'].includes(command) ? 350000 : 16000) : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'crm-create-company', 'crm-create-contact', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-mail-create', 'crm-mail-update', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-tax-record', 'crm-own-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record'].includes(command) ? await stdinJson(['crm-csv-import-check','crm-csv-import-commit'].includes(command) ? 350000 : 16000) : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
   if (command === 'ticket-status') validateStatusChange(payload);
   if (command === 'ticket-assignment') validateAssignment(payload);
   if (command === 'ticket-archive') validateArchive(payload);
-  if (command === 'crm-create-company') validateCompany(payload);
-  if (command === 'crm-create-contact') validateContact(payload);
+  if (['crm-create-company','crm-company-duplicates'].includes(command)) validateCompany(payload);
+  if (['crm-create-contact','crm-contact-duplicates'].includes(command)) validateContact(payload);
   if (command === 'crm-edit-company') validateCompanyEdit(payload);
   if (command === 'crm-edit-contact') validateContactEdit(payload);
   if (command === 'crm-prospect-link') validateProspectLink(payload);
@@ -264,6 +265,8 @@ async function main() {
       command === 'crm-prospects' ? await listSalesProspects(pool, arg) :
       command === 'crm-prospects-page' ? await listSalesProspectsPage(pool, payload) :
       command === 'crm-companies' ? await listCompanies(pool, arg, os.userInfo().username) :
+      command === 'crm-company-duplicates' ? await previewCompanyDuplicates(pool, payload, os.userInfo().username) :
+      command === 'crm-contact-duplicates' ? await previewContactDuplicates(pool, payload, os.userInfo().username) :
       command === 'crm-contacts' ? await listContacts(pool, arg, os.userInfo().username) :
       command === 'crm-company-tickets' ? await listCompanyTickets(pool, arg, os.userInfo().username) :
       command === 'crm-ticket-revocations' ? await listTicketRevocations(pool, arg, os.userInfo().username) :
