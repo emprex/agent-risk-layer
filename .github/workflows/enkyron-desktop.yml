@@ -648,6 +648,43 @@ jobs:
           assert window.crm_link_ticket_choice.count() == 1
           assert window.crm_link_ticket_submit.isEnabled()
           assert not window.crm_link_ticket_checked.isChecked()
+          # The same dialog permits reviewed reassignment without a new toolbar button.
+          window.crm_link_ticket_mode.setCurrentIndex(1)
+          assert calls[-1][0] == "crm-ticket-reassignment-options"
+          assert calls[-1][2]["destination_company_id"] == company_id
+          assert calls[-1][2]["search"] == ""
+          calls[-1][3]({
+              "available": True, "company": {
+                  "id": company_id, "name": "Synthetic Company",
+                  "record_version": 2
+              },
+              "items": [{
+                  "ticket_id": "33333333-4444-4555-8666-777777777777",
+                  "ticket_number": "ARL-2026-000010",
+                  "title": "Previously revoked synthetic ticket",
+                  "client_name": "Old unverified customer",
+                  "status": "scoping",
+                  "revocation_id": "44444444-5555-4666-8777-888888888888",
+                  "source_company_id": "55555555-6666-4777-8888-999999999999",
+                  "source_company_name": "Prior synthetic company"
+              }], "more": False
+          }, None)
+          assert window.crm_link_ticket_choice.count() == 1
+          assert window.crm_link_ticket_submit.isEnabled()
+          window.crm_link_ticket_note.setPlainText(
+              "Synthetic human review confirmed this ticket should belong to the new company."
+          )
+          window.crm_link_ticket_checked.setChecked(True)
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.Yes):
+              window.confirm_ticket_link()
+          assert calls[-1][0] == "crm-ticket-reassign"
+          assert calls[-1][2]["destination_company_id"] == company_id
+          assert calls[-1][2]["destination_record_version"] == 2
+          assert calls[-1][2]["expected_revocation_id"] == (
+              "44444444-5555-4666-8777-888888888888"
+          )
+          assert calls[-1][2]["confirmed"] is True
           window.crm_link_dialog.reject()
           window.open_new_company()
           assert window.crm_company_dialog.isVisible()
