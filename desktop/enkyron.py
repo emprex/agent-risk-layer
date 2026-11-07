@@ -1570,6 +1570,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
+            self.crm_contact_tickets_button.setEnabled(False)
             self.crm_contact_seq += 1
             self.crm_contacts_table.setRowCount(0)
             self.crm_contact_add.setEnabled(False)
@@ -1653,6 +1654,7 @@ class EnkyronWindow(QMainWindow):
             and company["record_version"] >= 1
         )
         self.crm_contact_edit.setEnabled(False)
+        self.crm_contact_tickets_button.setEnabled(False)
         self.crm_contact_add.setEnabled(True)
         self.crm_link_ticket_button.setEnabled(True)
         self.load_company_tickets(company_id)
@@ -1668,6 +1670,7 @@ class EnkyronWindow(QMainWindow):
                 return
             self.crm_contact_items = []
             self.crm_contact_edit.setEnabled(False)
+            self.crm_contact_tickets_button.setEnabled(False)
             self.crm_contacts_table.setRowCount(0)
             if error:
                 self.crm_contacts_notice.setText("Contacts unavailable.")
