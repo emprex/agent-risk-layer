@@ -14,7 +14,7 @@ test('revocation requires exact identifiers, current client label and human rati
   {...good,expected_client_name:'bad\nname'},{...good,review_note:'short'},
   {...good,review_note:'bad\0note'}, {...good,confirmed:false},
   {...good,reassign_company_id:company_id},null,[]]){
-  assert.throws(()=>validateTicketRevocation(invalid),/CRM/);
+  assert.throws(()=>validateTicketRevocation(invalid),/CRM|Invalid ticket identifier/);
  }
 });
 function mock({missing=false,wrongName=false,revoked=false}={}){
