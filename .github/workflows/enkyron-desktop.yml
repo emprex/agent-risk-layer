@@ -290,6 +290,34 @@ jobs:
           assert "relationship_state" not in calls[-1][2]
           window.crm_record_edit_dialog.reject()
           window.crm_contacts_table.selectRow(0)
+          assert window.crm_contact_tickets_button.isEnabled()
+          window.crm_contact_tickets_button.click()
+          assert calls[-2][0] == "crm-contact-tickets"
+          assert calls[-2][1] == "22222222-3333-4444-8555-666666666666"
+          assert calls[-1][0] == "crm-company-tickets"
+          assert calls[-1][1] == company_id
+          calls[-2][3]({
+              "available": True,
+              "contact": {"id": "22222222-3333-4444-8555-666666666666",
+                          "company_id": company_id},
+              "items": [], "more": False
+          }, None)
+          calls[-1][3]({
+              "available": True,
+              "items": [{"ticket_id": "33333333-4444-4555-8666-777777777777",
+                         "ticket_number": "CI-CONTACT-001",
+                         "title": "Synthetic client enquiry",
+                         "archived_at": None}],
+              "more": False
+          }, None)
+          assert window.crm_contact_ticket_dialog.isVisible()
+          assert "1 eligible tickets" in [
+              x.text() for x in window.crm_contact_ticket_dialog.findChildren(QLabel)
+          ][-1] or any(
+              "1 eligible tickets" in x.text()
+              for x in window.crm_contact_ticket_dialog.findChildren(QLabel)
+          )
+          window.crm_contact_ticket_dialog.reject()
           assert window.crm_contact_edit.isEnabled()
           window.crm_contact_edit.click()
           assert window.crm_record_edit_dialog.isVisible()
