@@ -730,6 +730,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_edit.setEnabled(False)
         self.crm_contact_edit.clicked.connect(self.open_edit_contact)
         contacts_heading.addWidget(self.crm_contact_edit)
+        self.crm_contact_tickets_button = QPushButton("Contact ticket links…")
+        self.crm_contact_tickets_button.setEnabled(False)
+        self.crm_contact_tickets_button.clicked.connect(self.open_contact_ticket_links)
+        contacts_heading.addWidget(self.crm_contact_tickets_button)
         contacts_l.addLayout(contacts_heading)
         self.crm_contacts_notice = QLabel(
             "Select a company to view its contacts. Email consent starts as unknown."
@@ -1696,12 +1700,147 @@ class EnkyronWindow(QMainWindow):
     def contact_selected(self):
         row = self.crm_contacts_table.currentRow()
         selected = 0 <= row < len(self.crm_contact_items)
+        self.crm_contact_tickets_button.setEnabled(bool(self.crm_company_id) and selected)
         self.crm_contact_edit.setEnabled(
             bool(self.crm_company_id) and selected and
             isinstance(self.crm_contact_items[row].get("record_version"), int)
             and self.crm_contact_items[row]["record_version"] >= 1
             if selected else False
         )
+
+    def open_contact_ticket_links(self):
+        row = self.crm_contacts_table.currentRow()
+        if not self.crm_company_id or not 0 <= row < len(self.crm_contact_items):
+            return
+        company_id = self.crm_company_id
+        contact_id = self.crm_contact_items[row]["id"]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Contact ticket links")
+        dialog.setMinimumWidth(600)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("REVIEWED CONTACT ↔ TICKET LINKS"))
+        info = QLabel(
+            "Only existing, manually reviewed company-ticket links are eligible. "
+            "This does not verify contact identity, grant consent or change any ticket."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        notice = QLabel("Loading links and eligible company tickets…")
+        layout.addWidget(notice)
+        history = QTableWidget(0, 2)
+        history.setHorizontalHeaderLabels(["Ticket", "Linked by"])
+        layout.addWidget(history)
+        choice = QComboBox()
+        layout.addWidget(choice)
+        reason = QPlainTextEdit()
+        reason.setMaximumHeight(90)
+        reason.setPlaceholderText("Human rationale (20–1000 characters)")
+        layout.addWidget(reason)
+        checked = QCheckBox("I reviewed this contact, company and ticket.")
+        layout.addWidget(checked)
+        save = QPushButton("Record link")
+        save.setObjectName("primary")
+        save.setEnabled(False)
+        layout.addWidget(save)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        layout.addWidget(close)
+        self.crm_contact_ticket_dialog = dialog
+        state = {"links": None, "tickets": None}
+
+        def selected():
+            row_now = self.crm_contacts_table.currentRow()
+            return (self.crm_company_id == company_id
+                    and 0 <= row_now < len(self.crm_contact_items)
+                    and self.crm_contact_items[row_now].get("id") == contact_id)
+
+        def refresh():
+            if not dialog.isVisible() or not selected():
+                save.setEnabled(False)
+                return
+            if state["links"] is None or state["tickets"] is None:
+                return
+            history.setRowCount(len(state["links"]))
+            already = {r.get("ticket_id") for r in state["links"]}
+            for i, record in enumerate(state["links"]):
+                for col, value in enumerate((
+                    record.get("ticket_number") or "",
+                    record.get("linked_by") or "",
+                )):
+                    history.setItem(i, col, QTableWidgetItem(str(value)))
+            choice.clear()
+            for ticket in state["tickets"]:
+                if ticket.get("ticket_id") not in already and not ticket.get("archived_at"):
+                    choice.addItem(
+                        str(ticket.get("ticket_number") or "") + " · "
+                        + str(ticket.get("title") or ""), ticket
+                    )
+            notice.setText(
+                "{} linked; {} eligible tickets.".format(len(already), choice.count())
+            )
+            save.setEnabled(choice.count() > 0)
+
+        def got_links(data, error):
+            if not dialog.isVisible() or not selected():
+                return
+            if error or not data or not data.get("available", False):
+                notice.setText(error or (data or {}).get("notice", "Links unavailable."))
+                save.setEnabled(False)
+                return
+            if (data.get("contact") or {}).get("company_id") != company_id:
+                notice.setText("Contact company changed; reopen.")
+                return
+            state["links"] = data.get("items", [])
+            refresh()
+
+        def got_tickets(data, error):
+            if not dialog.isVisible() or not selected():
+                return
+            if error or not data or not data.get("available", False):
+                notice.setText(error or (data or {}).get("notice", "Tickets unavailable."))
+                save.setEnabled(False)
+                return
+            state["tickets"] = data.get("items", [])
+            refresh()
+
+        def submit():
+            ticket = choice.currentData()
+            rationale = reason.toPlainText().strip()
+            if not selected() or not ticket:
+                return
+            if not 20 <= len(rationale) <= 1000 or not checked.isChecked():
+                QMessageBox.warning(dialog, "Review required",
+                    "Enter a 20–1000 character reason and confirm the exact link.")
+                return
+            if QMessageBox.question(dialog, "Confirm reviewed link",
+                "Record contact-to-ticket link without changing source data?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+                return
+            save.setEnabled(False)
+
+            def saved(data, error):
+                if not dialog.isVisible() or not selected():
+                    return
+                if error or not data or data.get("contact_id") != contact_id:
+                    notice.setText(error or "Link was refused.")
+                    refresh()
+                    return
+                reason.clear()
+                checked.setChecked(False)
+                state["links"] = None
+                self.bridge.call("crm-contact-tickets", contact_id, callback=got_links)
+
+            self.bridge.call("crm-link-contact-ticket", payload={
+                "company_id": company_id, "contact_id": contact_id,
+                "ticket_id": ticket["ticket_id"], "review_note": rationale,
+                "confirmed": True,
+            }, callback=saved)
+
+        save.clicked.connect(submit)
+        dialog.open()
+        self.bridge.call("crm-contact-tickets", contact_id, callback=got_links)
+        self.bridge.call("crm-company-tickets", company_id, callback=got_tickets)
 
     def open_edit_company(self):
         row = self.crm_company_table.currentRow()
