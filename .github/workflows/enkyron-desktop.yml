@@ -564,12 +564,22 @@ jobs:
                   "activities": {"total": 0, "more": False, "items": []},
                   "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []},
-                   "commercial_docs": {"total": 1, "more": False, "items": [{
+                   "commercial_docs": {"total": 3, "more": False, "items": [{
                        "document_kind": "proposal_draft",
                        "title": "Synthetic internal draft",
                        "status": "internal_unaccepted_draft",
                        "revision": 1, "proposal_id": "prop-synthetic",
                        "recorded_at": "2026-11-07T05:00:00Z"
+                   }, {
+                       "document_kind": "buyer_documentary_review",
+                       "title": "Buyer identity (operator documentary record)",
+                       "status": "operator_documented_unverified",
+                       "revision": 1, "proposal_id": "prop-synthetic"
+                   }, {
+                       "document_kind": "internal_proposal_decision",
+                       "title": "Proposal decision (internal only)",
+                       "status": "needs_changes",
+                       "revision": 1, "proposal_id": "prop-synthetic"
                    }]},
                    "ticket_history": {"total": 1, "more": False, "items": [{
                        "ticket_number": "CI-TICKET-SYNTHETIC",
@@ -591,13 +601,20 @@ jobs:
           assert window.crm_dossier_nav.count() == 11
           assert not window.crm_dossier_tabs.tabBar().isVisible()
           assert window.crm_dossier_nav.currentRow() == 0
-          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (1)"
+          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (3)"
           assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
           window.crm_dossier_nav.setCurrentRow(8)
           assert window.crm_dossier_tabs.currentIndex() == 8
           window.crm_dossier_tabs.setCurrentIndex(4)
           assert window.crm_dossier_nav.currentRow() == 4
-          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (1)"
+          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (3)"
+          commercial_page = window.crm_dossier_tabs.widget(7)
+          commercial_table = commercial_page.findChildren(QTableWidget)[0]
+          assert commercial_table.rowCount() == 3
+          assert commercial_table.item(1, 2).text() == "operator_documented_unverified"
+          assert commercial_table.item(2, 2).text() == "needs_changes"
+          assert any("not customer acceptance" in child.text()
+                     for child in commercial_page.findChildren(QLabel))
           assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
           assert window.crm_dossier_tabs.tabText(9) == "CRM audit (1)"
           assert window.crm_dossier_tabs.tabText(10) == "Field changes (0)"

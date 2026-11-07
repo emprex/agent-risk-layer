@@ -2960,6 +2960,14 @@ class EnkyronWindow(QMainWindow):
                 count = int(section.get("total", 0))
                 page = QWidget()
                 page_layout = QVBoxLayout(page)
+                if section_id == "commercial_docs":
+                    commercial_notice = QLabel(
+                        "Internal source records only. Buyer identity reviews "
+                        "are operator-entered; internal decisions are not "
+                        "customer acceptance, signed contracts, or permission to test."
+                    )
+                    commercial_notice.setWordWrap(True)
+                    page_layout.addWidget(commercial_notice)
                 if section_id == "tickets":
                     ticket_notice = QLabel(
                         "CRM links are operator-reviewed, not independent client "

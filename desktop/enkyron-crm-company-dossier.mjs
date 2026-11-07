@@ -84,8 +84,9 @@ const LISTS={
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
     +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
 
-  // Existing commercial source records only. Drafts are NOT contracts, accepted
-  // offers, invoices, payments, delivered projects or customer communications.
+  // Existing commercial source records only, including buyer documentary reviews
+  // and INTERNAL decisions. These are NOT accepted contracts, issued invoices,
+  // externally exchanged files, payments, delivered projects or customer consent.
   // The linkage is reviewed prospect -> scoped opportunity -> source records.
   commercial_docs:
     'WITH linked_opportunities AS ('
@@ -121,7 +122,23 @@ const LISTS={
     +'JOIN enkyron_crm_proposal_drafts p ON p.id=t.proposal_id '
     +'AND p.workspace_key=t.workspace_key '
     +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
-    +'WHERE t.workspace_key=$1) '
+    +'WHERE t.workspace_key=$1 UNION ALL '
+    +"SELECT 'buyer_documentary_review',b.id,"
+    +"'Buyer identity (operator documentary record)',b.review_status,"
+    +'b.proposal_revision,b.recorded_at,b.proposal_id '
+    +'FROM enkyron_crm_proposal_buyer_reviews b '
+    +'JOIN enkyron_crm_proposal_drafts p ON p.id=b.proposal_id '
+    +'AND p.workspace_key=b.workspace_key '
+    +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
+    +'WHERE b.workspace_key=$1 UNION ALL '
+    +"SELECT 'internal_proposal_decision',d.id,"
+    +"'Proposal decision (internal only)',d.decision,"
+    +'d.proposal_revision,d.recorded_at,d.proposal_id '
+    +'FROM enkyron_crm_proposal_internal_decisions d '
+    +'JOIN enkyron_crm_proposal_drafts p ON p.id=d.proposal_id '
+    +'AND p.workspace_key=d.workspace_key '
+    +'JOIN linked_opportunities o ON o.id=p.opportunity_id '
+    +'WHERE d.workspace_key=$1) '
     +'SELECT document_kind,document_id,title,status,revision,recorded_at,'
     +'proposal_id,count(*) OVER() AS total_rows FROM docs '
     +'ORDER BY recorded_at DESC,document_kind,document_id LIMIT 21',
@@ -190,7 +207,7 @@ export async function getCompanyDossier(pool,id,operator){
     return {available:true,company,sections,
       notice:'Only recorded company contacts and explicitly reviewed links are included. '
         +'Commercial stages and manual notes are not independently verified. '
-        +'Commercial document entries (including terms) are internal drafts, not accepted contracts, '
+        +'Commercial entries include operator documentary records and internal draft decisions, not accepted contracts, '
         +'issued invoices, completed projects or exchanged emails. '
         +'Ticket history is internal event and note metadata, not message contents. '
         +'ARL project and assessment references on tickets are technical links, '

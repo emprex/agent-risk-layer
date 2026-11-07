@@ -118,6 +118,28 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
        'Customer acceptance is not recorded', 'No signed contract is present',
        'synthetic-ci-only',actor]
     );
+    // These records are not signatures or acceptance from a customer.
+    const buyerId=randomUUID(),decisionId=randomUUID();
+    const privateBuyerMarker='CONFIDENTIAL_BUYER_REVIEW_NOT_IN_360';
+    const privateDecisionMarker='CONFIDENTIAL_DECISION_REVIEW_NOT_IN_360';
+    await pool.query(
+      'INSERT INTO enkyron_crm_proposal_buyer_reviews '
+      +'(id,workspace_key,proposal_id,proposal_revision,company_id,'
+      +'legal_name,registered_address,source_reference,review_note,recorded_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [buyerId,'local:'+actor,proposalId,1,a.id,
+       privateBuyerMarker,'Example registered address for CI only, London',
+       'synthetic-source-reference',
+       'Operator documentary record; no independent verification or customer acceptance.',
+       actor]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_crm_proposal_internal_decisions '
+      +'(id,workspace_key,proposal_id,proposal_revision,decision,review_note,recorded_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7)',
+      [decisionId,'local:'+actor,proposalId,1,'needs_changes',
+       privateDecisionMarker+'; internal follow-up is required for this draft.',actor]
+    );
     const ticket=randomUUID();
     await pool.query(
       'INSERT INTO arl_workbench_tickets '
@@ -152,7 +174,7 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(dossier.company.relationship_state,'prospect');
     assert.deepEqual(Object.fromEntries(
       Object.entries(dossier.sections).map(([k,v])=>[k,v.total])
-    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:2,ticket_history:2,audit_events:4,audit_changes:0});
+    ),{contacts:21,prospects:1,tickets:1,opportunities:1,qualifications:0,activities:1,drafts:1,commercial_docs:4,ticket_history:2,audit_events:4,audit_changes:0});
     assert.equal(dossier.sections.contacts.items.length,20);
     assert.equal(dossier.sections.contacts.more,true);
     assert.equal(dossier.sections.prospects.items[0].prospect_id,linkedProspect);
@@ -176,8 +198,20 @@ test('PostgreSQL company 360 shows only manually linked records without rewritin
     assert.equal(terms?.proposal_id,proposalId);
     assert.equal(terms?.revision,1);
     assert.equal(terms?.status,'operator_draft_unapproved');
-    assert.equal(docs.length,2);
+    const buyer=docs.find(x=>x.document_kind==='buyer_documentary_review');
+    const decision=docs.find(x=>x.document_kind==='internal_proposal_decision');
+    assert.equal(buyer?.document_id,buyerId);
+    assert.equal(buyer?.proposal_id,proposalId);
+    assert.equal(buyer?.revision,1);
+    assert.equal(buyer?.status,'operator_documented_unverified');
+    assert.equal(decision?.document_id,decisionId);
+    assert.equal(decision?.proposal_id,proposalId);
+    assert.equal(decision?.revision,1);
+    assert.equal(decision?.status,'needs_changes');
+    assert.equal(docs.length,4);
     assert.ok(!JSON.stringify(docs).includes(privateCommercialTerms));
+    assert.ok(!JSON.stringify(docs).includes(privateBuyerMarker));
+    assert.ok(!JSON.stringify(docs).includes(privateDecisionMarker));
     assert.ok(!docs.some(x=>['accepted','signed','contract_issued','issued'].includes(x.status)));
     assert.equal(dossier.sections.activities.items[0].activity_type,'task_note');
     assert.deepEqual(new Set(dossier.sections.ticket_history.items.map(x=>x.source_id)),

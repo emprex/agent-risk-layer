@@ -11,7 +11,7 @@ assertion of legal compliance or production readiness.
 |---|---|---|
 | E02-01 Companies | Create/edit versioning and history; synthetic Debian create/edit demonstrated | Entire A–Z reconciliation and ownership checks |
 | E02-02 Contacts | Create/edit and durable synthetic contact demonstrated | Negative stale-version/consent acceptance on Debian |
-| E02-03 Company 360 | Debian screenshot 2026-11-07 confirms eleven readable sidebar sections with contact/ticket counts. Development slice adds reviewed ticket provenance and optional ARL technical reference IDs to existing Tickets view | Exact-head CI and Debian acceptance of ticket provenance; signed contracts, delivered projects, independent documents and external exchanges not implemented |
+| E02-03 Company 360 | Debian screenshot 2026-11-07 confirms eleven readable sidebar sections. CI validates ticket provenance and draft commercial records; this slice adds operator buyer documentary reviews and internal proposal decisions to existing Commercial drafts chronology | Exact-head CI and Debian acceptance of added review sources; signed contracts, delivered projects, independent documents and external exchanges not implemented |
 | E02-04 Search/deduplicate | E02-04A company duplicate warning seen on Debian 2026-11-07. E02-04B manual creation transaction-time recheck, advisory serialization and override audit in development. | Exact-head CI and Debian synthetic acceptance of override/refusal; contact duplicate confirmation; other creation and edit entrypoints require separate consistency review. |
 | E02-05 Many-to-many | Contact–ticket link persisted on Debian. E02-05R revocation of synthetic ticket ARL-2026-000004 persisted after restart. E02-05S first reviewed reassignment from `Test` to `ARL CRM Import Test 3d5a49b4` visibly succeeded; operator confirmed restart test PASS on 2026-11-07. Exact-head CI for E02-05S passed on `a90b756`. | E02-05 as a whole remains OPEN: verify historical lineage and separate contact associations in redacted local DB evidence; any further transfer needs separately reviewed correction; real ARL tickets 000001/000002 require explicit operator decision; E02-06 access controls unresolved. |
 | E02-06 Audit/access | E02-06A event/field-change views shown in Debian | Authenticated users, roles, isolation and privilege-negative tests |
@@ -109,3 +109,21 @@ review notes remain hidden. No new section, new table, migration or change
 to historical ticket/CRM data. CI tests intentionally reassign a synthetic
 ticket to a reviewed same-name twin and require zero current ticket/history
 in the former dossier. Full E02-03 and E02-05 remain OPEN.
+
+## E02-03 pre-contract documentary chronology (development, 2026-11-07)
+
+The existing `Commercial drafts` company preview now includes two additional
+immutable **source records** already present in migrations 078 and 080:
+`buyer_documentary_review` with `operator_documented_unverified` status, and
+`internal_proposal_decision` with its source decision `needs_changes` or
+`internal_draft_approved`. The second is *internal draft* approval only and
+cannot prove customer signature or authorise testing, issuing quotes, invoicing
+or launching a mission. Both are linked through the same explicitly reviewed
+company-prospect-opportunity-proposal chain, with workspace scoping at every
+step. Only kind, source ID, revision, status, proposal ID and timestamp are
+shown. Legal name/address, evidence references, buyer review notes and internal
+decision rationale remain out of the dossier overview. No new table, contract,
+project, legal assertion, permissions, email or navigation is created. Source
+read remains read-only/repeatable, capped to 20 and count-preserving; local
+Debian acceptance remains separate from GitHub CI. E02-03/E07-05/E07-08/E08-01
+remain OPEN.
