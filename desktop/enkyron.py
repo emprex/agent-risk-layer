@@ -275,6 +275,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_seq = 0
         self.crm_quote_dialog = None
         self.crm_quote_context = None
+        self.crm_catalog_dialog = None
+        self.crm_catalog_form = None
+        self.crm_catalog_form_context = None
+        self.crm_catalog_seq = 0
+        self.crm_catalog_items = []
         self.sales_overview_seq = 0
         self.sales_overview_loaded = False
         self.crm_review_dialog = None
@@ -1200,6 +1205,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_search.setMaxLength(100)
         self.crm_proposal_search.setPlaceholderText("Search opportunity or proposal title…")
         proposal_toolbar.addWidget(self.crm_proposal_search, 1)
+        self.crm_service_catalog_button = QPushButton("Service catalog…")
+        self.crm_service_catalog_button.clicked.connect(self.open_service_catalog)
+        proposal_toolbar.addWidget(self.crm_service_catalog_button)
         proposal_refresh = QPushButton("Refresh proposals")
         proposal_refresh.clicked.connect(self.load_proposals)
         proposal_toolbar.addWidget(proposal_refresh)
@@ -7059,6 +7067,473 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-tax-record", payload=payload, callback=received)
+
+    def open_service_catalog(self):
+        if self.crm_catalog_dialog and self.crm_catalog_dialog.isVisible():
+            self.crm_catalog_dialog.raise_()
+            self.crm_catalog_dialog.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · ARL service catalog (operator managed)")
+        dialog.resize(960, 670)
+        dialog.setMinimumSize(680, 490)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("SERVICE CATALOG · DESCRIPTIONS AND PRICING"))
+        explanation = QLabel(
+            "These are operator-owned commercial offers, not automatically "
+            "validated technical capabilities. Fixed price, custom quote and "
+            "recurring base fee are supported. Tax is not determined here. "
+            "Nothing is issued, invoiced or security-tested by the catalog."
+        )
+        explanation.setWordWrap(True)
+        explanation.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(explanation)
+        search_row = QHBoxLayout()
+        self.crm_catalog_search = QLineEdit()
+        self.crm_catalog_search.setMaxLength(100)
+        self.crm_catalog_search.setPlaceholderText("Search service name or code…")
+        self.crm_catalog_search.returnPressed.connect(self.reload_service_catalog)
+        search_row.addWidget(self.crm_catalog_search, 1)
+        refresh = QPushButton("Search / refresh")
+        refresh.clicked.connect(self.reload_service_catalog)
+        search_row.addWidget(refresh)
+        layout.addLayout(search_row)
+        self.crm_catalog_notice = QLabel("No services loaded.")
+        self.crm_catalog_notice.setWordWrap(True)
+        layout.addWidget(self.crm_catalog_notice)
+        self.crm_catalog_table = QTableWidget(0, 5)
+        self.crm_catalog_table.setHorizontalHeaderLabels(
+            ["Code", "Service", "Family", "Pricing", "Status"]
+        )
+        self.crm_catalog_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for col in (0, 2, 3, 4):
+            self.crm_catalog_table.horizontalHeader().setSectionResizeMode(
+                col, QHeaderView.ResizeMode.ResizeToContents
+            )
+        self.crm_catalog_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_catalog_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_catalog_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_catalog_table.itemSelectionChanged.connect(
+            self.service_catalog_selected
+        )
+        self.crm_catalog_table.itemDoubleClicked.connect(
+            lambda _item: self.edit_selected_catalog_service()
+        )
+        layout.addWidget(self.crm_catalog_table, 2)
+        layout.addWidget(section_title("SERVICE FICHE AND VERSION HISTORY"))
+        self.crm_catalog_details = make_text_area()
+        self.crm_catalog_details.setPlaceholderText(
+            "Select a service to see its complete fiche and audit history."
+        )
+        layout.addWidget(self.crm_catalog_details, 2)
+        actions = QHBoxLayout()
+        create = QPushButton("+ New service")
+        create.clicked.connect(lambda: self.open_catalog_service_form(None))
+        actions.addWidget(create)
+        self.crm_catalog_edit = QPushButton("Edit selected fiche…")
+        self.crm_catalog_edit.setEnabled(False)
+        self.crm_catalog_edit.clicked.connect(self.edit_selected_catalog_service)
+        actions.addWidget(self.crm_catalog_edit)
+        actions.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        actions.addWidget(close)
+        layout.addLayout(actions)
+        self.crm_catalog_dialog = dialog
+        self.crm_catalog_items = []
+        dialog.open()
+        self.reload_service_catalog()
+
+    def reload_service_catalog(self):
+        if not self.crm_catalog_dialog or not self.crm_catalog_dialog.isVisible():
+            return
+        self.crm_catalog_seq += 1
+        seq = self.crm_catalog_seq
+        query = self.crm_catalog_search.text().strip()
+        self.crm_catalog_notice.setText("Loading service catalogue…")
+        self.crm_catalog_edit.setEnabled(False)
+        self.crm_catalog_details.clear()
+        self.crm_catalog_items = []
+        self.crm_catalog_table.blockSignals(True)
+        self.crm_catalog_table.setRowCount(0)
+        self.crm_catalog_table.blockSignals(False)
+
+        def received(data, error):
+            if seq != self.crm_catalog_seq:
+                return
+            if error or not data or not data.get("available"):
+                self.crm_catalog_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "Service catalogue unavailable."
+                    )
+                )
+                return
+            items = data.get("items") or []
+            self.crm_catalog_items = items
+            table = self.crm_catalog_table
+            table.blockSignals(True)
+            table.setRowCount(len(items))
+            for row, item in enumerate(items):
+                values = [
+                    item.get("service_code") or "",
+                    item.get("name") or "",
+                    (item.get("family") or "").replace("_", " ").title(),
+                    (item.get("pricing_model") or "").replace("_", " ").title(),
+                    (item.get("status") or "").title()
+                ]
+                for col, value in enumerate(values):
+                    table.setItem(row, col, QTableWidgetItem(str(value)))
+            table.blockSignals(False)
+            tail = " First 100 shown; refine search." if data.get("more") else ""
+            self.crm_catalog_notice.setText(
+                "{} commercial fiche(s).{} Prices are operator entered; "
+                "nothing is sold or sent automatically.".format(len(items), tail)
+            )
+
+        self.bridge.call("crm-service-catalog-list", query, callback=received)
+
+    def service_catalog_selected(self):
+        row = self.crm_catalog_table.currentRow()
+        if not 0 <= row < len(self.crm_catalog_items):
+            self.crm_catalog_edit.setEnabled(False)
+            self.crm_catalog_details.clear()
+            return
+        selected = self.crm_catalog_items[row]
+        sid = selected["id"]
+        self.crm_catalog_edit.setEnabled(True)
+        self.crm_catalog_details.setPlainText("Loading fiche and audit history…")
+
+        def received(data, error):
+            row = self.crm_catalog_table.currentRow()
+            if (not 0 <= row < len(self.crm_catalog_items)
+                    or self.crm_catalog_items[row].get("id") != sid):
+                return
+            if error or not data or not data.get("available"):
+                self.crm_catalog_details.setPlainText(
+                    error or "Could not load service detail."
+                )
+                return
+            item = data["service"]
+            fee = "Custom quote required (no fixed price)"
+            if item.get("price_minor") is not None:
+                fee = "{} {}{}".format(
+                    item.get("currency") or "",
+                    self._quote_format_minor(int(item["price_minor"])),
+                    " / " + str(item["billing_period"])
+                    if item.get("billing_period") else ""
+                )
+            detail = [
+                "{} · Revision {} · {}".format(
+                    item.get("name"), item.get("revision"), item.get("status")
+                ),
+                "Service code: " + str(item.get("service_code") or ""),
+                "Category: " + str(item.get("family") or ""),
+                "Pricing: {} — {}".format(item.get("pricing_model"), fee),
+                "Currency: {} · Tax treatment not determined".format(
+                    item.get("currency") or ""
+                ),
+                "",
+                "DESCRIPTION",
+                item.get("summary") or "",
+                "",
+                "INCLUSIONS / SCOPE",
+                item.get("inclusions") or "",
+                "",
+                "EXCLUSIONS",
+                item.get("exclusions") or "",
+                "",
+                "DELIVERABLES",
+                item.get("deliverables") or "",
+                "",
+                "CLIENT PREREQUISITES",
+                item.get("prerequisites") or "",
+                "",
+                "TECHNICAL NOTES — not a test or verified control mapping",
+                item.get("technical_notes") or "Not documented",
+                "",
+                "LATEST HUMAN RECORD NOTE",
+                item.get("review_note") or "",
+                "",
+                "IMMUTABLE VERSIONS",
+            ]
+            for version in data.get("history") or []:
+                price = version.get("price_minor")
+                detail.append(
+                    "R{} — {} — {} {} — {} — {}".format(
+                        version.get("revision"),
+                        version.get("status"),
+                        item.get("currency") or "",
+                        "not priced" if price is None else
+                        self._quote_format_minor(int(price)),
+                        version.get("recorded_by") or "",
+                        display_date(version.get("recorded_at"))
+                    )
+                )
+            if data.get("more"):
+                detail.append("Only 20 latest versions shown.")
+            self.crm_catalog_details.setPlainText("\n".join(detail))
+
+        self.bridge.call("crm-service-catalog-read", sid, callback=received)
+
+    def edit_selected_catalog_service(self):
+        row = self.crm_catalog_table.currentRow()
+        if 0 <= row < len(self.crm_catalog_items):
+            self.open_catalog_service_form(dict(self.crm_catalog_items[row]))
+
+    def open_catalog_service_form(self, existing):
+        if self.crm_catalog_form and self.crm_catalog_form.isVisible():
+            self.crm_catalog_form.raise_()
+            return
+        dialog = QDialog(self.crm_catalog_dialog or self)
+        dialog.setWindowTitle(
+            "ENKYRON · Edit service fiche" if existing
+            else "ENKYRON · New service fiche (DRAFT)"
+        )
+        dialog.resize(790, 650)
+        dialog.setMinimumSize(600, 470)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title(
+            "EDIT CATALOG FICHE" if existing else "NEW COMMERCIAL FICHE"
+        ))
+        note = QLabel(
+            "This is commercial metadata, not technical assurance. "
+            "Available means you explicitly permit future manual quote selection. "
+            "No VAT is calculated. Do not invent prices or delivery capabilities."
+        )
+        note.setWordWrap(True)
+        note.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(note)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        form = QFormLayout(body)
+        fields = {}
+        for key, title, maxlength in (
+            ("service_code", "Service code *", 48),
+            ("name", "Service name *", 160)
+        ):
+            widget = QLineEdit()
+            widget.setMaxLength(maxlength)
+            widget.setText(str((existing or {}).get(key) or ""))
+            form.addRow(title, widget)
+            fields[key] = widget
+        family = QComboBox()
+        for label, key in (
+            ("Agent assessment", "agent_assessment"),
+            ("MCP / APIs", "mcp_api"),
+            ("Technical security testing", "security_testing"),
+            ("Remediation and retest", "remediation_retest"),
+            ("Advisory", "advisory"),
+            ("Continuous services", "continuous"),
+            ("Other", "other")
+        ):
+            family.addItem(label, key)
+        family.setCurrentIndex(max(0, family.findData(
+            (existing or {}).get("family") or "agent_assessment"
+        )))
+        form.addRow("Service family", family)
+        fields["family"] = family
+        for key, title, limit in (
+            ("summary", "What this service does *", 1200),
+            ("inclusions", "Scope / inclusions *", 3000),
+            ("exclusions", "Exclusions *", 3000),
+            ("deliverables", "What the client receives *", 3000),
+            ("prerequisites", "Client prerequisites / authorisation *", 3000),
+            ("technical_notes", "Optional ARL controls / tools notes", 3000),
+            ("review_note", "Human change rationale *", 1200)
+        ):
+            widget = QPlainTextEdit()
+            widget.setMaximumHeight(95)
+            widget.setPlaceholderText(
+                "At least 20 characters when provided. "
+                "Describe the real bounded scope; no invented claims."
+            )
+            widget.setPlainText(str((existing or {}).get(key) or ""))
+            form.addRow(title, widget)
+            fields[key] = widget
+        model = QComboBox()
+        for label, key in (
+            ("Fixed price (bounded scope)", "fixed"),
+            ("Custom quote / price after scoping", "custom_quote"),
+            ("Recurring base fee", "recurring")
+        ):
+            model.addItem(label, key)
+        model.setCurrentIndex(max(0, model.findData(
+            (existing or {}).get("pricing_model") or "custom_quote"
+        )))
+        form.addRow("Pricing mode", model)
+        fields["pricing_model"] = model
+        currency = QComboBox()
+        for code in ("GBP", "EUR", "USD"):
+            currency.addItem(code, code)
+        currency.setCurrentIndex(max(0, currency.findData(
+            (existing or {}).get("currency") or "GBP"
+        )))
+        form.addRow("Currency", currency)
+        fields["currency"] = currency
+        price = QLineEdit()
+        price.setMaxLength(10)
+        price.setPlaceholderText("e.g. 750.00 (leave blank if not yet agreed)")
+        if existing and existing.get("price_minor") is not None:
+            price.setText(self._quote_format_minor(int(existing["price_minor"])))
+        form.addRow("Base fee (tax undetermined)", price)
+        fields["price_minor"] = price
+        period = QComboBox()
+        period.addItem("Not recurring", None)
+        for key in ("monthly", "quarterly", "yearly"):
+            period.addItem(key.title(), key)
+        period.setCurrentIndex(max(0, period.findData(
+            (existing or {}).get("billing_period")
+        )))
+        form.addRow("Billing interval", period)
+        fields["billing_period"] = period
+        status = QComboBox()
+        for label, key in (
+            ("Draft — not selectable", "draft"),
+            ("Available — operator confirmed", "available"),
+            ("Retired — historical only", "retired")
+        ):
+            status.addItem(label, key)
+        status.setCurrentIndex(max(0, status.findData(
+            (existing or {}).get("status") or "draft"
+        )))
+        form.addRow("Commercial status", status)
+        fields["status"] = status
+
+        def mode_changed():
+            pricing = model.currentData()
+            price.setEnabled(pricing != "custom_quote")
+            period.setEnabled(pricing == "recurring")
+            if pricing == "custom_quote":
+                price.clear()
+                period.setCurrentIndex(0)
+            elif pricing == "fixed":
+                period.setCurrentIndex(0)
+
+        model.currentIndexChanged.connect(lambda _index: mode_changed())
+        mode_changed()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        confirm = QCheckBox(
+            "I confirm these are human-entered commercial claims and prices."
+        )
+        footer.addWidget(confirm)
+        footer.addStretch()
+        close = QPushButton("Cancel")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        save = QPushButton("Save fiche revision" if existing else "Create fiche")
+        save.setObjectName("primary")
+        footer.addWidget(save)
+        layout.addLayout(footer)
+        self.crm_catalog_form = dialog
+        self.crm_catalog_form_context = {
+            "existing": existing, "fields": fields,
+            "confirm": confirm, "save": save
+        }
+        save.clicked.connect(self.save_catalog_service)
+        dialog.open()
+
+    def save_catalog_service(self):
+        ctx = self.crm_catalog_form_context
+        dialog = self.crm_catalog_form
+        if not ctx or not dialog or not dialog.isVisible():
+            return
+        fields = ctx["fields"]
+        content = {}
+        for key, widget in fields.items():
+            if isinstance(widget, QComboBox):
+                content[key] = widget.currentData()
+            elif isinstance(widget, QPlainTextEdit):
+                content[key] = widget.toPlainText().strip()
+            else:
+                content[key] = widget.text().strip()
+        if not ctx["confirm"].isChecked():
+            QMessageBox.warning(
+                dialog, "Operator confirmation required",
+                "Confirm that the service fiche is an operator-entered commercial offer."
+            )
+            return
+        price_str = content.get("price_minor") or ""
+        pricing = content["pricing_model"]
+        if pricing == "custom_quote":
+            content["price_minor"] = None
+            content["billing_period"] = None
+        else:
+            if price_str:
+                parsed = self._quote_parse_minor(price_str)
+                if parsed is None or parsed <= 0:
+                    QMessageBox.warning(
+                        dialog, "Invalid fee",
+                        "Use a positive base fee with no more than two decimals."
+                    )
+                    return
+                content["price_minor"] = parsed
+            else:
+                content["price_minor"] = None
+            if pricing == "fixed":
+                content["billing_period"] = None
+        if content["status"] == "available" and pricing != "custom_quote" \
+                and content["price_minor"] is None:
+            QMessageBox.warning(
+                dialog, "Unpriced active service",
+                "Enter the agreed base fee or retain Draft status."
+            )
+            return
+        if not re.fullmatch(r"[A-Z][A-Z0-9_-]{2,47}",
+                            content.get("service_code") or ""):
+            QMessageBox.warning(
+                dialog, "Service code",
+                "Use uppercase letters, digits, hyphens or underscores (3–48)."
+            )
+            return
+        required = (
+            ("name", 5), ("summary", 20), ("inclusions", 20),
+            ("exclusions", 20), ("deliverables", 20),
+            ("prerequisites", 20), ("review_note", 20)
+        )
+        if any(len(content.get(key) or "") < minimum for key, minimum in required):
+            QMessageBox.warning(
+                dialog, "Incomplete fiche",
+                "Enter the service name and detailed descriptions, exclusions, "
+                "deliverables, prerequisites and human rationale."
+            )
+            return
+        if content.get("technical_notes") == "":
+            content["technical_notes"] = None
+        existing = ctx["existing"]
+        if existing:
+            content["id"] = existing["id"]
+            content["expected_revision"] = existing["revision"]
+        content["confirmed"] = True
+        ctx["save"].setEnabled(False)
+        command = "crm-service-catalog-update" if existing \
+            else "crm-service-catalog-create"
+
+        def received(data, error):
+            if error or not data or not data.get("id"):
+                ctx["save"].setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Service not saved",
+                    error or "Could not record the catalogue fiche."
+                )
+                return
+            dialog.accept()
+            self.crm_catalog_form = None
+            self.crm_catalog_form_context = None
+            self.reload_service_catalog()
+
+        self.bridge.call(command, payload=content, callback=received)
+
 
     def open_selected_quote_lines(self):
         row = self.crm_proposal_table.currentRow()
