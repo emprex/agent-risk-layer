@@ -28,11 +28,11 @@ test('read-only scope and accurate persisted line reconciliation',async()=>{
   const db={query:async(sql,params)=>{
     calls.push({sql,params});
     return {rows:[{
-      id,revision:2,amount_minor:'350099',currency:'GBP',
+      id,revision:2,amount_minor:'350099',currency:'GBP',title:'Synthetic consulting proposal',
       description:'AI tool inventory and scoping',
       quantity:2,unit_price_minor:'125050',line_total_minor:'250100',position:1
     },{
-      id,revision:2,amount_minor:'350099',currency:'GBP',
+      id,revision:2,amount_minor:'350099',currency:'GBP',title:'Synthetic consulting proposal',
       description:'Human-led evidence review',
       quantity:1,unit_price_minor:'99999',line_total_minor:'99999',position:2
     }]};
@@ -41,6 +41,7 @@ test('read-only scope and accurate persisted line reconciliation',async()=>{
   assert.equal(data.uses_lines,true);
   assert.equal(data.lines.length,2);
   assert.equal(data.amount_minor,350099);
+  assert.equal(data.title,'Synthetic consulting proposal');
   assert.deepEqual(calls[0].params,['local:ci-owner',id]);
   assert.doesNotMatch(calls[0].sql,/\b(?:INSERT|UPDATE|DELETE)\b/i);
   await assert.rejects(()=>readProposalLines({
@@ -96,4 +97,17 @@ test('stale versions and foreign workspace reject before any writes',async()=>{
     assert.equal(statements.at(-1),'ROLLBACK');
     assert.ok(!statements.some(s=>s.startsWith('INSERT')||s.startsWith('DELETE')));
   }
+});
+
+test('unitemized draft exposes its saved title and exact fee for safe editable prefill',async()=>{
+  const source={query:async()=>({rows:[{
+    id,revision:1,title:'AI Agent Security Scoping Review — DRAFT',
+    amount_minor:'75000',currency:'GBP',position:null,
+    description:null,quantity:null,unit_price_minor:null,line_total_minor:null
+  }]})};
+  const r=await readProposalLines(source,id,'ci-owner');
+  assert.equal(r.uses_lines,false);
+  assert.equal(r.title,'AI Agent Security Scoping Review — DRAFT');
+  assert.equal(r.amount_minor,75000);
+  assert.deepEqual(r.lines,[]);
 });

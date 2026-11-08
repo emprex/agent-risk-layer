@@ -59,7 +59,7 @@ export async function readProposalLines(pool,id,actor){
     const total=lines.reduce((x,l)=>x+l.line_total_minor,0);
     if(lines.length>25||lines.length&&total!==Number(first.amount_minor))
       throw new Error('CRM proposal total does not match its saved lines');
-    return {available:true,id,revision:first.revision,
+    return {available:true,id,revision:first.revision,title:first.title,
       currency:first.currency,amount_minor:Number(first.amount_minor),
       lines,uses_lines:lines.length>0};
   }catch(error){

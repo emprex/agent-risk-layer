@@ -204,3 +204,19 @@ remains in the commercial opportunity for human review.
 CI uses disposable PostgreSQL and Qt tests. A new migration script enforces
 checksums, fails on historical drift and backs up `arl_local` before `--apply`.
 Local Debian acceptance must be performed separately on the same ticket.
+
+## Proposal line-item prefill (2026-11-08, development)
+
+The Debian E2E synthetic quote for `ARL E2E Test 0711` was priced at GBP
+750.00 and subsequently itemized by the operator; the screenshot confirms
+proposal revision 2. The line editor should not require retyping information
+already stored in an unitemized draft. It now proposes **one editable line**
+using the proposal's actual title, quantity 1 and exactly its stored
+minor-unit fee. The `crm-proposal-lines` read-only response exposes the
+saved title; existing persisted lines are loaded unchanged, with no duplicate
+or automatic repricing. **Opening the editor never writes to PostgreSQL**.
+Saving still requires operator action, creates an audited new proposal
+revision, and enforces exact totals and optimistic locking. No VAT, legal
+acceptance, electronic communication or assessment work is inferred.
+No schema migration or changes to existing Debian quotes. Exact-head CI
+and Debian visual acceptance remain separate gates.

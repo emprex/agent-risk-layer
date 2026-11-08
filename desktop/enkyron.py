@@ -6485,9 +6485,10 @@ class EnkyronWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title("DETAILED PROPOSAL · INTERNAL DRAFT"))
         note = QLabel(
-            "Enter each service, whole-number quantity and unit fee. "
-            "ENKYRON calculates the total precisely. Taxes and terms are not "
-            "calculated; nothing is sent or issued."
+            "When a proposal has no detailed lines, ENKYRON pre-fills one "
+            "editable line from its saved title and fee (quantity 1). "
+            "Review and save it, or replace it with your own breakdown. "
+            "Taxes and terms are not calculated; nothing is sent or issued."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -6539,12 +6540,25 @@ class EnkyronWindow(QMainWindow):
         }
         self.crm_quote_dialog = dialog
         self.crm_quote_table.blockSignals(True)
-        for line in quote.get("lines", []):
-            self.add_quote_line(
-                line.get("description") or "",
-                str(line.get("quantity") or 1),
-                self._quote_format_minor(int(line["unit_price_minor"]))
-            )
+        existing_lines = quote.get("lines") or []
+        if existing_lines:
+            # Never overwrite or duplicate a stored commercial breakdown.
+            for line in existing_lines:
+                self.add_quote_line(
+                    line.get("description") or "",
+                    str(line.get("quantity") or 1),
+                    self._quote_format_minor(int(line["unit_price_minor"]))
+                )
+        elif not quote.get("uses_lines"):
+            # Only a local editable suggestion. No DB write until Save is
+            # explicitly clicked; both title and amount are from this draft.
+            title = quote.get("title")
+            amount = quote.get("amount_minor")
+            if (isinstance(title, str) and 5 <= len(title.strip()) <= 500
+                    and isinstance(amount, int) and 1 <= amount <= 999999999):
+                self.add_quote_line(
+                    title.strip(), "1", self._quote_format_minor(amount)
+                )
         self.crm_quote_table.blockSignals(False)
         self.crm_quote_table.itemChanged.connect(self.recalculate_quote_lines)
         self.recalculate_quote_lines()

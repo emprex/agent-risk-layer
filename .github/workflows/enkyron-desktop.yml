@@ -1893,12 +1893,22 @@ jobs:
           assert calls[-1][1] == "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee"
           calls[-1][3]({
               "available": True, "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-              "revision": 2, "currency": "GBP", "amount_minor": 130075,
+              "revision": 2, "title": "Synthetic ARL proposal",
+              "currency": "GBP", "amount_minor": 130075,
               "uses_lines": False, "lines": []
           }, None)
           assert window.crm_quote_dialog.isVisible()
-          assert window.crm_quote_table.rowCount() == 0
-          assert not window.crm_quote_save.isEnabled()
+          assert window.crm_quote_table.rowCount() == 1
+          assert window.crm_quote_table.item(0, 0).text() == "Synthetic ARL proposal"
+          assert window.crm_quote_table.item(0, 1).text() == "1"
+          assert window.crm_quote_table.item(0, 2).text() == "1300.75"
+          assert window.crm_quote_table.item(0, 3).text() == "1300.75"
+          assert "1300.75" in window.crm_quote_total.text()
+          assert window.crm_quote_save.isEnabled()
+          # The suggested line is editable and can be replaced with a deliberate
+          # multi-line operator breakdown; it has NOT been persisted on open.
+          window.crm_quote_table.selectRow(0)
+          window.remove_quote_line()
           window.add_quote_line("Bounded manual tool review", "2", "125.50")
           window.add_quote_line("Report and human validation", "1", "50.25")
           assert window.crm_quote_table.rowCount() == 2
@@ -1911,6 +1921,26 @@ jobs:
           assert calls[-1][2]["lines"][0]["quantity"] == 2
           assert calls[-1][2]["lines"][0]["unit_price_minor"] == 12550
           assert calls[-1][2]["lines"][1]["unit_price_minor"] == 5025
+          window.crm_quote_dialog.reject()
+
+          # Opening a previously itemized proposal must retain the saved lines,
+          # and must not invent an additional fee line.
+          window.show_quote_lines_dialog({
+              "available": True, "id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "revision": 3, "title": "Synthetic ARL proposal",
+              "currency": "GBP", "amount_minor": 30125,
+              "uses_lines": True, "lines": [
+                  {"description": "Bounded manual tool review",
+                   "quantity": 2, "unit_price_minor": 12550},
+                  {"description": "Report and human validation",
+                   "quantity": 1, "unit_price_minor": 5025}
+              ]
+          })
+          assert window.crm_quote_dialog.isVisible()
+          assert window.crm_quote_table.rowCount() == 2
+          assert window.crm_quote_table.item(0, 0).text() == "Bounded manual tool review"
+          assert window.crm_quote_table.item(1, 0).text() == "Report and human validation"
+          assert "301.25" in window.crm_quote_total.text()
           window.crm_quote_dialog.reject()
 
           window.crm_tabs.setCurrentIndex(4)
