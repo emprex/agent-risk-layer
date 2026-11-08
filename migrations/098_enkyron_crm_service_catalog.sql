@@ -80,7 +80,7 @@ ALTER TABLE enkyron_crm_proposal_lines
  ADD COLUMN source_catalog_revision INTEGER,
  ADD CONSTRAINT enkyron_quote_line_catalog_pair CHECK(
    (source_catalog_id IS NULL AND source_catalog_revision IS NULL) OR
-   (source_catalog_id IS NOT NULL AND source_catalog_revision>=1)),
+   (source_catalog_id IS NOT NULL AND source_catalog_revision IS NOT NULL AND source_catalog_revision>=1)),
  ADD CONSTRAINT enkyron_quote_line_catalog_fk
  FOREIGN KEY(workspace_key,source_catalog_id,source_catalog_revision)
  REFERENCES enkyron_crm_service_catalog_versions(workspace_key,service_id,revision)
@@ -90,7 +90,7 @@ ALTER TABLE enkyron_crm_proposal_line_versions
  ADD COLUMN source_catalog_revision INTEGER,
  ADD CONSTRAINT enkyron_quote_version_catalog_pair CHECK(
    (source_catalog_id IS NULL AND source_catalog_revision IS NULL) OR
-   (source_catalog_id IS NOT NULL AND source_catalog_revision>=1)),
+   (source_catalog_id IS NOT NULL AND source_catalog_revision IS NOT NULL AND source_catalog_revision>=1)),
  ADD CONSTRAINT enkyron_quote_version_catalog_fk
  FOREIGN KEY(workspace_key,source_catalog_id,source_catalog_revision)
  REFERENCES enkyron_crm_service_catalog_versions(workspace_key,service_id,revision)
