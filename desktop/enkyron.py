@@ -260,6 +260,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_context = None
         self.crm_invoice_prepare_ready = False
         self.crm_invoice_prepare_prospect_id = None
+        self.crm_invoice_prepare_company_id = None
         self.crm_invoice_prepare_steps = []
         self.crm_invoice_detail_dialog = None
         self.crm_invoice_issue_dialog = None
@@ -5604,6 +5605,7 @@ class EnkyronWindow(QMainWindow):
         body_l.addWidget(fee)
         self.crm_invoice_prepare_ready = bool(data.get("can_prepare"))
         self.crm_invoice_prepare_prospect_id = data.get("prospect_id")
+        self.crm_invoice_prepare_company_id = data.get("company_id")
         self.crm_invoice_prepare_steps = list(data.get("steps") or [])
         if self.crm_invoice_prepare_ready:
             gate_text = (
@@ -5734,6 +5736,7 @@ class EnkyronWindow(QMainWindow):
         routes = {
             "issuer": self.open_issuing_company_profile,
             "research": self.open_proposal_prospect_association,
+            "company": self.open_proposal_company_ticket_association,
             "buyer": self.open_proposal_buyer_review,
             "terms": self.open_proposal_commercial_terms,
             "tax": self.open_proposal_tax_review,
@@ -5746,6 +5749,21 @@ class EnkyronWindow(QMainWindow):
             return
         dialog.reject()
         action()
+
+    def open_proposal_company_ticket_association(self):
+        """Show the recorded CRM company; never infer a link by client name."""
+        company_id = self.crm_invoice_prepare_company_id
+        if not company_id:
+            QMessageBox.warning(
+                self, "CRM company origin unavailable",
+                "This invoice preparation has no reviewed company identifier."
+            )
+            return
+        self.crm_pending_company_id = company_id
+        self.crm_tabs.setCurrentIndex(0)
+        self.crm_company_detail_tabs.setCurrentIndex(1)
+        self.crm_company_search.setText("")
+        self.load_companies()
 
     def open_proposal_prospect_association(self):
         """Open the exact prospect, not a search or guessed company name."""

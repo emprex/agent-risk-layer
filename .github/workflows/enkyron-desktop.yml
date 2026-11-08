@@ -1501,6 +1501,43 @@ jobs:
           window.crm_review_dialog.reject()
           assert window.crm_invoice_link_return_proposal_id is None
           assert calls[-1][0] == "crm-prospect-review"
+          # Direct CRM company-ticket origin requires no legacy research prospect.
+          window.open_proposal_invoice_preparation()
+          assert calls[-1][0] == "crm-invoice-prepare"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "proposal_title": "Synthetic CRM Company Service",
+              "prospect_id": None,
+              "company_id": "11111111-2222-4333-8444-555555555555",
+              "source_ticket_id": "33333333-4444-4555-8666-777777777777",
+              "origin_kind": "reviewed_company_ticket",
+              "currency": "GBP", "proposed_fee_minor": 75000,
+              "worksheet_id": None, "can_prepare": False,
+              "blockers": ["Reviewed company-ticket association currently revoked"],
+              "issuer": None, "buyer": None,
+              "steps": [
+                  {"key": "issuer", "action": "issuer",
+                   "label": "Issuing company profile", "ready": True},
+                  {"key": "link", "action": "company",
+                   "label": "Reviewed company-ticket association", "ready": False,
+                   "detail": "Reopen original company and ticket"},
+                  {"key": "buyer", "action": "buyer",
+                   "label": "Buyer identity review", "ready": False}
+              ]
+          }, None)
+          assert window.crm_invoice_prepare_dialog.isVisible()
+          assert window.crm_invoice_prepare_prospect_id is None
+          assert window.crm_invoice_prepare_company_id == "11111111-2222-4333-8444-555555555555"
+          assert "Reviewed company-ticket association" in window.crm_invoice_next_button.text()
+          assert not window.crm_invoice_prepare_save.isEnabled()
+          with patch.object(window, "load_companies") as company_loader:
+              window.crm_invoice_next_button.click()
+              company_loader.assert_called_once_with()
+          assert window.crm_pending_company_id == "11111111-2222-4333-8444-555555555555"
+          assert window.crm_tabs.currentIndex() == 0
+          assert window.crm_company_detail_tabs.currentIndex() == 1
+          assert not window.crm_invoice_prepare_dialog.isVisible()
           # A completed link allows the checklist to proceed to buyer review.
           window.open_proposal_invoice_preparation()
           assert calls[-1][0] == "crm-invoice-prepare"

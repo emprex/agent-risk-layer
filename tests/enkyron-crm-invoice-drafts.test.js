@@ -20,7 +20,8 @@ test('requires explicit draft-only confirmation, no tax or invoice number',()=>{
  }
 });
 function mock({withWorksheet=true,stale=false,existing=false,
-  malformed=false,otherWorkspace=false,missingStep=null,decision='internal_draft_approved',expiredTerms=false}={}){
+  malformed=false,otherWorkspace=false,missingStep=null,
+  origin='research',decision='internal_draft_approved',expiredTerms=false}={}){
  const calls=[];let released=false;
  const proposal={id,revision:stale?3:2,title:'Synthetic draft service',
    currency:'GBP',amount_minor:'50000'};
@@ -35,7 +36,10 @@ function mock({withWorksheet=true,stale=false,existing=false,
  const q=async(sql,params)=>{
   calls.push({sql,params});
   if(sql.startsWith('SELECT id,title,revision'))return {rows:otherWorkspace?[]:[proposal]};
-  if(sql.startsWith('SELECT o.prospect_id'))return {rows:[{prospect_id:'ARL-P-000001'}]};
+  if(sql.startsWith('SELECT o.prospect_id,o.company_id,o.source_ticket_id'))
+    return {rows:[origin==='company'
+      ?{prospect_id:null,company_id:id,source_ticket_id:worksheetId}
+      :{prospect_id:'ARL-P-000001',company_id:null,source_ticket_id:null}]};
   if(sql.startsWith('SELECT\n  EXISTS'))return {rows:[{
     issuer_profile:missingStep!=='issuer',company_link:missingStep!=='link',
     buyer_review:missingStep!=='buyer',terms_recorded:missingStep!=='terms',
@@ -59,6 +63,8 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  assert.equal(r.can_prepare,false);
  assert.equal(r.worksheet_id,null);
  assert.equal(r.prospect_id,'ARL-P-000001');
+ assert.equal(r.company_id,null);
+ assert.equal(r.source_ticket_id,null);
  assert.match(r.blockers.join(' '),/worksheet/);
  assert.deepEqual(r.steps.map(s=>s.key),
    ['issuer','link','buyer','terms','tax','internal','worksheet']);
@@ -76,6 +82,7 @@ test('read preparation is consistent, scoped and blocks unapproved worksheets',a
  assert.equal(ready.current_draft_id,null);
  assert.equal(ready.steps.length,7);
  assert.ok(ready.steps.every(step=>step.ready));
+ assert.equal(ready.steps.find(step=>step.key==='link').action,'research');
  assert.ok(ready.steps.every(step=>!('company_utr' in step)));
  const c=mock({existing:true});
  assert.equal((await readInvoicePreparation(c.pool,id,'local-operator')).can_prepare,false);
@@ -133,4 +140,34 @@ test('invoice draft list and read do not introduce computed VAT',async()=>{
  const d=await readInvoiceDraft(pool,id,'local-operator');
  assert.equal(d.draft.invoice_total_minor,null);
  assert.equal(d.draft.invoice_number,null);
+});
+
+test('company-origin invoice preflight accepts only the reviewed company-ticket path',async()=>{
+  const complete=mock({origin:'company'});
+  const result=await readInvoicePreparation(complete.pool,id,'local-operator');
+  assert.equal(result.can_prepare,true);
+  assert.equal(result.prospect_id,null);
+  assert.equal(result.company_id,id);
+  assert.equal(result.source_ticket_id,worksheetId);
+  assert.equal(result.origin_kind,'reviewed_company_ticket');
+  assert.equal(result.steps.find(x=>x.key==='link').action,'company');
+  assert.equal(result.steps.find(x=>x.key==='link').ready,true);
+  const checks=complete.calls.find(x=>x.sql.startsWith('SELECT\n  EXISTS'));
+  assert.match(checks.sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(checks.sql,/e.workspace_key=d.workspace_key/);
+  assert.match(checks.sql,/e.ticket_id=o.source_ticket_id/);
+  assert.match(checks.sql,/enkyron_crm_prospect_links/);
+  const recorded=mock({origin:'company'});
+  const saved=await recordInvoiceDraft(recorded.pool,input,'local-operator',{uuid:()=>id});
+  assert.equal(saved.status,'unissued_tax_review_required');
+  const revoked=mock({origin:'company',missingStep:'link'});
+  const blocked=await readInvoicePreparation(revoked.pool,id,'local-operator');
+  assert.equal(blocked.can_prepare,false);
+  assert.equal(blocked.steps.find(x=>x.key==='link').action,'company');
+  assert.match(blocked.steps.find(x=>x.key==='link').detail,/still be effective/);
+  assert.match(blocked.blockers.join(' '),/Reviewed company-ticket association/);
+  await assert.rejects(()=>recordInvoiceDraft(
+    revoked.pool,input,'local-operator'
+  ),/incomplete current-revision prerequisites/);
+  assert.ok(!revoked.calls.some(x=>x.sql.startsWith('INSERT')));
 });

@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
-import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
+import {createOpportunity,createCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
+import {createDeskTicket} from '../desktop/enkyron-ticket-intake.mjs';
+import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {revokeTicketAssociation} from '../desktop/enkyron-crm-ticket-corrections.mjs';
 import {createProposalDraft,updateProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {recordCompanyProfile} from '../desktop/enkyron-company-profile.mjs';
 import {recordBuyerReview} from '../desktop/enkyron-crm-buyer-review.mjs';
@@ -240,5 +243,146 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     assert.equal(frozen.proposal_revision,1);
     assert.equal(await count('arl_workbench_tickets'),before.tickets);
     assert.equal(await count('sales_messages'),before.messages);
+  }finally{await db.end();}
+});
+
+test('direct CRM company origin: same scoped ticket and R2 worksheet produce only an UNISSUED invoice draft', {
+  skip:!uri&&'Isolated CI PostgreSQL only',timeout:60000
+},async()=>{
+  const db=new pg.Pool({connectionString:isolated(),max:3});
+  const actor='ci-invoice-direct-'+randomUUID().slice(0,8);
+  const name='Synthetic Invoice Company '+randomUUID().slice(0,8);
+  try{
+    await recordCompanyProfile(db,{
+      expected_revision:0,confirmed:true,
+      legal_name:'Synthetic ARL Issuer Ltd',
+      trading_name:'Synthetic ARL',registration_number:'00000000',
+      company_utr:'0123456789',tax_office_number:'001',
+      incorporation_country:'GB',
+      registered_office:'10 Fictional Road, London EX1 1AB',
+      company_email:'billing@example.invalid',
+      vat_status:'unknown',default_currency:'GBP',
+      source_reference:'Synthetic issuer for isolated CI',
+      verification_notes:'No external legal or HMRC verification occurred.'
+    },actor);
+    const company=await createCompany(db,{name},actor);
+    const ticket=await createDeskTicket(db,{
+      source:'manual',client_name:name,title:'E2E synthetic customer ticket',
+      request_text:'Human-led scoping consultation; no real customer permission.'
+    },actor);
+    await linkTicketToCompany(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      ticket_client_name_at_review:name,
+      review_note:'Operator explicitly reviewed synthetic company and ticket origin.',
+      reviewed:true
+    },actor);
+    const opportunity=await createCompanyOpportunity(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      company_name_at_review:name,ticket_number_at_review:ticket.ticket_number,
+      next_action:'Draft a synthetic internal security consultation quote',
+      due_date:null,confirmed:true
+    },actor);
+    const proposal=await createProposalDraft(db,{
+      opportunity_id:opportunity.id,
+      title:'AI Agent Security Scoping Review — DRAFT',
+      scope_text:'Human-led documentary scoping only; no live testing or issue.',
+      currency:'GBP',amount_minor:75000
+    },actor);
+    const initial=await readInvoicePreparation(db,proposal.id,actor);
+    assert.equal(initial.prospect_id,null);
+    assert.equal(initial.company_id,company.id);
+    assert.equal(initial.source_ticket_id,ticket.id);
+    assert.equal(initial.origin_kind,'reviewed_company_ticket');
+    assert.equal(initial.can_prepare,false);
+    assert.equal(initial.steps.find(s=>s.key==='link').ready,true);
+    assert.equal(initial.steps.find(s=>s.key==='link').action,'company');
+    await assert.rejects(()=>readInvoicePreparation(
+      db,proposal.id,actor+'-unrelated'),/not found in local workspace/);
+    const other=await createCompany(db,{name:name+' unrelated'},actor);
+    await assert.rejects(()=>recordBuyerReview(db,{
+      proposal_id:proposal.id,company_id:other.id,expected_revision:1,
+      legal_name:'Synthetic unrelated',registered_address:'10 Imaginary Test Road',
+      source_reference:'Isolated CI data only',
+      review_note:'Wrong company deliberately selected for a negative test',
+      confirmed:true
+    },actor),/current reviewed CRM company association/);
+    await recordBuyerReview(db,{
+      proposal_id:proposal.id,company_id:company.id,expected_revision:1,
+      legal_name:'Synthetic Buyer — UNVERIFIED',
+      registered_address:'20 Fictional Avenue, United Kingdom (TEST ONLY)',
+      source_reference:'ENKYRON synthetic fixture, not a registry reference',
+      review_note:'Operator entered synthetic buyer details for internal E2E. No real identity verified.',
+      confirmed:true
+    },actor);
+    await recordCommercialTerms(db,{
+      proposal_id:proposal.id,expected_revision:1,confirmed:true,
+      valid_until:'2099-12-31',
+      payment_terms:'Synthetic terms only; no payment obligation or invoice issued.',
+      delivery_terms:'One-day consultation only after separate written agreement.',
+      exclusions:'No penetration tests, production access or completed assessment.',
+      assumptions:'No real customer, tax determination or permission to perform work.',
+      source_reference:'Synthetic terms for isolated E2E review'
+    },actor);
+    await recordTaxReview(db,{
+      proposal_id:proposal.id,expected_revision:1,confirmed:true,
+      buyer_type:'unknown',buyer_country:'',service_mode:'human_led_advisory',
+      business_evidence:'',location_evidence:'',
+      uk_vat_registration:'unknown',overseas_withholding:'not_checked',
+      review_notes:'All tax details unknown. No VAT treatment, rate or location evidenced.',
+      source_reference:'CI tax review for unknown synthetic buyer'
+    },actor);
+    const approval=await recordInternalDecision(db,{
+      proposal_id:proposal.id,expected_revision:1,confirmed:true,
+      decision:'internal_draft_approved',
+      review_note:'Internal synthetic content reviewed, not approval to send or invoice.'
+    },actor);
+    const worksheet=await recordBillingWorksheet(db,{
+      proposal_id:proposal.id,expected_revision:1,
+      approval_id:approval.id,confirmed:true,
+      preparation_note:'Synthetic prebilling only: neither VAT nor client agreement established.'
+    },actor);
+    const ready=await readInvoicePreparation(db,proposal.id,actor);
+    assert.equal(ready.can_prepare,true);
+    assert.equal(ready.worksheet_id,worksheet.id);
+    assert.equal(ready.company_id,company.id);
+    assert.equal(ready.source_ticket_id,ticket.id);
+    assert.equal(ready.prospect_id,null);
+    assert.equal(ready.buyer.legal_name,'Synthetic Buyer — UNVERIFIED');
+    assert.ok(ready.steps.every(s=>s.ready));
+    assert.equal(ready.proposed_fee_minor,75000);
+    const request={
+      proposal_id:proposal.id,worksheet_id:worksheet.id,expected_revision:1,
+      preparation_note:'Internal UNISSUED invoice draft only. No VAT or customer order.',
+      confirmed:true
+    };
+    const saved=await recordInvoiceDraft(db,request,actor);
+    assert.equal(saved.status,'unissued_tax_review_required');
+    const draft=(await readInvoiceDraft(db,saved.id,actor)).draft;
+    assert.equal(draft.currency,'GBP');
+    assert.equal(draft.proposed_fee_minor,'75000');
+    assert.equal(draft.buyer_legal_name,'Synthetic Buyer — UNVERIFIED');
+    assert.equal(draft.status,'unissued_tax_review_required');
+    assert.equal(draft.invoice_number,null);
+    assert.equal(draft.vat_amount_minor,null);
+    assert.equal(draft.invoice_total_minor,null);
+    assert.equal(draft.issued_at,null);
+    await assert.rejects(()=>recordInvoiceDraft(db,request,actor),/already recorded/);
+    await revokeTicketAssociation(db,{
+      company_id:company.id,ticket_id:ticket.id,expected_client_name:name,
+      review_note:'Revoked synthetic company-ticket link to verify source invalidation.',
+      confirmed:true
+    },actor);
+    const changed=await readInvoicePreparation(db,proposal.id,actor);
+    assert.equal(changed.steps.find(s=>s.key==='link').ready,false);
+    assert.equal(changed.can_prepare,false);
+    assert.equal(changed.current_draft_id,saved.id);
+    assert.equal((await readInvoiceDraft(db,saved.id,actor)).draft.invoice_number,null);
+    const original=(await db.query(
+      'SELECT status,linked_project_id,linked_assessment_id FROM arl_workbench_tickets WHERE id=$1',
+      [ticket.id]
+    )).rows[0];
+    assert.equal(original.status,'new');
+    assert.equal(original.linked_project_id,null);
+    assert.equal(original.linked_assessment_id,null);
   }finally{await db.end();}
 });

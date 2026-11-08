@@ -47,7 +47,9 @@ const WORKSHEET='SELECT id,proposal_revision,source_approval_id,issuer_profile_i
   +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3';
 // Provenance for the exact selected proposal. No name matching, prospect
 // creation, or buyer verification is performed in this read-only lookup.
-const PROSPECT_FOR_PROPOSAL='SELECT o.prospect_id FROM enkyron_crm_proposal_drafts d '
+const ORIGIN_FOR_PROPOSAL=
+  'SELECT o.prospect_id,o.company_id,o.source_ticket_id '
+  +'FROM enkyron_crm_proposal_drafts d '
   +'JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id '
   +'AND o.workspace_key=d.workspace_key '
   +'WHERE d.workspace_key=$1 AND d.id=$2';
@@ -65,9 +67,16 @@ const CHECKLIST=`SELECT
   EXISTS(SELECT 1 FROM enkyron_crm_proposal_drafts d
     JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id
       AND o.workspace_key=d.workspace_key
-    JOIN enkyron_crm_prospect_links l ON l.workspace_key=d.workspace_key
-      AND l.prospect_id=o.prospect_id
-    WHERE d.workspace_key=$1 AND d.id=$2) AS company_link,
+    WHERE d.workspace_key=$1 AND d.id=$2
+      AND (
+        EXISTS(SELECT 1 FROM enkyron_crm_prospect_links l
+          WHERE l.workspace_key=d.workspace_key AND l.prospect_id=o.prospect_id)
+        OR (o.company_id IS NOT NULL AND o.source_ticket_id IS NOT NULL
+          AND EXISTS(SELECT 1 FROM enkyron_crm_effective_ticket_links e
+            WHERE e.workspace_key=d.workspace_key
+              AND e.company_id=o.company_id
+              AND e.ticket_id=o.source_ticket_id))
+      )) AS company_link,
   EXISTS(SELECT 1 FROM enkyron_crm_proposal_buyer_reviews b
     WHERE b.workspace_key=$1 AND b.proposal_id=$2
       AND b.proposal_revision=$3) AS buyer_review,
@@ -83,15 +92,20 @@ const CHECKLIST=`SELECT
   (SELECT a.decision FROM enkyron_crm_proposal_internal_decisions a
     WHERE a.workspace_key=$1 AND a.proposal_id=$2
       AND a.proposal_revision=$3 LIMIT 1) AS internal_decision`;
-function readinessSteps(checks,worksheet,existing){
+function readinessSteps(checks,worksheet,existing,origin=null){
   const decision=checks?.internal_decision??null;
+  const direct=Boolean(origin?.company_id&&origin?.source_ticket_id);
   return [
     {key:'issuer',action:'issuer',label:'Issuing company profile',
       ready:checks?.issuer_profile===true,
       detail:'Enter the operator-issued legal profile; it remains unverified.'},
-    {key:'link',action:'research',label:'Associate prospect with a CRM company',
+    {key:'link',action:direct?'company':'research',
+      label:direct?'Reviewed company-ticket association'
+        :'Associate prospect with a CRM company',
       ready:checks?.company_link===true,
-      detail:'Explicit operator link required; similar names are not proof.'},
+      detail:direct
+        ?'Original CRM company-ticket link must still be effective. Review the ticket association in Companies & Contacts.'
+        :'Explicit operator link required; similar names are not proof.'},
     {key:'buyer',action:'buyer',label:'Buyer identity review',
       ready:checks?.buyer_review===true,
       detail:'Document the linked company for the current proposal revision.'},
@@ -144,10 +158,10 @@ export async function readInvoicePreparation(pool,proposalId,actor){
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const proposal=(await client.query(PROPOSAL,[person.key,id])).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
-    const prospect=(await client.query(
-      PROSPECT_FOR_PROPOSAL,[person.key,id])).rows[0];
-    if(!prospect?.prospect_id)
-      throw new Error('CRM selected proposal has no source research prospect');
+    const origin=(await client.query(
+      ORIGIN_FOR_PROPOSAL,[person.key,id])).rows[0];
+    if(!origin?.prospect_id&&!(origin?.company_id&&origin?.source_ticket_id))
+      throw new Error('CRM proposal has no recorded research or reviewed company-ticket origin');
     const checks=(await client.query(
       CHECKLIST,[person.key,id,proposal.revision])).rows[0];
     if(!checks)throw new Error('CRM invoice prerequisite status unavailable');
@@ -159,12 +173,15 @@ export async function readInvoicePreparation(pool,proposalId,actor){
       existing=(await client.query(EXISTING,[person.key,worksheet.id])).rows[0]??null;
     }
     const blocker=eligible(proposal,worksheet,issuer,buyer);
-    const steps=readinessSteps(checks,worksheet,existing);
+    const steps=readinessSteps(checks,worksheet,existing,origin);
     const incomplete=steps.filter(step=>!step.ready);
     await client.query('COMMIT');
     return {
       available:true,proposal_id:id,proposal_revision:proposal.revision,
-      prospect_id:prospect.prospect_id,
+      prospect_id:origin.prospect_id??null,
+      company_id:origin.company_id??null,
+      source_ticket_id:origin.source_ticket_id??null,
+      origin_kind:origin.company_id?'reviewed_company_ticket':'reviewed_research_prospect',
       proposal_title:proposal.title,currency:proposal.currency,
       proposed_fee_minor:amountMinor(proposal.amount_minor),
       worksheet_id:worksheet?.id??null,

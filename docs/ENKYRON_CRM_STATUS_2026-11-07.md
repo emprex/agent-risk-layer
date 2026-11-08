@@ -255,3 +255,29 @@ client permission, contract or sending is inferred. No new migration or
 local data edits. CI includes direct company-origin test with an unrelated
 company, foreign workspace, immutable history and reviewed link revocation.
 Local Debian acceptance is separate, using only synthetic buyer data.
+
+## E2E invoice draft preparation from company-origin opportunity (2026-11-08)
+
+The Debian operator reached the existing ARL E2E Test 0711 R2 proposal
+(GBP 750) and recorded an internal billing worksheet. The next action,
+Prepare invoice draft, failed with `CRM selected proposal has no source
+research prospect`. This was an obsolete path assumption: migration 094
+permits opportunities originating directly from a *reviewed CRM company and
+effective ticket link*, with no legacy `sales_prospects` record.
+
+The invoice-preparation read path now accepts either explicitly recorded
+opportunity origin. Its checklist requires a currently effective company-
+ticket association for direct CRM opportunities or the original reviewed
+research-prospect/company link for legacy opportunities. Both checks are
+scoped by workspace and exact originating IDs, not company-name similarity.
+Revocation makes a direct company-origin checklist incomplete; historical
+drafts and worksheet snapshots remain immutable. The UI routes a missing
+direct-company link to the recorded CRM company/tickets panel, not prospect
+research. Tests cover both origins, foreign-workspace blocking, revocation,
+one-draft-only, and exact issuer/buyer/amount snapshots.
+
+No migration or data rewrite is needed. The resulting record remains
+`unissued_tax_review_required` with no invoice number, VAT amount,
+amount due, issue date, email, payment or contractual acceptance.
+Exact-head CI is required before Debian sync; the existing R2 worksheet
+must be reused, not recreated.
