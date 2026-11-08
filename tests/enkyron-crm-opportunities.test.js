@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   OPPORTUNITY_STAGES,validateOpportunityCreate,validateOpportunityUpdate,
+  validateOpportunityProbability,
   listOpportunities,prospectOpportunity,createOpportunity,updateOpportunity
 } from '../desktop/enkyron-crm-opportunities.mjs';
 const id='11111111-2222-4333-8444-555555555555';
@@ -24,6 +25,14 @@ test('validates business stages, actual calendar dates and manual action',()=>{
     null,{},[]
   ]) assert.throws(()=>validateOpportunityCreate(invalid),/CRM/);
   assert.equal(validateOpportunityUpdate(edit).stage,'qualified');
+  assert.equal(validateOpportunityProbability(null),null);
+  assert.equal(validateOpportunityProbability(0),0);
+  assert.equal(validateOpportunityProbability(100),100);
+  assert.equal(validateOpportunityUpdate({...edit,probability_percent:35}).probability_percent,35);
+  assert.equal(Object.hasOwn(validateOpportunityUpdate(edit),'probability_percent'),false);
+  for(const v of [-1,101,34.5,'50',undefined,true,NaN,Infinity]){
+    assert.throws(()=>validateOpportunityProbability(v),/CRM/);
+  }
   for(const invalid of [
     {...edit,id:'nonsense'},{...edit,expected_version:0},
     {...edit,expected_version:'1'},{...edit,stage:'autoprospect'},
@@ -98,7 +107,8 @@ test('update checks expected version and audits old/new fields atomically',async
     if(sql.startsWith('UPDATE enkyron_crm_opportunities'))return {rows:[{id,version:2}]};
     return {rows:[]};
   },release:()=>{}};
-  const result=await updateOpportunity({connect:async()=>client},edit,'ci-operator',
+  const result=await updateOpportunity({connect:async()=>client},
+    {...edit,probability_percent:35},'ci-operator',
     {uuid:()=> 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
   assert.equal(result.version,2);
   assert.equal(result.stage,'qualified');
@@ -106,9 +116,12 @@ test('update checks expected version and audits old/new fields atomically',async
   const update=calls.find(x=>x.sql.startsWith('UPDATE enkyron_crm_opportunities'));
   assert.deepEqual(update.values.slice(0,2),['local:ci-operator',id]);
   assert.equal(update.values[5],1);
+  assert.equal(update.values[6],35);
   const event=calls.find(x=>x.sql.startsWith('INSERT INTO enkyron_crm_opportunity_events'));
   assert.equal(event.values[3],'research');
   assert.equal(event.values[4],'qualified');
+  assert.equal(event.values[10],null);
+  assert.equal(event.values[11],35);
   const actions=[];
   await assert.rejects(()=>updateOpportunity({
     connect:async()=>({
@@ -122,4 +135,26 @@ test('update checks expected version and audits old/new fields atomically',async
     })
   },edit,'ci-operator'),/changed since opening/);
   assert.equal(actions.at(-1),'ROLLBACK');
+});
+
+
+test('legacy update without explicit estimate preserves existing probability',async()=>{
+  const calls=[];
+  const db={connect:async()=>({
+    query:async(sql,params)=>{
+      calls.push({sql,params});
+      if(sql.startsWith('SELECT id,stage,next_action'))return {rows:[{
+        id,stage:'research',next_action:'Original action',due_date:null,
+        probability_percent:77,version:1
+      }]};
+      if(sql.startsWith('UPDATE enkyron_crm_opportunities'))return {rows:[{id,version:2}]};
+      return {rows:[]};
+    },release:()=>{}
+  })};
+  await updateOpportunity(db,{...edit,stage:'qualified'},'ci-operator',
+    {uuid:()=> 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
+  assert.equal(calls.find(x=>x.sql.startsWith('UPDATE')).params[6],77);
+  const event=calls.find(x=>x.sql.startsWith('INSERT'));
+  assert.equal(event.params[10],77);
+  assert.equal(event.params[11],77);
 });

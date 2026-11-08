@@ -76,9 +76,12 @@ test('E07 company-first: reviewed company-ticket -> opportunity -> internal prop
       .filter(x=>x.id===created.id).length,0);
     const qualified=await updateOpportunity(pool,{
       id:created.id,expected_version:1,stage:'qualified',
-      next_action:'Prepare scoped draft for human review',due_date:null
+      next_action:'Prepare scoped draft for human review',due_date:null,
+      probability_percent:40
     },actor);
     assert.equal(qualified.version,2);
+    assert.equal((await listOpportunities(pool,companyName,actor)).items
+      .find(x=>x.id===created.id).probability_percent,40);
     const quote=await createProposalDraft(pool,{
       opportunity_id:created.id,
       title:'Synthetic security consultation — draft only',
