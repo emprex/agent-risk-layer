@@ -18,6 +18,7 @@ import {readInvoiceIssueReview,recordInvoiceIssueReview}
   from '../desktop/enkyron-crm-invoice-issue-review.mjs';
 import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
 import {readQuoteEvidenceReview,recordQuoteEvidenceReview} from '../desktop/enkyron-crm-quote-evidence-review.mjs';
+import {readQuoteExternalReport,recordQuoteExternalReport} from '../desktop/enkyron-crm-quote-external-report.mjs';
 import {listInvoiceDrafts,readInvoiceDraft,readInvoicePreparation,recordInvoiceDraft}
   from '../desktop/enkyron-crm-invoice-drafts.mjs';
 
@@ -304,6 +305,20 @@ test('direct CRM company origin: same scoped ticket and R2 worksheet produce onl
       review_note:'Synthetic issuer, buyer and tax reference verification still missing.'
     },actor);
     assert.equal(reviewA.issue_authorised,false);
+    const blockedExternal=await readQuoteExternalReport(db,proposal.id,actor);
+    assert.equal(blockedExternal.can_record,false);
+    assert.equal(blockedExternal.issue_authorised,false);
+    await assert.rejects(()=>recordQuoteExternalReport(db,{
+      proposal_id:proposal.id,expected_revision:1,
+      expected_source_review_id:reviewA.id,
+      reported_reviewer_name:'Synthetic external reviewer',
+      report_reference:'CI-SOURCE-NOT-SUBMITTED',
+      report_date:'2026-11-08',
+      issuer_coverage:'not_addressed',buyer_coverage:'not_addressed',
+      tax_coverage:'not_addressed',report_outcome:'requires_changes',
+      review_note:'No submitted source is present; this write must be refused.',
+      confirmed:true
+    },actor),/requires latest submitted/);
     await assert.rejects(()=>recordQuoteEvidenceReview(db,{
       proposal_id:proposal.id,expected_revision:1,
       expected_previous_id:null,confirmed:true,review_state:'needs_changes',
@@ -322,6 +337,37 @@ test('direct CRM company origin: same scoped ticket and R2 worksheet produce onl
     const savedHistory=await readQuoteEvidenceReview(db,proposal.id,actor);
     assert.equal(savedHistory.latest.id,reviewB.id);
     assert.equal(savedHistory.history.length,2);
+    const pendingExternal=await readQuoteExternalReport(db,proposal.id,actor);
+    assert.equal(pendingExternal.can_record,true);
+    assert.equal(pendingExternal.current_source_review_id,reviewB.id);
+    const externalRequest={
+      proposal_id:proposal.id,expected_revision:1,
+      expected_source_review_id:reviewB.id,
+      reported_reviewer_name:'Synthetic External Adviser',
+      reported_reviewer_organisation:'Fictional Advisory Organisation',
+      report_reference:'E2E-FICTIONAL-REPORT-01',
+      report_date:'2026-11-08',
+      issuer_coverage:'issues_reported',buyer_coverage:'not_addressed',
+      tax_coverage:'covered_in_report',report_outcome:'requires_changes',
+      review_note:'Synthetic report metadata only; no independent authentication, tax finding or legal verification.',
+      confirmed:true
+    };
+    const external=await recordQuoteExternalReport(db,externalRequest,actor);
+    assert.equal(external.issue_authorised,false);
+    const receipt=await readQuoteExternalReport(db,proposal.id,actor);
+    assert.equal(receipt.can_record,false);
+    assert.equal(receipt.latest_for_source.id,external.id);
+    assert.equal(receipt.history.length,1);
+    await assert.rejects(()=>recordQuoteExternalReport(db,externalRequest,actor),
+      /already recorded/);
+    await assert.rejects(()=>readQuoteExternalReport(db,proposal.id,actor+'-other'),
+      /not found/);
+    await assert.rejects(()=>db.query(
+      'UPDATE enkyron_crm_quote_external_reports SET report_outcome=$1 WHERE id=$2',
+      ['report_received',external.id]),/immutable|may not|update|delete/i);
+    await assert.rejects(()=>db.query(
+      'DELETE FROM enkyron_crm_quote_external_reports WHERE id=$1',
+      [external.id]),/immutable|may not|update|delete/i);
     await assert.rejects(()=>readQuoteEvidenceReview(db,proposal.id,actor+'-other'),/not found/);
     await assert.rejects(()=>db.query(
       'UPDATE enkyron_crm_quote_evidence_reviews SET review_state=$1 WHERE id=$2',
