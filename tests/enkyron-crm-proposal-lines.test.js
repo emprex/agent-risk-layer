@@ -111,3 +111,56 @@ test('unitemized draft exposes its saved title and exact fee for safe editable p
   assert.equal(r.amount_minor,75000);
   assert.deepEqual(r.lines,[]);
 });
+
+
+test('catalog source requires a complete immutable version pointer',()=>{
+  const source='11111111-aaaa-4bbb-8ccc-222222222222';
+  const good={...req,lines:[{
+    description:'ARL-CI — Reviewed bounded agent assessment',
+    quantity:1,unit_price_minor:90000,
+    source_catalog_id:source,source_catalog_revision:2
+  }]};
+  const valid=validateProposalLines(good);
+  assert.equal(valid.lines[0].source_catalog_revision,2);
+  assert.equal(valid.lines[0].source_catalog_id,source);
+  for(const bad of [
+    {...good,lines:[{...good.lines[0],source_catalog_id:null}]},
+    {...good,lines:[{...good.lines[0],source_catalog_revision:null}]},
+    {...good,lines:[{...good.lines[0],source_catalog_revision:0}]},
+    {...good,lines:[{...good.lines[0],source_catalog_revision:'2'}]},
+    {...good,lines:[{...good.lines[0],source_catalog_id:'not-an-id'}]}
+  ])assert.throws(()=>validateProposalLines(bad),/CRM/);
+});
+test('new sourced line rejects forged label or changed catalog currency before delete',async()=>{
+  const service='11111111-aaaa-4bbb-8ccc-222222222222';
+  const request={proposal_id:id,expected_revision:2,lines:[{
+    description:'ARL-CI — Reviewed bounded agent assessment',
+    quantity:1,unit_price_minor:90000,source_catalog_id:service,
+    source_catalog_revision:1
+  }]};
+  for(const source of [
+    {revision:1,status:'available',currency:'EUR',price_minor:'90000',
+      pricing_model:'fixed',service_code:'ARL-CI',name:'Reviewed bounded agent assessment'},
+    {revision:2,status:'available',currency:'GBP',price_minor:'90000',
+      pricing_model:'fixed',service_code:'ARL-CI',name:'Reviewed bounded agent assessment'},
+    {revision:1,status:'retired',currency:'GBP',price_minor:'90000',
+      pricing_model:'fixed',service_code:'ARL-CI',name:'Reviewed bounded agent assessment'},
+    {revision:1,status:'available',currency:'GBP',price_minor:'100000',
+      pricing_model:'fixed',service_code:'ARL-CI',name:'Reviewed bounded agent assessment'}
+  ]){
+    const sqls=[];
+    const db={connect:async()=>({
+      query:async(sql,params)=>{
+        sqls.push({sql,params});
+        if(sql.includes('FROM enkyron_crm_proposal_drafts'))return {rows:[{
+          id,revision:2,currency:'GBP',title:'Synthetic quote',scope_text:'Review'
+        }]};
+        if(sql.includes('FROM enkyron_crm_service_catalog c'))return {rows:[source]};
+        return {rows:[]};
+      },release:()=>{}
+    })};
+    await assert.rejects(()=>replaceProposalLines(db,request,'operator'),/catalog/);
+    assert.ok(!sqls.some(x=>x.sql.startsWith('DELETE')));
+    assert.equal(sqls.at(-1).sql,'ROLLBACK');
+  }
+});
