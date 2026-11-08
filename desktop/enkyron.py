@@ -275,6 +275,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_seq = 0
         self.crm_quote_dialog = None
         self.crm_quote_context = None
+        self.crm_quote_picker_dialog = None
+        self.crm_quote_picker_items = []
         self.crm_catalog_dialog = None
         self.crm_catalog_form = None
         self.crm_catalog_form_context = None
@@ -7577,10 +7579,10 @@ class EnkyronWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title("DETAILED PROPOSAL · INTERNAL DRAFT"))
         note = QLabel(
-            "When a proposal has no detailed lines, ENKYRON pre-fills one "
-            "editable line from its saved title and fee (quantity 1). "
-            "Review and save it, or replace it with your own breakdown. "
-            "Taxes and terms are not calculated; nothing is sent or issued."
+            "Use manually priced lines or choose an operator-available catalog "
+            "service. Catalog lines are snapshot drafts tied to the exact "
+            "service revision. Editing their name or price removes that link. "
+            "No VAT, contract, subscription or sending is performed."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -7607,6 +7609,9 @@ class EnkyronWindow(QMainWindow):
         add = QPushButton("+ Add line")
         add.clicked.connect(lambda: self.add_quote_line())
         actions.addWidget(add)
+        from_catalog = QPushButton("Add from catalog…")
+        from_catalog.clicked.connect(self.open_quote_catalog_picker)
+        actions.addWidget(from_catalog)
         remove = QPushButton("Remove selected")
         remove.clicked.connect(self.remove_quote_line)
         actions.addWidget(remove)
@@ -7639,7 +7644,11 @@ class EnkyronWindow(QMainWindow):
                 self.add_quote_line(
                     line.get("description") or "",
                     str(line.get("quantity") or 1),
-                    self._quote_format_minor(int(line["unit_price_minor"]))
+                    self._quote_format_minor(int(line["unit_price_minor"])),
+                    {
+                        "source_catalog_id": line["source_catalog_id"],
+                        "source_catalog_revision": line["source_catalog_revision"]
+                    } if line.get("source_catalog_id") else None
                 )
         elif not quote.get("uses_lines"):
             # Only a local editable suggestion. No DB write until Save is
@@ -7652,7 +7661,7 @@ class EnkyronWindow(QMainWindow):
                     title.strip(), "1", self._quote_format_minor(amount)
                 )
         self.crm_quote_table.blockSignals(False)
-        self.crm_quote_table.itemChanged.connect(self.recalculate_quote_lines)
+        self.crm_quote_table.itemChanged.connect(self.quote_line_item_changed)
         self.recalculate_quote_lines()
         dialog.open()
 
@@ -7669,7 +7678,7 @@ class EnkyronWindow(QMainWindow):
         whole, _, fraction = text.partition(".")
         return int(whole) * 100 + int((fraction + "00")[:2])
 
-    def add_quote_line(self, description="", quantity="1", price=""):
+    def add_quote_line(self, description="", quantity="1", price="", source=None):
         table = self.crm_quote_table
         if table.rowCount() >= 25:
             QMessageBox.information(
@@ -7682,12 +7691,31 @@ class EnkyronWindow(QMainWindow):
         table.insertRow(row)
         for col, value in enumerate((description, quantity, price, "")):
             item = QTableWidgetItem(value)
+            if col == 0 and source:
+                item.setData(Qt.ItemDataRole.UserRole, source)
+                item.setToolTip(
+                    "Catalog source revision {}. Edit name or fee to detach source.".format(
+                        source["source_catalog_revision"]
+                    )
+                )
             if col == 3:
                 item.setFlags(
                     item.flags() & ~Qt.ItemFlag.ItemIsEditable
                 )
             table.setItem(row, col, item)
         table.blockSignals(False)
+        self.recalculate_quote_lines()
+
+    def quote_line_item_changed(self, item):
+        if item.column() in (0, 2):
+            title = self.crm_quote_table.item(item.row(), 0)
+            if title and title.data(Qt.ItemDataRole.UserRole):
+                self.crm_quote_table.blockSignals(True)
+                title.setData(Qt.ItemDataRole.UserRole, None)
+                title.setToolTip(
+                    "Catalog linkage detached by manual edit; line is now custom priced."
+                )
+                self.crm_quote_table.blockSignals(False)
         self.recalculate_quote_lines()
 
     def remove_quote_line(self):
@@ -7724,10 +7752,15 @@ class EnkyronWindow(QMainWindow):
             total += value
             if total > 999999999:
                 return None
-            lines.append({
+            entry = {
                 "description": description, "quantity": quantity,
                 "unit_price_minor": price
-            })
+            }
+            name_cell = table.item(row, 0)
+            source = name_cell.data(Qt.ItemDataRole.UserRole) if name_cell else None
+            if source:
+                entry.update(source)
+            lines.append(entry)
         return (lines, total)
 
     def recalculate_quote_lines(self, *_args):
@@ -7765,6 +7798,215 @@ class EnkyronWindow(QMainWindow):
                 )
             )
             self.crm_quote_save.setEnabled(True)
+
+    def open_quote_catalog_picker(self):
+        if not self.crm_quote_dialog or not self.crm_quote_dialog.isVisible():
+            return
+        if self.crm_quote_picker_dialog and self.crm_quote_picker_dialog.isVisible():
+            self.crm_quote_picker_dialog.raise_()
+            return
+        dialog = QDialog(self.crm_quote_dialog)
+        dialog.setWindowTitle("ENKYRON · Select catalog service for a draft line")
+        dialog.resize(710, 510)
+        dialog.setMinimumSize(580, 420)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("SELECT OPERATOR-AVAILABLE SERVICE"))
+        note = QLabel(
+            "Only current available service versions in the quote currency "
+            "can be selected. Copying a line does NOT approve a quote. "
+            "A recurring line is a proposed fee for ONE period, not a "
+            "subscription agreement. Tax treatment remains undetermined."
+        )
+        note.setWordWrap(True)
+        note.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(note)
+        row = QHBoxLayout()
+        self.crm_quote_picker_search = QLineEdit()
+        self.crm_quote_picker_search.setMaxLength(100)
+        self.crm_quote_picker_search.setPlaceholderText(
+            "Filter by service name or code…"
+        )
+        self.crm_quote_picker_search.returnPressed.connect(
+            self.reload_quote_catalog_picker
+        )
+        row.addWidget(self.crm_quote_picker_search, 1)
+        search = QPushButton("Search")
+        search.clicked.connect(self.reload_quote_catalog_picker)
+        row.addWidget(search)
+        layout.addLayout(row)
+        self.crm_quote_picker_notice = QLabel("Loading selectable services…")
+        self.crm_quote_picker_notice.setWordWrap(True)
+        layout.addWidget(self.crm_quote_picker_notice)
+        self.crm_quote_picker_combo = QComboBox()
+        self.crm_quote_picker_combo.currentIndexChanged.connect(
+            lambda _index: self.quote_catalog_picker_selected()
+        )
+        layout.addWidget(self.crm_quote_picker_combo)
+        self.crm_quote_picker_details = make_text_area()
+        layout.addWidget(self.crm_quote_picker_details, 1)
+        form = QFormLayout()
+        self.crm_quote_picker_qty = QSpinBox()
+        self.crm_quote_picker_qty.setRange(1, 10000)
+        form.addRow("Quantity / periods", self.crm_quote_picker_qty)
+        self.crm_quote_picker_price = QLineEdit()
+        self.crm_quote_picker_price.setPlaceholderText(
+            "Enter negotiated custom quote fee"
+        )
+        self.crm_quote_picker_price.setMaxLength(10)
+        form.addRow("Unit fee", self.crm_quote_picker_price)
+        layout.addLayout(form)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        close = QPushButton("Cancel")
+        close.clicked.connect(dialog.reject)
+        actions.addWidget(close)
+        self.crm_quote_picker_insert = QPushButton("Add service to draft")
+        self.crm_quote_picker_insert.setObjectName("primary")
+        self.crm_quote_picker_insert.setEnabled(False)
+        self.crm_quote_picker_insert.clicked.connect(
+            self.insert_quote_catalog_service
+        )
+        actions.addWidget(self.crm_quote_picker_insert)
+        layout.addLayout(actions)
+        self.crm_quote_picker_dialog = dialog
+        self.crm_quote_picker_items = []
+        dialog.open()
+        self.reload_quote_catalog_picker()
+
+    def reload_quote_catalog_picker(self):
+        if (not self.crm_quote_picker_dialog or
+                not self.crm_quote_picker_dialog.isVisible()):
+            return
+        search = self.crm_quote_picker_search.text().strip()
+        self.crm_quote_picker_insert.setEnabled(False)
+        self.crm_quote_picker_notice.setText("Loading catalog…")
+
+        def received(data, error):
+            if not self.crm_quote_picker_dialog.isVisible():
+                return
+            self.crm_quote_picker_combo.blockSignals(True)
+            self.crm_quote_picker_combo.clear()
+            if error or not data or not data.get("available"):
+                self.crm_quote_picker_items = []
+                self.crm_quote_picker_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "Catalog is not available."
+                    )
+                )
+                self.crm_quote_picker_combo.blockSignals(False)
+                self.quote_catalog_picker_selected()
+                return
+            selected_currency = self.crm_quote_context["currency"]
+            self.crm_quote_picker_items = [
+                item for item in (data.get("items") or [])
+                if item.get("status") == "available"
+                and item.get("currency") == selected_currency
+            ]
+            for idx, item in enumerate(self.crm_quote_picker_items):
+                self.crm_quote_picker_combo.addItem(
+                    "{} · {} (R{})".format(
+                        item["service_code"], item["name"], item["revision"]
+                    ), idx
+                )
+            self.crm_quote_picker_combo.blockSignals(False)
+            message = "{} matching available {} service(s).".format(
+                len(self.crm_quote_picker_items), selected_currency
+            )
+            if data.get("more"):
+                message += " Only first 100 catalog records searched; refine search."
+            self.crm_quote_picker_notice.setText(message)
+            self.quote_catalog_picker_selected()
+
+        self.bridge.call("crm-service-catalog-list", search, callback=received)
+
+    def quote_catalog_picker_selected(self):
+        idx = self.crm_quote_picker_combo.currentData()
+        if not isinstance(idx, int) or not 0 <= idx < len(self.crm_quote_picker_items):
+            self.crm_quote_picker_insert.setEnabled(False)
+            self.crm_quote_picker_details.clear()
+            self.crm_quote_picker_price.clear()
+            return
+        item = self.crm_quote_picker_items[idx]
+        model = item["pricing_model"]
+        price = item.get("price_minor")
+        self.crm_quote_picker_price.setReadOnly(model != "custom_quote")
+        if model == "custom_quote":
+            self.crm_quote_picker_price.clear()
+        else:
+            self.crm_quote_picker_price.setText(
+                self._quote_format_minor(int(price)) if price is not None else ""
+            )
+        self.crm_quote_picker_details.setPlainText(
+            "{} · {} · R{}\n"
+            "Pricing: {}{} · Tax NOT determined\n\n"
+            "DESCRIPTION\n{}\n\n"
+            "INCLUSIONS\n{}\n\n"
+            "EXCLUSIONS\n{}\n\n"
+            "DELIVERABLES\n{}\n\n"
+            "PREREQUISITES\n{}\n\n"
+            "TECHNICAL SCOPE (operator note, not verified)\n{}".format(
+                item["service_code"], item["name"], item["revision"],
+                model, " / " + str(item.get("billing_period"))
+                if item.get("billing_period") else "",
+                item.get("summary") or "",
+                item.get("inclusions") or "",
+                item.get("exclusions") or "",
+                item.get("deliverables") or "",
+                item.get("prerequisites") or "",
+                item.get("technical_notes") or "Not documented"
+            )
+        )
+        self.crm_quote_picker_insert.setEnabled(
+            bool(price) or model == "custom_quote"
+        )
+
+    def insert_quote_catalog_service(self):
+        picker = self.crm_quote_picker_dialog
+        if not picker or not picker.isVisible() or not self.crm_quote_context:
+            return
+        idx = self.crm_quote_picker_combo.currentData()
+        if not isinstance(idx, int) or not 0 <= idx < len(self.crm_quote_picker_items):
+            return
+        item = self.crm_quote_picker_items[idx]
+        price = self._quote_parse_minor(self.crm_quote_picker_price.text())
+        if price is None or price <= 0:
+            QMessageBox.warning(
+                picker, "Unit fee missing",
+                "Enter a positive manually agreed fee for custom quote services."
+            )
+            return
+        if item["pricing_model"] != "custom_quote" and (
+            item.get("price_minor") is None or
+                int(item["price_minor"]) != price
+        ):
+            QMessageBox.warning(
+                picker, "Catalog price changed",
+                "Reopen the catalog; the listed base fee cannot be overwritten."
+            )
+            return
+        name = "{} — {}{}".format(
+            item["service_code"], item["name"],
+            " — {} service period".format(item["billing_period"])
+            if item["pricing_model"] == "recurring" else ""
+        )
+        if self.crm_quote_table.rowCount() >= 25:
+            QMessageBox.warning(
+                picker, "Maximum quote lines",
+                "The current draft already has 25 lines."
+            )
+            return
+        self.add_quote_line(
+            name, str(self.crm_quote_picker_qty.value()),
+            self._quote_format_minor(price),
+            {
+                "source_catalog_id": item["id"],
+                "source_catalog_revision": item["revision"]
+            }
+        )
+        picker.accept()
+        self.crm_quote_picker_dialog = None
+        self.crm_quote_picker_items = []
+
 
     def save_quote_lines(self):
         dialog = self.crm_quote_dialog
