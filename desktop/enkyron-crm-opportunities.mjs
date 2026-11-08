@@ -31,6 +31,12 @@ function dateField(value){
     throw new Error('CRM invalid calendar date');
   return value;
 }
+export function validateOpportunityProbability(value){
+  if(value===null)return null;
+  if(!Number.isSafeInteger(value)||value<0||value>100)
+    throw new Error('CRM win probability must be an integer 0–100 or unknown');
+  return value;
+}
 export function validateOpportunityCreate(data){
   if(!data||typeof data!=='object'||Array.isArray(data))
     throw new Error('CRM invalid opportunity request');
@@ -72,7 +78,9 @@ export function validateOpportunityUpdate(data){
     expected_version:data.expected_version,
     stage:data.stage,
     next_action:textField(data.next_action,'next action',5,1000),
-    due_date:dateField(data.due_date)
+    due_date:dateField(data.due_date),
+    ...(Object.hasOwn(data,'probability_percent')?
+      {probability_percent:validateOpportunityProbability(data.probability_percent)}:{})
   };
 }
 export async function listOpportunities(pool,search,operator){
@@ -81,7 +89,7 @@ export async function listOpportunities(pool,search,operator){
     const result=await pool.query(
       'SELECT o.id,o.prospect_id,o.company_id,o.source_ticket_id,'
       +'o.company_name_at_creation,o.stage,o.next_action,'
-      +'o.due_date,o.version,o.updated_at,'
+      +'o.due_date,o.probability_percent,o.version,o.updated_at,'
       +'COALESCE(p.company_name,c.name) AS current_candidate_name,'
       +"CASE WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
       +"ELSE p.source END AS prospect_source "
@@ -108,7 +116,7 @@ export async function prospectOpportunity(pool,id,operator){
   const prospectId=requireProspectId(id),scope=workspace(operator);
   try{
     const rows=(await pool.query(
-      'SELECT id,prospect_id,stage,next_action,due_date,version '
+      'SELECT id,prospect_id,stage,next_action,due_date,probability_percent,version '
       +'FROM enkyron_crm_opportunities WHERE workspace_key=$1 AND prospect_id=$2',
       [scope.key,prospectId]
     )).rows;
@@ -163,7 +171,7 @@ export async function updateOpportunity(pool,input,operator,options={}){
   const uuid=options.uuid??randomUUID;
   return transaction(pool,async client=>{
     const existing=(await client.query(
-      'SELECT id,stage,next_action,due_date,version FROM enkyron_crm_opportunities '
+      'SELECT id,stage,next_action,due_date,probability_percent,version FROM enkyron_crm_opportunities '
       +'WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
       [scope.key,req.id]
     )).rows[0];
@@ -173,23 +181,31 @@ export async function updateOpportunity(pool,input,operator,options={}){
     const oldDue=existing.due_date
       ? (existing.due_date instanceof Date ? existing.due_date.toISOString().slice(0,10)
         : String(existing.due_date).slice(0,10)) : null;
-    if(existing.stage===req.stage&&existing.next_action===req.next_action&&oldDue===req.due_date)
+    const oldProbability=existing.probability_percent??null;
+    const nextProbability=Object.hasOwn(req,'probability_percent')?
+      req.probability_percent:oldProbability;
+    if(existing.stage===req.stage&&existing.next_action===req.next_action&&
+       oldDue===req.due_date&&oldProbability===nextProbability)
       throw new Error('CRM no changes to record');
     const updated=(await client.query(
       'UPDATE enkyron_crm_opportunities '
-      +'SET stage=$3,next_action=$4,due_date=$5,version=version+1,updated_at=NOW() '
+      +'SET stage=$3,next_action=$4,due_date=$5,probability_percent=$7,'
+      +'version=version+1,updated_at=NOW() '
       +'WHERE workspace_key=$1 AND id=$2 AND version=$6 '
       +'RETURNING id,version',
-      [scope.key,req.id,req.stage,req.next_action,req.due_date,req.expected_version]
+      [scope.key,req.id,req.stage,req.next_action,req.due_date,
+       req.expected_version,nextProbability]
     )).rows[0];
     if(!updated)throw new Error('CRM opportunity revision conflict');
     await client.query(
       'INSERT INTO enkyron_crm_opportunity_events '
       +'(id,workspace_key,opportunity_id,event_type,old_stage,new_stage,'
-      +'old_next_action,new_next_action,old_due_date,new_due_date,actor_local) '
-      +"VALUES($1,$2,$3,'updated',$4,$5,$6,$7,$8,$9,$10)",
+      +'old_next_action,new_next_action,old_due_date,new_due_date,actor_local,'
+      +'old_probability_percent,new_probability_percent) '
+      +"VALUES($1,$2,$3,'updated',$4,$5,$6,$7,$8,$9,$10,$11,$12)",
       [uuid(),scope.key,req.id,existing.stage,req.stage,
-        existing.next_action,req.next_action,oldDue,req.due_date,scope.actor]
+        existing.next_action,req.next_action,oldDue,req.due_date,scope.actor,
+        oldProbability,nextProbability]
     );
     return {id:req.id,version:updated.version,stage:req.stage};
   });
