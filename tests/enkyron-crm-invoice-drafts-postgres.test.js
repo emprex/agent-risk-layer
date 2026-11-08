@@ -16,6 +16,7 @@ import {recordInternalDecision} from '../desktop/enkyron-crm-internal-review.mjs
 import {recordBillingWorksheet} from '../desktop/enkyron-crm-billing-worksheet.mjs';
 import {readInvoiceIssueReview,recordInvoiceIssueReview}
   from '../desktop/enkyron-crm-invoice-issue-review.mjs';
+import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
 import {listInvoiceDrafts,readInvoiceDraft,readInvoicePreparation,recordInvoiceDraft}
   from '../desktop/enkyron-crm-invoice-drafts.mjs';
 
@@ -155,6 +156,11 @@ test('real PostgreSQL invoice drafts: source gate, immutable snapshots and no in
     },actor),/requires current approved billing worksheet/);
     const created=await recordInvoiceDraft(db,request,actor);
     assert.equal(created.status,'unissued_tax_review_required');
+    const offerCheck=await readQuoteIssuePreflight(db,proposal.id,actor);
+    assert.equal(offerCheck.issue_authorised,false);
+    assert.equal(offerCheck.can_issue,false);
+    assert.equal(offerCheck.steps.find(s=>s.label==='Reviewed client association').state,'documented');
+    await assert.rejects(()=>readQuoteIssuePreflight(db,proposal.id,foreign),/not found/);
     const draft=(await readInvoiceDraft(db,created.id,actor)).draft;
     assert.equal(draft.issuer_legal_name,'Synthetic Invoicing Company Ltd');
     assert.equal(draft.buyer_legal_name,'Synthetic Customer Ltd');
@@ -357,6 +363,10 @@ test('direct CRM company origin: same scoped ticket and R2 worksheet produce onl
     };
     const saved=await recordInvoiceDraft(db,request,actor);
     assert.equal(saved.status,'unissued_tax_review_required');
+    const offerCheck=await readQuoteIssuePreflight(db,proposal.id,actor);
+    assert.equal(offerCheck.issue_authorised,false);
+    assert.equal(offerCheck.can_issue,false);
+    assert.equal(offerCheck.steps.find(s=>s.label==='Reviewed client association').state,'documented');
     const draft=(await readInvoiceDraft(db,saved.id,actor)).draft;
     assert.equal(draft.currency,'GBP');
     assert.equal(draft.proposed_fee_minor,'75000');
@@ -374,6 +384,9 @@ test('direct CRM company origin: same scoped ticket and R2 worksheet produce onl
     },actor);
     const changed=await readInvoicePreparation(db,proposal.id,actor);
     assert.equal(changed.steps.find(s=>s.key==='link').ready,false);
+    const checkAfterRevocation=await readQuoteIssuePreflight(db,proposal.id,actor);
+    assert.equal(checkAfterRevocation.issue_authorised,false);
+    assert.equal(checkAfterRevocation.steps.find(s=>s.label==='Reviewed client association').state,'blocked');
     assert.equal(changed.can_prepare,false);
     assert.equal(changed.current_draft_id,saved.id);
     assert.equal((await readInvoiceDraft(db,saved.id,actor)).draft.invoice_number,null);
