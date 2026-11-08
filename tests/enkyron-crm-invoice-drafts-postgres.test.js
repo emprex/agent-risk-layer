@@ -17,6 +17,7 @@ import {recordBillingWorksheet} from '../desktop/enkyron-crm-billing-worksheet.m
 import {readInvoiceIssueReview,recordInvoiceIssueReview}
   from '../desktop/enkyron-crm-invoice-issue-review.mjs';
 import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
+import {readQuoteEvidenceReview,recordQuoteEvidenceReview} from '../desktop/enkyron-crm-quote-evidence-review.mjs';
 import {listInvoiceDrafts,readInvoiceDraft,readInvoicePreparation,recordInvoiceDraft}
   from '../desktop/enkyron-crm-invoice-drafts.mjs';
 
@@ -294,6 +295,37 @@ test('direct CRM company origin: same scoped ticket and R2 worksheet produce onl
       scope_text:'Human-led documentary scoping only; no live testing or issue.',
       currency:'GBP',amount_minor:75000
     },actor);
+    const emptyReview=await readQuoteEvidenceReview(db,proposal.id,actor);
+    assert.equal(emptyReview.issue_authorised,false);
+    assert.equal(emptyReview.latest,null);
+    const reviewA=await recordQuoteEvidenceReview(db,{
+      proposal_id:proposal.id,expected_revision:1,
+      expected_previous_id:null,confirmed:true,review_state:'needs_changes',
+      review_note:'Synthetic issuer, buyer and tax reference verification still missing.'
+    },actor);
+    assert.equal(reviewA.issue_authorised,false);
+    await assert.rejects(()=>recordQuoteEvidenceReview(db,{
+      proposal_id:proposal.id,expected_revision:1,
+      expected_previous_id:null,confirmed:true,review_state:'needs_changes',
+      review_note:'Concurrent stale operator action must never append another first review.'
+    },actor),/changed concurrently/);
+    const reviewB=await recordQuoteEvidenceReview(db,{
+      proposal_id:proposal.id,expected_revision:1,
+      expected_previous_id:reviewA.id,confirmed:true,
+      review_state:'submitted_for_independent_review',
+      issuer_source_reference:'Synthetic issuer source reference',
+      buyer_source_reference:'Synthetic buyer source reference',
+      tax_source_reference:'Synthetic tax source reference',
+      review_note:'Source references for independent review only; no legal or fiscal approval.'
+    },actor);
+    assert.equal(reviewB.issue_authorised,false);
+    const savedHistory=await readQuoteEvidenceReview(db,proposal.id,actor);
+    assert.equal(savedHistory.latest.id,reviewB.id);
+    assert.equal(savedHistory.history.length,2);
+    await assert.rejects(()=>readQuoteEvidenceReview(db,proposal.id,actor+'-other'),/not found/);
+    await assert.rejects(()=>db.query(
+      'UPDATE enkyron_crm_quote_evidence_reviews SET review_state=$1 WHERE id=$2',
+      ['needs_changes',reviewA.id]),/immutable|may not|update|delete/i);
     const initial=await readInvoicePreparation(db,proposal.id,actor);
     assert.equal(initial.prospect_id,null);
     assert.equal(initial.company_id,company.id);
