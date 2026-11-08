@@ -71,3 +71,27 @@ CREATE INDEX enkyron_catalog_version_history
 CREATE TRIGGER enkyron_catalog_versions_immutable
  BEFORE UPDATE OR DELETE ON enkyron_crm_service_catalog_versions
  FOR EACH ROW EXECUTE FUNCTION enkyron_crm_events_immutable();
+
+-- Snapshot provenance for a quote line may refer to one immutable catalog fiche
+-- version. The line's description and fee stay COPIED in draft/version tables:
+-- editing a catalog fiche never reprices or rewrites an existing quote.
+ALTER TABLE enkyron_crm_proposal_lines
+ ADD COLUMN source_catalog_id TEXT,
+ ADD COLUMN source_catalog_revision INTEGER,
+ ADD CONSTRAINT enkyron_quote_line_catalog_pair CHECK(
+   (source_catalog_id IS NULL AND source_catalog_revision IS NULL) OR
+   (source_catalog_id IS NOT NULL AND source_catalog_revision>=1)),
+ ADD CONSTRAINT enkyron_quote_line_catalog_fk
+ FOREIGN KEY(workspace_key,source_catalog_id,source_catalog_revision)
+ REFERENCES enkyron_crm_service_catalog_versions(workspace_key,service_id,revision)
+ ON DELETE RESTRICT;
+ALTER TABLE enkyron_crm_proposal_line_versions
+ ADD COLUMN source_catalog_id TEXT,
+ ADD COLUMN source_catalog_revision INTEGER,
+ ADD CONSTRAINT enkyron_quote_version_catalog_pair CHECK(
+   (source_catalog_id IS NULL AND source_catalog_revision IS NULL) OR
+   (source_catalog_id IS NOT NULL AND source_catalog_revision>=1)),
+ ADD CONSTRAINT enkyron_quote_version_catalog_fk
+ FOREIGN KEY(workspace_key,source_catalog_id,source_catalog_revision)
+ REFERENCES enkyron_crm_service_catalog_versions(workspace_key,service_id,revision)
+ ON DELETE RESTRICT;
