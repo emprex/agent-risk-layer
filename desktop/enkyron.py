@@ -245,6 +245,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
         self.crm_issue_preflight_dialog = None
+        self.crm_quote_evidence_dialog = None
+        self.crm_quote_evidence_context = None
         self.crm_tax_dialog = None
         self.crm_tax_context = None
         self.crm_company_profile_dialog = None
@@ -1285,6 +1287,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_issue_preflight_button.setEnabled(False)
         self.crm_issue_preflight_button.clicked.connect(self.open_quote_issue_preflight)
         quote_issue_row.addWidget(self.crm_issue_preflight_button)
+        self.crm_quote_evidence_button = QPushButton("Quote evidence review…")
+        self.crm_quote_evidence_button.setEnabled(False)
+        self.crm_quote_evidence_button.clicked.connect(self.open_quote_evidence_review)
+        quote_issue_row.addWidget(self.crm_quote_evidence_button)
         proposal_footer.addLayout(quote_issue_row)
         billing_actions = QHBoxLayout()
         billing_explanation = QLabel(
@@ -4297,6 +4303,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_terms_button.setEnabled(False)
         self.crm_internal_button.setEnabled(False)
         self.crm_issue_preflight_button.setEnabled(False)
+        self.crm_quote_evidence_button.setEnabled(False)
         self.crm_billing_button.setEnabled(False)
         self.crm_invoice_prepare_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
@@ -4353,6 +4360,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_terms_button.setEnabled(available)
         self.crm_internal_button.setEnabled(available)
         self.crm_issue_preflight_button.setEnabled(available)
+        self.crm_quote_evidence_button.setEnabled(available)
         self.crm_billing_button.setEnabled(available)
         self.crm_invoice_prepare_button.setEnabled(available)
 
@@ -5239,6 +5247,205 @@ class EnkyronWindow(QMainWindow):
         layout.addWidget(close)
         self.crm_issue_preflight_dialog = dialog
         dialog.show()
+
+
+    def open_quote_evidence_review(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if (self.crm_quote_evidence_dialog and
+                self.crm_quote_evidence_dialog.isVisible()):
+            self.crm_quote_evidence_dialog.raise_()
+            self.crm_quote_evidence_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_quote_evidence_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Quote evidence unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not read quote evidence history."
+                    )
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh Proposals before recording source references."
+                )
+                self.load_proposals()
+                return
+            self.show_quote_evidence_review(data)
+
+        self.bridge.call(
+            "crm-quote-evidence-review", proposal_id, callback=received
+        )
+
+    def show_quote_evidence_review(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Quote evidence review (NO APPROVAL)")
+        dialog.resize(770, 610)
+        dialog.setMinimumSize(590, 440)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("SOURCE REFERENCES · INDEPENDENT REVIEW PENDING"))
+        warning = QLabel(
+            "Record references and open concerns only. Nothing here verifies "
+            "legal identity or VAT, issues a quote, accepts a contract, or "
+            "permits security testing. Do not paste secrets or documents."
+        )
+        warning.setTextFormat(Qt.TextFormat.PlainText)
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        heading = QLabel("{} · Revision {}".format(
+            data.get("proposal_title") or "Proposal",
+            data.get("proposal_revision") or "?"
+        ))
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        form = QFormLayout()
+        self.crm_quote_evidence_state = QComboBox()
+        self.crm_quote_evidence_state.addItem(
+            "Needs changes / verification missing", "needs_changes"
+        )
+        self.crm_quote_evidence_state.addItem(
+            "Sources submitted (NOT approved)", "submitted_for_independent_review"
+        )
+        form.addRow("Documentary state", self.crm_quote_evidence_state)
+        latest = data.get("latest") or {}
+        self.crm_quote_evidence_refs = {}
+        for key, label, hint in (
+            ("issuer_source_reference", "Issuer identity reference",
+             "Registry / identity document reference"),
+            ("buyer_source_reference", "Buyer identity reference",
+             "Customer company documentary reference"),
+            ("tax_source_reference", "Tax treatment reference",
+             "Independent tax advice or legislation reference")
+        ):
+            entry = QLineEdit()
+            entry.setMaxLength(500)
+            entry.setPlaceholderText(hint + " · 3–500 characters")
+            entry.setText(latest.get(key) or "")
+            form.addRow(label, entry)
+            self.crm_quote_evidence_refs[key] = entry
+        self.crm_quote_evidence_note = QPlainTextEdit()
+        self.crm_quote_evidence_note.setMaximumHeight(120)
+        self.crm_quote_evidence_note.setPlaceholderText(
+            "Explain required independent verification (30–2000 characters)"
+        )
+        form.addRow("Review explanation", self.crm_quote_evidence_note)
+        body_l.addLayout(form)
+        body_l.addWidget(section_title("IMMUTABLE SOURCE REVIEW HISTORY"))
+        events = data.get("history") or []
+        history = QTableWidget(len(events), 3)
+        history.setHorizontalHeaderLabels(["Recorded", "State", "Operator"])
+        history.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        history.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for row, item in enumerate(events):
+            for col, value in enumerate((
+                display_date(item.get("recorded_at")), item.get("review_state"),
+                item.get("recorded_by")
+            )):
+                history.setItem(row, col, QTableWidgetItem(str(value or "")))
+        history.setMinimumHeight(min(220, 44 + len(events) * 28))
+        body_l.addWidget(history)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 events are shown."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_quote_evidence_confirm = QCheckBox(
+            "I confirm this logs sources; it does NOT verify or approve them."
+        )
+        footer.addWidget(self.crm_quote_evidence_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_quote_evidence_save = QPushButton("Record source review")
+        self.crm_quote_evidence_save.setObjectName("primary")
+        self.crm_quote_evidence_save.clicked.connect(self.save_quote_evidence_review)
+        footer.addWidget(self.crm_quote_evidence_save)
+        layout.addLayout(footer)
+        self.crm_quote_evidence_dialog = dialog
+        self.crm_quote_evidence_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "expected_previous_id": latest.get("id")
+        }
+        dialog.open()
+
+    def save_quote_evidence_review(self):
+        dialog = self.crm_quote_evidence_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_quote_evidence_context:
+            return
+        state = self.crm_quote_evidence_state.currentData()
+        refs = {
+            key: field.text().strip()
+            for key, field in self.crm_quote_evidence_refs.items()
+        }
+        note = self.crm_quote_evidence_note.toPlainText().strip()
+        if not 30 <= len(note) <= 2000:
+            QMessageBox.warning(
+                dialog, "Explanation required", "Enter 30–2000 characters."
+            )
+            return
+        if any(v and not 3 <= len(v) <= 500 for v in refs.values()):
+            QMessageBox.warning(
+                dialog, "Source reference invalid",
+                "Each nonempty reference requires 3–500 characters."
+            )
+            return
+        if state == "submitted_for_independent_review" and not all(refs.values()):
+            QMessageBox.warning(
+                dialog, "References missing",
+                "All three source references are required for submission."
+            )
+            return
+        if not self.crm_quote_evidence_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Human confirmation required",
+                "Confirm these are only source references, not approvals."
+            )
+            return
+        self.crm_quote_evidence_save.setEnabled(False)
+        payload = {
+            **self.crm_quote_evidence_context, **refs,
+            "review_state": state, "review_note": note, "confirmed": True
+        }
+
+        def received(data, error):
+            if error or not data or data.get("issue_authorised") is not False:
+                self.crm_quote_evidence_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Review not recorded",
+                    error or "Unexpected response; no issue is authorised."
+                )
+                return
+            dialog.accept()
+            self.crm_quote_evidence_dialog = None
+            self.crm_quote_evidence_context = None
+            QMessageBox.information(
+                self, "Source review recorded",
+                "Append-only review saved. No identity, tax, issue, "
+                "contract, invoice or security testing decision was made."
+            )
+
+        self.bridge.call(
+            "crm-quote-evidence-record", payload=payload, callback=received
+        )
 
 
     def open_internal_draft_review(self):
