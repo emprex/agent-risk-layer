@@ -1508,6 +1508,9 @@ class EnkyronWindow(QMainWindow):
                 for entry in entries:
                     title = (entry.get("company_name_at_creation") or "Untitled")
                     stage = (entry.get("stage") or "").replace("_", " ").title()
+                    estimate = entry.get("probability_percent")
+                    if estimate is not None:
+                        stage += " · {}% estimated win chance".format(estimate)
                     next_action = entry.get("next_action") or ""
                     if len(next_action) > 70:
                         next_action = next_action[:67] + "…"
@@ -7973,6 +7976,21 @@ class EnkyronWindow(QMainWindow):
         else:
             self.crm_followup_stage.setEnabled(False)
         form.addRow("Commercial stage", self.crm_followup_stage)
+        if existing:
+            # One field inside the existing editor, not a new toolbar button.
+            # -1 means no human forecast; historical opportunities remain unknown.
+            self.crm_followup_probability = QSpinBox()
+            self.crm_followup_probability.setRange(-1, 100)
+            self.crm_followup_probability.setSpecialValueText("Not estimated")
+            self.crm_followup_probability.setSuffix(" %")
+            estimate = existing.get("probability_percent")
+            self.crm_followup_probability.setValue(
+                -1 if estimate is None else int(estimate)
+            )
+            self.crm_followup_probability.setToolTip(
+                "Your manual estimate (0–100%). Not calculated from stages or AI."
+            )
+            form.addRow("Estimated win probability", self.crm_followup_probability)
         self.crm_followup_action = QPlainTextEdit()
         self.crm_followup_action.setMaximumHeight(130)
         self.crm_followup_action.setPlaceholderText(
@@ -8044,7 +8062,11 @@ class EnkyronWindow(QMainWindow):
                 "expected_version": existing["version"],
                 "stage": self.crm_followup_stage.currentData(),
                 "next_action": next_action,
-                "due_date": due_date
+                "due_date": due_date,
+                "probability_percent": (
+                    None if self.crm_followup_probability.value() < 0
+                    else self.crm_followup_probability.value()
+                )
             }
         else:
             action = "crm-create-opportunity"
