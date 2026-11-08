@@ -281,3 +281,10 @@ No migration or data rewrite is needed. The resulting record remains
 amount due, issue date, email, payment or contractual acceptance.
 Exact-head CI is required before Debian sync; the existing R2 worksheet
 must be reused, not recreated.
+
+
+## E07-03A — preflight documentaire avant émission d'un devis (2026-11-08)
+
+ENKYRON CRM → Proposals dispose désormais d'un bouton « Quote issue preflight… » en lecture seule. Il inspecte la révision exacte du brouillon, la source entreprise/ticket ou prospect revu, la cohérence des lignes tarifaires, le profil émetteur, la revue acheteur, les conditions, la recherche fiscale et la décision interne. Il distingue explicitement la **présence d'un document** de sa **vérification indépendante**.
+
+Ce bloc ne produit aucun devis émis, envoi, acceptation, signature, contrat, mission, facture ou calcul de TVA : `can_issue=false` et `issue_authorised=false` sont inconditionnels. Les documents restent uniquement internes et les exigences d'identité juridique, de fiscalité et d'émission officielle sont bloquées. Aucune migration n'a été ajoutée, aucune donnée Debian n'a été modifiée. Des tests Node, de fenêtre Qt synthétique et PostgreSQL CI (association révoquée incluse) ont été ajoutés. La recette Debian est distincte des résultats CI. PR #520 reste Draft.
