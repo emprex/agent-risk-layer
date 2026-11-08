@@ -247,6 +247,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_issue_preflight_dialog = None
         self.crm_quote_evidence_dialog = None
         self.crm_quote_evidence_context = None
+        self.crm_external_report_dialog = None
+        self.crm_external_report_context = None
         self.crm_tax_dialog = None
         self.crm_tax_context = None
         self.crm_company_profile_dialog = None
@@ -1292,6 +1294,17 @@ class EnkyronWindow(QMainWindow):
         self.crm_quote_evidence_button.clicked.connect(self.open_quote_evidence_review)
         quote_issue_row.addWidget(self.crm_quote_evidence_button)
         proposal_footer.addLayout(quote_issue_row)
+        external_report_row = QHBoxLayout()
+        external_report_row.addWidget(QLabel(
+            "External review: record a reported finding, NOT a verified approval."
+        ), 1)
+        self.crm_external_report_button = QPushButton("External review report…")
+        self.crm_external_report_button.setEnabled(False)
+        self.crm_external_report_button.clicked.connect(
+            self.open_quote_external_report
+        )
+        external_report_row.addWidget(self.crm_external_report_button)
+        proposal_footer.addLayout(external_report_row)
         billing_actions = QHBoxLayout()
         billing_explanation = QLabel(
             "Billing preparation: internal worksheet only; no invoice or VAT calculation."
@@ -4304,6 +4317,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_internal_button.setEnabled(False)
         self.crm_issue_preflight_button.setEnabled(False)
         self.crm_quote_evidence_button.setEnabled(False)
+        self.crm_external_report_button.setEnabled(False)
         self.crm_billing_button.setEnabled(False)
         self.crm_invoice_prepare_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
@@ -4361,6 +4375,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_internal_button.setEnabled(available)
         self.crm_issue_preflight_button.setEnabled(available)
         self.crm_quote_evidence_button.setEnabled(available)
+        self.crm_external_report_button.setEnabled(available)
         self.crm_billing_button.setEnabled(available)
         self.crm_invoice_prepare_button.setEnabled(available)
 
@@ -5445,6 +5460,252 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call(
             "crm-quote-evidence-record", payload=payload, callback=received
+        )
+
+
+    def open_quote_external_report(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if (self.crm_external_report_dialog and
+                self.crm_external_report_dialog.isVisible()):
+            self.crm_external_report_dialog.raise_()
+            self.crm_external_report_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_external_report_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "External report unavailable",
+                    error or (data or {}).get(
+                        "notice", "Could not read external report register."
+                    )
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh Proposals before reviewing external report metadata."
+                )
+                self.load_proposals()
+                return
+            self.show_quote_external_report(data)
+
+        self.bridge.call(
+            "crm-quote-external-report", proposal_id, callback=received
+        )
+
+    def show_quote_external_report(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            "ENKYRON · External report intake (NO VERIFICATION OR ISSUE)"
+        )
+        dialog.resize(780, 660)
+        dialog.setMinimumSize(590, 480)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("EXTERNAL REPORT METADATA · NOT VERIFIED"))
+        introduction = QLabel(
+            "An operator may log a report claimed to come from an external "
+            "reviewer. ENKYRON does not authenticate that reviewer, verify "
+            "legal identity, determine tax, issue quotes or permit security testing."
+        )
+        introduction.setTextFormat(Qt.TextFormat.PlainText)
+        introduction.setWordWrap(True)
+        layout.addWidget(introduction)
+        title = QLabel("{} · Revision {}".format(
+            data.get("proposal_title") or "Proposal",
+            data.get("proposal_revision") or "?"
+        ))
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setWordWrap(True)
+        layout.addWidget(title)
+        status = QLabel(
+            "Current source evidence status: {}. {}".format(
+                data.get("source_state") or "unknown",
+                "Intake possible (human evidence only)." if data.get("can_record")
+                else "INTAKE BLOCKED: submit documentary references first."
+            )
+        )
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        block = QLabel("\n".join(
+            "• " + str(s) for s in data.get("blockers") or []
+        ))
+        block.setTextFormat(Qt.TextFormat.PlainText)
+        block.setWordWrap(True)
+        body_l.addWidget(block)
+        form = QFormLayout()
+        self.crm_external_report_fields = {}
+        for key, label, placeholder, max_len in (
+            ("reported_reviewer_name", "Reviewer as declared",
+             "Name reported in the source; NOT authenticated", 160),
+            ("reported_reviewer_organisation", "Organisation (optional)",
+             "Organisation as declared, not validated", 160),
+            ("report_reference", "External report reference",
+             "Identifier / archive reference only, no secrets", 500),
+            ("report_date", "Report date",
+             "YYYY-MM-DD, date stated on external report", 10)
+        ):
+            field = QLineEdit()
+            field.setMaxLength(max_len)
+            field.setPlaceholderText(placeholder)
+            form.addRow(label, field)
+            self.crm_external_report_fields[key] = field
+        self.crm_external_report_coverages = {}
+        for key, label in (
+            ("issuer_coverage", "Issuer identity coverage"),
+            ("buyer_coverage", "Buyer identity coverage"),
+            ("tax_coverage", "Tax treatment coverage")
+        ):
+            combo = QComboBox()
+            combo.addItem("Not addressed", "not_addressed")
+            combo.addItem("Issues reported", "issues_reported")
+            combo.addItem("Covered in report (NOT independently verified)",
+                          "covered_in_report")
+            form.addRow(label, combo)
+            self.crm_external_report_coverages[key] = combo
+        self.crm_external_report_outcome = QComboBox()
+        self.crm_external_report_outcome.addItem(
+            "Requires changes", "requires_changes"
+        )
+        self.crm_external_report_outcome.addItem(
+            "Report received (NOT approved)", "report_received"
+        )
+        form.addRow("Operator's documentary classification",
+                    self.crm_external_report_outcome)
+        self.crm_external_report_note = QPlainTextEdit()
+        self.crm_external_report_note.setMaximumHeight(120)
+        self.crm_external_report_note.setPlaceholderText(
+            "Explain what the claimed report covers, and any unresolved "
+            "verification (30–2000 characters)."
+        )
+        form.addRow("Human rationale", self.crm_external_report_note)
+        body_l.addLayout(form)
+        body_l.addWidget(section_title("IMMUTABLE EXTERNAL REPORT RECEIPTS"))
+        events = data.get("history") or []
+        table = QTableWidget(len(events), 3)
+        table.setHorizontalHeaderLabels(
+            ["Recorded", "Reported outcome", "Entered by"]
+        )
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        for row, entry in enumerate(events):
+            for col, value in enumerate((
+                display_date(entry.get("entered_at")),
+                entry.get("report_outcome"),
+                entry.get("entered_by")
+            )):
+                table.setItem(row, col, QTableWidgetItem(str(value or "")))
+        table.setMinimumHeight(min(225, 45 + len(events) * 28))
+        body_l.addWidget(table)
+        if data.get("more"):
+            body_l.addWidget(QLabel("Only the latest 20 receipts are shown."))
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_external_report_confirm = QCheckBox(
+            "I confirm this report is NOT independently authenticated or approved."
+        )
+        footer.addWidget(self.crm_external_report_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_external_report_save = QPushButton("Record report receipt")
+        self.crm_external_report_save.setObjectName("primary")
+        self.crm_external_report_save.setEnabled(bool(data.get("can_record")))
+        self.crm_external_report_save.clicked.connect(
+            self.save_quote_external_report
+        )
+        footer.addWidget(self.crm_external_report_save)
+        layout.addLayout(footer)
+        self.crm_external_report_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "expected_source_review_id": data.get("current_source_review_id")
+        }
+        self.crm_external_report_dialog = dialog
+        dialog.open()
+
+    def save_quote_external_report(self):
+        dialog = self.crm_external_report_dialog
+        if not dialog or not dialog.isVisible() or not self.crm_external_report_context:
+            return
+        data = {
+            key: field.text().strip()
+            for key, field in self.crm_external_report_fields.items()
+        }
+        note = self.crm_external_report_note.toPlainText().strip()
+        if not 30 <= len(note) <= 2000:
+            QMessageBox.warning(
+                dialog, "Explanation required", "Enter 30–2000 characters."
+            )
+            return
+        report_date = data.get("report_date") or ""
+        qt_date = QDate.fromString(report_date, "yyyy-MM-dd")
+        if (not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_date)
+                or not qt_date.isValid()):
+            QMessageBox.warning(
+                dialog, "Invalid date", "Enter a real date YYYY-MM-DD."
+            )
+            return
+        if (not 3 <= len(data.get("reported_reviewer_name") or "") <= 160
+                or not 3 <= len(data.get("report_reference") or "") <= 500
+                or (data.get("reported_reviewer_organisation") and
+                    not 3 <= len(data["reported_reviewer_organisation"]) <= 160)):
+            QMessageBox.warning(
+                dialog, "Required report identity",
+                "Provide the reported reviewer, report reference, and optional organisation."
+            )
+            return
+        if not self.crm_external_report_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Human confirmation required",
+                "Confirm that this report intake does NOT authenticate its source."
+            )
+            return
+        payload = {
+            **self.crm_external_report_context, **data,
+            **{key: combo.currentData()
+               for key, combo in self.crm_external_report_coverages.items()},
+            "report_outcome": self.crm_external_report_outcome.currentData(),
+            "review_note": note, "confirmed": True
+        }
+        self.crm_external_report_save.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or data.get("issue_authorised") is not False:
+                self.crm_external_report_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "External report not recorded",
+                    error or "Unexpected response; no quotation can be issued."
+                )
+                return
+            dialog.accept()
+            self.crm_external_report_dialog = None
+            self.crm_external_report_context = None
+            QMessageBox.information(
+                self, "Report receipt recorded",
+                "A claimed external report receipt has been logged. "
+                "No independently verified identity, tax decision, "
+                "quote issuance, contract, invoice or mission was created."
+            )
+
+        self.bridge.call(
+            "crm-quote-external-record", payload=payload, callback=received
         )
 
 
