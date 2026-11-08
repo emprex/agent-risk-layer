@@ -244,6 +244,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_proposal_items = []
         self.crm_proposal_dialog = None
         self.crm_proposal_context = None
+        self.crm_issue_preflight_dialog = None
         self.crm_tax_dialog = None
         self.crm_tax_context = None
         self.crm_company_profile_dialog = None
@@ -1276,6 +1277,15 @@ class EnkyronWindow(QMainWindow):
         proposal_reviews.addWidget(self.crm_internal_button)
         proposal_reviews.addStretch()
         proposal_footer.addLayout(proposal_reviews)
+        quote_issue_row = QHBoxLayout()
+        quote_issue_row.addWidget(QLabel(
+            "Quote issue: inspect missing evidence before a real offer."
+        ), 1)
+        self.crm_issue_preflight_button = QPushButton("Quote issue preflight…")
+        self.crm_issue_preflight_button.setEnabled(False)
+        self.crm_issue_preflight_button.clicked.connect(self.open_quote_issue_preflight)
+        quote_issue_row.addWidget(self.crm_issue_preflight_button)
+        proposal_footer.addLayout(quote_issue_row)
         billing_actions = QHBoxLayout()
         billing_explanation = QLabel(
             "Billing preparation: internal worksheet only; no invoice or VAT calculation."
@@ -4286,6 +4296,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_buyer_button.setEnabled(False)
         self.crm_terms_button.setEnabled(False)
         self.crm_internal_button.setEnabled(False)
+        self.crm_issue_preflight_button.setEnabled(False)
         self.crm_billing_button.setEnabled(False)
         self.crm_invoice_prepare_button.setEnabled(False)
         self.crm_proposal_table.blockSignals(True)
@@ -4341,6 +4352,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_buyer_button.setEnabled(available)
         self.crm_terms_button.setEnabled(available)
         self.crm_internal_button.setEnabled(available)
+        self.crm_issue_preflight_button.setEnabled(available)
         self.crm_billing_button.setEnabled(available)
         self.crm_invoice_prepare_button.setEnabled(available)
 
@@ -5131,6 +5143,102 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-commercial-record", payload=payload, callback=received)
+
+
+    def open_quote_issue_preflight(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        if (self.crm_issue_preflight_dialog and
+                self.crm_issue_preflight_dialog.isVisible()):
+            self.crm_issue_preflight_dialog.raise_()
+            self.crm_issue_preflight_dialog.activateWindow()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_issue_preflight_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Quote preflight unavailable",
+                    error or (data or {}).get(
+                        "notice", "Unable to inspect selected proposal.")
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "Refresh Proposals before reviewing issue prerequisites."
+                )
+                self.load_proposals()
+                return
+            self.show_quote_issue_preflight(data)
+
+        self.bridge.call(
+            "crm-quote-issue-preflight", proposal_id, callback=received
+        )
+
+    def show_quote_issue_preflight(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Quote issue preflight (READ ONLY)")
+        dialog.resize(750, 560)
+        dialog.setMinimumSize(590, 420)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("QUOTE ISSUE · BLOCKED / READ ONLY"))
+        notice = QLabel(
+            "Recorded documents only. No tax determination, verified identity, "
+            "customer-facing quotation, acceptance or authorisation to issue."
+        )
+        notice.setWordWrap(True)
+        notice.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(notice)
+        heading = QLabel("{} · Revision {}".format(
+            data.get("proposal_title") or "Proposal",
+            data.get("proposal_revision") or "?"
+        ))
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+        amount = int(data.get("proposed_fee_minor") or 0)
+        whole, minor = divmod(amount, 100)
+        fee = QLabel("Draft fee: {} {:,}.{:02d} (tax undetermined)".format(
+            data.get("currency") or "", whole, minor
+        ))
+        fee.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(fee)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        for entry in data.get("steps") or []:
+            title = QLabel("{} — {}".format(
+                str(entry.get("state") or "blocked").upper(),
+                entry.get("label") or "Unspecified"
+            ))
+            title.setTextFormat(Qt.TextFormat.PlainText)
+            body_l.addWidget(title)
+            detail = QLabel(entry.get("detail") or "")
+            detail.setTextFormat(Qt.TextFormat.PlainText)
+            detail.setWordWrap(True)
+            body_l.addWidget(detail)
+        blocked = QLabel(
+            "NO ISSUANCE PERMITTED. Remaining requirements:\n" +
+            "\n".join("• "+str(s) for s in data.get("blockers") or [])
+        )
+        blocked.setTextFormat(Qt.TextFormat.PlainText)
+        blocked.setWordWrap(True)
+        body_l.addWidget(blocked)
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close)
+        self.crm_issue_preflight_dialog = dialog
+        dialog.show()
 
 
     def open_internal_draft_review(self):
