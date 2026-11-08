@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from html import escape
 from math import ceil
+import re
 from os import close, replace
 from pathlib import Path
 from tempfile import mkstemp
@@ -23,6 +24,82 @@ def _text(value: object) -> str:
     if not isinstance(value, str):
         raise ValueError("Invalid proposal text")
     return escape(value, quote=True)
+
+
+
+def _inline_scope(text: str) -> str:
+    """Render only **bold**, escaping every other character as untrusted text."""
+    result = []
+    index = 0
+    for match in re.finditer(r"\*\*([^*\n]+)\*\*", text):
+        result.append(escape(text[index:match.start()], quote=True))
+        result.append("<b>" + escape(match.group(1), quote=True) + "</b>")
+        index = match.end()
+    result.append(escape(text[index:], quote=True))
+    return "".join(result)
+
+
+def _scope_html(source: str) -> str:
+    """Safe Markdown subset: headings, paragraphs, bold, and numbered/bullet lists.
+
+    Blank lines delimit blocks; never interpret user-entered HTML or links.
+    """
+    blocks: list[str] = []
+    paragraph: list[str] = []
+    list_type = ""
+    items: list[str] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            blocks.append(
+                '<p style="margin-top:2px;margin-bottom:5px">'
+                + _inline_scope(" ".join(paragraph)) + "</p>"
+            )
+            paragraph.clear()
+
+    def flush_list() -> None:
+        nonlocal list_type
+        if items:
+            blocks.append(
+                f'<{list_type} style="margin-top:2px;margin-bottom:5px">'
+                + "".join("<li>" + _inline_scope(item) + "</li>" for item in items)
+                + f"</{list_type}>"
+            )
+            items.clear()
+        list_type = ""
+
+    for raw in source.splitlines():
+        line = raw.strip()
+        if not line:
+            flush_paragraph()
+            flush_list()
+            continue
+        heading = re.fullmatch(r"#{1,3}\s+(.+)", line)
+        standalone_bold = re.fullmatch(r"\*\*([^*]+)\*\*", line)
+        if heading or standalone_bold:
+            flush_paragraph()
+            flush_list()
+            label = heading.group(1) if heading else standalone_bold.group(1)
+            blocks.append(
+                '<p style="font-size:10pt;margin-top:7px;margin-bottom:2px"><b>'
+                + escape(label, quote=True) + "</b></p>"
+            )
+            continue
+        bullet = re.fullmatch(r"[-*]\s+(.+)", line)
+        numbered = re.fullmatch(r"[0-9]+[.)]\s+(.+)", line)
+        if bullet or numbered:
+            flush_paragraph()
+            new_type = "ul" if bullet else "ol"
+            if list_type and list_type != new_type:
+                flush_list()
+            list_type = new_type
+            items.append((bullet or numbered).group(1))
+            continue
+        flush_list()
+        paragraph.append(line)
+    flush_paragraph()
+    flush_list()
+    return "".join(blocks)
 
 
 def _money(minor: int, currency: str) -> str:
@@ -48,6 +125,8 @@ def validate_pdf_snapshot(snapshot: dict) -> dict:
     if not isinstance(snapshot.get("revision"), int) or snapshot["revision"] < 1:
         raise ValueError("Invalid proposal revision")
     _money(snapshot.get("amount_minor"), snapshot["currency"])
+    if snapshot.get("buyer_origin") not in ("research_candidate", "crm_company"):
+        raise ValueError("Invalid proposal buyer source")
     issuer = snapshot.get("issuer")
     if issuer is not None:
         # Strict allowlist: an HMRC number is NEVER an approved PDF field.
@@ -102,7 +181,12 @@ def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
     now = exported_at or datetime.now(timezone.utc)
     generated = now.astimezone(timezone.utc).strftime("%d %B %Y, %H:%M UTC")
     title, candidate = _text(s["title"]), _text(s["research_candidate"])
-    scope = _text(s["scope_text"]).replace("\n", "<br />")
+    scope = _scope_html(s["scope_text"])
+    buyer_label = (
+        "CRM company at opportunity creation (legal identity not independently verified)"
+        if s["buyer_origin"] == "crm_company"
+        else "Research candidate (not a verified legal buyer)"
+    )
     issuer = s.get("issuer")
     if issuer is None:
         issuer_html = (
@@ -155,21 +239,30 @@ def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
             'The proposed fee was entered manually.</i></p>'
         )
 
-    return f"""<html><head><meta charset="UTF-8"></head>
-    <body style="font-family:'DejaVu Sans';font-size:10pt;color:#20354a">
-      <h1 style="font-size:20pt;color:#10263b;margin:0">Commercial proposal</h1>
-      <p style="font-size:15pt;color:#176e81"><b>DRAFT - NOT SENT</b></p>
+    return f"""<html><head><meta charset="UTF-8">
+    <style>
+      body {{font-family:'DejaVu Sans';font-size:9pt;color:#20354a;}}
+      p {{margin-top:2px;margin-bottom:5px;}}
+      ul, ol {{margin-top:2px;margin-bottom:5px;}}
+      li {{margin-top:0px;margin-bottom:0px;}}
+      h2 {{margin-top:8px;margin-bottom:4px;}}
+    </style></head>
+    <body style="font-family:'DejaVu Sans';font-size:9pt;color:#20354a">
+      <h1 style="font-size:17pt;color:#10263b;margin:0">Commercial proposal</h1>
+      <p style="font-size:11pt;color:#176e81;margin-top:2px;margin-bottom:7px">
+      <b>DRAFT - NOT SENT</b></p>
       {issuer_html}
-      <p><b>Research candidate (not a verified legal buyer):</b> {candidate}</p>
+      <p><b>{buyer_label}:</b> {candidate}</p>
       <p><b>Proposal:</b> {title}</p>
       <p><b>Document reference:</b> {escape(s["id"])} &nbsp; <b>Revision:</b> {s["revision"]}</p>
       <p><b>Exported:</b> {generated}</p>
       <hr />
-      <h2 style="color:#20354a;font-size:13pt">Proposed scope and deliverables</h2>
-      <p>{scope}</p>
-      <h2 style="color:#20354a;font-size:13pt">Proposed commercial fee</h2>
+      <h2 style="color:#20354a;font-size:11pt">Proposed scope and deliverables</h2>
+      {scope}
+      <h2 style="color:#20354a;font-size:11pt">Proposed commercial fee</h2>
       {rows}
-      <p style="font-size:14pt;color:#10263b"><b>Draft total: {_money(s["amount_minor"], s["currency"])}</b></p>
+      <p style="font-size:12pt;color:#10263b;margin-top:6px;margin-bottom:5px">
+      <b>Draft total: {_money(s["amount_minor"], s["currency"])}</b></p>
       <p style="color:#6a5360"><b>Tax treatment has not been determined.</b>
       No VAT rate, tax-inclusive total, buyer legal identity, offer validity,
       contractual terms, approval or signature is represented in this draft.</p>
@@ -204,11 +297,12 @@ def export_draft_pdf(destination: str | Path, snapshot: dict) -> int:
         try:
             width, height = writer.width(), writer.height()
             margin = 50
-            body_top, footer_height = 70, 44
+            body_top, footer_height = 60, 41
             content_width = width - 2 * margin
-            content_height = height - body_top - footer_height - 25
+            content_height = height - body_top - footer_height - 16
             doc = QTextDocument()
-            doc.setDefaultFont(QFont("DejaVu Sans", 10))
+            doc.setDocumentMargin(0)
+            doc.setDefaultFont(QFont("DejaVu Sans", 9))
             doc.setPageSize(QSizeF(content_width, content_height))
             doc.setHtml(draft_html(snapshot))
             pages = max(1, doc.pageCount())

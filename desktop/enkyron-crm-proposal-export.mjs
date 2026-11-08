@@ -24,7 +24,9 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
     const proposal=(await client.query(
       'SELECT d.id,d.opportunity_id,d.title,d.scope_text,d.currency,'
       +'d.amount_minor,d.revision,d.updated_at,'
-      +'o.company_name_at_creation '
+      +'o.company_name_at_creation,'
+      +"CASE WHEN o.company_id IS NOT NULL THEN 'crm_company' "
+      +"ELSE 'research_candidate' END AS buyer_origin "
       +'FROM enkyron_crm_proposal_drafts d '
       +'JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
@@ -94,6 +96,7 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       currency:proposal.currency,amount_minor:price,
       revision:proposal.revision,updated_at:proposal.updated_at,
       research_candidate:proposal.company_name_at_creation,
+      buyer_origin:proposal.buyer_origin,
       issuer,
       lines
     },notice:'Internal draft only. Issuer profile is operator-entered, not independently verified. No buyer identity, VAT or approval verified.'};

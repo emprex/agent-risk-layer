@@ -8,7 +8,8 @@ function makePool({missing=false,foreign=false,badTotal=false,withLines=true,wit
   const proposal={id,opportunity_id:id,title:'Human-led AI security proposal',
     scope_text:'Scope grounded in manual requirements and explicit customer permission.',
     currency:'GBP',amount_minor:50000,revision:2,
-    company_name_at_creation:'Unverified research candidate'};
+    company_name_at_creation:'Unverified research candidate',
+    buyer_origin:'research_candidate'};
   return {queries,get released(){return released;},pool:{
     connect:async()=>({query:async(sql,params)=>{
       queries.push({sql,params});
@@ -36,6 +37,8 @@ test('snapshot uses read-only repeatable read and exact workspace scope',async()
   assert.equal(data.proposal.revision,2);
   assert.equal(data.proposal.amount_minor,50000);
   assert.equal(data.proposal.research_candidate,'Unverified research candidate');
+  assert.equal(data.proposal.buyer_origin,'research_candidate');
+  assert.match(m.queries[1].sql,/o[.]company_id IS NOT NULL/);
   assert.deepEqual(data.proposal.issuer,{
     legal_name:'Synthetic Issuer <Ltd>',registration_number:'00000000',
     registered_office:'10 Fake Street, Test City, UK',revision:3,
@@ -57,6 +60,25 @@ test('snapshot uses read-only repeatable read and exact workspace scope',async()
   assert.equal(m.released,1);
   assert.doesNotMatch(m.queries.map(x=>x.sql).join(' '),
     /\b(?:INSERT|UPDATE|DELETE|MERGE)\b/i);
+});
+test('direct CRM company source is distinct from an unverified research candidate',async()=>{
+  const m=makePool({withLines:false});
+  const original=m.pool.connect;
+  m.pool.connect=async()=>{
+    const client=await original();
+    const query=client.query;
+    client.query=async(sql,params)=>{
+      const response=await query(sql,params);
+      if(sql.startsWith('SELECT d.id')&&response.rows[0])
+        response.rows[0].buyer_origin='crm_company';
+      return response;
+    };
+    return client;
+  };
+  const r=await readProposalForDraftPdf(m.pool,id,'ci-owner');
+  assert.equal(r.proposal.buyer_origin,'crm_company');
+  assert.equal(r.proposal.research_candidate,'Unverified research candidate');
+  assert.deepEqual(r.proposal.lines,[]);
 });
 test('no priced itemization is an honest manual fee, not fabricated lines',async()=>{
   const m=makePool({withLines:false});

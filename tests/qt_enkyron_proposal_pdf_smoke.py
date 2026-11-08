@@ -22,6 +22,7 @@ def fixture():
         "scope_text": "A manually proposed assessment of tools <MCP> & integrations.\n"
                       "No service has been authorised or delivered.",
         "research_candidate": "Research candidate <Not verified>",
+        "buyer_origin": "research_candidate",
         "currency": "GBP", "amount_minor": 30125,
         "issuer": {
             "legal_name": "Synthetic Issuer <Ltd>",
@@ -59,6 +60,94 @@ class DraftPdfTest(unittest.TestCase):
         self.assertIn("DRAFT - NOT SENT", html)
         self.assertNotIn("VAT 20%", html)
 
+
+    def test_real_scoping_draft_rendered_as_lists_and_compact_page(self):
+        sample = fixture()
+        sample["buyer_origin"] = "crm_company"
+        sample["research_candidate"] = "ARL E2E Test 0711"
+        sample["title"] = "ARL - AI Agent Security Scoping Review - DRAFT"
+        sample["amount_minor"] = 75000
+        sample["lines"] = [{
+            "position": 1, "description": "AI Agent Security Scoping Review - 1 consultant day",
+            "quantity": 1, "unit_price_minor": 75000, "line_total_minor": 75000,
+        }]
+        sample["scope_text"] = """**SERVICE: AI AGENT SECURITY SCOPING REVIEW - INTERNAL TEST DRAFT**
+
+**Client:** ARL E2E Test 0711 (synthetic test company)
+
+**Reference:** Ticket ARL-2026-000005
+
+**Objective**
+
+Perform a preliminary, human-led review of the proposed AI-agent architecture, identifying key security risks, trust boundaries and areas requiring further assessment.
+
+**Proposed scope**
+
+- Review of one AI-agent workflow and its architecture documentation.
+- Preliminary review of one MCP server and up to three associated tool/API interfaces, where documented.
+- Examination of declared tool permissions, authentication, data flows and human approval boundaries.
+- Identification of potential prompt-injection, excessive-agency and sensitive-data exposure risks.
+- Mapping of preliminary observations to relevant ARL security control categories.
+
+**Deliverables**
+
+1. Short architecture and trust-boundary review.
+2. Preliminary risk register identifying observations and recommended next steps.
+3. Written scoping summary with limitations and outstanding evidence requests.
+4. A 30-minute review meeting.
+
+**Estimated effort:** Up to one consultant day.
+
+**Exclusions**
+
+No penetration testing, active scanning, exploitation, production-system access, credential handling or changes to customer infrastructure. No independent assurance, certification or full 108-control assessment is included.
+
+**Commercial status**
+
+Internal synthetic quotation only. The proposed fee is GBP 750.00, excluding any tax determination. The scope, schedule and price require human approval and written customer agreement before any engagement.
+
+**Authorisation**
+
+No security testing is authorised by this proposal. Customer identity, contractual acceptance and any required testing permissions must be separately reviewed and recorded before work begins."""
+        html = draft_html(sample)
+        self.assertIn("CRM company at opportunity creation", html)
+        self.assertNotIn("Research candidate (not a verified legal buyer)", html)
+        self.assertIn("<b>Objective</b>", html)
+        self.assertIn("<ul", html)
+        self.assertIn("<ol", html)
+        self.assertIn("<li>Review of one AI-agent workflow", html)
+        self.assertNotIn("**SERVICE:", html)
+        self.assertNotIn("<br /><br />", html)
+        self.assertIn("GBP 750.00", html)
+        with tempfile.TemporaryDirectory() as work:
+            path = Path(work) / "realistic-scoping-draft.pdf"
+            pages = export_draft_pdf(path, sample)
+            self.assertEqual(pages, 1, "Normal scoping proposal should not leave a near-empty second page")
+            if shutil.which("pdftotext"):
+                text = subprocess.check_output(
+                    ["pdftotext", "-layout", str(path), "-"], text=True)
+                self.assertNotIn("**", text)
+                self.assertIn("ARL-2026-000005", text)
+                self.assertIn("Preliminary risk register", text)
+                self.assertIn("No security testing is authorised", text)
+                self.assertIn("Draft total: GBP 750.00", text)
+                self.assertIn("Page 1 / 1", text)
+
+    def test_scope_markdown_never_interprets_untrusted_raw_html(self):
+        sample = fixture()
+        sample["scope_text"] = (
+            "**Review:** Examine <script>alert('x')</script> & **safe text**.\n\n"
+            "- Analyze <MCP> and boundary <br> characters."
+        )
+        rendered = draft_html(sample)
+        self.assertNotIn("<script>", rendered)
+        self.assertNotIn("<br> characters.", rendered)
+        self.assertIn("&lt;script&gt;", rendered)
+        self.assertIn("&lt;MCP&gt;", rendered)
+        self.assertIn("<b>Review:</b>", rendered)
+        self.assertIn("<b>safe text</b>", rendered)
+        self.assertIn("<ul", rendered)
+
     def test_invalid_snapshot_never_writes_file(self):
         for mutation in (
             {"amount_minor": 30126},
@@ -66,6 +155,7 @@ class DraftPdfTest(unittest.TestCase):
                          "quantity": 1, "unit_price_minor": 3,
                          "line_total_minor": 4}]},
             {"currency": "BTC"},
+            {"buyer_origin": "unknown"},
             {"issuer": {**fixture()["issuer"], "company_utr": "0123456789"}},
             {"issuer": {**fixture()["issuer"], "verification_status": "verified"}},
 

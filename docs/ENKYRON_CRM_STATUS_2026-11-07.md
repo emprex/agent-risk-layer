@@ -220,3 +220,21 @@ revision, and enforces exact totals and optimistic locking. No VAT, legal
 acceptance, electronic communication or assessment work is inferred.
 No schema migration or changes to existing Debian quotes. Exact-head CI
 and Debian visual acceptance remain separate gates.
+
+## PDF draft export — scoped Markdown and buyer provenance (2026-11-08)
+
+The operator-exported two-page ENKYRON draft had literal Markdown emphasis
+markers, unstructured lists, a sparse second page, and labelled a direct CRM
+company as a Research candidate. The read-only repeatable-read exporter now
+carries buyer_origin selected from o.company_id. Direct CRM companies receive
+an operator-entered, legally unverified label; historic research prospects
+retain the original unverified research-candidate caption.
+
+The Qt renderer only supports escaped Markdown headings, bold, paragraphs,
+bullet and ordered lists. Raw HTML is never interpreted. Body spacing and
+margins were tightened for the representative GBP 750 single-day scoping
+proposal, without changing the source, the tax state, calculated amounts,
+the issuer's unverified status or the DRAFT/NOT SENT safeguards.
+Tests cover escaping, safe origin selection, PDF text and page count, and
+the existing long multi-page case. There is no migration or local data edit.
+Re-export the existing proposal revision 2 for Debian visual acceptance.

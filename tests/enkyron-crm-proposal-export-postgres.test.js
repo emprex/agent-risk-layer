@@ -7,6 +7,10 @@ import {createProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {replaceProposalLines} from '../desktop/enkyron-crm-proposal-lines.mjs';
 import {readProposalForDraftPdf} from '../desktop/enkyron-crm-proposal-export.mjs';
 import {recordCompanyProfile} from '../desktop/enkyron-company-profile.mjs';
+import {createCompany} from '../desktop/enkyron-crm.mjs';
+import {createDeskTicket} from '../desktop/enkyron-ticket-intake.mjs';
+import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {createCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 
 const uri=process.env.ARL_CI_POSTGRES_URL||'';
 function isolated(){
@@ -71,6 +75,7 @@ test('PostgreSQL PDF snapshot reads saved proposal lines and does not change com
     assert.equal(pdf.proposal.id,created.id);
     assert.equal(pdf.proposal.revision,2);
     assert.equal(pdf.proposal.research_candidate,'Research candidate - UNVERIFIED');
+    assert.equal(pdf.proposal.buyer_origin,'research_candidate');
     assert.equal(pdf.proposal.currency,'GBP');
     assert.equal(pdf.proposal.amount_minor,50100);
     assert.deepEqual(pdf.proposal.issuer,{
@@ -93,5 +98,46 @@ test('PostgreSQL PDF snapshot reads saved proposal lines and does not change com
       db.query('SELECT * FROM enkyron_crm_opportunities WHERE id=$1',[opportunity.id])
     ])).map(x=>x.rows[0]);
     assert.deepEqual(after,before,'Read-only draft export must not send or mutate CRM records');
+  }finally{await db.end();}
+});
+
+test('PDF snapshot identifies CRM-company buyer source without legal-identity promotion', {
+  skip:!uri&&'Isolated PostgreSQL CI only',timeout:60000
+},async()=>{
+  const db=new pg.Pool({connectionString:isolated(),max:3});
+  const actor='ci-pdf-company-'+randomUUID().slice(0,6);
+  const name='Synthetic CRM Company '+randomUUID().slice(0,6);
+  try{
+    const company=await createCompany(db,{name},actor);
+    const ticket=await createDeskTicket(db,{
+      source:'manual',client_name:name,title:'Synthetic requested service',
+      request_text:'Internal synthetic scoping proposal; no authorised security testing.'
+    },actor);
+    await linkTicketToCompany(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      ticket_client_name_at_review:name,
+      review_note:'CI-only operator verified synthetic company and ticket association.',
+      reviewed:true
+    },actor);
+    const opportunity=await createCompanyOpportunity(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      company_name_at_review:name,ticket_number_at_review:ticket.ticket_number,
+      next_action:'Prepare safe test quotation draft',due_date:null,confirmed:true
+    },actor);
+    const proposal=await createProposalDraft(db,{
+      opportunity_id:opportunity.id,title:'Scoping review internal draft',
+      scope_text:'**Objective**\n\n- Review the supplied documents only.',
+      currency:'GBP',amount_minor:75000
+    },actor);
+    const result=await readProposalForDraftPdf(db,proposal.id,actor);
+    assert.equal(result.proposal.buyer_origin,'crm_company');
+    assert.equal(result.proposal.research_candidate,name);
+    assert.equal(result.proposal.amount_minor,75000);
+    assert.deepEqual(result.proposal.lines,[]);
+    assert.equal(result.proposal.issuer,null);
+    assert.equal((await db.query(
+      'SELECT source_ticket_id FROM enkyron_crm_opportunities WHERE id=$1',
+      [opportunity.id]
+    )).rows[0].source_ticket_id,ticket.id);
   }finally{await db.end();}
 });
