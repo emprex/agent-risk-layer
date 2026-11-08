@@ -70,6 +70,7 @@ jobs:
           node --check desktop/enkyron-crm-quote-evidence-review.mjs
           node --check desktop/enkyron-crm-quote-external-report.mjs
           node --check scripts/enkyron-crm-quote-external-report-schema.mjs
+          node --check scripts/enkyron-crm-opportunity-probability-schema.mjs
           node --check scripts/enkyron-crm-quote-evidence-review-schema.mjs
           node --check desktop/enkyron-crm-tax-review.mjs
           node --check desktop/enkyron-company-profile.mjs
@@ -1058,6 +1059,8 @@ jobs:
           window.open_followup_update()
           assert window.crm_followup_dialog.isVisible()
           assert window.crm_followup_stage.isEnabled()
+          assert window.crm_followup_probability.value() == -1
+          window.crm_followup_probability.setValue(35)
           assert window.crm_followup_has_date.isChecked()
           window.crm_followup_stage.setCurrentIndex(
               window.crm_followup_stage.findData("qualified")
@@ -1067,6 +1070,7 @@ jobs:
           assert calls[-1][0] == "crm-update-opportunity"
           assert calls[-1][2]["expected_version"] == 1
           assert calls[-1][2]["stage"] == "qualified"
+          assert calls[-1][2]["probability_percent"] == 35
           window.crm_followup_dialog.reject()
           window.navigation.setCurrentRow(1)
           assert window.pages.currentIndex() == 1
