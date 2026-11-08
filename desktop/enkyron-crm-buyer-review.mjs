@@ -109,7 +109,7 @@ export async function recordBuyerReview(pool,input,actor,options={}){
       throw new Error('CRM proposal changed; reopen current buyer review');
     if(!proposal.company_id || !proposal.company_name ||
        proposal.company_id!==data.company_id)
-      throw new Error('CRM buyer requires a current reviewed CRM company association');
+      throw new Error('CRM buyer requires a current reviewed CRM company association (linked and active)');
     const already=(await client.query(
       'SELECT id FROM enkyron_crm_proposal_buyer_reviews '
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3',
