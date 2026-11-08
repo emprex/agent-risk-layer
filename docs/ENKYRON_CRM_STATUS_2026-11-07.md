@@ -238,3 +238,20 @@ the issuer's unverified status or the DRAFT/NOT SENT safeguards.
 Tests cover escaping, safe origin selection, PDF text and page count, and
 the existing long multi-page case. There is no migration or local data edit.
 Re-export the existing proposal revision 2 for Debian visual acceptance.
+
+## Direct CRM company buyer review (2026-11-08, development)
+
+The operator E2E quote for ARL E2E Test 0711 at proposal revision 2 is
+company-ticket-origin (migration 094), not a legacy sales_prospects link.
+The existing buyer documentary view was still tied to research prospects,
+so it showed no linked CRM company and disabled review on this real path.
+The query now uses the recorded CRM company only while its explicit
+company-ticket link remains effective in the same local workspace.
+Legacy prospect origin is unchanged. A revoked company-ticket link removes
+the eligible buyer identity source, but does not delete any append-only
+review history. The native dialog distinguishes these two origins and
+explains when a link has been revoked. No legal verification, signature,
+client permission, contract or sending is inferred. No new migration or
+local data edits. CI includes direct company-origin test with an unrelated
+company, foreign workspace, immutable history and reviewed link revocation.
+Local Debian acceptance is separate, using only synthetic buyer data.

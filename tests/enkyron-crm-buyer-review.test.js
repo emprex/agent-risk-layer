@@ -22,6 +22,7 @@ test('buyer review validation requires linked company identifier and traceable s
 function mockDB({linked=true,stale=false,already=false}={}){
   const queries=[];let released=false;
   const proposal={id,revision:stale?3:2,research_candidate:'Research Candidate',
+    origin_kind:'reviewed_research_prospect',
     company_id:linked?company:null,
     company_name:linked?'Synthetic CRM Buyer':null,
     company_legal_name:'Synthetic Linked Buyer Ltd'};
@@ -43,6 +44,12 @@ test('read shows only explicitly linked company, not inferred buyer',async()=>{
   assert.deepEqual(m.queries[0].params,['local:ci-user',id]);
   const a=mockDB();
   assert.equal((await readBuyerReview(a.pool,id,'ci-user')).linked_company.id,company);
+  assert.equal((await readBuyerReview(a.pool,id,'ci-user')).origin_kind,
+    'reviewed_research_prospect');
+  assert.match(a.queries[0].sql,/enkyron_crm_effective_ticket_links/);
+  assert.match(a.queries[0].sql,/COALESCE\(o.company_id,l.company_id\)/);
+  assert.match(a.queries[0].sql,/e.workspace_key=d.workspace_key/);
+  assert.match(a.queries[0].sql,/e.ticket_id=o.source_ticket_id/);
 });
 test('write is immutable, scoped, version-bound and confirms human link',async()=>{
   const m=mockDB();

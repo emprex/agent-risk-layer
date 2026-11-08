@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
+import {createDeskTicket} from '../desktop/enkyron-ticket-intake.mjs';
+import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {revokeTicketAssociation} from '../desktop/enkyron-crm-ticket-corrections.mjs';
+import {createCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {createProposalDraft,updateProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {readBuyerReview,recordBuyerReview}
@@ -125,5 +129,73 @@ test('buyer review: explicit link, immutable revision, cross-workspace rejection
     assert.equal(await count('arl_workbench_tickets'),baseline.tickets);
     assert.equal(await count('enkyron_crm_companies'),baseline.companies+2);
     assert.equal(id.length,36);
+  }finally{await db.end();}
+});
+
+test('buyer identity review on direct CRM company-ticket origin requires effective reviewed link', {
+  skip:!url&&'Disposable CI database only',timeout:60000
+},async()=>{
+  const db=new pg.Pool({connectionString:disposable(),max:3});
+  const actor='ci-buyer-direct-'+randomUUID().slice(0,8);
+  const name='Synthetic E2E Buyer '+randomUUID().slice(0,7);
+  try{
+    const company=await createCompany(db,{name},actor);
+    const twin=await createCompany(db,{name:name+' Other'},actor);
+    const ticket=await createDeskTicket(db,{
+      source:'manual',client_name:name,title:'Buyer review source ticket',
+      request_text:'Synthetic company-scoped commercial quote; no customer authorisation.'
+    },actor);
+    await linkTicketToCompany(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      ticket_client_name_at_review:name,
+      review_note:'Operator reviewed the synthetic original company and ticket.',
+      reviewed:true
+    },actor);
+    const opp=await createCompanyOpportunity(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      company_name_at_review:name,ticket_number_at_review:ticket.ticket_number,
+      next_action:'Prepare internal draft and examine buyer identity documents',
+      due_date:null,confirmed:true
+    },actor);
+    const prop=await createProposalDraft(db,{
+      opportunity_id:opp.id,title:'Synthetic scoping proposal',
+      scope_text:'Human-reviewed proposal draft with no testing authorisation.',
+      currency:'GBP',amount_minor:75000
+    },actor);
+    const buyer=await readBuyerReview(db,prop.id,actor);
+    assert.equal(buyer.origin_kind,'reviewed_company_ticket');
+    assert.equal(buyer.linked_company.id,company.id);
+    assert.equal(buyer.linked_company.name,name);
+    assert.equal(buyer.current,null);
+    await assert.rejects(()=>readBuyerReview(db,prop.id,'ci-foreign-operator'),
+      /not found in local workspace/);
+    const input={proposal_id:prop.id,company_id:company.id,
+      expected_revision:1,confirmed:true,
+      legal_name:'Synthetic E2E Buyer (not verified)',
+      registered_address:'10 Example Lane, Fictional Test City, UK',
+      source_reference:'CI synthetic buyer identity fixture only',
+      review_note:'Operator entered deliberately synthetic documentary data; no '
+        +'independent legal verification or contractual acceptance.'};
+    await assert.rejects(()=>recordBuyerReview(db,{
+      ...input,company_id:twin.id
+    },actor),/current reviewed CRM company association/);
+    const saved=await recordBuyerReview(db,input,actor);
+    assert.equal(saved.review_status,'operator_documented_unverified');
+    const after=await readBuyerReview(db,prop.id,actor);
+    assert.equal(after.current.company_id,company.id);
+    assert.equal(after.current.proposal_revision,1);
+    await assert.rejects(()=>recordBuyerReview(db,input,actor),/already recorded/);
+    await revokeTicketAssociation(db,{
+      company_id:company.id,ticket_id:ticket.id,expected_client_name:name,
+      review_note:'Synthetic revocation to ensure old buyer source no longer qualifies.',
+      confirmed:true
+    },actor);
+    const revoked=await readBuyerReview(db,prop.id,actor);
+    assert.equal(revoked.linked_company,null);
+    assert.equal(revoked.current.company_id,company.id,
+      'Immutable historical documentary entry stays visible after revocation');
+    await assert.rejects(()=>recordBuyerReview(db,{
+      ...input,expected_revision:1
+    },actor),/current reviewed CRM company association/);
   }finally{await db.end();}
 });

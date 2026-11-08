@@ -1,5 +1,6 @@
 // ENKYRON proposal buyer dossier: manual documentary review, never automatic identity verification.
-// A legacy research candidate must ALREADY be linked by a human to a CRM company.
+// A legacy research candidate must be linked by a human to a CRM company.
+// Direct company-origin opportunities require their effective reviewed ticket link.
 // Append-only snapshots are version-bound to the priced proposal; no send, VAT or acceptance.
 import {randomUUID} from 'node:crypto';
 
@@ -42,14 +43,21 @@ export function validateBuyerReview(input){
 }
 const PROPOSAL_SQL=
   'SELECT d.id,d.revision,o.company_name_at_creation AS research_candidate,'
-  +'l.company_id,c.name AS company_name,c.legal_name AS company_legal_name '
+  +'c.id AS company_id,c.name AS company_name,c.legal_name AS company_legal_name,'
+  +"CASE WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
+  +"ELSE 'reviewed_research_prospect' END AS origin_kind "
   +'FROM enkyron_crm_proposal_drafts d '
   +'JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id '
   +'AND o.workspace_key=d.workspace_key '
   +'LEFT JOIN enkyron_crm_prospect_links l '
   +'ON l.workspace_key=d.workspace_key AND l.prospect_id=o.prospect_id '
   +'LEFT JOIN enkyron_crm_companies c '
-  +'ON c.id=l.company_id AND c.workspace_key=l.workspace_key '
+  +'ON c.workspace_key=d.workspace_key '
+  +'AND c.id=COALESCE(o.company_id,l.company_id) '
+  +'AND (o.company_id IS NULL OR EXISTS ('
+  +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+  +'WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id '
+  +'AND e.ticket_id=o.source_ticket_id)) '
   +'WHERE d.workspace_key=$1 AND d.id=$2';
 export async function readBuyerReview(pool,proposalId,actor){
   const id=identifier(proposalId,'proposal'),scope=owner(actor);
@@ -66,6 +74,7 @@ export async function readBuyerReview(pool,proposalId,actor){
     )).rows;
     return {available:true,proposal_id:id,proposal_revision:proposal.revision,
       research_candidate:proposal.research_candidate,
+      origin_kind:proposal.origin_kind,
       linked_company:proposal.company_id && proposal.company_name ? {
         id:proposal.company_id,name:proposal.company_name,
         crm_legal_name:proposal.company_legal_name??null
@@ -78,7 +87,8 @@ export async function readBuyerReview(pool,proposalId,actor){
       })),
       more:rows.length>20,
       notice:'Documentary information entered by an operator; NOT independently verified. '
-        +'A buyer must first be explicitly linked to this research prospect.'};
+        +'The buyer must be a reviewed CRM association: either a linked research '
+        +'prospect or the still-effective company-ticket link.'};
   }catch(e){
     if(e?.code==='42P01')return {available:false,
       notice:'Buyer review requires ENKYRON schema 078; install it after backing up.'};
@@ -99,7 +109,7 @@ export async function recordBuyerReview(pool,input,actor,options={}){
       throw new Error('CRM proposal changed; reopen current buyer review');
     if(!proposal.company_id || !proposal.company_name ||
        proposal.company_id!==data.company_id)
-      throw new Error('CRM buyer must be explicitly linked to this prospect first');
+      throw new Error('CRM buyer requires a current reviewed CRM company association');
     const already=(await client.query(
       'SELECT id FROM enkyron_crm_proposal_buyer_reviews '
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3',

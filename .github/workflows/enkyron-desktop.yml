@@ -1821,6 +1821,45 @@ jobs:
           assert any("Research candidate: <b>Untrusted Research Co.</b>" == label.text()
                      and label.textFormat() == Qt.TextFormat.PlainText for label in labels)
           window.crm_buyer_dialog.reject()
+          # Company-first opportunity: an effective reviewed company-ticket link
+          # is a valid source, without requiring a fabricated research prospect.
+          window.open_proposal_buyer_review()
+          assert calls[-1][0] == "crm-buyer-review"
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "ARL E2E Test 0711",
+              "origin_kind": "reviewed_company_ticket",
+              "linked_company": {
+                  "id": "11111111-2222-4333-8444-555555555555",
+                  "name": "ARL E2E Test 0711", "crm_legal_name": None
+              },
+              "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert window.crm_buyer_save.isEnabled()
+          labels = window.crm_buyer_dialog.findChildren(QLabel)
+          assert any(
+              "Company at opportunity creation: ARL E2E Test 0711" == label.text()
+              and label.textFormat() == Qt.TextFormat.PlainText for label in labels)
+          assert any("currently reviewed ticket link" in label.text()
+                     for label in labels)
+          window.crm_buyer_dialog.reject()
+          # If the reviewed ticket link is revoked, the proposed buyer is NOT
+          # eligible and the operator cannot record a new buyer review.
+          window.open_proposal_buyer_review()
+          calls[-1][3]({
+              "available": True,
+              "proposal_id": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+              "proposal_revision": 1, "research_candidate": "ARL E2E Test 0711",
+              "origin_kind": "reviewed_company_ticket",
+              "linked_company": None, "current": None, "history": [], "more": False
+          }, None)
+          assert window.crm_buyer_dialog.isVisible()
+          assert not window.crm_buyer_save.isEnabled()
+          assert any("no longer effective" in label.text()
+                     for label in window.crm_buyer_dialog.findChildren(QLabel))
+          window.crm_buyer_dialog.reject()
           # Country and B2B status are operator-entered evidence; no VAT inferred.
           assert window.crm_tax_review_button.isEnabled()
           window.open_proposal_tax_review()

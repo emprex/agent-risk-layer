@@ -4746,15 +4746,21 @@ class EnkyronWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         body = QWidget()
         body_l = QVBoxLayout(body)
-        candidate = data.get("research_candidate") or "Unknown research prospect"
-        candidate_label = QLabel("Research candidate: " + candidate)
+        direct_company = data.get("origin_kind") == "reviewed_company_ticket"
+        candidate = data.get("research_candidate") or "Unknown CRM source"
+        candidate_label = QLabel(
+            ("Company at opportunity creation: " if direct_company
+             else "Research candidate: ") + candidate
+        )
         candidate_label.setTextFormat(Qt.TextFormat.PlainText)
         candidate_label.setWordWrap(True)
         body_l.addWidget(candidate_label)
         linked = data.get("linked_company")
         if linked:
             company_text = (
-                "Explicitly linked CRM company: " + (linked.get("name") or "")
+                ("CRM company with currently reviewed ticket link: "
+                 if direct_company else "Explicitly linked CRM company: ")
+                + (linked.get("name") or "")
             )
             linked_label = QLabel(company_text)
             linked_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -4762,9 +4768,13 @@ class EnkyronWindow(QMainWindow):
             body_l.addWidget(linked_label)
         else:
             missing = QLabel(
-                "No CRM company has been explicitly linked to this research prospect. "
-                "Create or select a company in Companies & Contacts, then use the "
-                "prospect association workflow before reviewing the buyer."
+                ("The CRM company-ticket association is no longer effective. "
+                 "Review the ticket correction history; no buyer review can be "
+                 "recorded until a valid human-reviewed link exists."
+                 if direct_company else
+                 "No CRM company has been explicitly linked to this research prospect. "
+                 "Create or select a company in Companies & Contacts, then use the "
+                 "prospect association workflow before reviewing the buyer.")
             )
             missing.setWordWrap(True)
             body_l.addWidget(missing)
