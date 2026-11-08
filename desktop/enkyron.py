@@ -802,6 +802,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_link_ticket_button.setEnabled(False)
         self.crm_link_ticket_button.clicked.connect(self.open_ticket_link_dialog)
         ticket_heading.addWidget(self.crm_link_ticket_button)
+        self.crm_ticket_opportunity_button = QPushButton("+ Opportunity from ticket")
+        self.crm_ticket_opportunity_button.setEnabled(False)
+        self.crm_ticket_opportunity_button.clicked.connect(
+            self.open_company_ticket_opportunity
+        )
+        ticket_heading.addWidget(self.crm_ticket_opportunity_button)
         company_tickets_l.addLayout(ticket_heading)
         self.crm_company_tickets_notice = QLabel(
             "Select a company. Ticket names alone never prove client identity."
@@ -1629,6 +1635,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_items = []
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             if error:
                 self.crm_company_notice.setText("CRM company lookup unavailable.")
@@ -1698,6 +1705,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_ticket_seq += 1
             self.crm_company_tickets_table.setRowCount(0)
             self.crm_link_ticket_button.setEnabled(False)
+            self.crm_ticket_opportunity_button.setEnabled(False)
             self.crm_open_company_ticket_button.setEnabled(False)
             return
         company = self.crm_company_items[row]
@@ -3232,6 +3240,7 @@ class EnkyronWindow(QMainWindow):
         seq = self.crm_ticket_seq
         self.crm_ticket_items = []
         self.crm_company_tickets_table.setRowCount(0)
+        self.crm_ticket_opportunity_button.setEnabled(False)
         self.crm_open_company_ticket_button.setEnabled(False)
         self.crm_revoke_ticket_button.setEnabled(False)
         self.crm_ticket_corrections_notice.setText("Reading correction history…")
@@ -3328,6 +3337,78 @@ class EnkyronWindow(QMainWindow):
         active = 0 <= row < len(self.crm_ticket_items)
         self.crm_open_company_ticket_button.setEnabled(active)
         self.crm_revoke_ticket_button.setEnabled(active)
+        self.crm_ticket_opportunity_button.setEnabled(
+            active and self.crm_ticket_items[row].get("status") != "closed"
+            if active else False
+        )
+
+    def open_company_ticket_opportunity(self):
+        row = self.crm_company_tickets_table.currentRow()
+        if not self.crm_company_id or not 0 <= row < len(self.crm_ticket_items):
+            return
+        ticket = dict(self.crm_ticket_items[row])
+        company_id = self.crm_company_id
+        company = next(
+            (c for c in self.crm_company_items if c.get("id") == company_id), None
+        )
+        if not company or ticket.get("status") == "closed":
+            return
+        ticket_id = ticket["ticket_id"]
+        label = "{} / {} · {}".format(
+            company["name"], ticket.get("ticket_number") or "",
+            ticket.get("title") or ""
+        )
+        action, accepted = QInputDialog.getMultiLineText(
+            self, "ENKYRON · New company opportunity",
+            "Reviewed company and linked ticket:\n{}\n\n"
+            "Next human commercial action (5–1000 characters):".format(label),
+            "Review the synthetic service scope and prepare an internal proposal draft."
+        )
+        if not accepted:
+            return
+        action = action.strip()
+        if not 5 <= len(action) <= 1000:
+            QMessageBox.warning(self, "Next action required",
+                "Enter a specific next step in 5–1000 characters.")
+            return
+        if QMessageBox.question(
+            self, "Confirm reviewed company-ticket origin",
+            "Record one internal opportunity for {}?\n\n"
+            "The ticket's original client name is '{}'. Check the reviewed CRM "
+            "association. This action does not send email, verify identity, "
+            "authorise tests, issue a contract or start an assessment.".format(
+                label, ticket.get("client_name") or ""
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self.crm_ticket_opportunity_button.setEnabled(False)
+        payload = {
+            "company_id": company_id,
+            "ticket_id": ticket_id,
+            "company_name_at_review": company["name"],
+            "ticket_number_at_review": ticket["ticket_number"],
+            "next_action": action,
+            "due_date": None,
+            "confirmed": True
+        }
+
+        def received(data, error):
+            if error or not isinstance(data, dict) or not data.get("id"):
+                self.company_ticket_selected()
+                QMessageBox.warning(self, "Opportunity not saved",
+                    error or "CRM record unavailable.")
+                return
+            self.status.setText(
+                "Reviewed company-ticket opportunity created; no external action."
+            )
+            self.crm_tabs.setCurrentIndex(4)
+            self.load_pipeline()
+
+        self.bridge.call(
+            "crm-company-opportunity-create", payload=payload, callback=received
+        )
 
     def open_ticket_link_correction(self):
         row = self.crm_company_tickets_table.currentRow()
@@ -7244,7 +7325,9 @@ class EnkyronWindow(QMainWindow):
             "UPDATE COMMERCIAL OPPORTUNITY" if existing else
             "PLAN A PROSPECT FOLLOW-UP"
         ))
-        title = QLabel("Research candidate: {}".format(
+        title = QLabel("{}: {}".format(
+            "Company (ticket-linked)" if existing and existing.get("company_id")
+            else "Research candidate",
             prospect.get("company_name") or "Unknown"
         ))
         title.setTextFormat(Qt.TextFormat.PlainText)

@@ -3,6 +3,8 @@
 import {randomUUID} from 'node:crypto';
 import {boundedSearch} from './enkyron-contract.mjs';
 import {requireProspectId} from './enkyron-crm-link.mjs';
+import {requireCompanyId} from './enkyron-crm-tickets.mjs';
+import {requireTicketId} from './enkyron-contract.mjs';
 
 export const OPPORTUNITY_STAGES=Object.freeze([
   'research','qualified','contact_planned','contacted','discovery',
@@ -40,6 +42,22 @@ export function validateOpportunityCreate(data){
     due_date:dateField(data.due_date)
   };
 }
+export function validateCompanyOpportunityCreate(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||
+    Object.keys(data).some(k=>![
+      'company_id','ticket_id','company_name_at_review',
+      'ticket_number_at_review','next_action','due_date','confirmed'
+    ].includes(k)))throw new Error('CRM invalid company opportunity request');
+  if(data.confirmed!==true)throw new Error('CRM reviewed ticket confirmation required');
+  return {
+    company_id:requireCompanyId(data.company_id),
+    ticket_id:requireTicketId(data.ticket_id),
+    company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
+    ticket_number_at_review:textField(data.ticket_number_at_review,'ticket number',8,40),
+    next_action:textField(data.next_action,'next action',5,1000),
+    due_date:dateField(data.due_date)
+  };
+}
 export function validateOpportunityUpdate(data){
   if(!data||typeof data!=='object'||Array.isArray(data))
     throw new Error('CRM invalid opportunity update');
@@ -61,11 +79,16 @@ export async function listOpportunities(pool,search,operator){
   const q=boundedSearch(search),scope=workspace(operator);
   try{
     const result=await pool.query(
-      'SELECT o.id,o.prospect_id,o.company_name_at_creation,o.stage,o.next_action,'
-      +'o.due_date,o.version,o.updated_at,p.company_name AS current_candidate_name,'
-      +'p.source AS prospect_source '
+      'SELECT o.id,o.prospect_id,o.company_id,o.source_ticket_id,'
+      +'o.company_name_at_creation,o.stage,o.next_action,'
+      +'o.due_date,o.version,o.updated_at,'
+      +'COALESCE(p.company_name,c.name) AS current_candidate_name,'
+      +"CASE WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
+      +"ELSE p.source END AS prospect_source "
       +'FROM enkyron_crm_opportunities o '
-      +'JOIN sales_prospects p ON p.id=o.prospect_id '
+      +'LEFT JOIN sales_prospects p ON p.id=o.prospect_id '
+      +'LEFT JOIN enkyron_crm_companies c ON c.id=o.company_id '
+      +'AND c.workspace_key=o.workspace_key '
       +'WHERE o.workspace_key=$1 AND '
       +"($2='' OR POSITION(LOWER($2) IN LOWER(o.company_name_at_creation))>0 "
       +'OR POSITION(LOWER($2) IN LOWER(o.next_action))>0) '
@@ -169,5 +192,64 @@ export async function updateOpportunity(pool,input,operator,options={}){
         existing.next_action,req.next_action,oldDue,req.due_date,scope.actor]
     );
     return {id:req.id,version:updated.version,stage:req.stage};
+  });
+}
+
+/**
+ * The new company-first route is separate from legacy research prospects.
+ * No sales_prospects write, no ticket rewrite and no inferred name association.
+ * The operator explicitly reviews the already effective CRM ticket link.
+ */
+export async function createCompanyOpportunity(pool,input,operator,options={}){
+  const req=validateCompanyOpportunityCreate(input),scope=workspace(operator);
+  const uuid=options.uuid??randomUUID;
+  return transaction(pool,async client=>{
+    const company=(await client.query(
+      'SELECT id,name FROM enkyron_crm_companies '
+      +'WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [scope.key,req.company_id]
+    )).rows[0];
+    if(!company)throw new Error('CRM company not found in local workspace');
+    if(company.name!==req.company_name_at_review)
+      throw new Error('CRM company identity changed; reopen before creating an opportunity');
+    const ticket=(await client.query(
+      'SELECT id,ticket_number,status,archived_at '
+      +'FROM arl_workbench_tickets WHERE id=$1 FOR KEY SHARE',
+      [req.ticket_id]
+    )).rows[0];
+    if(!ticket||ticket.ticket_number!==req.ticket_number_at_review)
+      throw new Error('CRM source ticket changed or not found');
+    if(ticket.archived_at||ticket.status==='closed')
+      throw new Error('CRM closed or archived source ticket cannot start an opportunity');
+    const reviewed=(await client.query(
+      'SELECT 1 FROM enkyron_crm_effective_ticket_links '
+      +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3',
+      [scope.key,req.company_id,req.ticket_id]
+    )).rows[0];
+    if(!reviewed)throw new Error('CRM company-ticket association not currently reviewed');
+    const existing=(await client.query(
+      'SELECT id FROM enkyron_crm_opportunities '
+      +'WHERE workspace_key=$1 AND company_id=$2 AND source_ticket_id=$3',
+      [scope.key,req.company_id,req.ticket_id]
+    )).rows[0];
+    if(existing)throw new Error('CRM opportunity already exists for this company-ticket pair');
+    const id=uuid();
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunities '
+      +'(id,workspace_key,prospect_id,company_id,source_ticket_id,'
+      +'company_name_at_creation,stage,next_action,due_date,owner_local) '
+      +"VALUES($1,$2,NULL,$3,$4,$5,'research',$6,$7,$8)",
+      [id,scope.key,req.company_id,req.ticket_id,company.name,
+       req.next_action,req.due_date,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunity_events '
+      +'(id,workspace_key,opportunity_id,event_type,new_stage,new_next_action,'
+      +"new_due_date,actor_local) VALUES($1,$2,$3,'created','research',$4,$5,$6)",
+      [uuid(),scope.key,id,req.next_action,req.due_date,scope.actor]
+    );
+    return {id,prospect_id:null,company_id:req.company_id,
+      source_ticket_id:req.ticket_id,stage:'research',version:1,
+      notice:'Internal commercial opportunity only; no client acceptance, test or outreach.'};
   });
 }

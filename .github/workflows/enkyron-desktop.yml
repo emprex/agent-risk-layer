@@ -83,6 +83,7 @@ jobs:
           node --check scripts/enkyron-crm-proposals-schema.mjs
           node --check scripts/enkyron-crm-qualification-schema.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
+          node --check scripts/enkyron-crm-company-opportunities-schema.mjs
           node --check desktop/enkyron-crm-activities.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
           node --check desktop/enkyron-crm-overview.mjs
@@ -98,7 +99,7 @@ jobs:
           node --check scripts/enkyron-crm-privacy-schema.mjs
           node --check scripts/enkyron-crm-retention-schema.mjs
           node --check scripts/enkyron-client-desk-schema.mjs
-          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
+          node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
       - name: Install native Qt system libraries
         run: |
@@ -702,6 +703,17 @@ jobs:
           window.crm_company_tickets_table.selectRow(0)
           assert window.crm_open_company_ticket_button.isEnabled()
           assert window.crm_revoke_ticket_button.isEnabled()
+          assert window.crm_ticket_opportunity_button.isEnabled()
+          with patch("desktop.enkyron.QInputDialog.getMultiLineText",
+                     return_value=("Review the synthetic service scope for a manual proposal.", True)), patch(
+              "desktop.enkyron.QMessageBox.question",
+              return_value=QMessageBox.StandardButton.Yes):
+              window.crm_ticket_opportunity_button.click()
+          assert calls[-1][0] == "crm-company-opportunity-create"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["ticket_id"] == example_ticket_id
+          assert calls[-1][2]["ticket_number_at_review"] == "ARL-2026-000009"
+          assert calls[-1][2]["confirmed"] is True
           window.crm_revoke_ticket_button.click()
           correction = window.crm_ticket_correction_dialog
           assert correction.isVisible()

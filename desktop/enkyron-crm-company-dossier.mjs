@@ -46,23 +46,31 @@ const LISTS={
     +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
     +'ORDER BY l.linked_at DESC,l.ticket_id DESC LIMIT 21',
   opportunities:
-    'SELECT o.id AS opportunity_id,o.prospect_id,o.stage,o.next_action,'
-    +'o.due_date,o.version,o.updated_at,'
+    'SELECT o.id AS opportunity_id,o.prospect_id,o.company_id,o.source_ticket_id,'
+    +'o.stage,o.next_action,o.due_date,o.version,o.updated_at,'
     +'count(*) OVER() AS total_rows '
-    +'FROM enkyron_crm_prospect_links l '
-    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
-    +'AND o.workspace_key=l.workspace_key '
-    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'FROM enkyron_crm_opportunities o '
+    +'WHERE o.workspace_key=$1 AND ('
+    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+    +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
+    +'AND e.ticket_id=o.source_ticket_id))) '
     +'ORDER BY o.updated_at DESC,o.id DESC LIMIT 21',
   activities:
     'SELECT a.id,a.activity_type,a.detail,a.recorded_by,a.recorded_at,'
     +'count(*) OVER() AS total_rows '
-    +'FROM enkyron_crm_prospect_links l '
-    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
-    +'AND o.workspace_key=l.workspace_key '
+    +'FROM enkyron_crm_opportunities o '
     +'JOIN enkyron_crm_activities a ON a.opportunity_id=o.id '
     +'AND a.workspace_key=o.workspace_key '
-    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'WHERE o.workspace_key=$1 AND ('
+    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+    +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
+    +'AND e.ticket_id=o.source_ticket_id))) '
     +'ORDER BY a.recorded_at DESC,a.id DESC LIMIT 21',
   qualifications:
     'SELECT r.id,r.contact_id,COALESCE(c.full_name,\'Company\') AS subject,'
@@ -76,24 +84,32 @@ const LISTS={
   drafts:
     'SELECT d.id,d.subject,d.recipient_email,d.revision,d.updated_at,'
     +'count(*) OVER() AS total_rows '
-    +'FROM enkyron_crm_prospect_links l '
-    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
-    +'AND o.workspace_key=l.workspace_key '
+    +'FROM enkyron_crm_opportunities o '
     +'JOIN enkyron_crm_mail_drafts d ON d.opportunity_id=o.id '
     +'AND d.workspace_key=o.workspace_key '
-    +'WHERE l.workspace_key=$1 AND l.company_id=$2 '
+    +'WHERE o.workspace_key=$1 AND ('
+    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+    +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
+    +'AND e.ticket_id=o.source_ticket_id))) '
     +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
 
   // Existing commercial source records only, including buyer documentary reviews
   // and INTERNAL decisions. These are NOT accepted contracts, issued invoices,
   // externally exchanged files, payments, delivered projects or customer consent.
-  // The linkage is reviewed prospect -> scoped opportunity -> source records.
+  // Source: reviewed legacy prospect OR current reviewed company-ticket -> opportunity.
   commercial_docs:
     'WITH linked_opportunities AS ('
-    +'SELECT o.id FROM enkyron_crm_prospect_links l '
-    +'JOIN enkyron_crm_opportunities o ON o.prospect_id=l.prospect_id '
-    +'AND o.workspace_key=l.workspace_key '
-    +'WHERE l.workspace_key=$1 AND l.company_id=$2), '
+    +'SELECT o.id FROM enkyron_crm_opportunities o '
+    +'WHERE o.workspace_key=$1 AND ('
+    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+    +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
+    +'AND e.ticket_id=o.source_ticket_id)))), '
     +'docs AS ('
     +"SELECT 'proposal_draft'::text AS document_kind,p.id AS document_id,"
     +"p.title AS title,'internal_unaccepted_draft'::text AS status,"

@@ -139,6 +139,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-ticket-triage-postgres.test.js
 
+      - name: ENKYRON E07 CRM company-ticket opportunity PostgreSQL acceptance
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-company-opportunities-postgres.test.js
+
       - name: ENKYRON CRM E02 structured company/contact PostgreSQL checks
         env:
           CI: 'true'

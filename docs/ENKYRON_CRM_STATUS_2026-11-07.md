@@ -176,3 +176,31 @@ contract or sends an invoice. Uninstalled migration is reported without
 preventing ordinary ticket reads. Applying the migration requires an intentional
 operator-run backup-first script. The CI and Debian acceptance gates are
 separate. E03-02 generic tags, SLA and broader operations remain OPEN.
+
+## E07 company-first opportunity from existing CRM ticket (development, 2026-11-08)
+
+During the E2E onboarding for `ARL E2E Test 0711`, the existing opportunities
+workflow was found to require legacy `sales_prospects`, so an operator-entered
+CRM company could not legitimately progress to a commercial opportunity without
+fabricating a research candidate. The additive migration 094 permits a
+**separate** company/ticket origin, retaining the original prospect route:
+`company_id` and `source_ticket_id` are scoped FKs, and exactly one origin
+is required per opportunity. Uniqueness prevents duplicate opportunities from
+the same company-ticket pair. The new Qt action appears beside a selected,
+previously reviewed CRM ticket. It requires a manual next action and a second
+explicit human confirmation; the backend verifies current reviewed ticket
+association, the exact company name, ticket number, workspace and current
+(nonclosed, nonarchived) status inside the creation transaction.
+
+Pipeline, opportunity editing and draft proposal generation are reused; the
+company dossier shows both reviewed legacy-origin and direct company-origin
+opportunities and commercial drafts under explicit scoped joins. A prior
+company whose ticket association is later revoked no longer shows direct
+opportunity records in its active company 360 view; historical rows remain.
+No `sales_prospects` insertion, ticket edit, email, legal identity promotion,
+contract, authorised assessment or invoice. The snapshot source record
+remains in the commercial opportunity for human review.
+
+CI uses disposable PostgreSQL and Qt tests. A new migration script enforces
+checksums, fails on historical drift and backs up `arl_local` before `--apply`.
+Local Debian acceptance must be performed separately on the same ticket.
