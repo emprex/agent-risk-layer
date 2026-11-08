@@ -7101,14 +7101,14 @@ class EnkyronWindow(QMainWindow):
         self.crm_catalog_notice = QLabel("No services loaded.")
         self.crm_catalog_notice.setWordWrap(True)
         layout.addWidget(self.crm_catalog_notice)
-        self.crm_catalog_table = QTableWidget(0, 5)
+        self.crm_catalog_table = QTableWidget(0, 6)
         self.crm_catalog_table.setHorizontalHeaderLabels(
-            ["Code", "Service", "Family", "Pricing", "Status"]
+            ["Code", "Service", "Family", "Pricing", "Base fee", "Status"]
         )
         self.crm_catalog_table.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
-        for col in (0, 2, 3, 4):
+        for col in (0, 2, 3, 4, 5):
             self.crm_catalog_table.horizontalHeader().setSectionResizeMode(
                 col, QHeaderView.ResizeMode.ResizeToContents
             )
@@ -7182,11 +7182,21 @@ class EnkyronWindow(QMainWindow):
             table.blockSignals(True)
             table.setRowCount(len(items))
             for row, item in enumerate(items):
+                raw_fee = item.get("price_minor")
+                fee = ("Custom" if item.get("pricing_model") == "custom_quote"
+                       else "Not set" if raw_fee is None
+                       else "{} {}{}".format(
+                           item.get("currency") or "",
+                           self._quote_format_minor(int(raw_fee)),
+                           " / " + str(item.get("billing_period"))
+                           if item.get("billing_period") else ""
+                       ))
                 values = [
                     item.get("service_code") or "",
                     item.get("name") or "",
                     (item.get("family") or "").replace("_", " ").title(),
                     (item.get("pricing_model") or "").replace("_", " ").title(),
+                    fee,
                     (item.get("status") or "").title()
                 ]
                 for col, value in enumerate(values):
