@@ -258,6 +258,53 @@ jobs:
               }]
           }, None)
           assert window.crm_tabs.count() == 7
+          assert hasattr(window, "crm_service_catalog_button")
+          window.crm_service_catalog_button.click()
+          assert window.crm_catalog_dialog.isVisible()
+          assert calls[-1][0] == "crm-service-catalog-list"
+          service_id = "11111111-aaaa-4bbb-8ccc-222222222222"
+          synthetic_service = {
+              "id": service_id,
+              "service_code": "ARL-CI-REVIEW",
+              "name": "Synthetic agent security review",
+              "family": "agent_assessment",
+              "summary": "Test-only bounded description of a fictional ARL product.",
+              "inclusions": "Only synthetic offline documents and selected controls.",
+              "exclusions": "No production testing, no external customer network.",
+              "deliverables": "Synthetic review and example report for test purposes.",
+              "prerequisites": "Explicit written scope and permission before real tests.",
+              "technical_notes": None,
+              "pricing_model": "fixed",
+              "currency": "GBP",
+              "price_minor": "90000",
+              "billing_period": None,
+              "status": "available",
+              "revision": 1,
+              "review_note": "Synthetic CI operator price only, not a published offer."
+          }
+          calls[-1][3]({
+              "available": True, "items": [synthetic_service], "more": False
+          }, None)
+          assert window.crm_catalog_table.rowCount() == 1
+          assert window.crm_catalog_table.item(0, 4).text() == "GBP 900.00"
+          window.crm_catalog_table.selectRow(0)
+          assert calls[-1][0] == "crm-service-catalog-read"
+          calls[-1][3]({
+              "available": True, "service": synthetic_service,
+              "history": [{
+                  "revision": 1, "status": "available",
+                  "price_minor": "90000", "recorded_by": "ci",
+                  "recorded_at": "2026-11-08"
+              }], "more": False
+          }, None)
+          assert "INCLUSIONS" in window.crm_catalog_details.toPlainText()
+          assert "IMMUTABLE VERSIONS" in window.crm_catalog_details.toPlainText()
+          window.open_catalog_service_form(None)
+          assert window.crm_catalog_form.isVisible()
+          assert window.crm_catalog_form_context["fields"]["pricing_model"].currentData() == "custom_quote"
+          assert window.crm_catalog_form_context["fields"]["status"].currentData() == "draft"
+          window.crm_catalog_form.reject()
+          window.crm_catalog_dialog.reject()
           assert hasattr(window, "crm_buyer_button")
           assert hasattr(window, "crm_issue_preflight_button")
           assert not window.crm_issue_preflight_button.isEnabled()
@@ -2035,6 +2082,29 @@ jobs:
           assert window.crm_quote_table.item(0, 3).text() == "1300.75"
           assert "1300.75" in window.crm_quote_total.text()
           assert window.crm_quote_save.isEnabled()
+          # Select a current catalog fiche. This is only an editable draft row;
+          # server verification and snapshot provenance are separately tested.
+          window.open_quote_catalog_picker()
+          assert window.crm_quote_picker_dialog.isVisible()
+          assert calls[-1][0] == "crm-service-catalog-list"
+          calls[-1][3]({
+              "available": True, "items": [synthetic_service], "more": False
+          }, None)
+          assert window.crm_quote_picker_combo.count() == 1
+          assert window.crm_quote_picker_price.text() == "900.00"
+          assert window.crm_quote_picker_price.isReadOnly()
+          window.insert_quote_catalog_service()
+          assert window.crm_quote_table.rowCount() == 2
+          assert window.crm_quote_table.item(1, 0).text() == (
+              "ARL-CI-REVIEW — Synthetic agent security review"
+          )
+          assert window.crm_quote_table.item(1, 0).data(
+              Qt.ItemDataRole.UserRole
+          )["source_catalog_revision"] == 1
+          assert "2200.75" in window.crm_quote_total.text()
+          window.crm_quote_table.selectRow(1)
+          window.remove_quote_line()
+          assert window.crm_quote_table.rowCount() == 1
           # The suggested line is editable and can be replaced with a deliberate
           # multi-line operator breakdown; it has NOT been persisted on open.
           window.crm_quote_table.selectRow(0)
