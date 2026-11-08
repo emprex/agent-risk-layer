@@ -53,7 +53,8 @@ test('E07 company-first: reviewed company-ticket -> opportunity -> internal prop
       reviewed:true
     },actor);
     await assert.rejects(
-      ()=>createCompanyOpportunity(pool,{...request,company_id:twin.id},actor),
+      ()=>createCompanyOpportunity(pool,{...request,company_id:twin.id,
+        company_name_at_review:companyName+' Alternate'},actor),
       /company-ticket association not currently reviewed/
     );
     await assert.rejects(
