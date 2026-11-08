@@ -110,14 +110,23 @@ export async function replaceProposalLines(pool,input,actor,options={}){
     // New catalog references are constrained to the latest operator-available
     // fiche revision. Existing unchanged referenced rows can survive a later
     // service price or status change; past quote lines are never repriced.
+    const reusedOldLines=new Set();
     for(const line of data.lines){
       if(!line.source_catalog_id)continue;
-      const retained=old.some(x=>
+      // Exact one-to-one unchanged old row only. Quantity growth or a copy of
+      // the same old source is a NEW commercial action, and must revalidate
+      // current pricing and availability against the catalog.
+      const retainedIndex=old.findIndex((x,i)=>
+        !reusedOldLines.has(i)&&
         x.source_catalog_id===line.source_catalog_id&&
         Number(x.source_catalog_revision)===line.source_catalog_revision&&
         x.description===line.description&&
+        Number(x.quantity)===line.quantity&&
         Number(x.unit_price_minor)===line.unit_price_minor);
-      if(retained)continue;
+      if(retainedIndex>=0){
+        reusedOldLines.add(retainedIndex);
+        continue;
+      }
       const source=(await client.query(
         'SELECT c.revision,c.status,c.currency,c.price_minor,c.pricing_model,'
         +'v.service_code,v.name,v.billing_period '
