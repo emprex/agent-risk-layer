@@ -7,6 +7,7 @@ import {createProposalDraft,readProposalDraft,updateProposalDraft}
   from '../desktop/enkyron-crm-proposals.mjs';
 import {replaceProposalLines,readProposalLines}
   from '../desktop/enkyron-crm-proposal-lines.mjs';
+import {createServiceCatalog,updateServiceCatalog} from '../desktop/enkyron-crm-service-catalog.mjs';
 const uri=process.env.ARL_CI_POSTGRES_URL||'';
 function onlyCi(){
   assert.equal(process.env.CI,'true','Use isolated PostgreSQL CI only');
@@ -109,5 +110,76 @@ test('PostgreSQL quote lines: precise totals, immutable versions, workspace isol
       baseline);
     assert.equal((await db.query('SELECT amount_minor FROM enkyron_crm_proposal_drafts WHERE id=$1',
       [proposal.id])).rows[0].amount_minor,'250200');
+
+    // E07-02: human-authorised catalog selection copies a fee and retains the
+    // source version for provenance. A later catalog revision NEVER reprices it.
+    const serviceCode='ARL-CI-QUOTED-'+randomUUID().slice(0,6).toUpperCase();
+    const service={
+      service_code:serviceCode,name:'Synthetic bounded agent assessment',
+      family:'agent_assessment',
+      summary:'This is an isolated CI service fiche, not a validated commercial offer.',
+      inclusions:'A limited hypothetical review of agent permissions and selected controls.',
+      exclusions:'No live network testing, production access, or broad pentesting.',
+      deliverables:'Synthetic summary and test-only risk findings with human limitations.',
+      prerequisites:'Signed client authorisation before any technical security testing.',
+      technical_notes:null,
+      pricing_model:'fixed',currency:'GBP',price_minor:35000,
+      billing_period:null,status:'available',
+      review_note:'Synthetic catalog price in isolated database only; no actual sale.',
+      confirmed:true
+    };
+    const catalog=await createServiceCatalog(db,service,actor);
+    const catalogLine={
+      description:serviceCode+' — '+service.name,
+      quantity:1,unit_price_minor:35000,
+      source_catalog_id:catalog.id,source_catalog_revision:1
+    };
+    await assert.rejects(()=>replaceProposalLines(db,{
+      proposal_id:proposal.id,expected_revision:3,
+      lines:[catalogLine,{...catalogLine,source_catalog_id:randomUUID()}]
+    },actor),/catalog version|availability changed/);
+    const sourced=await replaceProposalLines(db,{
+      proposal_id:proposal.id,expected_revision:3,
+      lines:[...updatedLines,catalogLine]
+    },actor);
+    assert.equal(sourced.revision,4);
+    assert.equal(sourced.total_minor,285200);
+    const recorded=await readProposalLines(db,proposal.id,actor);
+    assert.equal(recorded.lines[2].source_catalog_id,catalog.id);
+    assert.equal(recorded.lines[2].source_catalog_revision,1);
+    assert.equal(recorded.lines[2].description,catalogLine.description);
+    await updateServiceCatalog(db,{
+      ...service,id:catalog.id,expected_revision:1,price_minor:99900,
+      review_note:'Updated synthetic catalog pricing must not mutate existing quotes.'
+    },actor);
+    const unchanged=await readProposalLines(db,proposal.id,actor);
+    assert.equal(unchanged.lines[2].unit_price_minor,35000);
+    assert.equal(unchanged.amount_minor,285200);
+    await assert.rejects(()=>replaceProposalLines(db,{
+      proposal_id:proposal.id,expected_revision:4,
+      lines:[...updatedLines,{...catalogLine,quantity:2}]
+    },actor),/catalog version|availability changed/);
+    const extended=await replaceProposalLines(db,{
+      proposal_id:proposal.id,expected_revision:4,
+      lines:[{...updatedLines[0],description:'Updated manual service details'},
+        updatedLines[1],catalogLine]
+    },actor);
+    assert.equal(extended.revision,5);
+    const versioned=(await db.query(
+      'SELECT revision,unit_price_minor,source_catalog_id,source_catalog_revision '
+      +'FROM enkyron_crm_proposal_line_versions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2 '
+      +'AND source_catalog_id=$3 ORDER BY revision',
+      ['local:'+actor,proposal.id,catalog.id]
+    )).rows;
+    assert.deepEqual(versioned.map(x=>x.revision),[4,5]);
+    assert.deepEqual(versioned.map(x=>x.unit_price_minor),['35000','35000']);
+    assert.deepEqual(versioned.map(x=>x.source_catalog_revision),[1,1]);
+    await assert.rejects(()=>db.query(
+      'UPDATE enkyron_crm_proposal_line_versions SET unit_price_minor=1 '
+      +'WHERE workspace_key=$1 AND proposal_id=$2 AND source_catalog_id=$3',
+      ['local:'+actor,proposal.id,catalog.id]
+    ),/cannot be changed|immutable|may not/i);
+
   }finally{await db.end();}
 });
