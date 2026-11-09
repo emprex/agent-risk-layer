@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E03-04A ENKYRON local invoice issuance journal migration. Never auto-applies when launching ENKYRON.
+// E09-05 ENKYRON local commercial invoice and payment migration. Never auto-applies when launching ENKYRON.
 // Only the already-established single-operator arl_local database may be changed.
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -57,7 +57,7 @@ try{
     const backupDir=path.join(os.homedir(),'.local','share','enkyron','backups');
     await fs.mkdir(backupDir,{recursive:true,mode:0o700});
     const backup=path.join(backupDir,
-      'arl_local-before-enkyron-102-'+new Date().toISOString().replace(/[:.]/g,'-')+'.dump');
+      'arl_local-before-enkyron-103-'+new Date().toISOString().replace(/[:.]/g,'-')+'.dump');
     const result=spawnSync('pg_dump',[
       '--format=custom','--no-password','--host=/var/run/postgresql',
       '--username='+operator,'--dbname=arl_local','--file='+backup
