@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from datetime import date
+from hashlib import sha256
 from html import escape
+import json
 from os import close, replace
 from pathlib import Path
 from tempfile import mkstemp
@@ -80,6 +82,11 @@ def lifecycle_test_html(record):
         raise ValueError("TEST tax arithmetic mismatch")
     if not isinstance(record.get("source_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", record["source_sha256"]):
         raise ValueError("Missing TEST source integrity reference")
+    digest = sha256(json.dumps(
+        source, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    if digest != record["source_sha256"]:
+        raise ValueError("Stored TEST source integrity mismatch")
     def esc(value):
         if not isinstance(value, str) or not 1 <= len(value) <= 600:
             raise ValueError("Invalid TEST invoice text")
