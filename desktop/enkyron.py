@@ -4627,6 +4627,27 @@ class EnkyronWindow(QMainWindow):
                 check.get("label") or "", (check.get("status") or "unknown").replace("_", " ").upper(),
                 check.get("note") or ""
             ))
+        text.extend(["", "CONTRACT DOCUMENT REFERENCES · OPERATOR-REPORTED ONLY"])
+        if not data.get("contract_registry_installed"):
+            text.append(
+                "Not available: local migration 101 has not been installed."
+            )
+        else:
+            for receipt in data.get("contract_references") or []:
+                freshness = ("CURRENT SOW" if receipt.get("is_current_sow")
+                             else "HISTORICAL / STALE SOW")
+                text.append(
+                    "{} · SOW R{} · {} · UNVERIFIED · {} · {}".format(
+                        (receipt.get("document_kind") or "").replace("_", " ").upper(),
+                        receipt.get("sow_revision"), freshness,
+                        receipt.get("source_reference") or "",
+                        receipt.get("recorded_by") or ""
+                    )
+                )
+            if not data.get("contract_references"):
+                text.append("No contractual document references recorded.")
+            if data.get("contract_references_more"):
+                text.append("Only the 10 most recent references are shown.")
         text.extend(["", "MISSING OR UNVERIFIED REQUIREMENTS"])
         text.extend("- " + str(x) for x in (data.get("blockers") or []))
         text.extend([
@@ -4638,12 +4659,72 @@ class EnkyronWindow(QMainWindow):
         view.setReadOnly(True)
         view.setPlainText("\n".join(text))
         layout.addWidget(view, 1)
+
+        # E07-05B: optional inline reference recorder; no extra window.
+        panel = QFrame()
+        panel_l = QVBoxLayout(panel)
+        explanation = QLabel(
+            "Record only a reference to a document reported by an operator. "
+            "This does NOT verify a signature, legal authority, NDA/DPA applicability "
+            "or permission for any security test. Do not paste secrets or document bodies."
+        )
+        explanation.setWordWrap(True)
+        explanation.setTextFormat(Qt.TextFormat.PlainText)
+        panel_l.addWidget(explanation)
+        form = QFormLayout()
+        self.crm_contract_ref_kind = QComboBox()
+        for title, kind in (
+            ("NDA / confidentiality", "nda"),
+            ("Engagement agreement", "engagement_agreement"),
+            ("Data processing agreement", "dpa"),
+            ("Claimed testing permission", "test_permission"),
+        ):
+            self.crm_contract_ref_kind.addItem(title, kind)
+        form.addRow("Document type", self.crm_contract_ref_kind)
+        self.crm_contract_ref_reference = QLineEdit()
+        self.crm_contract_ref_reference.setMaxLength(300)
+        self.crm_contract_ref_reference.setPlaceholderText(
+            "Short source reference or identifier (not document contents)"
+        )
+        form.addRow("Reference *", self.crm_contract_ref_reference)
+        self.crm_contract_ref_note = QLineEdit()
+        self.crm_contract_ref_note.setMaxLength(500)
+        self.crm_contract_ref_note.setPlaceholderText(
+            "Human provenance note, 20–500 characters"
+        )
+        form.addRow("Source note *", self.crm_contract_ref_note)
+        panel_l.addLayout(form)
+        self.crm_contract_ref_confirm = QCheckBox(
+            "I confirm this is UNVERIFIED reference metadata, not a signed agreement or test authority."
+        )
+        panel_l.addWidget(self.crm_contract_ref_confirm)
+        self.crm_contract_ref_save = QPushButton("Record unverified reference")
+        self.crm_contract_ref_save.clicked.connect(self.save_contract_reference)
+        panel_l.addWidget(self.crm_contract_ref_save)
+        panel.hide()
+        layout.addWidget(panel)
+        self.crm_contract_ref_panel = panel
+        self.crm_contract_ref_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "expected_sow_revision": (sow or {}).get("sow_revision") or 0,
+        }
+
         footer = QHBoxLayout()
         edit = QPushButton("Document SOW draft…")
         edit.clicked.connect(lambda: self.open_sow_draft_record(
             data["proposal_id"], data["proposal_revision"]
         ))
         footer.addWidget(edit)
+        record = QPushButton("Record document reference…")
+        record.setEnabled(bool(data.get("can_record_contract_reference")))
+        record.setToolTip(
+            "Requires a current SOW and manually installed migration 101."
+        )
+        record.clicked.connect(
+            lambda: panel.setVisible(not panel.isVisible())
+        )
+        footer.addWidget(record)
         footer.addStretch()
         close = QPushButton("Close")
         close.clicked.connect(dialog.reject)
@@ -4652,6 +4733,77 @@ class EnkyronWindow(QMainWindow):
         self.crm_sow_dialog = dialog
         dialog.finished.connect(lambda _result: setattr(self, "crm_sow_dialog", None))
         dialog.show()
+
+    def save_contract_reference(self):
+        dialog = getattr(self, "crm_sow_dialog", None)
+        context = getattr(self, "crm_contract_ref_context", None)
+        if (not dialog or not dialog.isVisible() or not context or
+                not self.crm_contract_ref_panel.isVisible()):
+            return
+        reference = self.crm_contract_ref_reference.text().strip()
+        note = self.crm_contract_ref_note.text().strip()
+        if not 5 <= len(reference) <= 300 or not 20 <= len(note) <= 500:
+            QMessageBox.warning(
+                dialog, "Incomplete document reference",
+                "Enter a short reference (5–300 characters) and a human "
+                "provenance note (20–500 characters)."
+            )
+            return
+        if not self.crm_contract_ref_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Unverified reference only",
+                "Confirm this is a reported reference, not legal or testing authority."
+            )
+            return
+        payload = {
+            **context,
+            "document_kind": self.crm_contract_ref_kind.currentData(),
+            "source_reference": reference,
+            "review_note": note,
+            "confirmed": True,
+        }
+        self.crm_contract_ref_save.setEnabled(False)
+
+        def saved(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_contract_ref_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "Reference not recorded",
+                    error or "Could not record the document reference."
+                )
+                return
+            if (data.get("evidence_status") != "operator_reference_unverified" or
+                    data.get("testing_authorised") is not False):
+                QMessageBox.warning(
+                    dialog, "Unexpected document status",
+                    "The reference response did not match the unverified-only contract."
+                )
+                return
+
+            def refreshed(snapshot, refresh_error):
+                if not dialog.isVisible():
+                    return
+                if (refresh_error or not snapshot or
+                        snapshot.get("proposal_id") != context["proposal_id"] or
+                        snapshot.get("proposal_revision") != context["expected_revision"]):
+                    QMessageBox.warning(
+                        dialog, "Reference recorded; refresh required",
+                        "The entry was recorded, but the current SOW view could not "
+                        "be refreshed. Close and reopen it to read the register."
+                    )
+                    return
+                dialog.reject()
+                self.show_sow_scope_review(snapshot)
+
+            self.bridge.call(
+                "crm-sow-sources", context["proposal_id"], callback=refreshed
+            )
+
+        self.bridge.call(
+            "crm-contract-reference-save", payload=payload, callback=saved
+        )
 
     def open_sow_draft_record(self, proposal_id, revision):
         existing = getattr(self, "crm_sow_draft_dialog", None)

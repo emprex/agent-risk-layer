@@ -139,6 +139,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_sow_draft_smoke.py'
 
+      - name: Native inline contract reference smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_contract_reference_smoke.py'
+
       - name: Native SOW source preview smoke
         env:
           QT_QPA_PLATFORM: offscreen
