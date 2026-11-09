@@ -130,7 +130,7 @@ test('write is transactional and refuses staleness, missing buyer and duplicate'
 });
 test('invoice draft list and read do not introduce computed VAT',async()=>{
  const pool={query:async(sql,params)=>{
-  if(sql.startsWith('SELECT id,proposal_id,proposal_revision,service_description'))
+  if(sql.startsWith('SELECT d.id,d.proposal_id,d.proposal_revision,d.service_description'))
     return {rows:[]};
   return {rows:[{id,status:'unissued_tax_review_required',vat_amount_minor:null,
     invoice_number:null,invoice_total_minor:null}]};
