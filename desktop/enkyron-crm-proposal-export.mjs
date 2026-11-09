@@ -27,7 +27,7 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       +'o.company_name_at_creation,'
       +"CASE WHEN o.company_id IS NOT NULL THEN 'crm_company' "
       +"ELSE 'research_candidate' END AS buyer_origin, "
-      +'CASE WHEN o.company_id IS NOT NULL THEN EXISTS ('
+      +'CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN TRUE WHEN o.company_id IS NOT NULL THEN EXISTS ('
       +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
       +'WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id '
       +'AND e.ticket_id=o.source_ticket_id) ELSE FALSE '
@@ -44,7 +44,7 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
     // Research-only drafts retain their explicit unverified-buyer label.
     if(proposal.buyer_origin==='crm_company'&&
        proposal.current_company_association!==true)
-      throw new Error('CRM draft PDF export blocked: reviewed company-ticket association is no longer effective');
+      throw new Error('CRM draft PDF export blocked: company source association is no longer effective');
     if(!['crm_company','research_candidate'].includes(proposal.buyer_origin))
       throw new Error('CRM invalid proposal buyer source');
     if(!['GBP','EUR','USD'].includes(proposal.currency)||
