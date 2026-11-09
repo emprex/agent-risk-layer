@@ -7243,7 +7243,9 @@ class EnkyronWindow(QMainWindow):
                     item.get("buyer_legal_name") or "",
                     item.get("service_description") or "",
                     "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
-                    str(item.get("status") or "unknown").replace("_", " "),
+                    ("Issued · " + str(item["issued_invoice_number"])
+                     if item.get("issued_invoice_number")
+                     else "Ready for issue").replace("_", " "),
                     display_date(item.get("recorded_at"))
                 ]
                 for col, value in enumerate(values):
@@ -7253,9 +7255,8 @@ class EnkyronWindow(QMainWindow):
             self.crm_invoice_table.blockSignals(False)
             extra = " Showing first 100; refine search." if data.get("more") else ""
             self.crm_invoice_notice.setText(
-                "{} unissued draft(s).{} To prepare one, open Proposals, "
-                "complete its internal review and billing worksheet, "
-                "then select Prepare invoice draft….".format(
+                "{} prepared invoice source(s).{} Choose Issue invoice, or "
+                "open a linked issued invoice. New quotes are in Proposals.".format(
                     len(self.crm_invoice_items), extra
                 )
             )
@@ -7267,6 +7268,15 @@ class EnkyronWindow(QMainWindow):
         available = 0 <= row < len(self.crm_invoice_items)
         self.crm_invoice_open.setEnabled(available)
         self.crm_invoice_finalize_button.setEnabled(available)
+        selected = self.crm_invoice_items[row] if available else {}
+        self.crm_invoice_finalize_button.setText(
+            "Open issued invoice" if selected.get("issued_invoice_id")
+            else "Issue invoice…"
+        )
+        self.crm_invoice_open.setText(
+            "View draft" if not selected.get("issued_invoice_id")
+            else "View source"
+        )
         self.crm_invoice_issue_button.setEnabled(available)
 
     def open_invoice_finalization(self):
@@ -7279,6 +7289,9 @@ class EnkyronWindow(QMainWindow):
             self.crm_issuance_dialog.activateWindow()
             return
         draft = self.crm_invoice_items[row]
+        if draft.get("issued_invoice_id"):
+            self.open_issued_invoice_by_id(draft["issued_invoice_id"])
+            return
         source_id = draft["id"]
         self.crm_invoice_finalize_button.setEnabled(False)
 
