@@ -110,6 +110,26 @@ def make_text_area(readonly=True):
     return area
 
 
+def make_workspace_window(title, size=(1090, 710), minimum=(770, 520)):
+    """Independent, non-modal Qt top-level window for operator work views.
+
+    No parent/transient owner: the main desktop remains usable and the OS
+    can move, maximise or minimise this window on another screen.
+    Keep a Python reference in the owning workspace until it closes.
+    Do not use this for confirmation or authorisation dialogs.
+    """
+    flags = (Qt.WindowType.Window |
+             Qt.WindowType.WindowMinMaxButtonsHint |
+             Qt.WindowType.WindowCloseButtonHint)
+    window = QDialog(None, flags)
+    window.setWindowModality(Qt.WindowModality.NonModal)
+    window.setModal(False)
+    window.setWindowTitle(title)
+    window.resize(*size)
+    window.setMinimumSize(*minimum)
+    return window
+
+
 class DesktopBridge:
     """One bounded JSON message per local subprocess; no listening network port."""
 
@@ -1543,6 +1563,13 @@ class EnkyronWindow(QMainWindow):
         self.search.textChanged.connect(lambda _: self.search_timer.start())
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
+
+    def closeEvent(self, event):
+        # Standalone company windows must never outlive their local workspace
+        # (and leave customer details visible after ENKYRON is closed).
+        if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
+            self.crm_dossier_dialog.close()
+        super().closeEvent(event)
 
     def module_changed(self, index):
         if index < 0 or index >= self.pages.count():
@@ -2982,10 +3009,18 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("crm-company-csv", company_id, callback=received)
 
     def open_company_messages(self):
-        """Open the company's recorded messages and notes, with full text."""
+        """Open recorded messages only for the actually selected CRM company."""
+        if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and self.crm_dossier_company_id != self.crm_company_id):
+            # The open dossier may contain unsaved fields for another company.
+            # Never silently redirect its view or leave a stale navigation flag.
+            self.crm_dossier_open_messages_after_load = False
+            self.open_company_dossier()
+            return
         self.crm_dossier_open_messages_after_load = True
         self.open_company_dossier()
         if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and self.crm_dossier_company_id == self.crm_company_id
                 and self.crm_dossier_tabs.count() > 5):
             self.crm_dossier_nav.setCurrentRow(5)
             self.crm_dossier_open_messages_after_load = False
@@ -2994,14 +3029,18 @@ class EnkyronWindow(QMainWindow):
         if not self.crm_company_id:
             return
         if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
+            if self.crm_dossier_company_id != self.crm_company_id:
+                QMessageBox.information(
+                    self, "Another company dossier is open",
+                    "Close the current dossier before opening another company. "
+                    "Any unsaved review form remains in the open window."
+                )
+                return
             self.crm_dossier_dialog.raise_()
             self.crm_dossier_dialog.activateWindow()
             return
         company_id = self.crm_company_id
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · Company dossier")
-        dialog.resize(1090, 710)
-        dialog.setMinimumSize(770, 520)
+        dialog = make_workspace_window("ENKYRON · Company dossier")
         layout = QVBoxLayout(dialog)
         self.crm_dossier_heading = QLabel("Company dossier")
         self.crm_dossier_heading.setTextFormat(Qt.TextFormat.PlainText)
@@ -3091,7 +3130,9 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(footer)
         self.crm_dossier_dialog = dialog
         self.crm_dossier_company_id = company_id
-        dialog.open()
+        # show() keeps the window modeless. QDialog.open() would make the
+        # main ENKYRON window inaccessible while this dossier is displayed.
+        dialog.show()
         self.refresh_company_dossier()
 
     def update_dossier_section_visibility(self, *_args):

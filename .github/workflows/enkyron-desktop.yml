@@ -741,6 +741,32 @@ jobs:
           assert window.crm_company_dossier_open.isEnabled()
           window.open_company_dossier()
           assert window.crm_dossier_dialog.isVisible()
+          # Independent work window: do not make the main Qt desktop modal,
+          # minimise it with its parent, or suppress native window controls.
+          detached = window.crm_dossier_dialog
+          assert detached.isWindow()
+          assert detached.parentWidget() is None
+          assert not detached.isModal()
+          assert detached.windowModality() == Qt.WindowModality.NonModal
+          assert detached.windowFlags() & Qt.WindowType.WindowMinimizeButtonHint
+          assert detached.windowFlags() & Qt.WindowType.WindowMaximizeButtonHint
+          assert detached.windowFlags() & Qt.WindowType.WindowCloseButtonHint
+          assert window.isEnabled() and window.navigation.isEnabled()
+          detached.resize(1160, 740)
+          assert detached.width() == 1160 and detached.height() == 740
+          detached.move(140, 90)
+          assert detached.pos().x() == 140 and detached.pos().y() == 90
+          # Another selected company must not silently reopen the wrong dossier.
+          with patch("desktop.enkyron.QMessageBox.information") as inform:
+              window.crm_company_id = "33333333-3333-4333-8333-333333333333"
+              window.open_company_dossier()
+              inform.assert_called_once()
+          with patch("desktop.enkyron.QMessageBox.information") as inform:
+              window.open_company_messages()
+              inform.assert_called_once()
+          assert not window.crm_dossier_open_messages_after_load
+          assert detached.isVisible()
+          window.crm_company_id = company_id
           assert calls[-1][0] == "crm-company-dossier"
           assert calls[-1][1] == company_id
           calls[-1][3]({
@@ -2363,6 +2389,10 @@ jobs:
           assert calls[-1][2]["expected_version"] == 1
           assert calls[-1][2]["stage"] == "qualified"
           window.crm_followup_dialog.reject()
+          # Closing the operator workspace must close orphan standalone CRM views.
+          window.crm_dossier_dialog.show()
+          assert window.crm_dossier_dialog.isVisible()
           window.close()
+          assert not window.crm_dossier_dialog.isVisible()
           app.quit()
           PY
