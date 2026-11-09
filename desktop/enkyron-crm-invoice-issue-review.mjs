@@ -88,12 +88,27 @@ export async function readInvoiceIssueReview(pool,draftId,actor){
     if(issuer?.vat_status==='registered'&&!issuer.vat_number)
       blockers.push('Issuing company VAT number not recorded');
     const latest=reviews[0]??null;
+    // These are evidence-intake gaps, not a determination of legal validity.
+    // Even complete operator-supplied references NEVER grant issue authority.
+    const documentary_gaps=[];
+    if(!latest)documentary_gaps.push('No human documentary review recorded');
+    else if(latest.outcome==='needs_changes')
+      documentary_gaps.push('Latest human review requires changes');
+    if(!latest?.supply_date)
+      documentary_gaps.push('No evidenced service supply date recorded');
+    if(!latest?.customer_authorisation_reference)
+      documentary_gaps.push('No customer authorisation source recorded');
+    if(!latest?.tax_evidence_reference)
+      documentary_gaps.push('No tax evidence source recorded');
+    if(!latest?.payment_terms_reference)
+      documentary_gaps.push('No payment terms source recorded');
     return {
       available:true,invoice_draft_id:draft_id,draft,
       issuer_vat_status:issuer?.vat_status??'unavailable',
       issuer_has_vat_number:Boolean(issuer?.vat_number),
       issuer_has_company_email:Boolean(issuer?.company_email),
-      blockers,
+      blockers,documentary_gaps,
+      invoice_gate:'blocked_no_verified_issue_authority',
       latest,history:reviews.slice(0,20).map(x=>({
         id:x.id,outcome:x.outcome,supply_date:x.supply_date,
         recorded_by:x.recorded_by,recorded_at:x.recorded_at
