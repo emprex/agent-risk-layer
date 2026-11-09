@@ -69,7 +69,7 @@ export async function readQuoteIssuePreflight(pool,proposalId,actor){
       &&validBuyer&&terms.valid_now===true;
     const steps=[
       record('Reviewed client association',origin,
-        'Must be an effective company/ticket link or reviewed research link.'),
+        'Must have a recorded CRM company or an effective reviewed historical link.'),
       record('Itemised price',priced,
         'Current line-item total must match draft fee exactly.'),
       record('Issuer profile',Boolean(issuer),
