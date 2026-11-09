@@ -138,7 +138,9 @@ export async function readSowSources(pool,id,actor){
     if(!lines.length)
       blockers.push('No priced quote lines to map to services');
     if(lines.some(l=>!l.provenance))
-      blockers.push('Custom quote line(s) require manually documented inclusions, exclusions and deliverables');
+      blockers.push(sow
+        ? 'Custom quote line(s) have no linked catalog version; manual correspondence with the unapproved SOW still needs review'
+        : 'Custom quote line(s) have no linked catalog version or current structured SOW for manual scope review');
     if(!terms)blockers.push('No commercial terms recorded for current proposal revision');
     else if(terms.still_valid!==true)
       blockers.push('Recorded commercial validity has expired');

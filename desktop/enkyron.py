@@ -4524,8 +4524,9 @@ class EnkyronWindow(QMainWindow):
                 ])
             else:
                 text.append(
-                    "Custom line: inclusions, exclusions, deliverables and prerequisites "
-                    "are Not documented as a linked service snapshot."
+                    "Custom line: no catalog-linked service version. Compare this "
+                    "line manually with the current SOW, if one exists; this is "
+                    "not automatic scope validation."
                 )
         if not data.get("lines"):
             text.append("Not documented — proposal contains no detailed quote lines.")

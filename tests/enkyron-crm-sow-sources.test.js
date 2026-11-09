@@ -37,6 +37,7 @@ test('planning SOW is a scoped read-only snapshot with explicit missing authorit
  assert.equal(r.amount_minor,75000);
  assert.equal(r.terms,null);
  assert.equal(r.current_sow,null);
+ assert.match(r.blockers.join(' '),/no linked catalog version or current structured SOW/);
  assert.equal(r.contract_checks.length,5);
  assert.equal(r.contract_checks.find(x=>x.code==='nda').status,'applicability_not_assessed');
  assert.equal(r.contract_checks.find(x=>x.code==='dpa').status,'applicability_not_assessed');
@@ -100,6 +101,8 @@ test('saved SOW R1 is documented on exact revision, without granting contract au
    lines:[priced],sow:saved});
  const r=await readSowSources(m.pool,id,'ci-owner');
  assert.equal(r.current_sow.sow_revision,1);
+ assert.match(r.blockers.join(' '),/manual correspondence with the unapproved SOW still needs review/);
+ assert.ok(!r.blockers.some(x=>x.includes('require manually documented inclusions')));
  assert.equal(r.current_sow.content_sha256,saved.content_sha256);
  assert.equal(r.current_sow.acceptance_criteria,saved.acceptance_criteria);
  assert.ok(!r.blockers.some(x=>x.includes('not separately documented')));
