@@ -1871,10 +1871,23 @@ jobs:
               "issuer_has_vat_number": False,
               "issuer_has_company_email": True,
               "blockers": ["Issuing company VAT status is not established"],
+              "documentary_gaps": [
+                  "No human documentary review recorded",
+                  "No evidenced service supply date recorded",
+                  "No customer authorisation source recorded",
+                  "No tax evidence source recorded",
+                  "No payment terms source recorded"
+              ],
+              "invoice_gate": "blocked_no_verified_issue_authority",
               "latest": None, "history": [], "more": False,
               "issue_authorised": False
           }, None)
           assert window.crm_invoice_issue_dialog.isVisible()
+          gate = window.crm_invoice_issue_dialog.findChild(QLabel, "invoiceGateStatus")
+          assert "BLOCKED" in gate.text()
+          gaps = window.crm_invoice_issue_dialog.findChild(QLabel, "invoiceDocumentaryGaps")
+          assert "customer authorisation" in gaps.text()
+          assert "supply date" in gaps.text()
           assert window.crm_issue_outcome.currentData() == "needs_changes"
           assert not window.crm_issue_confirm.isChecked()
           window.crm_issue_note.setPlainText(
