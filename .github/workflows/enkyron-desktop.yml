@@ -98,6 +98,7 @@ jobs:
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check scripts/enkyron-crm-company-opportunities-schema.mjs
           node --check desktop/enkyron-crm-activities.mjs
+          node --check scripts/enkyron-remove-false-tickets-local.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
           node --check desktop/enkyron-crm-overview.mjs
           node --check desktop/enkyron-crm-pipeline.mjs
