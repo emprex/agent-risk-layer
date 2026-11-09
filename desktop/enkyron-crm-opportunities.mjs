@@ -273,12 +273,6 @@ export async function createCompanyOpportunity(pool,input,operator,options={}){
       throw new Error('CRM source ticket changed or not found');
     if(ticket.archived_at||ticket.status==='closed')
       throw new Error('CRM closed or archived source ticket cannot start an opportunity');
-    const reviewed=(await client.query(
-      'SELECT 1 FROM enkyron_crm_effective_ticket_links '
-      +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3',
-      [scope.key,req.company_id,req.ticket_id]
-    )).rows[0];
-    if(!reviewed)throw new Error('CRM company-ticket association not currently reviewed');
     const corrected=(await client.query(
       'SELECT 1 FROM enkyron_crm_opportunity_origin_corrections '
       +'WHERE workspace_key=$1 AND old_source_ticket_id=$2',
@@ -286,6 +280,12 @@ export async function createCompanyOpportunity(pool,input,operator,options={}){
     )).rows[0];
     if(corrected)
       throw new Error('CRM corrected commercial ticket cannot originate a new opportunity');
+    const reviewed=(await client.query(
+      'SELECT 1 FROM enkyron_crm_effective_ticket_links '
+      +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3',
+      [scope.key,req.company_id,req.ticket_id]
+    )).rows[0];
+    if(!reviewed)throw new Error('CRM company-ticket association not currently reviewed');
     const existing=(await client.query(
       'SELECT id FROM enkyron_crm_opportunities '
       +'WHERE workspace_key=$1 AND company_id=$2 AND source_ticket_id=$3',
