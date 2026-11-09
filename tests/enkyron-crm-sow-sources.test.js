@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readSowSources} from '../desktop/enkyron-crm-sow-sources.mjs';
+import {readSowSources,contractReadiness} from '../desktop/enkyron-crm-sow-sources.mjs';
 const id='11111111-2222-4333-8444-555555555555';
 const fixture={id,revision:2,title:'Synthetic work statement',
   scope_text:'Review the documented AI agent architecture; no live tests.',
@@ -152,4 +152,34 @@ test('unverified contractual references retain exact SOW provenance and no test 
  assert.deepEqual(m.queries.find(x=>x.sql.startsWith('SELECT id,proposal_revision,sow_revision,document_kind')).params,
   ['local:ci-owner',id,2]);
  assert.equal(m.queries.at(-1).sql,'COMMIT');
+});
+
+test('E07-05C: claimed NDA, engagement or testing permission never grants authority',()=>{
+ const current={sow_revision:1,status:'operator_draft_unapproved'};
+ const rows=['nda','engagement_agreement','dpa','test_permission'].map(document_kind=>({
+  document_kind,proposal_revision:2,sow_revision:1,
+  evidence_status:'operator_reference_unverified'}));
+ const r=contractReadiness(2,current,rows,true);
+ assert.equal(r.decision,'BLOCKED_EXTERNAL_VERIFICATION');
+ assert.equal(r.current_unverified_reference_count,4);
+ assert.equal(r.sow_revision,1);
+ for(const key of ['can_accept_engagement','can_sign','can_start_project',
+   'assessment_authorised','testing_authorised'])assert.equal(r[key],false);
+ assert.match(r.requirements.join(' '),/Signed engagement agreement not independently verified/);
+});
+test('E07-05C: stale versions and absent registry cannot confer document readiness',()=>{
+ const refs=[
+  {proposal_revision:2,sow_revision:1,evidence_status:'operator_reference_unverified'},
+  {proposal_revision:2,sow_revision:2,evidence_status:'operator_reference_unverified'},
+  {proposal_revision:1,sow_revision:2,evidence_status:'operator_reference_unverified'},
+  {proposal_revision:2,sow_revision:2,evidence_status:'verified'}
+ ];
+ const sow={sow_revision:2,status:'operator_draft_unapproved'};
+ const r=contractReadiness(2,sow,refs,true);
+ assert.equal(r.current_unverified_reference_count,1);
+ assert.equal(r.can_start_project,false);
+ assert.equal(contractReadiness(2,null,refs,true).current_unverified_reference_count,0);
+ assert.equal(contractReadiness(2,sow,refs,false).current_unverified_reference_count,0);
+ assert.equal(contractReadiness(2,sow,[],true).testing_authorised,false);
+ assert.throws(()=>contractReadiness(0,sow,[],true),/invalid contractual checkpoint/);
 });
