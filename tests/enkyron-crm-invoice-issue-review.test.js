@@ -46,6 +46,12 @@ test('pre-issue lookup remains read-only, includes genuine blockers, no authorit
  const x=fake();
  const a=await readInvoiceIssueReview(x.pool,id,'operator');
  assert.equal(a.issue_authorised,false);
+ assert.equal(a.invoice_gate,'blocked_no_verified_issue_authority');
+ assert.match(a.documentary_gaps.join(' '),/No human documentary review/);
+ assert.match(a.documentary_gaps.join(' '),/supply date/);
+ assert.match(a.documentary_gaps.join(' '),/customer authorisation/);
+ assert.match(a.documentary_gaps.join(' '),/tax evidence/);
+ assert.match(a.documentary_gaps.join(' '),/payment terms/);
  assert.match(a.blockers.join(' '),/VAT status/);
  assert.match(a.blockers.join(' '),/email/);
  assert.deepEqual(x.calls[1].params,['local:operator',id]);
@@ -65,4 +71,15 @@ test('manual review can append even when tax unresolved, never issues invoice',a
  const missing=fake({exists:false});
  await assert.rejects(()=>recordInvoiceIssueReview(missing.pool,base,'operator'),/not found/);
  assert.equal(missing.calls.at(-1).sql,'ROLLBACK');
+});
+
+test('documented sources and synthetic review never make issuance authorised',async()=>{
+ const x=fake({hasReviews:true,vatStatus:'registered',hasEmail:true});
+ const snapshot=await readInvoiceIssueReview(x.pool,id,'operator');
+ assert.equal(snapshot.latest.outcome,'needs_changes');
+ assert.match(snapshot.documentary_gaps.join(' '),/requires changes/);
+ assert.equal(snapshot.invoice_gate,'blocked_no_verified_issue_authority');
+ assert.equal(snapshot.issue_authorised,false);
+ assert.equal(x.calls[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+ assert.equal(x.calls.at(-1).sql,'COMMIT');
 });
