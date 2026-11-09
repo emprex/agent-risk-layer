@@ -61,6 +61,10 @@ def issued_invoice_html(invoice):
     tax=(price*rate+50)//100
     if tax!=int(invoice["vat_amount_minor"]) or price+tax!=int(invoice["total_minor"]):
         raise ValueError("Invoice total does not match VAT calculation")
+    registration_number=(
+        "<p><b>Company registration:</b> "+_text(invoice["issuer_registration_number"],"company number")+"</p>"
+        if invoice.get("issuer_registration_number") else ""
+    )
     vat_number=(
         "<p><b>VAT registration number:</b> "+_text(invoice["issuer_vat_number"],"VAT number")+"</p>"
         if issuer_status=="registered" else
@@ -93,6 +97,7 @@ def issued_invoice_html(invoice):
     <td>{_text(invoice["buyer_legal_name"],"buyer")}<br/>
     {_text(invoice["buyer_registered_address"],"buyer address")}</td></tr>
     </table>
+    {registration_number}
     {vat_number}
     {customer_ref}
     <h2 style="font-size:11pt">Services</h2>
