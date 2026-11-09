@@ -72,6 +72,18 @@ class InvoiceIssueQtSmoke(unittest.TestCase):
                        "vat_rate_percent": 20}
             with self.assertRaises(ValueError):
                 issued_invoice_html(bad_vat)
+            registered = {
+                **fixture(), "issuer_vat_status": "registered",
+                "issuer_vat_number": "GB123456789",
+                "vat_rate_percent": 20,
+                "vat_amount_minor": 15000, "total_minor": 90000,
+            }
+            html = issued_invoice_html(registered)
+            self.assertIn("GBP 900.00", html)
+            self.assertIn("VAT 20%", html)
+            self.assertIn("GB123456789", html)
+            company = {**registered, "issuer_registration_number": "12345678"}
+            self.assertIn("Company registration:", issued_invoice_html(company))
 
     def test_normal_crm_buttons_read_preflight_then_explicitly_issue(self):
         calls = []
