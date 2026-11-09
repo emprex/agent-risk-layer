@@ -55,6 +55,10 @@ test('E07-05B synthetic unverified contract reference is immutable and revision 
   assert.equal(preview.contract_references[0].is_current_sow,true);
   assert.equal(preview.contract_references[0].evidence_status,'operator_reference_unverified');
   assert.equal(preview.testing_authorised,false);
+  assert.equal(preview.contract_decision.decision,'BLOCKED_EXTERNAL_VERIFICATION');
+  assert.equal(preview.contract_decision.current_unverified_reference_count,1);
+  assert.equal(preview.contract_decision.can_start_project,false);
+  assert.equal(preview.contract_decision.assessment_authorised,false);
   assert.equal(preview.contract_checks.find(x=>x.code==='right_to_test').status,'not_authorised');
   await assert.rejects(()=>recordContractReference(db,receiptInput,actor),/already logged/);
   await assert.rejects(()=>db.query(
@@ -73,6 +77,8 @@ test('E07-05B synthetic unverified contract reference is immutable and revision 
   await assert.rejects(()=>recordContractReference(db,receiptInput,actor),/SOW version changed/);
   const stale=await readSowSources(db,proposal.id,actor);
   assert.equal(stale.contract_references[0].is_current_sow,false);
+  assert.equal(stale.contract_decision.current_unverified_reference_count,0);
+  assert.equal(stale.contract_decision.testing_authorised,false);
   assert.equal(stale.testing_authorised,false);
   const revised=await updateProposalDraft(db,{id:proposal.id,expected_revision:1,
    title:'Synthetic updated proposal',scope_text:'Documentary engagement review; no active testing authorised.',
