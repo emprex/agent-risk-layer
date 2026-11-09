@@ -3071,20 +3071,12 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_dossier_notice.setWordWrap(True)
         layout.addWidget(self.crm_dossier_notice)
-        self.crm_dossier_commercial_index = None
-        self.crm_dossier_commercial_button = QPushButton("View commercial documents →")
-        self.crm_dossier_commercial_button.setEnabled(False)
-        self.crm_dossier_commercial_button.clicked.connect(
-            self.open_dossier_commercial_workflow
-        )
-        layout.addWidget(
-            self.crm_dossier_commercial_button,
-            alignment=Qt.AlignmentFlag.AlignLeft
-        )
         # Keep section IDs/indices stable for existing callbacks and audit views.
         # Frequent tasks stay visible; extra sections are always one toggle away.
-        self.crm_dossier_show_all = QCheckBox(
-            "Show all sections, including research and audit"
+        self.crm_dossier_show_all = QCheckBox("Show all sections")
+        self.crm_dossier_show_all.setToolTip(
+            "Include research links, commercial documents, ticket history "
+            "and audit sections, even when empty."
         )
         self.crm_dossier_show_all.toggled.connect(
             self.update_dossier_section_visibility
@@ -3141,6 +3133,14 @@ class EnkyronWindow(QMainWindow):
             return
         show_all = self.crm_dossier_show_all.isChecked()
         primary = {"contacts", "opportunities", "qualifications", "activities"}
+        # When folding advanced sections away, do not leave the content of a
+        # hidden section on screen with no visible corresponding selection.
+        if not show_all:
+            selected = self.crm_dossier_nav.currentRow()
+            if 0 <= selected < len(self.crm_dossier_sections):
+                section_id, count = self.crm_dossier_sections[selected]
+                if section_id not in primary and count == 0:
+                    self.crm_dossier_nav.setCurrentRow(0)
         for row, (section_id, count) in enumerate(self.crm_dossier_sections):
             visible = show_all or section_id in primary or count > 0
             self.crm_dossier_nav.setRowHidden(row, not visible)
@@ -3576,11 +3576,6 @@ class EnkyronWindow(QMainWindow):
                     "{} ({})".format(title, count)
                 )
                 self.crm_dossier_sections.append((section_id, count))
-                if section_id == "commercial_docs":
-                    self.crm_dossier_commercial_index = self.crm_dossier_tabs.count() - 1
-            self.crm_dossier_commercial_button.setEnabled(
-                self.crm_dossier_commercial_index is not None
-            )
             # Qt may expose its tab bar again as tabs are inserted.
             self.crm_dossier_tabs.tabBar().hide()
             index = selected_tab if 0 <= selected_tab < self.crm_dossier_tabs.count() else 0
@@ -3602,16 +3597,6 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
-
-    def open_dossier_commercial_workflow(self):
-        index = self.crm_dossier_commercial_index
-        if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
-                and index is not None and 0 <= index < self.crm_dossier_nav.count()):
-            # A zero-record commercial section is initially folded away.
-            # Explicit operator navigation must always reveal that section.
-            if self.crm_dossier_nav.isRowHidden(index):
-                self.crm_dossier_show_all.setChecked(True)
-            self.crm_dossier_nav.setCurrentRow(index)
 
     def open_dossier_source_proposal(self, proposal_id):
         if not proposal_id:
