@@ -2,7 +2,8 @@
 
 **Source of truth:** `docs/ENKYRON_PSA_ROADMAP.md` block E02 and
 `docs/ENKYRON_CRM_ACCEPTANCE_A_Z.md`.
-**Current PR:** #520 on `feat/enkyron-desktop-20261105`.
+**Historical PR checkpoint (2026-11-07):** #520 on `feat/enkyron-desktop-20261105`.
+**Latest CRM field outcome:** see the 2026-11-09 E02/E07 correction receipt at the end of this ledger; it supersedes the earlier ticket-retention plan.
 **Rule:** DONE-CI never means DONE-LOCAL. Subfeatures do not close a
 parent criterion. This ledger is an evidence-oriented snapshot, not an
 assertion of legal compliance or production readiness.
@@ -469,6 +470,8 @@ Observation à corriger : l'avertissement d'une ligne tarifaire `custom` suggér
 
 ## E07-CRM company-only sales correction (development, 2026-11-09)
 
+**Historical implementation note:** the ticket-retention wording below describes PR #521's interim approach. The operator subsequently instructed a *physical deletion* of the two mistakenly created sales tickets, completed and verified locally under PR #523 (see final addendum). Do not treat the interim retention wording as the current state.
+
 **Problem:** the company-first opportunity introduced in migration 094 demanded a
 reviewed Client Desk ticket. Two operator-initiated LinkedIn contacts were
 therefore falsely represented as service ticket origins:
@@ -539,3 +542,126 @@ La phase interne du dossier synthétique ARL E2E Test 0711 est arrêtée ici pou
 E07-05C ajoute à la même fenêtre SOW un verdict documentaire déterministe et lisible `BLOCKED_EXTERNAL_VERIFICATION`. Le calcul est lié à la révision courante du devis et du SOW ; seules les références de même révision et de statut `operator_reference_unverified` sont comptées. Des références périmées, des versions de devis antérieures ou des documents prétendument signés ne créent **aucun** droit de signature, acceptation, projet, assessment ou test. Aucun nouveau formulaire, migration, document fictif, envoi ou service extérieur. Tests Node, PostgreSQL synthétique et Qt couvrent ce non-contournement ; CI exact HEAD et recette Debian restent à confirmer.
 
 **Distinction de clôture :** exercice interne synthétique E07-05 = `CLOSED_AS_BLOCKED` une fois CI et recette du verdict validées ; **E07-05 global n'est PAS DONE en production**. Les prérequis réels non satisfaits sont l'identité et le signataire vérifiés, l'acceptation client d'un périmètre courant, un accord commercial véritablement signé, la décision humaine sur NDA/DPA, et pour les tests actifs une autorisation ciblée et des règles d'engagement. Ils dépendent d'une vraie contrepartie et de l'intégration E07-06 ; ne pas fabriquer de validations internes pour franchir ces conditions. E07-03 émission reste bloquée, E07-06 signatures et E07-08 conversion ne sont pas autorisées. La PR #520 reste Draft/non fusionnée.
+
+
+## E02/E07 — definitive CRM outreach correction and message chronology (2026-11-09)
+
+**Scope and evidence status.** This is the current, verified correction for the two
+operator-initiated LinkedIn prospecting records (Threat ResQ and Xurrent); it
+**supersedes** the interim retained-ticket approach documented under PR #521.
+Source: actual Debian terminal receipts on 2026-11-09 and the operator's
+ENKYRON company-dossier screenshot. CI green alone is never local acceptance.
+Changes are on branch `feat/enkyron-desktop-20261105` (not asserted merged
+to `main`).
+
+### 1. Ticketless sales opportunities — PR #521
+
+Migration `100_enkyron_crm_company_direct_opportunities.sql` changes
+`enkyron_opportunity_exactly_one_origin`: legacy research prospects remain
+supported, while a reviewed CRM company may now own a direct commercial
+opportunity with `source_ticket_id IS NULL`. The partial unique index
+`enkyron_opportunity_company_direct_once` prevents a second such direct
+opportunity per workspace/company; ticket-backed historical opportunities
+remain a separate supported path. Backend
+`desktop/enkyron-crm-opportunities.mjs` and the native
+`desktop/enkyron.py` support `+ Commercial opportunity` without requiring
+`Client Desk` intake. Company dossier, follow-ups and downstream *internal
+draft* commercial source readers account for direct-company origins. No sales
+lead is automatically converted into an assessment, contract or client request.
+
+Operator's first run: verified local backup
+`enkyron-crm-before-ticketless-2026-11-09T15-08-24-959Z.dump`, migration
+100 **APPLIED**, followed by `column "id" does not exist` in the follow-up
+inspection. PR #522 fixes the query from `SELECT id` to `SELECT 1` on
+`enkyron_crm_effective_ticket_links`, which deliberately has no `id`
+column. On the subsequent Debian run:
+`enkyron-crm-before-ticketless-2026-11-09T15-13-32-609Z.dump`
+was verified (SHA-256
+`90d93176d72f349366aca26365baad2fcd5bc3c94afcaba50b020b038846b1f9`);
+migration 100 was already present. Both correction operations completed,
+with existing opportunity IDs and manual activities retained:
+
+| Company/contact | Opportunity ID | Original erroneous ticket | CRM activities at correction |
+|---|---|---|---|
+| Threat ResQ / Sumit B. Jain | `abb0616c-0c95-4f7e-9c3a-b49812f459aa` | `ARL-2026-000006` | 7 |
+| Xurrent / Madhu Rawat | `68e65606-1042-423a-8a69-b93a513cdc2d` | `ARL-2026-000007` | 5 |
+
+### 2. Definitive removal of the two false tickets — PR #523, DONE-LOCAL
+
+After the operator explicitly rejected keeping these two nonexistent
+customer-request tickets, `scripts/enkyron-remove-false-tickets-local.mjs
+--apply` was added for this **specific** pair. It checks the exact
+company/contact/opportunity IDs, exact ticket names and original manual-intake
+references, absence of a live `source_ticket_id`, current absence of linked
+projects/assessments and unexpected dependent records, and preservation of
+commercial activities. It verifies `pg_dump` with `pg_restore --list`
+before changes and performs the dependent-row and ticket hard deletes within
+**one PostgreSQL transaction**. Named append-only-link triggers are temporarily
+disabled and restored within that same transaction; any failed guard causes
+rollback. This is not a generic arbitrary-ticket delete API.
+
+Debian terminal evidence:
+`enkyron-before-false-ticket-removal-2026-11-09T15-30-13-988Z.dump`
+verified; SHA-256
+`59cef2d48db160aa9302d7c182be787c7d6d96673a0befe3988270c5a83d9bff`.
+The run printed **REMOVED FALSE TICKET** for both `000006` and `000007`,
+then **VERIFIED CRM** for both preserved opportunities and **7 / 5**
+messages/notes respectively, and finally
+`SUCCESS: both false tickets absent. CRM data preserved.`
+This is **DONE-LOCAL for these two deletes and the immediately verified CRM
+invariants only**. Backup archives remain on the Debian filesystem; no claim
+that historical backup bytes were also erased.
+
+### 3. Messages are directly readable in the native CRM — PR #523
+
+`desktop/enkyron.py` adds `CRM → Companies → [company] →
+Messages / notes…`; the company dossier's `activities` section presents
+the entire selected `enkyron_crm_activities.detail` text in a read-only
+details pane. The existing `CRM → Follow-ups → Messages / activity…`
+lets the operator manually save activity notes with an explicit confirmation.
+Backend `desktop/enkyron-crm-activities.mjs` remains scoped to the current
+local operator/workspace, stores manual notes rather than verified mail
+transport and does not fetch LinkedIn inbox content automatically.
+
+Operator's subsequent screenshot showed **Threat ResQ: 1 contact,
+1 opportunity, 0 tickets and 8 saved messages/notes**. The eighth was
+Sumit's reported incoming LinkedIn reply, `Sounds interesting`. Later, the
+operator confirmed sending an outgoing LinkedIn invitation for a *small
+AI-agent/MCP/workflow security pilot*, **not a call**. Its subsequent CRM
+save was *not* evidenced in this checkpoint; do not assert nine saved notes.
+
+### 4. Oldest-to-newest conversation display — PR #524
+
+Previously the newest note appeared at row 1. The operator requested
+a narrative chronology: first recorded message at the top, newest reply
+last. In `desktop/enkyron-crm-company-dossier.mjs`, the SQL still fetches
+the newest records by `recorded_at DESC, id DESC LIMIT 21`; `preview`
+reverses the capped `activities` items **for display only**. This preserves
+the most recent 20 records and exact total/more indicator. Similarly,
+`desktop/enkyron-crm-activities.mjs` reverses the newest 100 merged
+opportunity events/activity entries before returning them to the Qt history.
+Other dossier sections retain their prior sorting. There is **no SQL schema
+migration, re-timestamping, deletion, renumbering of stored IDs or rewriting
+of original messages**. Within the visible page, row 1 is the earliest shown
+event and the final row is the latest. If more than 20 company notes exist,
+the first shown is the oldest *within that recent window*, not necessarily
+the earliest-ever note.
+
+PR #524 was squash-merged to the ENKYRON feature branch as
+`78b517061fb330bed4c0a6d41ac4ee3f92a0cca6`, with **CI PASS** and
+**ENKYRON Desktop PASS** on the PR exact head. The user received the
+`git pull --ff-only origin feat/enkyron-desktop-20261105` update command;
+the local application restart and visual confirmation of the new
+chronological order have **not** been separately evidenced here.
+
+**Operational model now:** CRM company → contact → direct opportunity →
+manual LinkedIn correspondence/notes → proposed small pilot. **No Client
+Desk ticket for outbound prospecting.** Service requests, signed commercial
+agreements, explicit scoped testing authorisation and real assessment
+execution remain separate gated workflows. E02/E07 parent acceptance is not
+fully closed by these narrowly verified corrections.
+
+**Merged changes:** [PR #521](https://github.com/emprex/agent-risk-layer/pull/521),
+[PR #522](https://github.com/emprex/agent-risk-layer/pull/522),
+[PR #523](https://github.com/emprex/agent-risk-layer/pull/523),
+[PR #524](https://github.com/emprex/agent-risk-layer/pull/524).
