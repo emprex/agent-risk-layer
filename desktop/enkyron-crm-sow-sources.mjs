@@ -22,7 +22,7 @@ const PROPOSAL=[
  'SELECT d.id,d.revision,d.title,d.scope_text,d.currency,d.amount_minor,',
  'o.company_name_at_creation,',
  "CASE WHEN o.company_id IS NOT NULL THEN 'crm_company' ELSE 'research_candidate' END AS buyer_origin,",
- 'CASE WHEN o.company_id IS NOT NULL THEN EXISTS(',
+ 'CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN TRUE WHEN o.company_id IS NOT NULL THEN EXISTS(',
  ' SELECT 1 FROM enkyron_crm_effective_ticket_links e',
  ' WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id',
  ' AND e.ticket_id=o.source_ticket_id)',

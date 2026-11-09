@@ -48,6 +48,7 @@ test('planning SOW is a scoped read-only snapshot with explicit missing authorit
  assert.equal(r.testing_authorised,false);
  assert.match(r.blockers.join(' '),/permission.*testing/);
  assert.ok(m.queries[1].sql.includes('enkyron_crm_effective_ticket_links'));
+ assert.match(m.queries[1].sql,/source_ticket_id IS NULL THEN TRUE/);
  assert.deepEqual(m.queries[1].params,['local:ci-owner',id]);
  assert.equal(m.queries.at(-1).sql,'COMMIT');
  assert.equal(m.released,true);

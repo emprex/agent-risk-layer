@@ -503,3 +503,9 @@ verify that commercial records retain all correspondence, no faux service
 ticket appears in the active queue, and both correction audits are visible.
 Do not claim DONE-LOCAL based on GitHub CI. All later client requests still
 require explicit scope and authorisation before any technical assessment.
+
+## E07-05B prerequisite — direct company opportunity → SOW source (2026-11-09)
+
+Post-100 regression found during preparation of the contractual document reference register. Since migration 100, an opportunity may belong directly to a CRM company **without** `source_ticket_id`. Other commercial controls already treat that source as effective for documentary purposes, while `readSowSources` still tried to find an effective company/ticket association and marked direct commercial opportunities as stale. Corrected the SOW source SQL to accept a direct company origin without inventing a ticket; ticket-backed opportunities still require the actual effective link. The company is *not* thereby legally verified, nor is any agreement, quote issue, or testing authority approved.
+
+A dedicated synthetic PostgreSQL regression now checks the direct company → opportunity → proposal → SOW source path, with no newly created Service Desk ticket. No migration, no UI change, no Debian data modification. This is a **compatibility correction before E07-05B**; the full contractual register remains planned and unapproved. CI exact-head to verify, local acceptance not claimed.

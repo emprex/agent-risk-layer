@@ -15,6 +15,7 @@ import {createProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {readProposalForDraftPdf} from '../desktop/enkyron-crm-proposal-export.mjs';
 import {readBuyerReview} from '../desktop/enkyron-crm-buyer-review.mjs';
 import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
+import {readSowSources} from '../desktop/enkyron-crm-sow-sources.mjs';
 import {readInvoicePreparation} from '../desktop/enkyron-crm-invoice-drafts.mjs';
 const url=process.env.ARL_CI_POSTGRES_URL||'';
 function isolated(){
@@ -53,6 +54,13 @@ test('direct CRM opportunity needs no ticket and appears with correspondence in 
     scope_text:'Prospective AI agent security assessment, subject to written authorisation.',
     currency:'GBP',amount_minor:50000
   },operator);
+  // A direct company sales opportunity must be valid SOW provenance WITHOUT a service ticket.
+  const directSow=await readSowSources(pool,draft.id,operator);
+  assert.equal(directSow.buyer_origin,'crm_company');
+  assert.equal(directSow.effective_origin,true);
+  assert.ok(!directSow.blockers.some(x=>x.includes('ticket association')));
+  assert.equal(directSow.can_approve_sow,false);
+  assert.equal(directSow.testing_authorised,false);
   // Commercial documentary steps must not secretly depend on a service ticket.
   const pdf=await readProposalForDraftPdf(pool,draft.id,operator);
   assert.ok(pdf,'commercial PDF draft remains available to the operator');
