@@ -776,7 +776,16 @@ jobs:
                       "arl_project_ref": None, "arl_assessment_ref": None
                   }]},
                   "opportunities": {"total": 0, "more": False, "items": []},
-                  "activities": {"total": 0, "more": False, "items": []},
+                  "activities": {"total": 2, "more": False, "items": [
+                      {"id": "ci-note-1", "activity_type": "note",
+                       "detail": "First recorded LinkedIn research summary; not a synced message.",
+                       "recorded_by": "ci-operator",
+                       "recorded_at": "2026-11-07T09:00:00Z"},
+                      {"id": "ci-note-2", "activity_type": "note",
+                       "detail": "Later full note with literal <untrusted> text and an example URL.",
+                       "recorded_by": "ci-operator",
+                       "recorded_at": "2026-11-09T12:00:00Z"}
+                  ]},
                   "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []},
                    "commercial_docs": {"total": 4, "more": False, "items": [{
@@ -822,6 +831,23 @@ jobs:
           # and advanced sections remain retrievable without changing IDs.
           assert window.crm_dossier_heading.text() == "Synthetic Company"
           assert "1 contact(s)" in window.crm_dossier_glance.text()
+          assert "2 messages / notes" in window.crm_dossier_glance.text()
+          # UX-03: complete notes visible in their existing chronology without
+          # a selected row, and no claimed synchronisation or inferred sender.
+          activity_page = window.crm_dossier_tabs.widget(5)
+          activity_texts = [
+              item.text() for item in activity_page.findChildren(QLabel)
+              if item.objectName() == "crmActivityText"
+          ]
+          assert activity_texts == [
+              "First recorded LinkedIn research summary; not a synced message.",
+              "Later full note with literal <untrusted> text and an example URL."
+          ]
+          assert activity_page.findChildren(QTableWidget) == []
+          assert any(
+              "LinkedIn and email are not connected" in label.text()
+              for label in activity_page.findChildren(QLabel)
+          )
           assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
               "No next action recorded" in window.crm_dossier_next_action.text()
           )
