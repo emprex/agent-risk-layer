@@ -50,6 +50,8 @@ class SowPreviewSmoke(unittest.TestCase):
             self.assertIn("Client signature",rendered)
             self.assertIn("Current SOW R1",rendered)
             self.assertIn("Data processing agreement",rendered)
+            self.assertIn("BLOCKED_EXTERNAL_VERIFICATION",rendered)
+            self.assertIn("NO PROJECT START",rendered)
             self.assertIn("NOT AUTHORISED",rendered)
             self.assertNotIn("SOW acceptance criteria and technical targets are not separately documented",rendered)
             dialog.reject()
