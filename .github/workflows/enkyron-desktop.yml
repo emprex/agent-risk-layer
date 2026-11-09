@@ -1326,6 +1326,14 @@ jobs:
               "local_operator": "ci-operator",
           }, None)
           assert window.current_status_label.text() == "Current: IN PROGRESS"
+          assert calls[-1][0] == "ticket-actions"
+          assert not window.ticket_actions_button.isEnabled()
+          calls[-1][3]({"available": True, "items": []}, None)
+          assert window.ticket_actions_button.isEnabled()
+          assert "No actions recorded" in window.ticket_actions_view.toPlainText()
+          window.ticket_actions_button.click()
+          assert window.ticket_action_dialog.isVisible()
+          window.ticket_action_dialog.reject()
           assert window.ticket_triage_button.isEnabled()
           assert "NOT YET REVIEWED" in window.ticket_triage_label.text()
           window.ticket_triage_button.click()
