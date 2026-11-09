@@ -21,11 +21,15 @@ from PySide6.QtWidgets import (
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
     from .enkyron_invoice_pdf import export_issued_invoice_pdf
+    from .enkyron_invoice_test_ledger import TestInvoiceLedger
+    from .enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
+    from enkyron_invoice_test_ledger import TestInvoiceLedger
+    from enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
@@ -7233,6 +7237,20 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             self.crm_invoice_items = data.get("items") or []
+            # Demo invoices are isolated from the official financial register.
+            # Show them in the SAME commercial row, never as extra CRM objects.
+            try:
+                demo_states = TestInvoiceLedger().statuses([
+                    item.get("id") for item in self.crm_invoice_items
+                    if self._is_synthetic_buyer(item)
+                ])
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.crm_invoice_notice.setText(
+                    "Sample invoice history unavailable: " + str(exc)
+                )
+                demo_states = {}
+            for item in self.crm_invoice_items:
+                item["demo_status"] = demo_states.get(item.get("id"))
             self.crm_invoice_table.blockSignals(True)
             self.crm_invoice_table.setRowCount(len(self.crm_invoice_items))
             for row, item in enumerate(self.crm_invoice_items):
@@ -7245,7 +7263,10 @@ class EnkyronWindow(QMainWindow):
                     "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
                     ("Issued · " + str(item["issued_invoice_number"])
                      if item.get("issued_invoice_number")
-                     else "Ready for issue").replace("_", " "),
+                     else ("Sample · " + str(item["demo_status"]).replace("test_", "")
+                           if item.get("demo_status") else
+                           "Sample only" if self._is_synthetic_buyer(item)
+                           else "Ready for issue")).replace("_", " "),
                     display_date(item.get("recorded_at"))
                 ]
                 for col, value in enumerate(values):
@@ -7271,6 +7292,8 @@ class EnkyronWindow(QMainWindow):
         selected = self.crm_invoice_items[row] if available else {}
         self.crm_invoice_finalize_button.setText(
             "Open issued invoice" if selected.get("issued_invoice_id")
+            else "Open sample invoice" if selected.get("demo_status")
+            else "Create sample invoice…" if self._is_synthetic_buyer(selected)
             else "Issue invoice…"
         )
         self.crm_invoice_open.setText(
@@ -7291,6 +7314,9 @@ class EnkyronWindow(QMainWindow):
         draft = self.crm_invoice_items[row]
         if draft.get("issued_invoice_id"):
             self.open_issued_invoice_by_id(draft["issued_invoice_id"])
+            return
+        if self._is_synthetic_buyer(draft):
+            self.open_synthetic_invoice(draft)
             return
         source_id = draft["id"]
         self.crm_invoice_finalize_button.setEnabled(False)
