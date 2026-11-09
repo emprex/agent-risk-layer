@@ -53,10 +53,10 @@ const LISTS={
     +'WHERE o.workspace_key=$1 AND ('
     +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
-    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id))) '
+    +'AND e.ticket_id=o.source_ticket_id)))) '
     +'ORDER BY o.updated_at DESC,o.id DESC LIMIT 21',
   activities:
     'SELECT a.id,a.activity_type,a.detail,a.recorded_by,a.recorded_at,'
@@ -67,10 +67,10 @@ const LISTS={
     +'WHERE o.workspace_key=$1 AND ('
     +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
-    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id))) '
+    +'AND e.ticket_id=o.source_ticket_id)))) '
     +'ORDER BY a.recorded_at DESC,a.id DESC LIMIT 21',
   qualifications:
     'SELECT r.id,r.contact_id,COALESCE(c.full_name,\'Company\') AS subject,'
@@ -90,26 +90,26 @@ const LISTS={
     +'WHERE o.workspace_key=$1 AND ('
     +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
-    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id))) '
+    +'AND e.ticket_id=o.source_ticket_id)))) '
     +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
 
   // Existing commercial source records only, including buyer documentary reviews
   // and INTERNAL decisions. These are NOT accepted contracts, issued invoices,
   // externally exchanged files, payments, delivered projects or customer consent.
-  // Source: reviewed legacy prospect OR current reviewed company-ticket -> opportunity.
+  // Source: explicitly reviewed research prospect or CRM company; legacy ticket provenance remains checked when present.
   commercial_docs:
     'WITH linked_opportunities AS ('
     +'SELECT o.id FROM enkyron_crm_opportunities o '
     +'WHERE o.workspace_key=$1 AND ('
     +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
-    +'AND l.company_id=$2) OR (o.company_id=$2 AND EXISTS ('
+    +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id)))), '
+    +'AND e.ticket_id=o.source_ticket_id))))), '
     +'docs AS ('
     +"SELECT 'proposal_draft'::text AS document_kind,p.id AS document_id,"
     +"p.title AS title,'internal_unaccepted_draft'::text AS status,"
