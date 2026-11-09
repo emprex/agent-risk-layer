@@ -9,12 +9,15 @@ const ownerKey=(actor)=>{
     throw new Error('CRM invalid local operator');
   return 'local:'+actor;
 };
-function preview(rows){
+function preview(rows,chronological=false){
   if(!Array.isArray(rows))throw new Error('CRM invalid dossier results');
   const count=rows.length?Number(rows[0].total_rows):0;
   if(!Number.isSafeInteger(count)||count<rows.length||count<0||
     rows.length>MAX_ITEMS+1)throw new Error('CRM invalid dossier count');
+  // Select the most recent records as before, then display the conversation
+  // oldest-to-newest so the latest message appears at the bottom.
   const items=rows.slice(0,MAX_ITEMS).map(({total_rows,...item})=>item);
+  if(chronological)items.reverse();
   return {total:count,items,more:count>MAX_ITEMS};
 }
 const LISTS={
@@ -216,7 +219,8 @@ export async function getCompanyDossier(pool,id,operator){
     if(!company)throw new Error('CRM company not found in local workspace');
     const sections={};
     for(const [name,sql] of Object.entries(LISTS)){
-      sections[name]=preview((await client.query(sql,[key,companyId])).rows);
+      sections[name]=preview((await client.query(sql,[key,companyId])).rows,
+        name==='activities');
     }
     await client.query('COMMIT');
     inTx=false;
