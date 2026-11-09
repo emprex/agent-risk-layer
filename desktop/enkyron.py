@@ -528,6 +528,18 @@ class EnkyronWindow(QMainWindow):
         notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
         notes_l.addWidget(self.notes_view, 1)
+        notes_l.addWidget(section_title("INTERNAL TICKET ACTIONS — NOT TEST AUTHORISATION"))
+        self.ticket_actions_view = make_text_area()
+        self.ticket_actions_view.setMaximumHeight(150)
+        self.ticket_actions_view.setPlainText("Select a ticket to load its action checklist.")
+        notes_l.addWidget(self.ticket_actions_view)
+        self.ticket_actions_button = QPushButton("Plan / update ticket action…")
+        self.ticket_actions_button.setEnabled(False)
+        self.ticket_actions_button.clicked.connect(self.open_ticket_action)
+        notes_l.addWidget(self.ticket_actions_button, alignment=Qt.AlignmentFlag.AlignRight)
+        self.ticket_actions = []
+        self.ticket_actions_available = False
+        self.ticket_action_dialog = None
         notes_l.addWidget(section_title("NEW MANUAL OBSERVATION (NOT VERIFIED EVIDENCE)"))
         self.note_editor = make_text_area(False)
         self.note_editor.setPlaceholderText("Enter factual observations or next actions…")
@@ -9785,6 +9797,181 @@ class EnkyronWindow(QMainWindow):
         )
         self.update_status_button.setEnabled(can_change)
 
+    def load_ticket_actions(self, ticket_id):
+        """Read the bounded internal checklist for one selected ticket."""
+        if ticket_id != self.current_id:
+            return
+        self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self.ticket_actions_button.setEnabled(False)
+        self.ticket_actions = []
+        self.ticket_actions_available = False
+
+        def received(data, error):
+            if ticket_id != self.current_id:
+                return
+            if error or not isinstance(data, dict):
+                self.ticket_actions_view.setPlainText(
+                    "Action checklist unavailable: " + str(error or "Read failed")
+                )
+                return
+            if not data.get("available"):
+                self.ticket_actions_view.setPlainText(
+                    data.get("notice") or "Action checklist unavailable (migration 102 required)."
+                )
+                return
+            items = data.get("items") or []
+            self.ticket_actions = items
+            self.ticket_actions_available = True
+            self.ticket_actions_view.setPlainText(
+                "\n".join(
+                    "{} · R{} · {}{}\n{}".format(
+                        str(item.get("state") or "todo").upper(),
+                        item.get("revision") or "?",
+                        item.get("title") or "(untitled)",
+                        " · due " + str(item["due_on"])[:10]
+                        if item.get("due_on") else "",
+                        item.get("details") or "(no details)"
+                    )
+                    for item in items
+                ) or "No actions recorded for this ticket."
+            )
+            ticket = self.current_ticket or {}
+            self.ticket_actions_button.setEnabled(
+                not ticket.get("archived_at") and ticket.get("status") != "closed"
+            )
+
+        self.bridge.call("ticket-actions", ticket_id, callback=received)
+
+    def open_ticket_action(self):
+        ticket_id = self.current_id
+        if (not ticket_id or not self.current_ticket or
+                not self.ticket_actions_available or
+                not self.ticket_actions_button.isEnabled()):
+            return
+        if self.ticket_action_dialog and self.ticket_action_dialog.isVisible():
+            self.ticket_action_dialog.raise_()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Internal ticket action")
+        dialog.setMinimumWidth(580)
+        layout = QVBoxLayout(dialog)
+        intro = QLabel(
+            "This is an internal task checklist. Marking an item Done does not "
+            "approve a client agreement, validate evidence or authorise security testing."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        choice = QComboBox()
+        choice.addItem("New action", None)
+        for item in self.ticket_actions:
+            choice.addItem(
+                "{} · {}".format(
+                    str(item.get("state") or "todo").upper(),
+                    item.get("title") or "(untitled)"
+                ),
+                item.get("action_id")
+            )
+        form.addRow("Action", choice)
+        name = QLineEdit()
+        name.setMaxLength(160)
+        form.addRow("Title *", name)
+        details = QPlainTextEdit()
+        details.setMaximumHeight(75)
+        form.addRow("Details (optional)", details)
+        due = QLineEdit()
+        due.setPlaceholderText("YYYY-MM-DD or leave empty")
+        due.setMaxLength(10)
+        form.addRow("Due date", due)
+        state = QComboBox()
+        for value in ("todo", "blocked", "done"):
+            state.addItem(value.title(), value)
+        form.addRow("Status", state)
+        layout.addLayout(form)
+        reason = QPlainTextEdit()
+        reason.setMaximumHeight(75)
+        reason.setPlaceholderText("Human reason for this new action or revision (10–500 characters)")
+        layout.addWidget(reason)
+        confirmed = QCheckBox("I confirm this is internal planning, not a security authorisation.")
+        layout.addWidget(confirmed)
+        save = QPushButton("Save action revision")
+        save.setObjectName("primary")
+        layout.addWidget(save)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        layout.addWidget(cancel)
+        self.ticket_action_dialog = dialog
+
+        def selected():
+            sid = choice.currentData()
+            item = next((x for x in self.ticket_actions if x.get("action_id") == sid), None)
+            name.setText(str(item.get("title") or "") if item else "")
+            details.setPlainText(str(item.get("details") or "") if item else "")
+            due.setText(str(item.get("due_on") or "")[:10] if item else "")
+            index = state.findData(item.get("state") if item else "todo")
+            state.setCurrentIndex(index if index >= 0 else 0)
+            state.setEnabled(bool(item))
+            confirmed.setChecked(False)
+            reason.clear()
+
+        choice.currentIndexChanged.connect(selected)
+        selected()
+
+        def submit():
+            if ticket_id != self.current_id or not dialog.isVisible():
+                return
+            title = name.text().strip()
+            rationale = reason.toPlainText().strip()
+            if not 5 <= len(title) <= 160 or not 10 <= len(rationale) <= 500:
+                QMessageBox.warning(dialog, "Action not ready",
+                                    "Enter a title (5–160 characters) and reason (10–500 characters).")
+                return
+            if not confirmed.isChecked():
+                QMessageBox.warning(dialog, "Confirmation required",
+                                    "Confirm the internal-only nature of this action.")
+                return
+            item = next(
+                (x for x in self.ticket_actions if x.get("action_id") == choice.currentData()),
+                None
+            )
+            if QMessageBox.question(
+                dialog, "Confirm internal action",
+                "Save this ticket action without changing ticket status, "
+                "creating a project or authorising a security test?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            ) != QMessageBox.StandardButton.Yes:
+                return
+            payload = {
+                "ticket_id": ticket_id,
+                "action_id": item.get("action_id") if item else None,
+                "expected_revision": item.get("revision") if item else None,
+                "title": title,
+                "details": details.toPlainText().strip(),
+                "due_on": due.text().strip() or None,
+                "state": state.currentData(),
+                "rationale": rationale,
+                "confirmed": True,
+            }
+            save.setEnabled(False)
+
+            def recorded(data, error):
+                if ticket_id != self.current_id or not dialog.isVisible():
+                    return
+                if error or not isinstance(data, dict) or not data.get("event_id"):
+                    save.setEnabled(True)
+                    QMessageBox.warning(dialog, "Action not recorded",
+                                        str(error or "Refresh this ticket and review again."))
+                    return
+                dialog.accept()
+                self.status.setText("Internal ticket action saved; refreshing checklist.")
+                self.load_ticket_actions(ticket_id)
+
+            self.bridge.call("ticket-action-save", payload=payload, callback=recorded)
+
+        save.clicked.connect(submit)
+        dialog.exec()
+
     def open_ticket_triage(self):
         ticket_id = self.current_id
         if (not ticket_id or not self.current_ticket or
@@ -10094,6 +10281,10 @@ class EnkyronWindow(QMainWindow):
         self.ticket_triage_label.setText("Business triage: Loading…")
         self.ticket_triage_latest_id = None
         self.ticket_triage_button.setEnabled(False)
+        self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self.ticket_actions_button.setEnabled(False)
+        self.ticket_actions = []
+        self.ticket_actions_available = False
         self.owner_label.setText("Assigned to: Unassigned")
         self.assign_button.setEnabled(False)
         self.archive_button.setEnabled(False)
@@ -10199,6 +10390,7 @@ class EnkyronWindow(QMainWindow):
                 self.ticket_triage_button.setEnabled(
                     active and ticket["status"] != "closed"
                 )
+            self.load_ticket_actions(ticket_id)
             if not active:
                 self.meta.setText(self.meta.text() + " · ARCHIVED")
             self.engine_button.setEnabled(
