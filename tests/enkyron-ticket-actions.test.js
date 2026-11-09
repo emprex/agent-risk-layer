@@ -18,7 +18,7 @@ test('E03-04A validates human action and rejects authority-like shortcuts',()=>{
     {...input,confirmed:false},{...input,state:'done'},
     {...input,state:'approved'},{...input,due_on:'2026-02-30'},
     {...input,title:'x'}, {...input,action_id:action},
-    {...input,expected_revision:1},{...input,details:'x\\u0000'.repeat(30)},
+    {...input,expected_revision:1},{...input,details:'x\u0000'.repeat(30)},
     {...input,rationale:'short'},{...input,unrecognised:true}
   ])assert.throws(()=>validateTicketAction(bad));
   assert.equal(validateTicketAction({...input,due_on:null}).due_on,null);
