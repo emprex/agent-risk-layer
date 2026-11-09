@@ -7317,7 +7317,22 @@ class EnkyronWindow(QMainWindow):
         dialog.resize(800, 660)
         dialog.setMinimumSize(620, 470)
         layout = QVBoxLayout(dialog)
-        layout.addWidget(section_title("HUMAN DOCUMENTARY CHECK · NO INVOICE ISSUANCE"))
+        layout.addWidget(section_title("INVOICE READINESS · FINAL DOCUMENTARY GATE"))
+        latest = data.get("latest") or {}
+        terminal = QLabel(
+            "BLOCKED — INVOICE MUST REMAIN UNISSUED\n"
+            "Latest human review: {} · Official invoice: NOT AUTHORISED".format(
+                str(latest.get("outcome") or "none recorded").replace("_", " ")
+            )
+        )
+        terminal.setObjectName("invoiceGateStatus")
+        terminal.setTextFormat(Qt.TextFormat.PlainText)
+        terminal.setWordWrap(True)
+        terminal.setStyleSheet(
+            "background: #fff3e6; color: #713b12; "
+            "border: 1px solid #deaf70; border-radius: 6px; padding: 10px;"
+        )
+        layout.addWidget(terminal)
         warning = QLabel(
             "Document sources for customer authorisation, supply date, "
             "tax examination and payment terms. Recording this checklist "
@@ -7359,6 +7374,17 @@ class EnkyronWindow(QMainWindow):
             )
             label.setWordWrap(True)
             body_l.addWidget(label)
+        gaps = data.get("documentary_gaps") or []
+        gaps_label = QLabel(
+            "EVIDENCE STILL MISSING\n" +
+            ("\n".join("• " + str(gap) for gap in gaps)
+             if gaps else "All documentary source fields have entries, "
+             "but independent legal, tax and customer verification is not established.")
+        )
+        gaps_label.setObjectName("invoiceDocumentaryGaps")
+        gaps_label.setTextFormat(Qt.TextFormat.PlainText)
+        gaps_label.setWordWrap(True)
+        body_l.addWidget(gaps_label)
         form = QFormLayout()
         self.crm_issue_outcome = QComboBox()
         self.crm_issue_outcome.addItem(
@@ -7368,7 +7394,6 @@ class EnkyronWindow(QMainWindow):
             "Sources documented (NOT approved to issue)", "documents_logged"
         )
         form.addRow("Human documentation status *", self.crm_issue_outcome)
-        latest = data.get("latest") or {}
         self.crm_issue_supply_date = QLineEdit()
         self.crm_issue_supply_date.setMaxLength(10)
         self.crm_issue_supply_date.setPlaceholderText(
@@ -7429,7 +7454,7 @@ class EnkyronWindow(QMainWindow):
         )
         footer.addWidget(self.crm_issue_confirm)
         footer.addStretch()
-        close = QPushButton("Close")
+        close = QPushButton("Finish review · keep unissued")
         close.clicked.connect(dialog.reject)
         footer.addWidget(close)
         self.crm_issue_save = QPushButton("Record documentary check")
