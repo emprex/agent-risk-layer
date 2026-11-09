@@ -185,7 +185,7 @@ jobs:
           assert [window.navigation.item(i).text() for i in range(3)] == [
               "Home", "Tickets", "CRM"
           ]
-          assert window.pages.currentIndex() == 1
+          assert window.pages.currentIndex() == 0
           assert window.ticket_views.count() == 2
           assert window.ticket_views.currentIndex() == 0
           assert window.ticket_list.parentWidget() is not window.tabs.parentWidget()
@@ -290,6 +290,9 @@ jobs:
               }]
           }, None)
           assert window.crm_tabs.count() == 7
+          assert [window.crm_proposal_workflow.tabText(i) for i in range(3)] == [
+              "1 · Offer", "2 · Review & contract", "3 · Prebilling"
+          ]
           assert hasattr(window, "crm_service_catalog_button")
           window.crm_service_catalog_button.click()
           assert window.crm_catalog_dialog.isVisible()
@@ -756,7 +759,7 @@ jobs:
                   "activities": {"total": 0, "more": False, "items": []},
                   "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []},
-                   "commercial_docs": {"total": 3, "more": False, "items": [{
+                   "commercial_docs": {"total": 4, "more": False, "items": [{
                        "document_kind": "proposal_draft",
                        "title": "Synthetic internal draft",
                        "status": "internal_unaccepted_draft",
@@ -771,6 +774,12 @@ jobs:
                        "document_kind": "internal_proposal_decision",
                        "title": "Proposal decision (internal only)",
                        "status": "needs_changes",
+                       "revision": 1, "proposal_id": "prop-synthetic"
+                   }, {
+                       "document_kind": "unissued_invoice_draft",
+                       "document_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                       "title": "Synthetic invoice draft",
+                       "status": "unissued_tax_review_required",
                        "revision": 1, "proposal_id": "prop-synthetic"
                    }]},
                    "ticket_history": {"total": 1, "more": False, "items": [{
@@ -793,18 +802,41 @@ jobs:
           assert window.crm_dossier_nav.count() == 11
           assert not window.crm_dossier_tabs.tabBar().isVisible()
           assert window.crm_dossier_nav.currentRow() == 0
-          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (3)"
+          assert window.crm_dossier_nav.item(7).text() == "Commercial drafts (4)"
           assert window.crm_dossier_nav.item(8).text() == "Ticket history (1)"
           window.crm_dossier_nav.setCurrentRow(8)
           assert window.crm_dossier_tabs.currentIndex() == 8
           window.crm_dossier_tabs.setCurrentIndex(4)
           assert window.crm_dossier_nav.currentRow() == 4
-          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (3)"
+          assert window.crm_dossier_tabs.tabText(7) == "Commercial drafts (4)"
           commercial_page = window.crm_dossier_tabs.widget(7)
           commercial_table = commercial_page.findChildren(QTableWidget)[0]
-          assert commercial_table.rowCount() == 3
+          assert commercial_table.rowCount() == 4
           assert commercial_table.item(1, 2).text() == "operator_documented_unverified"
           assert commercial_table.item(2, 2).text() == "needs_changes"
+          assert commercial_table.item(3, 2).text() == "unissued_tax_review_required"
+          assert window.crm_dossier_commercial_button.isEnabled()
+          window.crm_dossier_commercial_button.click()
+          assert window.crm_dossier_tabs.currentIndex() == 7
+          actions = {
+              button.text(): button for button in commercial_page.findChildren(QPushButton)
+          }
+          source = actions["Open source proposal…"]
+          draft = actions["Open invoice draft…"]
+          blockers = actions["Review invoice blockers…"]
+          commercial_table.selectRow(0)
+          assert source.isEnabled() and not draft.isEnabled()
+          source.click()
+          assert calls[-1][0] == "crm-proposal"
+          assert calls[-1][1] == "prop-synthetic"
+          commercial_table.selectRow(3)
+          assert source.isEnabled() and draft.isEnabled() and blockers.isEnabled()
+          draft.click()
+          assert calls[-1][0] == "crm-invoice-draft"
+          assert calls[-1][1] == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+          blockers.click()
+          assert calls[-1][0] == "crm-invoice-issue-review"
+          assert calls[-1][1] == "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
           assert any("not customer acceptance" in child.text()
                      for child in commercial_page.findChildren(QLabel))
           assert window.crm_dossier_tabs.tabText(8) == "Ticket history (1)"
