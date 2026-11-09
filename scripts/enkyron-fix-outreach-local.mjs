@@ -127,7 +127,7 @@ async function inspect(pool,item){
  if(x.source_ticket_id!==x.ticket_id||corrections.length||revoked.length)
   throw Error('Opportunity/ticket history mismatch: '+item.name);
  const link=(await pool.query(
-  'SELECT id FROM enkyron_crm_effective_ticket_links '
+  'SELECT 1 FROM enkyron_crm_effective_ticket_links '
   +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3',
   [workspace,item.company_id,x.ticket_id]
  )).rows;

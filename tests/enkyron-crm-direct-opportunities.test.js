@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {
  validateDirectCompanyOpportunityCreate, validateOriginCorrection
 } from '../desktop/enkyron-crm-opportunities.mjs';
@@ -31,4 +32,18 @@ test('historical origin correction requires all reviewed identifiers and a reaso
  assert.throws(()=>validateOriginCorrection({...req,confirmed:false}),/confirmation/);
  assert.throws(()=>validateOriginCorrection({...req,reason:'too short'}),/reason/);
  assert.throws(()=>validateOriginCorrection({...req,opportunity_id:'bad'}),/identifier/);
+});
+
+// Regression for operator's local correction script. The canonical view in
+// migration 091 deliberately does NOT project an id column.
+test('outreach local repair checks effective link existence without selecting absent id',()=>{
+ const sql=readFileSync(new URL('../migrations/091_enkyron_crm_ticket_reassignments.sql',
+   import.meta.url),'utf8');
+ assert.match(sql,/CREATE VIEW enkyron_crm_effective_ticket_links AS/i);
+ const view=sql.split('CREATE VIEW enkyron_crm_effective_ticket_links AS')[1];
+ assert.doesNotMatch(view,/SELECT l\.id\b/);
+ const script=readFileSync(new URL('../scripts/enkyron-fix-outreach-local.mjs',
+   import.meta.url),'utf8');
+ assert.match(script,/SELECT 1 FROM enkyron_crm_effective_ticket_links /);
+ assert.doesNotMatch(script,/SELECT id FROM enkyron_crm_effective_ticket_links /);
 });
