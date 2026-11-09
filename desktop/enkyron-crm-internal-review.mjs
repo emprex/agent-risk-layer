@@ -34,12 +34,25 @@ export function validateInternalDecision(input){
 
 // These are DOCUMENTED prerequisites, not verified company/tax/contract claims.
 // The snapshot refs identify which exact immutable records informed the human.
+// Check the effective source link, not merely a historical buyer review record.
+const BUYER_ORIGIN='SELECT COALESCE(o.company_id,l.company_id) AS buyer_company_id,'
+  +'CASE WHEN o.company_id IS NOT NULL THEN EXISTS('
+  +' SELECT 1 FROM enkyron_crm_effective_ticket_links e'
+  +' WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id'
+  +' AND e.ticket_id=o.source_ticket_id) ELSE l.company_id IS NOT NULL'
+  +' END AS effective_origin '
+  +'FROM enkyron_crm_proposal_drafts d '
+  +'JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id'
+  +' AND o.workspace_key=d.workspace_key '
+  +'LEFT JOIN enkyron_crm_prospect_links l'
+  +' ON l.workspace_key=d.workspace_key AND l.prospect_id=o.prospect_id '
+  +'WHERE d.workspace_key=$1 AND d.id=$2';
 async function readiness(db,key,proposal){
   const params=[key,proposal.id,proposal.revision];
-  const [issuer,buyer,terms,tax]=await Promise.all([
+  const [issuer,buyer,terms,tax,origin]=await Promise.all([
     db.query('SELECT id,revision,legal_name FROM enkyron_operator_company_profiles '
       +'WHERE workspace_key=$1 ORDER BY revision DESC LIMIT 1',[key]),
-    db.query('SELECT id,company_id FROM enkyron_crm_proposal_buyer_reviews '
+    db.query('SELECT id,company_id,review_status FROM enkyron_crm_proposal_buyer_reviews '
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 LIMIT 1',params),
     db.query('SELECT id,valid_until::text AS valid_until,'
       +'(valid_until>=CURRENT_DATE) AS still_valid '
@@ -47,16 +60,22 @@ async function readiness(db,key,proposal){
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 LIMIT 1',params),
     db.query('SELECT id,buyer_type,uk_vat_registration FROM enkyron_crm_proposal_tax_reviews '
       +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 '
-      +'ORDER BY recorded_at DESC,id DESC LIMIT 1',params)
+      +'ORDER BY recorded_at DESC,id DESC LIMIT 1',params),
+    db.query(BUYER_ORIGIN,[key,proposal.id])
   ]);
   const ir=issuer.rows[0]??null,br=buyer.rows[0]??null,
-    tr=terms.rows[0]??null,vr=tax.rows[0]??null;
+    tr=terms.rows[0]??null,vr=tax.rows[0]??null,
+    binding=origin.rows[0]??null;
   const blockers=[];
   const amount=Number(proposal.amount_minor);
   if(!Number.isSafeInteger(amount)||amount<1||amount>999999999)
     blockers.push('Proposal price requires review');
   if(!ir)blockers.push('Issuing company profile is missing');
   if(!br)blockers.push('Current revision lacks an explicitly linked buyer documentary record');
+  else if(binding?.effective_origin!==true||
+    !binding.buyer_company_id||br.company_id!==binding.buyer_company_id||
+    br.review_status!=='operator_documented_unverified')
+    blockers.push('Buyer documentary record no longer matches an effective reviewed client association');
   if(!tr)blockers.push('Current revision has no recorded commercial terms');
   else if(!tr.still_valid)blockers.push('Commercial validity date has expired');
   if(!vr)blockers.push('Current revision has no manual tax research note');

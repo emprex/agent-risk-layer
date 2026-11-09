@@ -17,18 +17,22 @@ test('internal review rejects malformed requests and no human confirmation',()=>
  }
 });
 function mock({missing=[],revision=2,existing=false,hasProposal=true,
- current=null,issuerId='issuer-1',taxId='tax-1',termsValid=true}={}){
+ current=null,issuerId='issuer-1',taxId='tax-1',termsValid=true,
+ effectiveOrigin=true,bindingCompany='company-1',reviewedCompany='company-1'}={}){
  const queries=[];let released=false;
  const proposal={id,revision,title:'Synthetic internal draft',amount_minor:'50000',currency:'GBP'};
  const rows={
   enkyron_operator_company_profiles:{id:issuerId,revision:1,legal_name:'Synthetic Ltd'},
-  enkyron_crm_proposal_buyer_reviews:{id:'buyer-1',company_id:'company-1'},
+  enkyron_crm_proposal_buyer_reviews:{id:'buyer-1',company_id:reviewedCompany,
+    review_status:'operator_documented_unverified'},
   enkyron_crm_proposal_commercial_terms:{id:'terms-1',valid_until:'2099-01-01',still_valid:termsValid},
   enkyron_crm_proposal_tax_reviews:{id:taxId,buyer_type:'unknown',uk_vat_registration:'unknown'}
  };
  const query=async(sql,params)=>{
   queries.push({sql,params});
   if(sql.startsWith('SELECT id,revision,title,amount_minor'))return {rows:hasProposal?[proposal]:[]};
+  if(sql.startsWith('SELECT COALESCE(o.company_id'))
+    return {rows:[{buyer_company_id:bindingCompany,effective_origin:effectiveOrigin}]};
   if(sql.startsWith('SELECT id FROM enkyron_crm_proposal_internal_decisions'))
     return {rows:existing?[{id:'previous'}]:[]};
   if(sql.startsWith('SELECT id,proposal_revision,decision,review_note'))
@@ -105,4 +109,38 @@ test('immutable internal decision is identified as stale when documentary IDs ch
     ...approved,decision:'needs_changes'
   }}).db,id,'ci-operator');
   assert.equal(needs.current_documentary_status,'not_approved');
+});
+
+test('revoked or mismatched client association blocks new internal content approval',async()=>{
+ for(const changed of [
+   {effectiveOrigin:false},
+   {bindingCompany:'different-company'},
+   {reviewedCompany:'different-company'},
+   {bindingCompany:null}
+ ]){
+   const reviewed=mock(changed);
+   const preview=await readInternalReview(reviewed.db,id,'ci-operator');
+   assert.equal(preview.can_approve_internal,false);
+   assert.match(preview.blockers.join(' '),/effective reviewed client association/);
+   assert.ok(reviewed.queries.some(x=>x.sql.startsWith('SELECT COALESCE(o.company_id')
+     &&x.params[0]==='local:ci-operator'&&x.params[1]===id));
+   const approval=mock(changed);
+   await assert.rejects(()=>recordInternalDecision(approval.db,{
+     ...base,decision:'internal_draft_approved'
+   },'ci-operator'),/blocked/);
+   assert.equal(approval.queries.at(-1).sql,'ROLLBACK');
+   assert.ok(!approval.queries.some(x=>x.sql.startsWith('INSERT')));
+   const correction=mock(changed);
+   const saved=await recordInternalDecision(correction.db,base,'ci-operator',{uuid:()=>id});
+   assert.equal(saved.decision,'needs_changes');
+ }
+ const oldReview={id:'review-1',proposal_revision:2,
+   decision:'internal_draft_approved',
+   issuer_profile_id:'issuer-1',buyer_review_id:'buyer-1',
+   terms_id:'terms-1',tax_review_id:'tax-1',recorded_by:'ci-operator'};
+ const historical=await readInternalReview(mock({
+   current:oldReview,effectiveOrigin:false
+ }).db,id,'ci-operator');
+ assert.equal(historical.current.id,'review-1');
+ assert.equal(historical.current_documentary_status,'recorded_references_stale');
 });

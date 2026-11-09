@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import pg from 'pg';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
-import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
+import {createOpportunity,createCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
+import {createDeskTicket} from '../desktop/enkyron-ticket-intake.mjs';
+import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {revokeTicketAssociation} from '../desktop/enkyron-crm-ticket-corrections.mjs';
 import {createProposalDraft,updateProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {recordCompanyProfile} from '../desktop/enkyron-company-profile.mjs';
 import {recordBuyerReview} from '../desktop/enkyron-crm-buyer-review.mjs';
@@ -175,5 +178,82 @@ test('real PostgreSQL internal draft review: blocked, prerequisites, immutable, 
     )).rows[0];
     assert.equal(afterProposal.revision,2);
     assert.equal(Number(afterProposal.amount_minor),55000);
+
+    // Separate company-first synthetic quote: a reviewed buyer dossier
+    // must NOT allow content approval after the source ticket link is revoked.
+    const companyName='CI Revoked Buyer '+randomUUID().slice(0,8);
+    const directCompany=await createCompany(db,{name:companyName},actor);
+    const directTicket=await createDeskTicket(db,{
+      source:'manual',client_name:companyName,title:'Synthetic company-first quote',
+      request_text:'Testing the reviewed association boundary, not a live assessment.'
+    },actor);
+    await linkTicketToCompany(db,{
+      company_id:directCompany.id,ticket_id:directTicket.id,
+      ticket_client_name_at_review:companyName,
+      review_note:'Synthetic company/ticket association for revocation acceptance.',
+      reviewed:true
+    },actor);
+    const directOpportunity=await createCompanyOpportunity(db,{
+      company_id:directCompany.id,ticket_id:directTicket.id,
+      company_name_at_review:companyName,
+      ticket_number_at_review:directTicket.ticket_number,
+      next_action:'Review synthetic customer link before any approval',
+      due_date:null,confirmed:true
+    },actor);
+    const directProposal=await createProposalDraft(db,{
+      opportunity_id:directOpportunity.id,title:'Revocable source quote - internal draft',
+      scope_text:'No signed customer agreement or permission to conduct security testing.',
+      currency:'GBP',amount_minor:25000
+    },actor);
+    await recordBuyerReview(db,{
+      proposal_id:directProposal.id,company_id:directCompany.id,expected_revision:1,
+      confirmed:true,legal_name:'Synthetic revocable buyer',
+      registered_address:'12 Test Road, Fictional City, AB1 2CD',
+      source_reference:'Synthetic current company-ticket link',
+      review_note:'Synthetic buyer document before revoking its underlying association.'
+    },actor);
+    await recordCommercialTerms(db,{
+      proposal_id:directProposal.id,expected_revision:1,confirmed:true,
+      valid_until:'2099-12-31',
+      payment_terms:'Payment terms require independent agreement and review.',
+      delivery_terms:'Delivery is subject to written client permission and scope.',
+      exclusions:'Active exploitation and live testing are excluded.',
+      assumptions:'Synthetic documents only, with no legal authorization to proceed.',
+      source_reference:'Synthetic company-first terms'
+    },actor);
+    await recordTaxReview(db,{
+      proposal_id:directProposal.id,expected_revision:1,confirmed:true,
+      buyer_type:'unknown',buyer_country:'',service_mode:'human_led_advisory',
+      business_evidence:'',location_evidence:'',
+      uk_vat_registration:'unknown',overseas_withholding:'not_checked',
+      review_notes:'Synthetic tax research only; no tax determination is made.',
+      source_reference:'Synthetic company-first tax note'
+    },actor);
+    const active=await readInternalReview(db,directProposal.id,actor);
+    assert.equal(active.can_approve_internal,true);
+    await revokeTicketAssociation(db,{
+      company_id:directCompany.id,ticket_id:directTicket.id,
+      expected_client_name:companyName,
+      review_note:'Synthetic association revoked before any draft approval; evidence must fail closed.',
+      confirmed:true
+    },actor);
+    const revoked=await readInternalReview(db,directProposal.id,actor);
+    assert.equal(revoked.can_approve_internal,false);
+    assert.match(revoked.blockers.join(' '),/effective reviewed client association/);
+    await assert.rejects(()=>recordInternalDecision(db,{
+      proposal_id:directProposal.id,expected_revision:1,confirmed:true,
+      decision:'internal_draft_approved',
+      review_note:'Attempted approval with previously reviewed but revoked buyer link.'
+    },actor),/blocked/);
+    const response=await recordInternalDecision(db,{
+      proposal_id:directProposal.id,expected_revision:1,confirmed:true,
+      decision:'needs_changes',
+      review_note:'The source ticket association was revoked; rework the buyer linkage.'
+    },actor);
+    assert.equal(response.decision,'needs_changes');
+    assert.equal((await db.query('SELECT count(*)::int AS n '
+      +'FROM enkyron_crm_proposal_internal_decisions '
+      +'WHERE workspace_key=$1 AND proposal_id=$2',
+      ['local:'+actor,directProposal.id])).rows[0].n,1);
   }finally{await db.end();}
 });
