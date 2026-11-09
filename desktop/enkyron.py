@@ -1017,7 +1017,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_compose_button.setEnabled(False)
         self.crm_compose_button.clicked.connect(self.open_compose_draft)
         footer.addWidget(self.crm_compose_button)
-        self.crm_activity_button = QPushButton("Activity history…")
+        self.crm_activity_button = QPushButton("Messages / activity…")
         self.crm_activity_button.setEnabled(False)
         self.crm_activity_button.clicked.connect(self.open_activity_history)
         footer.addWidget(self.crm_activity_button)
@@ -9017,7 +9017,7 @@ class EnkyronWindow(QMainWindow):
         selected = self.crm_followup_items[row]
         opportunity_id = selected["id"]
         dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · Commercial activity history")
+        dialog.setWindowTitle("ENKYRON · Messages and commercial activity")
         dialog.resize(780, 620)
         dialog.setMinimumSize(670, 530)
         layout = QVBoxLayout(dialog)
@@ -9059,7 +9059,7 @@ class EnkyronWindow(QMainWindow):
         )
         layout.addWidget(self.crm_activity_table, 2)
         self.crm_activity_details = make_text_area()
-        self.crm_activity_details.setMaximumHeight(90)
+        self.crm_activity_details.setMinimumHeight(150)
         layout.addWidget(self.crm_activity_details)
         layout.addWidget(section_title("ADD MANUAL ACTIVITY NOTE"))
         form = QFormLayout()
@@ -9076,7 +9076,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_detail_input = QPlainTextEdit()
         self.crm_activity_detail_input.setMaximumHeight(105)
         self.crm_activity_detail_input.setPlaceholderText(
-            "Record the relevant context, outcome or next step (10–2000 characters). "
+            "Paste the exact message text or record your notes, with channel, "
+            "direction and contact name (10–2000 characters). "
             "Never paste secrets or private credentials."
         )
         form.addRow("Record *", self.crm_activity_detail_input)
@@ -9090,7 +9091,7 @@ class EnkyronWindow(QMainWindow):
         close.clicked.connect(dialog.reject)
         buttons.addWidget(close)
         buttons.addStretch()
-        self.crm_activity_save = QPushButton("Save activity note")
+        self.crm_activity_save = QPushButton("Save message / note")
         self.crm_activity_save.setObjectName("primary")
         self.crm_activity_save.setEnabled(False)
         self.crm_activity_save.clicked.connect(self.save_activity_note)
