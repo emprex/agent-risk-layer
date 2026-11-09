@@ -80,6 +80,10 @@ async function ticketList(pool, query, includeArchived=false) {
     `SELECT id,ticket_number,title,client_name,status,archived_at,updated_at
      FROM arl_workbench_tickets
      WHERE ($3::boolean OR archived_at IS NULL)
+       AND ($3::boolean OR NOT EXISTS (
+         SELECT 1 FROM enkyron_crm_opportunity_origin_corrections c
+         WHERE c.old_source_ticket_id = arl_workbench_tickets.id
+       ))
        AND ($1='' OR ticket_number ILIKE $2 OR title ILIKE $2
        OR client_name ILIKE $2 OR target_reference ILIKE $2)
      ORDER BY updated_at DESC,id LIMIT 101`,
