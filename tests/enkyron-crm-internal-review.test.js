@@ -97,7 +97,7 @@ test('immutable internal decision is identified as stale when documentary IDs ch
     assert.equal(r.history[0].decision,'internal_draft_approved');
     assert.equal(m.queries[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     assert.equal(m.queries.at(-1).sql,'COMMIT');
-    assert.ok(m.queries.every(x=>!/^(INSERT|UPDATE|DELETE)\\b/.test(x.sql)));
+    assert.ok(m.queries.every(x=>!/^(INSERT|UPDATE|DELETE)\b/.test(x.sql)));
   }
   const pending=await readInternalReview(mock().db,id,'ci-operator');
   assert.equal(pending.current_documentary_status,'not_recorded');
