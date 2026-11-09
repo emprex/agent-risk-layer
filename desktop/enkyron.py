@@ -3009,10 +3009,18 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("crm-company-csv", company_id, callback=received)
 
     def open_company_messages(self):
-        """Open the company's recorded messages and notes, with full text."""
+        """Open recorded messages only for the actually selected CRM company."""
+        if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and self.crm_dossier_company_id != self.crm_company_id):
+            # The open dossier may contain unsaved fields for another company.
+            # Never silently redirect its view or leave a stale navigation flag.
+            self.crm_dossier_open_messages_after_load = False
+            self.open_company_dossier()
+            return
         self.crm_dossier_open_messages_after_load = True
         self.open_company_dossier()
         if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and self.crm_dossier_company_id == self.crm_company_id
                 and self.crm_dossier_tabs.count() > 5):
             self.crm_dossier_nav.setCurrentRow(5)
             self.crm_dossier_open_messages_after_load = False
