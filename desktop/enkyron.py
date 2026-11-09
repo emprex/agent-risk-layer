@@ -19,10 +19,12 @@ from PySide6.QtWidgets import (
 
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
+    from .enkyron_invoice_sample_pdf import export_test_invoice_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
+    from enkyron_invoice_sample_pdf import export_test_invoice_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
@@ -7535,6 +7537,54 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-invoice-issue-record", payload=payload, callback=received)
 
+    def export_invoice_test_pdf(self, draft):
+        """Export a synthetic, non-payable invoice preview. No database writes."""
+        buyer = str(draft.get("buyer_legal_name") or "")
+        if "SYNTHETIC" not in buyer.upper():
+            QMessageBox.warning(
+                self, "TEST export unavailable",
+                "This export is restricted to explicitly synthetic test buyers."
+            )
+            return
+        folder = Path.home() / "Documents"
+        if not folder.is_dir():
+            folder = Path.home()
+        suggested = folder / ("ENKYRON_TEST_INVOICE_" + str(draft.get("id") or "")[:8] + ".pdf")
+        chosen, _ = QFileDialog.getSaveFileName(
+            self, "Save SYNTHETIC TEST invoice PDF", str(suggested),
+            "PDF documents (*.pdf)"
+        )
+        if not chosen:
+            return
+        destination = Path(chosen)
+        if destination.suffix.lower() != ".pdf":
+            destination = destination.with_suffix(".pdf")
+        if destination.is_symlink():
+            QMessageBox.warning(self, "TEST export cancelled",
+                                "A symbolic link cannot be overwritten.")
+            return
+        if destination.exists():
+            answer = QMessageBox.question(
+                self, "Replace existing TEST PDF?",
+                "Replace this local TEST invoice PDF? No CRM records will be changed.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            pages = export_test_invoice_pdf(destination, draft)
+        except (OSError, PermissionError, ValueError, RuntimeError) as exc:
+            QMessageBox.warning(self, "TEST invoice PDF not saved", str(exc))
+            return
+        QMessageBox.information(
+            self, "Synthetic invoice PDF generated",
+            "Saved {} page(s) to {}. This is a SAMPLE / TEST document only; "
+            "no invoice was issued, emailed or recorded in accounting.".format(
+                pages, str(destination)
+            )
+        )
+
     def show_invoice_draft_detail(self, draft):
         dialog = QDialog(self)
         dialog.setWindowTitle("ENKYRON · Internal invoice draft · NOT ISSUED")
@@ -7579,9 +7629,21 @@ class EnkyronWindow(QMainWindow):
         body.setLayout(form)
         scroll.setWidget(body)
         layout.addWidget(scroll, 1)
+        actions = QHBoxLayout()
+        if "SYNTHETIC" in str(draft.get("buyer_legal_name") or "").upper():
+            export = QPushButton("Export TEST invoice PDF…")
+            export.setObjectName("exportTestInvoicePdf")
+            export.setToolTip(
+                "Local sample invoice PDF, clearly marked TEST / NOT PAYABLE. "
+                "No number, VAT rate, issue date, payment or database write."
+            )
+            export.clicked.connect(lambda: self.export_invoice_test_pdf(draft))
+            actions.addWidget(export)
+        actions.addStretch()
         close = QPushButton("Close")
         close.clicked.connect(dialog.reject)
-        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+        actions.addWidget(close)
+        layout.addLayout(actions)
         self.crm_invoice_detail_dialog = dialog
         dialog.open()
 
