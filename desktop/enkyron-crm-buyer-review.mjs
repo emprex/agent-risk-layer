@@ -88,7 +88,7 @@ export async function readBuyerReview(pool,proposalId,actor){
       more:rows.length>20,
       notice:'Documentary information entered by an operator; NOT independently verified. '
         +'The buyer must be a reviewed CRM association: either a linked research '
-        +'prospect or the still-effective company-ticket link.'};
+        +'prospect or a recorded CRM company (with reviewed ticket link where applicable).'};
   }catch(e){
     if(e?.code==='42P01')return {available:false,
       notice:'Buyer review requires ENKYRON schema 078; install it after backing up.'};
