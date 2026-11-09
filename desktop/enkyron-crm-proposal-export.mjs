@@ -44,7 +44,7 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
     // Research-only drafts retain their explicit unverified-buyer label.
     if(proposal.buyer_origin==='crm_company'&&
        proposal.current_company_association!==true)
-      throw new Error('CRM draft PDF export blocked: company source association is no longer effective');
+      throw new Error('CRM draft PDF export blocked: reviewed company-ticket association is no longer effective');
     if(!['crm_company','research_candidate'].includes(proposal.buyer_origin))
       throw new Error('CRM invalid proposal buyer source');
     if(!['GBP','EUR','USD'].includes(proposal.currency)||
