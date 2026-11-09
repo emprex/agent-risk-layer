@@ -724,6 +724,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_dossier_open.setEnabled(False)
         self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
         company_toolbar.addWidget(self.crm_company_dossier_open)
+        self.crm_company_messages_button = QPushButton("Messages / notes…")
+        self.crm_company_messages_button.setEnabled(False)
+        self.crm_company_messages_button.clicked.connect(self.open_company_messages)
+        company_toolbar.addWidget(self.crm_company_messages_button)
         self.crm_company_csv_button = QPushButton("CRM CSV…")
         self.crm_company_csv_button.setEnabled(True)
         self.crm_company_csv_button.clicked.connect(self.open_crm_csv_tools)
@@ -1673,6 +1677,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
             self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
@@ -1746,6 +1751,7 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
             self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
@@ -1765,6 +1771,7 @@ class EnkyronWindow(QMainWindow):
         company_id = company["id"]
         self.crm_company_id = company_id
         self.crm_company_dossier_open.setEnabled(True)
+        self.crm_company_messages_button.setEnabled(True)
         self.crm_company_opportunity_add.setEnabled(True)
         self.crm_company_csv_button.setEnabled(True)
         self.crm_company_edit.setEnabled(
@@ -2885,6 +2892,12 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-company-csv", company_id, callback=received)
 
+    def open_company_messages(self):
+        """Open the company's recorded messages and notes, with full text."""
+        self.open_company_dossier()
+        if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
+            self.crm_dossier_nav.setCurrentRow(5)
+
     def open_company_dossier(self):
         if not self.crm_company_id:
             return
@@ -3025,7 +3038,7 @@ class EnkyronWindow(QMainWindow):
                     ("Priority", "priority"), ("Review note", "rationale"),
                     ("Recorded", "recorded_at")
                 ]),
-                ("activities", "Activity notes", [
+                ("activities", "Messages / notes", [
                     ("Type", "activity_type"), ("Details", "detail"),
                     ("Operator", "recorded_by"), ("Recorded", "recorded_at")
                 ]),
@@ -3216,6 +3229,38 @@ class EnkyronWindow(QMainWindow):
                     page_layout.addStretch()
                 else:
                     page_layout.addWidget(table, 1)
+                if section_id == "activities":
+                    hint = QLabel(
+                        "Operator-recorded messages and notes. Select a row "
+                        "to read the complete text; LinkedIn is not synced."
+                    )
+                    hint.setWordWrap(True)
+                    page_layout.insertWidget(0, hint)
+                    full_message = make_text_area()
+                    full_message.setReadOnly(True)
+                    full_message.setMinimumHeight(160)
+                    full_message.setPlaceholderText(
+                        "Select a message or note to read the full text."
+                    )
+                    def show_full_message(items=rows, view=table,
+                                          destination=full_message):
+                        current = view.currentRow()
+                        if not 0 <= current < len(items):
+                            destination.clear()
+                            return
+                        message = items[current]
+                        destination.setPlainText(
+                            "{} | {} | {}\n\n{}".format(
+                                message.get("activity_type") or "note",
+                                message.get("recorded_by") or "Operator",
+                                display_date(message.get("recorded_at")),
+                                message.get("detail") or ""
+                            )
+                        )
+                    table.itemSelectionChanged.connect(show_full_message)
+                    page_layout.addWidget(full_message, 1)
+                    if rows:
+                        table.selectRow(0)
                 if section_id == "qualifications":
                     scroll = QScrollArea()
                     scroll.setWidgetResizable(True)
