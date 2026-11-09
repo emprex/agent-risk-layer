@@ -8,7 +8,9 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import (
+    QApplication, QPushButton, QCheckBox, QSpinBox, QMessageBox, QFileDialog,
+)
 
 from desktop.enkyron_invoice_test_ledger import TestInvoiceLedger
 from desktop.enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
@@ -121,6 +123,113 @@ class TestBillingLifecycle(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         ledger.create(draft, itemization, "2026-11-09", 20, 30)
             self.assertIsNone(ledger.get(DRAFT_ID))
+
+    def test_real_crm_row_completes_synthetic_invoice_without_test_toolbar(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(
+            os.environ, {"XDG_DATA_HOME": folder}
+        ):
+            calls = []
+
+            def fake_call(_self, action, arg="", payload=None, callback=None):
+                calls.append((action, arg, payload, callback))
+
+            with patch.object(DesktopBridge, "call", fake_call):
+                window = EnkyronWindow()
+                try:
+                    window.navigation.setCurrentRow(2)
+                    window.crm_tabs.setCurrentIndex(6)
+                    pending = [x for x in calls if x[0] == "crm-invoice-drafts"][-1]
+                    pending[3]({
+                        "available": True, "items": [{
+                            "id": DRAFT_ID,
+                            "buyer_legal_name": source()["buyer_legal_name"],
+                            "service_description": source()["service_description"],
+                            "currency": "GBP",
+                            "proposed_fee_minor": "75000",
+                            "status": "unissued_tax_review_required",
+                            "recorded_at": "2026-11-09",
+                            "issued_invoice_id": None
+                        }]
+                    }, None)
+                    self.assertFalse(hasattr(window, "crm_invoice_test_export"))
+                    self.assertFalse(hasattr(window, "crm_test_billing_dialog"))
+                    window.crm_invoice_table.selectRow(0)
+                    self.assertEqual(window.crm_invoice_finalize_button.text(),
+                                     "Create sample invoice…")
+                    window.crm_invoice_finalize_button.click()
+                    self.assertEqual(calls[-1][0], "crm-invoice-draft")
+                    self.assertEqual(calls[-1][1], DRAFT_ID)
+                    calls[-1][3]({"available": True, "draft": source()}, None)
+                    self.assertEqual(calls[-1][0], "crm-proposal-lines")
+                    self.assertEqual(calls[-1][1], PROPOSAL_ID)
+                    calls[-1][3]({
+                        "available": True, "id": PROPOSAL_ID,
+                        "revision": 2, "currency": "GBP",
+                        "amount_minor": 75000, "lines": lines(),
+                    }, None)
+                    dialog = window.crm_issuance_dialog
+                    self.assertTrue(dialog.isVisible())
+                    button = dialog.findChild(QPushButton, "confirmSampleInvoice")
+                    self.assertFalse(button.isEnabled())
+                    dialog.findChild(QCheckBox, "sampleInvoiceConfirm").setChecked(True)
+                    self.assertTrue(button.isEnabled())
+                    self.assertEqual(
+                        dialog.findChild(QSpinBox, "sampleInvoiceVat").value(), 20
+                    )
+                    button.click()
+                    record = TestInvoiceLedger().get(DRAFT_ID)
+                    self.assertIsNotNone(record)
+                    self.assertEqual(record["status"], "test_issued")
+                    self.assertEqual(record["subtotal_minor"], 75000)
+                    self.assertEqual(record["vat_minor"], 15000)
+                    self.assertEqual(record["total_minor"], 90000)
+                    detail = window.crm_issued_detail_dialog
+                    self.assertTrue(detail.isVisible())
+                    self.assertIn("TEST-", detail.windowTitle())
+                    pdf = Path(folder) / "sample.pdf"
+                    with patch("desktop.enkyron.QFileDialog.getSaveFileName",
+                               return_value=(str(pdf), "PDF documents (*.pdf)")), patch(
+                        "desktop.enkyron.QMessageBox.information",
+                        return_value=QMessageBox.StandardButton.Ok
+                    ):
+                        detail.findChild(
+                            QPushButton, "exportIssuedInvoicePdf"
+                        ).click()
+                    self.assertTrue(pdf.read_bytes().startswith(b"%PDF-"))
+                    if shutil.which("pdftotext"):
+                        body = subprocess.check_output(
+                            ["pdftotext", str(pdf), "-"], text=True
+                        )
+                        self.assertIn("NOT PAYABLE", body)
+                        self.assertIn("GBP 900.00", body)
+                    with patch("desktop.enkyron.QMessageBox.question",
+                               return_value=QMessageBox.StandardButton.Yes):
+                        detail.findChild(QPushButton, "sampleInvoiceSend").click()
+                        self.assertEqual(
+                            TestInvoiceLedger().get(DRAFT_ID)["status"], "test_sent"
+                        )
+                        detail = window.crm_issued_detail_dialog
+                        detail.findChild(
+                            QPushButton, "recordInvoicePayment"
+                        ).click()
+                    self.assertEqual(
+                        TestInvoiceLedger().get(DRAFT_ID)["status"], "test_paid"
+                    )
+                    self.assertFalse(window.crm_issued_detail_dialog.findChild(
+                        QPushButton, "recordInvoicePayment"
+                    ).isEnabled())
+                    self.assertFalse(any(
+                        x[0] in ("crm-invoice-issue", "crm-invoice-payment-record")
+                        for x in calls
+                    ))
+                    # Test status survives closing/reopening with same local data.
+                    window.crm_issued_detail_dialog.reject()
+                    same = TestInvoiceLedger().get(DRAFT_ID)
+                    window.show_synthetic_invoice_detail(same)
+                    self.assertIn("TEST-", window.crm_issued_detail_dialog.windowTitle())
+                    window.crm_issued_detail_dialog.reject()
+                finally:
+                    window.close()
 
     def test_test_harness_is_not_a_crm_feature(self):
         # Simulation lifecycle tests above run outside the customer-facing CRM.
