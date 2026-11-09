@@ -7341,6 +7341,210 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-invoice-issue-preflight", source_id, callback=received)
 
+    @staticmethod
+    def _is_synthetic_buyer(item):
+        """Only explicitly labelled synthetic clients enter the sample route."""
+        return (isinstance(item, dict)
+                and isinstance(item.get("buyer_legal_name"), str)
+                and "SYNTHETIC" in item["buyer_legal_name"].upper())
+
+    def open_synthetic_invoice(self, selected):
+        """Same CRM invoice action, safely routed to the isolated sample ledger."""
+        draft_id = selected["id"]
+        try:
+            existing = TestInvoiceLedger().get(draft_id)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Sample invoice unavailable", str(exc))
+            return
+        if existing:
+            self.show_synthetic_invoice_detail(existing)
+            return
+        self.crm_invoice_finalize_button.setEnabled(False)
+
+        def received_draft(data, error):
+            self.invoice_draft_selected()
+            draft = (data or {}).get("draft") or {}
+            if (error or not (data or {}).get("available")
+                    or draft.get("id") != draft_id
+                    or not self._is_synthetic_buyer(draft)
+                    or draft.get("status") != "unissued_tax_review_required"):
+                QMessageBox.warning(
+                    self, "Sample invoice unavailable",
+                    error or "This synthetic source draft could not be verified."
+                )
+                return
+            proposal_id = draft.get("proposal_id")
+            if not proposal_id:
+                QMessageBox.warning(
+                    self, "Sample invoice unavailable", "Missing source proposal."
+                )
+                return
+
+            def received_lines(result, line_error):
+                proposal = result or {}
+                if (line_error or not proposal.get("available")
+                        or proposal.get("id") != proposal_id
+                        or int(proposal.get("revision") or 0)
+                           != int(draft.get("proposal_revision") or 0)
+                        or proposal.get("currency") != draft.get("currency")
+                        or int(proposal.get("amount_minor") or 0)
+                           != int(draft.get("proposed_fee_minor") or 0)):
+                    QMessageBox.warning(
+                        self, "Sample invoice unavailable",
+                        line_error or "Source quote revision or amount differs."
+                    )
+                    return
+                try:
+                    lines = [{
+                        "description": line["description"],
+                        "quantity": int(line["quantity"]),
+                        "unit_price_minor": int(line["unit_price_minor"]),
+                        "line_total_minor": int(line["line_total_minor"]),
+                    } for line in (proposal.get("lines") or [])]
+                    if not lines:
+                        fee = int(draft["proposed_fee_minor"])
+                        lines = [{
+                            "description": draft["service_description"],
+                            "quantity": 1,
+                            "unit_price_minor": fee,
+                            "line_total_minor": fee,
+                        }]
+                    self.show_synthetic_invoice_prepare(draft, lines)
+                except (ValueError, TypeError, KeyError) as exc:
+                    QMessageBox.warning(self, "Sample invoice unavailable", str(exc))
+
+            self.bridge.call("crm-proposal-lines", proposal_id, callback=received_lines)
+
+        self.bridge.call("crm-invoice-draft", draft_id, callback=received_draft)
+
+    def show_synthetic_invoice_prepare(self, draft, lines):
+        """Compact version of Issue invoice; only this synthetic buyer gets a sample."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Create sample invoice")
+        dialog.resize(620, 375)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("CREATE SAMPLE INVOICE"))
+        header = QLabel(
+            "{}\n{}\nPrice: {}".format(
+                draft.get("buyer_legal_name"),
+                draft.get("service_description"),
+                self._billing_money(draft["proposed_fee_minor"],
+                                    draft.get("currency"))
+            )
+        )
+        header.setTextFormat(Qt.TextFormat.PlainText)
+        header.setWordWrap(True)
+        layout.addWidget(header)
+        info = QLabel(
+            "This buyer is synthetic. The result is a SAMPLE / NOT PAYABLE PDF "
+            "and a local simulated history, not a genuine invoice or debt. "
+            "The VAT rate below is only a test scenario."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        form = QFormLayout()
+        issue_date = QDateEdit(QDate.currentDate())
+        issue_date.setDisplayFormat("yyyy-MM-dd")
+        issue_date.setCalendarPopup(True)
+        issue_date.setObjectName("sampleInvoiceDate")
+        form.addRow("Sample date", issue_date)
+        vat = QSpinBox()
+        vat.setRange(0, 30)
+        vat.setValue(20)
+        vat.setSuffix("% · sample only")
+        vat.setObjectName("sampleInvoiceVat")
+        form.addRow("Sample VAT", vat)
+        days = QSpinBox()
+        days.setRange(0, 365)
+        days.setValue(30)
+        days.setSuffix(" days")
+        days.setObjectName("sampleInvoiceDueDays")
+        form.addRow("Payment term", days)
+        layout.addLayout(form)
+        confirm = QCheckBox(
+            "I confirm this is a sample, not an issued invoice or real payment."
+        )
+        confirm.setObjectName("sampleInvoiceConfirm")
+        layout.addWidget(confirm)
+        controls = QHBoxLayout()
+        controls.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        controls.addWidget(cancel)
+        create = QPushButton("Create sample invoice")
+        create.setObjectName("confirmSampleInvoice")
+        create.setEnabled(False)
+        confirm.toggled.connect(create.setEnabled)
+        controls.addWidget(create)
+        layout.addLayout(controls)
+
+        def save():
+            if not confirm.isChecked():
+                return
+            create.setEnabled(False)
+            try:
+                saved = TestInvoiceLedger().create(
+                    draft, lines, issue_date.date().toString("yyyy-MM-dd"),
+                    vat.value(), days.value()
+                )
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(dialog, "Sample invoice not created", str(exc))
+                create.setEnabled(True)
+                return
+            dialog.accept()
+            self.load_invoice_drafts()
+            self.show_synthetic_invoice_detail(saved)
+
+        create.clicked.connect(save)
+        self.crm_issuance_dialog = dialog
+        dialog.open()
+
+    def show_synthetic_invoice_detail(self, record):
+        """Reuse the normal invoice detail widget, never a second TEST module."""
+        src = record["source"]
+        state = record["status"]
+        paid = record["total_minor"] if state == "test_paid" else 0
+        invoice = {
+            "id": src["source_draft_id"],
+            "invoice_number": record["test_number"],
+            "issue_date": record["simulated_issue_date"],
+            "supply_date": record["simulated_issue_date"],
+            "due_date": record["simulated_due_date"],
+            "buyer_legal_name": src["buyer"],
+            "service_description": src["service"],
+            "currency": src["currency"],
+            "line_items": src["lines"],
+            "subtotal_minor": record["subtotal_minor"],
+            "vat_amount_minor": record["vat_minor"],
+            "total_minor": record["total_minor"],
+            "paid_minor": paid,
+            "balance_minor": record["total_minor"] - paid,
+            "payment_status": state.replace("test_", "sample_"),
+            "_synthetic_record": record,
+        }
+        self.show_issued_invoice_detail(invoice)
+
+    def advance_synthetic_invoice(self, record, state):
+        """A confirmation of simulation only; never emails or moves funds."""
+        action = "sending" if state == "test_sent" else "payment receipt"
+        response = QMessageBox.question(
+            self, "Confirm simulated " + action,
+            "Record a SAMPLE " + action + "? No email or money is involved.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if response != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            updated = TestInvoiceLedger().advance(
+                record["source"]["source_draft_id"], state
+            )
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Sample step refused", str(exc))
+            return
+        self.show_synthetic_invoice_detail(updated)
+        self.load_invoice_drafts()
+
     def show_invoice_finalization(self, draft, preflight):
         """Short commercial invoice confirmation, not an audit-review wizard."""
         dialog = QDialog(self)
