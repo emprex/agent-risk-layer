@@ -442,7 +442,22 @@ jobs:
           assert "not connected" in window.crm_mail_connection.text().lower()
           assert window.crm_company_table.rowCount() == 1
           assert window.crm_company_add.isEnabled()
+          # UX-01: controls are easy to find, without a wall of disabled buttons.
+          assert window.crm_selected_company_bar.isHidden()
+          assert window.crm_company_advanced_bar.isHidden()
+          assert window.crm_contact_advanced_bar.isHidden()
+          window.crm_company_more_toggle.click()
+          assert not window.crm_company_advanced_bar.isHidden()
+          window.crm_company_more_toggle.click()
+          assert window.crm_company_advanced_bar.isHidden()
+          window.crm_contact_more_toggle.click()
+          assert not window.crm_contact_advanced_bar.isHidden()
+          window.crm_contact_more_toggle.click()
+          assert window.crm_contact_advanced_bar.isHidden()
           window.crm_company_table.selectRow(0)
+          assert not window.crm_selected_company_bar.isHidden()
+          assert "Synthetic Company" in window.crm_selected_company_label.text()
+          assert window.crm_company_dossier_open.isEnabled()
           assert calls[-1][0] == "crm-contacts"
           assert calls[-1][1] == company_id
           calls[-1][3]({
@@ -761,7 +776,16 @@ jobs:
                       "arl_project_ref": None, "arl_assessment_ref": None
                   }]},
                   "opportunities": {"total": 0, "more": False, "items": []},
-                  "activities": {"total": 0, "more": False, "items": []},
+                  "activities": {"total": 2, "more": False, "items": [
+                      {"id": "ci-note-1", "activity_type": "note",
+                       "detail": "First recorded LinkedIn research summary; not a synced message.",
+                       "recorded_by": "ci-operator",
+                       "recorded_at": "2026-11-07T09:00:00Z"},
+                      {"id": "ci-note-2", "activity_type": "note",
+                       "detail": "Later full note with literal <untrusted> text and an example URL.",
+                       "recorded_by": "ci-operator",
+                       "recorded_at": "2026-11-09T12:00:00Z"}
+                  ]},
                   "qualifications": {"total": 0, "more": False, "items": []},
                   "drafts": {"total": 0, "more": False, "items": []},
                    "commercial_docs": {"total": 4, "more": False, "items": [{
@@ -803,6 +827,37 @@ jobs:
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
+          # UX-02: task summary is derived only from the stored dossier,
+          # and advanced sections remain retrievable without changing IDs.
+          assert window.crm_dossier_heading.text() == "Synthetic Company"
+          assert "1 contact(s)" in window.crm_dossier_glance.text()
+          assert "2 messages / notes" in window.crm_dossier_glance.text()
+          # UX-03: complete notes visible in their existing chronology without
+          # a selected row, and no claimed synchronisation or inferred sender.
+          activity_page = window.crm_dossier_tabs.widget(5)
+          activity_texts = [
+              item.text() for item in activity_page.findChildren(QLabel)
+              if item.objectName() == "crmActivityText"
+          ]
+          assert activity_texts == [
+              "First recorded LinkedIn research summary; not a synced message.",
+              "Later full note with literal <untrusted> text and an example URL."
+          ]
+          assert activity_page.findChildren(QTableWidget) == []
+          assert any(
+              "LinkedIn and email are not connected" in label.text()
+              for label in activity_page.findChildren(QLabel)
+          )
+          assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
+              "No next action recorded" in window.crm_dossier_next_action.text()
+          )
+          assert not window.crm_dossier_show_all.isChecked()
+          assert window.crm_dossier_nav.isRowHidden(10)
+          assert not window.crm_dossier_nav.isRowHidden(4)
+          window.crm_dossier_show_all.click()
+          assert not window.crm_dossier_nav.isRowHidden(10)
+          window.crm_dossier_show_all.click()
+          assert window.crm_dossier_nav.isRowHidden(10)
           assert window.crm_dossier_tabs.count() == 11
           assert window.crm_dossier_nav.count() == 11
           assert not window.crm_dossier_tabs.tabBar().isVisible()

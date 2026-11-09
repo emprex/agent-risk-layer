@@ -736,29 +736,53 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_add.setEnabled(False)
         self.crm_company_add.clicked.connect(self.open_new_company)
         company_toolbar.addWidget(self.crm_company_add)
+        self.crm_company_more_toggle = QPushButton("More tools…")
+        self.crm_company_more_toggle.setCheckable(True)
+        company_toolbar.addWidget(self.crm_company_more_toggle)
+        company_l.addLayout(company_toolbar)
+
+        # Show primary actions only for the company the operator selected.
+        self.crm_selected_company_bar = QWidget()
+        selected_company_l = QHBoxLayout(self.crm_selected_company_bar)
+        selected_company_l.setContentsMargins(0, 0, 0, 0)
+        self.crm_selected_company_label = QLabel("No company selected")
+        selected_company_l.addWidget(self.crm_selected_company_label, 1)
+        self.crm_company_dossier_open = QPushButton("Open company")
+        self.crm_company_dossier_open.setObjectName("primary")
+        self.crm_company_dossier_open.setEnabled(False)
+        self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
+        selected_company_l.addWidget(self.crm_company_dossier_open)
+        self.crm_company_opportunity_add = QPushButton("+ Opportunity")
+        self.crm_company_opportunity_add.setEnabled(False)
+        self.crm_company_opportunity_add.clicked.connect(self.open_company_direct_opportunity)
+        selected_company_l.addWidget(self.crm_company_opportunity_add)
+        company_l.addWidget(self.crm_selected_company_bar)
+        self.crm_selected_company_bar.setHidden(True)
+
+        # Existing commands are preserved in a progressive-disclosure row.
+        self.crm_company_advanced_bar = QWidget()
+        company_advanced_l = QHBoxLayout(self.crm_company_advanced_bar)
+        company_advanced_l.setContentsMargins(0, 0, 0, 0)
         self.crm_company_edit = QPushButton("Edit company…")
         self.crm_company_edit.setEnabled(False)
         self.crm_company_edit.clicked.connect(self.open_edit_company)
-        company_toolbar.addWidget(self.crm_company_edit)
-        self.crm_company_opportunity_add = QPushButton("+ Commercial opportunity")
-        self.crm_company_opportunity_add.setEnabled(False)
-        self.crm_company_opportunity_add.clicked.connect(self.open_company_direct_opportunity)
-        company_toolbar.addWidget(self.crm_company_opportunity_add)
-        self.crm_company_dossier_open = QPushButton("Open company dossier")
-        self.crm_company_dossier_open.setEnabled(False)
-        self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
-        company_toolbar.addWidget(self.crm_company_dossier_open)
+        company_advanced_l.addWidget(self.crm_company_edit)
         self.crm_company_messages_button = QPushButton("Messages / notes…")
         self.crm_company_messages_button.setEnabled(False)
         self.crm_company_messages_button.clicked.connect(self.open_company_messages)
-        company_toolbar.addWidget(self.crm_company_messages_button)
+        company_advanced_l.addWidget(self.crm_company_messages_button)
         self.crm_company_csv_button = QPushButton("CRM CSV…")
         self.crm_company_csv_button.setEnabled(True)
         self.crm_company_csv_button.clicked.connect(self.open_crm_csv_tools)
-        company_toolbar.addWidget(self.crm_company_csv_button)
-        company_l.addLayout(company_toolbar)
+        company_advanced_l.addWidget(self.crm_company_csv_button)
+        company_advanced_l.addStretch()
+        company_l.addWidget(self.crm_company_advanced_bar)
+        self.crm_company_advanced_bar.setHidden(True)
+        self.crm_company_more_toggle.toggled.connect(
+            self.crm_company_advanced_bar.setVisible
+        )
         self.crm_company_notice = QLabel(
-            "Structured CRM has not been loaded. Historic prospects remain separate."
+            "Select a company to view its contacts, or double-click to open its dossier."
         )
         self.crm_company_notice.setWordWrap(True)
         company_l.addWidget(self.crm_company_notice)
@@ -780,6 +804,10 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.crm_company_table.itemSelectionChanged.connect(self.company_selected)
+        self.crm_company_table.itemDoubleClicked.connect(
+            lambda _item: self.open_company_dossier()
+        )
+        self.crm_company_table.setMinimumHeight(200)
         company_l.addWidget(self.crm_company_table, 3)
         # Lower half remains one pane, with Contacts / Tickets internal tabs.
         self.crm_company_detail_tabs = QTabWidget()
@@ -800,18 +828,31 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_tickets_button = QPushButton("Contact ticket links…")
         self.crm_contact_tickets_button.setEnabled(False)
         self.crm_contact_tickets_button.clicked.connect(self.open_contact_ticket_links)
-        contacts_heading.addWidget(self.crm_contact_tickets_button)
+        self.crm_contact_more_toggle = QPushButton("More contact tools…")
+        self.crm_contact_more_toggle.setCheckable(True)
+        contacts_heading.addWidget(self.crm_contact_more_toggle)
+        contacts_l.addLayout(contacts_heading)
+
+        self.crm_contact_advanced_bar = QWidget()
+        contact_advanced_l = QHBoxLayout(self.crm_contact_advanced_bar)
+        contact_advanced_l.setContentsMargins(0, 0, 0, 0)
+        contact_advanced_l.addWidget(self.crm_contact_tickets_button)
         self.crm_privacy_button = QPushButton("Privacy requests…")
         self.crm_privacy_button.setEnabled(False)
         self.crm_privacy_button.clicked.connect(self.open_privacy_requests)
-        contacts_heading.addWidget(self.crm_privacy_button)
+        contact_advanced_l.addWidget(self.crm_privacy_button)
         self.crm_retention_button = QPushButton("Retention reviews…")
         self.crm_retention_button.setEnabled(False)
         self.crm_retention_button.clicked.connect(self.open_retention_reviews)
-        contacts_heading.addWidget(self.crm_retention_button)
-        contacts_l.addLayout(contacts_heading)
+        contact_advanced_l.addWidget(self.crm_retention_button)
+        contact_advanced_l.addStretch()
+        contacts_l.addWidget(self.crm_contact_advanced_bar)
+        self.crm_contact_advanced_bar.setHidden(True)
+        self.crm_contact_more_toggle.toggled.connect(
+            self.crm_contact_advanced_bar.setVisible
+        )
         self.crm_contacts_notice = QLabel(
-            "Select a company to view its contacts. Email consent starts as unknown."
+            "Select a company above to view its contacts."
         )
         self.crm_contacts_notice.setWordWrap(True)
         contacts_l.addWidget(self.crm_contacts_notice)
@@ -1718,6 +1759,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.setRowCount(0)
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
+            self.crm_selected_company_bar.setHidden(True)
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
@@ -1774,8 +1816,8 @@ class EnkyronWindow(QMainWindow):
             count = len(self.crm_company_items)
             suffix = " (first 100; narrow search)" if data.get("more") else ""
             self.crm_company_notice.setText(
-                f"{count} registered companie(s){suffix}. "
-                "Legacy prospects have not been imported."
+                f"{count} companies{suffix}. "
+                "Select a company to view its contacts; double-click to open its dossier."
             )
             if chosen >= 0:
                 self.crm_company_table.selectRow(chosen)
@@ -1792,6 +1834,7 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_company_table.currentRow()
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
+            self.crm_selected_company_bar.setHidden(True)
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
@@ -1812,6 +1855,10 @@ class EnkyronWindow(QMainWindow):
         company = self.crm_company_items[row]
         company_id = company["id"]
         self.crm_company_id = company_id
+        self.crm_selected_company_label.setText(
+            "Selected: " + str(company.get("name") or "")
+        )
+        self.crm_selected_company_bar.setHidden(False)
         self.crm_company_dossier_open.setEnabled(True)
         self.crm_company_messages_button.setEnabled(True)
         self.crm_company_opportunity_add.setEnabled(True)
@@ -2956,9 +3003,10 @@ class EnkyronWindow(QMainWindow):
         dialog.resize(1090, 710)
         dialog.setMinimumSize(770, 520)
         layout = QVBoxLayout(dialog)
-        heading = QLabel("COMPANY DOSSIER")
-        heading.setStyleSheet("font-size: 18px; font-weight: bold;")
-        layout.addWidget(heading)
+        self.crm_dossier_heading = QLabel("Company dossier")
+        self.crm_dossier_heading.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_dossier_heading.setStyleSheet("font-size: 18px; font-weight: bold;")
+        layout.addWidget(self.crm_dossier_heading)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_summary.setWordWrap(True)
@@ -2967,14 +3015,25 @@ class EnkyronWindow(QMainWindow):
             "border-radius: 6px; padding: 9px 12px; line-height: 1.3;"
         )
         layout.addWidget(self.crm_dossier_summary)
+        self.crm_dossier_glance = QLabel("Loading contacts, opportunities and notes…")
+        self.crm_dossier_glance.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_dossier_glance.setWordWrap(True)
+        self.crm_dossier_glance.setStyleSheet(
+            "font-weight: bold; padding: 4px 0;"
+        )
+        layout.addWidget(self.crm_dossier_glance)
+        self.crm_dossier_next_action = QLabel("")
+        self.crm_dossier_next_action.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_dossier_next_action.setWordWrap(True)
+        layout.addWidget(self.crm_dossier_next_action)
         self.crm_dossier_notice = QLabel(
-            "Only reviewed links appear here. Similar company names do not "
-            "establish an association."
+            "Internal CRM records: notes are not verified sent messages, "
+            "and drafts are not signed contracts or issued invoices."
         )
         self.crm_dossier_notice.setWordWrap(True)
         layout.addWidget(self.crm_dossier_notice)
         self.crm_dossier_commercial_index = None
-        self.crm_dossier_commercial_button = QPushButton("Open commercial workflow →")
+        self.crm_dossier_commercial_button = QPushButton("View commercial documents →")
         self.crm_dossier_commercial_button.setEnabled(False)
         self.crm_dossier_commercial_button.clicked.connect(
             self.open_dossier_commercial_workflow
@@ -2983,9 +3042,16 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_commercial_button,
             alignment=Qt.AlignmentFlag.AlignLeft
         )
-        # Fixed left-side section list: all eleven entries remain visible
-        # without horizontal tab arrows. Keep QTabWidget as the page stack so
-        # existing qualification forms and keyboard navigation still work.
+        # Keep section IDs/indices stable for existing callbacks and audit views.
+        # Frequent tasks stay visible; extra sections are always one toggle away.
+        self.crm_dossier_show_all = QCheckBox(
+            "Show all sections, including research and audit"
+        )
+        self.crm_dossier_show_all.toggled.connect(
+            self.update_dossier_section_visibility
+        )
+        layout.addWidget(self.crm_dossier_show_all)
+        self.crm_dossier_sections = []
         dossier_body = QHBoxLayout()
         dossier_body.setSpacing(10)
         self.crm_dossier_nav = QListWidget()
@@ -3028,6 +3094,16 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
         self.refresh_company_dossier()
 
+    def update_dossier_section_visibility(self, *_args):
+        """Progressive disclosure without dropping any dossier section or ID."""
+        if not getattr(self, "crm_dossier_nav", None):
+            return
+        show_all = self.crm_dossier_show_all.isChecked()
+        primary = {"contacts", "opportunities", "qualifications", "activities"}
+        for row, (section_id, count) in enumerate(self.crm_dossier_sections):
+            visible = show_all or section_id in primary or count > 0
+            self.crm_dossier_nav.setRowHidden(row, not visible)
+
     def refresh_company_dossier(self):
         dialog = self.crm_dossier_dialog
         company_id = self.crm_dossier_company_id
@@ -3050,6 +3126,9 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             company = data["company"]
+            name = str(company.get("name") or "Company")
+            self.crm_dossier_heading.setText(name)
+            dialog.setWindowTitle("ENKYRON · " + name[:75])
             detail = ", ".join(filter(None, [
                 company.get("city"), company.get("country")
             ]))
@@ -3067,6 +3146,27 @@ class EnkyronWindow(QMainWindow):
                 )
             )
             sections = data.get("sections", {})
+            def section_count(name):
+                return int((sections.get(name) or {}).get("total", 0))
+
+            self.crm_dossier_glance.setText(
+                "{} contact(s)  ·  {} opportunity(ies)  ·  "
+                "{} messages / notes  ·  {} commercial drafts".format(
+                    section_count("contacts"), section_count("opportunities"),
+                    section_count("activities"), section_count("commercial_docs")
+                )
+            )
+            opportunities = (sections.get("opportunities") or {}).get("items") or []
+            next_action = next(
+                (str(item.get("next_action")).strip() for item in opportunities
+                 if item.get("next_action") and str(item.get("next_action")).strip()),
+                None
+            )
+            self.crm_dossier_next_action.setText(
+                "Latest recorded follow-up: " + next_action
+                if next_action else
+                "No next action recorded in the visible opportunities."
+            )
             definitions = [
                 ("contacts", "Contacts", [
                     ("Name", "full_name"), ("Role", "job_title"),
@@ -3124,6 +3224,7 @@ class EnkyronWindow(QMainWindow):
             ]
             self.crm_dossier_tabs.clear()
             self.crm_dossier_nav.clear()
+            self.crm_dossier_sections = []
             for section_id, title, columns in definitions:
                 section = sections.get(section_id, {})
                 rows = section.get("items", [])
@@ -3283,7 +3384,26 @@ class EnkyronWindow(QMainWindow):
                         )
                     page_layout.addStretch()
                 else:
-                    page_layout.addWidget(table, 1)
+                    if section_id in {
+                        "contacts", "prospects", "tickets", "opportunities",
+                        "drafts", "ticket_history", "audit_events", "audit_changes"
+                    } and len(rows) <= 4:
+                        if not rows:
+                            empty_hints = {
+                                "contacts": "No contacts recorded yet.",
+                                "tickets": "No service tickets linked to this company.",
+                                "opportunities": "No commercial opportunities recorded yet.",
+                            }
+                            note = QLabel(
+                                empty_hints.get(section_id, "No records in this section.")
+                            )
+                            note.setWordWrap(True)
+                            page_layout.addWidget(note)
+                        table.setMaximumHeight(52 + 32 * len(rows))
+                        page_layout.addWidget(table)
+                        page_layout.addStretch(1)
+                    elif section_id != "activities":
+                        page_layout.addWidget(table, 1)
                 if section_id == "commercial_docs":
                     guidance = QLabel(
                         "Select a linked record. Open its existing proposal or "
@@ -3335,37 +3455,71 @@ class EnkyronWindow(QMainWindow):
                         table.selectRow(0)
                     update_document_actions()
                 if section_id == "activities":
+                    # Chronological, read-only notes. These are manually
+                    # recorded CRM entries, not authenticated external mail.
+                    # No parsing of free text for sender, direction or consent.
                     hint = QLabel(
-                        "Operator-recorded messages and notes. Select a row "
-                        "to read the complete text; LinkedIn is not synced."
+                        "Recorded notes and message summaries, oldest visible first. "
+                        "These entries were entered by an operator; LinkedIn "
+                        "and email are not connected."
                     )
                     hint.setWordWrap(True)
-                    page_layout.insertWidget(0, hint)
-                    full_message = make_text_area()
-                    full_message.setReadOnly(True)
-                    full_message.setMinimumHeight(160)
-                    full_message.setPlaceholderText(
-                        "Select a message or note to read the full text."
-                    )
-                    def show_full_message(items=rows, view=table,
-                                          destination=full_message):
-                        current = view.currentRow()
-                        if not 0 <= current < len(items):
-                            destination.clear()
-                            return
-                        message = items[current]
-                        destination.setPlainText(
-                            "{} | {} | {}\n\n{}".format(
-                                message.get("activity_type") or "note",
-                                message.get("recorded_by") or "Operator",
-                                display_date(message.get("recorded_at")),
-                                message.get("detail") or ""
-                            )
+                    page_layout.addWidget(hint)
+                    timeline = QScrollArea()
+                    timeline.setObjectName("crmActivitiesTimeline")
+                    timeline.setWidgetResizable(True)
+                    timeline.setFrameShape(QFrame.Shape.NoFrame)
+                    timeline_content = QWidget()
+                    timeline_layout = QVBoxLayout(timeline_content)
+                    timeline_layout.setContentsMargins(4, 6, 8, 8)
+                    timeline_layout.setSpacing(10)
+                    if not rows:
+                        empty = QLabel(
+                            "No activity notes recorded yet. "
+                            "Nothing has been sent from this view."
                         )
-                    table.itemSelectionChanged.connect(show_full_message)
-                    page_layout.addWidget(full_message, 1)
-                    if rows:
-                        table.selectRow(0)
+                        empty.setWordWrap(True)
+                        timeline_layout.addWidget(empty)
+                    for record in rows:
+                        card = QFrame()
+                        card.setObjectName("crmActivityCard")
+                        card.setStyleSheet(
+                            "QFrame#crmActivityCard { background: #f7fafc; "
+                            "border: 1px solid #d8e2ea; border-radius: 6px; }"
+                            "QFrame#crmActivityCard QLabel { border: 0; "
+                            "background: transparent; }"
+                        )
+                        card_layout = QVBoxLayout(card)
+                        card_layout.setContentsMargins(12, 10, 12, 12)
+                        card_layout.setSpacing(7)
+                        activity_type = str(record.get("activity_type") or "note")
+                        type_label = (
+                            "Internal note" if activity_type == "note" else
+                            "Recorded activity: " + activity_type
+                        )
+                        header_text = "{}   ·   {}   ·   Entered by {}".format(
+                            type_label,
+                            display_date(record.get("recorded_at")) or "Date unknown",
+                            record.get("recorded_by") or "Unknown operator"
+                        )
+                        card_header = QLabel(header_text)
+                        card_header.setTextFormat(Qt.TextFormat.PlainText)
+                        card_header.setWordWrap(True)
+                        card_header.setStyleSheet("font-weight: bold;")
+                        card_layout.addWidget(card_header)
+                        body = QLabel(str(record.get("detail") or "(No text recorded)"))
+                        body.setObjectName("crmActivityText")
+                        body.setTextFormat(Qt.TextFormat.PlainText)
+                        body.setWordWrap(True)
+                        body.setTextInteractionFlags(
+                            Qt.TextInteractionFlag.TextSelectableByMouse |
+                            Qt.TextInteractionFlag.TextSelectableByKeyboard
+                        )
+                        card_layout.addWidget(body)
+                        timeline_layout.addWidget(card)
+                    timeline_layout.addStretch(1)
+                    timeline.setWidget(timeline_content)
+                    page_layout.addWidget(timeline, 1)
                 if section_id == "qualifications":
                     scroll = QScrollArea()
                     scroll.setWidgetResizable(True)
@@ -3380,6 +3534,7 @@ class EnkyronWindow(QMainWindow):
                 self.crm_dossier_nav.addItem(
                     "{} ({})".format(title, count)
                 )
+                self.crm_dossier_sections.append((section_id, count))
                 if section_id == "commercial_docs":
                     self.crm_dossier_commercial_index = self.crm_dossier_tabs.count() - 1
             self.crm_dossier_commercial_button.setEnabled(
@@ -3391,12 +3546,18 @@ class EnkyronWindow(QMainWindow):
             if getattr(self, "crm_dossier_open_messages_after_load", False):
                 index = 5
                 self.crm_dossier_open_messages_after_load = False
+            # Restore a previously selected advanced section without hiding it.
+            if (index < len(self.crm_dossier_sections)
+                    and self.crm_dossier_sections[index][0] not in {
+                        "contacts", "opportunities", "qualifications", "activities"
+                    } and self.crm_dossier_sections[index][1] == 0):
+                self.crm_dossier_show_all.setChecked(True)
+            self.update_dossier_section_visibility()
             self.crm_dossier_tabs.setCurrentIndex(index)
             self.crm_dossier_nav.setCurrentRow(index)
             self.crm_dossier_notice.setText(
-                "Only explicitly reviewed company links. Internal notes and "
-                "commercial drafts are not verified customer communications, "
-                "signed contracts or issued invoices."
+                "Internal CRM records: notes are not verified sent messages, "
+                "and drafts are not signed contracts or issued invoices."
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
@@ -3405,6 +3566,10 @@ class EnkyronWindow(QMainWindow):
         index = self.crm_dossier_commercial_index
         if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
                 and index is not None and 0 <= index < self.crm_dossier_nav.count()):
+            # A zero-record commercial section is initially folded away.
+            # Explicit operator navigation must always reveal that section.
+            if self.crm_dossier_nav.isRowHidden(index):
+                self.crm_dossier_show_all.setChecked(True)
             self.crm_dossier_nav.setCurrentRow(index)
 
     def open_dossier_source_proposal(self, proposal_id):
