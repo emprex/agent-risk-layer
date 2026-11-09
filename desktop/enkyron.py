@@ -7484,6 +7484,14 @@ class EnkyronWindow(QMainWindow):
                     for e in r["events"]
                 )
             )
+            # Keep the visible CRM register aligned with the local TEST ledger.
+            selected_row = self.crm_invoice_table.currentRow()
+            if (0 <= selected_row < len(self.crm_invoice_items)
+                    and self.crm_invoice_items[selected_row].get("id") == draft["id"]
+                    and self.crm_invoice_table.item(selected_row, 5)):
+                self.crm_invoice_table.item(selected_row, 5).setText(
+                    r["status"].replace("_", " ")
+                )
 
         def create_simulation():
             if not consent.isChecked() or current["value"]:
