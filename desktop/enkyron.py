@@ -7234,11 +7234,18 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             item = data["service"]
-            fee = "Custom quote required (no fixed price)"
-            if item.get("price_minor") is not None:
+            pricing = item.get("pricing_model")
+            price_minor = item.get("price_minor")
+            if pricing == "custom_quote":
+                fee = "Price determined per client quote"
+            elif price_minor is None:
+                fee = "Base fee not set (draft)"
+                if pricing == "recurring" and item.get("billing_period"):
+                    fee += " / " + str(item["billing_period"])
+            else:
                 fee = "{} {}{}".format(
                     item.get("currency") or "",
-                    self._quote_format_minor(int(item["price_minor"])),
+                    self._quote_format_minor(int(price_minor)),
                     " / " + str(item["billing_period"])
                     if item.get("billing_period") else ""
                 )
