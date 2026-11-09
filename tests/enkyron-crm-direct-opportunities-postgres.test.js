@@ -12,6 +12,10 @@ import {
 } from '../desktop/enkyron-crm-opportunities.mjs';
 import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 import {createProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
+import {readProposalForDraftPdf} from '../desktop/enkyron-crm-proposal-export.mjs';
+import {readBuyerReview} from '../desktop/enkyron-crm-buyer-review.mjs';
+import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
+import {readInvoicePreparation} from '../desktop/enkyron-crm-invoice-drafts.mjs';
 const url=process.env.ARL_CI_POSTGRES_URL||'';
 function isolated(){
  assert.equal(process.env.CI,'true','Only disposable CI PostgreSQL may be written');
@@ -49,6 +53,16 @@ test('direct CRM opportunity needs no ticket and appears with correspondence in 
     scope_text:'Prospective AI agent security assessment, subject to written authorisation.',
     currency:'GBP',amount_minor:50000
   },operator);
+  // Commercial documentary steps must not secretly depend on a service ticket.
+  const pdf=await readProposalForDraftPdf(pool,draft.id,operator);
+  assert.ok(pdf,'commercial PDF draft remains available to the operator');
+  const buyer=await readBuyerReview(pool,draft.id,operator);
+  assert.equal(buyer.origin_kind,'crm_company_direct');
+  const preflight=await readQuoteIssuePreflight(pool,draft.id,operator);
+  assert.ok(preflight,'quote preflight must be readable even when incomplete');
+  const invoice=await readInvoicePreparation(pool,draft.id,operator);
+  assert.equal(invoice.origin_kind,'crm_company_direct');
+  assert.equal(invoice.can_prepare,false,'missing documentary gates still block billing');
   const dossier=await getCompanyDossier(pool,company.id,operator);
   assert.ok(dossier.sections.opportunities.items.some(x=>x.opportunity_id===opp.id));
   assert.ok(dossier.sections.activities.items.some(x=>x.detail.includes('NOT SENT')));
