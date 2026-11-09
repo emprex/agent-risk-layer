@@ -7270,6 +7270,492 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_finalize_button.setEnabled(available)
         self.crm_invoice_issue_button.setEnabled(available)
 
+    def open_invoice_finalization(self):
+        """Issue the selected commercial draft in one operator-confirmed action."""
+        row = self.crm_invoice_table.currentRow()
+        if not 0 <= row < len(self.crm_invoice_items):
+            return
+        if (self.crm_issuance_dialog and self.crm_issuance_dialog.isVisible()):
+            self.crm_issuance_dialog.raise_()
+            self.crm_issuance_dialog.activateWindow()
+            return
+        draft = self.crm_invoice_items[row]
+        source_id = draft["id"]
+        self.crm_invoice_finalize_button.setEnabled(False)
+
+        def received(data, error):
+            self.invoice_draft_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Invoice issue unavailable",
+                    error or (data or {}).get("notice", "Invoice issuance is unavailable.")
+                )
+                return
+            issues = data.get("issues") or []
+            if issues:
+                QMessageBox.warning(
+                    self, "Invoice cannot be issued yet",
+                    "\n".join("• " + str(item) for item in issues) +
+                    "\n\nYou can continue commercial work without creating extra drafts."
+                )
+                return
+            self.show_invoice_finalization(draft, data)
+
+        self.bridge.call("crm-invoice-issue-preflight", source_id, callback=received)
+
+    def show_invoice_finalization(self, draft, preflight):
+        """Short commercial invoice confirmation, not an audit-review wizard."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Issue invoice")
+        dialog.resize(630, 440)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("ISSUE INVOICE"))
+        issuer_status = preflight.get("issuer_vat_status")
+        vat = 20 if issuer_status == "registered" else 0
+        amount_minor = int(draft.get("proposed_fee_minor") or 0)
+        tax_minor = (amount_minor * vat + 50) // 100
+        summary = QLabel(
+            "{}\n{}\nNet: {}  ·  VAT: {}  ·  TOTAL: {}".format(
+                draft.get("buyer_legal_name") or "",
+                draft.get("service_description") or "",
+                self._billing_money(amount_minor, draft.get("currency")),
+                self._billing_money(tax_minor, draft.get("currency")),
+                self._billing_money(amount_minor + tax_minor, draft.get("currency")),
+            )
+        )
+        summary.setTextFormat(Qt.TextFormat.PlainText)
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+        tax_info = QLabel(
+            "Tax status from the current issuing-company profile: {}. "
+            "VAT {}%. This must reflect the actual transaction; no automated "
+            "tax classification is being inferred.".format(
+                issuer_status, vat
+            )
+        )
+        tax_info.setWordWrap(True)
+        layout.addWidget(tax_info)
+        form = QFormLayout()
+        supply = QDateEdit(QDate.currentDate())
+        supply.setCalendarPopup(True)
+        supply.setDisplayFormat("yyyy-MM-dd")
+        supply.setObjectName("invoiceSupplyDate")
+        form.addRow("Service supplied on", supply)
+        due = QSpinBox()
+        due.setRange(0, 180)
+        due.setValue(30)
+        due.setSuffix(" days")
+        due.setObjectName("invoiceDueDays")
+        form.addRow("Payment terms", due)
+        reference = QLineEdit()
+        reference.setMaxLength(200)
+        reference.setPlaceholderText("Optional customer PO / reference")
+        reference.setObjectName("invoiceCustomerReference")
+        form.addRow("Customer reference", reference)
+        basis = QLineEdit()
+        basis.setMaxLength(1000)
+        basis.setPlaceholderText("Order, accepted scope or completed-service reference")
+        basis.setObjectName("invoiceIssueBasis")
+        form.addRow("Reason / source", basis)
+        layout.addLayout(form)
+        confirm = QCheckBox(
+            "I confirm the customer, service delivery, tax treatment, "
+            "amount and authority to issue this invoice."
+        )
+        confirm.setObjectName("invoiceHumanIssueConfirm")
+        confirm.setWordWrap(True)
+        layout.addWidget(confirm)
+        warning = QLabel(
+            "Issuing creates a numbered, immutable invoice. Nothing is emailed "
+            "automatically. You can export the PDF afterwards."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        footer = QHBoxLayout()
+        footer.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        footer.addWidget(cancel)
+        issue = QPushButton("Issue invoice")
+        issue.setObjectName("confirmInvoiceIssue")
+        issue.setEnabled(False)
+        footer.addWidget(issue)
+        layout.addLayout(footer)
+        confirm.toggled.connect(
+            lambda checked: issue.setEnabled(bool(checked) and
+                len(basis.text().strip()) >= 10)
+        )
+        basis.textChanged.connect(
+            lambda _value: issue.setEnabled(
+                confirm.isChecked() and len(basis.text().strip()) >= 10
+            )
+        )
+
+        def submit():
+            if not issue.isEnabled():
+                return
+            issue.setEnabled(False)
+            payload = {
+                "draft_id": draft["id"],
+                "supply_date": supply.date().toString("yyyy-MM-dd"),
+                "due_days": due.value(),
+                "vat_rate_percent": vat,
+                "customer_reference": reference.text().strip() or None,
+                "issuance_basis": basis.text().strip(),
+                "confirmed": True
+            }
+
+            def saved(result, error):
+                if error or not result or not result.get("id"):
+                    QMessageBox.warning(
+                        dialog, "Invoice was not issued",
+                        error or "No issue receipt was returned. Check the register."
+                    )
+                    issue.setEnabled(True)
+                    return
+                dialog.accept()
+                self.load_invoice_drafts()
+                self.open_issued_invoice_by_id(result["id"])
+
+            self.bridge.call("crm-invoice-issue", payload=payload, callback=saved)
+
+        issue.clicked.connect(submit)
+        self.crm_issuance_dialog = dialog
+        dialog.open()
+
+    @staticmethod
+    def _billing_money(minor, currency="GBP"):
+        value = int(minor)
+        return "{} {:,}.{:02d}".format(
+            currency or "GBP", value // 100, value % 100
+        )
+
+    def open_issued_invoice_register(self):
+        if (self.crm_issued_register_dialog and
+                self.crm_issued_register_dialog.isVisible()):
+            self.crm_issued_register_dialog.raise_()
+            self.crm_issued_register_dialog.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Issued invoices & payments")
+        dialog.resize(970, 560)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("ISSUED INVOICES"))
+        search_bar = QHBoxLayout()
+        self.crm_issued_search = QLineEdit()
+        self.crm_issued_search.setPlaceholderText("Search customer or invoice number…")
+        search_bar.addWidget(self.crm_issued_search)
+        reload_button = QPushButton("Refresh")
+        reload_button.clicked.connect(self.refresh_issued_invoice_register)
+        search_bar.addWidget(reload_button)
+        layout.addLayout(search_bar)
+        self.crm_issued_notice = QLabel("Loading invoices…")
+        self.crm_issued_notice.setWordWrap(True)
+        layout.addWidget(self.crm_issued_notice)
+        self.crm_issued_table = QTableWidget(0, 6)
+        self.crm_issued_table.setHorizontalHeaderLabels(
+            ["Invoice #", "Customer", "Date", "Due", "Total", "Balance"]
+        )
+        self.crm_issued_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.crm_issued_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.crm_issued_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.crm_issued_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        layout.addWidget(self.crm_issued_table, 1)
+        footer = QHBoxLayout()
+        footer.addStretch()
+        view = QPushButton("Open invoice…")
+        view.setObjectName("openIssuedInvoice")
+        view.setEnabled(False)
+        self.crm_issued_table.itemSelectionChanged.connect(
+            lambda: view.setEnabled(
+                0 <= self.crm_issued_table.currentRow() < len(self.crm_issued_items)
+            )
+        )
+        self.crm_issued_table.itemDoubleClicked.connect(
+            lambda _item: self.open_selected_issued_invoice()
+        )
+        view.clicked.connect(self.open_selected_issued_invoice)
+        footer.addWidget(view)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        layout.addLayout(footer)
+        self.crm_issued_register_dialog = dialog
+        dialog.open()
+        self.refresh_issued_invoice_register()
+
+    def refresh_issued_invoice_register(self):
+        if not (self.crm_issued_register_dialog and
+                self.crm_issued_register_dialog.isVisible()):
+            return
+        query = self.crm_issued_search.text().strip()
+        self.crm_issued_items = []
+        self.crm_issued_table.setRowCount(0)
+
+        def received(data, error):
+            if not self.crm_issued_register_dialog.isVisible():
+                return
+            if error or not data or not data.get("available"):
+                self.crm_issued_notice.setText(
+                    error or (data or {}).get(
+                        "notice", "Issued invoice register unavailable"
+                    )
+                )
+                return
+            items = data.get("items") or []
+            self.crm_issued_items = items
+            self.crm_issued_table.setRowCount(len(items))
+            for index, item in enumerate(items):
+                fields = [
+                    item.get("invoice_number") or "",
+                    item.get("buyer_legal_name") or "",
+                    item.get("issue_date") or "",
+                    item.get("due_date") or "",
+                    self._billing_money(item.get("total_minor") or 0,
+                                        item.get("currency")),
+                    self._billing_money(item.get("balance_minor") or 0,
+                                        item.get("currency")),
+                ]
+                for col, value in enumerate(fields):
+                    self.crm_issued_table.setItem(
+                        index, col, QTableWidgetItem(str(value))
+                    )
+            self.crm_issued_notice.setText(
+                "{} issued invoice(s). Balances are based on manually recorded "
+                "payment references; no bank reconciliation.".format(len(items))
+            )
+
+        self.bridge.call("crm-invoices-issued", query, callback=received)
+
+    def open_selected_issued_invoice(self):
+        row = self.crm_issued_table.currentRow()
+        if 0 <= row < len(self.crm_issued_items):
+            self.open_issued_invoice_by_id(self.crm_issued_items[row]["id"])
+
+    def open_issued_invoice_by_id(self, invoice_id):
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "Invoice unavailable",
+                    error or "Could not load the issued invoice."
+                )
+                return
+            invoice = data.get("invoice") or {}
+            if invoice.get("id") != invoice_id:
+                QMessageBox.warning(self, "Invoice mismatch",
+                                    "Refresh the issued-invoice register.")
+                return
+            self.show_issued_invoice_detail(invoice)
+
+        self.bridge.call("crm-invoice-issued", invoice_id, callback=received)
+
+    def show_issued_invoice_detail(self, invoice):
+        if (self.crm_issued_detail_dialog and
+                self.crm_issued_detail_dialog.isVisible()):
+            self.crm_issued_detail_dialog.reject()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Invoice " + str(invoice["invoice_number"]))
+        dialog.resize(700, 560)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("INVOICE " + str(invoice["invoice_number"])))
+        lines = invoice.get("line_items") or []
+        body = [
+            "Customer: " + str(invoice.get("buyer_legal_name") or ""),
+            "Supply date: " + str(invoice.get("supply_date") or ""),
+            "Invoice date: " + str(invoice.get("issue_date") or ""),
+            "Due: " + str(invoice.get("due_date") or ""),
+            "",
+        ]
+        for item in lines:
+            body.append(
+                "{} × {} · {}".format(
+                    item.get("quantity"), item.get("description"),
+                    self._billing_money(item.get("line_total_minor") or 0,
+                                        invoice.get("currency"))
+                )
+            )
+        body.extend([
+            "", "Subtotal: " + self._billing_money(
+                invoice.get("subtotal_minor"), invoice.get("currency")),
+            "VAT: " + self._billing_money(
+                invoice.get("vat_amount_minor"), invoice.get("currency")),
+            "Total: " + self._billing_money(
+                invoice.get("total_minor"), invoice.get("currency")),
+            "Paid: " + self._billing_money(
+                invoice.get("paid_minor"), invoice.get("currency")),
+            "Outstanding: " + self._billing_money(
+                invoice.get("balance_minor"), invoice.get("currency")),
+            "Status: " + str(invoice.get("payment_status") or ""),
+        ])
+        details = QPlainTextEdit()
+        details.setReadOnly(True)
+        details.setPlainText("\n".join(body))
+        layout.addWidget(details, 1)
+        actions = QHBoxLayout()
+        export = QPushButton("Export invoice PDF…")
+        export.setObjectName("exportIssuedInvoicePdf")
+        export.clicked.connect(
+            lambda: self.export_issued_invoice_from_crm(invoice)
+        )
+        actions.addWidget(export)
+        payment = QPushButton("Record payment…")
+        payment.setObjectName("recordInvoicePayment")
+        payment.setEnabled(int(invoice.get("balance_minor") or 0) > 0)
+        payment.clicked.connect(
+            lambda: self.open_invoice_payment(invoice)
+        )
+        actions.addWidget(payment)
+        actions.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        actions.addWidget(close)
+        layout.addLayout(actions)
+        self.crm_issued_detail_dialog = dialog
+        dialog.open()
+
+    def export_issued_invoice_from_crm(self, invoice):
+        documents = Path.home() / "Documents"
+        folder = documents if documents.is_dir() else Path.home()
+        name = "ENKYRON_" + str(invoice["invoice_number"]) + ".pdf"
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Save issued invoice PDF", str(folder / name),
+            "PDF documents (*.pdf)"
+        )
+        if not filename:
+            return
+        target = Path(filename)
+        if target.suffix.lower() != ".pdf":
+            target = target.with_suffix(".pdf")
+        if target.is_symlink():
+            QMessageBox.warning(self, "Export cancelled",
+                                "Cannot overwrite a symbolic link.")
+            return
+        if target.exists():
+            answer = QMessageBox.question(
+                self, "Replace existing PDF?",
+                "Replace this saved invoice PDF? The issued record is unchanged.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            pages = export_issued_invoice_pdf(target, invoice)
+        except (OSError, ValueError, RuntimeError) as exc:
+            QMessageBox.warning(self, "PDF not saved", str(exc))
+            return
+        QMessageBox.information(
+            self, "Invoice PDF saved",
+            "Saved {} page(s) to {}. No email was sent.".format(pages, target)
+        )
+
+    def open_invoice_payment(self, invoice):
+        if (self.crm_invoice_payment_dialog and
+                self.crm_invoice_payment_dialog.isVisible()):
+            self.crm_invoice_payment_dialog.raise_()
+            return
+        outstanding = int(invoice.get("balance_minor") or 0)
+        if outstanding <= 0:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Record received payment")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("RECORD PAYMENT"))
+        layout.addWidget(QLabel(
+            "{} · Outstanding {}".format(
+                invoice.get("invoice_number"),
+                self._billing_money(outstanding, invoice.get("currency"))
+            )
+        ))
+        form = QFormLayout()
+        pounds = QLineEdit()
+        pounds.setObjectName("invoicePaymentAmount")
+        pounds.setText("{:.2f}".format(Decimal(outstanding) / 100))
+        form.addRow("Amount received (GBP)", pounds)
+        paid_on = QDateEdit(QDate.currentDate())
+        paid_on.setCalendarPopup(True)
+        paid_on.setDisplayFormat("yyyy-MM-dd")
+        paid_on.setObjectName("invoicePaymentDate")
+        form.addRow("Date received", paid_on)
+        reference = QLineEdit()
+        reference.setObjectName("invoicePaymentReference")
+        reference.setMaxLength(200)
+        reference.setPlaceholderText("Bank/payment reference actually received")
+        form.addRow("Payment reference", reference)
+        layout.addLayout(form)
+        confirm = QCheckBox(
+            "I confirm this payment was actually received. "
+            "ENKYRON does not move money or verify bank deposits."
+        )
+        confirm.setObjectName("invoicePaymentConfirm")
+        layout.addWidget(confirm)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        save = QPushButton("Record payment")
+        save.setObjectName("saveInvoicePayment")
+        save.setEnabled(False)
+        buttons.addWidget(save)
+        layout.addLayout(buttons)
+        def eligible():
+            save.setEnabled(
+                confirm.isChecked() and len(reference.text().strip()) >= 3 and
+                len(pounds.text().strip()) > 0
+            )
+        confirm.toggled.connect(lambda _v: eligible())
+        reference.textChanged.connect(lambda _v: eligible())
+        pounds.textChanged.connect(lambda _v: eligible())
+
+        def submit():
+            try:
+                value = Decimal(pounds.text().strip())
+                minor = value * 100
+                if (not value.is_finite() or minor != minor.to_integral_value()
+                        or not 0 < minor <= outstanding):
+                    raise ValueError("Payment must be a positive amount up to the balance")
+                amount_minor = int(minor)
+            except (InvalidOperation, ValueError):
+                QMessageBox.warning(dialog, "Invalid payment",
+                                    "Enter a valid GBP amount not exceeding the balance.")
+                return
+            save.setEnabled(False)
+            payload = {
+                "invoice_id": invoice["id"],
+                "amount_minor": amount_minor,
+                "paid_on": paid_on.date().toString("yyyy-MM-dd"),
+                "payment_reference": reference.text().strip(),
+                "confirmed": True
+            }
+
+            def received(data, error):
+                if error or not data or not data.get("id"):
+                    QMessageBox.warning(dialog, "Payment not recorded",
+                                        error or "No payment receipt was returned.")
+                    save.setEnabled(True)
+                    return
+                dialog.accept()
+                if self.crm_issued_detail_dialog:
+                    self.crm_issued_detail_dialog.reject()
+                self.open_issued_invoice_by_id(invoice["id"])
+                self.refresh_issued_invoice_register()
+
+            self.bridge.call("crm-invoice-payment-record",
+                             payload=payload, callback=received)
+
+        save.clicked.connect(submit)
+        self.crm_invoice_payment_dialog = dialog
+        dialog.open()
+
     def open_selected_invoice_draft(self):
         row = self.crm_invoice_table.currentRow()
         if not 0 <= row < len(self.crm_invoice_items):
