@@ -50,9 +50,9 @@ try{
   const existing=applied.get(version);
   if(existing && existing!==expected)throw new Error('ENKYRON migration checksum mismatch');
   if(existing){
-    console.log('ENKYRON SOW draft schema 101 already applied and checksum verified. No changes.');
+    console.log('ENKYRON contract reference schema 101 already applied and checksum verified. No changes.');
   }else if(mode==='--check'){
-    console.log('ENKYRON SOW draft schema 101 not applied. Historical migrations verified; no changes.');
+    console.log('ENKYRON contract reference schema 101 not applied. Historical migrations verified; no changes.');
   }else{
     const backupDir=path.join(os.homedir(),'.local','share','enkyron','backups');
     await fs.mkdir(backupDir,{recursive:true,mode:0o700});
@@ -88,6 +88,6 @@ try{
       await client.query('ROLLBACK').catch(()=>{});
       throw error;
     }
-    console.log('ENKYRON SOW draft schema 101 applied. Only additive contract reference register created; historical companies, SOWs and assessments were unchanged.');
+    console.log('ENKYRON contract reference schema 101 applied. Only additive contract reference register created; historical companies, SOWs and assessments were unchanged.');
   }
 }finally{await client.end();}
