@@ -2894,9 +2894,12 @@ class EnkyronWindow(QMainWindow):
 
     def open_company_messages(self):
         """Open the company's recorded messages and notes, with full text."""
+        self.crm_dossier_open_messages_after_load = True
         self.open_company_dossier()
-        if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
+        if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and self.crm_dossier_tabs.count() > 5):
             self.crm_dossier_nav.setCurrentRow(5)
+            self.crm_dossier_open_messages_after_load = False
 
     def open_company_dossier(self):
         if not self.crm_company_id:
@@ -3278,6 +3281,9 @@ class EnkyronWindow(QMainWindow):
             # Qt may expose its tab bar again as tabs are inserted.
             self.crm_dossier_tabs.tabBar().hide()
             index = selected_tab if 0 <= selected_tab < self.crm_dossier_tabs.count() else 0
+            if getattr(self, "crm_dossier_open_messages_after_load", False):
+                index = 5
+                self.crm_dossier_open_messages_after_load = False
             self.crm_dossier_tabs.setCurrentIndex(index)
             self.crm_dossier_nav.setCurrentRow(index)
             self.crm_dossier_notice.setText(
