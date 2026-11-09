@@ -4553,12 +4553,192 @@ class EnkyronWindow(QMainWindow):
         view.setReadOnly(True)
         view.setPlainText("\n".join(text))
         layout.addWidget(view, 1)
+        footer = QHBoxLayout()
+        edit = QPushButton("Document SOW draft…")
+        edit.clicked.connect(lambda: self.open_sow_draft_record(
+            data["proposal_id"], data["proposal_revision"]
+        ))
+        footer.addWidget(edit)
+        footer.addStretch()
         close = QPushButton("Close")
         close.clicked.connect(dialog.reject)
-        layout.addWidget(close)
+        footer.addWidget(close)
+        layout.addLayout(footer)
         self.crm_sow_dialog = dialog
         dialog.finished.connect(lambda _result: setattr(self, "crm_sow_dialog", None))
         dialog.show()
+
+    def open_sow_draft_record(self, proposal_id, revision):
+        existing = getattr(self, "crm_sow_draft_dialog", None)
+        if existing and existing.isVisible():
+            existing.raise_()
+            return
+
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "SOW draft unavailable",
+                    error or (data or {}).get("notice", "Could not load SOW register.")
+                )
+                return
+            if (data.get("proposal_id") != proposal_id or
+                    data.get("proposal_revision") != revision):
+                QMessageBox.warning(
+                    self, "Proposal changed",
+                    "The proposal revision changed. Refresh the SOW review before editing."
+                )
+                self.load_proposals()
+                return
+            self.show_sow_draft_record(data)
+
+        self.bridge.call("crm-sow-draft", proposal_id, callback=received)
+
+    def show_sow_draft_record(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · SOW working draft (NOT APPROVED)")
+        dialog.resize(810, 700)
+        dialog.setMinimumSize(600, 450)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("SOW · OPERATOR WORKING DRAFT"))
+        notice = QLabel(
+            "Manual documentation for proposal revision {}. Earlier versions "
+            "remain immutable. This is NOT a customer-approved SOW, contract, "
+            "signed authorisation or permission to access/test any target.".format(
+                data["proposal_revision"]
+            )
+        )
+        notice.setWordWrap(True)
+        notice.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(notice)
+        current = data.get("current") or {}
+        layout.addWidget(QLabel(
+            "Proposal: {} · R{} · Current SOW R{}".format(
+                data.get("proposal_title") or "",
+                data["proposal_revision"], current.get("sow_revision") or 0
+            )
+        ))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_l = QVBoxLayout(body)
+        form = QFormLayout()
+        self.crm_sow_draft_fields = {}
+        specs = (
+            ("in_scope", "Included scope *", "List proposed systems and tasks to include"),
+            ("out_of_scope", "Excluded scope *", "List explicit technical exclusions"),
+            ("deliverables", "Deliverables *", "Specify documents, results and meetings"),
+            ("acceptance_criteria", "Acceptance criteria *",
+             "Specify how the proposed deliverables would be checked"),
+            ("target_inventory", "Target inventory *",
+             "Document target identifiers or explicitly state no targets are authorised"),
+            ("dependencies", "Dependencies *",
+             "Specify customer documents and prerequisite decisions"),
+        )
+        for key, label, hint in specs:
+            editor = QPlainTextEdit()
+            editor.setMaximumHeight(100)
+            editor.setPlaceholderText(hint + " (20–3000 characters)")
+            editor.setPlainText(current.get(key) or "")
+            form.addRow(label, editor)
+            self.crm_sow_draft_fields[key] = editor
+        self.crm_sow_draft_note = QPlainTextEdit()
+        self.crm_sow_draft_note.setMaximumHeight(85)
+        self.crm_sow_draft_note.setPlaceholderText(
+            "Why record this version? Human explanation (30–1000 characters)"
+        )
+        form.addRow("Version rationale *", self.crm_sow_draft_note)
+        body_l.addLayout(form)
+        body_l.addWidget(section_title("IMMUTABLE SOW VERSION HISTORY"))
+        history = data.get("history") or []
+        records = QPlainTextEdit()
+        records.setReadOnly(True)
+        records.setMaximumHeight(115)
+        records.setPlainText("\n".join(
+            "Proposal R{} · SOW R{} · {} · SHA-256 {}".format(
+                x.get("proposal_revision"), x.get("sow_revision"),
+                x.get("recorded_by") or "operator",
+                x.get("content_sha256") or "not recorded"
+            )
+            for x in history
+        ) or "No SOW versions recorded.")
+        body_l.addWidget(records)
+        body_l.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        footer = QHBoxLayout()
+        self.crm_sow_draft_confirm = QCheckBox(
+            "I confirm this is an UNAPPROVED draft, not permission to test."
+        )
+        footer.addWidget(self.crm_sow_draft_confirm)
+        footer.addStretch()
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        footer.addWidget(close)
+        self.crm_sow_draft_save = QPushButton("Record new SOW draft version")
+        self.crm_sow_draft_save.setObjectName("primary")
+        self.crm_sow_draft_save.clicked.connect(self.save_sow_draft_record)
+        footer.addWidget(self.crm_sow_draft_save)
+        layout.addLayout(footer)
+        self.crm_sow_draft_context = {
+            "proposal_id": data["proposal_id"],
+            "expected_revision": data["proposal_revision"],
+            "expected_sow_revision": current.get("sow_revision") or 0,
+        }
+        self.crm_sow_draft_dialog = dialog
+        dialog.finished.connect(
+            lambda _result: setattr(self, "crm_sow_draft_dialog", None)
+        )
+        dialog.open()
+
+    def save_sow_draft_record(self):
+        dialog = getattr(self, "crm_sow_draft_dialog", None)
+        if not dialog or not dialog.isVisible():
+            return
+        fields = {
+            key: widget.toPlainText().strip()
+            for key, widget in self.crm_sow_draft_fields.items()
+        }
+        note = self.crm_sow_draft_note.toPlainText().strip()
+        if (any(not 20 <= len(value) <= 3000 for value in fields.values())
+                or not 30 <= len(note) <= 1000):
+            QMessageBox.warning(
+                dialog, "Missing SOW draft documentation",
+                "Complete all six scope fields (20–3000 characters) and "
+                "a version rationale (30–1000 characters)."
+            )
+            return
+        if not self.crm_sow_draft_confirm.isChecked():
+            QMessageBox.warning(
+                dialog, "Draft confirmation required",
+                "Confirm this is an unapproved working draft only."
+            )
+            return
+        payload = {
+            **self.crm_sow_draft_context, **fields,
+            "review_note": note, "confirmed": True
+        }
+        self.crm_sow_draft_save.setEnabled(False)
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if error or not data or not data.get("id"):
+                self.crm_sow_draft_save.setEnabled(True)
+                QMessageBox.warning(
+                    dialog, "SOW version not recorded",
+                    error or "Could not record SOW draft revision."
+                )
+                return
+            dialog.accept()
+            QMessageBox.information(
+                self, "SOW draft version recorded",
+                "SOW R{} saved for proposal revision {}. "
+                "No contract, signature, quote issuance or testing permission.".format(
+                    data["sow_revision"], data["proposal_revision"]
+                )
+            )
+
+        self.bridge.call("crm-sow-draft-save", payload=payload, callback=received)
 
     def select_proposal_pdf_path(self, proposal_id, revision):
         suggestion = "ENKYRON_DRAFT_{}_R{}.pdf".format(
