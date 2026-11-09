@@ -716,6 +716,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_edit.setEnabled(False)
         self.crm_company_edit.clicked.connect(self.open_edit_company)
         company_toolbar.addWidget(self.crm_company_edit)
+        self.crm_company_opportunity_add = QPushButton("+ Commercial opportunity")
+        self.crm_company_opportunity_add.setEnabled(False)
+        self.crm_company_opportunity_add.clicked.connect(self.open_company_direct_opportunity)
+        company_toolbar.addWidget(self.crm_company_opportunity_add)
         self.crm_company_dossier_open = QPushButton("Open company dossier")
         self.crm_company_dossier_open.setEnabled(False)
         self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
@@ -1669,6 +1673,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_opportunity_add.setEnabled(False)
             self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
@@ -1741,6 +1746,7 @@ class EnkyronWindow(QMainWindow):
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
             self.crm_company_dossier_open.setEnabled(False)
+            self.crm_company_opportunity_add.setEnabled(False)
             self.crm_company_csv_button.setEnabled(True)
             self.crm_company_edit.setEnabled(False)
             self.crm_contact_edit.setEnabled(False)
@@ -1759,6 +1765,7 @@ class EnkyronWindow(QMainWindow):
         company_id = company["id"]
         self.crm_company_id = company_id
         self.crm_company_dossier_open.setEnabled(True)
+        self.crm_company_opportunity_add.setEnabled(True)
         self.crm_company_csv_button.setEnabled(True)
         self.crm_company_edit.setEnabled(
             isinstance(company.get("record_version"), int)
@@ -3387,6 +3394,64 @@ class EnkyronWindow(QMainWindow):
         self.crm_ticket_opportunity_button.setEnabled(
             active and self.crm_ticket_items[row].get("status") != "closed"
             if active else False
+        )
+
+    def open_company_direct_opportunity(self):
+        """Create an internal CRM lead from a reviewed company, without a service ticket."""
+        company_id = self.crm_company_id
+        company = next(
+            (c for c in self.crm_company_items if c.get("id") == company_id),
+            None
+        )
+        if not company:
+            return
+        name = company.get("name") or ""
+        action, accepted = QInputDialog.getMultiLineText(
+            self, "ENKYRON · Commercial opportunity",
+            "Company: {}\\n\\nNext commercial action (5–1000 characters):".format(name),
+            "Prepare a written introduction and record replies in the CRM."
+        )
+        if not accepted:
+            return
+        action = action.strip()
+        if not 5 <= len(action) <= 1000:
+            QMessageBox.warning(self, "Next action required",
+                "Enter a specific next step in 5–1000 characters.")
+            return
+        if QMessageBox.question(
+            self, "Confirm commercial opportunity",
+            ("Create a CRM-only opportunity for {}?\\n\\n"
+             "No service ticket, customer acceptance, email, contract, "
+             "testing authorisation or assessment is created.").format(name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self.crm_company_opportunity_add.setEnabled(False)
+        payload = {
+            "company_id": company_id,
+            "company_name_at_review": name,
+            "next_action": action,
+            "due_date": None,
+            "confirmed": True
+        }
+
+        def received(data, error):
+            self.crm_company_opportunity_add.setEnabled(
+                self.crm_company_id is not None
+            )
+            if error or not isinstance(data, dict) or not data.get("id"):
+                QMessageBox.warning(self, "Opportunity not saved",
+                    error or "CRM record unavailable.")
+                return
+            self.status.setText("CRM-only opportunity saved. No ticket created.")
+            self.crm_tabs.setCurrentIndex(4)
+            self.load_followups()
+            self.load_pipeline()
+
+        self.bridge.call(
+            "crm-company-direct-opportunity-create",
+            payload=payload, callback=received
         )
 
     def open_company_ticket_opportunity(self):
@@ -5120,7 +5185,7 @@ class EnkyronWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         body = QWidget()
         body_l = QVBoxLayout(body)
-        direct_company = data.get("origin_kind") == "reviewed_company_ticket"
+        direct_company = data.get("origin_kind") in ("reviewed_company_ticket", "crm_company_direct")
         candidate = data.get("research_candidate") or "Unknown CRM source"
         candidate_label = QLabel(
             ("Company at opportunity creation: " if direct_company
@@ -9022,7 +9087,7 @@ class EnkyronWindow(QMainWindow):
             "PLAN A PROSPECT FOLLOW-UP"
         ))
         title = QLabel("{}: {}".format(
-            "Company (ticket-linked)" if existing and existing.get("company_id")
+            "CRM company" if existing and existing.get("company_id")
             else "Research candidate",
             prospect.get("company_name") or "Unknown"
         ))

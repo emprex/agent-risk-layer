@@ -36,7 +36,7 @@ export function validateInternalDecision(input){
 // The snapshot refs identify which exact immutable records informed the human.
 // Check the effective source link, not merely a historical buyer review record.
 const BUYER_ORIGIN='SELECT COALESCE(o.company_id,l.company_id) AS buyer_company_id,'
-  +'CASE WHEN o.company_id IS NOT NULL THEN EXISTS('
+  +'CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN TRUE WHEN o.company_id IS NOT NULL THEN EXISTS('
   +' SELECT 1 FROM enkyron_crm_effective_ticket_links e'
   +' WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id'
   +' AND e.ticket_id=o.source_ticket_id) ELSE l.company_id IS NOT NULL'

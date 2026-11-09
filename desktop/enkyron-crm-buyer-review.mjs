@@ -44,7 +44,7 @@ export function validateBuyerReview(input){
 const PROPOSAL_SQL=
   'SELECT d.id,d.revision,o.company_name_at_creation AS research_candidate,'
   +'c.id AS company_id,c.name AS company_name,c.legal_name AS company_legal_name,'
-  +"CASE WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
+  +"CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN 'crm_company_direct' WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
   +"ELSE 'reviewed_research_prospect' END AS origin_kind "
   +'FROM enkyron_crm_proposal_drafts d '
   +'JOIN enkyron_crm_opportunities o ON o.id=d.opportunity_id '
@@ -54,7 +54,7 @@ const PROPOSAL_SQL=
   +'LEFT JOIN enkyron_crm_companies c '
   +'ON c.workspace_key=d.workspace_key '
   +'AND c.id=COALESCE(o.company_id,l.company_id) '
-  +'AND (o.company_id IS NULL OR EXISTS ('
+  +'AND (o.company_id IS NULL OR o.source_ticket_id IS NULL OR EXISTS ('
   +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
   +'WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id '
   +'AND e.ticket_id=o.source_ticket_id)) '
@@ -88,7 +88,7 @@ export async function readBuyerReview(pool,proposalId,actor){
       more:rows.length>20,
       notice:'Documentary information entered by an operator; NOT independently verified. '
         +'The buyer must be a reviewed CRM association: either a linked research '
-        +'prospect or the still-effective company-ticket link.'};
+        +'prospect or a recorded CRM company (with reviewed ticket link where applicable).'};
   }catch(e){
     if(e?.code==='42P01')return {available:false,
       notice:'Buyer review requires ENKYRON schema 078; install it after backing up.'};

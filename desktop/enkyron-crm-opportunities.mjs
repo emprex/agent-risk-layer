@@ -64,6 +64,42 @@ export function validateCompanyOpportunityCreate(data){
     due_date:dateField(data.due_date)
   };
 }
+/** A manual CRM-only lead is not a service request or authorisation to test. */
+export function validateDirectCompanyOpportunityCreate(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||
+     Object.keys(data).some(k=>!['company_id','company_name_at_review',
+      'next_action','due_date','confirmed'].includes(k)))
+    throw new Error('CRM invalid direct company opportunity request');
+  if(data.confirmed!==true)
+    throw new Error('CRM manual company opportunity review required');
+  return {
+    company_id:requireCompanyId(data.company_id),
+    company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
+    next_action:textField(data.next_action,'next action',5,1000),
+    due_date:dateField(data.due_date)
+  };
+}
+
+export function validateOriginCorrection(data){
+  if(!data||typeof data!=='object'||Array.isArray(data)||
+     Object.keys(data).some(k=>!['company_id','opportunity_id','ticket_id',
+       'ticket_number_at_review','company_name_at_review','reason','confirmed'].includes(k)))
+    throw new Error('CRM invalid commercial origin correction');
+  if(data.confirmed!==true)
+    throw new Error('CRM correction requires explicit human confirmation');
+  if(typeof data.opportunity_id!=='string'||
+     !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(data.opportunity_id))
+    throw new Error('CRM invalid opportunity identifier');
+  return {
+    company_id:requireCompanyId(data.company_id),
+    opportunity_id:data.opportunity_id,
+    ticket_id:requireTicketId(data.ticket_id),
+    ticket_number_at_review:textField(data.ticket_number_at_review,'ticket number',8,40),
+    company_name_at_review:textField(data.company_name_at_review,'company name',1,300),
+    reason:textField(data.reason,'correction reason',30,1000)
+  };
+}
+
 export function validateOpportunityUpdate(data){
   if(!data||typeof data!=='object'||Array.isArray(data))
     throw new Error('CRM invalid opportunity update');
@@ -91,7 +127,7 @@ export async function listOpportunities(pool,search,operator){
       +'o.company_name_at_creation,o.stage,o.next_action,'
       +'o.due_date,o.probability_percent,o.version,o.updated_at,'
       +'COALESCE(p.company_name,c.name) AS current_candidate_name,'
-      +"CASE WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
+      +"CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN 'crm_company_direct' WHEN o.company_id IS NOT NULL THEN 'reviewed_company_ticket' "
       +"ELSE p.source END AS prospect_source "
       +'FROM enkyron_crm_opportunities o '
       +'LEFT JOIN sales_prospects p ON p.id=o.prospect_id '
@@ -237,6 +273,13 @@ export async function createCompanyOpportunity(pool,input,operator,options={}){
       throw new Error('CRM source ticket changed or not found');
     if(ticket.archived_at||ticket.status==='closed')
       throw new Error('CRM closed or archived source ticket cannot start an opportunity');
+    const corrected=(await client.query(
+      'SELECT 1 FROM enkyron_crm_opportunity_origin_corrections '
+      +'WHERE workspace_key=$1 AND old_source_ticket_id=$2',
+      [scope.key,req.ticket_id]
+    )).rows[0];
+    if(corrected)
+      throw new Error('CRM corrected commercial ticket cannot originate a new opportunity');
     const reviewed=(await client.query(
       'SELECT 1 FROM enkyron_crm_effective_ticket_links '
       +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3',
@@ -267,5 +310,140 @@ export async function createCompanyOpportunity(pool,input,operator,options={}){
     return {id,prospect_id:null,company_id:req.company_id,
       source_ticket_id:req.ticket_id,stage:'research',version:1,
       notice:'Internal commercial opportunity only; no client acceptance, test or outreach.'};
+  });
+}
+
+/** Company-first prospecting: no prospect import, ticket, service action or outreach. */
+export async function createDirectCompanyOpportunity(pool,input,operator,options={}){
+  const req=validateDirectCompanyOpportunityCreate(input),scope=workspace(operator);
+  const uuid=options.uuid??randomUUID;
+  return transaction(pool,async client=>{
+    // Serialise direct opportunities per company, including against parallel operators.
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',
+      [scope.key+':company-opportunity:'+req.company_id]);
+    const company=(await client.query(
+      'SELECT id,name FROM enkyron_crm_companies WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [scope.key,req.company_id]
+    )).rows[0];
+    if(!company||company.name!==req.company_name_at_review)
+      throw new Error('CRM company changed; review again');
+    const existing=(await client.query(
+      'SELECT id FROM enkyron_crm_opportunities WHERE workspace_key=$1 AND company_id=$2 AND source_ticket_id IS NULL',
+      [scope.key,req.company_id]
+    )).rows;
+    if(existing.length)
+      throw new Error('CRM direct company opportunity already exists; open it instead');
+    const id=uuid();
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunities (id,workspace_key,prospect_id,company_id,source_ticket_id,'
+      +'company_name_at_creation,stage,next_action,due_date,owner_local) '
+      +"VALUES($1,$2,NULL,$3,NULL,$4,'research',$5,$6,$7)",
+      [id,scope.key,company.id,company.name,req.next_action,req.due_date,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunity_events '
+      +'(id,workspace_key,opportunity_id,event_type,new_stage,new_next_action,new_due_date,actor_local) '
+      +"VALUES($1,$2,$3,'created','research',$4,$5,$6)",
+      [uuid(),scope.key,id,req.next_action,req.due_date,scope.actor]
+    );
+    return {id,company_id:company.id,source_ticket_id:null,stage:'research',version:1,
+      notice:'CRM opportunity only. No client ticket, contact, outbound message or assessment created.'};
+  });
+}
+
+/** Reviewed correction: de-link a synthetic commercial intake from its opportunity.
+ * Source ticket stays available with its original immutable history.
+ */
+export async function correctCommercialOrigin(pool,input,operator,options={}){
+  const req=validateOriginCorrection(input),scope=workspace(operator);
+  const uuid=options.uuid??randomUUID;
+  return transaction(pool,async client=>{
+    const opportunity=(await client.query(
+      'SELECT id,company_id,prospect_id,source_ticket_id,stage,next_action,due_date,version '
+      +'FROM enkyron_crm_opportunities WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
+      [scope.key,req.opportunity_id]
+    )).rows[0];
+    if(!opportunity||opportunity.company_id!==req.company_id||
+       opportunity.prospect_id!==null||
+       opportunity.source_ticket_id!==req.ticket_id)
+      throw new Error('CRM correction source changed; stop without modification');
+    const company=(await client.query(
+      'SELECT name FROM enkyron_crm_companies WHERE workspace_key=$1 AND id=$2',
+      [scope.key,req.company_id]
+    )).rows[0];
+    if(!company||company.name!==req.company_name_at_review)
+      throw new Error('CRM company identity does not match');
+    const ticket=(await client.query(
+      'SELECT ticket_number,title,client_name,target_reference,linked_project_id,linked_assessment_id '
+      +'FROM arl_workbench_tickets WHERE id=$1 FOR KEY SHARE',
+      [req.ticket_id]
+    )).rows[0];
+    if(!ticket||ticket.ticket_number!==req.ticket_number_at_review||
+       ticket.client_name!==company.name||
+       ticket.target_reference!=='intake:manual'||
+       !(
+         ticket.title==='Partnership enquiry - Threat ResQ - LinkedIn - 2026-11-09'||
+         ticket.title==='Internal commercial lead - Xurrent - LinkedIn - 2026-11-09'
+       )||
+       ticket.linked_project_id||ticket.linked_assessment_id)
+      throw new Error('CRM correction is limited to the two reviewed synthetic LinkedIn tickets');
+    // The original CRM ticket association must still be active and exclusively
+    // linked to this company. The correction revokes it in the same transaction.
+    const sourceLink=(await client.query(
+      'SELECT id FROM enkyron_crm_ticket_links '
+      +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3 FOR UPDATE',
+      [scope.key,req.company_id,req.ticket_id]
+    )).rows[0];
+    const revoked=(await client.query(
+      'SELECT id FROM enkyron_crm_ticket_link_revocations '
+      +'WHERE workspace_key=$1 AND ticket_id=$2',
+      [scope.key,req.ticket_id]
+    )).rows[0];
+    if(!sourceLink||revoked)
+      throw new Error('CRM source link absent or already revoked; manual review required');
+    const references=(await client.query(
+      'SELECT count(*)::int AS n FROM enkyron_crm_opportunities '
+      +'WHERE workspace_key=$1 AND source_ticket_id=$2',
+      [scope.key,req.ticket_id]
+    )).rows[0].n;
+    if(references!==1)
+      throw new Error('CRM ticket is referenced by other opportunities; stop');
+    await client.query(
+      'UPDATE enkyron_crm_opportunities '
+      +'SET source_ticket_id=NULL,version=version+1,updated_at=NOW() '
+      +'WHERE workspace_key=$1 AND id=$2',
+      [scope.key,req.opportunity_id]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunity_origin_corrections '
+      +'(id,workspace_key,opportunity_id,old_source_ticket_id,company_id,reason,actor_local) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7)',
+      [uuid(),scope.key,req.opportunity_id,req.ticket_id,
+        req.company_id,req.reason,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_opportunity_events '
+      +'(id,workspace_key,opportunity_id,event_type,old_stage,new_stage,'
+      +'old_next_action,new_next_action,old_due_date,new_due_date,actor_local) '
+      +"VALUES($1,$2,$3,'updated',$4,$4,$5,$5,$6,$6,$7)",
+      [uuid(),scope.key,req.opportunity_id,opportunity.stage,
+        opportunity.next_action,opportunity.due_date,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_ticket_link_revocations '
+      +'(id,workspace_key,link_id,company_id,ticket_id,ticket_client_name_at_review,review_note,revoked_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uuid(),scope.key,sourceLink.id,req.company_id,req.ticket_id,
+        company.name,req.reason,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_events '
+      +'(id,workspace_key,resource_kind,resource_id,event_type,actor_local) '
+      +"VALUES($1,$2,'company',$3,'corrected',$4)",
+      [uuid(),scope.key,req.company_id,scope.actor]
+    );
+    return {id:req.opportunity_id,company_id:req.company_id,source_ticket_id:null,
+      version:opportunity.version+1,
+      notice:'Commercial-only opportunity corrected; mistaken ticket association revoked. Original ticket retained, no service status invented.'};
   });
 }

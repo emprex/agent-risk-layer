@@ -465,3 +465,41 @@ E07-05A targeted gap: the existing SOW source preview still said `SOW acceptance
 Recette opérateur fournie pour `ARL E2E Test 0711`, proposition R2 (GBP 750), SOW R1 : l'aperçu affiche la bonne empreinte SHA-256 `312c206232b6a1a2bf386afedf2903dfe317dead888410f20f2f8f4c6edf8d09`, les critères d'acceptation et cibles comme documentés mais non approuvés, les statuts NDA/DPA `applicability_not_assessed`, le contrat `not_evidenced_in_workflow`, l'autorisation de test `not_authorised`. **E07-05A = DONE-LOCAL pour la recette de lecture du scénario synthétique uniquement** ; non preuve de contrat ou d'autorisation.
 
 Observation à corriger : l'avertissement d'une ligne tarifaire `custom` suggérait que ses inclusions/exclusions/livrables n'avaient pas été documentés, alors que le SOW R1 contient de tels champs généraux. Le système ne doit ni les considérer absents, ni affirmer qu'une ligne et le SOW sont reliés automatiquement. Le nouveau libellé distingue `pas de provenance de version catalogue` et `correspondance manuelle avec le SOW non revue`, sans imposer une liaison catalogue à un prix custom. Aucun nouveau champ, écran, stockage, migration, signature ni autorité. Les libellés sont couverts en test Node ; ce changement spécifique reste à valider sur le commit exact et sur Debian avant clôture de sa propre recette. Le fil directeur 17 blocs/157 critères et la matrice CRM A→Z restent les références. **E07-05 global OPEN**.
+
+
+## E07-CRM company-only sales correction (development, 2026-11-09)
+
+**Problem:** the company-first opportunity introduced in migration 094 demanded a
+reviewed Client Desk ticket. Two operator-initiated LinkedIn contacts were
+therefore falsely represented as service ticket origins:
+
+- Threat ResQ / Sumit B. Jain: ARL-2026-000006; opportunity
+  `abb0616c-0c95-4f7e-9c3a-b49812f459aa`.
+- Xurrent / Madhu Rawat: ARL-2026-000007; opportunity
+  `68e65606-1042-423a-8a69-b93a513cdc2d`.
+
+**Fix PR #521, migration 100:** directly reviewed CRM company opportunities may
+be created without any Client Desk ticket. Company 360 explicitly includes
+these opportunities, notes and internal proposal drafts. Historical research
+and reviewed company-ticket opportunity types remain supported. The original
+company and contact records are unchanged. No message, contract, permission
+to test or assessment is inferred.
+
+**Local correction:** `scripts/enkyron-fix-outreach-local.mjs --apply` is a
+one-time, operator-invoked, identity-pinned tool. It demands a verified pg_dump,
+checks the local PostgreSQL database and prior migration 099, records new
+migration 100 with checksum under the schema lock, verifies exact company,
+contact, opportunity and ticket identities, and records the origin correction
+with immutable provenance. It revokes the stale company/ticket and contact
+view links *without deleting the underlying ticket or its historical events*.
+The same commercial opportunity IDs, stages, next actions and activity notes
+are preserved; original tickets are excluded from the active Client Desk
+list but remain accessible in historical/all-ticket views. Re-execution is
+designed to verify rather than duplicate a completed correction.
+
+**Gates:** Green exact-head CI is necessary but not sufficient. The local
+operator must confirm a verified backup and terminal output, open ENKYRON and
+verify that commercial records retain all correspondence, no faux service
+ticket appears in the active queue, and both correction audits are visible.
+Do not claim DONE-LOCAL based on GitHub CI. All later client requests still
+require explicit scope and authorisation before any technical assessment.

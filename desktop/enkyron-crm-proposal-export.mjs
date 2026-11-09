@@ -27,7 +27,7 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       +'o.company_name_at_creation,'
       +"CASE WHEN o.company_id IS NOT NULL THEN 'crm_company' "
       +"ELSE 'research_candidate' END AS buyer_origin, "
-      +'CASE WHEN o.company_id IS NOT NULL THEN EXISTS ('
+      +'CASE WHEN o.company_id IS NOT NULL AND o.source_ticket_id IS NULL THEN TRUE WHEN o.company_id IS NOT NULL THEN EXISTS ('
       +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
       +'WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id '
       +'AND e.ticket_id=o.source_ticket_id) ELSE FALSE '
@@ -39,8 +39,8 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       [owner,proposalId]
     )).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
-    // A company-origin draft must not be exported with its historical CRM
-    // company label after the reviewed source ticket association is revoked.
+    // A historical ticket-backed draft requires its effective reviewed ticket link.
+    // A direct CRM company-origin draft has no service ticket by design.
     // Research-only drafts retain their explicit unverified-buyer label.
     if(proposal.buyer_origin==='crm_company'&&
        proposal.current_company_association!==true)
