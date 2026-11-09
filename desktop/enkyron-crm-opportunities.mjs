@@ -279,6 +279,13 @@ export async function createCompanyOpportunity(pool,input,operator,options={}){
       [scope.key,req.company_id,req.ticket_id]
     )).rows[0];
     if(!reviewed)throw new Error('CRM company-ticket association not currently reviewed');
+    const corrected=(await client.query(
+      'SELECT 1 FROM enkyron_crm_opportunity_origin_corrections '
+      +'WHERE workspace_key=$1 AND old_source_ticket_id=$2',
+      [scope.key,req.ticket_id]
+    )).rows[0];
+    if(corrected)
+      throw new Error('CRM corrected commercial ticket cannot originate a new opportunity');
     const existing=(await client.query(
       'SELECT id FROM enkyron_crm_opportunities '
       +'WHERE workspace_key=$1 AND company_id=$2 AND source_ticket_id=$3',
