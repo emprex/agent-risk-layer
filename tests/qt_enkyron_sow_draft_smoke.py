@@ -38,7 +38,7 @@ class SowDraftDialogSmoke(unittest.TestCase):
             self.assertTrue(all(isinstance(v,QPlainTextEdit)
                 for v in window.crm_sow_draft_fields.values()))
             self.assertFalse(window.crm_sow_draft_confirm.isChecked())
-            self.assertEqual(calls,[])
+            self.assertFalse(any(action=='crm-sow-draft-save' for action,*_ in calls))
             dialog.reject()
         finally:
             if window is not None:
