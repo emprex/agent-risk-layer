@@ -130,6 +130,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p qt_enkyron_proposal_pdf_smoke.py
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p qt_enkyron_invoice_sample_pdf_smoke.py
       - name: Native historical internal approval UI smoke
         env:
           QT_QPA_PLATFORM: offscreen
@@ -1828,6 +1829,7 @@ jobs:
           assert "1,250.50" in window.crm_invoice_table.item(0, 3).text()
           window.crm_invoice_table.selectRow(0)
           assert window.crm_invoice_open.isEnabled()
+          assert window.crm_invoice_test_export.isEnabled()
           window.crm_invoice_open.click()
           assert calls[-1][0] == "crm-invoice-draft"
           assert calls[-1][1] == draft_id
@@ -1848,7 +1850,26 @@ jobs:
               }
           }, None)
           assert window.crm_invoice_detail_dialog.isVisible()
+          assert window.crm_invoice_detail_dialog.findChild(
+              QPushButton, "exportTestInvoicePdf"
+          ).isEnabled()
           window.crm_invoice_detail_dialog.reject()
+          window.crm_invoice_test_export.click()
+          assert calls[-1][0] == "crm-invoice-draft"
+          assert calls[-1][1] == draft_id
+          test_exports = []
+          window.export_invoice_test_pdf = lambda draft: test_exports.append(draft)
+          calls[-1][3]({
+              "available": True,
+              "draft": {
+                  "id": draft_id,
+                  "buyer_legal_name": "Synthetic Buyer Ltd",
+                  "service_description": "Synthetic Service",
+                  "proposed_fee_minor": "125050"
+              }
+          }, None)
+          assert len(test_exports) == 1
+          assert test_exports[0]["id"] == draft_id
           assert window.crm_invoice_issue_button.isEnabled()
           assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
               0
