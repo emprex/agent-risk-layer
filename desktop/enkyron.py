@@ -3402,7 +3402,7 @@ class EnkyronWindow(QMainWindow):
                         table.setMaximumHeight(52 + 32 * len(rows))
                         page_layout.addWidget(table)
                         page_layout.addStretch(1)
-                    else:
+                    elif section_id != "activities":
                         page_layout.addWidget(table, 1)
                 if section_id == "commercial_docs":
                     guidance = QLabel(
@@ -3455,37 +3455,71 @@ class EnkyronWindow(QMainWindow):
                         table.selectRow(0)
                     update_document_actions()
                 if section_id == "activities":
+                    # Chronological, read-only notes. These are manually
+                    # recorded CRM entries, not authenticated external mail.
+                    # No parsing of free text for sender, direction or consent.
                     hint = QLabel(
-                        "Operator-recorded messages and notes. Select a row "
-                        "to read the complete text; LinkedIn is not synced."
+                        "Recorded notes and message summaries, oldest visible first. "
+                        "These entries were entered by an operator; LinkedIn "
+                        "and email are not connected."
                     )
                     hint.setWordWrap(True)
-                    page_layout.insertWidget(0, hint)
-                    full_message = make_text_area()
-                    full_message.setReadOnly(True)
-                    full_message.setMinimumHeight(160)
-                    full_message.setPlaceholderText(
-                        "Select a message or note to read the full text."
-                    )
-                    def show_full_message(items=rows, view=table,
-                                          destination=full_message):
-                        current = view.currentRow()
-                        if not 0 <= current < len(items):
-                            destination.clear()
-                            return
-                        message = items[current]
-                        destination.setPlainText(
-                            "{} | {} | {}\n\n{}".format(
-                                message.get("activity_type") or "note",
-                                message.get("recorded_by") or "Operator",
-                                display_date(message.get("recorded_at")),
-                                message.get("detail") or ""
-                            )
+                    page_layout.addWidget(hint)
+                    timeline = QScrollArea()
+                    timeline.setObjectName("crmActivitiesTimeline")
+                    timeline.setWidgetResizable(True)
+                    timeline.setFrameShape(QFrame.Shape.NoFrame)
+                    timeline_content = QWidget()
+                    timeline_layout = QVBoxLayout(timeline_content)
+                    timeline_layout.setContentsMargins(4, 6, 8, 8)
+                    timeline_layout.setSpacing(10)
+                    if not rows:
+                        empty = QLabel(
+                            "No activity notes recorded yet. "
+                            "Nothing has been sent from this view."
                         )
-                    table.itemSelectionChanged.connect(show_full_message)
-                    page_layout.addWidget(full_message, 1)
-                    if rows:
-                        table.selectRow(0)
+                        empty.setWordWrap(True)
+                        timeline_layout.addWidget(empty)
+                    for record in rows:
+                        card = QFrame()
+                        card.setObjectName("crmActivityCard")
+                        card.setStyleSheet(
+                            "QFrame#crmActivityCard { background: #f7fafc; "
+                            "border: 1px solid #d8e2ea; border-radius: 6px; }"
+                            "QFrame#crmActivityCard QLabel { border: 0; "
+                            "background: transparent; }"
+                        )
+                        card_layout = QVBoxLayout(card)
+                        card_layout.setContentsMargins(12, 10, 12, 12)
+                        card_layout.setSpacing(7)
+                        activity_type = str(record.get("activity_type") or "note")
+                        type_label = (
+                            "Internal note" if activity_type == "note" else
+                            "Recorded activity: " + activity_type
+                        )
+                        header_text = "{}   ·   {}   ·   Entered by {}".format(
+                            type_label,
+                            display_date(record.get("recorded_at")) or "Date unknown",
+                            record.get("recorded_by") or "Unknown operator"
+                        )
+                        card_header = QLabel(header_text)
+                        card_header.setTextFormat(Qt.TextFormat.PlainText)
+                        card_header.setWordWrap(True)
+                        card_header.setStyleSheet("font-weight: bold;")
+                        card_layout.addWidget(card_header)
+                        body = QLabel(str(record.get("detail") or "(No text recorded)"))
+                        body.setObjectName("crmActivityText")
+                        body.setTextFormat(Qt.TextFormat.PlainText)
+                        body.setWordWrap(True)
+                        body.setTextInteractionFlags(
+                            Qt.TextInteractionFlag.TextSelectableByMouse |
+                            Qt.TextInteractionFlag.TextSelectableByKeyboard
+                        )
+                        card_layout.addWidget(body)
+                        timeline_layout.addWidget(card)
+                    timeline_layout.addStretch(1)
+                    timeline.setWidget(timeline_content)
+                    page_layout.addWidget(timeline, 1)
                 if section_id == "qualifications":
                     scroll = QScrollArea()
                     scroll.setWidgetResizable(True)
