@@ -442,7 +442,22 @@ jobs:
           assert "not connected" in window.crm_mail_connection.text().lower()
           assert window.crm_company_table.rowCount() == 1
           assert window.crm_company_add.isEnabled()
+          # UX-01: controls are easy to find, without a wall of disabled buttons.
+          assert window.crm_selected_company_bar.isHidden()
+          assert window.crm_company_advanced_bar.isHidden()
+          assert window.crm_contact_advanced_bar.isHidden()
+          window.crm_company_more_toggle.click()
+          assert not window.crm_company_advanced_bar.isHidden()
+          window.crm_company_more_toggle.click()
+          assert window.crm_company_advanced_bar.isHidden()
+          window.crm_contact_more_toggle.click()
+          assert not window.crm_contact_advanced_bar.isHidden()
+          window.crm_contact_more_toggle.click()
+          assert window.crm_contact_advanced_bar.isHidden()
           window.crm_company_table.selectRow(0)
+          assert not window.crm_selected_company_bar.isHidden()
+          assert "Synthetic Company" in window.crm_selected_company_label.text()
+          assert window.crm_company_dossier_open.isEnabled()
           assert calls[-1][0] == "crm-contacts"
           assert calls[-1][1] == company_id
           calls[-1][3]({
