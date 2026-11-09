@@ -39,8 +39,8 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       [owner,proposalId]
     )).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
-    // A company-origin draft must not be exported with its historical CRM
-    // company label after the reviewed source ticket association is revoked.
+    // A historical ticket-backed draft requires its effective reviewed ticket link.
+    // A direct CRM company-origin draft has no service ticket by design.
     // Research-only drafts retain their explicit unverified-buyer label.
     if(proposal.buyer_origin==='crm_company'&&
        proposal.current_company_association!==true)
