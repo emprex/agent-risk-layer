@@ -264,17 +264,37 @@ export async function recordInvoiceDraft(pool,input,actor,options={}){
 export async function listInvoiceDrafts(pool,search,actor){
   const query=boundedSearch(search),person=scope(actor);
   try{
-    const rows=(await pool.query(
-      'SELECT id,proposal_id,proposal_revision,service_description,'
-      +'issuer_legal_name,buyer_legal_name,currency,proposed_fee_minor,'
-      +'status,vat_treatment,recorded_at '
-      +'FROM enkyron_crm_invoice_drafts WHERE workspace_key=$1 '
-      +"AND ($2='' OR POSITION(lower($2) IN lower(buyer_legal_name))>0 "
-      +'OR POSITION(lower($2) IN lower(service_description))>0) '
-      +'ORDER BY recorded_at DESC,id DESC LIMIT 101',[person.key,query]
-    )).rows;
+    // Existing immutable draft snapshots remain untouched after invoice issue.
+    // Join the real invoice where migration 103 is present, so operators see
+    // one linked commercial record instead of two unrelated "drafts".
+    const base=
+      'SELECT d.id,d.proposal_id,d.proposal_revision,d.service_description,'
+      +'d.issuer_legal_name,d.buyer_legal_name,d.currency,d.proposed_fee_minor,'
+      +'d.status,d.vat_treatment,d.recorded_at,';
+    const tail=
+      ' FROM enkyron_crm_invoice_drafts d '
+      +"WHERE d.workspace_key=$1 AND ($2='' OR "
+      +'POSITION(lower($2) IN lower(d.buyer_legal_name))>0 OR '
+      +'POSITION(lower($2) IN lower(d.service_description))>0) '
+      +'ORDER BY d.recorded_at DESC,d.id DESC LIMIT 101';
+    let rows;
+    try{
+      rows=(await pool.query(
+        base+'i.id AS issued_invoice_id,i.invoice_number AS issued_invoice_number '
+        +'FROM enkyron_crm_invoice_drafts d LEFT JOIN enkyron_crm_issued_invoices i '
+        +'ON i.workspace_key=d.workspace_key AND i.source_draft_id=d.id '
+        +tail.slice(' FROM enkyron_crm_invoice_drafts d '.length),
+        [person.key,query]
+      )).rows;
+    }catch(e){
+      if(e?.code!=='42P01')throw e;
+      rows=(await pool.query(
+        base+'NULL::text AS issued_invoice_id,NULL::text AS issued_invoice_number '
+        +tail,[person.key,query]
+      )).rows;
+    }
     return {available:true,items:rows.slice(0,100),more:rows.length>100,
-      notice:'Unissued invoice drafts only. No official invoice number, amount due or payment balance.'};
+      notice:'Prepared invoice sources with linked issued invoices where available.'};
   }catch(error){
     if(error?.code==='42P01')return {available:false,items:[],
       notice:'Invoice draft schema 082 has not been installed.'};
