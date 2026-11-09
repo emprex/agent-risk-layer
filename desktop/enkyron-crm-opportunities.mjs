@@ -387,6 +387,20 @@ export async function correctCommercialOrigin(pool,input,operator,options={}){
        )||
        ticket.linked_project_id||ticket.linked_assessment_id)
       throw new Error('CRM correction is limited to the two reviewed synthetic LinkedIn tickets');
+    // The original CRM ticket association must still be active and exclusively
+    // linked to this company. The correction revokes it in the same transaction.
+    const sourceLink=(await client.query(
+      'SELECT id FROM enkyron_crm_ticket_links '
+      +'WHERE workspace_key=$1 AND company_id=$2 AND ticket_id=$3 FOR UPDATE',
+      [scope.key,req.company_id,req.ticket_id]
+    )).rows[0];
+    const revoked=(await client.query(
+      'SELECT id FROM enkyron_crm_ticket_link_revocations '
+      +'WHERE workspace_key=$1 AND ticket_id=$2',
+      [scope.key,req.ticket_id]
+    )).rows[0];
+    if(!sourceLink||revoked)
+      throw new Error('CRM source link absent or already revoked; manual review required');
     const references=(await client.query(
       'SELECT count(*)::int AS n FROM enkyron_crm_opportunities '
       +'WHERE workspace_key=$1 AND source_ticket_id=$2',
@@ -415,8 +429,21 @@ export async function correctCommercialOrigin(pool,input,operator,options={}){
       [uuid(),scope.key,req.opportunity_id,opportunity.stage,
         opportunity.next_action,opportunity.due_date,scope.actor]
     );
+    await client.query(
+      'INSERT INTO enkyron_crm_ticket_link_revocations '
+      +'(id,workspace_key,link_id,company_id,ticket_id,ticket_client_name_at_review,review_note,revoked_by) '
+      +'VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uuid(),scope.key,sourceLink.id,req.company_id,req.ticket_id,
+        company.name,req.reason,scope.actor]
+    );
+    await client.query(
+      'INSERT INTO enkyron_crm_events '
+      +'(id,workspace_key,resource_kind,resource_id,event_type,actor_local) '
+      +"VALUES($1,$2,'company',$3,'corrected',$4)",
+      [uuid(),scope.key,req.company_id,scope.actor]
+    );
     return {id:req.opportunity_id,company_id:req.company_id,source_ticket_id:null,
       version:opportunity.version+1,
-      notice:'Commercial origin corrected. Original ticket untouched, retained for separate administrative review.'};
+      notice:'Commercial-only opportunity corrected; mistaken ticket association revoked. Original ticket retained, no service status invented.'};
   });
 }
