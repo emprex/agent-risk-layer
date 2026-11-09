@@ -135,5 +135,15 @@ test('reviewed correction detaches only known accidental LinkedIn ticket and pre
   const dossier=await getCompanyDossier(pool,company.id,operator);
   assert.ok(dossier.sections.opportunities.items.some(x=>x.opportunity_id===opp.id));
   assert.ok(dossier.sections.activities.items.some(x=>x.id===note.id));
+  assert.equal(dossier.sections.tickets.total,0,
+    'revoked prospecting intake must not masquerade as a company service ticket');
+  const revocation=(await pool.query(
+   'SELECT id FROM enkyron_crm_ticket_link_revocations WHERE workspace_key=$1 AND ticket_id=$2',
+   ['local:'+operator,ticket.id])).rows;
+  assert.equal(revocation.length,1);
+  await assert.rejects(()=>pool.query(
+   'DELETE FROM enkyron_crm_opportunity_origin_corrections WHERE opportunity_id=$1',
+   [opp.id]
+  ),/cannot be changed or deleted/);
  }finally{await pool.end();}
 });
