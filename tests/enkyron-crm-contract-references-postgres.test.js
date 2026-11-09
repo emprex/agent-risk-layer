@@ -6,6 +6,7 @@ import {createOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {createProposalDraft,updateProposalDraft} from '../desktop/enkyron-crm-proposals.mjs';
 import {recordSowDraft} from '../desktop/enkyron-crm-sow-drafts.mjs';
 import {recordContractReference} from '../desktop/enkyron-crm-contract-references.mjs';
+import {readSowSources} from '../desktop/enkyron-crm-sow-sources.mjs';
 const url=process.env.ARL_CI_POSTGRES_URL||'';
 function isolated(){
  assert.equal(process.env.CI,'true');
@@ -49,6 +50,12 @@ test('E07-05B synthetic unverified contract reference is immutable and revision 
   const saved=await recordContractReference(db,receiptInput,actor);
   assert.equal(saved.evidence_status,'operator_reference_unverified');
   assert.equal(saved.testing_authorised,false);
+  const preview=await readSowSources(db,proposal.id,actor);
+  assert.equal(preview.contract_references.length,1);
+  assert.equal(preview.contract_references[0].is_current_sow,true);
+  assert.equal(preview.contract_references[0].evidence_status,'operator_reference_unverified');
+  assert.equal(preview.testing_authorised,false);
+  assert.equal(preview.contract_checks.find(x=>x.code==='right_to_test').status,'not_authorised');
   await assert.rejects(()=>recordContractReference(db,receiptInput,actor),/already logged/);
   await assert.rejects(()=>db.query(
    'UPDATE enkyron_crm_contract_references SET evidence_status=$1 WHERE id=$2',
@@ -64,11 +71,16 @@ test('E07-05B synthetic unverified contract reference is immutable and revision 
   await recordSowDraft(db,{...sowInput,expected_sow_revision:1,
    deliverables:sowInput.deliverables+' An additional written limitations note.'},actor);
   await assert.rejects(()=>recordContractReference(db,receiptInput,actor),/SOW version changed/);
+  const stale=await readSowSources(db,proposal.id,actor);
+  assert.equal(stale.contract_references[0].is_current_sow,false);
+  assert.equal(stale.testing_authorised,false);
   const revised=await updateProposalDraft(db,{id:proposal.id,expected_revision:1,
    title:'Synthetic updated proposal',scope_text:'Documentary engagement review; no active testing authorised.',
    currency:'GBP',amount_minor:75000},actor);
   assert.equal(revised.revision,2);
   await assert.rejects(()=>recordContractReference(db,receiptInput,actor),/proposal revision changed/);
+  const later=await readSowSources(db,proposal.id,actor);
+  assert.equal(later.contract_references.length,0);
   const still=(await db.query(
    'SELECT count(*)::int AS n FROM enkyron_crm_contract_references WHERE workspace_key=$1 AND proposal_id=$2',
    ['local:'+actor,proposal.id])).rows[0].n;

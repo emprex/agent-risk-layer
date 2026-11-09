@@ -7,7 +7,8 @@ const fixture={id,revision:2,title:'Synthetic work statement',
   currency:'GBP',amount_minor:'75000',
   company_name_at_creation:'Research lead',buyer_origin:'research_candidate',
   effective_origin:false};
-function mock({proposal=fixture,lines=[],terms=null,sow=null,missing=false}={}){
+function mock({proposal=fixture,lines=[],terms=null,sow=null,
+ contractRegistry=false,references=[],missing=false}={}){
  const queries=[];let released=false;
  const pool={connect:async()=>({
   query:async(sql,params)=>{
@@ -19,6 +20,9 @@ function mock({proposal=fixture,lines=[],terms=null,sow=null,missing=false}={}){
    if(sql.startsWith('SELECT l.position'))return {rows:lines};
    if(sql.startsWith('SELECT id,valid_until'))return {rows:terms?[terms]:[]};
    if(sql.startsWith('SELECT id,sow_revision'))return {rows:sow?[sow]:[]};
+   if(sql.startsWith('SELECT to_regclass'))return {rows:[{installed:contractRegistry}]};
+   if(sql.startsWith('SELECT id,proposal_revision,sow_revision,document_kind'))
+     return {rows:references};
    throw new Error('Unexpected query');
   },
   release:()=>{released=true;}
@@ -37,6 +41,9 @@ test('planning SOW is a scoped read-only snapshot with explicit missing authorit
  assert.equal(r.amount_minor,75000);
  assert.equal(r.terms,null);
  assert.equal(r.current_sow,null);
+ assert.equal(r.contract_registry_installed,false);
+ assert.equal(r.can_record_contract_reference,false);
+ assert.deepEqual(r.contract_references,[]);
  assert.match(r.blockers.join(' '),/no linked catalog version or current structured SOW/);
  assert.equal(r.contract_checks.length,5);
  assert.equal(r.contract_checks.find(x=>x.code==='nda').status,'applicability_not_assessed');
@@ -124,4 +131,25 @@ test('future proposal revision cannot revive the SOW from another revision',asyn
  assert.equal(r.contract_checks.find(x=>x.code==='exclusions').status,'sow_not_documented');
  assert.deepEqual(m.queries.find(x=>x.sql.startsWith('SELECT id,sow_revision')).params,
    ['local:ci-owner',id,3]);
+});
+
+test('unverified contractual references retain exact SOW provenance and no test authority',async()=>{
+ const current={id,sow_revision:2,status:'operator_draft_unapproved',
+  content_sha256:'a'.repeat(64),acceptance_criteria:'Written report criteria',
+  target_inventory:'No authorised technical target'};
+ const ref={id,proposal_revision:2,sow_revision:1,
+  document_kind:'test_permission',source_reference:'synthetic claimed note',
+  evidence_status:'operator_reference_unverified'};
+ const m=mock({sow:current,contractRegistry:true,references:[ref]});
+ const r=await readSowSources(m.pool,id,'ci-owner');
+ assert.equal(r.contract_references.length,1);
+ assert.equal(r.contract_references[0].is_current_sow,false);
+ assert.equal(r.contract_references[0].evidence_status,'operator_reference_unverified');
+ assert.equal(r.can_record_contract_reference,true);
+ assert.equal(r.contract_checks.find(x=>x.code==='right_to_test').status,'not_authorised');
+ assert.equal(r.testing_authorised,false);
+ assert.equal(r.can_accept_engagement,false);
+ assert.deepEqual(m.queries.find(x=>x.sql.startsWith('SELECT id,proposal_revision,sow_revision,document_kind')).params,
+  ['local:ci-owner',id,2]);
+ assert.equal(m.queries.at(-1).sql,'COMMIT');
 });

@@ -54,6 +54,12 @@ const CURRENT_SOW='SELECT id,sow_revision,status,content_sha256,'
  +'FROM enkyron_crm_sow_draft_versions '
  +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 '
  +'ORDER BY sow_revision DESC LIMIT 1';
+const CONTRACT_TABLE="SELECT to_regclass('public.enkyron_crm_contract_references') IS NOT NULL AS installed";
+const CONTRACT_HISTORY='SELECT id,proposal_revision,sow_revision,document_kind,source_reference,'
+ +'review_note,evidence_status,recorded_by,recorded_at '
+ +'FROM enkyron_crm_contract_references '
+ +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 '
+ +'ORDER BY recorded_at DESC,id DESC LIMIT 11';
 // E07-05A: this module holds no authenticated contract/signature evidence.
 // These statuses are research/action prompts, never assertions that a legal
 // agreement is absent outside ENKYRON, and never authorization to test.
@@ -129,6 +135,10 @@ export async function readSowSources(pool,id,actor){
       !Number.isSafeInteger(sow.sow_revision)||sow.sow_revision<1||
       !/^[a-f0-9]{64}$/.test(sow.content_sha256)))
       throw new Error('CRM invalid current SOW draft documentary record');
+    // The preview still functions on Debian before migration 101.
+    const registry=(await client.query(CONTRACT_TABLE)).rows[0]?.installed===true;
+    const references=registry?
+      (await client.query(CONTRACT_HISTORY,[key,pid,p.revision])).rows:[];
     await client.query('COMMIT');
     const blockers=[];
     if(p.buyer_origin==='crm_company'&&p.effective_origin!==true)
@@ -162,6 +172,12 @@ export async function readSowSources(pool,id,actor){
         target_inventory:sow.target_inventory
       }:null,
       contract_checks:contractChecklist(Boolean(sow)),
+      contract_registry_installed:registry,
+      contract_references:references.slice(0,10).map(x=>({
+        ...x,is_current_sow:Boolean(sow&&x.sow_revision===sow.sow_revision)
+      })),
+      contract_references_more:references.length>10,
+      can_record_contract_reference:Boolean(registry&&sow),
       can_accept_engagement:false,
       lines_sow_documented: Boolean(sow),
       terms:terms?{
