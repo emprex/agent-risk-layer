@@ -151,6 +151,10 @@ export async function updateProposalDraft(pool,input,actor,options={}){
       +'WHERE workspace_key=$1 AND proposal_id=$2',
       [owner.key,data.id]
     )).rows[0]?.n??0;
+    // Itemised prices are stored as minor units in the proposal's currency.
+    // Relabelling GBP line amounts as EUR/USD without re-pricing is not a conversion.
+    if(itemized>0&&current.currency!==data.currency)
+      throw new Error('CRM proposal currency cannot change after quote lines exist; create a separate draft in the other currency');
     if(itemized>0&&Number(current.amount_minor)!==data.amount_minor)
       throw new Error('CRM proposal total is computed from quote lines; use Edit lines');
     if(current.title===data.title&&current.scope_text===data.scope_text&&

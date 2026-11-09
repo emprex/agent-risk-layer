@@ -132,3 +132,26 @@ test('edits update price and append new immutable revision fingerprint',async()=
   assert.match(statements[4].params[4],/^[a-f0-9]{64}$/);
   assert.ok(!statements[4].params.includes(next.scope_text));
 });
+
+test('itemised currency cannot be relabelled without re-pricing saved quote lines',async()=>{
+  const statements=[];
+  const db={connect:async()=>({
+    query:async(sql,params)=>{
+      statements.push({sql,params});
+      if(sql.startsWith('SELECT title,scope_text'))return {rows:[{
+        title:base.title,scope_text:base.scope_text,currency:'GBP',
+        amount_minor:'125050',revision:2
+      }]};
+      if(sql.startsWith('SELECT count(*)::integer'))return {rows:[{n:1}]};
+      if(sql==='ROLLBACK'||sql==='BEGIN')return {rows:[]};
+      throw new Error('Unexpected SQL after currency refusal');
+    },release:()=>{}
+  })};
+  await assert.rejects(()=>updateProposalDraft(db,{
+    id,expected_revision:2,...base,currency:'EUR',
+    title:'Currency change that would mislabel stored quote lines'
+  },'ci-owner'),/currency cannot change after quote lines exist/);
+  assert.deepEqual(statements.map(x=>x.sql.match(/^[A-Z]+/)[0]),
+    ['BEGIN','SELECT','SELECT','ROLLBACK']);
+  assert.deepEqual(statements[1].params,['local:ci-owner',id]);
+});

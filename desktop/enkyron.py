@@ -8108,6 +8108,11 @@ class EnkyronWindow(QMainWindow):
             ))
         form.addRow("Proposed fee *", self.crm_proposal_price)
         if existing and proposal.get("has_lines"):
+            self.crm_proposal_currency.setEnabled(False)
+            self.crm_proposal_currency.setToolTip(
+                "Currency is locked once this draft has saved line items. "
+                "Create a separate draft to quote in another currency."
+            )
             self.crm_proposal_price.setReadOnly(True)
             self.crm_proposal_price.setToolTip(
                 "This total is calculated from the detailed quote lines. "

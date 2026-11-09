@@ -57,6 +57,16 @@ test('PostgreSQL quote lines: precise totals, immutable versions, workspace isol
     },actor);
     assert.equal(written.revision,2);
     assert.equal(written.total_minor,250275);
+    // A priced GBP line cannot be silently re-labelled as EUR through the
+    // general proposal editor. This must not create another revision/event.
+    await assert.rejects(()=>updateProposalDraft(db,{
+      id:proposal.id,expected_revision:2,title:'Synthetic quote draft',
+      scope_text:'Human-led analysis of bounded agentic workflow tests.',
+      currency:'EUR',amount_minor:250275
+    },actor),/currency cannot change after quote lines exist/);
+    const unchangedCurrency=await readProposalDraft(db,proposal.id,actor);
+    assert.equal(unchangedCurrency.proposal.currency,'GBP');
+    assert.equal(unchangedCurrency.proposal.revision,2);
     const read=await readProposalLines(db,proposal.id,actor);
     assert.equal(read.uses_lines,true);
     assert.deepEqual(read.lines.map(l=>l.line_total_minor),[200250,50025]);
