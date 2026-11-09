@@ -53,11 +53,10 @@ test('direct CRM opportunity needs no ticket and appears with correspondence in 
   assert.ok(dossier.sections.opportunities.items.some(x=>x.opportunity_id===opp.id));
   assert.ok(dossier.sections.activities.items.some(x=>x.detail.includes('NOT SENT')));
   assert.ok(dossier.sections.commercial_docs.items.some(x=>x.proposal_id===draft.id));
-  const foreign=await getCompanyDossier(pool,company.id,'another-operator');
-  assert.fail('Expected cross-workspace refusal: '+JSON.stringify(foreign));
- }catch(e){
-  // Cross-workspace lookup is expected to reject; do not mask earlier assertions.
-  if(!/company not found in local workspace/.test(String(e?.message))) throw e;
+  await assert.rejects(
+   ()=>getCompanyDossier(pool,company.id,'another-operator'),
+   /company not found in local workspace/
+  );
  }finally{await pool.end();}
 });
 test('reviewed correction detaches only known accidental LinkedIn ticket and preserves audit',{
