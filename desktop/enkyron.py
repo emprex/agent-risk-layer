@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from decimal import Decimal, InvalidOperation
 import sys
 from pathlib import Path
 
@@ -19,10 +20,12 @@ from PySide6.QtWidgets import (
 
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
+    from .enkyron_invoice_pdf import export_issued_invoice_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
+    from enkyron_invoice_pdf import export_issued_invoice_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
@@ -270,6 +273,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_detail_dialog = None
         self.crm_invoice_issue_dialog = None
         self.crm_invoice_issue_context = None
+        self.crm_issuance_dialog = None
+        self.crm_issued_register_dialog = None
+        self.crm_issued_detail_dialog = None
+        self.crm_invoice_payment_dialog = None
+        self.crm_issued_items = []
         self.crm_invoice_items = []
         self.crm_invoice_loaded = False
         self.crm_invoice_seq = 0
@@ -1371,11 +1379,11 @@ class EnkyronWindow(QMainWindow):
 
         invoice_page = QWidget()
         invoice_l = QVBoxLayout(invoice_page)
-        invoice_l.addWidget(section_title("INVOICES · INTERNAL UNISSUED DRAFT REGISTER"))
+        invoice_l.addWidget(section_title("INVOICES · BILLING"))
         invoice_disclaimer = QLabel(
-            "These are preparation records, NOT issued invoices. "
-            "No invoice number, VAT amount, payable balance, banking or payment "
-            "entries are created. Customer identity is operator-entered."
+            "Select an invoice draft and choose Issue invoice when the client, "
+            "service and tax details have been confirmed. Official invoices and "
+            "payments are shown in the issued-invoice register."
         )
         invoice_disclaimer.setWordWrap(True)
         invoice_l.addWidget(invoice_disclaimer)
@@ -1427,10 +1435,17 @@ class EnkyronWindow(QMainWindow):
         )
         invoice_buttons.addWidget(self.crm_invoice_to_proposals)
         invoice_buttons.addStretch()
-        self.crm_invoice_open = QPushButton("Open selected draft…")
+        self.crm_invoice_open = QPushButton("View draft")
         self.crm_invoice_open.setEnabled(False)
         self.crm_invoice_open.clicked.connect(self.open_selected_invoice_draft)
         invoice_buttons.addWidget(self.crm_invoice_open)
+        self.crm_invoice_finalize_button = QPushButton("Issue invoice…")
+        self.crm_invoice_finalize_button.setEnabled(False)
+        self.crm_invoice_finalize_button.clicked.connect(self.open_invoice_finalization)
+        invoice_buttons.addWidget(self.crm_invoice_finalize_button)
+        self.crm_issued_register_button = QPushButton("Issued invoices & payments…")
+        self.crm_issued_register_button.clicked.connect(self.open_issued_invoice_register)
+        invoice_buttons.addWidget(self.crm_issued_register_button)
         self.crm_invoice_issue_button = QPushButton("Issue documentation review…")
         self.crm_invoice_issue_button.setEnabled(False)
         self.crm_invoice_issue_button.clicked.connect(self.open_invoice_issue_review)
@@ -7202,8 +7217,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_loaded = False
         self.crm_invoice_items = []
         self.crm_invoice_open.setEnabled(False)
+        self.crm_invoice_finalize_button.setEnabled(False)
         self.crm_invoice_issue_button.setEnabled(False)
-        self.crm_invoice_notice.setText("Loading unissued invoice drafts…")
+        self.crm_invoice_notice.setText("Loading invoice drafts…")
         self.crm_invoice_table.blockSignals(True)
         self.crm_invoice_table.setRowCount(0)
         self.crm_invoice_table.blockSignals(False)
@@ -7251,7 +7267,9 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_invoice_table.currentRow()
         available = 0 <= row < len(self.crm_invoice_items)
         self.crm_invoice_open.setEnabled(available)
+        self.crm_invoice_finalize_button.setEnabled(available)
         self.crm_invoice_issue_button.setEnabled(available)
+
     def open_selected_invoice_draft(self):
         row = self.crm_invoice_table.currentRow()
         if not 0 <= row < len(self.crm_invoice_items):
