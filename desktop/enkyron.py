@@ -736,29 +736,53 @@ class EnkyronWindow(QMainWindow):
         self.crm_company_add.setEnabled(False)
         self.crm_company_add.clicked.connect(self.open_new_company)
         company_toolbar.addWidget(self.crm_company_add)
+        self.crm_company_more_toggle = QPushButton("More tools…")
+        self.crm_company_more_toggle.setCheckable(True)
+        company_toolbar.addWidget(self.crm_company_more_toggle)
+        company_l.addLayout(company_toolbar)
+
+        # Show primary actions only for the company the operator selected.
+        self.crm_selected_company_bar = QWidget()
+        selected_company_l = QHBoxLayout(self.crm_selected_company_bar)
+        selected_company_l.setContentsMargins(0, 0, 0, 0)
+        self.crm_selected_company_label = QLabel("No company selected")
+        selected_company_l.addWidget(self.crm_selected_company_label, 1)
+        self.crm_company_dossier_open = QPushButton("Open company")
+        self.crm_company_dossier_open.setObjectName("primary")
+        self.crm_company_dossier_open.setEnabled(False)
+        self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
+        selected_company_l.addWidget(self.crm_company_dossier_open)
+        self.crm_company_opportunity_add = QPushButton("+ Opportunity")
+        self.crm_company_opportunity_add.setEnabled(False)
+        self.crm_company_opportunity_add.clicked.connect(self.open_company_direct_opportunity)
+        selected_company_l.addWidget(self.crm_company_opportunity_add)
+        company_l.addWidget(self.crm_selected_company_bar)
+        self.crm_selected_company_bar.setHidden(True)
+
+        # Existing commands are preserved in a progressive-disclosure row.
+        self.crm_company_advanced_bar = QWidget()
+        company_advanced_l = QHBoxLayout(self.crm_company_advanced_bar)
+        company_advanced_l.setContentsMargins(0, 0, 0, 0)
         self.crm_company_edit = QPushButton("Edit company…")
         self.crm_company_edit.setEnabled(False)
         self.crm_company_edit.clicked.connect(self.open_edit_company)
-        company_toolbar.addWidget(self.crm_company_edit)
-        self.crm_company_opportunity_add = QPushButton("+ Commercial opportunity")
-        self.crm_company_opportunity_add.setEnabled(False)
-        self.crm_company_opportunity_add.clicked.connect(self.open_company_direct_opportunity)
-        company_toolbar.addWidget(self.crm_company_opportunity_add)
-        self.crm_company_dossier_open = QPushButton("Open company dossier")
-        self.crm_company_dossier_open.setEnabled(False)
-        self.crm_company_dossier_open.clicked.connect(self.open_company_dossier)
-        company_toolbar.addWidget(self.crm_company_dossier_open)
+        company_advanced_l.addWidget(self.crm_company_edit)
         self.crm_company_messages_button = QPushButton("Messages / notes…")
         self.crm_company_messages_button.setEnabled(False)
         self.crm_company_messages_button.clicked.connect(self.open_company_messages)
-        company_toolbar.addWidget(self.crm_company_messages_button)
+        company_advanced_l.addWidget(self.crm_company_messages_button)
         self.crm_company_csv_button = QPushButton("CRM CSV…")
         self.crm_company_csv_button.setEnabled(True)
         self.crm_company_csv_button.clicked.connect(self.open_crm_csv_tools)
-        company_toolbar.addWidget(self.crm_company_csv_button)
-        company_l.addLayout(company_toolbar)
+        company_advanced_l.addWidget(self.crm_company_csv_button)
+        company_advanced_l.addStretch()
+        company_l.addWidget(self.crm_company_advanced_bar)
+        self.crm_company_advanced_bar.setHidden(True)
+        self.crm_company_more_toggle.toggled.connect(
+            self.crm_company_advanced_bar.setVisible
+        )
         self.crm_company_notice = QLabel(
-            "Structured CRM has not been loaded. Historic prospects remain separate."
+            "Select a company to view its contacts, or double-click to open its dossier."
         )
         self.crm_company_notice.setWordWrap(True)
         company_l.addWidget(self.crm_company_notice)
@@ -780,6 +804,10 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.crm_company_table.itemSelectionChanged.connect(self.company_selected)
+        self.crm_company_table.itemDoubleClicked.connect(
+            lambda _item: self.open_company_dossier()
+        )
+        self.crm_company_table.setMinimumHeight(200)
         company_l.addWidget(self.crm_company_table, 3)
         # Lower half remains one pane, with Contacts / Tickets internal tabs.
         self.crm_company_detail_tabs = QTabWidget()
@@ -800,18 +828,31 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_tickets_button = QPushButton("Contact ticket links…")
         self.crm_contact_tickets_button.setEnabled(False)
         self.crm_contact_tickets_button.clicked.connect(self.open_contact_ticket_links)
-        contacts_heading.addWidget(self.crm_contact_tickets_button)
+        self.crm_contact_more_toggle = QPushButton("More contact tools…")
+        self.crm_contact_more_toggle.setCheckable(True)
+        contacts_heading.addWidget(self.crm_contact_more_toggle)
+        contacts_l.addLayout(contacts_heading)
+
+        self.crm_contact_advanced_bar = QWidget()
+        contact_advanced_l = QHBoxLayout(self.crm_contact_advanced_bar)
+        contact_advanced_l.setContentsMargins(0, 0, 0, 0)
+        contact_advanced_l.addWidget(self.crm_contact_tickets_button)
         self.crm_privacy_button = QPushButton("Privacy requests…")
         self.crm_privacy_button.setEnabled(False)
         self.crm_privacy_button.clicked.connect(self.open_privacy_requests)
-        contacts_heading.addWidget(self.crm_privacy_button)
+        contact_advanced_l.addWidget(self.crm_privacy_button)
         self.crm_retention_button = QPushButton("Retention reviews…")
         self.crm_retention_button.setEnabled(False)
         self.crm_retention_button.clicked.connect(self.open_retention_reviews)
-        contacts_heading.addWidget(self.crm_retention_button)
-        contacts_l.addLayout(contacts_heading)
+        contact_advanced_l.addWidget(self.crm_retention_button)
+        contact_advanced_l.addStretch()
+        contacts_l.addWidget(self.crm_contact_advanced_bar)
+        self.crm_contact_advanced_bar.setHidden(True)
+        self.crm_contact_more_toggle.toggled.connect(
+            self.crm_contact_advanced_bar.setVisible
+        )
         self.crm_contacts_notice = QLabel(
-            "Select a company to view its contacts. Email consent starts as unknown."
+            "Select a company above to view its contacts."
         )
         self.crm_contacts_notice.setWordWrap(True)
         contacts_l.addWidget(self.crm_contacts_notice)
@@ -1718,6 +1759,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_company_table.setRowCount(0)
             self.crm_company_table.blockSignals(False)
             self.crm_company_id = None
+            self.crm_selected_company_bar.setHidden(True)
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
@@ -1774,8 +1816,8 @@ class EnkyronWindow(QMainWindow):
             count = len(self.crm_company_items)
             suffix = " (first 100; narrow search)" if data.get("more") else ""
             self.crm_company_notice.setText(
-                f"{count} registered companie(s){suffix}. "
-                "Legacy prospects have not been imported."
+                f"{count} companies{suffix}. "
+                "Select a company to view its contacts; double-click to open its dossier."
             )
             if chosen >= 0:
                 self.crm_company_table.selectRow(chosen)
@@ -1792,6 +1834,7 @@ class EnkyronWindow(QMainWindow):
         row = self.crm_company_table.currentRow()
         if row < 0 or row >= len(self.crm_company_items):
             self.crm_company_id = None
+            self.crm_selected_company_bar.setHidden(True)
             self.crm_company_dossier_open.setEnabled(False)
             self.crm_company_messages_button.setEnabled(False)
             self.crm_company_opportunity_add.setEnabled(False)
@@ -1812,6 +1855,10 @@ class EnkyronWindow(QMainWindow):
         company = self.crm_company_items[row]
         company_id = company["id"]
         self.crm_company_id = company_id
+        self.crm_selected_company_label.setText(
+            "Selected: " + str(company.get("name") or "")
+        )
+        self.crm_selected_company_bar.setHidden(False)
         self.crm_company_dossier_open.setEnabled(True)
         self.crm_company_messages_button.setEnabled(True)
         self.crm_company_opportunity_add.setEnabled(True)
