@@ -7339,10 +7339,14 @@ class EnkyronWindow(QMainWindow):
         summary.setWordWrap(True)
         layout.addWidget(summary)
         tax_info = QLabel(
-            "Tax status from the current issuing-company profile: {}. "
-            "VAT {}%. This must reflect the actual transaction; no automated "
-            "tax classification is being inferred.".format(
-                issuer_status, vat
+            "Issuer VAT position: {}. {}"
+            .format(
+                issuer_status,
+                "20% applies only to a UK domestic standard-rated supply. "
+                "If this is cross-border, exempt, reverse-charge or otherwise "
+                "non-standard, do not issue from this limited workflow."
+                if issuer_status == "registered"
+                else "No VAT charged. Confirm this is the correct status before issue."
             )
         )
         tax_info.setWordWrap(True)
@@ -7371,7 +7375,7 @@ class EnkyronWindow(QMainWindow):
         form.addRow("Reason / source", basis)
         layout.addLayout(form)
         confirm = QCheckBox(
-            "I confirm the customer, service delivery, tax treatment, "
+            "I confirm the customer, delivery, applicable UK VAT treatment, "
             "amount and authority to issue this invoice."
         )
         confirm.setObjectName("invoiceHumanIssueConfirm")
