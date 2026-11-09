@@ -4678,6 +4678,21 @@ class EnkyronWindow(QMainWindow):
                 check.get("label") or "", (check.get("status") or "unknown").replace("_", " ").upper(),
                 check.get("note") or ""
             ))
+        checkpoint = data.get("contract_decision") or {}
+        text.extend(["", "E07-05 · CONTRACTUAL READINESS DECISION"])
+        text.append(
+            "Status: " + str(checkpoint.get("decision") or "BLOCKED_EXTERNAL_VERIFICATION")
+        )
+        text.append(
+            "Current-SOW unverified document references: {}".format(
+                checkpoint.get("current_unverified_reference_count", 0)
+            )
+        )
+        for requirement in checkpoint.get("requirements") or [
+            "Signed agreement and independent customer authority not verified."
+        ]:
+            text.append("External prerequisite: " + str(requirement))
+        text.append("NO PROJECT START · NO SIGNATURE · NO ASSESSMENT/TEST AUTHORISATION")
         text.extend(["", "CONTRACT DOCUMENT REFERENCES · OPERATOR-REPORTED ONLY"])
         if not data.get("contract_registry_installed"):
             text.append(
