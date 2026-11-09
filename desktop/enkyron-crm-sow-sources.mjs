@@ -84,6 +84,31 @@ function contractChecklist(hasSow){
  ];
 }
 
+// E07-05C: terminal documentary checkpoint, not a source of signature authority.
+// A claimed reference never establishes contractual validity or a right to test.
+export function contractReadiness(proposalRevision,sow,references,registry){
+ if(!Number.isSafeInteger(proposalRevision)||proposalRevision<1||
+    !Array.isArray(references)||typeof registry!=='boolean')
+  throw new Error('CRM invalid contractual checkpoint input');
+ const current=Boolean(sow&&Number.isSafeInteger(sow.sow_revision)&&
+   sow.sow_revision>=1&&sow.status==='operator_draft_unapproved');
+ const matched=registry&&current?references.filter(x=>x&&
+   x.proposal_revision===proposalRevision&&x.sow_revision===sow.sow_revision&&
+   x.evidence_status==='operator_reference_unverified'):[];
+ const requirements=[
+   ...(!current?['Current revision SOW is not documented.']:[]),
+   'Contracting-party identity and signatory authority not independently verified.',
+   'Client acceptance of the current SOW not independently authenticated.',
+   'Signed engagement agreement not independently verified.',
+   'NDA necessity and DPA/personal-data roles not assessed.',
+   'Bounded permission and rules of engagement for active tests not independently verified.'
+ ];
+ return {decision:'BLOCKED_EXTERNAL_VERIFICATION',
+   proposal_revision:proposalRevision,sow_revision:current?sow.sow_revision:null,
+   current_unverified_reference_count:matched.length,requirements,
+   can_accept_engagement:false,can_sign:false,can_start_project:false,
+   assessment_authorised:false,testing_authorised:false};
+}
 export async function readSowSources(pool,id,actor){
   const key=workspace(actor),pid=proposalId(id),client=await pool.connect();
   try{
@@ -159,6 +184,7 @@ export async function readSowSources(pool,id,actor){
     else
       blockers.push('Current SOW draft is documented but NOT independently approved or accepted');
     blockers.push('Client signature and explicit permission for any security testing are NOT established');
+    const contract_decision=contractReadiness(p.revision,sow,references,registry);
     return {
       available:true,proposal_id:pid,proposal_revision:p.revision,
       title:p.title,scope_text:p.scope_text,currency:p.currency,amount_minor:fee,
@@ -172,6 +198,7 @@ export async function readSowSources(pool,id,actor){
         target_inventory:sow.target_inventory
       }:null,
       contract_checks:contractChecklist(Boolean(sow)),
+      contract_decision,
       contract_registry_installed:registry,
       contract_references:references.slice(0,10).map(x=>({
         ...x,is_current_sow:Boolean(sow&&x.sow_revision===sow.sow_revision)
