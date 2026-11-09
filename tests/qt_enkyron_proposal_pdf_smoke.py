@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from desktop.enkyron_proposal_pdf import (
-    draft_html, export_draft_pdf, validate_pdf_snapshot,
+    draft_html, draft_snapshot_sha256, export_draft_pdf, validate_pdf_snapshot,
 )
 
 ID = "11111111-2222-4333-8444-555555555555"
@@ -60,6 +60,26 @@ class DraftPdfTest(unittest.TestCase):
         self.assertIn("DRAFT - NOT SENT", html)
         self.assertNotIn("VAT 20%", html)
 
+
+    def test_source_digest_reproducible_and_sensitive_to_printed_fields(self):
+        initial = fixture()
+        digest = draft_snapshot_sha256(initial)
+        self.assertRegex(digest, r"^[a-f0-9]{64}$")
+        self.assertEqual(digest, draft_snapshot_sha256(copy.deepcopy(initial)))
+        # The export timestamp and an unprinted source field must not change
+        # the digest of the displayed source content.
+        extra = copy.deepcopy(initial)
+        extra["updated_at"] = "2026-11-09T11:33:00Z"
+        self.assertEqual(digest, draft_snapshot_sha256(extra))
+        modified = copy.deepcopy(initial)
+        modified["issuer"]["registered_office"] = "12 Changed Synthetic Office, Test City"
+        self.assertNotEqual(digest, draft_snapshot_sha256(modified))
+        modified = copy.deepcopy(initial)
+        modified["scope_text"] += "\\nThe draft scope was explicitly revised."
+        self.assertNotEqual(digest, draft_snapshot_sha256(modified))
+        modified = copy.deepcopy(initial)
+        modified["lines"][0]["description"] = "Changed review of tools and boundaries"
+        self.assertNotEqual(digest, draft_snapshot_sha256(modified))
 
     def test_real_scoping_draft_rendered_as_lists_and_compact_page(self):
         sample = fixture()
@@ -132,6 +152,10 @@ No security testing is authorised by this proposal. Customer identity, contractu
                 self.assertIn("No security testing is authorised", text)
                 self.assertIn("Draft total: GBP 750.00", text)
                 self.assertIn("Page 1 / 1", text)
+                self.assertIn(
+                    "Source snapshot SHA-256: " + draft_snapshot_sha256(sample),
+                    text.replace("\\n", " ")
+                )
 
     def test_scope_markdown_never_interprets_untrusted_raw_html(self):
         sample = fixture()

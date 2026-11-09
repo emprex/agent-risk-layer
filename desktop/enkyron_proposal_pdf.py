@@ -6,7 +6,9 @@ All offer content comes from the read-only, revision-consistent CRM snapshot.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import sha256
 from html import escape
+import json
 from math import ceil
 import re
 from os import close, replace
@@ -175,6 +177,22 @@ def validate_pdf_snapshot(snapshot: dict) -> dict:
     return snapshot
 
 
+def draft_snapshot_sha256(snapshot: dict) -> str:
+    """Digest the fields actually printed, not the PDF bytes or export timestamp.
+
+    This is a reproducible source-reference fingerprint, NOT a signature,
+    proof of origin, identity verification, approval, or tamper protection.
+    """
+    data = validate_pdf_snapshot(snapshot)
+    allowed = ("id", "revision", "title", "scope_text",
+               "research_candidate", "buyer_origin", "currency",
+               "amount_minor", "issuer", "lines")
+    shown = {key: data.get(key) for key in allowed}
+    canonical = json.dumps(shown, ensure_ascii=False, sort_keys=True,
+                           separators=(",", ":"), allow_nan=False)
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
     """Escaped, restrained A4 print layout; no guessed buyer/tax/terms."""
     s = validate_pdf_snapshot(snapshot)
@@ -276,7 +294,7 @@ def draft_html(snapshot: dict, exported_at: datetime | None = None) -> str:
 
 def export_draft_pdf(destination: str | Path, snapshot: dict) -> int:
     """Atomically write a read-only PDF preview. Returns number of A4 pages."""
-    validate_pdf_snapshot(snapshot)
+    digest = draft_snapshot_sha256(snapshot)
     target = Path(destination).expanduser()
     if target.suffix.lower() != ".pdf" or not target.parent.is_dir():
         raise ValueError("Choose an existing folder and a .pdf filename")
@@ -332,6 +350,12 @@ def export_draft_pdf(destination: str | Path, snapshot: dict) -> int:
                     "Internal working draft - no tax, approval or issue determined")
                 painter.drawText(QRectF(margin, height-52, content_width, 20),
                     Qt.AlignmentFlag.AlignRight, f"Page {page+1} / {pages}")
+                # This is a digest of the printed source fields, NOT the
+                # final PDF file digest and NOT an authenticated signature.
+                painter.setFont(QFont("DejaVu Sans Mono", 7))
+                painter.drawText(QRectF(margin, height-32, content_width, 16),
+                    Qt.AlignmentFlag.AlignLeft,
+                    "Source snapshot SHA-256: " + digest)
                 painter.restore()
         finally:
             if not painter.end():
