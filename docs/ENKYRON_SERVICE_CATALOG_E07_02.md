@@ -35,3 +35,58 @@ The bridge verifies at save time that a NEW catalog-linked line references the c
 - E07-02 implementation can only be declared DONE-LOCAL after separately confirming migration checksum, UI, one explicit test entry and persistent version/price provenance. Commercial catalog content still requires ARL review.
 
 Next work follows the director plan, not an invented side project: E07-03 formal quotation acceptance, E07-04/05/06 SOW/authorization/contracts, E07-07 recurring engagements, E07-08 mission conversion, E09 billing.
+
+## Debian acceptance and exact-head CI — 2026-11-09
+
+**Verified baseline:** GitHub PR #520 is still **open/draft** on
+`feat/enkyron-desktop-20261105`. The accepted and Debian-synchronised code
+commit is `7fbbafa3217a94ff8352d049469282adff390801`.
+At this exact GitHub head, the **CI** and **ENKYRON Desktop** workflows
+both completed successfully. GitHub CI does not substitute for local operator
+acceptance. No merge has been authorised.
+
+**Installed local schema:** additive migration 098 was applied intentionally
+on Debian 13 after a protected PostgreSQL dump at
+`/home/emprex/.local/share/enkyron/backups/arl_local-before-enkyron-098-2026-11-09T09-28-04-899Z.dump`.
+The migration checksum was verified. Do not reapply migration 098 to prove
+this acceptance and do not reset or remove historical data.
+
+**Synthetic operator acceptance (DONE-LOCAL for the bounded cases below):**
+- The existing `CRM → Proposals → Service catalog…` editor created and
+  subsequently revised `ARL-E0702-TEST`
+  (`946e24f1-381f-4fcf-aec7-ac4ab507e70d`).
+  PostgreSQL readback confirmed current revision 5, state `draft`,
+  pricing model `fixed`, currency GBP, price `NULL`. Historical revisions
+  were preserved; a temporary R3 `available` was returned to `draft`.
+- `Add from catalog…` selected synthetic R3 in a **draft** quote-line
+  editor. A manually supplied £1.00 line temporarily displayed £751.00;
+  the operator **cancelled without saving**.
+- A subsequent PostgreSQL **read-only** check of the pre-existing
+  `ARL — AI Agent Security Scoping Review — DRAFT` R2 found
+  `amount_minor=75000`, one saved line totaling 75000 pence, and
+  zero catalog-linked saved lines. Thus the local test did not mutate the
+  existing £750.00 draft quote.
+
+**CI-only scope:** synthetic PostgreSQL tests cover catalog version snapshots,
+provenance constraints, allowed selections, and persistence of a sourced line.
+These were **not** independently repeated as a persistent sourced-line save
+on the local Debian database. Do not label them DONE-LOCAL.
+
+**Last UI correction:** a `fixed` service in `draft` without a price
+must not display `Custom quote required`. The correction distinguishes
+unpriced fixed, custom-quote and unpriced recurring entries; Qt smoke tests
+pass in GitHub CI at the exact head. A **brief Debian visual readback of this
+one label remains NOT-VERIFIED**; do not repeat the whole E07-02 recipe.
+
+**Scope still open:** real ARL service descriptions and tariffs are not yet
+human-reviewed, no real catalog service has been declared commercially
+available, and no quotation issuance, tax determination, customer acceptance,
+contract, invoice or security assessment is authorised by this catalog.
+The overarching E07-02 roadmap criterion remains **partially accepted**,
+not globally complete.
+
+**Next:** once the single visual label check is obtained, continue the
+roadmap at E07-03 by inspecting the **existing** quote revisions,
+pre-issuance checks, approval history and unresolved security/identity
+dependencies. Do not duplicate the previous quote-review modules or add
+another control merely because the technical branch is still draft.
