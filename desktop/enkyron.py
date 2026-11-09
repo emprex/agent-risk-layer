@@ -1264,6 +1264,9 @@ class EnkyronWindow(QMainWindow):
         proposals_l.addWidget(self.crm_proposal_table, 1)
         # Three compact rows prevent CRM actions being clipped on smaller screens.
         proposal_footer = QVBoxLayout()
+        self.crm_proposal_workflow = QTabWidget()
+        offer_page = QWidget()
+        offer_layout = QVBoxLayout(offer_page)
         proposal_navigation = QHBoxLayout()
         proposal_navigation.addWidget(QLabel(
             "To create a new draft, select an opportunity in Pipeline."
@@ -1274,7 +1277,7 @@ class EnkyronWindow(QMainWindow):
             lambda: self.crm_tabs.setCurrentIndex(4)
         )
         proposal_navigation.addWidget(to_pipeline)
-        proposal_footer.addLayout(proposal_navigation)
+        offer_layout.addLayout(proposal_navigation)
 
         proposal_edit_actions = QHBoxLayout()
         self.crm_open_proposal = QPushButton("Open selected proposal")
@@ -1294,8 +1297,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_sow_button.clicked.connect(self.open_sow_scope_review)
         proposal_edit_actions.addWidget(self.crm_sow_button)
         proposal_edit_actions.addStretch()
-        proposal_footer.addLayout(proposal_edit_actions)
+        offer_layout.addLayout(proposal_edit_actions)
+        self.crm_proposal_workflow.addTab(offer_page, "1 · Offer")
 
+        review_page = QWidget()
+        review_layout = QVBoxLayout(review_page)
         proposal_reviews = QHBoxLayout()
         self.crm_buyer_button = QPushButton("Buyer identity review…")
         self.crm_buyer_button.setEnabled(False)
@@ -1314,7 +1320,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_internal_button.clicked.connect(self.open_internal_draft_review)
         proposal_reviews.addWidget(self.crm_internal_button)
         proposal_reviews.addStretch()
-        proposal_footer.addLayout(proposal_reviews)
+        review_layout.addLayout(proposal_reviews)
         quote_issue_row = QHBoxLayout()
         quote_issue_row.addWidget(QLabel(
             "Quote issue: inspect missing evidence before a real offer."
@@ -1327,7 +1333,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_quote_evidence_button.setEnabled(False)
         self.crm_quote_evidence_button.clicked.connect(self.open_quote_evidence_review)
         quote_issue_row.addWidget(self.crm_quote_evidence_button)
-        proposal_footer.addLayout(quote_issue_row)
+        review_layout.addLayout(quote_issue_row)
         external_report_row = QHBoxLayout()
         external_report_row.addWidget(QLabel(
             "External review: record a reported finding, NOT a verified approval."
@@ -1338,7 +1344,11 @@ class EnkyronWindow(QMainWindow):
             self.open_quote_external_report
         )
         external_report_row.addWidget(self.crm_external_report_button)
-        proposal_footer.addLayout(external_report_row)
+        review_layout.addLayout(external_report_row)
+        self.crm_proposal_workflow.addTab(review_page, "2 · Review & contract")
+
+        billing_page = QWidget()
+        billing_layout = QVBoxLayout(billing_page)
         billing_actions = QHBoxLayout()
         billing_explanation = QLabel(
             "Billing preparation: internal worksheet only; no invoice or VAT calculation."
@@ -1353,7 +1363,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_prepare_button.setEnabled(False)
         self.crm_invoice_prepare_button.clicked.connect(self.open_proposal_invoice_preparation)
         billing_actions.addWidget(self.crm_invoice_prepare_button)
-        proposal_footer.addLayout(billing_actions)
+        billing_layout.addLayout(billing_actions)
+        self.crm_proposal_workflow.addTab(billing_page, "3 · Prebilling")
+        proposal_footer.addWidget(self.crm_proposal_workflow)
         proposals_l.addLayout(proposal_footer)
         self.crm_tabs.addTab(proposals_page, "Proposals")
 
@@ -1386,7 +1398,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_table = QTableWidget(0, 6)
         self.crm_invoice_table.setHorizontalHeaderLabels([
             "Internal draft ID", "Buyer (unverified)", "Service",
-            "Proposed fee", "VAT", "Recorded"
+            "Proposed fee", "Draft status", "Recorded"
         ])
         self.crm_invoice_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
@@ -1463,7 +1475,7 @@ class EnkyronWindow(QMainWindow):
             lambda _: self.crm_company_search_timer.start()
         )
         self.navigation.currentRowChanged.connect(self.module_changed)
-        self.navigation.setCurrentRow(1)
+        self.navigation.setCurrentRow(0)
 
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
@@ -2943,6 +2955,16 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_dossier_notice.setWordWrap(True)
         layout.addWidget(self.crm_dossier_notice)
+        self.crm_dossier_commercial_index = None
+        self.crm_dossier_commercial_button = QPushButton("Open commercial workflow →")
+        self.crm_dossier_commercial_button.setEnabled(False)
+        self.crm_dossier_commercial_button.clicked.connect(
+            self.open_dossier_commercial_workflow
+        )
+        layout.addWidget(
+            self.crm_dossier_commercial_button,
+            alignment=Qt.AlignmentFlag.AlignLeft
+        )
         # Fixed left-side section list: all eleven entries remain visible
         # without horizontal tab arrows. Keep QTabWidget as the page stack so
         # existing qualification forms and keyboard navigation still work.
@@ -3244,6 +3266,56 @@ class EnkyronWindow(QMainWindow):
                     page_layout.addStretch()
                 else:
                     page_layout.addWidget(table, 1)
+                if section_id == "commercial_docs":
+                    guidance = QLabel(
+                        "Select a linked record. Open its existing proposal or "
+                        "unissued invoice draft; invoice review displays the real "
+                        "documentary blockers. Nothing is issued or sent."
+                    )
+                    guidance.setWordWrap(True)
+                    page_layout.insertWidget(0, guidance)
+                    commercial_buttons = QHBoxLayout()
+                    open_source = QPushButton("Open source proposal…")
+                    open_invoice = QPushButton("Open invoice draft…")
+                    review_invoice = QPushButton("Review invoice blockers…")
+                    commercial_buttons.addWidget(open_source)
+                    commercial_buttons.addWidget(open_invoice)
+                    commercial_buttons.addWidget(review_invoice)
+                    commercial_buttons.addStretch()
+
+                    def selected_document(items=rows, view=table):
+                        selected_row = view.currentRow()
+                        return items[selected_row] if 0 <= selected_row < len(items) else None
+
+                    def update_document_actions():
+                        document = selected_document()
+                        is_invoice = bool(
+                            document and document.get("document_kind") ==
+                            "unissued_invoice_draft" and document.get("document_id")
+                        )
+                        open_source.setEnabled(bool(document and document.get("proposal_id")))
+                        open_invoice.setEnabled(is_invoice)
+                        review_invoice.setEnabled(is_invoice)
+
+                    def open_source_document():
+                        document = selected_document()
+                        if document and document.get("proposal_id"):
+                            self.open_dossier_source_proposal(document["proposal_id"])
+
+                    def open_invoice_document(review=False):
+                        document = selected_document()
+                        if (document and document.get("document_kind") ==
+                                "unissued_invoice_draft" and document.get("document_id")):
+                            self.open_dossier_invoice(document["document_id"], review=review)
+
+                    table.itemSelectionChanged.connect(update_document_actions)
+                    open_source.clicked.connect(open_source_document)
+                    open_invoice.clicked.connect(lambda: open_invoice_document(False))
+                    review_invoice.clicked.connect(lambda: open_invoice_document(True))
+                    page_layout.addLayout(commercial_buttons)
+                    if rows:
+                        table.selectRow(0)
+                    update_document_actions()
                 if section_id == "activities":
                     hint = QLabel(
                         "Operator-recorded messages and notes. Select a row "
@@ -3290,6 +3362,11 @@ class EnkyronWindow(QMainWindow):
                 self.crm_dossier_nav.addItem(
                     "{} ({})".format(title, count)
                 )
+                if section_id == "commercial_docs":
+                    self.crm_dossier_commercial_index = self.crm_dossier_tabs.count() - 1
+            self.crm_dossier_commercial_button.setEnabled(
+                self.crm_dossier_commercial_index is not None
+            )
             # Qt may expose its tab bar again as tabs are inserted.
             self.crm_dossier_tabs.tabBar().hide()
             index = selected_tab if 0 <= selected_tab < self.crm_dossier_tabs.count() else 0
@@ -3305,6 +3382,59 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
+
+    def open_dossier_commercial_workflow(self):
+        index = self.crm_dossier_commercial_index
+        if (self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible()
+                and index is not None and 0 <= index < self.crm_dossier_nav.count()):
+            self.crm_dossier_nav.setCurrentRow(index)
+
+    def open_dossier_source_proposal(self, proposal_id):
+        if not proposal_id:
+            return
+        if self.crm_proposal_dialog and self.crm_proposal_dialog.isVisible():
+            self.crm_proposal_dialog.raise_()
+            self.crm_proposal_dialog.activateWindow()
+            return
+
+        def received(data, error):
+            proposal = (data or {}).get("proposal") or {}
+            if (error or not (data or {}).get("available")
+                    or proposal.get("id") != proposal_id):
+                QMessageBox.warning(
+                    self, "Linked proposal unavailable",
+                    error or "The linked proposal could not be verified. Refresh the dossier."
+                )
+                return
+            self.show_proposal_dialog(proposal)
+
+        self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def open_dossier_invoice(self, draft_id, review=False):
+        if not draft_id:
+            return
+        existing = self.crm_invoice_issue_dialog if review else self.crm_invoice_detail_dialog
+        if existing and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        command = "crm-invoice-issue-review" if review else "crm-invoice-draft"
+
+        def received(data, error):
+            draft = (data or {}).get("draft") or {}
+            if (error or not (data or {}).get("available")
+                    or draft.get("id") != draft_id):
+                QMessageBox.warning(
+                    self, "Linked invoice draft unavailable",
+                    error or "The linked invoice draft could not be verified. Refresh the dossier."
+                )
+                return
+            if review:
+                self.show_invoice_issue_review(data)
+            else:
+                self.show_invoice_draft_detail(draft)
+
+        self.bridge.call(command, draft_id, callback=received)
 
     def record_company_qualification(self):
         dialog = self.crm_dossier_dialog
@@ -7098,7 +7228,8 @@ class EnkyronWindow(QMainWindow):
                     item.get("buyer_legal_name") or "",
                     item.get("service_description") or "",
                     "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
-                    "Undetermined", display_date(item.get("recorded_at"))
+                    str(item.get("status") or "unknown").replace("_", " "),
+                    display_date(item.get("recorded_at"))
                 ]
                 for col, value in enumerate(values):
                     self.crm_invoice_table.setItem(
