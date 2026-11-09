@@ -4,7 +4,10 @@ import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mj
 const id='11111111-2222-4333-8444-555555555555';
 const company='22222222-3333-4444-8555-666666666666';
 function fixture({active=true,buyerCompany=company,fee='75000',lines='75000',
-  valid=true,decision='internal_draft_approved',found=true}={}){
+  valid=true,decision='internal_draft_approved',found=true,
+  issuerId=id,buyerId=id,termsId=id,taxId=id,
+  approvedIssuerId=issuerId,approvedBuyerId=buyerId,
+  approvedTermsId=termsId,approvedTaxId=taxId}={}){
   const calls=[];
   const rows=sql=>{
     if(sql.includes('JOIN enkyron_crm_opportunities o'))return found?[{
@@ -12,13 +15,16 @@ function fixture({active=true,buyerCompany=company,fee='75000',lines='75000',
       amount_minor:fee,company_id:company,buyer_company_id:company,
       effective_origin:active
     }]:[];
-    if(sql.includes('FROM enkyron_operator_company_profiles'))return [{id}];
+    if(sql.includes('FROM enkyron_operator_company_profiles'))return [{id:issuerId}];
     if(sql.includes('FROM enkyron_crm_proposal_buyer_reviews'))
-      return [{id,company_id:buyerCompany,review_status:'operator_documented_unverified'}];
+      return [{id:buyerId,company_id:buyerCompany,review_status:'operator_documented_unverified'}];
     if(sql.includes('FROM enkyron_crm_proposal_commercial_terms'))
-      return [{id,review_status:'operator_draft_unapproved',valid_now:valid}];
-    if(sql.includes('FROM enkyron_crm_proposal_tax_reviews'))return [{id}];
-    if(sql.includes('FROM enkyron_crm_proposal_internal_decisions'))return [{id,decision}];
+      return [{id:termsId,review_status:'operator_draft_unapproved',valid_now:valid}];
+    if(sql.includes('FROM enkyron_crm_proposal_tax_reviews'))return [{id:taxId}];
+    if(sql.includes('FROM enkyron_crm_proposal_internal_decisions'))
+      return [{id,decision,issuer_profile_id:approvedIssuerId,
+        buyer_review_id:approvedBuyerId,terms_id:approvedTermsId,
+        tax_review_id:approvedTaxId}];
     if(sql.includes('FROM enkyron_crm_proposal_lines'))return [{n:1,total:lines}];
     return [];
   };
@@ -62,4 +68,22 @@ test('invalid IDs and foreign workspaces fail closed',async()=>{
   assert.equal(x.calls.at(-2).sql,'ROLLBACK');
   await assert.rejects(()=>readQuoteIssuePreflight(x.pool,'invalid','emprex'),/invalid proposal ID/);
   await assert.rejects(()=>readQuoteIssuePreflight(x.pool,id,'bad actor'),/invalid local operator/);
+});
+
+test('superseded references never count as current approval in quote preflight',async()=>{
+  const other='99999999-8888-4777-8666-555555555555';
+  for(const stale of [
+    {issuerId:other},{buyerId:other},{termsId:other},{taxId:other}
+  ]){
+    const r=await readQuoteIssuePreflight(fixture(stale).pool,id,'emprex');
+    assert.equal(r.steps.find(x=>x.label==='Internal content decision').state,'blocked');
+    assert.equal(r.can_issue,false);
+    assert.equal(r.issue_authorised,false);
+  }
+  const current=fixture();
+  const out=await readQuoteIssuePreflight(current.pool,id,'emprex');
+  assert.equal(out.steps.find(x=>x.label==='Internal content decision').state,'documented');
+  assert.ok(current.calls.find(x=>x.sql.includes('FROM enkyron_crm_proposal_tax_reviews')).sql
+    .includes('ORDER BY recorded_at DESC,id DESC LIMIT 1'));
+  assert.ok(current.calls.every(x=>!/^(INSERT|UPDATE|DELETE)/.test(x.sql)));
 });

@@ -11,6 +11,7 @@ import {recordCommercialTerms} from '../desktop/enkyron-crm-commercial-terms.mjs
 import {recordTaxReview} from '../desktop/enkyron-crm-tax-review.mjs';
 import {readInternalReview,recordInternalDecision}
   from '../desktop/enkyron-crm-internal-review.mjs';
+import {readQuoteIssuePreflight} from '../desktop/enkyron-crm-quote-preflight.mjs';
 
 const url=process.env.ARL_CI_POSTGRES_URL||'';
 function disposable(){
@@ -136,6 +137,26 @@ test('real PostgreSQL internal draft review: blocked, prerequisites, immutable, 
     assert.equal(readback.current.buyer_review_id,buyer.id);
     assert.equal(readback.current.terms_id,terms.id);
     assert.equal(readback.current.tax_review_id,tax.id);
+    const currentPreflight=await readQuoteIssuePreflight(db,proposal.id,actor);
+    assert.equal(currentPreflight.steps.find(x=>
+      x.label==='Internal content decision').state,'documented');
+    // A later issuer edit does not erase the historical internal approval,
+    // but cannot reuse that approval as a current documentary prerequisite.
+    await recordCompanyProfile(db,{
+      expected_revision:1,confirmed:true,
+      legal_name:'Synthetic Issuing Company Ltd',registration_number:'00000000',
+      incorporation_country:'GB',
+      registered_office:'11 New Synthetic Office Street, Test City EX1 2AB',
+      vat_status:'unknown',default_currency:'GBP',
+      source_reference:'Superseding issuer fixture (not independently verified)',
+      verification_notes:'Synthetic issuer revision 2 must stale the old approval evidence.'
+    },actor);
+    const stalePreflight=await readQuoteIssuePreflight(db,proposal.id,actor);
+    assert.equal(stalePreflight.steps.find(x=>
+      x.label==='Internal content decision').state,'blocked');
+    assert.equal(stalePreflight.can_issue,false);
+    assert.equal(stalePreflight.issue_authorised,false);
+    assert.equal((await readInternalReview(db,proposal.id,actor)).current.id,recorded.id);
     await assert.rejects(()=>recordInternalDecision(db,{
       ...base,expected_revision:2,decision:'needs_changes'
     },actor),/already recorded/);

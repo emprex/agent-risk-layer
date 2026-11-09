@@ -25,8 +25,10 @@ const termsSql='SELECT id,review_status,(valid_until>=CURRENT_DATE) AS valid_now
   +'FROM enkyron_crm_proposal_commercial_terms '
   +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3';
 const taxSql='SELECT id FROM enkyron_crm_proposal_tax_reviews '
-  +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 LIMIT 1';
-const internalSql='SELECT id,decision FROM enkyron_crm_proposal_internal_decisions '
+  +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 '
+  +'ORDER BY recorded_at DESC,id DESC LIMIT 1';
+const internalSql='SELECT id,decision,issuer_profile_id,buyer_review_id,terms_id,tax_review_id '
+  +'FROM enkyron_crm_proposal_internal_decisions '
   +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3';
 const linesSql='SELECT count(*)::int AS n,COALESCE(sum(line_total_minor),0)::text AS total '
   +'FROM enkyron_crm_proposal_lines WHERE workspace_key=$1 AND proposal_id=$2';
@@ -55,6 +57,16 @@ export async function readQuoteIssuePreflight(pool,proposalId,actor){
     const validBuyer=origin&&buyer?.company_id===p.buyer_company_id
       &&buyer?.review_status==='operator_documented_unverified';
     const priced=lines?.n>0&&BigInt(lines.total)===BigInt(p.amount_minor);
+    // An old content approval must not appear CURRENT if its exact issuer,
+    // buyer, terms or tax source has been superseded, expired or unlinked.
+    // The historical immutable approval remains in the audit log.
+    const currentApproval=internal?.decision==='internal_draft_approved'
+      &&Boolean(issuer?.id&&buyer?.id&&terms?.id&&tax?.id)
+      &&internal.issuer_profile_id===issuer.id
+      &&internal.buyer_review_id===buyer.id
+      &&internal.terms_id===terms.id
+      &&internal.tax_review_id===tax.id
+      &&validBuyer&&terms.valid_now===true;
     const steps=[
       record('Reviewed client association',origin,
         'Must be an effective company/ticket link or reviewed research link.'),
@@ -69,8 +81,8 @@ export async function readQuoteIssuePreflight(pool,proposalId,actor){
         'Recorded draft terms must still be within their validity date.'),
       record('International tax review',Boolean(tax),
         'Human research record only; no tax decision.'),
-      record('Internal content decision',internal?.decision==='internal_draft_approved',
-        'Content approval only; not approval to issue.')
+      record('Internal content decision',currentApproval,
+        'Approval must reference current issuer, buyer, valid terms and latest tax note; not approval to issue.')
     ];
     return {
       available:true,proposal_id:proposalId,proposal_revision:p.revision,
