@@ -1433,6 +1433,15 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_open.setEnabled(False)
         self.crm_invoice_open.clicked.connect(self.open_selected_invoice_draft)
         invoice_buttons.addWidget(self.crm_invoice_open)
+        self.crm_invoice_test_export = QPushButton("Generate TEST invoice PDF…")
+        self.crm_invoice_test_export.setObjectName("generateTestInvoicePdf")
+        self.crm_invoice_test_export.setEnabled(False)
+        self.crm_invoice_test_export.setToolTip(
+            "Generate an offline SAMPLE invoice from the selected synthetic "
+            "CRM draft. No financial entry, tax calculation, issue or email."
+        )
+        self.crm_invoice_test_export.clicked.connect(self.export_selected_invoice_test_pdf)
+        invoice_buttons.addWidget(self.crm_invoice_test_export)
         self.crm_invoice_issue_button = QPushButton("Issue documentation review…")
         self.crm_invoice_issue_button.setEnabled(False)
         self.crm_invoice_issue_button.clicked.connect(self.open_invoice_issue_review)
@@ -7204,6 +7213,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_loaded = False
         self.crm_invoice_items = []
         self.crm_invoice_open.setEnabled(False)
+        self.crm_invoice_test_export.setEnabled(False)
         self.crm_invoice_issue_button.setEnabled(False)
         self.crm_invoice_notice.setText("Loading unissued invoice drafts…")
         self.crm_invoice_table.blockSignals(True)
@@ -7254,6 +7264,38 @@ class EnkyronWindow(QMainWindow):
         available = 0 <= row < len(self.crm_invoice_items)
         self.crm_invoice_open.setEnabled(available)
         self.crm_invoice_issue_button.setEnabled(available)
+        synthetic = (
+            available and
+            "SYNTHETIC" in str(
+                self.crm_invoice_items[row].get("buyer_legal_name") or ""
+            ).upper()
+        )
+        self.crm_invoice_test_export.setEnabled(bool(synthetic))
+
+    def export_selected_invoice_test_pdf(self):
+        """Generate a sample PDF by reading the selected CRM invoice source."""
+        row = self.crm_invoice_table.currentRow()
+        if not 0 <= row < len(self.crm_invoice_items):
+            return
+        selected = self.crm_invoice_items[row]
+        draft_id = selected.get("id")
+        if "SYNTHETIC" not in str(selected.get("buyer_legal_name") or "").upper():
+            return
+        self.crm_invoice_test_export.setEnabled(False)
+
+        def received(data, error):
+            self.invoice_draft_selected()
+            draft = (data or {}).get("draft") or {}
+            if (error or not (data or {}).get("available")
+                    or draft.get("id") != draft_id):
+                QMessageBox.warning(
+                    self, "TEST invoice unavailable",
+                    error or "Could not verify selected CRM invoice source."
+                )
+                return
+            self.export_invoice_test_pdf(draft)
+
+        self.bridge.call("crm-invoice-draft", draft_id, callback=received)
 
     def open_selected_invoice_draft(self):
         row = self.crm_invoice_table.currentRow()
