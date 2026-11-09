@@ -1401,10 +1401,10 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_invoice_notice.setWordWrap(True)
         invoice_l.addWidget(self.crm_invoice_notice)
-        self.crm_invoice_table = QTableWidget(0, 6)
+        self.crm_invoice_table = QTableWidget(0, 7)
         self.crm_invoice_table.setHorizontalHeaderLabels([
             "Internal draft ID", "Buyer (unverified)", "Service",
-            "Proposed fee", "Draft status", "Recorded"
+            "Proposed fee", "Draft status", "TEST cycle", "Recorded"
         ])
         self.crm_invoice_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
@@ -1417,7 +1417,7 @@ class EnkyronWindow(QMainWindow):
         )
         invoice_header = self.crm_invoice_table.horizontalHeader()
         invoice_header.setMinimumSectionSize(100)
-        for column in (0, 1, 3, 4, 5):
+        for column in (0, 1, 3, 4, 5, 6):
             invoice_header.setSectionResizeMode(
                 column, QHeaderView.ResizeMode.ResizeToContents
             )
@@ -7234,6 +7234,14 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             self.crm_invoice_items = data.get("items") or []
+            try:
+                test_states = TestInvoiceLedger().statuses([
+                    item.get("id") for item in self.crm_invoice_items
+                ])
+                test_ledger_error = ""
+            except (OSError, ValueError, RuntimeError) as exc:
+                test_states = {}
+                test_ledger_error = str(exc)
             self.crm_invoice_table.blockSignals(True)
             self.crm_invoice_table.setRowCount(len(self.crm_invoice_items))
             for row, item in enumerate(self.crm_invoice_items):
@@ -7245,6 +7253,7 @@ class EnkyronWindow(QMainWindow):
                     item.get("service_description") or "",
                     "{} {:,}.{:02d}".format(item.get("currency") or "", major, minor),
                     str(item.get("status") or "unknown").replace("_", " "),
+                    test_states.get(item.get("id"), "Not run").replace("_", " "),
                     display_date(item.get("recorded_at"))
                 ]
                 for col, value in enumerate(values):
@@ -7256,8 +7265,11 @@ class EnkyronWindow(QMainWindow):
             self.crm_invoice_notice.setText(
                 "{} unissued draft(s).{} To prepare one, open Proposals, "
                 "complete its internal review and billing worksheet, "
-                "then select Prepare invoice draft….".format(
-                    len(self.crm_invoice_items), extra
+                "then select Prepare invoice draft…. "
+                "{}".format(
+                    len(self.crm_invoice_items), extra,
+                    "TEST ledger unavailable: " + test_ledger_error
+                    if test_ledger_error else ""
                 )
             )
 
@@ -7413,7 +7425,6 @@ class EnkyronWindow(QMainWindow):
         footer = QHBoxLayout()
         create = QPushButton("Create simulated TEST invoice")
         create.setObjectName("createSimulatedInvoice")
-        create.setObjectName("primary")
         create.setEnabled(False)
         footer.addWidget(create)
         export = QPushButton("Export TEST invoice PDF…")
