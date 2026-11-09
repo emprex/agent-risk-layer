@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+const requireFile=(relative)=>readFileSync(new URL(relative,import.meta.url),'utf8');
 import {
  validateDirectCompanyOpportunityCreate, validateOriginCorrection
 } from '../desktop/enkyron-crm-opportunities.mjs';
@@ -46,4 +47,18 @@ test('outreach local repair checks effective link existence without selecting ab
    import.meta.url),'utf8');
  assert.match(script,/SELECT 1 FROM enkyron_crm_effective_ticket_links /);
  assert.doesNotMatch(script,/SELECT id FROM enkyron_crm_effective_ticket_links /);
+});
+
+test('false-ticket removal is restricted to two synthetic intakes and preserves commercial messages',()=>{
+ const fs=requireFile('../scripts/enkyron-remove-false-tickets-local.mjs');
+ assert.match(fs,/ARL-2026-000006/);
+ assert.match(fs,/ARL-2026-000007/);
+ assert.match(fs,/enkyron-before-false-ticket-removal-/);
+ assert.match(fs,/pg_restore/);
+ assert.match(fs,/BEGIN/);
+ assert.match(fs,/ROLLBACK/);
+ assert.match(fs,/COMMIT/);
+ assert.match(fs,/DELETE FROM arl_workbench_tickets WHERE id=\$1/);
+ assert.doesNotMatch(fs,/DELETE FROM enkyron_crm_activities/);
+ assert.doesNotMatch(fs,/DELETE FROM enkyron_crm_opportunities/);
 });
