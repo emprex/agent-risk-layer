@@ -7,6 +7,7 @@ import {createProposalDraft,readProposalDraft,updateProposalDraft}
   from '../desktop/enkyron-crm-proposals.mjs';
 import {replaceProposalLines,readProposalLines}
   from '../desktop/enkyron-crm-proposal-lines.mjs';
+import {readSowSources} from '../desktop/enkyron-crm-sow-sources.mjs';
 import {createServiceCatalog,updateServiceCatalog} from '../desktop/enkyron-crm-service-catalog.mjs';
 const uri=process.env.ARL_CI_POSTGRES_URL||'';
 function onlyCi(){
@@ -165,6 +166,21 @@ test('PostgreSQL quote lines: precise totals, immutable versions, workspace isol
     const unchanged=await readProposalLines(db,proposal.id,actor);
     assert.equal(unchanged.lines[2].unit_price_minor,35000);
     assert.equal(unchanged.amount_minor,285200);
+    const sow=await readSowSources(db,proposal.id,actor);
+    assert.equal(sow.proposal_revision,4);
+    assert.equal(sow.lines.length,3);
+    assert.equal(sow.lines[0].provenance,null);
+    assert.equal(sow.lines[2].provenance.service_code,serviceCode);
+    assert.equal(sow.lines[2].provenance.source_catalog_revision,1);
+    assert.equal(sow.lines[2].provenance.inclusions,service.inclusions);
+    assert.equal(sow.lines[2].provenance.exclusions,service.exclusions);
+    assert.equal(sow.lines[2].provenance.deliverables,service.deliverables);
+    assert.equal(sow.lines[2].provenance.prerequisites,service.prerequisites);
+    assert.equal(sow.terms,null);
+    assert.ok(sow.blockers.some(x=>x.includes('No commercial terms')));
+    assert.equal(sow.can_approve_sow,false);
+    assert.equal(sow.testing_authorised,false);
+    await assert.rejects(()=>readSowSources(db,proposal.id,'ci-other'),/not found/);
     await assert.rejects(()=>replaceProposalLines(db,{
       proposal_id:proposal.id,expected_revision:4,
       lines:[...updatedLines,{...catalogLine,quantity:2}]

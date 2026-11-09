@@ -1269,6 +1269,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_export_draft_pdf.setEnabled(False)
         self.crm_export_draft_pdf.clicked.connect(self.export_selected_draft_pdf)
         proposal_edit_actions.addWidget(self.crm_export_draft_pdf)
+        self.crm_sow_button = QPushButton("SOW source review…")
+        self.crm_sow_button.setEnabled(False)
+        self.crm_sow_button.clicked.connect(self.open_sow_scope_review)
+        proposal_edit_actions.addWidget(self.crm_sow_button)
         proposal_edit_actions.addStretch()
         proposal_footer.addLayout(proposal_edit_actions)
 
@@ -4382,6 +4386,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_open_proposal.setEnabled(available)
         self.crm_edit_lines.setEnabled(available)
         self.crm_export_draft_pdf.setEnabled(available)
+        self.crm_sow_button.setEnabled(available)
         self.crm_tax_review_button.setEnabled(available)
         self.crm_buyer_button.setEnabled(available)
         self.crm_terms_button.setEnabled(available)
@@ -4434,6 +4439,126 @@ class EnkyronWindow(QMainWindow):
             self.show_proposal_dialog(data["proposal"])
 
         self.bridge.call("crm-proposal", proposal_id, callback=received)
+
+    def open_sow_scope_review(self):
+        row = self.crm_proposal_table.currentRow()
+        if not 0 <= row < len(self.crm_proposal_items):
+            return
+        previous = getattr(self, "crm_sow_dialog", None)
+        if previous and previous.isVisible():
+            previous.raise_()
+            return
+        selected = self.crm_proposal_items[row]
+        proposal_id, revision = selected["id"], selected["revision"]
+        self.crm_sow_button.setEnabled(False)
+
+        def received(data, error):
+            self.proposal_selected()
+            if error or not data or not data.get("available"):
+                QMessageBox.warning(
+                    self, "SOW source review unavailable",
+                    error or (data or {}).get("notice", "Could not read SOW sources.")
+                )
+                return
+            if data.get("proposal_id") != proposal_id or data.get("proposal_revision") != revision:
+                QMessageBox.warning(
+                    self, "Proposal changed", "Refresh the proposal before reviewing its SOW sources."
+                )
+                self.load_proposals()
+                return
+            self.show_sow_scope_review(data)
+
+        self.bridge.call("crm-sow-sources", proposal_id, callback=received)
+
+    def show_sow_scope_review(self, data):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Statement of Work source review — NOT APPROVED")
+        dialog.resize(870, 640)
+        dialog.setMinimumSize(620, 420)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("SOW SOURCE PREVIEW · READ ONLY"))
+        note = QLabel(
+            "Operator-entered planning sources only. This does not validate a "
+            "Statement of Work, identify an authorised signatory, grant permission "
+            "for security testing, or create a contract."
+        )
+        note.setWordWrap(True)
+        note.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(note)
+        text = [
+            "SOW SOURCE PREVIEW — NOT APPROVED",
+            "Proposal: {} · Revision {}".format(
+                data.get("title") or "", data.get("proposal_revision") or ""
+            ),
+            "Reference: {}".format(data.get("proposal_id") or ""),
+            "Buyer reference (NOT legally verified): {}".format(data.get("buyer_label") or ""),
+            "Buyer origin: {}".format(data.get("buyer_origin") or "Unknown"),
+            "Proposed price: {} {}".format(
+                data.get("currency") or "", self._quote_format_minor(
+                    int(data.get("amount_minor") or 0)
+                )
+            ),
+            "",
+            "OPERATOR-ENTERED PROPOSED SCOPE",
+            str(data.get("scope_text") or "Not documented"),
+            "",
+            "QUOTED SERVICES · IMMUTABLE CATALOG SOURCES WHEN AVAILABLE",
+        ]
+        for line in data.get("lines") or []:
+            text.extend([
+                "",
+                "{}. {} · Qty {}".format(
+                    line.get("position"), line.get("description"), line.get("quantity")
+                )
+            ])
+            source = line.get("provenance")
+            if source:
+                text.extend([
+                    "Catalog source: {} · R{}".format(
+                        source.get("service_code"), source.get("source_catalog_revision")
+                    ),
+                    "Inclusions: " + str(source.get("inclusions") or "Not documented"),
+                    "Exclusions: " + str(source.get("exclusions") or "Not documented"),
+                    "Deliverables: " + str(source.get("deliverables") or "Not documented"),
+                    "Prerequisites: " + str(source.get("prerequisites") or "Not documented"),
+                ])
+            else:
+                text.append(
+                    "Custom line: inclusions, exclusions, deliverables and prerequisites "
+                    "are Not documented as a linked service snapshot."
+                )
+        if not data.get("lines"):
+            text.append("Not documented — proposal contains no detailed quote lines.")
+        text.extend(["", "COMMERCIAL TERMS · OPERATOR DRAFT ONLY"])
+        terms = data.get("terms")
+        if terms:
+            for name, key in [
+                ("Valid until", "valid_until"), ("Delivery", "delivery_terms"),
+                ("Assumptions", "assumptions"), ("Exclusions", "exclusions"),
+                ("Payment", "payment_terms"), ("Source", "source_reference")
+            ]:
+                text.append(name + ": " + str(terms.get(key) or "Not documented"))
+            if not terms.get("still_valid"):
+                text.append("EXPIRED: Commercial validity date has passed.")
+        else:
+            text.append("Not documented for this proposal revision.")
+        text.extend(["", "MISSING OR UNVERIFIED SOW REQUIREMENTS"])
+        text.extend("- " + str(x) for x in (data.get("blockers") or []))
+        text.extend([
+            "",
+            "NOT AUTHORISED: no SOW approval, no signature, no client acceptance, "
+            "no contract, no test permission."
+        ])
+        view = QPlainTextEdit()
+        view.setReadOnly(True)
+        view.setPlainText("\n".join(text))
+        layout.addWidget(view, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        layout.addWidget(close)
+        self.crm_sow_dialog = dialog
+        dialog.finished.connect(lambda _result: setattr(self, "crm_sow_dialog", None))
+        dialog.show()
 
     def select_proposal_pdf_path(self, proposal_id, revision):
         suggestion = "ENKYRON_DRAFT_{}_R{}.pdf".format(
