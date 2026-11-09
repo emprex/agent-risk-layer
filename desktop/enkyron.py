@@ -9970,7 +9970,7 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("ticket-action-save", payload=payload, callback=recorded)
 
         save.clicked.connect(submit)
-        dialog.exec()
+        dialog.open()
 
     def open_ticket_triage(self):
         ticket_id = self.current_id
