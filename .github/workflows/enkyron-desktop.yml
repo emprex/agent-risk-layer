@@ -880,15 +880,39 @@ jobs:
               "LinkedIn and email are not connected" in label.text()
               for label in activity_page.findChildren(QLabel)
           )
-          # UX-04: in-place activity entry, using ONLY the previously
-          # reviewed opportunity ID in this dossier. No service tickets,
-          # outbox or new backend operations.
+          # UX-05: readable complete company/contact and next-action cards,
+          # without a cramped grid or any inferred marketing permission.
+          contact_labels = [
+              child.text() for child in
+              window.crm_dossier_tabs.widget(0).findChildren(QLabel)
+              if child.objectName() == "crmDossierContactDetail"
+          ]
+          assert contact_labels == [
+              "Synthetic Contact", "Role: Engineering",
+              "Email: contact@example.invalid",
+              "Marketing permission: unknown"
+          ]
+          opportunity_labels = [
+              child.text() for child in
+              window.crm_dossier_tabs.widget(3).findChildren(QLabel)
+              if child.objectName() == "crmDossierOpportunityDetail"
+          ]
+          assert "Next action: Await a reply about a small security pilot" in opportunity_labels
+          assert any(value.startswith("Due: ") for value in opportunity_labels)
+          assert window.crm_dossier_tabs.widget(0).findChildren(QTableWidget) == []
+          # UX-05: the full-height note timeline and scrollable editor
+          # share ONE viewport, never crushing the notes below the form.
           assert window.crm_dossier_activity_record.isEnabled()
-          assert window.crm_dossier_activity_editor.isHidden()
+          assert window.crm_dossier_activity_stack.currentWidget() is (
+              window.crm_dossier_activity_timeline
+          )
           assert not window.crm_dossier_activity_save.isEnabled()
           window.crm_dossier_nav.setCurrentRow(5)
           window.crm_dossier_activity_record.click()
-          assert not window.crm_dossier_activity_editor.isHidden()
+          assert window.crm_dossier_activity_stack.currentWidget() is (
+              window.crm_dossier_activity_editor_scroll
+          )
+          assert window.crm_dossier_activity_record.text() == "Back to notes"
           assert window.crm_dossier_activity_opportunity.currentData() == (
               "66666666-7777-4888-9999-aaaaaaaaaaaa"
           )
@@ -900,6 +924,21 @@ jobs:
           )
           assert window.crm_dossier_activity_save.isEnabled()
           assert window.crm_dossier_activity_type.currentData() == "note"
+          # Returning to notes preserves the draft, and disables saving
+          # until the operator deliberately opens the editor again.
+          window.crm_dossier_activity_record.click()
+          assert window.crm_dossier_activity_stack.currentWidget() is (
+              window.crm_dossier_activity_timeline
+          )
+          assert not window.crm_dossier_activity_save.isEnabled()
+          assert window.crm_dossier_activity_detail.toPlainText().startswith(
+              "LinkedIn message recorded"
+          )
+          window.crm_dossier_activity_record.click()
+          assert window.crm_dossier_activity_stack.currentWidget() is (
+              window.crm_dossier_activity_editor_scroll
+          )
+          assert window.crm_dossier_activity_save.isEnabled()
           window.crm_dossier_activity_save.click()
           assert calls[-1][0] == "crm-record-activity"
           assert calls[-1][2] == {
