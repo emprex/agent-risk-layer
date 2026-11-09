@@ -122,6 +122,12 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p qt_enkyron_proposal_pdf_smoke.py
+      - name: Native historical internal approval UI smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_internal_review_smoke.py'
+
       - name: Python CSV formula-injection and no-clobber tests
         run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv.py' -v
 

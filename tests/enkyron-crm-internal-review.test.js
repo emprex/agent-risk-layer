@@ -16,21 +16,23 @@ test('internal review rejects malformed requests and no human confirmation',()=>
    assert.throws(()=>validateInternalDecision(bad),/CRM/);
  }
 });
-function mock({missing=[],revision=2,existing=false,hasProposal=true}={}){
+function mock({missing=[],revision=2,existing=false,hasProposal=true,
+ current=null,issuerId='issuer-1',taxId='tax-1',termsValid=true}={}){
  const queries=[];let released=false;
  const proposal={id,revision,title:'Synthetic internal draft',amount_minor:'50000',currency:'GBP'};
  const rows={
-  enkyron_operator_company_profiles:{id:'issuer-1',revision:1,legal_name:'Synthetic Ltd'},
+  enkyron_operator_company_profiles:{id:issuerId,revision:1,legal_name:'Synthetic Ltd'},
   enkyron_crm_proposal_buyer_reviews:{id:'buyer-1',company_id:'company-1'},
-  enkyron_crm_proposal_commercial_terms:{id:'terms-1',valid_until:'2099-01-01',still_valid:true},
-  enkyron_crm_proposal_tax_reviews:{id:'tax-1',buyer_type:'unknown',uk_vat_registration:'unknown'}
+  enkyron_crm_proposal_commercial_terms:{id:'terms-1',valid_until:'2099-01-01',still_valid:termsValid},
+  enkyron_crm_proposal_tax_reviews:{id:taxId,buyer_type:'unknown',uk_vat_registration:'unknown'}
  };
  const query=async(sql,params)=>{
   queries.push({sql,params});
   if(sql.startsWith('SELECT id,revision,title,amount_minor'))return {rows:hasProposal?[proposal]:[]};
   if(sql.startsWith('SELECT id FROM enkyron_crm_proposal_internal_decisions'))
     return {rows:existing?[{id:'previous'}]:[]};
-  if(sql.startsWith('SELECT id,proposal_revision,decision,review_note'))return {rows:[]};
+  if(sql.startsWith('SELECT id,proposal_revision,decision,review_note'))
+    return {rows:current?[current]:[]};
   for(const [table,row] of Object.entries(rows)){
    if(sql.includes('FROM '+table+' '))return {rows:missing.includes(table)?[]:[row]};
   }
@@ -73,4 +75,34 @@ test('needs_changes is recorded despite blockers; approval requires current evid
    await assert.rejects(()=>recordInternalDecision(x.db,base,'ci-operator'),/CRM/);
    assert.equal(x.queries.at(-1).sql,'ROLLBACK');
  }
+});
+
+test('immutable internal decision is identified as stale when documentary IDs change',async()=>{
+  const approved={id:'review-1',proposal_revision:2,
+    decision:'internal_draft_approved',review_note:'Historical synthetic review',
+    issuer_profile_id:'issuer-1',buyer_review_id:'buyer-1',
+    terms_id:'terms-1',tax_review_id:'tax-1',recorded_by:'ci-operator'};
+  const normal=mock({current:approved});
+  const a=await readInternalReview(normal.db,id,'ci-operator');
+  assert.equal(a.current_documentary_status,'recorded_references_match');
+  assert.equal(a.current.id,'review-1');
+  for(const changes of [
+    {issuerId:'issuer-2'},{taxId:'tax-2'},{termsValid:false},
+    {missing:['enkyron_crm_proposal_buyer_reviews']}
+  ]){
+    const m=mock({current:approved,...changes});
+    const r=await readInternalReview(m.db,id,'ci-operator');
+    assert.equal(r.current_documentary_status,'recorded_references_stale');
+    assert.equal(r.current.id,'review-1');
+    assert.equal(r.history[0].decision,'internal_draft_approved');
+    assert.equal(m.queries[0].sql,'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    assert.equal(m.queries.at(-1).sql,'COMMIT');
+    assert.ok(m.queries.every(x=>!/^(INSERT|UPDATE|DELETE)\\b/.test(x.sql)));
+  }
+  const pending=await readInternalReview(mock().db,id,'ci-operator');
+  assert.equal(pending.current_documentary_status,'not_recorded');
+  const needs=await readInternalReview(mock({current:{
+    ...approved,decision:'needs_changes'
+  }}).db,id,'ci-operator');
+  assert.equal(needs.current_documentary_status,'not_approved');
 });

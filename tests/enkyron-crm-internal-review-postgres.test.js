@@ -137,6 +137,7 @@ test('real PostgreSQL internal draft review: blocked, prerequisites, immutable, 
     assert.equal(readback.current.buyer_review_id,buyer.id);
     assert.equal(readback.current.terms_id,terms.id);
     assert.equal(readback.current.tax_review_id,tax.id);
+    assert.equal(readback.current_documentary_status,'recorded_references_match');
     const currentPreflight=await readQuoteIssuePreflight(db,proposal.id,actor);
     assert.equal(currentPreflight.steps.find(x=>
       x.label==='Internal content decision').state,'documented');
@@ -156,7 +157,9 @@ test('real PostgreSQL internal draft review: blocked, prerequisites, immutable, 
       x.label==='Internal content decision').state,'blocked');
     assert.equal(stalePreflight.can_issue,false);
     assert.equal(stalePreflight.issue_authorised,false);
-    assert.equal((await readInternalReview(db,proposal.id,actor)).current.id,recorded.id);
+    const staleInternal=await readInternalReview(db,proposal.id,actor);
+    assert.equal(staleInternal.current.id,recorded.id);
+    assert.equal(staleInternal.current_documentary_status,'recorded_references_stale');
     await assert.rejects(()=>recordInternalDecision(db,{
       ...base,expected_revision:2,decision:'needs_changes'
     },actor),/already recorded/);

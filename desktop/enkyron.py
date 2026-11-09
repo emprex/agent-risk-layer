@@ -5812,6 +5812,17 @@ class EnkyronWindow(QMainWindow):
         form.addRow("Decision rationale *", self.crm_internal_notes)
         body_l.addLayout(form)
         current = data.get("current")
+        if data.get("current_documentary_status") == "recorded_references_stale":
+            stale = QLabel(
+                "RECORDED APPROVAL IS STALE: one or more supporting documentary "
+                "records have changed or expired since the internal decision. "
+                "The historical decision is preserved but cannot be treated as "
+                "current approval. A new proposal revision and human review "
+                "would be required; quote issuance remains blocked."
+            )
+            stale.setWordWrap(True)
+            stale.setTextFormat(Qt.TextFormat.PlainText)
+            body_l.addWidget(stale)
         if current:
             index = self.crm_internal_decision.findData(current.get("decision"))
             if index < 0:

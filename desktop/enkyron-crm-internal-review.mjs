@@ -72,6 +72,19 @@ async function readiness(db,key,proposal){
     legal_notice:'Buyer and issuer details are operator-entered, NOT independently verified.'
   };
 }
+// A recorded approval is historical: compare its immutable source IDs to
+// today's documentary records without upgrading it to issue authority.
+function approvalSourceStatus(current,support){
+  if(!current)return 'not_recorded';
+  if(current.decision!=='internal_draft_approved')return 'not_approved';
+  const refs=support.evidence;
+  const same=support.can_approve_internal&&
+    current.issuer_profile_id===refs.issuer_profile_id&&
+    current.buyer_review_id===refs.buyer_review_id&&
+    current.terms_id===refs.terms_id&&
+    current.tax_review_id===refs.tax_review_id;
+  return same?'recorded_references_match':'recorded_references_stale';
+}
 const PROPOSAL='SELECT id,revision,title,amount_minor,currency '
   +'FROM enkyron_crm_proposal_drafts WHERE workspace_key=$1 AND id=$2';
 const DECISIONS='SELECT id,proposal_revision,decision,review_note,recorded_by,'
@@ -89,11 +102,13 @@ export async function readInternalReview(pool,id,actor){
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
     const support=await readiness(client,scope.key,proposal);
     const decisions=(await client.query(DECISIONS,[scope.key,proposal_id])).rows;
+    const current=decisions.find(x=>x.proposal_revision===proposal.revision)??null;
+    const current_documentary_status=approvalSourceStatus(current,support);
     await client.query('COMMIT');
     return {available:true,proposal_id,proposal_revision:proposal.revision,
       proposal_title:proposal.title,amount_minor:proposal.amount_minor,
       currency:proposal.currency,...support,
-      current:decisions.find(x=>x.proposal_revision===proposal.revision)??null,
+      current,current_documentary_status,
       history:decisions.slice(0,20).map(x=>({
         proposal_revision:x.proposal_revision,decision:x.decision,
         recorded_by:x.recorded_by,recorded_at:x.recorded_at
