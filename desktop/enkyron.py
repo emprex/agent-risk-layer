@@ -5185,7 +5185,7 @@ class EnkyronWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         body = QWidget()
         body_l = QVBoxLayout(body)
-        direct_company = data.get("origin_kind") == "reviewed_company_ticket"
+        direct_company = data.get("origin_kind") in ("reviewed_company_ticket", "crm_company_direct")
         candidate = data.get("research_candidate") or "Unknown CRM source"
         candidate_label = QLabel(
             ("Company at opportunity creation: " if direct_company
