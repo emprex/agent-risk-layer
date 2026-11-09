@@ -90,3 +90,11 @@ roadmap at E07-03 by inspecting the **existing** quote revisions,
 pre-issuance checks, approval history and unresolved security/identity
 dependencies. Do not duplicate the previous quote-review modules or add
 another control merely because the technical branch is still draft.
+
+## Operator visual readback — 2026-11-09 10:40 Europe/London
+
+**Evidence supplied:** operator screenshot of native ENKYRON `CRM → Proposals → Service catalog…` with the synthetic record `ARL-E0702-TEST` selected. Table shows `Pricing: Fixed`, `Base fee: Not set`, and `Status: Draft`. The service-version panel lists R1 through R5; the latest human note confirms synthetic quote integration testing and return to draft. The misleading prior `Custom quote required` text is absent from the presented table.
+
+**Result:** targeted visual-label correction **DONE-LOCAL** (bounded operator screenshot acceptance). The table uses the compact `Not set` label; the longer `Base fee not set (draft)` string is not asserted as observed. Screenshot is visual evidence only; it does not independently prove a fresh SQL read or additional source-line persistence. The earlier PostgreSQL readback and existing CI remain the separate support for those claims. No database write, new service revision, migration, quote issuance or merge was required for this confirmation.
+
+**Remaining:** E07-02 continues to lack approved real service content and prices. E07-03 formal issue/acceptance remains blocked; continue by inspecting existing quotation revision, evidence-review, identity and tax gates rather than building duplicate workflows.
