@@ -7807,10 +7807,25 @@ class EnkyronWindow(QMainWindow):
                 self.crm_issued_detail_dialog.isVisible()):
             self.crm_issued_detail_dialog.reject()
         dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · Invoice " + str(invoice["invoice_number"]))
+        sample = invoice.get("_synthetic_record")
+        dialog.setWindowTitle(
+            "ENKYRON · " + ("SAMPLE " if sample else "") +
+            "Invoice " + str(invoice["invoice_number"])
+        )
         dialog.resize(700, 560)
         layout = QVBoxLayout(dialog)
-        layout.addWidget(section_title("INVOICE " + str(invoice["invoice_number"])))
+        layout.addWidget(section_title(
+            ("SAMPLE · NOT PAYABLE · " if sample else "INVOICE ") +
+            str(invoice["invoice_number"])
+        ))
+        if sample:
+            notice = QLabel(
+                "SYNTHETIC CUSTOMER. No legal invoice, tax determination, "
+                "email, accounts posting or financial collection. "
+                "This is a sample of the normal customer journey."
+            )
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
         lines = invoice.get("line_items") or []
         body = [
             "Customer: " + str(invoice.get("buyer_legal_name") or ""),
@@ -7834,10 +7849,10 @@ class EnkyronWindow(QMainWindow):
                 invoice.get("vat_amount_minor"), invoice.get("currency")),
             "Total: " + self._billing_money(
                 invoice.get("total_minor"), invoice.get("currency")),
-            "Paid: " + self._billing_money(
-                invoice.get("paid_minor"), invoice.get("currency")),
-            "Outstanding: " + self._billing_money(
-                invoice.get("balance_minor"), invoice.get("currency")),
+            ("Simulated paid: " if sample else "Paid: ") +
+                self._billing_money(invoice.get("paid_minor"), invoice.get("currency")),
+            ("Simulated balance: " if sample else "Outstanding: ") +
+                self._billing_money(invoice.get("balance_minor"), invoice.get("currency")),
             "Status: " + str(invoice.get("payment_status") or ""),
         ])
         details = QPlainTextEdit()
@@ -7845,18 +7860,38 @@ class EnkyronWindow(QMainWindow):
         details.setPlainText("\n".join(body))
         layout.addWidget(details, 1)
         actions = QHBoxLayout()
-        export = QPushButton("Export invoice PDF…")
+        export = QPushButton(
+            "Save SAMPLE PDF…" if sample else "Export invoice PDF…"
+        )
         export.setObjectName("exportIssuedInvoicePdf")
         export.clicked.connect(
             lambda: self.export_issued_invoice_from_crm(invoice)
         )
         actions.addWidget(export)
-        payment = QPushButton("Record payment…")
-        payment.setObjectName("recordInvoicePayment")
-        payment.setEnabled(int(invoice.get("balance_minor") or 0) > 0)
-        payment.clicked.connect(
-            lambda: self.open_invoice_payment(invoice)
+        if sample:
+            sent = QPushButton("Simulate send")
+            sent.setObjectName("sampleInvoiceSend")
+            sent.setEnabled(sample["status"] == "test_issued")
+            sent.clicked.connect(
+                lambda: self.advance_synthetic_invoice(sample, "test_sent")
+            )
+            actions.addWidget(sent)
+        payment = QPushButton(
+            "Simulate payment" if sample else "Record payment…"
         )
+        payment.setObjectName("recordInvoicePayment")
+        payment.setEnabled(
+            sample["status"] == "test_sent" if sample
+            else int(invoice.get("balance_minor") or 0) > 0
+        )
+        if sample:
+            payment.clicked.connect(
+                lambda: self.advance_synthetic_invoice(sample, "test_paid")
+            )
+        else:
+            payment.clicked.connect(
+                lambda: self.open_invoice_payment(invoice)
+            )
         actions.addWidget(payment)
         actions.addStretch()
         close = QPushButton("Close")
@@ -7893,7 +7928,12 @@ class EnkyronWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 return
         try:
-            pages = export_issued_invoice_pdf(target, invoice)
+            if invoice.get("_synthetic_record"):
+                pages = export_lifecycle_test_pdf(
+                    target, invoice["_synthetic_record"]
+                )
+            else:
+                pages = export_issued_invoice_pdf(target, invoice)
         except (OSError, ValueError, RuntimeError) as exc:
             QMessageBox.warning(self, "PDF not saved", str(exc))
             return
