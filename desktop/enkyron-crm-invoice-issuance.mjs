@@ -162,7 +162,11 @@ async function inputSources(client,key,draftId,{lock=false}={}){
   const draft=(await client.query(DRAFT+(lock?' FOR UPDATE':''),[key,draftId])).rows[0]??null;
   if(!draft)throw new Error('ENKYRON invoice draft not found');
   const issuer=(await client.query(ISSUER,[key])).rows[0]??null;
-  const proposal=(await client.query(PROPOSAL,[key,draft.proposal_id])).rows[0]??null;
+  // Lock the source proposal while issuing so repricing or line replacements
+  // cannot race with the frozen invoicing snapshot.
+  const proposal=(await client.query(
+    PROPOSAL+(lock?' FOR SHARE':''),[key,draft.proposal_id]
+  )).rows[0]??null;
   const lines=(await client.query(LINES,[key,draft.proposal_id])).rows;
   const problems=blockers(draft,issuer,proposal);
   if(!problems.length){
