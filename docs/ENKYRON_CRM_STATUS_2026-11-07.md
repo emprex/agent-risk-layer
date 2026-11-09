@@ -665,3 +665,18 @@ fully closed by these narrowly verified corrections.
 [PR #522](https://github.com/emprex/agent-risk-layer/pull/522),
 [PR #523](https://github.com/emprex/agent-risk-layer/pull/523),
 [PR #524](https://github.com/emprex/agent-risk-layer/pull/524).
+
+
+## E03-04A/B — Internal ticket action checklist (2026-11-09)
+
+**Source of truth:** `docs/ENKYRON_PSA_ROADMAP.md` Bloc E03-04 and this ledger. The original E07-05 synthetic contractual path is deliberately `CLOSED_AS_BLOCKED` pending genuine external verification; do not repeat synthetic signatures, contracts or assessments. The CRM outreach and false-ticket corrections documented above remain authoritative.
+
+**Limited software increment:** additive migration `102_enkyron_ticket_action_versions.sql`, immutable per-action revision journal attached to existing `arl_workbench_tickets`. The record stores an operator-entered title, optional details/deadline, a manual state `todo / blocked / done`, reason, actor and timestamp. Updating an item appends a revision and uses optimistic `expected_revision`; closed or archived tickets are read-only. The transaction locks the ticket row before checking the action revision; an obsolete revision is rejected without an INSERT. Existing tickets, work notes, assignments, contracts, SOWs, invoice drafts and assessments are not reclassified or modified by the schema installation.
+
+The bridge commands `ticket-actions` (read-only) and `ticket-action-save` (explicit confirmed mutation) are local only. The existing native `Tickets → Work Notes` tab shows the bounded checklist and a single `Plan / update ticket action…` editor. The editor is disabled if migration 102 is absent or the ticket is closed/archived. This does not implement genuine L1–L5 roles, shared multi-user task assignment, workflow approvals, customer messaging, SLA, calendar, attachments or automated execution.
+
+**Safety boundary:** an internal action marked `done` is NOT a signed agreement, customer consent, verified evidence, security conclusion or permission to test. No new ticket, project, mail, assessment, SOW, invoice or charge is created. No EIRYON/LLM authority is involved.
+
+**Validation planned:** syntax and Node tests, disposable PostgreSQL integration (version history, reject stale, immutable trigger, closed/archive rejection, no assessment linking) and native Qt smoke on current HEAD. The database `arl_local` has NOT been migrated to 102 in this increment. For eventual local acceptance, run the local schema script with `--check`, then separately authorize `--apply` (verified owner-only backup first), then a strictly synthetic action save/readback/revision. No automatic migration on desktop startup.
+
+**Status:** E03-04A/B `IN-PROGRESS`; no `DONE-CI` before exact-head CI; no `DONE-LOCAL` until Debian confirmation. E03-04 parent remains OPEN, since complete subtasks, dependency management, multi-user assignment and due-date workflow are not implemented. PR #520 remains Draft/unmerged.
