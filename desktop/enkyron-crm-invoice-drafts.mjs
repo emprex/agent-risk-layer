@@ -72,7 +72,7 @@ const CHECKLIST=`SELECT
         EXISTS(SELECT 1 FROM enkyron_crm_prospect_links l
           WHERE l.workspace_key=d.workspace_key AND l.prospect_id=o.prospect_id)
         OR (o.company_id IS NOT NULL AND (o.source_ticket_id IS NULL OR
-          AND EXISTS(SELECT 1 FROM enkyron_crm_effective_ticket_links e
+          EXISTS(SELECT 1 FROM enkyron_crm_effective_ticket_links e
             WHERE e.workspace_key=d.workspace_key
               AND e.company_id=o.company_id
               AND e.ticket_id=o.source_ticket_id)))
