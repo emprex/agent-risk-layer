@@ -818,6 +818,20 @@ jobs:
           }, None)
           assert "Synthetic Company" in window.crm_dossier_summary.text()
           assert "Relationship: prospect" in window.crm_dossier_summary.text()
+          # UX-02: task summary is derived only from the stored dossier,
+          # and advanced sections remain retrievable without changing IDs.
+          assert window.crm_dossier_heading.text() == "Synthetic Company"
+          assert "1 contact(s)" in window.crm_dossier_glance.text()
+          assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
+              "No next action recorded" in window.crm_dossier_next_action.text()
+          )
+          assert not window.crm_dossier_show_all.isChecked()
+          assert window.crm_dossier_nav.isRowHidden(10)
+          assert not window.crm_dossier_nav.isRowHidden(4)
+          window.crm_dossier_show_all.click()
+          assert not window.crm_dossier_nav.isRowHidden(10)
+          window.crm_dossier_show_all.click()
+          assert window.crm_dossier_nav.isRowHidden(10)
           assert window.crm_dossier_tabs.count() == 11
           assert window.crm_dossier_nav.count() == 11
           assert not window.crm_dossier_tabs.tabBar().isVisible()
