@@ -5,6 +5,7 @@ payment, send or tax decision is created by this module.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
@@ -125,7 +126,7 @@ def _source(snapshot: dict, lines: list) -> tuple[dict, str]:
         })
         total += ext
     if total != fee:
-        raise ValueError("Prized proposal lines do not match the frozen invoice draft total")
+        raise ValueError("Priced proposal lines do not match the frozen invoice draft total")
     frozen = {
         "source_draft_id": snapshot["id"],
         "source_proposal_id": snapshot["proposal_id"],
@@ -145,19 +146,24 @@ class TestInvoiceLedger:
     def __init__(self, path: Path | str | None = None):
         self.path = Path(path) if path is not None else default_test_ledger_path()
 
+    @contextmanager
     def _connect(self):
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.path.is_symlink():
             raise ValueError("Refusing symlink for TEST invoice ledger")
         con = sqlite3.connect(str(self.path), timeout=5)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA foreign_keys=ON")
-        con.executescript(_SCHEMA)
         try:
-            os.chmod(self.path, 0o600)
-        except OSError:
-            pass
-        return con
+            con.row_factory = sqlite3.Row
+            con.execute("PRAGMA foreign_keys=ON")
+            con.executescript(_SCHEMA)
+            try:
+                os.chmod(self.path, 0o600)
+            except OSError:
+                pass
+            with con:
+                yield con
+        finally:
+            con.close()
 
     @staticmethod
     def _row(con, source_id):
