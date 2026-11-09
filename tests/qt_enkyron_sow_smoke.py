@@ -22,6 +22,18 @@ class SowPreviewSmoke(unittest.TestCase):
                 "lines":[{"position":1,"description":"Synthetic manual review",
                     "quantity":1,"line_total_minor":75000,"provenance":None}],
                 "terms":None,
+                "current_sow":{"sow_revision":1,
+                    "status":"operator_draft_unapproved",
+                    "content_sha256":"a"*64,
+                    "acceptance_criteria":"Written report with boundaries and risks",
+                    "target_inventory":"No authorised real test targets"},
+                "contract_checks":[
+                    {"code":"dpa","label":"Data processing agreement",
+                     "status":"applicability_not_assessed",
+                     "note":"Assess data roles before making any DPA decision."},
+                    {"code":"right_to_test","label":"Explicit written right to security-test",
+                     "status":"not_authorised",
+                     "note":"A separate signed and bounded authorisation is required."}],
                 "blockers":["Client signature and explicit permission for any security testing are NOT established"],
                 "can_approve_sow":False,"can_sign":False,"testing_authorised":False
             }
@@ -36,7 +48,10 @@ class SowPreviewSmoke(unittest.TestCase):
             self.assertIn("Synthetic manual review",rendered)
             self.assertIn("NOT AUTHORISED",rendered)
             self.assertIn("Client signature",rendered)
-            self.assertIn("Not documented",rendered)
+            self.assertIn("Current SOW R1",rendered)
+            self.assertIn("Data processing agreement",rendered)
+            self.assertIn("NOT AUTHORISED",rendered)
+            self.assertNotIn("SOW acceptance criteria and technical targets are not separately documented",rendered)
             dialog.reject()
         finally:
             if window is not None: window.close()

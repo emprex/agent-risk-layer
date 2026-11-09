@@ -49,6 +49,34 @@ const TERMS='SELECT id,valid_until::text AS valid_until,'
  +'exclusions,assumptions,source_reference,review_status '
  +'FROM enkyron_crm_proposal_commercial_terms '
  +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 LIMIT 1';
+const CURRENT_SOW='SELECT id,sow_revision,status,content_sha256,'
+ +'acceptance_criteria,target_inventory '
+ +'FROM enkyron_crm_sow_draft_versions '
+ +'WHERE workspace_key=$1 AND proposal_id=$2 AND proposal_revision=$3 '
+ +'ORDER BY sow_revision DESC LIMIT 1';
+// E07-05A: this module holds no authenticated contract/signature evidence.
+// These statuses are research/action prompts, never assertions that a legal
+// agreement is absent outside ENKYRON, and never authorization to test.
+function contractChecklist(hasSow){
+ return [
+   {code:'nda',label:'NDA / confidentiality',
+    status:'applicability_not_assessed',
+    note:'Whether a standalone NDA is required must be reviewed by a human; no signed NDA is evidenced here.'},
+   {code:'agreement',label:'Master service agreement / engagement contract',
+    status:'not_evidenced_in_workflow',
+    note:'No independently checked signed engagement or authorised client signatory is evidenced in this workflow.'},
+   {code:'dpa',label:'Data processing agreement',
+    status:'applicability_not_assessed',
+    note:'Assess controller/processor roles and personal-data processing before deciding whether a DPA is needed.'},
+   {code:'exclusions',label:'Scope and exclusions',
+    status:hasSow?'draft_only_unapproved':'sow_not_documented',
+    note:hasSow?'Current proposal has an operator-authored SOW draft, not approved exclusions.'
+      :'No current-revision structured SOW draft; proposal text alone is not accepted scope.'},
+   {code:'right_to_test',label:'Explicit written right to security-test',
+    status:'not_authorised',
+    note:'Active tests require separate verified authority, bounded targets, permitted methods and agreed rules of engagement.'}
+ ];
+}
 
 export async function readSowSources(pool,id,actor){
   const key=workspace(actor),pid=proposalId(id),client=await pool.connect();
@@ -96,6 +124,11 @@ export async function readSowSources(pool,id,actor){
     if(lines.length&&lines.reduce((sum,l)=>sum+l.line_total_minor,0)!==fee)
       throw new Error('CRM SOW source total does not match the saved quote');
     const terms=(await client.query(TERMS,[key,pid,p.revision])).rows[0]??null;
+    const sow=(await client.query(CURRENT_SOW,[key,pid,p.revision])).rows[0]??null;
+    if(sow&&(sow.status!=='operator_draft_unapproved'||
+      !Number.isSafeInteger(sow.sow_revision)||sow.sow_revision<1||
+      !/^[a-f0-9]{64}$/.test(sow.content_sha256)))
+      throw new Error('CRM invalid current SOW draft documentary record');
     await client.query('COMMIT');
     const blockers=[];
     if(p.buyer_origin==='crm_company'&&p.effective_origin!==true)
@@ -109,14 +142,27 @@ export async function readSowSources(pool,id,actor){
     if(!terms)blockers.push('No commercial terms recorded for current proposal revision');
     else if(terms.still_valid!==true)
       blockers.push('Recorded commercial validity has expired');
-    blockers.push('SOW acceptance criteria and technical targets are not separately documented');
+    if(!sow)
+      blockers.push('SOW acceptance criteria and technical targets are not separately documented');
+    else
+      blockers.push('Current SOW draft is documented but NOT independently approved or accepted');
     blockers.push('Client signature and explicit permission for any security testing are NOT established');
     return {
       available:true,proposal_id:pid,proposal_revision:p.revision,
       title:p.title,scope_text:p.scope_text,currency:p.currency,amount_minor:fee,
       buyer_label:p.company_name_at_creation,buyer_origin:p.buyer_origin,
       effective_origin:p.effective_origin===true,
-      lines,terms:terms?{
+      lines,
+      current_sow:sow?{
+        id:sow.id,sow_revision:sow.sow_revision,
+        content_sha256:sow.content_sha256,status:sow.status,
+        acceptance_criteria:sow.acceptance_criteria,
+        target_inventory:sow.target_inventory
+      }:null,
+      contract_checks:contractChecklist(Boolean(sow)),
+      can_accept_engagement:false,
+      lines_sow_documented: Boolean(sow),
+      terms:terms?{
         id:terms.id,valid_until:terms.valid_until,still_valid:terms.still_valid===true,
         payment_terms:terms.payment_terms,delivery_terms:terms.delivery_terms,
         exclusions:terms.exclusions,assumptions:terms.assumptions,
@@ -124,7 +170,7 @@ export async function readSowSources(pool,id,actor){
         review_status:terms.review_status
       }:null,blockers,
       can_approve_sow:false,can_sign:false,testing_authorised:false,
-      notice:'READ ONLY SOW SOURCE PREVIEW. Not an approved scope, contract, quotation issue, signature or permission to test.'
+      notice:'READ ONLY SOW/CONTRACT PREVIEW. Signed agreement, NDA/DPA applicability and test authority require separate human verification.'
     };
   }catch(error){
     await client.query('ROLLBACK').catch(()=>{});

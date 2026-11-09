@@ -4542,7 +4542,26 @@ class EnkyronWindow(QMainWindow):
                 text.append("EXPIRED: Commercial validity date has passed.")
         else:
             text.append("Not documented for this proposal revision.")
-        text.extend(["", "MISSING OR UNVERIFIED SOW REQUIREMENTS"])
+        sow = data.get("current_sow")
+        text.extend(["", "RECORDED SOW DRAFT · UNAPPROVED"])
+        if sow:
+            text.extend([
+                "Current SOW R{} · {}".format(
+                    sow.get("sow_revision"), sow.get("status") or "unapproved"
+                ),
+                "Source SHA-256: " + str(sow.get("content_sha256") or ""),
+                "Acceptance criteria recorded in SOW; NOT client-approved.",
+                "Target inventory recorded in SOW; NOT permission to test.",
+            ])
+        else:
+            text.append("No current-revision structured SOW recorded.")
+        text.extend(["", "E07-05 · CONTRACT & AUTHORITY CHECK · NOT VERIFIED"])
+        for check in data.get("contract_checks") or []:
+            text.append("{}: {}. {}".format(
+                check.get("label") or "", (check.get("status") or "unknown").replace("_", " ").upper(),
+                check.get("note") or ""
+            ))
+        text.extend(["", "MISSING OR UNVERIFIED REQUIREMENTS"])
         text.extend("- " + str(x) for x in (data.get("blockers") or []))
         text.extend([
             "",

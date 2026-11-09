@@ -7,7 +7,7 @@ const fixture={id,revision:2,title:'Synthetic work statement',
   currency:'GBP',amount_minor:'75000',
   company_name_at_creation:'Research lead',buyer_origin:'research_candidate',
   effective_origin:false};
-function mock({proposal=fixture,lines=[],terms=null,missing=false}={}){
+function mock({proposal=fixture,lines=[],terms=null,sow=null,missing=false}={}){
  const queries=[];let released=false;
  const pool={connect:async()=>({
   query:async(sql,params)=>{
@@ -18,6 +18,7 @@ function mock({proposal=fixture,lines=[],terms=null,missing=false}={}){
    if(sql.startsWith('SELECT d.id'))return {rows:proposal?[proposal]:[]};
    if(sql.startsWith('SELECT l.position'))return {rows:lines};
    if(sql.startsWith('SELECT id,valid_until'))return {rows:terms?[terms]:[]};
+   if(sql.startsWith('SELECT id,sow_revision'))return {rows:sow?[sow]:[]};
    throw new Error('Unexpected query');
   },
   release:()=>{released=true;}
@@ -35,6 +36,12 @@ test('planning SOW is a scoped read-only snapshot with explicit missing authorit
  assert.equal(r.lines[0].provenance,null);
  assert.equal(r.amount_minor,75000);
  assert.equal(r.terms,null);
+ assert.equal(r.current_sow,null);
+ assert.equal(r.contract_checks.length,5);
+ assert.equal(r.contract_checks.find(x=>x.code==='nda').status,'applicability_not_assessed');
+ assert.equal(r.contract_checks.find(x=>x.code==='dpa').status,'applicability_not_assessed');
+ assert.equal(r.contract_checks.find(x=>x.code==='right_to_test').status,'not_authorised');
+ assert.equal(r.can_accept_engagement,false);
  assert.equal(r.can_approve_sow,false);
  assert.equal(r.can_sign,false);
  assert.equal(r.testing_authorised,false);
@@ -82,4 +89,35 @@ test('stale association, cross-workspace, inconsistent fee and absent schema fai
  assert.equal(m.queries.at(-1).sql,'ROLLBACK');
  await assert.rejects(()=>readSowSources(m.pool,'bad','ci-owner'),/invalid proposal/);
  await assert.rejects(()=>readSowSources(m.pool,id,'bad actor'),/invalid local operator/);
+});
+
+test('saved SOW R1 is documented on exact revision, without granting contract authority',async()=>{
+ const saved={id,sow_revision:1,status:'operator_draft_unapproved',
+   content_sha256:'a'.repeat(64),
+   acceptance_criteria:'Written scoping report lists evidence and known limitations.',
+   target_inventory:'Documentary inventory only; no host is authorised.'};
+ const m=mock({proposal:{...fixture,buyer_origin:'crm_company',effective_origin:true},
+   lines:[priced],sow:saved});
+ const r=await readSowSources(m.pool,id,'ci-owner');
+ assert.equal(r.current_sow.sow_revision,1);
+ assert.equal(r.current_sow.content_sha256,saved.content_sha256);
+ assert.equal(r.current_sow.acceptance_criteria,saved.acceptance_criteria);
+ assert.ok(!r.blockers.some(x=>x.includes('not separately documented')));
+ assert.match(r.blockers.join(' '),/NOT independently approved or accepted/);
+ assert.equal(r.contract_checks.find(x=>x.code==='exclusions').status,'draft_only_unapproved');
+ assert.equal(r.testing_authorised,false);
+ assert.equal(r.can_sign,false);
+ const select=m.queries.find(x=>x.sql.startsWith('SELECT id,sow_revision'));
+ assert.deepEqual(select.params,['local:ci-owner',id,2]);
+ assert.equal(m.queries.at(-1).sql,'COMMIT');
+ assert.ok(m.queries.every(x=>!/^(?:INSERT|UPDATE|DELETE)/.test(x.sql)));
+});
+test('future proposal revision cannot revive the SOW from another revision',async()=>{
+ const m=mock({proposal:{...fixture,revision:3},sow:null});
+ const r=await readSowSources(m.pool,id,'ci-owner');
+ assert.equal(r.current_sow,null);
+ assert.ok(r.blockers.some(x=>x.includes('not separately documented')));
+ assert.equal(r.contract_checks.find(x=>x.code==='exclusions').status,'sow_not_documented');
+ assert.deepEqual(m.queries.find(x=>x.sql.startsWith('SELECT id,sow_revision')).params,
+   ['local:ci-owner',id,3]);
 });
