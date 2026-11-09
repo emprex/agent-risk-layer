@@ -1860,15 +1860,17 @@ jobs:
           assert not window.crm_invoice_detail_dialog.findChild(
               QPushButton, "exportTestInvoicePdf"
           )
-          window.crm_invoice_detail_dialog.reject()
           assert window.crm_invoice_issue_button.isEnabled()
+          assert window.crm_invoice_finalize_button.isEnabled()
           assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
               0
           ) == QHeaderView.ResizeMode.ResizeToContents
           assert window.crm_invoice_table.horizontalHeader().sectionResizeMode(
               1
           ) == QHeaderView.ResizeMode.ResizeToContents
-          window.crm_invoice_issue_button.click()
+          window.crm_invoice_detail_dialog.findChild(
+              QPushButton, "viewInvoiceEvidence"
+          ).click()
           assert calls[-1][0] == "crm-invoice-issue-review"
           assert calls[-1][1] == draft_id
           calls[-1][3]({
