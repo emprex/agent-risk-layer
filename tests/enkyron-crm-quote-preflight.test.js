@@ -6,8 +6,10 @@ const company='22222222-3333-4444-8555-666666666666';
 function fixture({active=true,buyerCompany=company,fee='75000',lines='75000',
   valid=true,decision='internal_draft_approved',found=true,
   issuerId=id,buyerId=id,termsId=id,taxId=id,
-  approvedIssuerId=issuerId,approvedBuyerId=buyerId,
-  approvedTermsId=termsId,approvedTaxId=taxId}={}){
+  // Immutable approval references remain at the original IDs while
+  // the current source changes: this is the stale-source test condition.
+  approvedIssuerId=id,approvedBuyerId=id,
+  approvedTermsId=id,approvedTaxId=id}={}){
   const calls=[];
   const rows=sql=>{
     if(sql.includes('JOIN enkyron_crm_opportunities o'))return found?[{
