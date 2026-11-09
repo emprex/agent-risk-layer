@@ -761,6 +761,10 @@ jobs:
               window.crm_company_id = "33333333-3333-4333-8333-333333333333"
               window.open_company_dossier()
               inform.assert_called_once()
+          with patch("desktop.enkyron.QMessageBox.information") as inform:
+              window.open_company_messages()
+              inform.assert_called_once()
+          assert not window.crm_dossier_open_messages_after_load
           assert detached.isVisible()
           window.crm_company_id = company_id
           assert calls[-1][0] == "crm-company-dossier"
