@@ -3420,9 +3420,9 @@ class EnkyronWindow(QMainWindow):
             return
         if QMessageBox.question(
             self, "Confirm commercial opportunity",
-            "Create a CRM-only opportunity for {}?\\n\\n"
-            "No service ticket, customer acceptance, email, contract, "
-            "testing authorisation or assessment is created.".format(name),
+            ("Create a CRM-only opportunity for {}?\\n\\n"
+             "No service ticket, customer acceptance, email, contract, "
+             "testing authorisation or assessment is created.").format(name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         ) != QMessageBox.StandardButton.Yes:
