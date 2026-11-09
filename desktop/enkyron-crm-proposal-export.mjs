@@ -26,7 +26,12 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       +'d.amount_minor,d.revision,d.updated_at,'
       +'o.company_name_at_creation,'
       +"CASE WHEN o.company_id IS NOT NULL THEN 'crm_company' "
-      +"ELSE 'research_candidate' END AS buyer_origin "
+      +"ELSE 'research_candidate' END AS buyer_origin, "
+      +'CASE WHEN o.company_id IS NOT NULL THEN EXISTS ('
+      +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+      +'WHERE e.workspace_key=d.workspace_key AND e.company_id=o.company_id '
+      +'AND e.ticket_id=o.source_ticket_id) ELSE FALSE '
+      +'END AS current_company_association '
       +'FROM enkyron_crm_proposal_drafts d '
       +'JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
@@ -34,6 +39,14 @@ export async function readProposalForDraftPdf(pool,proposalId,actor){
       [owner,proposalId]
     )).rows[0];
     if(!proposal)throw new Error('CRM proposal not found in local workspace');
+    // A company-origin draft must not be exported with its historical CRM
+    // company label after the reviewed source ticket association is revoked.
+    // Research-only drafts retain their explicit unverified-buyer label.
+    if(proposal.buyer_origin==='crm_company'&&
+       proposal.current_company_association!==true)
+      throw new Error('CRM draft PDF export blocked: reviewed company-ticket association is no longer effective');
+    if(!['crm_company','research_candidate'].includes(proposal.buyer_origin))
+      throw new Error('CRM invalid proposal buyer source');
     if(!['GBP','EUR','USD'].includes(proposal.currency)||
       !Number.isSafeInteger(proposal.revision)||proposal.revision<1||
       typeof proposal.title!=='string'||!proposal.title.trim()||

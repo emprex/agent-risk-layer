@@ -10,6 +10,7 @@ import {recordCompanyProfile} from '../desktop/enkyron-company-profile.mjs';
 import {createCompany} from '../desktop/enkyron-crm.mjs';
 import {createDeskTicket} from '../desktop/enkyron-ticket-intake.mjs';
 import {linkTicketToCompany} from '../desktop/enkyron-crm-tickets.mjs';
+import {revokeTicketAssociation} from '../desktop/enkyron-crm-ticket-corrections.mjs';
 import {createCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 
 const uri=process.env.ARL_CI_POSTGRES_URL||'';
@@ -135,6 +136,22 @@ test('PDF snapshot identifies CRM-company buyer source without legal-identity pr
     assert.equal(result.proposal.amount_minor,75000);
     assert.deepEqual(result.proposal.lines,[]);
     assert.equal(result.proposal.issuer,null);
+    // Revoking the ticket/company source must also block a freshly exported
+    // DRAFT PDF; the historical proposal remains unchanged in PostgreSQL.
+    await revokeTicketAssociation(db,{
+      company_id:company.id,ticket_id:ticket.id,
+      expected_client_name:name,
+      review_note:'CI synthetic revocation: historical buyer label must not be exported as currently reviewed.',
+      confirmed:true
+    },actor);
+    await assert.rejects(()=>readProposalForDraftPdf(db,proposal.id,actor),
+      /company-ticket association is no longer effective/);
+    const unchanged=(await db.query(
+      'SELECT revision,currency,amount_minor FROM enkyron_crm_proposal_drafts '
+      +'WHERE workspace_key=$1 AND id=$2',['local:'+actor,proposal.id])).rows[0];
+    assert.equal(unchanged.revision,1);
+    assert.equal(unchanged.currency,'GBP');
+    assert.equal(Number(unchanged.amount_minor),75000);
     assert.equal((await db.query(
       'SELECT source_ticket_id FROM enkyron_crm_opportunities WHERE id=$1',
       [opportunity.id]

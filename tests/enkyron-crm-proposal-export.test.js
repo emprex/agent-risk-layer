@@ -9,7 +9,7 @@ function makePool({missing=false,foreign=false,badTotal=false,withLines=true,wit
     scope_text:'Scope grounded in manual requirements and explicit customer permission.',
     currency:'GBP',amount_minor:50000,revision:2,
     company_name_at_creation:'Unverified research candidate',
-    buyer_origin:'research_candidate'};
+    buyer_origin:'research_candidate',current_company_association:false};
   return {queries,get released(){return released;},pool:{
     connect:async()=>({query:async(sql,params)=>{
       queries.push({sql,params});
@@ -69,8 +69,10 @@ test('direct CRM company source is distinct from an unverified research candidat
     const query=client.query;
     client.query=async(sql,params)=>{
       const response=await query(sql,params);
-      if(sql.startsWith('SELECT d.id')&&response.rows[0])
+      if(sql.startsWith('SELECT d.id')&&response.rows[0]){
         response.rows[0].buyer_origin='crm_company';
+        response.rows[0].current_company_association=true;
+      }
       return response;
     };
     return client;
@@ -104,4 +106,29 @@ test('foreign proposal, missing migration and mismatched totals fail closed',asy
   assert.equal(c.released,1);
   await assert.rejects(()=>readProposalForDraftPdf(a.pool,id,'bad actor'),/operator/);
   await assert.rejects(()=>readProposalForDraftPdf(a.pool,'bad','ci-owner'),/identifier/);
+});
+
+test('direct company draft PDF rejects revoked association without writing',async()=>{
+  const m=makePool();
+  const original=m.pool.connect;
+  m.pool.connect=async()=>{
+    const client=await original();
+    const query=client.query;
+    client.query=async(sql,params)=>{
+      const response=await query(sql,params);
+      if(sql.startsWith('SELECT d.id')&&response.rows[0]){
+        response.rows[0].buyer_origin='crm_company';
+        response.rows[0].current_company_association=false;
+      }
+      return response;
+    };
+    return client;
+  };
+  await assert.rejects(()=>readProposalForDraftPdf(m.pool,id,'ci-owner'),
+    /company-ticket association is no longer effective/);
+  assert.match(m.queries[1].sql,/enkyron_crm_effective_ticket_links/);
+  assert.deepEqual(m.queries[1].params,['local:ci-owner',id]);
+  assert.equal(m.queries.at(-1).sql,'ROLLBACK');
+  assert.equal(m.released,1);
+  assert.ok(m.queries.every(q=>!/^(?:INSERT|UPDATE|DELETE)/.test(q.sql)));
 });
