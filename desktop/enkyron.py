@@ -241,6 +241,11 @@ class EnkyronWindow(QMainWindow):
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
         self.crm_dossier_seq = 0
+        self.crm_dossier_activity_company_id = None
+        self.crm_dossier_activity_opportunity_ids = set()
+        self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_editor = None
+        self.crm_dossier_activity_flash = ""
         self.crm_ticket_seq = 0
         self.crm_ticket_items = []
         self.crm_link_dialog = None
@@ -3122,6 +3127,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(footer)
         self.crm_dossier_dialog = dialog
         self.crm_dossier_company_id = company_id
+        self.crm_dossier_activity_company_id = None
+        self.crm_dossier_activity_opportunity_ids = set()
+        self.crm_dossier_activity_saving = False
+        self.crm_dossier_activity_editor = None
+        self.crm_dossier_activity_flash = ""
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
         dialog.show()
@@ -3263,6 +3273,18 @@ class EnkyronWindow(QMainWindow):
                     ("Operator", "actor_local"), ("Recorded", "recorded_at")
                 ])
             ]
+            # Keep an unsaved activity draft when the operator refreshes.
+            # The page stack is rebuilt below, so capture it beforehand.
+            activity_draft = None
+            if (self.crm_dossier_activity_company_id == company_id
+                    and self.crm_dossier_activity_editor is not None):
+                activity_draft = {
+                    "open": not self.crm_dossier_activity_editor.isHidden(),
+                    "kind": self.crm_dossier_activity_type.currentData(),
+                    "opportunity": self.crm_dossier_activity_opportunity.currentData(),
+                    "detail": self.crm_dossier_activity_detail.toPlainText(),
+                    "confirmed": self.crm_dossier_activity_confirm.isChecked()
+                }
             self.crm_dossier_tabs.clear()
             self.crm_dossier_nav.clear()
             self.crm_dossier_sections = []
@@ -3496,9 +3518,9 @@ class EnkyronWindow(QMainWindow):
                         table.selectRow(0)
                     update_document_actions()
                 if section_id == "activities":
-                    # Chronological, read-only notes. These are manually
-                    # recorded CRM entries, not authenticated external mail.
-                    # No parsing of free text for sender, direction or consent.
+                    # Read-only chronological history plus an explicitly
+                    # confirmed in-place append action. Reuse the existing
+                    # crm-record-activity service (no new company write API).
                     hint = QLabel(
                         "Recorded notes and message summaries, oldest visible first. "
                         "These entries were entered by an operator; LinkedIn "
@@ -3506,6 +3528,158 @@ class EnkyronWindow(QMainWindow):
                     )
                     hint.setWordWrap(True)
                     page_layout.addWidget(hint)
+
+                    opportunity_section = sections.get("opportunities") or {}
+                    linked_opportunities = [
+                        item for item in (opportunity_section.get("items") or [])
+                        if isinstance(item.get("opportunity_id"), str)
+                        and item.get("opportunity_id")
+                    ]
+                    self.crm_dossier_activity_company_id = company_id
+                    self.crm_dossier_activity_opportunity_ids = {
+                        item["opportunity_id"] for item in linked_opportunities
+                    }
+                    if self.crm_dossier_activity_flash:
+                        saved_notice = QLabel(self.crm_dossier_activity_flash)
+                        saved_notice.setObjectName("crmActivitySaveNotice")
+                        saved_notice.setTextFormat(Qt.TextFormat.PlainText)
+                        page_layout.addWidget(saved_notice)
+                        self.crm_dossier_activity_flash = ""
+
+                    self.crm_dossier_activity_record = QPushButton("Record activity…")
+                    self.crm_dossier_activity_record.setCheckable(True)
+                    self.crm_dossier_activity_record.setEnabled(
+                        bool(self.crm_dossier_activity_opportunity_ids)
+                        and not self.crm_dossier_activity_saving
+                    )
+                    page_layout.addWidget(
+                        self.crm_dossier_activity_record,
+                        alignment=Qt.AlignmentFlag.AlignLeft
+                    )
+                    if not self.crm_dossier_activity_opportunity_ids:
+                        missing = QLabel(
+                            "To record an activity, first create a commercial "
+                            "opportunity for this company in Companies & Contacts."
+                        )
+                        missing.setWordWrap(True)
+                        page_layout.addWidget(missing)
+
+                    self.crm_dossier_activity_editor = QWidget()
+                    editor_layout = QVBoxLayout(self.crm_dossier_activity_editor)
+                    editor_layout.setContentsMargins(6, 4, 6, 8)
+                    activity_form = QFormLayout()
+                    self.crm_dossier_activity_opportunity = QComboBox()
+                    if len(linked_opportunities) > 1:
+                        self.crm_dossier_activity_opportunity.addItem(
+                            "Select the relevant opportunity…", None
+                        )
+                    for pos, item in enumerate(linked_opportunities, 1):
+                        stage = str(item.get("stage") or "Unspecified").replace(
+                            "_", " "
+                        ).title()
+                        next_action_label = str(item.get("next_action") or "")
+                        description = "{} · {}{}".format(
+                            pos, stage,
+                            " · " + next_action_label[:75] if next_action_label else ""
+                        )
+                        self.crm_dossier_activity_opportunity.addItem(
+                            description, item["opportunity_id"]
+                        )
+                    if not linked_opportunities:
+                        self.crm_dossier_activity_opportunity.addItem(
+                            "No linked opportunity", None
+                        )
+                    activity_form.addRow(
+                        "Related opportunity", self.crm_dossier_activity_opportunity
+                    )
+                    if opportunity_section.get("more"):
+                        limited = QLabel(
+                            "Some opportunities are not shown here. "
+                            "Use Follow-ups for a different opportunity."
+                        )
+                        limited.setWordWrap(True)
+                        editor_layout.addWidget(limited)
+                    self.crm_dossier_activity_type = QComboBox()
+                    for activity_code, activity_title in (
+                        ("note", "Internal note"),
+                        ("call_note", "Call (manual record)"),
+                        ("meeting_note", "Meeting (manual record)"),
+                        ("email_note", "Email / message (manual record)"),
+                        ("task_note", "Task progress")
+                    ):
+                        self.crm_dossier_activity_type.addItem(
+                            activity_title, activity_code
+                        )
+                    activity_form.addRow("Type", self.crm_dossier_activity_type)
+                    self.crm_dossier_activity_detail = QPlainTextEdit()
+                    self.crm_dossier_activity_detail.setMaximumHeight(125)
+                    self.crm_dossier_activity_detail.setPlaceholderText(
+                        "What happened? Include contact, channel (e.g. LinkedIn), "
+                        "direction and exact wording when relevant. "
+                        "10–2000 characters. Do not enter credentials."
+                    )
+                    activity_form.addRow("Note *", self.crm_dossier_activity_detail)
+                    editor_layout.addLayout(activity_form)
+                    self.crm_dossier_activity_confirm = QCheckBox(
+                        "This is my manual record, not proof of external delivery."
+                    )
+                    editor_layout.addWidget(self.crm_dossier_activity_confirm)
+                    self.crm_dossier_activity_save = QPushButton("Save activity")
+                    self.crm_dossier_activity_save.setObjectName("primary")
+                    self.crm_dossier_activity_save.setEnabled(False)
+                    self.crm_dossier_activity_save.clicked.connect(
+                        self.save_dossier_activity
+                    )
+                    editor_layout.addWidget(
+                        self.crm_dossier_activity_save,
+                        alignment=Qt.AlignmentFlag.AlignRight
+                    )
+                    self.crm_dossier_activity_editor.setHidden(True)
+                    page_layout.addWidget(self.crm_dossier_activity_editor)
+                    def toggle_editor(expanded):
+                        self.crm_dossier_activity_editor.setVisible(expanded)
+                        self.crm_dossier_activity_record.setText(
+                            "Cancel entry" if expanded else "Record activity…"
+                        )
+                        self.update_dossier_activity_save()
+
+                    self.crm_dossier_activity_record.toggled.connect(toggle_editor)
+                    self.crm_dossier_activity_detail.textChanged.connect(
+                        self.update_dossier_activity_save
+                    )
+                    self.crm_dossier_activity_confirm.toggled.connect(
+                        self.update_dossier_activity_save
+                    )
+                    self.crm_dossier_activity_opportunity.currentIndexChanged.connect(
+                        self.update_dossier_activity_save
+                    )
+                    if activity_draft:
+                        original_kind = self.crm_dossier_activity_type.findData(
+                            activity_draft["kind"]
+                        )
+                        if original_kind >= 0:
+                            self.crm_dossier_activity_type.setCurrentIndex(
+                                original_kind
+                            )
+                        original_opportunity = (
+                            self.crm_dossier_activity_opportunity.findData(
+                                activity_draft["opportunity"]
+                            )
+                        )
+                        if original_opportunity >= 0:
+                            self.crm_dossier_activity_opportunity.setCurrentIndex(
+                                original_opportunity
+                            )
+                        self.crm_dossier_activity_detail.setPlainText(
+                            activity_draft["detail"]
+                        )
+                        self.crm_dossier_activity_confirm.setChecked(
+                            activity_draft["confirmed"]
+                        )
+                        self.crm_dossier_activity_record.setChecked(
+                            activity_draft["open"]
+                        )
+                    self.update_dossier_activity_save()
                     timeline = QScrollArea()
                     timeline.setObjectName("crmActivitiesTimeline")
                     timeline.setWidgetResizable(True)
@@ -3597,6 +3771,71 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
+
+    def update_dossier_activity_save(self, *_args):
+        """Only offer an append when the operator confirmed a valid local note."""
+        if not getattr(self, "crm_dossier_activity_save", None):
+            return
+        opportunity = self.crm_dossier_activity_opportunity.currentData()
+        detail = self.crm_dossier_activity_detail.toPlainText().strip()
+        permitted = (
+            self.crm_dossier_activity_company_id == self.crm_dossier_company_id
+            and opportunity in self.crm_dossier_activity_opportunity_ids
+            and not self.crm_dossier_activity_saving
+            and not self.crm_dossier_activity_editor.isHidden()
+            and 10 <= len(detail) <= 2000
+            and self.crm_dossier_activity_confirm.isChecked()
+        )
+        self.crm_dossier_activity_save.setEnabled(bool(permitted))
+
+    def save_dossier_activity(self):
+        """Append a manual activity through the existing scoped, audited service."""
+        dialog = self.crm_dossier_dialog
+        company_id = self.crm_dossier_company_id
+        if (not dialog or not dialog.isVisible() or
+                self.crm_dossier_activity_company_id != company_id or
+                self.crm_dossier_activity_saving or
+                not self.crm_dossier_activity_save.isEnabled()):
+            return
+        opportunity_id = self.crm_dossier_activity_opportunity.currentData()
+        if opportunity_id not in self.crm_dossier_activity_opportunity_ids:
+            QMessageBox.warning(
+                dialog, "Opportunity not available",
+                "Refresh the company dossier before recording this activity."
+            )
+            return
+        payload = {
+            "opportunity_id": opportunity_id,
+            "activity_type": self.crm_dossier_activity_type.currentData(),
+            "detail": self.crm_dossier_activity_detail.toPlainText().strip(),
+            "reviewed": True
+        }
+        self.crm_dossier_activity_saving = True
+        self.update_dossier_activity_save()
+
+        def saved(result, error):
+            if (dialog is not self.crm_dossier_dialog
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            self.crm_dossier_activity_saving = False
+            if error or not result or not result.get("id"):
+                QMessageBox.warning(
+                    dialog, "Save not confirmed",
+                    "Check the activity history before trying again to avoid "
+                    "duplicate records. " + str(error or "")
+                )
+                self.update_dossier_activity_save()
+                return
+            self.crm_dossier_activity_flash = (
+                "Activity saved to CRM. No external message was sent."
+            )
+            self.crm_dossier_activity_record.setChecked(False)
+            self.crm_dossier_activity_detail.clear()
+            self.crm_dossier_activity_confirm.setChecked(False)
+            self.refresh_company_dossier()
+
+        self.bridge.call("crm-record-activity", payload=payload, callback=saved)
 
     def open_dossier_source_proposal(self, proposal_id):
         if not proposal_id:
