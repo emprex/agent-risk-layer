@@ -877,13 +877,21 @@ jobs:
           assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
               "No next action recorded" in window.crm_dossier_next_action.text()
           )
+          # One control manages the extended sections. No competing
+          # "View commercial documents" button or second reveal mechanism.
+          assert window.crm_dossier_show_all.text() == "Show all sections"
+          assert not hasattr(window, "crm_dossier_commercial_button")
           assert not window.crm_dossier_show_all.isChecked()
           assert window.crm_dossier_nav.isRowHidden(10)
           assert not window.crm_dossier_nav.isRowHidden(4)
           window.crm_dossier_show_all.click()
           assert not window.crm_dossier_nav.isRowHidden(10)
+          window.crm_dossier_nav.setCurrentRow(10)
+          assert window.crm_dossier_tabs.currentIndex() == 10
           window.crm_dossier_show_all.click()
           assert window.crm_dossier_nav.isRowHidden(10)
+          assert window.crm_dossier_nav.currentRow() == 0
+          assert window.crm_dossier_tabs.currentIndex() == 0
           assert window.crm_dossier_tabs.count() == 11
           assert window.crm_dossier_nav.count() == 11
           assert not window.crm_dossier_tabs.tabBar().isVisible()
@@ -901,8 +909,7 @@ jobs:
           assert commercial_table.item(1, 2).text() == "operator_documented_unverified"
           assert commercial_table.item(2, 2).text() == "needs_changes"
           assert commercial_table.item(3, 2).text() == "unissued_tax_review_required"
-          assert window.crm_dossier_commercial_button.isEnabled()
-          window.crm_dossier_commercial_button.click()
+          window.crm_dossier_nav.setCurrentRow(7)
           assert window.crm_dossier_tabs.currentIndex() == 7
           actions = {
               button.text(): button for button in commercial_page.findChildren(QPushButton)
