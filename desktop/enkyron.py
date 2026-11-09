@@ -7363,7 +7363,6 @@ class EnkyronWindow(QMainWindow):
             "amount and authority to issue this invoice."
         )
         confirm.setObjectName("invoiceHumanIssueConfirm")
-        confirm.setWordWrap(True)
         layout.addWidget(confirm)
         warning = QLabel(
             "Issuing creates a numbered, immutable invoice. Nothing is emailed "
