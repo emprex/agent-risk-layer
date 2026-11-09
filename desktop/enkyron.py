@@ -20,11 +20,15 @@ from PySide6.QtWidgets import (
 if __package__:
     from .enkyron_proposal_pdf import export_draft_pdf
     from .enkyron_invoice_sample_pdf import export_test_invoice_pdf
+    from .enkyron_invoice_test_ledger import TestInvoiceLedger
+    from .enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_sample_pdf import export_test_invoice_pdf
+    from enkyron_invoice_test_ledger import TestInvoiceLedger
+    from enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
 
@@ -1433,14 +1437,14 @@ class EnkyronWindow(QMainWindow):
         self.crm_invoice_open.setEnabled(False)
         self.crm_invoice_open.clicked.connect(self.open_selected_invoice_draft)
         invoice_buttons.addWidget(self.crm_invoice_open)
-        self.crm_invoice_test_export = QPushButton("Generate TEST invoice PDF…")
+        self.crm_invoice_test_export = QPushButton("TEST billing A to Z…")
         self.crm_invoice_test_export.setObjectName("generateTestInvoicePdf")
         self.crm_invoice_test_export.setEnabled(False)
         self.crm_invoice_test_export.setToolTip(
-            "Generate an offline SAMPLE invoice from the selected synthetic "
-            "CRM draft. No financial entry, tax calculation, issue or email."
+            "Run a full synthetic invoice scenario using local TEST records, "
+            "mock dates/VAT, PDF and simulated sent/paid states. No real issue."
         )
-        self.crm_invoice_test_export.clicked.connect(self.export_selected_invoice_test_pdf)
+        self.crm_invoice_test_export.clicked.connect(self.open_test_invoice_workflow)
         invoice_buttons.addWidget(self.crm_invoice_test_export)
         self.crm_invoice_issue_button = QPushButton("Issue documentation review…")
         self.crm_invoice_issue_button.setEnabled(False)
@@ -7272,8 +7276,8 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_invoice_test_export.setEnabled(bool(synthetic))
 
-    def export_selected_invoice_test_pdf(self):
-        """Generate a sample PDF by reading the selected CRM invoice source."""
+    def open_test_invoice_workflow(self):
+        """Open the synthetic invoice lifecycle from the selected CRM draft."""
         row = self.crm_invoice_table.currentRow()
         if not 0 <= row < len(self.crm_invoice_items):
             return
@@ -7281,21 +7285,282 @@ class EnkyronWindow(QMainWindow):
         draft_id = selected.get("id")
         if "SYNTHETIC" not in str(selected.get("buyer_legal_name") or "").upper():
             return
+        if (getattr(self, "crm_test_billing_dialog", None)
+                and self.crm_test_billing_dialog.isVisible()):
+            self.crm_test_billing_dialog.raise_()
+            self.crm_test_billing_dialog.activateWindow()
+            return
         self.crm_invoice_test_export.setEnabled(False)
 
-        def received(data, error):
+        def received_draft(data, error):
             self.invoice_draft_selected()
             draft = (data or {}).get("draft") or {}
             if (error or not (data or {}).get("available")
-                    or draft.get("id") != draft_id):
+                    or draft.get("id") != draft_id
+                    or draft.get("status") != "unissued_tax_review_required"):
                 QMessageBox.warning(
-                    self, "TEST invoice unavailable",
-                    error or "Could not verify selected CRM invoice source."
+                    self, "TEST invoice blocked",
+                    error or "The selected unissued CRM draft is no longer eligible."
                 )
                 return
-            self.export_invoice_test_pdf(draft)
+            proposal_id = draft.get("proposal_id")
+            if not proposal_id:
+                QMessageBox.warning(self, "TEST invoice blocked",
+                                    "Source proposal link is missing.")
+                return
 
-        self.bridge.call("crm-invoice-draft", draft_id, callback=received)
+            def received_lines(quote, line_error):
+                if (line_error or not (quote or {}).get("available")
+                        or quote.get("id") != proposal_id
+                        or quote.get("revision") != draft.get("proposal_revision")
+                        or quote.get("currency") != draft.get("currency")
+                        or int(quote.get("amount_minor") or 0)
+                        != int(draft.get("proposed_fee_minor") or 0)):
+                    QMessageBox.warning(
+                        self, "TEST invoice blocked",
+                        line_error or "Source proposal revision/amount mismatch."
+                    )
+                    return
+                lines = quote.get("lines") or []
+                if not lines:
+                    # A source proposal without itemisation is faithfully one fee line.
+                    amount = int(draft.get("proposed_fee_minor") or 0)
+                    lines = [{
+                        "description": draft.get("service_description") or "",
+                        "quantity": 1, "unit_price_minor": amount,
+                        "line_total_minor": amount
+                    }]
+                self.show_test_invoice_workflow(draft, lines)
+
+            self.bridge.call("crm-proposal-lines", proposal_id, callback=received_lines)
+
+        self.bridge.call("crm-invoice-draft", draft_id, callback=received_draft)
+
+    @staticmethod
+    def _test_money(amount, currency):
+        value = int(amount)
+        major, minor = divmod(value, 100)
+        return "{} {:,}.{:02d}".format(currency, major, minor)
+
+    def show_test_invoice_workflow(self, draft, lines):
+        """Native TEST-only issue → simulated send → simulated paid and PDF."""
+        ledger = TestInvoiceLedger()
+        try:
+            record = ledger.get(draft["id"])
+        except (OSError, ValueError, RuntimeError) as exc:
+            QMessageBox.warning(self, "TEST register unavailable", str(exc))
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Synthetic invoicing A to Z")
+        dialog.resize(810, 700)
+        dialog.setMinimumSize(610, 500)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("TEST INVOICE · COMPLETE LIFECYCLE"))
+        warning = QLabel(
+            "SIMULATION ONLY. Values and VAT are test parameters, not tax advice. "
+            "This ledger is separate from PostgreSQL business invoices. "
+            "No real invoice, email, payment or accounting posting is created."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        source = QLabel(
+            "Source draft: {} \nCustomer: {} \nProposal R{} · {} \n"
+            "Saved source lines: {}".format(
+                draft.get("id"), draft.get("buyer_legal_name"),
+                draft.get("proposal_revision"),
+                self._test_money(draft.get("proposed_fee_minor"), draft.get("currency")),
+                len(lines)
+            )
+        )
+        source.setTextFormat(Qt.TextFormat.PlainText)
+        source.setWordWrap(True)
+        layout.addWidget(source)
+
+        form_holder = QWidget()
+        form_layout = QFormLayout(form_holder)
+        test_issue_date = QDateEdit(QDate.currentDate())
+        test_issue_date.setObjectName("simulatedInvoiceDate")
+        test_issue_date.setDisplayFormat("yyyy-MM-dd")
+        test_issue_date.setCalendarPopup(True)
+        form_layout.addRow("TEST issue date (scenario)", test_issue_date)
+        vat = QSpinBox()
+        vat.setObjectName("simulatedVatPercent")
+        vat.setRange(0, 30)
+        vat.setValue(20)
+        vat.setSuffix("% · TEST ONLY")
+        form_layout.addRow("Illustrative VAT rate", vat)
+        net_days = QSpinBox()
+        net_days.setObjectName("simulatedDueDays")
+        net_days.setRange(0, 365)
+        net_days.setValue(30)
+        net_days.setSuffix(" days · TEST")
+        form_layout.addRow("Illustrative payment term", net_days)
+        consent = QCheckBox(
+            "I confirm TEST-only issue, synthetic VAT, simulated payment and NO real send."
+        )
+        consent.setObjectName("simulationConsent")
+        form_layout.addRow("Explicit TEST confirmation", consent)
+        layout.addWidget(form_holder)
+
+        state = QLabel()
+        state.setObjectName("testInvoiceLifecycleStatus")
+        state.setWordWrap(True)
+        layout.addWidget(state)
+        events = QPlainTextEdit()
+        events.setObjectName("testInvoiceEvents")
+        events.setReadOnly(True)
+        layout.addWidget(events, 1)
+        footer = QHBoxLayout()
+        create = QPushButton("Create simulated TEST invoice")
+        create.setObjectName("createSimulatedInvoice")
+        create.setObjectName("primary")
+        create.setEnabled(False)
+        footer.addWidget(create)
+        export = QPushButton("Export TEST invoice PDF…")
+        export.setObjectName("exportLifecycleTestInvoice")
+        footer.addWidget(export)
+        sent = QPushButton("Simulate sending (NO email)")
+        sent.setObjectName("simulateInvoiceSent")
+        footer.addWidget(sent)
+        paid = QPushButton("Simulate payment (NO money)")
+        paid.setObjectName("simulateInvoicePaid")
+        footer.addWidget(paid)
+        layout.addLayout(footer)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.reject)
+        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+
+        current = {"value": record}
+        def refresh():
+            r = current["value"]
+            existing = bool(r)
+            form_holder.setVisible(not existing)
+            create.setVisible(not existing)
+            create.setEnabled(not existing and consent.isChecked())
+            export.setEnabled(existing)
+            sent.setEnabled(existing and r["status"] == "test_issued")
+            paid.setEnabled(existing and r["status"] == "test_sent")
+            if not existing:
+                state.setText("No TEST invoice exists for this source. "
+                              "Choose simulation values and create it.")
+                events.setPlainText(
+                    "SOURCE LINES:\n" +
+                    "\n".join(
+                        "{} × {} — {}".format(
+                            line["quantity"], line["description"],
+                            self._test_money(line["line_total_minor"], draft["currency"])
+                        ) for line in lines
+                    )
+                )
+                return
+            state.setText(
+                "TEST NUMBER: {} · {} \n"
+                "SIMULATED issue: {}   Due: {}   VAT: {}% \n"
+                "Subtotal: {}   TEST VAT: {}   TEST total: {} \n"
+                "Never real-issued, mailed, posted or collected.".format(
+                    r["test_number"], r["status"].upper(),
+                    r["simulated_issue_date"], r["simulated_due_date"],
+                    r["vat_rate_percent"],
+                    self._test_money(r["subtotal_minor"], r["currency"]),
+                    self._test_money(r["vat_minor"], r["currency"]),
+                    self._test_money(r["total_minor"], r["currency"])
+                )
+            )
+            events.setPlainText(
+                "SIMULATION HISTORY (no real-world actions)\n" +
+                "\n".join(
+                    "{} · {} · {}".format(e["created_at"], e["action"], e["note"])
+                    for e in r["events"]
+                )
+            )
+
+        def create_simulation():
+            if not consent.isChecked() or current["value"]:
+                return
+            try:
+                created = ledger.create(
+                    draft, lines, test_issue_date.date().toString("yyyy-MM-dd"),
+                    vat.value(), net_days.value()
+                )
+            except (ValueError, OSError) as exc:
+                QMessageBox.warning(dialog, "Cannot create TEST invoice", str(exc))
+                return
+            current["value"] = created
+            refresh()
+
+        def advance_state(next_state):
+            r = current["value"]
+            if not r:
+                return
+            label = "mock sending (NO email)" if next_state == "test_sent" else "mock payment (NO funds)"
+            answer = QMessageBox.question(
+                dialog, "Confirm TEST-only action",
+                "Record {} for {}? Nothing real will be sent or paid.".format(
+                    label, r["test_number"]
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                current["value"] = ledger.advance(draft["id"], next_state)
+            except (ValueError, OSError) as exc:
+                QMessageBox.warning(dialog, "TEST transition refused", str(exc))
+                return
+            refresh()
+
+        def export_simulation():
+            r = current["value"]
+            if not r:
+                return
+            folder = Path.home() / "Documents"
+            if not folder.is_dir():
+                folder = Path.home()
+            suggested = folder / ("ENKYRON_" + r["test_number"] + ".pdf")
+            chosen, _ = QFileDialog.getSaveFileName(
+                dialog, "Save TEST invoice from CRM", str(suggested),
+                "PDF documents (*.pdf)"
+            )
+            if not chosen:
+                return
+            target = Path(chosen)
+            if target.suffix.lower() != ".pdf":
+                target = target.with_suffix(".pdf")
+            if target.is_symlink():
+                QMessageBox.warning(dialog, "Export refused", "Cannot overwrite a symbolic link.")
+                return
+            if target.exists():
+                reply = QMessageBox.question(
+                    dialog, "Replace existing TEST PDF?",
+                    "Overwrite the selected TEST PDF only?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+            try:
+                pages = export_lifecycle_test_pdf(target, r)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(dialog, "TEST PDF failed", str(exc))
+                return
+            QMessageBox.information(
+                dialog, "TEST invoice PDF saved",
+                "Saved {} page(s) as {}. This is not a real invoice.".format(
+                    pages, target
+                )
+            )
+
+        consent.toggled.connect(lambda checked: create.setEnabled(
+            bool(checked) and not current["value"]
+        ))
+        create.clicked.connect(create_simulation)
+        export.clicked.connect(export_simulation)
+        sent.clicked.connect(lambda: advance_state("test_sent"))
+        paid.clicked.connect(lambda: advance_state("test_paid"))
+        self.crm_test_billing_dialog = dialog
+        refresh()
+        dialog.open()
 
     def open_selected_invoice_draft(self):
         row = self.crm_invoice_table.currentRow()
