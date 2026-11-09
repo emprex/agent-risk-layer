@@ -41,6 +41,8 @@ test('read scoped opportunity, combine history with bounded query',async()=>{
   const output=await listActivityTimeline(db,opportunityId,'ci-operator');
   assert.equal(output.available,true);
   assert.equal(output.items.length,2);
+  // Database returns newest first; the CRM presents the story oldest first.
+  assert.deepEqual(output.items.map(entry=>entry.id),['change','activity']);
   assert.deepEqual(seen.map(c=>c.params),
     [['local:ci-operator',opportunityId],['local:ci-operator',opportunityId]]);
   assert.match(seen[1].sql,/UNION ALL/);

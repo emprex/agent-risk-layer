@@ -125,3 +125,28 @@ test('preview is capped at twenty entries while retaining exact counts',async()=
   assert.equal(result.sections.contacts.more,true);
   assert.equal('total_rows' in result.sections.contacts.items[0],false);
 });
+
+test('messages display oldest to newest within the most recent twenty without hiding the latest',async()=>{
+  const db={connect:async()=>({
+    query:async(sql)=>{
+      if(sql.startsWith('SELECT id,name,legal_name'))
+        return {rows:[{id:company,name:'Threat ResQ'}]};
+      if(sql.includes('JOIN enkyron_crm_activities a'))
+        return {rows:Array.from({length:21},(_,i)=>({
+          id:'message-'+(21-i),
+          detail:i===0?'Most recent LinkedIn reply':'Earlier operator note',
+          total_rows:'24'
+        }))};
+      return {rows:[]};
+    },
+    release:()=>{}
+  })};
+  const result=await getCompanyDossier(db,company,'ci-operator');
+  const messages=result.sections.activities;
+  assert.equal(messages.total,24);
+  assert.equal(messages.more,true);
+  assert.equal(messages.items.length,20);
+  assert.equal(messages.items[0].id,'message-2');
+  assert.equal(messages.items.at(-1).id,'message-21');
+  assert.equal(messages.items.at(-1).detail,'Most recent LinkedIn reply');
+});

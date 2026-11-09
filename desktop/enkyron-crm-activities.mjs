@@ -55,7 +55,8 @@ export async function listActivityTimeline(pool,id,actor){
       +') entries ORDER BY recorded_at DESC,id DESC LIMIT 101',
       [owner.key,opportunityId]
     );
-    return {available:true,opportunity:row,items:history.rows.slice(0,100),
+    // Keep the newest 100 records but present them oldest-to-newest.
+    return {available:true,opportunity:row,items:history.rows.slice(0,100).reverse(),
       more:history.rows.length>100,
       notice:'Operator-recorded notes and stage changes, not verified email delivery.'};
   }catch(e){
