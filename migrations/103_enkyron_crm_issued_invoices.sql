@@ -42,6 +42,7 @@ CREATE TABLE enkyron_crm_issued_invoices (
     REFERENCES enkyron_crm_invoice_drafts(workspace_key,id) ON DELETE RESTRICT,
   CONSTRAINT enkyron_issued_invoice_draft_unique UNIQUE(workspace_key,source_draft_id),
   CONSTRAINT enkyron_issued_invoice_number_unique UNIQUE(workspace_key,invoice_number),
+  CONSTRAINT enkyron_issued_invoice_scope_unique UNIQUE(workspace_key,id),
   CONSTRAINT enkyron_issued_invoice_tax_consistency CHECK (
     (issuer_vat_status='not_registered' AND issuer_vat_number IS NULL
       AND vat_rate_percent=0 AND vat_amount_minor=0)
