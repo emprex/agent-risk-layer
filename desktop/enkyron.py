@@ -3279,7 +3279,7 @@ class EnkyronWindow(QMainWindow):
             if (self.crm_dossier_activity_company_id == company_id
                     and self.crm_dossier_activity_editor is not None):
                 activity_draft = {
-                    "open": not self.crm_dossier_activity_editor.isHidden(),
+                    "open": self.crm_dossier_activity_record.isChecked(),
                     "kind": self.crm_dossier_activity_type.currentData(),
                     "opportunity": self.crm_dossier_activity_opportunity.currentData(),
                     "detail": self.crm_dossier_activity_detail.toPlainText(),
@@ -3447,9 +3447,71 @@ class EnkyronWindow(QMainWindow):
                         )
                     page_layout.addStretch()
                 else:
-                    if section_id in {
-                        "contacts", "prospects", "tickets", "opportunities",
-                        "drafts", "ticket_history", "audit_events", "audit_changes"
+                    if section_id in ("contacts", "opportunities"):
+                        # Present relationship data in human-readable cards.
+                        # No inferred contact consent, identity or deal state.
+                        if not rows:
+                            empty = QLabel(
+                                "No contacts recorded for this company yet."
+                                if section_id == "contacts" else
+                                "No commercial opportunities recorded yet."
+                            )
+                            empty.setTextFormat(Qt.TextFormat.PlainText)
+                            page_layout.addWidget(empty)
+                        for item in rows:
+                            card = QFrame()
+                            card.setObjectName("crmDossierSummaryCard")
+                            card.setStyleSheet(
+                                "QFrame#crmDossierSummaryCard { "
+                                "background: #f7fafc; "
+                                "border: 1px solid #d8e2ea; border-radius: 6px; }"
+                                "QFrame#crmDossierSummaryCard QLabel { border: 0; "
+                                "background: transparent; }"
+                            )
+                            content = QVBoxLayout(card)
+                            content.setContentsMargins(12, 10, 12, 10)
+                            content.setSpacing(6)
+                            if section_id == "contacts":
+                                facts = [
+                                    ("", str(item.get("full_name") or "Unnamed contact")),
+                                    ("Role: ", str(item.get("job_title") or "Not recorded")),
+                                    ("Email: ", str(item.get("email") or "Not recorded")),
+                                    ("Marketing permission: ", str(
+                                        item.get("marketing_permission") or "unknown"
+                                    ))
+                                ]
+                            else:
+                                facts = [
+                                    ("Stage: ", str(item.get("stage") or "Not recorded").replace(
+                                        "_", " "
+                                    ).title()),
+                                    ("Next action: ", str(
+                                        item.get("next_action") or "Not recorded"
+                                    )),
+                                    ("Due: ", format_followup_due(
+                                        item.get("due_date"), item.get("stage")
+                                    ))
+                                ]
+                            for n, (prefix, value) in enumerate(facts):
+                                field = QLabel(prefix + value)
+                                field.setTextFormat(Qt.TextFormat.PlainText)
+                                field.setWordWrap(True)
+                                field.setTextInteractionFlags(
+                                    Qt.TextInteractionFlag.TextSelectableByMouse
+                                )
+                                field.setObjectName(
+                                    "crmDossierContactDetail"
+                                    if section_id == "contacts" else
+                                    "crmDossierOpportunityDetail"
+                                )
+                                if n == 0:
+                                    field.setStyleSheet("font-weight: bold;")
+                                content.addWidget(field)
+                            page_layout.addWidget(card)
+                        page_layout.addStretch(1)
+                    elif section_id in {
+                        "prospects", "tickets", "drafts",
+                        "ticket_history", "audit_events", "audit_changes"
                     } and len(rows) <= 4:
                         if not rows:
                             empty_hints = {
@@ -3634,12 +3696,33 @@ class EnkyronWindow(QMainWindow):
                         self.crm_dossier_activity_save,
                         alignment=Qt.AlignmentFlag.AlignRight
                     )
-                    self.crm_dossier_activity_editor.setHidden(True)
-                    page_layout.addWidget(self.crm_dossier_activity_editor)
+                    # Keep the full history legible while composing: one
+                    # content region switches between history and editor.
+                    # The editor scrolls on compact laptop screens.
+                    self.crm_dossier_activity_stack = QStackedWidget()
+                    self.crm_dossier_activity_editor_scroll = QScrollArea()
+                    self.crm_dossier_activity_editor_scroll.setObjectName(
+                        "crmDossierActivityEditorScroll"
+                    )
+                    self.crm_dossier_activity_editor_scroll.setWidgetResizable(True)
+                    self.crm_dossier_activity_editor_scroll.setFrameShape(
+                        QFrame.Shape.NoFrame
+                    )
+                    self.crm_dossier_activity_editor_scroll.setWidget(
+                        self.crm_dossier_activity_editor
+                    )
+                    self.crm_dossier_activity_stack.addWidget(
+                        self.crm_dossier_activity_editor_scroll
+                    )
+                    editor_layout.addStretch(1)
+
                     def toggle_editor(expanded):
-                        self.crm_dossier_activity_editor.setVisible(expanded)
+                        self.crm_dossier_activity_stack.setCurrentWidget(
+                            self.crm_dossier_activity_editor_scroll
+                            if expanded else self.crm_dossier_activity_timeline
+                        )
                         self.crm_dossier_activity_record.setText(
-                            "Cancel entry" if expanded else "Record activity…"
+                            "Back to notes" if expanded else "Record activity…"
                         )
                         self.update_dossier_activity_save()
 
@@ -3653,33 +3736,6 @@ class EnkyronWindow(QMainWindow):
                     self.crm_dossier_activity_opportunity.currentIndexChanged.connect(
                         self.update_dossier_activity_save
                     )
-                    if activity_draft:
-                        original_kind = self.crm_dossier_activity_type.findData(
-                            activity_draft["kind"]
-                        )
-                        if original_kind >= 0:
-                            self.crm_dossier_activity_type.setCurrentIndex(
-                                original_kind
-                            )
-                        original_opportunity = (
-                            self.crm_dossier_activity_opportunity.findData(
-                                activity_draft["opportunity"]
-                            )
-                        )
-                        if original_opportunity >= 0:
-                            self.crm_dossier_activity_opportunity.setCurrentIndex(
-                                original_opportunity
-                            )
-                        self.crm_dossier_activity_detail.setPlainText(
-                            activity_draft["detail"]
-                        )
-                        self.crm_dossier_activity_confirm.setChecked(
-                            activity_draft["confirmed"]
-                        )
-                        self.crm_dossier_activity_record.setChecked(
-                            activity_draft["open"]
-                        )
-                    self.update_dossier_activity_save()
                     timeline = QScrollArea()
                     timeline.setObjectName("crmActivitiesTimeline")
                     timeline.setWidgetResizable(True)
@@ -3734,7 +3790,38 @@ class EnkyronWindow(QMainWindow):
                         timeline_layout.addWidget(card)
                     timeline_layout.addStretch(1)
                     timeline.setWidget(timeline_content)
-                    page_layout.addWidget(timeline, 1)
+                    self.crm_dossier_activity_timeline = timeline
+                    self.crm_dossier_activity_stack.addWidget(timeline)
+                    self.crm_dossier_activity_stack.setCurrentWidget(timeline)
+                    page_layout.addWidget(self.crm_dossier_activity_stack, 1)
+                    if activity_draft:
+                        original_kind = self.crm_dossier_activity_type.findData(
+                            activity_draft["kind"]
+                        )
+                        if original_kind >= 0:
+                            self.crm_dossier_activity_type.setCurrentIndex(
+                                original_kind
+                            )
+                        original_opportunity = (
+                            self.crm_dossier_activity_opportunity.findData(
+                                activity_draft["opportunity"]
+                            )
+                        )
+                        if original_opportunity >= 0:
+                            self.crm_dossier_activity_opportunity.setCurrentIndex(
+                                original_opportunity
+                            )
+                        self.crm_dossier_activity_detail.setPlainText(
+                            activity_draft["detail"]
+                        )
+                        self.crm_dossier_activity_confirm.setChecked(
+                            activity_draft["confirmed"]
+                        )
+                        self.crm_dossier_activity_record.setChecked(
+                            activity_draft["open"]
+                        )
+                    self.update_dossier_activity_save()
+
                 if section_id == "qualifications":
                     scroll = QScrollArea()
                     scroll.setWidgetResizable(True)
@@ -3782,7 +3869,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_activity_company_id == self.crm_dossier_company_id
             and opportunity in self.crm_dossier_activity_opportunity_ids
             and not self.crm_dossier_activity_saving
-            and not self.crm_dossier_activity_editor.isHidden()
+            and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
             and self.crm_dossier_activity_confirm.isChecked()
         )
