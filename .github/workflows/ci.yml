@@ -352,6 +352,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-crm-invoice-drafts-postgres.test.js
 
+      - name: ENKYRON numbered invoices and manually recorded payments (disposable PostgreSQL)
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-crm-invoice-issuance-postgres.test.js
+
       - name: ENKYRON versioned CRM correction PostgreSQL
         env:
           CI: 'true'
