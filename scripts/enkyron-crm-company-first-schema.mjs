@@ -31,7 +31,7 @@ try{
   }
   const names=(await fs.readdir(dir))
     .filter(x=>/^\d{3}_[a-z0-9_-]+\.sql$/i.test(x)).sort();
-  if(!names.includes(version))throw new Error('ENKYRON migration 103 missing');
+  if(!names.includes(version))throw new Error('ENKYRON migration 104 missing');
   const sqls=new Map(await Promise.all(
     names.map(async name=>[name,await fs.readFile(path.join(dir,name),'utf8')])
   ));
@@ -52,7 +52,7 @@ try{
   if(existing){
     console.log('ENKYRON company-first journal/draft schema 104 already applied and checksum verified. No changes.');
   }else if(mode==='--check'){
-    console.log('ENKYRON company-first journal/draft schema 103 not applied. Historical migrations verified; no changes.');
+    console.log('ENKYRON company-first journal/draft schema 104 not applied. Historical migrations verified; no changes.');
   }else{
     const backupDir=path.join(os.homedir(),'.local','share','enkyron','backups');
     await fs.mkdir(backupDir,{recursive:true,mode:0o700});
