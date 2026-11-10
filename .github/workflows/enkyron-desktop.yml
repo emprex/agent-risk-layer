@@ -961,6 +961,12 @@ jobs:
               if b.objectName() == "crmDossierEditContact"
           ]
           assert len(inline_edit) == 1 and inline_edit[0].isEnabled()
+          assert inline_edit[0].maximumWidth() == 190
+          assert inline_edit[0].width() <= 190
+          edit_layout = inline_edit[0].parentWidget().layout()
+          assert edit_layout.itemAt(edit_layout.indexOf(inline_edit[0])).alignment() & (
+              Qt.AlignmentFlag.AlignRight
+          )
           inline_edit[0].click()
           assert window.crm_dossier_contact_editor is not None
           assert window.crm_dossier_contact_inputs["full_name"].text() == "Synthetic Contact"
@@ -1013,6 +1019,12 @@ jobs:
               if b.objectName() == "crmDossierNewContact"
           ]
           assert len(new_contact) == 1
+          assert new_contact[0].maximumWidth() == 190
+          assert new_contact[0].width() <= 190
+          add_layout = new_contact[0].parentWidget().layout()
+          assert add_layout.itemAt(add_layout.indexOf(new_contact[0])).alignment() & (
+              Qt.AlignmentFlag.AlignRight
+          )
           new_contact[0].click()
           assert window.crm_dossier_contact_editor is not None
           window.crm_dossier_contact_inputs["full_name"].setText("New Synthetic Contact")
