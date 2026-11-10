@@ -16,7 +16,7 @@ import {
 } from './enkyron-owner-session.mjs';
 
 const OPERATIONS=new Set([
-  'owner-login','owner-session-status','owner-logout',
+  'owner-setup-status','owner-login','owner-session-status','owner-logout',
   'owner-mail-status','owner-mail-threads','owner-mail-messages',
 ]);
 const KEY_DIRECTORY=path.join(os.homedir(),'.local','share','enkyron','auth');
@@ -51,12 +51,40 @@ async function trustedKey(){
     return await fh.readFile();
   }finally{await fh.close();}
 }
+async function inspectSetup(pool,operator){
+  // This read-only check is intentionally available BEFORE local key creation.
+  // It never authenticates a caller or grants mail access.
+  const row=(await pool.query(
+    "SELECT to_regclass('public.enkyron_identity_principal_effective') AS registry,"+
+    "to_regclass('public.enkyron_identity_credentials') AS credentials"
+  )).rows[0];
+  if(!row?.registry||!row?.credentials)
+    return {state:'schema_missing'};
+  const scope='local:'+operator;
+  const entries=(await pool.query(
+    'SELECT p.login_name,p.role,p.effective_status,'+
+    'EXISTS(SELECT 1 FROM enkyron_identity_credentials c '+
+    'WHERE c.principal_id=p.id) AS has_credentials '+
+    'FROM enkyron_identity_principal_effective p WHERE p.workspace_key=$1',
+    [scope]
+  )).rows;
+  if(entries.length===0)return {state:'not_enrolled'};
+  if(entries.length!==1||entries[0].login_name!=='ceo'
+      ||entries[0].role!=='organization_owner_l5'
+      ||entries[0].has_credentials!==true)
+    return {state:'needs_review'};
+  const status=entries[0].effective_status;
+  if(status==='pending'||status==='active'){
+    try{await trustedKey();}
+    catch{return {state:'needs_review'};}
+    return {state:status};
+  }
+  return {state:'needs_review'};
+}
 async function main(){
   const operation=process.argv[2];
   if(!OPERATIONS.has(operation)||process.argv.length!==3)
     throw new Error('Unsupported Owner operation');
-  const req=await readPayload();
-  const key=await trustedKey();
   const operator=os.userInfo().username;
   const pool=new pg.Pool({
     host:'/var/run/postgresql',database:'arl_local',user:operator,
@@ -64,6 +92,12 @@ async function main(){
     options:"-c statement_timeout=10000 -c lock_timeout=4000"
   });
   try{
+    if(operation==='owner-setup-status'){
+      emit({ok:true,result:await inspectSetup(pool,operator)});
+      return;
+    }
+    const req=await readPayload();
+    const key=await trustedKey();
     if(operation==='owner-login'){
       const data=await loginLocalOwner(pool,{
         operator,password:req.password,totpCode:req.totp_code,key,
@@ -129,8 +163,11 @@ async function main(){
 }
 main().catch(()=>{
   // Never serialize SQL errors, passwords, tokens, encryption details or stack traces.
-  const mail=process.argv[2]?.startsWith('owner-mail-');
-  emit({ok:false,error:mail
+  const action=process.argv[2];
+  const mail=action?.startsWith('owner-mail-');
+  emit({ok:false,error:action==='owner-setup-status'
+    ?'CEO account status unavailable'
+    :mail
     ?'Mail unavailable; check Owner session and Resend configuration'
     :'Owner login unavailable or credentials not accepted'});
   process.exitCode=1;
