@@ -38,6 +38,7 @@ else:
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
+OWNER_LOGIN_BRIDGE = ROOT / "desktop" / "enkyron-owner-login-bridge.mjs"
 
 STYLE = """
 QMainWindow { background: #edf2f6; }
@@ -179,7 +180,10 @@ class DesktopBridge:
             process.setArguments(["-m", module])
         else:
             process.setProgram("node")
-            args = [str(BRIDGE), action]
+            target = (OWNER_LOGIN_BRIDGE if action in (
+                "owner-login", "owner-session-status", "owner-logout"
+            ) else BRIDGE)
+            args = [str(target), action]
             if arg:
                 args.append(arg)
             process.setArguments(args)
@@ -303,6 +307,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
+        self.owner_session_token = None
+        self.owner_login_dialog = None
         self.crm_proposal_seq = 0
         self.crm_proposal_loaded = False
         self.crm_proposal_items = []
@@ -1252,6 +1258,15 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
         self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
         mail_head.addWidget(self.crm_mail_connection)
+        self.mail_owner_login = QPushButton("Sign in as CEO")
+        self.mail_owner_login.setObjectName("enkyronMailOwnerLogin")
+        self.mail_owner_login.clicked.connect(self.open_owner_login)
+        mail_head.addWidget(self.mail_owner_login)
+        self.mail_owner_logout = QPushButton("Sign out")
+        self.mail_owner_logout.setObjectName("enkyronMailOwnerLogout")
+        self.mail_owner_logout.setEnabled(False)
+        self.mail_owner_logout.clicked.connect(self.logout_owner)
+        mail_head.addWidget(self.mail_owner_logout)
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
@@ -1637,6 +1652,114 @@ class EnkyronWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
         self.reload_operator_profile()
+
+    def open_owner_login(self):
+        """Request a DB-verified CEO session; never transmit secrets on argv."""
+        if self.owner_session_token:
+            return
+        if self.owner_login_dialog and self.owner_login_dialog.isVisible():
+            self.owner_login_dialog.raise_()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · CEO sign in")
+        dialog.setMinimumWidth(410)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("CEO · SECURE SIGN IN"))
+        intro = QLabel(
+            "Sign in with the passphrase and authenticator code set up "
+            "for your ENKYRON Owner account. Resend remains disconnected "
+            "until separately authorised."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        password = QLineEdit()
+        password.setObjectName("enkyronOwnerPassword")
+        password.setAccessibleName("CEO account passphrase")
+        password.setEchoMode(QLineEdit.EchoMode.Password)
+        password.setMaxLength(200)
+        form.addRow("Passphrase", password)
+        totp = QLineEdit()
+        totp.setObjectName("enkyronOwnerTotp")
+        totp.setAccessibleName("Six digit authenticator code")
+        totp.setMaxLength(6)
+        totp.setPlaceholderText("6 digits")
+        form.addRow("Authenticator", totp)
+        layout.addLayout(form)
+        note = QLabel("Your passphrase and MFA code are not stored in the CRM.")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        buttons.addStretch()
+        submit = QPushButton("Sign in")
+        submit.setObjectName("enkyronOwnerLoginSubmit")
+        submit.setObjectName("primary")
+        buttons.addWidget(submit)
+        layout.addLayout(buttons)
+        self.owner_login_dialog = dialog
+
+        def sign_in():
+            secret = password.text()
+            code = totp.text()
+            if not secret or len(code) != 6 or not code.isascii() or not code.isdigit():
+                QMessageBox.warning(dialog, "Credentials required",
+                                    "Enter your passphrase and six-digit authenticator code.")
+                return
+            submit.setEnabled(False)
+            # The payload is a bounded local stdin pipe, NOT argv.
+            payload = {"password": secret, "totp_code": code}
+            password.clear()
+            totp.clear()
+            self.crm_mail_connection.setText("Verifying CEO credentials…")
+
+            def received(data, error):
+                if not dialog.isVisible():
+                    return
+                if error or not data or not isinstance(data.get("session_token"), str):
+                    submit.setEnabled(True)
+                    self.crm_mail_connection.setText("Not connected · Owner sign-in required")
+                    QMessageBox.warning(dialog, "Sign in failed",
+                                        "Account unavailable or credentials not accepted.")
+                    return
+                self.owner_session_token = data["session_token"]
+                self.mail_owner_login.setEnabled(False)
+                self.mail_owner_logout.setEnabled(True)
+                self.crm_mail_connection.setText(
+                    "CEO authenticated · Resend not connected"
+                )
+                self.mail_inbox.set_connection_state(
+                    "disconnected",
+                    "CEO authenticated · Connect Resend to read professional messages."
+                )
+                dialog.accept()
+            self.bridge.call("owner-login", payload=payload, callback=received)
+
+        submit.clicked.connect(sign_in)
+        dialog.finished.connect(lambda _: setattr(self, "owner_login_dialog", None))
+        dialog.open()
+
+    def logout_owner(self):
+        """Sign out locally immediately, then revoke the DB session token."""
+        token = self.owner_session_token
+        if not token:
+            return
+        self.owner_session_token = None
+        self.mail_owner_login.setEnabled(True)
+        self.mail_owner_logout.setEnabled(False)
+        self.crm_mail_connection.setText("Not connected · Owner sign-in required")
+        self.mail_inbox.set_connection_state("disconnected")
+        def received(_data, error):
+            if error:
+                QMessageBox.warning(
+                    self, "Session revocation unavailable",
+                    "Your local view was signed out. The database session "
+                    "could not be revoked; it expires after 30 minutes."
+                )
+        self.bridge.call("owner-logout", payload={"session_token": token},
+                         callback=received)
 
     def reload_operator_profile(self):
         """Read only the currently logged-in local operator's display identity."""
