@@ -238,7 +238,6 @@ class MailInboxView(QWidget):
             text = ("● " if item.get("unread") else "") + subject + ("\n" + date if date else "")
             row = QListWidgetItem(text)
             row.setData(Qt.ItemDataRole.UserRole, thread_id)
-            row.setToolTip(subject)
             self.thread_list.addItem(row)
         self.thread_list.blockSignals(False)
         count = self.thread_list.count()
@@ -288,9 +287,10 @@ class MailInboxView(QWidget):
         for item in messages[:50]:
             if not isinstance(item, dict):
                 continue
+            recipients = item.get("to") if isinstance(item.get("to"), list) else []
             header = "From: {}\nTo: {}\nDate: {}\nSubject: {}".format(
                 str(item.get("from") or "")[:254],
-                ", ".join(map(str, item.get("to") or []))[:500],
+                ", ".join(map(str, recipients[:20]))[:500],
                 str(item.get("created_at") or "")[:64],
                 str(item.get("subject") or "")[:300],
             )
@@ -299,7 +299,8 @@ class MailInboxView(QWidget):
                 message = "[HTML-only message: safe text preview not available]"
             view.append(header + "\n\n" + message)
         self.body.setPlainText(
-            "\n\n" + ("─" * 30) + "\n\n".join(view) if view else "No messages in this thread."
+            ("\n\n" + ("─" * 30) + "\n\n").join(view)
+            if view else "No messages in this thread."
         )
         self.meta.setText("{} message(s) · Plain text only.".format(len(view)))
         # Reply, ticket and company actions stay disabled until a separate
