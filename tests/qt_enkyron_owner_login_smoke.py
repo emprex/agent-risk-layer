@@ -57,7 +57,13 @@ class OwnerSignInSmoke(unittest.TestCase):
             self.assertFalse(window.mail_owner_login.isEnabled())
             self.assertTrue(window.mail_owner_logout.isEnabled())
             self.assertIn("CEO authenticated",window.crm_mail_connection.text())
-            self.assertIn("Resend not connected",window.crm_mail_connection.text())
+            self.assertEqual(calls[-1][0],"owner-mail-status")
+            self.assertEqual(calls[-1][2],{"session_token":SESSION})
+            calls[-1][3]({"connected":False,"mailboxes":[
+                {"key":"direction","address":"guillaume.strohecker@agentrisklayer.com"},
+                {"key":"support","address":"support@agentrisklayer.com"},
+            ]},None)
+            self.assertIn("Resend setup required",window.crm_mail_connection.text())
             self.assertFalse(window.mail_inbox.refresh_button.isEnabled())
             window.mail_owner_logout.click()
             self.assertIsNone(window.owner_session_token)
