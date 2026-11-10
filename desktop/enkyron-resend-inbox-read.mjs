@@ -28,14 +28,13 @@ function normalizeList(value,limit){
       ||value.data.length>limit)throw new Error('Resend returned an invalid list');
   return value;
 }
-function validatePrincipal(principal,organizationId){
-  // The principal MUST be produced by a future trusted authentication service.
-  // An OS username, self-declared profile, or caller-supplied IPC identity is NOT enough.
+function validatePrincipal(principal,organizationId,authoriseRead){
+  if(typeof authoriseRead==='function')return;
   if(!ownerMailboxPermission(principal,organizationId,'direction','read'))
     throw new Error('Owner authentication required');
 }
 export function createResendInboxReader({organizationId,mailboxes,credentialProvider,
-  fetchImpl=globalThis.fetch}={}){
+  fetchImpl=globalThis.fetch,authoriseRead}={}){
   if(typeof organizationId!=='string'||!organizationId.trim()
       ||!mailboxes||typeof mailboxes!=='object'||Array.isArray(mailboxes)
       ||typeof credentialProvider!=='function'||typeof fetchImpl!=='function')
@@ -48,7 +47,7 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     throw new Error('Resend mailboxes must be distinct');
   const organisation=organizationId;
   async function get(path,principal,limit){
-    validatePrincipal(principal,organisation);
+    validatePrincipal(principal,organisation,authoriseRead);
     let token;
     try{token=await credentialProvider();}catch{
       throw new Error('Resend connection unavailable');
@@ -81,7 +80,9 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
   return Object.freeze({
     async listThreads({principal,mailbox,limit=30,after=null}={}){
       const inbox=choose(mailbox),count=pageLimit(limit);
-      if(!ownerMailboxPermission(principal,organisation,mailbox,'read'))
+      if(typeof authoriseRead==='function'
+        ?authoriseRead(mailbox)!==true
+        :!ownerMailboxPermission(principal,organisation,mailbox,'read'))
         throw new Error('Mailbox access denied');
     const query=new URLSearchParams({folders:'inbox',limit:String(count)});
     if(after!==null)query.set('after',requireUuid(after));
@@ -96,7 +97,9 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     },
     async listThreadEmails({principal,mailbox,threadId,limit=30,after=null}={}){
       const inbox=choose(mailbox),thread=requireUuid(threadId),count=pageLimit(limit);
-      if(!ownerMailboxPermission(principal,organisation,mailbox,'read'))
+      if(typeof authoriseRead==='function'
+        ?authoriseRead(mailbox)!==true
+        :!ownerMailboxPermission(principal,organisation,mailbox,'read'))
         throw new Error('Mailbox access denied');
       const query=new URLSearchParams({limit:String(count)});
     if(after!==null)query.set('after',requireUuid(after));
