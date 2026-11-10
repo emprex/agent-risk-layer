@@ -7,7 +7,7 @@ const direction='11111111-1111-4111-8111-111111111111';
 const support='22222222-2222-4222-8222-222222222222';
 const thread='bed11232-01bb-4abd-a332-512c92261ff1';
 const email='34a0888b-4ddb-4abd-bba4-9f3e73687c20';
-const owner={verified:true,status:'active',role:'organization_owner_l5',
+const owner={verified:true,status:'active',loginName:'ceo',role:'organization_owner_l5',
   principalId:'operator-owner',personId:'person-owner',organizationId:org};
 function setup(fetchImpl,seen){
   return createResendInboxReader({organizationId:org,mailboxes:{direction,support},
