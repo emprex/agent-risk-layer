@@ -1,8 +1,10 @@
 """ENKYRON Mail native UX smoke: synthetic content, no PostgreSQL and no Resend."""
 import os
 import unittest
+import gc
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import MailInboxView
@@ -21,6 +23,15 @@ class MailNativeUXSmoke(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def _dispose(self, widget):
+        # Release Qt-owned children while QApplication is still alive.
+        # Avoid delayed QObject destruction during Python interpreter shutdown.
+        widget.close()
+        widget.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.app.processEvents()
+        gc.collect()
+
     def test_inbox_is_disconnected_and_actions_are_not_live(self):
         ui = MailInboxView()
         try:
@@ -38,7 +49,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertFalse(ui.show_threads("direction", [{"id": THREAD, "subject": "fake"}]))
             self.assertEqual(ui.thread_list.count(), 0)
         finally:
-            ui.close()
+            self._dispose(ui)
 
     def test_account_switch_clears_old_threads_and_never_changes_mail(self):
         ui = MailInboxView()
@@ -89,7 +100,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             }]))
             self.assertEqual(ui.thread_list.count(), 0)
         finally:
-            ui.close()
+            self._dispose(ui)
 
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
@@ -126,7 +137,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertFalse(window.mail_inbox.reply_button.isEnabled())
         finally:
             if window:
-                window.close()
+                self._dispose(window)
             DesktopBridge.call = prior
 
 
