@@ -186,6 +186,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_inbox_smoke.py'
 
+      - name: ENKYRON Owner login native Qt smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_owner_login_smoke.py'
+
       - name: UX-14 native manual external send smoke
         env:
           QT_QPA_PLATFORM: offscreen
