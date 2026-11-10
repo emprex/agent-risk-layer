@@ -47,7 +47,14 @@ class CompanyFollowupsSmoke(unittest.TestCase):
             self.assertNotIn("recipient_email", calls[-1][2])
             # Local response is only simulated; no customer DB changed.
             dialog.reject()
-            window.open_company_followups()
+            # UX-16A: Home gives one-click access to company-owned follow-ups.
+            # This is the existing read-only upcoming view, not opportunity tasks.
+            self.assertEqual(window.navigation.currentRow(), 0)
+            self.assertEqual(window.home_company_followups_button.text(),
+                             "Company follow-ups")
+            self.assertTrue(window.home_company_followups_button.isVisible())
+            window.home_company_followups_button.click()
+            self.assertEqual(window.navigation.currentRow(), 0)
             new_dialog = window.crm_company_followups_dialog
             self.assertTrue(new_dialog.isVisible())
             self.assertEqual(calls[-1][0], "crm-company-followups-upcoming")
