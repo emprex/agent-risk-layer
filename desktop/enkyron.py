@@ -372,7 +372,16 @@ class EnkyronWindow(QMainWindow):
         top_layout.addSpacing(24)
         top_layout.addWidget(QLabel("AgentRiskLayer · Client Desk & Security Operations"))
         top_layout.addStretch()
-        top_layout.addWidget(QLabel("LOCAL WORKSPACE"))
+        self.account_identity_label = QLabel("LOCAL WORKSPACE")
+        self.account_identity_label.setObjectName("enkyronPersonalIdentity")
+        self.account_identity_label.setTextFormat(Qt.TextFormat.PlainText)
+        top_layout.addWidget(self.account_identity_label)
+        self.account_profile_button = QPushButton("My account…")
+        self.account_profile_button.setObjectName("enkyronMyAccount")
+        self.account_profile_button.clicked.connect(self.open_personal_profile)
+        top_layout.addWidget(self.account_profile_button)
+        self.operator_profile_state = None
+        self.operator_profile_dialog = None
         outer.addWidget(top)
 
         # Application-level navigation; the ticket list is no longer the main menu.
@@ -1602,6 +1611,146 @@ class EnkyronWindow(QMainWindow):
         self.search.textChanged.connect(lambda _: self.search_timer.start())
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
+        self.reload_operator_profile()
+
+    def reload_operator_profile(self):
+        """Read only the currently logged-in local operator's display identity."""
+        def received(result, error):
+            if error or not result or not result.get("available"):
+                self.operator_profile_state = None
+                self.account_identity_label.setText("LOCAL WORKSPACE")
+                return
+            self.operator_profile_state = result
+            current = result.get("current") or {}
+            self.account_identity_label.setText(
+                "{} · {}".format(
+                    current.get("display_name"), current.get("job_title")
+                ) if current.get("display_name") else "LOCAL WORKSPACE"
+            )
+        self.bridge.call("operator-profile", callback=received)
+
+    def open_personal_profile(self):
+        """Native local display-identity editor; never an authorization form."""
+        if self.operator_profile_dialog and self.operator_profile_dialog.isVisible():
+            self.operator_profile_dialog.raise_()
+            self.operator_profile_dialog.activateWindow()
+            return
+        self.account_profile_button.setEnabled(False)
+
+        def received(result, error):
+            self.account_profile_button.setEnabled(True)
+            if error or not result or not result.get("available"):
+                QMessageBox.warning(
+                    self, "Personal profile unavailable",
+                    error or (result or {}).get("notice", "Check migration 107.")
+                )
+                return
+            self.show_personal_profile(result)
+
+        self.bridge.call("operator-profile", callback=received)
+
+    def show_personal_profile(self, result):
+        current = result.get("current") or {}
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · My account")
+        dialog.setMinimumWidth(610)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("MY ACCOUNT · PERSONAL DISPLAY IDENTITY"))
+        notice = QLabel(
+            "Your name is separate from the Linux operator and the legal "
+            "issuing-company profile. Founder / Owner is a local self-declared "
+            "label, NOT an authentication role or a permission grant. "
+            "L5 RBAC, MFA and multi-user access are not implemented yet."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        form = QFormLayout()
+        self.operator_profile_fields = {}
+        for key, label, max_len, hint in (
+            ("display_name", "Full name *", 120, "Your personal name"),
+            ("job_title", "Position *", 100, "Founder"),
+            ("organization_display", "Organisation (display only) *", 160,
+             "Company or organisation"),
+            ("work_email", "Email (optional)", 254,
+             "Account for business correspondence"),
+        ):
+            field = QLineEdit()
+            field.setMaxLength(max_len)
+            field.setText(current.get(key) or "")
+            field.setPlaceholderText(hint)
+            form.addRow(label, field)
+            self.operator_profile_fields[key] = field
+        layout.addLayout(form)
+        technical = QLabel(
+            "Technical Linux identity: {} (unchanged). Original CRM audit records "
+            "retain their historical actor.".format(
+                result.get("local_operator") or "Local operator"
+            )
+        )
+        technical.setWordWrap(True)
+        layout.addWidget(technical)
+        if current:
+            previous = QLabel(
+                "Current saved revision: {} · Saved: {}".format(
+                    current.get("revision") or "?",
+                    display_date(current.get("recorded_at"))
+                )
+            )
+            layout.addWidget(previous)
+        self.operator_profile_confirm = QCheckBox(
+            "I confirm this personal display information is my declaration, "
+            "not verified ownership or an L5 access grant."
+        )
+        layout.addWidget(self.operator_profile_confirm)
+        actions = QHBoxLayout()
+        dismiss = QPushButton("Cancel")
+        dismiss.clicked.connect(dialog.reject)
+        actions.addWidget(dismiss)
+        actions.addStretch()
+        self.operator_profile_save = QPushButton("Save my profile")
+        self.operator_profile_save.setObjectName("primary")
+        actions.addWidget(self.operator_profile_save)
+        layout.addLayout(actions)
+        self.operator_profile_context = {"expected_revision":int(current.get("revision") or 0)}
+        self.operator_profile_dialog = dialog
+        self.operator_profile_save.clicked.connect(self.save_personal_profile)
+        dialog.open()
+
+    def save_personal_profile(self):
+        dialog = self.operator_profile_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        payload = {key:widget.text().strip()
+                   for key,widget in self.operator_profile_fields.items()}
+        payload.update(self.operator_profile_context)
+        if not all(payload.get(key) for key in
+                   ("display_name", "job_title", "organization_display")):
+            QMessageBox.warning(dialog, "Missing profile information",
+                                "Enter your name, position and organisation.")
+            return
+        if not self.operator_profile_confirm.isChecked():
+            QMessageBox.warning(dialog, "Confirmation required",
+                                "Confirm the personal display identity declaration.")
+            return
+        payload["confirmed"] = True
+        self.operator_profile_save.setEnabled(False)
+
+        def received(result, error):
+            if not dialog.isVisible():
+                return
+            if error or not result or not result.get("revision"):
+                self.operator_profile_save.setEnabled(True)
+                QMessageBox.warning(dialog, "Personal profile not saved",
+                                    error or "Check the current profile revision.")
+                return
+            dialog.accept()
+            self.reload_operator_profile()
+            QMessageBox.information(
+                self, "Profile saved",
+                "Your personal display profile has been saved. Existing Linux "
+                "ownership, CRM audit history and security permissions were not changed."
+            )
+        self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
     def closeEvent(self, event):
         # Close both detached company views before the operator workspace exits.
