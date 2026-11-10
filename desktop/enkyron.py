@@ -3693,10 +3693,11 @@ class EnkyronWindow(QMainWindow):
                     self.crm_qualification_rationale.toPlainText().strip()
                     or self.crm_qualification_source.text().strip()
                     or self.crm_qualification_next.text().strip()
-                    or self.crm_qualification_subject.currentIndex() != 0
-                    or self.crm_qualification_fit.currentIndex() != 0
-                    or self.crm_qualification_priority.currentIndex() != 0
                 )):
+            # A subject, fit or priority selection without a written review
+            # is not a savable qualification. In particular, simply selecting
+            # a contact after a successful review must not trigger a false
+            # 'Discard unsaved work?' prompt when closing the dossier.
             pending.append("qualification review")
         return False, pending
 

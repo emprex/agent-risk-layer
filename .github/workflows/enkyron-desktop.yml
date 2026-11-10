@@ -183,6 +183,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_manual_sends_smoke.py'
 
+      - name: Dossier close after qualification — native Qt regression
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_dossier_close_qualification_smoke.py'
+
       - name: Native window smoke without PostgreSQL
         env:
           QT_QPA_PLATFORM: offscreen
