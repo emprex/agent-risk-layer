@@ -50,7 +50,7 @@ try{
   const existing=applied.get(version);
   if(existing && existing!==expected)throw new Error('ENKYRON migration checksum mismatch');
   if(existing){
-    console.log('ENKYRON company-first journal/draft schema 103 already applied and checksum verified. No changes.');
+    console.log('ENKYRON company-first journal/draft schema 104 already applied and checksum verified. No changes.');
   }else if(mode==='--check'){
     console.log('ENKYRON company-first journal/draft schema 103 not applied. Historical migrations verified; no changes.');
   }else{
@@ -90,6 +90,6 @@ try{
       await client.query('ROLLBACK').catch(()=>{});
       throw error;
     }
-    console.log('ENKYRON company-first journal/draft schema 103 applied. Only additive company-first journal/draft/payment records created; existing drafts, contracts and assessments remain unchanged.');
+    console.log('ENKYRON company-first journal/draft schema 104 applied. Existing records and opportunities remain unchanged; company-first notes and unsent drafts are now supported.');
   }
 }finally{await client.end();}
