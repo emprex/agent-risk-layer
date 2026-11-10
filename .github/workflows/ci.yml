@@ -268,6 +268,12 @@ jobs:
           ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
         run: node --test tests/enkyron-operator-personal-profile-postgres.test.js
 
+      - name: ENKYRON UX-15B1 dormant identities and lifecycle PostgreSQL tests
+        env:
+          CI: 'true'
+          ARL_CI_POSTGRES_URL: postgresql://arl_ci:synthetic-ci-only@127.0.0.1:5432/arl_ci
+        run: node --test tests/enkyron-identity-registry-postgres.test.js
+
       - name: ENKYRON CRM local unsent mail draft PostgreSQL integration
         env:
           CI: 'true'
