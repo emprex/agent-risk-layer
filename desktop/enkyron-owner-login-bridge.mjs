@@ -10,6 +10,7 @@ import {constants as C} from 'node:fs';
 import pg from 'pg';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
+import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
 import {
   loginLocalOwner, resolveLocalOwnerSession, logoutLocalOwner,
 } from './enkyron-owner-session.mjs';
@@ -92,14 +93,18 @@ async function main(){
       catch{
         if(operation==='owner-mail-status'){
           emit({ok:true,result:{
-            connected:false,notice:'Resend is not configured on this workstation',
+            connected:false,mailboxes:ownerMailAccessCard().mailboxes,
+            notice:'Resend is not configured on this workstation',
           }});
           return;
         }
         throw new Error('Mail provider not configured');
       }
       if(operation==='owner-mail-status'){
-        emit({ok:true,result:{connected:true,notice:'Resend credentials configured'}});
+        emit({ok:true,result:{
+          connected:true,mailboxes:ownerMailAccessCard().mailboxes,
+          notice:'Resend credentials configured',
+        }});
         return;
       }
       const reader=createResendInboxReader({
