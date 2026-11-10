@@ -18,6 +18,8 @@ class MailInboxView(QWidget):
     mailboxChanged = Signal(str)
     refreshRequested = Signal(str)
     threadRequested = Signal(str, str)
+    draftsRequested = Signal()
+    deskRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,6 +63,18 @@ class MailInboxView(QWidget):
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
         self.connection_label.setWordWrap(True)
         root.addWidget(self.connection_label)
+        # These routes remain useful even without a Resend connection.
+        quick = QHBoxLayout()
+        self.local_drafts_button = QPushButton("Open local drafts")
+        self.local_drafts_button.setObjectName("enkyronMailOpenDrafts")
+        self.local_drafts_button.clicked.connect(self.draftsRequested.emit)
+        quick.addWidget(self.local_drafts_button)
+        self.client_desk_button = QPushButton("Open Client Desk")
+        self.client_desk_button.setObjectName("enkyronMailOpenClientDesk")
+        self.client_desk_button.clicked.connect(self.deskRequested.emit)
+        quick.addWidget(self.client_desk_button)
+        quick.addStretch()
+        root.addLayout(quick)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -73,7 +87,7 @@ class MailInboxView(QWidget):
         self.search = QLineEdit()
         self.search.setObjectName("enkyronMailSearch")
         self.search.setAccessibleName("Search loaded conversations")
-        self.search.setPlaceholderText("Search sender or subject…")
+        self.search.setPlaceholderText("Search loaded conversation subjects…")
         self.search.setMaxLength(120)
         self.search.setEnabled(False)
         self.search.textChanged.connect(self._filter)
