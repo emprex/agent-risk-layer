@@ -1991,7 +1991,9 @@ class EnkyronWindow(QMainWindow):
             "Your name is separate from the Linux operator and the legal "
             "issuing-company profile. Founder / Owner is a local self-declared "
             "label, NOT an authentication role or a permission grant. "
-            "L5 RBAC, MFA and multi-user access are not implemented yet."
+            "The separate CEO sign-in verifies passphrase and MFA for Mail. "
+            "Full L5 enforcement across legacy CRM/Tickets and multi-user access "
+            "are not implemented yet."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -2016,9 +2018,10 @@ class EnkyronWindow(QMainWindow):
                     mailbox.get("address") or "Not assigned", rights
                 )
             account_text += (
-                "Connection: Not connected. Owner login/MFA and real Resend "
-                "mail access remain inactive."
-            )
+                "CEO sign-in: {}. Mail provider: consult the Mail workspace.\n"
+                "Assigned mailbox rights do not bypass provider configuration "
+                "or existing per-action checks."
+            ).format("signed in" if self.owner_session_token else "not signed in")
             account_card = QLabel(account_text)
             account_card.setTextFormat(Qt.TextFormat.PlainText)
             account_card.setWordWrap(True)
