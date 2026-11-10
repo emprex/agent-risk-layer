@@ -3132,6 +3132,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_saving = False
         self.crm_dossier_activity_editor = None
         self.crm_dossier_activity_flash = ""
+        self.crm_dossier_followup_editor = None
+        self.crm_dossier_followup_saving = False
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
         dialog.show()
@@ -3159,6 +3161,12 @@ class EnkyronWindow(QMainWindow):
         dialog = self.crm_dossier_dialog
         company_id = self.crm_dossier_company_id
         if not dialog or not dialog.isVisible() or not company_id:
+            return
+        if self.crm_dossier_followup_editor is not None:
+            QMessageBox.information(
+                dialog, "Unsaved next action",
+                "Save or cancel the open next-action edit before refreshing."
+            )
             return
         self.crm_dossier_seq += 1
         seq = self.crm_dossier_seq
@@ -3507,6 +3515,27 @@ class EnkyronWindow(QMainWindow):
                                 if n == 0:
                                     field.setStyleSheet("font-weight: bold;")
                                 content.addWidget(field)
+                            if section_id == "opportunities":
+                                edit = QPushButton("Edit next action")
+                                edit.setObjectName("crmDossierEditFollowup")
+                                edit.setEnabled(
+                                    isinstance(item.get("opportunity_id"), str)
+                                    and isinstance(item.get("version"), int)
+                                    and item.get("version", 0) >= 1
+                                    and item.get("stage") in (
+                                        "research", "qualified", "contact_planned",
+                                        "contacted", "discovery", "proposal",
+                                        "negotiation", "won", "lost"
+                                    )
+                                )
+                                edit.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           parent=card, scoped_company=company_id:
+                                    self.open_dossier_followup_editor(
+                                        parent, record, scoped_company
+                                    )
+                                )
+                                content.addWidget(edit)
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id in {
@@ -3822,7 +3851,7 @@ class EnkyronWindow(QMainWindow):
                         )
                     self.update_dossier_activity_save()
 
-                if section_id == "qualifications":
+                if section_id in ("qualifications", "contacts", "opportunities"):
                     scroll = QScrollArea()
                     scroll.setWidgetResizable(True)
                     scroll.setWidget(page)
@@ -3858,6 +3887,152 @@ class EnkyronWindow(QMainWindow):
             )
 
         self.bridge.call("crm-company-dossier", company_id, callback=received)
+
+
+    def open_dossier_followup_editor(self, card, record, company_id):
+        """Edit the already-linked next action in-place, without a new window."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        if self.crm_dossier_followup_editor is not None:
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the current next-action edit first."
+            )
+            return
+        opportunity_id = record.get("opportunity_id")
+        version = record.get("version")
+        stage = record.get("stage")
+        if (not opportunity_id or not isinstance(version, int)
+                or version < 1 or not stage):
+            QMessageBox.warning(
+                dialog, "Refresh required",
+                "The opportunity has no verifiable revision. Refresh dossier."
+            )
+            return
+
+        editor = QFrame(card)
+        editor.setObjectName("crmDossierFollowupEditor")
+        editor.setStyleSheet(
+            "QFrame#crmDossierFollowupEditor { "
+            "background: #ffffff; border: 1px solid #9cb9c6; "
+            "border-radius: 5px; }"
+        )
+        layout = QVBoxLayout(editor)
+        notice = QLabel(
+            "Update the planned action only. Stage and forecast stay unchanged; "
+            "this does not send a message or schedule a notification."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        form = QFormLayout()
+        action = QPlainTextEdit()
+        action.setObjectName("crmDossierFollowupAction")
+        action.setMaximumHeight(110)
+        action.setPlainText(str(record.get("next_action") or ""))
+        action.setPlaceholderText("Describe the next concrete commercial action.")
+        form.addRow("Next action *", action)
+        has_date = QCheckBox("Set due date")
+        due = QDateEdit()
+        due.setDisplayFormat("yyyy-MM-dd")
+        due.setCalendarPopup(True)
+        due.setDate(QDate.currentDate())
+        existing_date = str(record.get("due_date") or "")[:10]
+        parsed = QDate.fromString(existing_date, "yyyy-MM-dd")
+        if parsed.isValid():
+            due.setDate(parsed)
+            has_date.setChecked(True)
+        due.setEnabled(has_date.isChecked())
+        has_date.toggled.connect(due.setEnabled)
+        due_row = QHBoxLayout()
+        due_row.addWidget(has_date)
+        due_row.addWidget(due)
+        form.addRow("Due", due_row)
+        layout.addLayout(form)
+        confirmed = QCheckBox(
+            "I confirm this action and due date were entered by me."
+        )
+        layout.addWidget(confirmed)
+        controls = QHBoxLayout()
+        cancel = QPushButton("Cancel edit")
+        save = QPushButton("Save next action")
+        save.setObjectName("crmDossierSaveFollowup")
+        save.setEnabled(False)
+        controls.addWidget(cancel)
+        controls.addWidget(save)
+        layout.addLayout(controls)
+        card.layout().addWidget(editor)
+        self.crm_dossier_followup_editor = editor
+        self.crm_dossier_followup_action = action
+        self.crm_dossier_followup_confirm = confirmed
+        self.crm_dossier_followup_save = save
+        self.crm_dossier_followup_cancel = cancel
+
+        def enabled(*_args):
+            value = action.toPlainText().strip()
+            save.setEnabled(
+                not self.crm_dossier_followup_saving
+                and confirmed.isChecked()
+                and 5 <= len(value) <= 1000
+                and not any(ord(c) < 32 or ord(c) == 127 for c in value)
+            )
+
+        def finish():
+            if self.crm_dossier_followup_editor is editor:
+                self.crm_dossier_followup_editor = None
+                self.crm_dossier_followup_saving = False
+            editor.setParent(None)
+            editor.deleteLater()
+
+        def submit():
+            if (self.crm_dossier_followup_editor is not editor
+                    or self.crm_dossier_followup_saving
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id
+                    or not save.isEnabled()):
+                return
+            payload = {
+                "id": opportunity_id,
+                "company_id": company_id,
+                "expected_version": version,
+                "confirmed": True,
+                "stage": stage,
+                "next_action": action.toPlainText().strip(),
+                "due_date": (
+                    due.date().toString("yyyy-MM-dd")
+                    if has_date.isChecked() else None
+                )
+            }
+            self.crm_dossier_followup_saving = True
+            enabled()
+
+            def received(result, error):
+                if (self.crm_dossier_followup_editor is not editor
+                        or company_id != self.crm_dossier_company_id
+                        or not dialog.isVisible()):
+                    return
+                self.crm_dossier_followup_saving = False
+                if (error or not result or result.get("id") != opportunity_id
+                        or result.get("version") != version + 1):
+                    enabled()
+                    QMessageBox.warning(
+                        dialog, "Update not confirmed",
+                        str(error or "The opportunity may have changed. "
+                            "Review and refresh before retrying.")
+                    )
+                    return
+                finish()
+                self.refresh_company_dossier()
+
+            self.bridge.call("crm-update-opportunity",
+                             payload=payload, callback=received)
+
+        action.textChanged.connect(enabled)
+        confirmed.toggled.connect(enabled)
+        has_date.toggled.connect(enabled)
+        cancel.clicked.connect(finish)
+        save.clicked.connect(submit)
 
     def update_dossier_activity_save(self, *_args):
         """Only offer an append when the operator confirmed a valid local note."""

@@ -107,6 +107,10 @@ export function validateOpportunityUpdate(data){
     throw new Error('CRM invalid opportunity identifier');
   if(!Number.isSafeInteger(data.expected_version)||data.expected_version<1)
     throw new Error('CRM invalid opportunity revision');
+  // Company-360 updates demand a fresh human assertion. Legacy internal
+  // follow-up edits without a company scope retain their existing contract.
+  if(Object.hasOwn(data,'company_id')&&data.confirmed!==true)
+    throw new Error('CRM company dossier update requires explicit human confirmation');
   if(!OPPORTUNITY_STAGES.includes(data.stage))
     throw new Error('CRM invalid commercial stage');
   return {
@@ -115,6 +119,8 @@ export function validateOpportunityUpdate(data){
     stage:data.stage,
     next_action:textField(data.next_action,'next action',5,1000),
     due_date:dateField(data.due_date),
+    ...(Object.hasOwn(data,'company_id')?
+      {company_id:requireCompanyId(data.company_id)}:{}),
     ...(Object.hasOwn(data,'probability_percent')?
       {probability_percent:validateOpportunityProbability(data.probability_percent)}:{})
   };
@@ -214,6 +220,26 @@ export async function updateOpportunity(pool,input,operator,options={}){
     if(!existing)throw new Error('CRM opportunity not found for local operator');
     if(existing.version!==req.expected_version)
       throw new Error('CRM opportunity changed since opening; refresh before saving');
+    // A company-dossier edit must still belong to that exact company at
+    // execution time, not merely to this local operator's workspace.
+    // Reuse the same explicit prospect/company/effective ticket associations
+    // as the read-only 360 dossier; never infer association from a name.
+    if(Object.hasOwn(req,'company_id')){
+      const link=(await client.query(
+        'SELECT EXISTS(SELECT 1 FROM enkyron_crm_opportunities o '+
+        'WHERE o.workspace_key=$1 AND o.id=$2 AND ('+
+        'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '+
+        'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '+
+        'AND l.company_id=$3) OR '+
+        '(o.company_id=$3 AND (o.source_ticket_id IS NULL OR EXISTS ('+
+        'SELECT 1 FROM enkyron_crm_effective_ticket_links e '+
+        'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '+
+        'AND e.ticket_id=o.source_ticket_id))))) AS linked',
+        [scope.key,req.id,req.company_id]
+      )).rows[0];
+      if(link?.linked!==true)
+        throw new Error('CRM opportunity is no longer linked to this company; refresh dossier');
+    }
     const oldDue=existing.due_date
       ? (existing.due_date instanceof Date ? existing.due_date.toISOString().slice(0,10)
         : String(existing.due_date).slice(0,10)) : null;
