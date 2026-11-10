@@ -47,7 +47,7 @@ async function verifyEnvironment(){
   }
 }
 function run(command,args,timeout=180000){
-  const p=spawnSync(command,args,{encoding:'utf8',timeout,maxBuffer:4096});
+  const p=spawnSync(command,args,{stdio:['ignore','ignore','pipe'],encoding:'utf8',timeout,maxBuffer:4096});
   if(p.status!==0)throw new Error('Required local backup command failed: '+command);
   return p;
 }
