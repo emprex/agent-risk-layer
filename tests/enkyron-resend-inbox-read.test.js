@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {createResendInboxReader} from '../desktop/enkyron-resend-inbox-read.mjs';
 
 const org='org:01234567-89ab-cdef-0123-456789abcdef';
-const direction='03696bf5-4f1c-4680-a39a-ce359a16e2cb';
-const support='a82817ce-8fb8-4e09-8e05-b470a8238963';
+const direction='11111111-1111-4111-8111-111111111111';
+const support='22222222-2222-4222-8222-222222222222';
 const thread='bed11232-01bb-4abd-a332-512c92261ff1';
 const email='34a0888b-4ddb-4abd-bba4-9f3e73687c20';
 const owner={verified:true,status:'active',role:'organization_owner_l5',
