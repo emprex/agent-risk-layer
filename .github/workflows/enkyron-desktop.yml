@@ -927,6 +927,7 @@ jobs:
               "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
               "company_id": company_id,
               "expected_version": 1,
+              "confirmed": True,
               "stage": "contacted",
               "next_action": "Prepare a human-reviewed pilot proposal next week.",
               "due_date": "2026-11-12"
