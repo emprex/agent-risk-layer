@@ -1280,13 +1280,29 @@ class EnkyronWindow(QMainWindow):
         sent_layout = QVBoxLayout(sent_page)
         sent_layout.setContentsMargins(20, 20, 20, 20)
         sent_note = QLabel(
-            "Sent mail is not connected. Local operator-reported external sends "
-            "are recorded under Drafts, but are not verified provider receipts."
+            "Messages submitted by ENKYRON through Resend. Accepted means the "
+            "provider accepted the request, not that it was delivered."
         )
         sent_note.setTextFormat(Qt.TextFormat.PlainText)
         sent_note.setWordWrap(True)
         sent_layout.addWidget(sent_note)
-        sent_layout.addStretch()
+        self.mail_sent_table = QTableWidget(0,4)
+        self.mail_sent_table.setObjectName("enkyronMailSentTable")
+        self.mail_sent_table.setHorizontalHeaderLabels(
+            ["From","To","Subject","Status"]
+        )
+        self.mail_sent_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.mail_sent_table.horizontalHeader().setSectionResizeMode(
+            2,QHeaderView.ResizeMode.Stretch
+        )
+        sent_layout.addWidget(self.mail_sent_table,1)
+        self.mail_sent_status = QLabel("Sent history has not been loaded.")
+        sent_layout.addWidget(self.mail_sent_status)
+        self.crm_mail_folders.currentChanged.connect(
+            lambda idx: self.load_mail_sent() if idx==1 else None
+        )
         self.crm_mail_folders.addTab(sent_page, "Sent")
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
         self.crm_mail_folders.setCurrentIndex(0)
@@ -1725,6 +1741,35 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-messages",
             payload={"mailbox":mailbox,"thread_id":thread_id},callback=received)
 
+    def load_mail_sent(self):
+        """Show actual ENKYRON provider send attempts, never fabricated delivery."""
+        if not hasattr(self,"mail_sent_table"):
+            return
+        self.mail_sent_status.setText("Loading sent history…")
+        def received(data,error):
+            self.mail_sent_table.setRowCount(0)
+            if error or not data or not data.get("available"):
+                self.mail_sent_status.setText(
+                    "Sent history needs the Mail database workspace update."
+                )
+                return
+            entries=data.get("items") or []
+            self.mail_sent_table.setRowCount(len(entries))
+            for n,row in enumerate(entries):
+                fields=[
+                    "Direction" if row.get("mailbox_key")=="direction" else "Support",
+                    row.get("recipient_email") or "",
+                    row.get("subject") or "",
+                    "Accepted by Resend" if row.get("outcome")=="accepted"
+                    else "Status uncertain · check provider"
+                ]
+                for column,value in enumerate(fields):
+                    self.mail_sent_table.setItem(
+                        n,column,QTableWidgetItem(str(value))
+                    )
+            self.mail_sent_status.setText("{} submitted message(s).".format(len(entries)))
+        self.bridge.call("mail-sent",callback=received)
+
     def open_mail_compose(self):
         """New business email from Mail, no CRM company or login required."""
         if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
@@ -1953,6 +1998,8 @@ class EnkyronWindow(QMainWindow):
                 self.load_proposals()
 
     def crm_tab_changed(self, index):
+        if index == 3:
+            self.load_mail_status()
         if index == 4 and self.navigation.currentRow() == 2:
             self.load_pipeline()
         if index == 5 and self.navigation.currentRow() == 2:
@@ -12257,6 +12304,8 @@ class EnkyronWindow(QMainWindow):
                 return
             if error or not data or not data.get("id"):
                 self.crm_mail_save.setEnabled(True)
+                if hasattr(self,"crm_mail_send"):
+                    self.crm_mail_send.setEnabled(True)
                 QMessageBox.warning(dialog, "Draft not saved",
                                     error or "The local draft could not be saved.")
                 return
@@ -12308,9 +12357,8 @@ class EnkyronWindow(QMainWindow):
                   if mailbox=="direction" else "support@agentrisklayer.com")
         decision = QMessageBox.question(
             dialog, "Confirm email send",
-            "SEND this message now?\n\nFrom: {}\nTo: {}\nSubject: {}\n\n"
-            "Resend acceptance is not proof of delivery."
-            .format(sender,to,subject),
+            ("SEND this message now?\n\nFrom: {}\nTo: {}\nSubject: {}\n\n"
+             "Resend acceptance is not proof of delivery.").format(sender,to,subject),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
