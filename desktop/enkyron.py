@@ -4014,10 +4014,13 @@ class EnkyronWindow(QMainWindow):
         buttons.addWidget(cancel)
         buttons.addWidget(save)
         layout.addLayout(buttons)
-        if isinstance(container.layout(), QVBoxLayout):
-            container.layout().addWidget(editor)
-        else:
+        if not isinstance(container.layout(), QVBoxLayout):
             raise RuntimeError("Contact editor requires a vertical container")
+        if creating:
+            # Put the new-contact form directly below its action, before cards.
+            container.layout().insertWidget(1, editor)
+        else:
+            container.layout().addWidget(editor)
         self.crm_dossier_contact_editor = editor
         self.crm_dossier_contact_inputs = inputs
         self.crm_dossier_contact_submit = save
@@ -4218,10 +4221,11 @@ class EnkyronWindow(QMainWindow):
         if (not dialog or not dialog.isVisible()
                 or company_id != self.crm_dossier_company_id):
             return
-        if self.crm_dossier_followup_editor is not None:
+        if (self.crm_dossier_followup_editor is not None
+                or self.crm_dossier_contact_editor is not None):
             QMessageBox.information(
                 dialog, "Finish current edit",
-                "Save or cancel the current next-action edit first."
+                "Save or cancel the current contact or next-action edit first."
             )
             return
         opportunity_id = record.get("opportunity_id")
