@@ -53,7 +53,10 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
   const organisation=organizationId;
   async function get(path,principal,limit){
     validatePrincipal(principal,organisation);
-    const token=await credentialProvider();
+    let token;
+    try{token=await credentialProvider();}catch{
+      throw new Error('Resend connection unavailable');
+    }
     if(typeof token!=='string'||!token.trim()||/\s/.test(token))
       throw new Error('Resend connection unavailable');
     let response;
