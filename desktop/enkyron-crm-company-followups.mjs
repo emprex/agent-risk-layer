@@ -88,7 +88,7 @@ export async function updateCompanyFollowup(pool,input,actor,options={}){
   const uuid=options.uuid??randomUUID;
   return transact(pool,async c=>{
     const prior=(await c.query(
-      'SELECT id,company_id,action_text,due_date,status,version '
+      'SELECT id,company_id,action_text,due_date::text AS due_date,status,version '
       +'FROM enkyron_crm_company_followups '
       +'WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
       [owner.key,data.id]
@@ -130,7 +130,7 @@ export async function listCompanyFollowups(pool,companyId,actor){
     )).rows[0];
     if(!exists)throw new Error('CRM company not found in local workspace');
     const data=await pool.query(
-      'SELECT f.id,f.company_id,f.action_text,f.due_date,f.status,f.version,'
+      'SELECT f.id,f.company_id,f.action_text,f.due_date::text AS due_date,f.status,f.version,'
       +'f.created_at,f.updated_at '
       +'FROM enkyron_crm_company_followups f '
       +'WHERE f.workspace_key=$1 AND f.company_id=$2 '
@@ -148,7 +148,7 @@ export async function listUpcomingCompanyFollowups(pool,actor){
   const owner=scope(actor);
   try{
     const rows=await pool.query(
-      'SELECT f.id,f.company_id,c.name AS company_name,f.action_text,f.due_date,'
+      'SELECT f.id,f.company_id,c.name AS company_name,f.action_text,f.due_date::text AS due_date,'
       +'f.status,f.version,f.updated_at '
       +'FROM enkyron_crm_company_followups f '
       +'JOIN enkyron_crm_companies c ON c.workspace_key=f.workspace_key AND c.id=f.company_id '
