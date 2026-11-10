@@ -57,12 +57,16 @@ export async function listMailDrafts(pool,search,actor){
   try{
     const result=await pool.query(
       'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.revision,'
-      +'d.updated_at,COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation '
+      +'d.updated_at,COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
+      +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
+      +'s.sent_at AS external_sent_at '
       +'FROM enkyron_crm_mail_drafts d '
       +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
       +'LEFT JOIN enkyron_crm_companies c '
       +'ON c.id=d.company_id AND c.workspace_key=d.workspace_key '
+      +'LEFT JOIN enkyron_crm_mail_manual_sends s '
+      +'ON s.draft_id=d.id AND s.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
@@ -71,7 +75,7 @@ export async function listMailDrafts(pool,search,actor){
       [owner.key,query]
     );
     return {available:true,items:result.rows.slice(0,100),
-      more:result.rows.length>100,kind:'local_unsent_drafts'};
+      more:result.rows.length>100,kind:'local_drafts_and_manual_send_reports'};
   }catch(e){
     if(e?.code==='42P01')return {available:false,items:[],more:false,
       notice:'CRM mail draft schema 070 not installed locally.'};
@@ -85,12 +89,18 @@ export async function readMailDraft(pool,id,actor){
     const row=(await pool.query(
       'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.body_text,'
       +'d.revision,d.updated_at,'
-      +'COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation '
+      +'COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
+      +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
+      +'s.provider AS manual_send_provider,s.provider_message_id AS manual_message_id, '
+      +'s.sender_email AS manual_sender_email,s.sent_at AS external_sent_at, '
+      +'s.draft_revision AS sent_draft_revision '
       +'FROM enkyron_crm_mail_drafts d '
       +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.workspace_key=d.workspace_key AND o.id=d.opportunity_id '
       +'LEFT JOIN enkyron_crm_companies c '
       +'ON c.workspace_key=d.workspace_key AND c.id=d.company_id '
+      +'LEFT JOIN enkyron_crm_mail_manual_sends s '
+      +'ON s.draft_id=d.id AND s.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 AND d.id=$2',
       [owner.key,id]
     )).rows[0];
@@ -149,13 +159,18 @@ export async function updateMailDraft(pool,input,actor,options={}){
   const data=validateDraftUpdate(input),owner=scope(actor),uuid=options.uuid??randomUUID;
   return transact(pool,async client=>{
     const previous=(await client.query(
-      'SELECT id,recipient_email,subject,body_text,revision '
+      'SELECT id,recipient_email,subject,body_text,revision, '
+      +'EXISTS (SELECT 1 FROM enkyron_crm_mail_manual_sends s '
+      +'WHERE s.workspace_key=enkyron_crm_mail_drafts.workspace_key '
+      +'AND s.draft_id=enkyron_crm_mail_drafts.id) AS external_send_reported '
       +'FROM enkyron_crm_mail_drafts WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
       [owner.key,data.id]
     )).rows[0];
     if(!previous)throw new Error('CRM draft not found in local workspace');
     if(previous.revision!==data.expected_revision)
       throw new Error('CRM draft was changed; reopen the latest revision');
+    if(previous.external_send_reported)
+      throw new Error('CRM draft has a manual external send record and cannot be edited');
     if((previous.recipient_email||'')===data.recipient_email
         && previous.subject===data.subject
         && previous.body_text===data.body_text)

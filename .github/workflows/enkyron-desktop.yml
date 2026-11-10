@@ -106,6 +106,9 @@ jobs:
           node --test tests/enkyron-crm-company-followups.test.js
           node --check desktop/enkyron-crm-activities.mjs
           node --check scripts/enkyron-remove-false-tickets-local.mjs
+          node --check desktop/enkyron-crm-mail-manual-sends.mjs
+          node --check scripts/enkyron-crm-mail-manual-sends-schema.mjs
+          node --test tests/enkyron-crm-mail-manual-sends.test.js
           node --check desktop/enkyron-crm-mail-drafts.mjs
           node --check desktop/enkyron-crm-overview.mjs
           node --check desktop/enkyron-crm-pipeline.mjs
@@ -173,6 +176,12 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_followups_smoke.py'
+
+      - name: UX-14 native manual external send smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_manual_sends_smoke.py'
 
       - name: Native window smoke without PostgreSQL
         env:

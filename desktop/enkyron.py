@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 import json
 import re
 from decimal import Decimal, InvalidOperation
@@ -1153,10 +1154,10 @@ class EnkyronWindow(QMainWindow):
         drafts_page = QWidget()
         drafts_l = QVBoxLayout(drafts_page)
         drafts_l.setSpacing(12)
-        drafts_l.addWidget(section_title("EMAIL · DRAFTS"))
+        drafts_l.addWidget(section_title("EMAIL · DRAFTS & EXTERNAL SEND RECORDS"))
         drafts_info = QLabel(
-            "Write and manage email drafts linked to your opportunities. "
-            "Sending is not available yet. Check recipient details before using them."
+            "Local drafts and operator-reported external sends for companies or "
+            "opportunities. No mailbox is connected and nothing is sent here."
         )
         drafts_info.setWordWrap(True)
         drafts_l.addWidget(drafts_info)
@@ -1176,7 +1177,7 @@ class EnkyronWindow(QMainWindow):
         drafts_l.addWidget(self.crm_draft_notice)
         self.crm_draft_table = QTableWidget(0, 5)
         self.crm_draft_table.setHorizontalHeaderLabels(
-            ["Opportunity", "Recipient (manual)", "Subject", "Revision", "Updated"]
+            ["Company / prospect", "Recipient (manual)", "Subject", "Status / revision", "Updated"]
         )
         self.crm_draft_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
@@ -1207,7 +1208,7 @@ class EnkyronWindow(QMainWindow):
         drafts_l.addWidget(self.crm_draft_table, 1)
         draft_footer = QHBoxLayout()
         draft_footer.addWidget(QLabel(
-            "Create a draft by selecting an opportunity in Follow-ups."
+            "Compose from a company dossier or an existing opportunity."
         ))
         draft_footer.addStretch()
         self.crm_edit_draft = QPushButton("Open selected draft")
@@ -1230,7 +1231,7 @@ class EnkyronWindow(QMainWindow):
         mail_l.addWidget(self.crm_mail_folders, 1)
         for folder, explanation in (
             ("Inbox", "Connect a professional mailbox later to receive messages here."),
-            ("Sent", "Sent messages will appear after a mailbox is connected.")
+            ("Sent", "Mailbox not connected. Externally sent messages reported by the operator are labelled in Drafts; no provider verification is claimed.")
         ):
             folder_page = QWidget()
             folder_layout = QVBoxLayout(folder_page)
@@ -3891,9 +3892,10 @@ class EnkyronWindow(QMainWindow):
                     ("Type", "activity_type"), ("Details", "detail"),
                     ("Operator", "recorded_by"), ("Recorded", "recorded_at")
                 ]),
-                ("drafts", "Email drafts", [
+                ("drafts", "Email drafts / sends", [
                     ("Subject", "subject"), ("Recipient", "recipient_email"),
-                    ("Revision", "revision"), ("Updated", "updated_at")
+                    ("Revision", "revision"), ("State", "send_state"),
+                    ("Updated", "updated_at")
                 ]),
                 ("commercial_docs", "Commercial drafts", [
                     ("Record", "document_kind"), ("Title", "title"),
@@ -11564,7 +11566,11 @@ class EnkyronWindow(QMainWindow):
                     draft.get("company_name_at_creation") or "",
                     draft.get("recipient_email") or "Not set",
                     draft.get("subject") or "(No subject)",
-                    draft.get("revision") or 1,
+                    (
+                        "External send reported · R{}" if
+                        draft.get("mail_state") == "external_send_reported"
+                        else "Draft · R{}"
+                    ).format(draft.get("revision") or 1),
                     display_date(draft.get("updated_at"))
                 ]
                 for column, value in enumerate(fields):
@@ -11574,7 +11580,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_draft_table.blockSignals(False)
             suffix = " First 100; refine search." if data.get("more") else ""
             self.crm_draft_notice.setText(
-                "{} draft(s) saved.{}".format(len(self.crm_draft_items), suffix)
+                "{} draft / external send record(s).{}".format(len(self.crm_draft_items), suffix)
             )
 
         self.bridge.call("crm-mail-drafts", search, callback=received)
@@ -11658,14 +11664,16 @@ class EnkyronWindow(QMainWindow):
     def show_mail_draft_dialog(self, draft):
         dialog = QDialog(self)
         existing = bool(draft.get("id"))
+        reported = draft.get("mail_state") == "external_send_reported"
         dialog.setWindowTitle(
-            "ENKYRON · Edit draft" if existing
-            else "ENKYRON · New draft"
+            "ENKYRON · Reported external send" if reported else
+            "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
         )
         dialog.resize(720, 590)
         dialog.setMinimumSize(610, 500)
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
+            "EXTERNAL SEND (OPERATOR REPORTED)" if reported else
             "EDIT DRAFT" if existing else "NEW DRAFT"
         ))
         prospect = QLabel(
@@ -11674,8 +11682,11 @@ class EnkyronWindow(QMainWindow):
         prospect.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(prospect)
         warning = QLabel(
-            "This message is a draft, not a sent email. "
-            "Enter a recipient only after checking their contact details."
+            "The operator recorded an external send. ENKYRON has not verified "
+            "provider transmission, delivery or reading. This saved revision "
+            "is read-only." if reported else
+            "This is a local draft, not an email sent by ENKYRON. "
+            "Check the recipient before recording any external sending."
         )
         warning.setWordWrap(True)
         layout.addWidget(warning)
@@ -11686,11 +11697,13 @@ class EnkyronWindow(QMainWindow):
             "Optional · manually verified email address"
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
+        self.crm_mail_to.setReadOnly(reported)
         form.addRow("To", self.crm_mail_to)
         self.crm_mail_subject = QLineEdit()
         self.crm_mail_subject.setMaxLength(200)
         self.crm_mail_subject.setPlaceholderText("Subject")
         self.crm_mail_subject.setText(draft.get("subject") or "")
+        self.crm_mail_subject.setReadOnly(reported)
         form.addRow("Subject", self.crm_mail_subject)
         layout.addLayout(form)
         self.crm_mail_body = QPlainTextEdit()
@@ -11698,7 +11711,21 @@ class EnkyronWindow(QMainWindow):
             "Write your message here."
         )
         self.crm_mail_body.setPlainText(draft.get("body_text") or "")
+        self.crm_mail_body.setReadOnly(reported)
         layout.addWidget(self.crm_mail_body, 1)
+        if reported:
+            receipt = QLabel(
+                "Operator report: {} · {} · {}\nProvider message ID: {}"
+                .format(
+                    draft.get("manual_send_provider") or "Unknown",
+                    draft.get("manual_sender_email") or "Unknown sender",
+                    display_date(draft.get("external_sent_at")),
+                    draft.get("manual_message_id") or "Not recorded"
+                )
+            )
+            receipt.setTextFormat(Qt.TextFormat.PlainText)
+            receipt.setWordWrap(True)
+            layout.addWidget(receipt)
         buttons = QHBoxLayout()
         close = QPushButton("Close without saving")
         close.clicked.connect(dialog.reject)
@@ -11707,16 +11734,145 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_save = QPushButton("Save draft")
         self.crm_mail_save.setObjectName("primary")
         self.crm_mail_save.clicked.connect(self.save_mail_draft)
+        self.crm_mail_save.setVisible(not reported)
         buttons.addWidget(self.crm_mail_save)
+        if existing and not reported:
+            report_button = QPushButton("Record external send…")
+            report_button.setObjectName("crmMailManualSend")
+            report_button.clicked.connect(self.open_mail_manual_send)
+            buttons.addWidget(report_button)
         layout.addLayout(buttons)
         self.crm_draft_context = {
             "id": draft.get("id"),
             "revision": draft.get("revision"),
             "opportunity_id": draft.get("opportunity_id"),
             "company_id": draft.get("company_id"),
-            "dossier_company_id": draft.get("_dossier_company_id")
+            "dossier_company_id": draft.get("_dossier_company_id"),
+            "mail_state": draft.get("mail_state", "draft"),
+            "loaded_to": draft.get("recipient_email") or "",
+            "loaded_subject": draft.get("subject") or "",
+            "loaded_body": draft.get("body_text") or ""
         }
         self.crm_draft_dialog = dialog
+        dialog.open()
+
+
+    def open_mail_manual_send(self):
+        """Manually link a saved draft revision to a provider-side send report."""
+        parent = self.crm_draft_dialog
+        context = self.crm_draft_context
+        if (not parent or not parent.isVisible() or not context
+                or not context.get("id") or
+                context.get("mail_state") == "external_send_reported"):
+            return
+        if (self.crm_mail_to.text() != context.get("loaded_to")
+                or self.crm_mail_subject.text() != context.get("loaded_subject")
+                or self.crm_mail_body.toPlainText() != context.get("loaded_body")):
+            QMessageBox.warning(
+                parent, "Unsaved draft changes",
+                "Save or discard draft edits before recording an external send."
+            )
+            return
+        if not context.get("loaded_to"):
+            QMessageBox.warning(
+                parent, "Recipient missing",
+                "Record the actual recipient in the saved draft first."
+            )
+            return
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("ENKYRON · Record external email send")
+        dialog.setMinimumWidth(570)
+        layout = QVBoxLayout(dialog)
+        notice = QLabel(
+            "This is your manual record of an email sent outside ENKYRON. "
+            "It is NOT proof of provider transmission, delivery, reading, "
+            "recipient consent, or a commercial agreement. "
+            "The draft will be preserved read-only."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        form = QFormLayout()
+        provider = QComboBox()
+        provider.addItem("Gmail (not connected)", "gmail")
+        provider.addItem("Other external provider", "other")
+        form.addRow("External provider *", provider)
+        sender = QLineEdit()
+        sender.setMaxLength(254)
+        sender.setPlaceholderText("Account actually used to send the email")
+        form.addRow("From *", sender)
+        recipient = QLabel(context["loaded_to"])
+        recipient.setTextFormat(Qt.TextFormat.PlainText)
+        form.addRow("To (saved draft)", recipient)
+        message_id = QLineEdit()
+        message_id.setMaxLength(200)
+        message_id.setPlaceholderText("Provider message ID (not a password or token)")
+        form.addRow("Provider message ID *", message_id)
+        sent_at = QLineEdit()
+        sent_at.setMaxLength(35)
+        sent_at.setText(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        sent_at.setPlaceholderText("YYYY-MM-DDTHH:MM:SSZ")
+        form.addRow("Actual sent time (UTC) *", sent_at)
+        layout.addLayout(form)
+        confirm = QCheckBox(
+            "I personally confirm this is an externally sent message, "
+            "not an ENKYRON send or delivery verification."
+        )
+        layout.addWidget(confirm)
+        actions = QHBoxLayout()
+        back = QPushButton("Cancel")
+        back.clicked.connect(dialog.reject)
+        actions.addWidget(back)
+        actions.addStretch()
+        record = QPushButton("Save manual send record")
+        record.setObjectName("primary")
+        actions.addWidget(record)
+        layout.addLayout(actions)
+
+        def submit():
+            if not dialog.isVisible() or not parent.isVisible():
+                return
+            if not confirm.isChecked():
+                QMessageBox.warning(dialog, "Confirmation required",
+                                    "Confirm the manual nature of this record.")
+                return
+            payload = {
+                "draft_id": context["id"],
+                "expected_revision": context["revision"],
+                "provider": provider.currentData(),
+                "sender_email": sender.text().strip(),
+                "provider_message_id": message_id.text().strip(),
+                "sent_at": sent_at.text().strip(),
+                "confirmed": True
+            }
+            record.setEnabled(False)
+            def saved(result, error):
+                if not dialog.isVisible():
+                    return
+                if error or not result or not result.get("id"):
+                    record.setEnabled(True)
+                    QMessageBox.warning(
+                        dialog, "External send record not saved",
+                        str(error or "Check the current draft before retrying.")
+                    )
+                    return
+                dialog.accept()
+                parent.accept()
+                if (context.get("dossier_company_id") and
+                        self.crm_dossier_dialog and
+                        self.crm_dossier_dialog.isVisible() and
+                        self.crm_dossier_company_id == context["dossier_company_id"]):
+                    self.refresh_company_dossier()
+                else:
+                    self.load_mail_drafts()
+            self.bridge.call("crm-mail-manual-send",
+                             payload=payload, callback=saved)
+        record.clicked.connect(submit)
+        self.crm_mail_send_dialog = dialog
+        self.crm_mail_sender = sender
+        self.crm_mail_message_id = message_id
+        self.crm_mail_sent_at = sent_at
+        self.crm_mail_send_confirm = confirm
+        self.crm_mail_send_save = record
         dialog.open()
 
     def save_mail_draft(self):
@@ -11731,6 +11887,10 @@ class EnkyronWindow(QMainWindow):
                                 "Enter a subject or some text before saving.")
             return
         context = self.crm_draft_context
+        if context.get("mail_state") == "external_send_reported":
+            QMessageBox.warning(dialog, "Read-only external send",
+                                "This reported external send cannot be edited.")
+            return
         if context.get("id"):
             command = "crm-mail-update"
             payload = {
