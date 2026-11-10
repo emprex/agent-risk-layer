@@ -11,7 +11,7 @@ import { listOpportunities, prospectOpportunity, createOpportunity, createCompan
 import { listActivityTimeline, recordActivity, validateActivity, requireOpportunityId } from './enkyron-crm-activities.mjs';
 import { listMailDrafts, readMailDraft, createMailDraft, updateMailDraft, validateDraftCreate, validateDraftUpdate } from './enkyron-crm-mail-drafts.mjs';
 import {recordManualSend,validateManualSend} from './enkyron-crm-mail-manual-sends.mjs';
-import {mailStatus,mailThreads,mailMessages,mailSent,mailSendDraft,validateMailSendRequest} from './enkyron-mail-service.mjs';
+import {mailAccess,mailStatus,mailThreads,mailMessages,mailSent,mailSendDraft,validateMailSendRequest} from './enkyron-mail-service.mjs';
 import { getSalesOverview } from './enkyron-crm-overview.mjs';
 import { getSalesPipeline } from './enkyron-crm-pipeline.mjs';
 import { getCompanyDossier } from './enkyron-crm-company-dossier.mjs';
@@ -344,8 +344,20 @@ async function main() {
       command === 'crm-own-profile' ? await readCompanyProfile(pool, os.userInfo().username) :
       command === 'crm-own-profile-save' ? await recordCompanyProfile(pool, payload, os.userInfo().username) :
       command === 'operator-profile' ? await (async()=>{
-         const personal=await readPersonalProfile(pool,os.userInfo().username);
-         return {...personal,owner_access:ownerMailAccessCard(personal.current||{})};
+         const operator=os.userInfo().username;
+         const personal=await readPersonalProfile(pool,operator);
+         const grant=await mailAccess(pool,operator);
+         const card=ownerMailAccessCard(personal.current||{});
+         card.mailboxes=card.mailboxes.map(m=>{
+           const scoped=grant.mailboxes.find(x=>x.key===m.key);
+           return {...m,permissions:scoped
+             ?[...(scoped.can_read?['read']:[]),...(scoped.can_send?['send','reply']:[])]
+             :[]};
+         });
+         card.notice=grant.schema_ready
+           ?'Mailbox permissions recorded in local PostgreSQL.'
+           :'Mail permissions are not provisioned yet; account profile is display only.';
+         return {...personal,owner_access:card};
        })() :
       command === 'operator-profile-save' ? await recordPersonalProfile(pool, payload, os.userInfo().username) :
       command === 'crm-buyer-review' ? await readBuyerReview(pool, arg, os.userInfo().username) :
