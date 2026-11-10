@@ -1673,6 +1673,35 @@ class EnkyronWindow(QMainWindow):
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
+        # Read-only Owner permissions card: server-provided configuration, NOT a live session.
+        access = result.get("owner_access") or {}
+        mailboxes = access.get("mailboxes") or []
+        if access:
+            account_text = (
+                "Account: {}  |  Role: {}  |  Position: {}\n"
+                "Organisation: {}\n"
+                "Access: CRM, Tickets, Client dossiers and assigned mailboxes\n"
+            ).format(
+                access.get("login") or "ceo",
+                access.get("role") or "organization_owner_l5",
+                access.get("position") or "CEO",
+                access.get("organisation") or "AGENTRISKLAYER LTD"
+            )
+            for mailbox in mailboxes:
+                rights = ", ".join(mailbox.get("permissions") or [])
+                account_text += "{}: {}  |  {}\n".format(
+                    mailbox.get("label") or "Mailbox",
+                    mailbox.get("address") or "Not assigned", rights
+                )
+            account_text += (
+                "Connection: Not connected. Owner login/MFA and real Resend "
+                "mail access remain inactive."
+            )
+            account_card = QLabel(account_text)
+            account_card.setTextFormat(Qt.TextFormat.PlainText)
+            account_card.setWordWrap(True)
+            account_card.setObjectName("enkyronOwnerAccessCard")
+            layout.addWidget(account_card)
         form = QFormLayout()
         self.operator_profile_fields = {}
         for key, label, max_len, hint in (
