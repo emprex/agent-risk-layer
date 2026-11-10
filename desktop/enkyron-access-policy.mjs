@@ -13,6 +13,13 @@ const grants=Object.freeze({
   client_portal_user:Object.freeze(['ticket:create','ticket:read','document:read_published']),
 });
 export const ENKYRON_ACCESS_ROLES=Object.freeze(Object.keys(grants));
+const knownActions=new Set([
+  ...Object.values(grants).flat().filter(x=>x!=='*'),
+  // Privileged internal operations. New operations must be explicitly added.
+  'crm:read','crm:write','finance:read','finance:manage',
+  'account:manage','development:manage','audit:read',
+  'document:read_confidential','configuration:manage','email:send',
+]);
 const immutableActions=new Set([
   'audit:delete','audit:rewrite','evidence:delete','evidence:rewrite',
   'assessment:approve_own','assessment:erase_history',
@@ -40,6 +47,7 @@ export function authoriseEnkyronOperation(principal,action,resource){
      ||!id(resource.organizationId)||resource.organizationId!==principal.organizationId)
     return deny('organization-boundary');
   if(immutableActions.has(action))return deny('integrity-protected');
+  if(!knownActions.has(action))return deny('unknown-operation');
   if(!grants[principal.role].includes('*')&&!grants[principal.role].includes(action))
     return deny('not-permitted');
 
