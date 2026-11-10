@@ -9,10 +9,16 @@ const scrypt=promisify(crypto.scrypt);
 const ALG='scrypt-enkyron-v1';
 const N=16384, R=8, P=1;
 const B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-function failPassword(value){
-  if(typeof value!=='string'||value.length<15||value.length>200
-     ||/[\u0000-\u001f\u007f-\u009f]/u.test(value)||!value.trim())
-    throw new Error('Password must be a private 15-200 character passphrase');
+export function validateEnkyronPassword(value){
+  if(typeof value!=='string'||value.length<15)
+    throw new Error('Passphrase must contain at least 15 characters');
+  if(value.length>200)
+    throw new Error('Passphrase must not exceed 200 characters');
+  if(/[\u0000-\u001f\u007f-\u009f]/u.test(value))
+    throw new Error('Passphrase must not contain control characters');
+  if(!value.trim())
+    throw new Error('Passphrase must not consist only of whitespace');
+  return true;
 }
 function strictBuffer(str,length){
   if(typeof str!=='string'||!/^[A-Za-z0-9_-]+$/.test(str))return null;
@@ -23,7 +29,7 @@ function constantEqual(a,b){
   return a.length===b.length&&crypto.timingSafeEqual(a,b);
 }
 export async function hashEnkyronPassword(password){
-  failPassword(password);
+  validateEnkyronPassword(password);
   const salt=crypto.randomBytes(16);
   const derived=await scrypt(password,salt,64,{N,r:R,p:P,maxmem:64*1024*1024});
   return [ALG,N,R,P,salt.toString('base64url'),derived.toString('base64url')].join('$');
