@@ -869,6 +869,29 @@ jobs:
           assert window.crm_dossier_heading.text() == "Synthetic Company"
           assert "1 contact(s)" in window.crm_dossier_glance.text()
           assert "2 messages / notes" in window.crm_dossier_glance.text()
+          # Company-first drafting: one real company may create a local draft
+          # before any commercial opportunity exists. No email is sent.
+          draft_actions = [
+              b for b in window.crm_dossier_tabs.widget(6).findChildren(QPushButton)
+              if b.objectName() == "crmDossierCreateDraft"
+          ]
+          assert len(draft_actions) == 1 and draft_actions[0].isEnabled()
+          draft_actions[0].click()
+          assert window.crm_draft_dialog.isVisible()
+          assert window.crm_draft_context["company_id"] == company_id
+          assert window.crm_draft_context["opportunity_id"] is None
+          window.crm_mail_to.setText("public@example.invalid")
+          window.crm_mail_subject.setText("Unsent synthetic introduction")
+          window.crm_mail_body.setPlainText("This message is only saved locally.")
+          window.save_mail_draft()
+          assert calls[-1][0] == "crm-mail-create"
+          assert calls[-1][2] == {
+              "company_id": company_id,
+              "recipient_email": "public@example.invalid",
+              "subject": "Unsent synthetic introduction",
+              "body_text": "This message is only saved locally."
+          }
+          window.crm_draft_dialog.reject()
           # UX-08: company correction reuses an existing audited/versioned
           # backend but never opens another window or shrinks the note timeline.
           assert window.crm_dossier_edit_company.isEnabled()
@@ -1158,7 +1181,9 @@ jobs:
               window.crm_dossier_activity_editor_scroll
           )
           assert window.crm_dossier_activity_record.text() == "Back to notes"
-          assert window.crm_dossier_activity_opportunity.currentData() == (
+          assert window.crm_dossier_activity_opportunity.currentData() is None
+          assert window.crm_dossier_activity_opportunity.count() == 2
+          assert window.crm_dossier_activity_opportunity.itemData(1) == (
               "66666666-7777-4888-9999-aaaaaaaaaaaa"
           )
           window.crm_dossier_activity_detail.setPlainText("Short")
@@ -1187,7 +1212,7 @@ jobs:
           window.crm_dossier_activity_save.click()
           assert calls[-1][0] == "crm-record-activity"
           assert calls[-1][2] == {
-              "opportunity_id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+              "company_id": company_id,
               "activity_type": "note",
               "detail": "LinkedIn message recorded manually, no delivery confirmed.",
               "reviewed": True
@@ -1195,7 +1220,7 @@ jobs:
           assert not window.crm_dossier_activity_save.isEnabled()
           calls[-1][3]({
               "id": "77777777-8888-4999-aaaa-bbbbbbbbbbbb",
-              "opportunity_id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+              "company_id": company_id,
               "activity_type": "note"
           }, None)
           assert calls[-1][0] == "crm-company-dossier"
