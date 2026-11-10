@@ -51,19 +51,20 @@ test('verified CEO session, replay protection, revocation and revoked/disabled s
   skip:!url&&'Disposable PostgreSQL CI only',timeout:60000,
 },async()=>{
   const pool=new pg.Pool({connectionString:disposableCiUrl(),max:2});
-  const rawConnect=pool.connect.bind(pool);
-  pool.connect=async()=>{
-    const client=await rawConnect(),original=client.query.bind(client);
-    client.query=async(sql,args)=>{
-      try{return await original(sql,args);}
-      catch(error){
-        // Synthetic CI database only. Log SQLSTATE and query prefix, no args.
-        console.error('Owner CI SQL failure',error.code,String(sql).slice(0,65));
-        throw error;
-      }
+  const diagnosticPool={connect:async()=>{
+    const client=await pool.connect();
+    return {
+      query:async(sql,args)=>{
+        try{return await client.query(sql,args);}
+        catch(error){
+          // Synthetic CI database only. Log SQLSTATE, never query arguments.
+          console.error('Owner CI SQL failure',error.code,String(sql).slice(0,65));
+          throw error;
+        }
+      },
+      release:()=>client.release(),
     };
-    return client;
-  };
+  }};
   const workspace='local:ci-auth-'+randomUUID().slice(0,8);
   const operator=workspace.slice(6);
   const person=randomUUID(),id=randomUUID(),org='org:'+randomUUID();
@@ -82,16 +83,16 @@ test('verified CEO session, replay protection, revocation and revoked/disabled s
       '(principal_id,password_hash,totp_secret_encrypted) VALUES($1,$2,$3)',
       [id,passwordHash,encrypted]);
     let options={operator,password:pass,totpCode:'111111',key};
-    await assert.rejects(loginLocalOwner(pool,options),/Invalid Owner credentials/);
+    await assert.rejects(loginLocalOwner(diagnosticPool,options),/Invalid Owner credentials/);
     await pool.query('INSERT INTO enkyron_identity_status_events '+
       '(id,principal_id,event_type,reason) VALUES($1,$2,$3,$4)',
       [randomUUID(),id,'activated','Synthetic CI owner activation only']);
-    await assert.rejects(loginLocalOwner(pool,{
+    await assert.rejects(loginLocalOwner(diagnosticPool,{
       ...options,password:'not the correct password'
     }),/Invalid Owner credentials/);
     const step=Math.floor(Date.now()/30000),current=otp(secret,step);
     options={operator,password:pass,totpCode:current,key};
-    const login=await loginLocalOwner(pool,options);
+    const login=await loginLocalOwner(diagnosticPool,options);
     token=login.sessionToken;
     assert.equal(login.expiresInSeconds,1800);
     assert.equal(login.principal.organizationId,org);
@@ -105,7 +106,7 @@ test('verified CEO session, replay protection, revocation and revoked/disabled s
     });
     assert.equal(resolved.principalId,id);
     assert.equal(resolved.loginName,'ceo');
-    await assert.rejects(loginLocalOwner(pool,options),/Invalid Owner credentials/,
+    await assert.rejects(loginLocalOwner(diagnosticPool,options),/Invalid Owner credentials/,
       'TOTP must not be reused even with correct passphrase');
     await assert.rejects(resolveLocalOwnerSession(pool,{
       operator:'different-operator',sessionToken:token,key
@@ -124,7 +125,7 @@ test('verified CEO session, replay protection, revocation and revoked/disabled s
     await pool.query('INSERT INTO enkyron_identity_status_events '+
       '(id,principal_id,event_type,reason) VALUES($1,$2,$3,$4)',
       [randomUUID(),id,'disabled','Synthetic CI owner disabled for test']);
-    await assert.rejects(loginLocalOwner(pool,{
+    await assert.rejects(loginLocalOwner(diagnosticPool,{
       ...options,totpCode:otp(secret,step+1),
     }),/Invalid Owner credentials/);
   }finally{await pool.end();}
