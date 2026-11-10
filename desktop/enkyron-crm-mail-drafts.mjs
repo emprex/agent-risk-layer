@@ -4,6 +4,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {boundedSearch} from './enkyron-contract.mjs';
 import {requireOpportunityId} from './enkyron-crm-activities.mjs';
+import {requireCompanyId} from './enkyron-crm-tickets.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function scope(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
@@ -32,7 +33,11 @@ function contentFields(input){
 }
 export function validateDraftCreate(input){
   const content=contentFields(input);
-  return {opportunity_id:requireOpportunityId(input.opportunity_id),...content};
+  const opportunity_id=input.opportunity_id==null?null:requireOpportunityId(input.opportunity_id);
+  const company_id=input.company_id==null?null:requireCompanyId(input.company_id);
+  if((opportunity_id===null)===(company_id===null))
+    throw new Error('CRM draft requires exactly one company or opportunity');
+  return {opportunity_id,company_id,...content};
 }
 export function validateDraftUpdate(input){
   const content=contentFields(input);
@@ -51,13 +56,15 @@ export async function listMailDrafts(pool,search,actor){
   const query=boundedSearch(search),owner=scope(actor);
   try{
     const result=await pool.query(
-      'SELECT d.id,d.opportunity_id,d.recipient_email,d.subject,d.revision,'
-      +'d.updated_at,o.company_name_at_creation '
+      'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.revision,'
+      +'d.updated_at,COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation '
       +'FROM enkyron_crm_mail_drafts d '
-      +'JOIN enkyron_crm_opportunities o '
+      +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
+      +'LEFT JOIN enkyron_crm_companies c '
+      +'ON c.id=d.company_id AND c.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
-      +"AND ($2='' OR POSITION(lower($2) IN lower(o.company_name_at_creation))>0 "
+      +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
       +"OR POSITION(lower($2) IN lower(coalesce(d.recipient_email,'')))>0) "
       +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 101',
@@ -76,11 +83,14 @@ export async function readMailDraft(pool,id,actor){
   const owner=scope(actor);
   try{
     const row=(await pool.query(
-      'SELECT d.id,d.opportunity_id,d.recipient_email,d.subject,d.body_text,'
-      +'d.revision,d.updated_at,o.company_name_at_creation '
+      'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.body_text,'
+      +'d.revision,d.updated_at,'
+      +'COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation '
       +'FROM enkyron_crm_mail_drafts d '
-      +'JOIN enkyron_crm_opportunities o '
+      +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.workspace_key=d.workspace_key AND o.id=d.opportunity_id '
+      +'LEFT JOIN enkyron_crm_companies c '
+      +'ON c.workspace_key=d.workspace_key AND c.id=d.company_id '
       +'WHERE d.workspace_key=$1 AND d.id=$2',
       [owner.key,id]
     )).rows[0];
@@ -107,18 +117,22 @@ async function transact(pool,work){
 export async function createMailDraft(pool,input,actor,options={}){
   const data=validateDraftCreate(input),owner=scope(actor),uuid=options.uuid??randomUUID;
   return transact(pool,async client=>{
+    const companyMode=data.company_id!==null;
+    const source=companyMode?'enkyron_crm_companies':'enkyron_crm_opportunities';
+    const parentId=companyMode?data.company_id:data.opportunity_id;
     const parent=(await client.query(
-      'SELECT id FROM enkyron_crm_opportunities '
-      +'WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
-      [owner.key,data.opportunity_id]
+      'SELECT id FROM '+source+' WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [owner.key,parentId]
     )).rows[0];
-    if(!parent)throw new Error('CRM opportunity not found in local workspace');
+    if(!parent)throw new Error(
+      'CRM '+(companyMode?'company':'opportunity')+' not found in local workspace'
+    );
     const id=uuid();
     await client.query(
       'INSERT INTO enkyron_crm_mail_drafts '
-      +'(id,workspace_key,opportunity_id,recipient_email,subject,body_text,'
-      +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$7)',
-      [id,owner.key,data.opportunity_id,data.recipient_email||null,
+      +'(id,workspace_key,opportunity_id,company_id,recipient_email,subject,body_text,'
+      +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)',
+      [id,owner.key,data.opportunity_id,data.company_id,data.recipient_email||null,
         data.subject,data.body_text,owner.name]
     );
     await client.query(
@@ -127,7 +141,7 @@ export async function createMailDraft(pool,input,actor,options={}){
       +"VALUES($1,$2,$3,1,'created',$4,$5)",
       [uuid(),owner.key,id,fingerprint(data),owner.name]
     );
-    return {id,revision:1,opportunity_id:data.opportunity_id,
+    return {id,revision:1,opportunity_id:data.opportunity_id,company_id:data.company_id,
       notice:'Saved locally as an unsent draft. No email has been transmitted.'};
   });
 }
