@@ -127,3 +127,42 @@ test('UX-15B3 synthetic CEO enrollment creates ONE pending principal, never live
     assert.equal(denied.allowed,false);
   }finally{await pool.end();}
 });
+
+
+test('UX-15B3 regression: rejected passphrase or MFA never reaches backup or key creation',async()=>{
+  const source=await readFile(
+    new URL('../scripts/enkyron-enroll-owner.mjs',import.meta.url),'utf8'
+  );
+  const cryptoSource=await readFile(
+    new URL('../desktop/enkyron-auth-crypto.mjs',import.meta.url),'utf8'
+  );
+  const {validateEnkyronPassword}=await import('../desktop/enkyron-auth-crypto.mjs');
+  const invalid=[
+    '', 'short', ' '.repeat(16), 'short\nand more than 15',
+    'a'.repeat(201), null,
+  ];
+  for(const value of invalid)
+    assert.throws(()=>validateEnkyronPassword(value),/Passphrase/);
+  assert.equal(validateEnkyronPassword('Correct 15+ chars passphrase'),true);
+  assert.match(cryptoSource,/validateEnkyronPassword\(password\)/,
+    'Hasher and preflight must share identical passphrase requirements');
+  const inEnrollment=source.slice(source.indexOf("if(!await confirmation())"));
+  const required=[
+    'validateEnkyronPassword(password)',
+    'const repeated=secretPrompt',
+    "if(password!==repeated)",
+    'const code=secretPrompt',
+    'matchEnkyronTotpCounter(totpSecret,code,codeVerifiedAt)',
+    'await backupDatabase()',
+    'const key=await encryptionKey()',
+    'await enrollPendingLocalOwner(pool',
+  ];
+  const positions=required.map(token=>inEnrollment.indexOf(token));
+  assert.ok(positions.every(n=>n>=0),'Missing a required enrollment gate');
+  assert.deepEqual(positions,[...positions].sort((a,b)=>a-b),
+    'All input validations must precede backup and encryption key I/O');
+  assert.match(source,/FSC\.O_RDONLY\|FSC\.O_NOFOLLOW/,
+    'Existing local key must be opened without following symlinks');
+  assert.match(source,/FSC\.O_CREAT\|FSC\.O_EXCL\|FSC\.O_WRONLY\|FSC\.O_NOFOLLOW/,
+    'A missing key is created exclusively; existing key never overwritten');
+});
