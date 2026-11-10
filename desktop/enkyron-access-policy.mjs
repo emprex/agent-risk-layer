@@ -18,7 +18,7 @@ const knownActions=new Set([
   // Privileged internal operations. New operations must be explicitly added.
   'crm:read','crm:write','finance:read','finance:manage',
   'account:manage','development:manage','audit:read',
-  'document:read_confidential','configuration:manage','email:send',
+  'document:read_confidential','configuration:manage','email:read','email:send',
 ]);
 const immutableActions=new Set([
   'audit:delete','audit:rewrite','evidence:delete','evidence:rewrite',
