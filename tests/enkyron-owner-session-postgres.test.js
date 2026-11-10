@@ -51,6 +51,19 @@ test('verified CEO session, replay protection, revocation and revoked/disabled s
   skip:!url&&'Disposable PostgreSQL CI only',timeout:60000,
 },async()=>{
   const pool=new pg.Pool({connectionString:disposableCiUrl(),max:2});
+  const rawConnect=pool.connect.bind(pool);
+  pool.connect=async()=>{
+    const client=await rawConnect(),original=client.query.bind(client);
+    client.query=async(sql,args)=>{
+      try{return await original(sql,args);}
+      catch(error){
+        // Synthetic CI database only. Log SQLSTATE and query prefix, no args.
+        console.error('Owner CI SQL failure',error.code,String(sql).slice(0,65));
+        throw error;
+      }
+    };
+    return client;
+  };
   const workspace='local:ci-auth-'+randomUUID().slice(0,8);
   const operator=workspace.slice(6);
   const person=randomUUID(),id=randomUUID(),org='org:'+randomUUID();
