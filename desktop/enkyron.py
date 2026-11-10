@@ -3791,7 +3791,10 @@ class EnkyronWindow(QMainWindow):
                                     container, None, scoped_company
                                 )
                             )
-                            page_layout.addWidget(add_contact)
+                            add_contact.setMaximumWidth(190)
+                            page_layout.addWidget(
+                                add_contact, alignment=Qt.AlignmentFlag.AlignRight
+                            )
                         if not rows:
                             empty = QLabel(
                                 "No contacts recorded for this company yet."
@@ -3865,7 +3868,10 @@ class EnkyronWindow(QMainWindow):
                                         parent, record, scoped_company
                                     )
                                 )
-                                content.addWidget(edit_contact)
+                                edit_contact.setMaximumWidth(190)
+                                content.addWidget(
+                                    edit_contact, alignment=Qt.AlignmentFlag.AlignRight
+                                )
                             if section_id == "opportunities":
                                 edit = QPushButton("Edit next action")
                                 edit.setObjectName("crmDossierEditFollowup")
