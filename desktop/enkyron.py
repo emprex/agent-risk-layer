@@ -266,6 +266,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
+        self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
         self.crm_dossier_seq = 0
@@ -3150,7 +3151,6 @@ class EnkyronWindow(QMainWindow):
             "font-weight: bold; padding: 4px 0;"
         )
         layout.addWidget(self.crm_dossier_glance)
-        self.crm_company_followups_dialog = None
         self.crm_dossier_next_action = QLabel("")
         self.crm_dossier_next_action.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_next_action.setWordWrap(True)
