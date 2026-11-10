@@ -55,7 +55,9 @@ test('UX-15B1B AES-GCM protects TOTP credentials and binds ciphertext to princip
   assert.equal(decryptEnkyronTotpSecret(enc,key,scope),secret);
   assert.throws(()=>decryptEnkyronTotpSecret(enc,key,'org-A:human-2'));
   assert.throws(()=>decryptEnkyronTotpSecret(enc,other,scope));
-  assert.throws(()=>decryptEnkyronTotpSecret(enc.slice(0,-1)+'A',key,scope));
+  const parts=enc.split('.');
+  parts[3]=(parts[3][0]==='A'?'B':'A')+parts[3].slice(1);
+  assert.throws(()=>decryptEnkyronTotpSecret(parts.join('.'),key,scope));
   assert.throws(()=>encryptEnkyronTotpSecret(secret,Buffer.alloc(8),scope));
 });
 
