@@ -1208,7 +1208,7 @@ class EnkyronWindow(QMainWindow):
         drafts_l.addWidget(self.crm_draft_table, 1)
         draft_footer = QHBoxLayout()
         draft_footer.addWidget(QLabel(
-            "Create a draft by selecting an opportunity in Follow-ups."
+            "Compose from a company dossier or an existing opportunity."
         ))
         draft_footer.addStretch()
         self.crm_edit_draft = QPushButton("Open selected draft")
@@ -3892,9 +3892,10 @@ class EnkyronWindow(QMainWindow):
                     ("Type", "activity_type"), ("Details", "detail"),
                     ("Operator", "recorded_by"), ("Recorded", "recorded_at")
                 ]),
-                ("drafts", "Email drafts", [
+                ("drafts", "Email drafts / sends", [
                     ("Subject", "subject"), ("Recipient", "recipient_email"),
-                    ("Revision", "revision"), ("Updated", "updated_at")
+                    ("Revision", "revision"), ("State", "send_state"),
+                    ("Updated", "updated_at")
                 ]),
                 ("commercial_docs", "Commercial drafts", [
                     ("Record", "document_kind"), ("Title", "title"),
@@ -11816,7 +11817,6 @@ class EnkyronWindow(QMainWindow):
             "I personally confirm this is an externally sent message, "
             "not an ENKYRON send or delivery verification."
         )
-        confirm.setWordWrap(True)
         layout.addWidget(confirm)
         actions = QHBoxLayout()
         back = QPushButton("Cancel")
