@@ -11,6 +11,7 @@ import base64
 import getpass
 import json
 import os
+import stat
 from pathlib import Path
 import sys
 
@@ -22,13 +23,14 @@ DESKTOP = Path(__file__).resolve().parent.parent / "desktop/enkyron.py"
 
 def readable_record():
     try:
-        with RECORD.open("rb") as stream:
-            stat = os.fstat(stream.fileno())
-            if (not __import__("stat").S_ISREG(stat.st_mode)
-                    or stat.st_uid != os.getuid() or stat.st_nlink != 1
-                    or (stat.st_mode & 0o077) != 0):
+        fd = os.open(RECORD, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            entry = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(entry.st_mode)
+                    or entry.st_uid != os.getuid() or entry.st_nlink != 1
+                    or (entry.st_mode & 0o077) != 0):
                 raise RuntimeError("Unsafe saved local FIDO credential")
-            if stat.st_size > 8192:
+            if entry.st_size > 8192:
                 raise RuntimeError("Oversized saved local FIDO credential")
             value = json.load(stream)
     except FileNotFoundError:
@@ -49,7 +51,7 @@ def save_new_record(credential_bytes):
     folder = RECORD.parent
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     st = folder.lstat()
-    if (not __import__("stat").S_ISDIR(st.st_mode) or st.st_uid != os.getuid()
+    if (not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid()
             or (st.st_mode & 0o077) != 0):
         raise RuntimeError("Unsafe local ENKYRON auth directory")
     payload = json.dumps({
