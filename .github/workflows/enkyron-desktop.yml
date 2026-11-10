@@ -101,6 +101,9 @@ jobs:
           node --check scripts/enkyron-crm-qualification-schema.mjs
           node --check desktop/enkyron-crm-opportunities.mjs
           node --check scripts/enkyron-crm-company-opportunities-schema.mjs
+          node --check desktop/enkyron-crm-company-followups.mjs
+          node --check scripts/enkyron-crm-company-followups-schema.mjs
+          node --test tests/enkyron-crm-company-followups.test.js
           node --check desktop/enkyron-crm-activities.mjs
           node --check scripts/enkyron-remove-false-tickets-local.mjs
           node --check desktop/enkyron-crm-mail-drafts.mjs
@@ -164,6 +167,12 @@ jobs:
 
       - name: Python CSV import preflight (read-only, hostile files)
         run: python3 -m unittest discover -s tests -p 'test_enkyron_crm_csv_import.py' -v
+
+      - name: UX-13 native company-first follow-up smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_followups_smoke.py'
 
       - name: Native window smoke without PostgreSQL
         env:
