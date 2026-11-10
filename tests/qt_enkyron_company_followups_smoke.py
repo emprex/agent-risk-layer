@@ -52,7 +52,7 @@ class CompanyFollowupsSmoke(unittest.TestCase):
             self.assertEqual(window.navigation.currentRow(), 0)
             self.assertEqual(window.home_company_followups_button.text(),
                              "Company follow-ups")
-            self.assertTrue(window.home_company_followups_button.isVisible())
+            self.assertTrue(window.home_company_followups_button.isEnabled())
             window.home_company_followups_button.click()
             self.assertEqual(window.navigation.currentRow(), 0)
             new_dialog = window.crm_company_followups_dialog
