@@ -103,7 +103,7 @@ def prove():
         credential = auth_data.credential_data
         if credential is None or not auth_data.is_user_verified():
             raise RuntimeError("Registration failed required user verification")
-        print("FIDO_REGISTRATION_SIGNATURE_AND_UV: VERIFIED")
+        print("FIDO_REGISTRATION_CHALLENGE_AND_UV: VERIFIED")
 
         request, login_state = server.authenticate_begin(
             [credential], user_verification="required"
@@ -127,11 +127,9 @@ def prove():
                 login_state, [credential], assertion.credential_id,
                 assertion.client_data, assertion.authenticator_data, bad_signature,
             )
-        except (ValueError, Exception) as err:
-            # All invalid signature responses must be rejected. Don't print
-            # device details or credentials. A library failure is not success.
-            if not isinstance(err, ValueError):
-                raise
+        except ValueError:
+            # python-fido2 1.2.0 rejects an invalid signature with ValueError.
+            pass
         else:
             raise RuntimeError("SECURITY FAILURE: modified signature accepted")
         print("MODIFIED_SIGNATURE: DENIED")
