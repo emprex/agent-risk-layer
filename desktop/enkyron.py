@@ -4322,11 +4322,11 @@ class EnkyronWindow(QMainWindow):
         rationale.setObjectName("crmDossierContactReason")
         rationale.setMaximumHeight(85)
         rationale.setPlaceholderText(
-            "Explain the correction (20–1000 characters) or why the new contact "
-            "is distinct from possible duplicates (30–500 characters)."
+            "Optional for routine contact updates. Required for name changes "
+            "(20–1000 characters) or a duplicate override (30–500 characters)."
         )
         reason_label = QLabel(
-            "Reason for correction *" if not creating
+            "Reason (optional)" if not creating
             else "Reason for a separate duplicate record *"
         )
         reason_label.setWordWrap(True)
@@ -4341,10 +4341,11 @@ class EnkyronWindow(QMainWindow):
         duplicates.setVisible(False)
         layout.addWidget(duplicates)
         confirm = QCheckBox(
-            "I confirm my correction is supported by the stated reason."
+            "I confirm this name correction does not verify identity."
             if not creating else
-            "I confirm this is a manually entered, unverified contact record."
+            "I confirm these possible duplicates are separate contacts."
         )
+        confirm.hide()
         layout.addWidget(confirm)
         buttons = QHBoxLayout()
         cancel = QPushButton("Cancel contact edit")
@@ -4392,15 +4393,42 @@ class EnkyronWindow(QMainWindow):
                 save.setEnabled(False)
                 return
             if creating and state["review"] is None:
+                confirm.hide()
                 save.setEnabled(clean())
                 return
-            lower, upper = ((30, 500) if creating else (20, 1000))
-            reason_needed = not creating or bool(state["review"]["matches"])
-            note_ok = (
-                lower <= len(rationale.toPlainText().strip()) <= upper
-                if reason_needed else True
+            note = rationale.toPlainText().strip()
+            if creating:
+                # A match-free, reviewed create needs no extra affidavit.
+                require_reason = bool(state["review"]["matches"])
+                reason_label.setVisible(require_reason)
+                rationale.setVisible(require_reason)
+                confirm.setVisible(require_reason)
+                note_ok = (
+                    30 <= len(note) <= 500 if require_reason else True
+                )
+                save.setEnabled(
+                    clean() and note_ok
+                    and (not require_reason or confirm.isChecked())
+                )
+                return
+            changed_fields = {
+                key for key, widget in inputs.items()
+                if widget.text() != self.crm_dossier_contact_initial[key]
+            }
+            name_change = "full_name" in changed_fields
+            reason_label.setText(
+                "Reason for contact name change *"
+                if name_change else "Reason (optional)"
             )
-            save.setEnabled(clean() and confirm.isChecked() and note_ok)
+            confirm.setVisible(name_change)
+            note_ok = (
+                20 <= len(note) <= 1000 if name_change
+                else (not note or 20 <= len(note) <= 1000)
+            )
+            save.setEnabled(
+                clean() and bool(changed_fields) and note_ok
+                and (not name_change or confirm.isChecked())
+            )
 
         def changed(*_unused):
             if creating and state["review"] is not None:
