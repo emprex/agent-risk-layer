@@ -8,6 +8,7 @@ import {
 const id='11111111-2222-4333-8444-555555555555';
 const base={prospect_id:'lead_synthetic',company_name_at_review:'Acme Research',
   next_action:'Review public contact details before any outreach',due_date:'2026-11-12'};
+const companyId='22222222-3333-4444-8555-666666666666';
 const edit={id,expected_version:1,stage:'qualified',
   next_action:'Prepare a tailored introduction for human approval',
   due_date:null};
@@ -25,6 +26,8 @@ test('validates business stages, actual calendar dates and manual action',()=>{
     null,{},[]
   ]) assert.throws(()=>validateOpportunityCreate(invalid),/CRM/);
   assert.equal(validateOpportunityUpdate(edit).stage,'qualified');
+  assert.equal(validateOpportunityUpdate({...edit,company_id:companyId}).company_id,companyId);
+  assert.throws(()=>validateOpportunityUpdate({...edit,company_id:'wrong'}),/CRM/);
   assert.equal(validateOpportunityProbability(null),null);
   assert.equal(validateOpportunityProbability(0),0);
   assert.equal(validateOpportunityProbability(100),100);
@@ -137,6 +140,43 @@ test('update checks expected version and audits old/new fields atomically',async
   assert.equal(actions.at(-1),'ROLLBACK');
 });
 
+
+
+test('company-bound update refuses stale/missing company association before write',async()=>{
+  for(const linked of [true,false]){
+    const calls=[];
+    const client={
+      query:async(sql,values)=>{
+        calls.push({sql,values});
+        if(sql.startsWith('SELECT id,stage,next_action'))return {rows:[{
+          id,stage:'research',next_action:'Original action',due_date:null,version:1
+        }]};
+        if(sql.startsWith('SELECT EXISTS('))return {rows:[{linked}]};
+        if(sql.startsWith('UPDATE enkyron_crm_opportunities'))return {rows:[{id,version:2}]};
+        return {rows:[]};
+      },release:()=>{}
+    };
+    const db={connect:async()=>client};
+    const request={...edit,company_id:companyId};
+    if(linked){
+      const result=await updateOpportunity(db,request,'ci-operator',
+        {uuid:()=> 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
+      assert.equal(result.version,2);
+      assert.ok(calls.some(c=>c.sql.startsWith('UPDATE enkyron_crm_opportunities')));
+      assert.equal(calls.at(-1).sql,'COMMIT');
+    }else{
+      await assert.rejects(()=>updateOpportunity(db,request,'ci-operator'),
+        /no longer linked/);
+      assert.ok(!calls.some(c=>c.sql.startsWith('UPDATE')));
+      assert.equal(calls.at(-1).sql,'ROLLBACK');
+    }
+    const check=calls.find(c=>c.sql.startsWith('SELECT EXISTS('));
+    assert.deepEqual(check.values,['local:ci-operator',id,companyId]);
+    assert.match(check.sql,/enkyron_crm_prospect_links/);
+    assert.match(check.sql,/enkyron_crm_effective_ticket_links/);
+    assert.doesNotMatch(check.sql,/company_name/);
+  }
+});
 
 test('legacy update without explicit estimate preserves existing probability',async()=>{
   const calls=[];
