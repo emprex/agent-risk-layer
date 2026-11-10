@@ -308,10 +308,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
-        self.owner_session_token = None
-        self.owner_login_dialog = None
-        self.owner_setup_state = "checking"
-        self.owner_account_check_pending = False
+        self.mail_provider_ready = False
+        self.mail_status_loaded = False
         self.crm_proposal_seq = 0
         self.crm_proposal_loaded = False
         self.crm_proposal_items = []
@@ -391,17 +389,7 @@ class EnkyronWindow(QMainWindow):
         self.account_profile_button.setObjectName("enkyronMyAccount")
         self.account_profile_button.clicked.connect(self.open_personal_profile)
         top_layout.addWidget(self.account_profile_button)
-        # One CEO sign-in for the whole native workspace. Mailboxes do NOT log in separately.
-        self.mail_owner_login = QPushButton("Checking CEO account…")
-        self.mail_owner_login.setObjectName("enkyronMailOwnerLogin")
-        self.mail_owner_login.setEnabled(False)
-        self.mail_owner_login.clicked.connect(self.open_owner_login)
-        top_layout.addWidget(self.mail_owner_login)
-        self.mail_owner_logout = QPushButton("Sign out")
-        self.mail_owner_logout.setObjectName("enkyronMailOwnerLogout")
-        self.mail_owner_logout.setEnabled(False)
-        self.mail_owner_logout.clicked.connect(self.logout_owner)
-        top_layout.addWidget(self.mail_owner_logout)
+        # My account is an existing DB-backed profile, not an email login form.
         self.operator_profile_state = None
         self.operator_profile_dialog = None
         outer.addWidget(top)
@@ -1268,11 +1256,11 @@ class EnkyronWindow(QMainWindow):
         mail_head = QHBoxLayout()
         mail_head.addWidget(section_title("MAIL · DIRECTION & SUPPORT"))
         mail_head.addStretch()
-        self.crm_mail_connection = QLabel("Not connected · Owner sign-in required")
+        self.crm_mail_connection = QLabel("Mail · Compose and local drafts available")
         self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
         self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
         mail_head.addWidget(self.crm_mail_connection)
-        # Authentication lives in the top-level My account area, not inside Mail.
+        # Mail is one workspace; mailbox transport configuration is back-office.
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
@@ -1283,9 +1271,10 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
-        self.mail_inbox.refreshRequested.connect(self.refresh_owner_mail)
-        self.mail_inbox.mailboxChanged.connect(self.refresh_owner_mail)
-        self.mail_inbox.threadRequested.connect(self.read_owner_mail_thread)
+        self.mail_inbox.refreshRequested.connect(self.refresh_mail)
+        self.mail_inbox.mailboxChanged.connect(self.refresh_mail)
+        self.mail_inbox.threadRequested.connect(self.read_mail_thread)
+        self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
         sent_layout = QVBoxLayout(sent_page)
@@ -1661,286 +1650,91 @@ class EnkyronWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
         self.reload_operator_profile()
-        self.check_owner_account_setup()
 
-    def check_owner_account_setup(self):
-        """Show correct next action before requesting any private credentials."""
-        if self.owner_account_check_pending or self.owner_session_token:
+    def load_mail_status(self):
+        """Read mail permissions from PostgreSQL; never prompt to enrol a user."""
+        if self.mail_status_loaded:
             return
-        self.owner_account_check_pending = True
-        self.owner_setup_state = "checking"
-        self.mail_owner_login.setEnabled(False)
-        self.mail_owner_login.setText("Checking CEO account…")
-
-        def received(result, error):
-            self.owner_account_check_pending = False
-            if self.owner_session_token:
-                return
-            state = result.get("state") if isinstance(result, dict) and not error else None
-            if state not in ("active", "pending", "not_enrolled",
-                             "schema_missing", "needs_review"):
-                state = "unavailable"
-            self.owner_setup_state = state
-            wording = {
-                "active": "Sign in as CEO",
-                "pending": "Activate CEO account",
-                "not_enrolled": "Set up CEO account",
-                "schema_missing": "CEO setup required",
-                "needs_review": "CEO account needs review",
-                "unavailable": "CEO account unavailable",
-            }
-            self.mail_owner_login.setText(wording[state])
-            self.mail_owner_login.setEnabled(state in ("active", "pending", "not_enrolled"))
-            if state == "not_enrolled":
-                self.crm_mail_connection.setText(
-                    "CEO account not set up · Direction and Support are assigned, not connected"
-                )
-            elif state == "pending":
-                self.crm_mail_connection.setText("CEO account pending activation")
-            elif state == "active":
-                self.crm_mail_connection.setText("Not connected · Sign in as CEO")
-            elif state == "schema_missing":
-                self.crm_mail_connection.setText("CEO setup requires identity migrations 108 / 109")
-            else:
-                self.crm_mail_connection.setText("CEO account needs configuration review")
-
-        self.bridge.call("owner-setup-status", callback=received)
-
-    def open_owner_login(self):
-        """Request a DB-verified CEO session; never transmit secrets on argv."""
-        if self.owner_session_token:
-            return
-        if self.owner_setup_state != "active":
-            guidance = {
-                "not_enrolled": (
-                    "Your CEO passphrase has not been created yet.\n\n"
-                    "First, check and initialise your ONE CEO account on this "
-                    "workstation. It then provides access to both Direction "
-                    "and Support without any second mailbox login.\n\n"
-                    "From ~/agent-risk-layer, first verify your local database:\n"
-                    "node scripts/enkyron-enroll-owner.mjs --check\n\n"
-                    "Then run the one-time private CEO setup:\n"
-                    "node scripts/enkyron-enroll-owner.mjs --enroll\n\n"
-                    "Restart ENKYRON after setup. Never paste your passphrase "
-                    "or authenticator secret into a chat."
-                ),
-                "pending": (
-                    "Your CEO account exists but is PENDING activation. "
-                    "A pending account cannot sign in. Do not enrol a second account.\n\n"
-                    "From ~/agent-risk-layer, activate your existing identity:\n"
-                    "node scripts/enkyron-enroll-owner.mjs --activate\n\n"
-                    "Restart ENKYRON afterwards. Your private password and "
-                    "fresh authenticator code are requested locally."
-                ),
-                "schema_missing": (
-                    "Identity tables 108 / 109 are not installed. "
-                    "Check migrations before creating credentials."
-                ),
-            }
-            QMessageBox.information(
-                self, "CEO account setup",
-                guidance.get(self.owner_setup_state,
-                             "Verify the account setup before signing in.")
-            )
-            return
-        if self.owner_login_dialog and self.owner_login_dialog.isVisible():
-            self.owner_login_dialog.raise_()
-            return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · CEO sign in")
-        dialog.setMinimumWidth(410)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(section_title("CEO · SECURE SIGN IN"))
-        intro = QLabel(
-            "Sign in with the passphrase and authenticator code set up "
-            "for your ENKYRON Owner account. Resend remains disconnected "
-            "until separately authorised."
-        )
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
-        form = QFormLayout()
-        password = QLineEdit()
-        password.setObjectName("enkyronOwnerPassword")
-        password.setAccessibleName("CEO account passphrase")
-        password.setEchoMode(QLineEdit.EchoMode.Password)
-        password.setMaxLength(200)
-        form.addRow("Passphrase", password)
-        totp = QLineEdit()
-        totp.setObjectName("enkyronOwnerTotp")
-        totp.setAccessibleName("Six digit authenticator code")
-        totp.setMaxLength(6)
-        totp.setPlaceholderText("6 digits")
-        form.addRow("Authenticator", totp)
-        layout.addLayout(form)
-        note = QLabel("Your passphrase and MFA code are not stored in the CRM.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        buttons = QHBoxLayout()
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(dialog.reject)
-        buttons.addWidget(cancel)
-        buttons.addStretch()
-        submit = QPushButton("Sign in")
-        submit.setObjectName("enkyronOwnerLoginSubmit")
-        buttons.addWidget(submit)
-        layout.addLayout(buttons)
-        self.owner_login_dialog = dialog
-
-        def sign_in():
-            secret = password.text()
-            code = totp.text()
-            if not secret or len(code) != 6 or not code.isascii() or not code.isdigit():
-                QMessageBox.warning(dialog, "Credentials required",
-                                    "Enter your passphrase and six-digit authenticator code.")
-                return
-            submit.setEnabled(False)
-            # The payload is a bounded local stdin pipe, NOT argv.
-            payload = {"password": secret, "totp_code": code}
-            password.clear()
-            totp.clear()
-            self.crm_mail_connection.setText("Verifying CEO credentials…")
-
-            def received(data, error):
-                if not dialog.isVisible():
-                    # User cancelled while authentication was in flight:
-                    # never adopt the token; revoke the newly issued session.
-                    if data and isinstance(data.get("session_token"), str):
-                        self.bridge.call("owner-logout", payload={
-                            "session_token": data["session_token"]
-                        })
-                    self.crm_mail_connection.setText(
-                        "Not connected · Owner sign-in required"
-                    )
-                    return
-                if error or not data or not isinstance(data.get("session_token"), str):
-                    submit.setEnabled(True)
-                    self.crm_mail_connection.setText("Not connected · Owner sign-in required")
-                    QMessageBox.warning(dialog, "Sign in failed",
-                                        "Account unavailable or credentials not accepted.")
-                    return
-                self.owner_session_token = data["session_token"]
-                self.mail_owner_login.setText("CEO signed in")
-                self.mail_owner_login.setEnabled(False)
-                self.mail_owner_logout.setEnabled(True)
-                self.crm_mail_connection.setText(
-                    "CEO authenticated · Resend not connected"
-                )
-                self.mail_inbox.set_connection_state(
-                    "disconnected",
-                    "CEO authenticated · Connect Resend to read professional messages."
-                )
-                dialog.accept()
-                self.check_owner_mail_connection()
-            self.bridge.call("owner-login", payload=payload, callback=received)
-
-        submit.clicked.connect(sign_in)
-        dialog.finished.connect(lambda _: setattr(self, "owner_login_dialog", None))
-        dialog.open()
-
-    def check_owner_mail_connection(self):
-        """Use an authenticated backend status, never an editable Qt role."""
-        token = self.owner_session_token
-        if not token:
-            return
-        self.crm_mail_connection.setText("CEO authenticated · Checking Resend…")
-        self.mail_inbox.set_connection_state("loading")
+        self.mail_status_loaded = True
+        self.crm_mail_connection.setText("Checking email connection…")
         def received(data, error):
-            if token != self.owner_session_token:
-                return
             if error or not data:
-                self.crm_mail_connection.setText(
-                    "CEO authenticated · Resend connection unavailable"
-                )
+                self.mail_status_loaded = False
+                self.mail_provider_ready = False
+                self.crm_mail_connection.setText("Email connection unavailable · Drafts remain local")
                 self.mail_inbox.set_connection_state(
-                    "disconnected", "Unable to check Resend configuration."
+                    "disconnected", "Compose an email or use saved local drafts."
                 )
                 return
-            if data.get("mailboxes"):
-                self.mail_inbox.set_owner_mailboxes({
-                    "mailboxes": data["mailboxes"]
-                })
-            if not data.get("connected"):
-                self.crm_mail_connection.setText(
-                    "CEO authenticated · Resend setup required"
-                )
-                self.mail_inbox.set_connection_state(
-                    "disconnected", "Your Owner session is active. "
-                    "Resend has not been configured on this workstation."
-                )
-                return
-            self.refresh_owner_mail(self.mail_inbox.selected_mailbox)
-        self.bridge.call("owner-mail-status",
-                         payload={"session_token": token}, callback=received)
+            self.mail_provider_ready = bool(data.get("provider_configured"))
+            permitted = data.get("mailboxes") or []
+            if permitted:
+                self.mail_inbox.set_owner_mailboxes({"mailboxes": permitted})
+            if not data.get("schema_ready"):
+                msg = "Mail database update required for new drafts and saved messages."
+            elif not permitted:
+                msg = "Mailbox permissions have not been provisioned in PostgreSQL."
+            elif not self.mail_provider_ready:
+                msg = "Compose drafts now · Resend connection needed for send/receive."
+            else:
+                msg = "Email configured · Direction and Support"
+            self.crm_mail_connection.setText(msg)
+            if self.mail_provider_ready and permitted:
+                self.refresh_mail(self.mail_inbox.selected_mailbox)
+            else:
+                self.mail_inbox.set_connection_state("disconnected", msg)
+        self.bridge.call("mail-status", callback=received)
 
-    def refresh_owner_mail(self, mailbox):
-        """Fetch threads only under an active Owner session, scoped to mailbox."""
-        token = self.owner_session_token
-        if not token or mailbox not in ("direction", "support"):
+    def refresh_mail(self, mailbox):
+        """Read selected Resend Inbox under the local DB mailbox permission."""
+        if not self.mail_provider_ready or mailbox not in ("direction", "support"):
             return
         self.mail_inbox.set_connection_state("loading")
-        self.crm_mail_connection.setText("CEO authenticated · Loading inbox…")
+        self.crm_mail_connection.setText("Refreshing email…")
         def received(data, error):
-            if token != self.owner_session_token or mailbox != self.mail_inbox.selected_mailbox:
+            if mailbox != self.mail_inbox.selected_mailbox:
                 return
             if error or not data or data.get("mailbox") != mailbox:
                 self.mail_inbox.set_connection_state(
-                    "error", "Unable to load this mailbox. Retry when connected."
+                    "error", "Could not read this mailbox. Retry with Refresh inbox."
                 )
-                self.crm_mail_connection.setText(
-                    "CEO authenticated · Mail synchronisation error"
-                )
+                self.crm_mail_connection.setText("Email unavailable · Check Resend connection")
                 return
             self.mail_inbox.set_connection_state("connected")
             self.mail_inbox.show_threads(
-                mailbox,data.get("items") or [],bool(data.get("has_more"))
+                mailbox, data.get("items") or [], bool(data.get("has_more"))
             )
             self.crm_mail_connection.setText(
-                "CEO authenticated · {} inbox ready".format(mailbox.title())
+                "{} · Inbox refreshed".format(mailbox.title())
             )
-        self.bridge.call("owner-mail-threads", payload={
-            "session_token":token,"mailbox":mailbox
-        }, callback=received)
+        self.bridge.call("mail-threads", payload={"mailbox":mailbox}, callback=received)
 
-    def read_owner_mail_thread(self, mailbox, thread_id):
-        """Read selected conversation in plain text. No external actions."""
-        token=self.owner_session_token
-        if not token or mailbox not in ("direction","support") or not thread_id:
+    def read_mail_thread(self, mailbox, thread_id):
+        if mailbox not in ("direction","support") or not thread_id:
             return
         def received(data,error):
-            if token!=self.owner_session_token or mailbox!=self.mail_inbox.selected_mailbox:
+            if (mailbox != self.mail_inbox.selected_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
                 return
-            if error or not data or data.get("thread_id")!=thread_id:
+            if error or not data or data.get("thread_id") != thread_id:
                 self.mail_inbox.body.setPlainText(
-                    "Unable to read this conversation. Select it again to retry."
+                    "Unable to read this conversation. Please select it again."
                 )
                 return
-            self.mail_inbox.show_messages(
-                mailbox,thread_id,data.get("items") or []
-            )
-        self.bridge.call("owner-mail-messages",payload={
-            "session_token":token,"mailbox":mailbox,"thread_id":thread_id
-        },callback=received)
+            self.mail_inbox.show_messages(mailbox,thread_id,data.get("items") or [])
+        self.bridge.call("mail-messages",
+            payload={"mailbox":mailbox,"thread_id":thread_id},callback=received)
 
-    def logout_owner(self):
-        """Sign out locally immediately, then revoke the DB session token."""
-        token = self.owner_session_token
-        if not token:
+    def open_mail_compose(self):
+        """New business email from Mail, no CRM company or login required."""
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
             return
-        self.owner_session_token = None
-        self.mail_owner_login.setText("Sign in as CEO")
-        self.mail_owner_login.setEnabled(True)
-        self.mail_owner_logout.setEnabled(False)
-        self.crm_mail_connection.setText("Not connected · Owner sign-in required")
-        self.mail_inbox.set_connection_state("disconnected")
-        def received(_data, error):
-            if error:
-                QMessageBox.warning(
-                    self, "Session revocation unavailable",
-                    "Your local view was signed out. The database session "
-                    "could not be revoked; it expires after 30 minutes."
-                )
-        self.bridge.call("owner-logout", payload={"session_token": token},
-                         callback=received)
+        selected = self.mail_inbox.selected_mailbox
+        self.show_mail_draft_dialog({
+            "mailbox_key": selected if selected in ("direction","support") else "direction",
+            "company_name_at_creation": "Independent email",
+        })
 
     def reload_operator_profile(self):
         """Read only the currently logged-in local operator's display identity."""
@@ -1991,9 +1785,9 @@ class EnkyronWindow(QMainWindow):
             "Your name is separate from the Linux operator and the legal "
             "issuing-company profile. Founder / Owner is a local self-declared "
             "label, NOT an authentication role or a permission grant. "
-            "The separate CEO sign-in verifies passphrase and MFA for Mail. "
-            "Full L5 enforcement across legacy CRM/Tickets and multi-user access "
-            "are not implemented yet."
+            "My account is a saved local profile. Mailbox permissions are stored "
+            "separately in PostgreSQL. This local desktop is not a hardened "
+            "multi-user authentication system."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -2018,10 +1812,9 @@ class EnkyronWindow(QMainWindow):
                     mailbox.get("address") or "Not assigned", rights
                 )
             account_text += (
-                "CEO sign-in: {}. Mail provider: consult the Mail workspace.\n"
-                "Assigned mailbox rights do not bypass provider configuration "
-                "or existing per-action checks."
-            ).format("signed in" if self.owner_session_token else "not signed in")
+                "Mail rights are recorded in PostgreSQL when provisioned. "
+                "The Resend connection belongs to the Mail service, not My account."
+            )
             account_card = QLabel(account_text)
             account_card.setTextFormat(Qt.TextFormat.PlainText)
             account_card.setWordWrap(True)
@@ -2139,6 +1932,7 @@ class EnkyronWindow(QMainWindow):
             self.crm_tabs.setCurrentIndex(3)
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
+            self.load_mail_status()
             return
         if index < 0 or index >= self.pages.count():
             return
