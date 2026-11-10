@@ -26,6 +26,7 @@ if __package__:
     from .enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
+    from .enkyron_mail_workspace import MailInboxView
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -33,6 +34,7 @@ else:
     from enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
+    from enkyron_mail_workspace import MailInboxView
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -398,7 +400,7 @@ class EnkyronWindow(QMainWindow):
         nav_l.addWidget(QLabel("WORKSPACE"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
-        self.navigation.addItems(["Home", "Tickets", "CRM"])
+        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail"])
         self.navigation.setMaximumHeight(204)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
@@ -421,6 +423,10 @@ class EnkyronWindow(QMainWindow):
         go_tickets = QPushButton("Open Client Desk")
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
         home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
+        go_mail = QPushButton("Open Mail")
+        go_mail.setObjectName("enkyronHomeOpenMail")
+        go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
+        home_l.addWidget(go_mail, alignment=Qt.AlignmentFlag.AlignLeft)
 
         overview_header = QHBoxLayout()
         overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
@@ -1234,33 +1240,37 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_draft.clicked.connect(self.open_selected_draft)
         draft_footer.addWidget(self.crm_edit_draft)
         drafts_l.addLayout(draft_footer)
-        # Mail workspace is structurally ready, but no provider is configured.
-        # Do not invent received/sent messages or enable transport controls.
+        # One professional Mail workspace, reusing the existing local Drafts.
+        # No network calls until trusted Owner authentication is connected.
         mail_page = QWidget()
         mail_l = QVBoxLayout(mail_page)
         mail_l.setSpacing(10)
         mail_head = QHBoxLayout()
-        mail_head.addWidget(section_title("EMAIL"))
+        mail_head.addWidget(section_title("MAIL · DIRECTION & SUPPORT"))
         mail_head.addStretch()
-        self.crm_mail_connection = QLabel("Mailbox not connected")
+        self.crm_mail_connection = QLabel("Not connected · Owner sign-in required")
+        self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
+        self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
         mail_head.addWidget(self.crm_mail_connection)
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
-        for folder, explanation in (
-            ("Inbox", "Connect a professional mailbox later to receive messages here."),
-            ("Sent", "Mailbox not connected. Externally sent messages reported by the operator are labelled in Drafts; no provider verification is claimed.")
-        ):
-            folder_page = QWidget()
-            folder_layout = QVBoxLayout(folder_page)
-            folder_layout.setContentsMargins(16, 18, 16, 18)
-            title = QLabel(explanation)
-            title.setWordWrap(True)
-            folder_layout.addWidget(title)
-            folder_layout.addStretch()
-            self.crm_mail_folders.addTab(folder_page, folder)
+        self.mail_inbox = MailInboxView()
+        self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
+        sent_page = QWidget()
+        sent_layout = QVBoxLayout(sent_page)
+        sent_layout.setContentsMargins(20, 20, 20, 20)
+        sent_note = QLabel(
+            "Sent mail is not connected. Local operator-reported external sends "
+            "are recorded under Drafts, but are not verified provider receipts."
+        )
+        sent_note.setTextFormat(Qt.TextFormat.PlainText)
+        sent_note.setWordWrap(True)
+        sent_layout.addWidget(sent_note)
+        sent_layout.addStretch()
+        self.crm_mail_folders.addTab(sent_page, "Sent")
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
-        self.crm_mail_folders.setCurrentIndex(2)
+        self.crm_mail_folders.setCurrentIndex(0)
         self.crm_tabs.addTab(mail_page, "Mail")
 
         # Pipeline is an overview of the existing human-owned opportunities;
@@ -1628,8 +1638,10 @@ class EnkyronWindow(QMainWindow):
             if error or not result or not result.get("available"):
                 self.operator_profile_state = None
                 self.account_identity_label.setText("LOCAL WORKSPACE")
+                self.mail_inbox.set_owner_mailboxes({})
                 return
             self.operator_profile_state = result
+            self.mail_inbox.set_owner_mailboxes(result.get("owner_access") or {})
             current = result.get("current") or {}
             self.account_identity_label.setText(
                 "{} · {}".format(
@@ -1807,12 +1819,21 @@ class EnkyronWindow(QMainWindow):
         super().closeEvent(event)
 
     def module_changed(self, index):
+        # The top-level Mail shortcut focuses the existing CRM Mail tab.
+        # There is one shared draft list and no duplicated mail workspace.
+        if index == 3:
+            self.pages.setCurrentIndex(2)
+            self.crm_tabs.setCurrentIndex(3)
+            if not self.crm_drafts_loaded:
+                self.load_mail_drafts()
+            return
         if index < 0 or index >= self.pages.count():
             return
         self.pages.setCurrentIndex(index)
         if index == 0:
             self.load_sales_overview()
         if index == 2:
+            self.crm_tabs.setCurrentIndex(0)
             if not self.crm_company_loaded:
                 self.load_companies()
             if not self.crm_loaded:
