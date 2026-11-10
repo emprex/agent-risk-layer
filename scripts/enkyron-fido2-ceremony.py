@@ -80,6 +80,9 @@ def prove():
     try:
         client = Fido2Client(device, ORIGIN, user_interaction=interaction)
         info = client.info
+        if not any(v in ("FIDO_2_0", "FIDO_2_1_PRE", "FIDO_2_1", "FIDO_2_3")
+                   for v in info.versions):
+            raise RuntimeError("CTAP2 required: U2F-only devices are not allowed")
         if not configured_user_verification(info.options):
             raise RuntimeError(
                 "User verification is not configured on this key. "
