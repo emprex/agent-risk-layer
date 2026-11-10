@@ -35,9 +35,16 @@ export function validateDraftCreate(input){
   const content=contentFields(input);
   const opportunity_id=input.opportunity_id==null?null:requireOpportunityId(input.opportunity_id);
   const company_id=input.company_id==null?null:requireCompanyId(input.company_id);
-  if((opportunity_id===null)===(company_id===null))
-    throw new Error('CRM draft requires exactly one company or opportunity');
-  return {opportunity_id,company_id,...content};
+  // Standalone emails are deliberately allowed only when Mail specifies the
+  // chosen sender mailbox. Historical CRM callers still require one parent.
+  const mailbox_key=input.mailbox_key??null;
+  if(mailbox_key!==null&&!['direction','support'].includes(mailbox_key))
+    throw new Error('CRM invalid sender mailbox');
+  if(opportunity_id!==null&&company_id!==null)
+    throw new Error('CRM draft cannot belong to two CRM records');
+  if(opportunity_id===null&&company_id===null&&mailbox_key===null)
+    throw new Error('CRM draft requires a company, opportunity or mailbox');
+  return {opportunity_id,company_id,mailbox_key:mailbox_key??'direction',...content};
 }
 export function validateDraftUpdate(input){
   const content=contentFields(input);
@@ -45,18 +52,21 @@ export function validateDraftUpdate(input){
     throw new Error('CRM invalid draft identifier');
   if(!Number.isSafeInteger(input.expected_revision)||input.expected_revision<1)
     throw new Error('CRM invalid draft revision');
-  return {id:input.id,expected_revision:input.expected_revision,...content};
+  const mailbox_key=input.mailbox_key??null;
+  if(mailbox_key!==null&&!['direction','support'].includes(mailbox_key))
+    throw new Error('CRM invalid sender mailbox');
+  return {id:input.id,expected_revision:input.expected_revision,mailbox_key,...content};
 }
 function fingerprint(item){
   return createHash('sha256').update(JSON.stringify([
-    item.recipient_email||'',item.subject,item.body_text
+    item.mailbox_key||'direction',item.recipient_email||'',item.subject,item.body_text
   ])).digest('hex');
 }
 export async function listMailDrafts(pool,search,actor){
   const query=boundedSearch(search),owner=scope(actor);
   try{
     const result=await pool.query(
-      'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.revision,'
+      'SELECT d.id,d.opportunity_id,d.company_id,d.mailbox_key,d.recipient_email,d.subject,d.revision,'
       +'d.updated_at,COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
       +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
       +'s.sent_at AS external_sent_at '
@@ -87,7 +97,7 @@ export async function readMailDraft(pool,id,actor){
   const owner=scope(actor);
   try{
     const row=(await pool.query(
-      'SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.body_text,'
+      'SELECT d.id,d.opportunity_id,d.company_id,d.mailbox_key,d.recipient_email,d.subject,d.body_text,'
       +'d.revision,d.updated_at,'
       +'COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
       +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
@@ -128,22 +138,24 @@ export async function createMailDraft(pool,input,actor,options={}){
   const data=validateDraftCreate(input),owner=scope(actor),uuid=options.uuid??randomUUID;
   return transact(pool,async client=>{
     const companyMode=data.company_id!==null;
-    const source=companyMode?'enkyron_crm_companies':'enkyron_crm_opportunities';
     const parentId=companyMode?data.company_id:data.opportunity_id;
-    const parent=(await client.query(
-      'SELECT id FROM '+source+' WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
-      [owner.key,parentId]
-    )).rows[0];
-    if(!parent)throw new Error(
-      'CRM '+(companyMode?'company':'opportunity')+' not found in local workspace'
-    );
+    if(parentId!==null){
+      const source=companyMode?'enkyron_crm_companies':'enkyron_crm_opportunities';
+      const parent=(await client.query(
+        'SELECT id FROM '+source+' WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+        [owner.key,parentId]
+      )).rows[0];
+      if(!parent)throw new Error(
+        'CRM '+(companyMode?'company':'opportunity')+' not found in local workspace'
+      );
+    }
     const id=uuid();
     await client.query(
       'INSERT INTO enkyron_crm_mail_drafts '
-      +'(id,workspace_key,opportunity_id,company_id,recipient_email,subject,body_text,'
-      +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)',
-      [id,owner.key,data.opportunity_id,data.company_id,data.recipient_email||null,
-        data.subject,data.body_text,owner.name]
+      +'(id,workspace_key,opportunity_id,company_id,mailbox_key,recipient_email,subject,body_text,'
+      +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)',
+      [id,owner.key,data.opportunity_id,data.company_id,data.mailbox_key,
+        data.recipient_email||null,data.subject,data.body_text,owner.name]
     );
     await client.query(
       'INSERT INTO enkyron_crm_mail_draft_events '
@@ -152,6 +164,7 @@ export async function createMailDraft(pool,input,actor,options={}){
       [uuid(),owner.key,id,fingerprint(data),owner.name]
     );
     return {id,revision:1,opportunity_id:data.opportunity_id,company_id:data.company_id,
+      mailbox_key:data.mailbox_key,
       notice:'Saved locally as an unsent draft. No email has been transmitted.'};
   });
 }
@@ -159,7 +172,7 @@ export async function updateMailDraft(pool,input,actor,options={}){
   const data=validateDraftUpdate(input),owner=scope(actor),uuid=options.uuid??randomUUID;
   return transact(pool,async client=>{
     const previous=(await client.query(
-      'SELECT id,recipient_email,subject,body_text,revision, '
+      'SELECT id,mailbox_key,recipient_email,subject,body_text,revision, '
       +'EXISTS (SELECT 1 FROM enkyron_crm_mail_manual_sends s '
       +'WHERE s.workspace_key=enkyron_crm_mail_drafts.workspace_key '
       +'AND s.draft_id=enkyron_crm_mail_drafts.id) AS external_send_reported '
@@ -171,7 +184,9 @@ export async function updateMailDraft(pool,input,actor,options={}){
       throw new Error('CRM draft was changed; reopen the latest revision');
     if(previous.external_send_reported)
       throw new Error('CRM draft has a manual external send record and cannot be edited');
+    const mailboxKey=data.mailbox_key??previous.mailbox_key;
     if((previous.recipient_email||'')===data.recipient_email
+        && previous.mailbox_key===mailboxKey
         && previous.subject===data.subject
         && previous.body_text===data.body_text)
       throw new Error('CRM draft has no changes to save');
@@ -179,17 +194,18 @@ export async function updateMailDraft(pool,input,actor,options={}){
     const updated=(await client.query(
       'UPDATE enkyron_crm_mail_drafts '
       +'SET recipient_email=$3,subject=$4,body_text=$5,revision=$6,'
-      +'updated_by=$7,updated_at=NOW() '
+      +'updated_by=$7,updated_at=NOW(),mailbox_key=$9 '
       +'WHERE workspace_key=$1 AND id=$2 AND revision=$8 RETURNING id,revision',
       [owner.key,data.id,data.recipient_email||null,data.subject,data.body_text,
-        version,owner.name,data.expected_revision]
+        version,owner.name,data.expected_revision,mailboxKey]
     )).rows[0];
     if(!updated)throw new Error('CRM draft revision conflict');
     await client.query(
       'INSERT INTO enkyron_crm_mail_draft_events '
       +'(id,workspace_key,draft_id,revision,event_type,content_sha256,actor_local) '
       +"VALUES($1,$2,$3,$4,'edited',$5,$6)",
-      [uuid(),owner.key,data.id,version,fingerprint(data),owner.name]
+      [uuid(),owner.key,data.id,version,
+        fingerprint({...data,mailbox_key:mailboxKey}),owner.name]
     );
     return {id:data.id,revision:version,
       notice:'Updated local unsent draft; no external communication occurred.'};
