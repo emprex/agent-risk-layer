@@ -2523,15 +2523,16 @@ class EnkyronWindow(QMainWindow):
             form.addRow(label, editor)
         rationale = QPlainTextEdit()
         rationale.setPlaceholderText(
-            "Why was this correction necessary and what source was consulted? "
-            "(20–1000 characters)"
+            "Optional for routine edits. Name/legal-name corrections require "
+            "a reason (20–1000 characters)."
         )
         rationale.setMaximumHeight(100)
-        form.addRow("Correction rationale *", rationale)
+        form.addRow("Reason (if applicable)", rationale)
         layout.addLayout(form)
         confirmed = QCheckBox(
-            "I confirm these corrections do not prove identity or marketing consent."
+            "I confirm the name correction does not verify identity or consent."
         )
+        confirmed.hide()
         layout.addWidget(confirmed)
         buttons = QHBoxLayout()
         cancel = QPushButton("Cancel")
@@ -2543,13 +2544,40 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         record_id = record["id"]
         company_id = self.crm_company_id
+        baseline = {key: editor.text() for key, editor in inputs.items()}
         history = QPushButton("View correction history…")
         history.clicked.connect(
             lambda: self.open_crm_record_history(kind, record_id)
         )
         buttons.insertWidget(1, history)
 
+        def changed_fields():
+            return {
+                key for key, editor in inputs.items()
+                if editor.text() != baseline[key]
+            }
+
+        def sensitive_change():
+            return bool(changed_fields() & (
+                {"name", "legal_name"} if kind == "company" else {"full_name"}
+            ))
+
+        def update_save(*_args):
+            note = rationale.toPlainText().strip()
+            sensitive = sensitive_change()
+            confirmed.setVisible(sensitive)
+            key = "name" if kind == "company" else "full_name"
+            allowed = (
+                bool(changed_fields()) and bool(inputs[key].text().strip())
+                and (20 <= len(note) <= 1000 if sensitive else
+                     (not note or 20 <= len(note) <= 1000))
+                and (not sensitive or confirmed.isChecked())
+            )
+            submit.setEnabled(allowed)
+
         def save():
+            if not submit.isEnabled():
+                return
             if kind == "company" and company_id != self.crm_company_id:
                 QMessageBox.warning(dialog, "Selection changed",
                                     "Reopen the company editor.")
@@ -2559,8 +2587,9 @@ class EnkyronWindow(QMainWindow):
                                     "Reopen the contact editor.")
                 return
             note = rationale.toPlainText().strip()
-            if not 20 <= len(note) <= 1000 or not confirmed.isChecked():
-                QMessageBox.warning(dialog, "Confirmation required",
+            if (sensitive_change() and
+                    (not 20 <= len(note) <= 1000 or not confirmed.isChecked())):
+                QMessageBox.warning(dialog, "Name correction confirmation required",
                                     "Enter 20–1000 characters and confirm.")
                 return
             payload = {
@@ -2594,6 +2623,11 @@ class EnkyronWindow(QMainWindow):
                 payload=payload, callback=received
             )
 
+        for widget in inputs.values():
+            widget.textChanged.connect(update_save)
+        rationale.textChanged.connect(update_save)
+        confirmed.toggled.connect(update_save)
+        update_save()
         submit.clicked.connect(save)
         self.crm_record_edit_dialog = dialog
         dialog.open()
