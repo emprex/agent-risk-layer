@@ -881,11 +881,15 @@ jobs:
           assert window.crm_dossier_company_inputs["sector"].text() == "Cybersecurity"
           assert not window.crm_dossier_company_save.isEnabled()
           window.crm_dossier_company_inputs["sector"].setText("Cybersecurity / GRC")
-          window.crm_dossier_company_reason.setPlainText(
-              "Correcting the sector label after checking internal research records."
-          )
-          window.crm_dossier_company_confirm.setChecked(True)
           assert window.crm_dossier_company_save.isEnabled()
+          assert not window.crm_dossier_company_confirm.isVisible()
+          # A company-name change still requires review and confirmation.
+          window.crm_dossier_company_inputs["name"].setText("Renamed Company")
+          assert not window.crm_dossier_company_save.isEnabled()
+          assert window.crm_dossier_company_confirm.isVisible()
+          window.crm_dossier_company_inputs["name"].setText("Synthetic Company")
+          assert window.crm_dossier_company_save.isEnabled()
+          assert not window.crm_dossier_company_confirm.isVisible()
           with patch("desktop.enkyron.QMessageBox.question",
                      return_value=QMessageBox.StandardButton.No) as ask:
               window.crm_dossier_dialog.reject()
@@ -903,7 +907,7 @@ jobs:
           assert calls[-1][0] == "crm-edit-company"
           assert calls[-1][2] == {
               "id": company_id, "expected_version": 1, "confirmed": True,
-              "review_note": "Correcting the sector label after checking internal research records.",
+              "review_note": "",
               "name": "Synthetic Company", "legal_name": "",
               "sector": "Cybersecurity / GRC", "city": "London",
               "country": "UK", "website": ""
@@ -954,8 +958,8 @@ jobs:
               "Email: contact@example.invalid",
               "Telephone: Not recorded", "Marketing permission: unknown"
           ]
-          # UX-06B: existing contact correction stays within 360 and
-          # requires version, rationale and human confirmation.
+          # UX-11: routine contact edits use the versioned correction service
+          # without a mandatory rationale; name changes still require review.
           inline_edit = [
               b for b in window.crm_dossier_tabs.widget(0).findChildren(QPushButton)
               if b.objectName() == "crmDossierEditContact"
@@ -971,12 +975,17 @@ jobs:
           assert window.crm_dossier_contact_editor is not None
           assert window.crm_dossier_contact_inputs["full_name"].text() == "Synthetic Contact"
           window.crm_dossier_contact_inputs["email"].setText("new@example.invalid")
-          assert not window.crm_dossier_contact_submit.isEnabled()
-          window.crm_dossier_contact_reason.setPlainText(
-              "Confirmed updated email after reviewing primary correspondence."
-          )
-          window.crm_dossier_contact_confirm.setChecked(True)
           assert window.crm_dossier_contact_submit.isEnabled()
+          assert not window.crm_dossier_contact_confirm.isVisible()
+          # Changing a contact's name is a distinct identity-sensitive action.
+          window.crm_dossier_contact_inputs["full_name"].setText("Renamed Contact")
+          assert not window.crm_dossier_contact_submit.isEnabled()
+          # Qt isVisible() is false if the containing tab is not the active one
+          # in offscreen smoke; isHidden() reflects the widget's explicit state.
+          assert not window.crm_dossier_contact_confirm.isHidden()
+          window.crm_dossier_contact_inputs["full_name"].setText("Synthetic Contact")
+          assert window.crm_dossier_contact_submit.isEnabled()
+          assert not window.crm_dossier_contact_confirm.isVisible()
           with patch("desktop.enkyron.QMessageBox.information") as info:
               original_count = len(calls)
               window.refresh_company_dossier()
@@ -997,7 +1006,7 @@ jobs:
               "job_title": "Engineering",
               "email": "new@example.invalid",
               "phone": "",
-              "review_note": "Confirmed updated email after reviewing primary correspondence.",
+              "review_note": "",
               "confirmed": True
           }
           with patch("desktop.enkyron.QMessageBox.warning") as warn:
