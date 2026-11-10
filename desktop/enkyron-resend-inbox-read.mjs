@@ -3,7 +3,7 @@
 // An eventual trusted owner service must resolve the principal and supply the
 // OAuth access token and mailbox mapping; never accept these from a Qt payload.
 // No HTML rendering, attachment downloads, mail mutations, or PostgreSQL writes.
-import {authoriseEnkyronOperation} from './enkyron-access-policy.mjs';
+import {ownerMailboxPermission} from './enkyron-owner-mail-access.mjs';
 
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const MAILBOX_NAMES=['direction','support'];
@@ -31,12 +31,8 @@ function normalizeList(value,limit){
 function validatePrincipal(principal,organizationId){
   // The principal MUST be produced by a future trusted authentication service.
   // An OS username, self-declared profile, or caller-supplied IPC identity is NOT enough.
-  if(principal?.role!=='organization_owner_l5')
+  if(!ownerMailboxPermission(principal,organizationId,'direction','read'))
     throw new Error('Owner authentication required');
-  const permission=authoriseEnkyronOperation(principal,'email:read',{
-    organizationId,
-  });
-  if(!permission.allowed)throw new Error('Owner authentication required');
 }
 export function createResendInboxReader({organizationId,mailboxes,credentialProvider,
   fetchImpl=globalThis.fetch}={}){
@@ -85,6 +81,8 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
   return Object.freeze({
     async listThreads({principal,mailbox,limit=30,after=null}={}){
       const inbox=choose(mailbox),count=pageLimit(limit);
+      if(!ownerMailboxPermission(principal,organisation,mailbox,'read'))
+        throw new Error('Mailbox access denied');
     const query=new URLSearchParams({folders:'inbox',limit:String(count)});
     if(after!==null)query.set('after',requireUuid(after));
     const payload=await get(`/inboxes/${inbox}/threads?${query}`,principal,count);
@@ -98,6 +96,8 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     },
     async listThreadEmails({principal,mailbox,threadId,limit=30,after=null}={}){
       const inbox=choose(mailbox),thread=requireUuid(threadId),count=pageLimit(limit);
+      if(!ownerMailboxPermission(principal,organisation,mailbox,'read'))
+        throw new Error('Mailbox access denied');
       const query=new URLSearchParams({limit:String(count)});
     if(after!==null)query.set('after',requireUuid(after));
     const payload=await get(`/inboxes/${inbox}/threads/${thread}/emails?${query}`,principal,count);
