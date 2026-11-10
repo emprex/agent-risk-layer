@@ -62,18 +62,19 @@ const LISTS={
     +'AND e.ticket_id=o.source_ticket_id)))) '
     +'ORDER BY o.updated_at DESC,o.id DESC LIMIT 21',
   activities:
-    'SELECT a.id,a.activity_type,a.detail,a.recorded_by,a.recorded_at,'
-    +'count(*) OVER() AS total_rows '
-    +'FROM enkyron_crm_opportunities o '
-    +'JOIN enkyron_crm_activities a ON a.opportunity_id=o.id '
-    +'AND a.workspace_key=o.workspace_key '
-    +'WHERE o.workspace_key=$1 AND ('
-    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    'SELECT a.id,a.opportunity_id,a.company_id,a.activity_type,a.detail,'
+    +'a.recorded_by,a.recorded_at,count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_activities a '
+    +'WHERE a.workspace_key=$1 AND ('
+    +'a.company_id=$2 OR EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_opportunities o '
+    +'WHERE o.workspace_key=a.workspace_key AND o.id=a.opportunity_id '
+    +'AND (EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
     +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id)))) '
+    +'AND e.ticket_id=o.source_ticket_id)))))) '
     +'ORDER BY a.recorded_at DESC,a.id DESC LIMIT 21',
   qualifications:
     'SELECT r.id,r.contact_id,COALESCE(c.full_name,\'Company\') AS subject,'
@@ -85,18 +86,19 @@ const LISTS={
     +'WHERE r.workspace_key=$1 AND r.company_id=$2 '
     +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21',
   drafts:
-    'SELECT d.id,d.subject,d.recipient_email,d.revision,d.updated_at,'
-    +'count(*) OVER() AS total_rows '
-    +'FROM enkyron_crm_opportunities o '
-    +'JOIN enkyron_crm_mail_drafts d ON d.opportunity_id=o.id '
-    +'AND d.workspace_key=o.workspace_key '
-    +'WHERE o.workspace_key=$1 AND ('
-    +'EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
+    'SELECT d.id,d.opportunity_id,d.company_id,d.subject,d.recipient_email,'
+    +'d.revision,d.updated_at,count(*) OVER() AS total_rows '
+    +'FROM enkyron_crm_mail_drafts d '
+    +'WHERE d.workspace_key=$1 AND ('
+    +'d.company_id=$2 OR EXISTS ('
+    +'SELECT 1 FROM enkyron_crm_opportunities o '
+    +'WHERE o.workspace_key=d.workspace_key AND o.id=d.opportunity_id '
+    +'AND (EXISTS (SELECT 1 FROM enkyron_crm_prospect_links l '
     +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
     +'AND l.company_id=$2) OR (o.company_id=$2 AND (o.source_ticket_id IS NULL OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
     +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
-    +'AND e.ticket_id=o.source_ticket_id)))) '
+    +'AND e.ticket_id=o.source_ticket_id)))))) '
     +'ORDER BY d.updated_at DESC,d.id DESC LIMIT 21',
 
   // Existing commercial source records only, including buyer documentary reviews
