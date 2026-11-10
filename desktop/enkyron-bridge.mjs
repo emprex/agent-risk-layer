@@ -26,6 +26,7 @@ import {listServiceCatalog,readServiceCatalog,createServiceCatalog,updateService
 import { getTaxReviews, recordTaxReview, validateTaxReview } from './enkyron-crm-tax-review.mjs';
 import {readCompanyProfile,recordCompanyProfile,validateCompanyProfile} from './enkyron-company-profile.mjs';
 import {readPersonalProfile,recordPersonalProfile,validatePersonalProfile} from './enkyron-operator-personal-profile.mjs';
+import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
 import {explainLocalError} from './enkyron-db-errors.mjs';
 import {readBuyerReview,recordBuyerReview,validateBuyerReview} from './enkyron-crm-buyer-review.mjs';
 import {readCommercialTerms,recordCommercialTerms,validateCommercialTerms} from './enkyron-crm-commercial-terms.mjs';
@@ -340,7 +341,10 @@ async function main() {
       command === 'crm-tax-record' ? await recordTaxReview(pool, payload, os.userInfo().username) :
       command === 'crm-own-profile' ? await readCompanyProfile(pool, os.userInfo().username) :
       command === 'crm-own-profile-save' ? await recordCompanyProfile(pool, payload, os.userInfo().username) :
-      command === 'operator-profile' ? await readPersonalProfile(pool, os.userInfo().username) :
+      command === 'operator-profile' ? await (async()=>{
+         const personal=await readPersonalProfile(pool,os.userInfo().username);
+         return {...personal,owner_access:ownerMailAccessCard(personal.current||{})};
+       })() :
       command === 'operator-profile-save' ? await recordPersonalProfile(pool, payload, os.userInfo().username) :
       command === 'crm-buyer-review' ? await readBuyerReview(pool, arg, os.userInfo().username) :
       command === 'crm-buyer-record' ? await recordBuyerReview(pool, payload, os.userInfo().username) :
