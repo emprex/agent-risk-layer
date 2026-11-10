@@ -180,6 +180,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_followups_smoke.py'
 
+      - name: ENKYRON Mail native inbox UX smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_inbox_smoke.py'
+
       - name: UX-14 native manual external send smoke
         env:
           QT_QPA_PLATFORM: offscreen
@@ -220,8 +226,8 @@ jobs:
           assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
           assert window.pages.count() == 3
-          assert [window.navigation.item(i).text() for i in range(3)] == [
-              "Home", "Tickets", "CRM"
+          assert [window.navigation.item(i).text() for i in range(4)] == [
+              "Home", "Tickets", "CRM", "Mail"
           ]
           assert window.pages.currentIndex() == 0
           assert window.ticket_views.count() == 2
