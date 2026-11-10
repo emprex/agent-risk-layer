@@ -435,7 +435,7 @@ class EnkyronWindow(QMainWindow):
         self.sales_overview_attention = QLabel("")
         self.sales_overview_attention.setWordWrap(True)
         home_l.addWidget(self.sales_overview_attention)
-        home_l.addWidget(section_title("UPCOMING FOLLOW-UPS"))
+        home_l.addWidget(section_title("UPCOMING OPPORTUNITY FOLLOW-UPS"))
         self.sales_overview_table = QTableWidget(0, 4)
         self.sales_overview_table.setHorizontalHeaderLabels(
             ["Prospect", "Stage", "Next action", "Due"]
@@ -454,11 +454,20 @@ class EnkyronWindow(QMainWindow):
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         home_l.addWidget(self.sales_overview_table, 1)
-        open_followups = QPushButton("Open CRM follow-ups")
+        # Opportunity and company-owned follow-ups are distinct records.
+        # Give both a direct Home entry, without inventing combined counts.
+        followups_actions = QHBoxLayout()
+        followups_actions.addStretch()
+        open_followups = QPushButton("Opportunity follow-ups")
         open_followups.clicked.connect(self.open_sales_followups)
-        home_l.addWidget(
-            open_followups, alignment=Qt.AlignmentFlag.AlignRight
+        followups_actions.addWidget(open_followups)
+        self.home_company_followups_button = QPushButton("Company follow-ups")
+        self.home_company_followups_button.setObjectName("homeCompanyFollowups")
+        self.home_company_followups_button.clicked.connect(
+            lambda: self.open_company_followups()
         )
+        followups_actions.addWidget(self.home_company_followups_button)
+        home_l.addLayout(followups_actions)
         self.pages.addWidget(home)
 
         ticket_page = QWidget()
@@ -1929,7 +1938,7 @@ class EnkyronWindow(QMainWindow):
                 )
             )
             self.sales_overview_attention.setText(
-                "Follow-ups: {} overdue  ·  {} due today  ·  "
+                "Opportunity follow-ups: {} overdue  ·  {} due today  ·  "
                 "{} due in the next 7 days  |  As of {}".format(
                     numbers["overdue"], numbers["due_today"],
                     numbers["due_next_week"], numbers["as_of"]
