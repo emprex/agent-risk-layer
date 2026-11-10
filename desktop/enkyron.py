@@ -110,7 +110,35 @@ def make_text_area(readonly=True):
     return area
 
 
-def make_workspace_window(title, size=(1090, 710), minimum=(770, 520)):
+class GuardedCompanyWindow(QDialog):
+    """Only the independent company dossier asks before discarding edits."""
+
+    def __init__(self, parent=None, flags=Qt.WindowType.Widget):
+        super().__init__(parent, flags)
+        self.close_guard = None
+        self._close_approved = False
+
+    def _approve_close(self):
+        if self._close_approved:
+            return True
+        if self.close_guard is not None and not self.close_guard():
+            return False
+        self._close_approved = True
+        return True
+
+    def reject(self):
+        if self._approve_close():
+            super().reject()
+
+    def closeEvent(self, event):
+        if not self._approve_close():
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+
+def make_workspace_window(title, size=(1090, 710), minimum=(770, 520),
+                          dialog_type=QDialog):
     """Independent, non-modal Qt top-level window for operator work views.
 
     No parent/transient owner: the main desktop remains usable and the OS
@@ -121,7 +149,7 @@ def make_workspace_window(title, size=(1090, 710), minimum=(770, 520)):
     flags = (Qt.WindowType.Window |
              Qt.WindowType.WindowMinMaxButtonsHint |
              Qt.WindowType.WindowCloseButtonHint)
-    window = QDialog(None, flags)
+    window = dialog_type(None, flags)
     window.setWindowModality(Qt.WindowModality.NonModal)
     window.setModal(False)
     window.setWindowTitle(title)
@@ -1574,6 +1602,9 @@ class EnkyronWindow(QMainWindow):
         # (and leave customer details visible after ENKYRON is closed).
         if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
             self.crm_dossier_dialog.close()
+            if self.crm_dossier_dialog.isVisible():
+                event.ignore()
+                return
         super().closeEvent(event)
 
     def module_changed(self, index):
@@ -3045,7 +3076,9 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_dialog.activateWindow()
             return
         company_id = self.crm_company_id
-        dialog = make_workspace_window("ENKYRON · Company dossier")
+        dialog = make_workspace_window(
+            "ENKYRON · Company dossier", dialog_type=GuardedCompanyWindow
+        )
         layout = QVBoxLayout(dialog)
         self.crm_dossier_heading = QLabel("Company dossier")
         self.crm_dossier_heading.setTextFormat(Qt.TextFormat.PlainText)
@@ -3135,10 +3168,79 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_followup_editor = None
         self.crm_dossier_followup_saving = False
         self.crm_dossier_contact_editor = None
+        self.crm_dossier_contact_initial = None
+        self.crm_dossier_contact_pending = False
+        self.crm_dossier_followup_initial = None
+        dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
         dialog.show()
         self.refresh_company_dossier()
+
+    def company_dossier_pending_or_unsaved(self):
+        """Read only local Qt draft state. Never queries or writes customer data."""
+        if (self.crm_dossier_activity_saving
+                or self.crm_dossier_followup_saving
+                or self.crm_dossier_contact_pending):
+            return True, ["A CRM save or duplicate check is still in progress"]
+        pending = []
+        if self.crm_dossier_contact_editor is not None:
+            current = {
+                key: widget.text()
+                for key, widget in self.crm_dossier_contact_inputs.items()
+            }
+            if (current != (self.crm_dossier_contact_initial or {})
+                    or self.crm_dossier_contact_reason.toPlainText().strip()):
+                pending.append("contact details")
+        if self.crm_dossier_followup_editor is not None:
+            current = (
+                self.crm_dossier_followup_action.toPlainText(),
+                self.crm_dossier_followup_due.date().toString("yyyy-MM-dd")
+                if self.crm_dossier_followup_has_date.isChecked() else None
+            )
+            if current != self.crm_dossier_followup_initial:
+                pending.append("next action")
+        if (self.crm_dossier_activity_editor is not None
+                and self.crm_dossier_activity_detail.toPlainText().strip()):
+            pending.append("activity note")
+        if (self.crm_dossier_tabs.count() > 4
+                and getattr(self, "crm_qualification_rationale", None) is not None
+                and (
+                    self.crm_qualification_rationale.toPlainText().strip()
+                    or self.crm_qualification_source.text().strip()
+                    or self.crm_qualification_next.text().strip()
+                    or self.crm_qualification_subject.currentIndex() != 0
+                    or self.crm_qualification_fit.currentIndex() != 0
+                    or self.crm_qualification_priority.currentIndex() != 0
+                )):
+            pending.append("qualification review")
+        return False, pending
+
+    def confirm_company_dossier_close(self):
+        """Protect the Close button, window X and application shutdown alike."""
+        dialog = self.crm_dossier_dialog
+        if not dialog or not dialog.isVisible():
+            return True
+        busy, drafts = self.company_dossier_pending_or_unsaved()
+        if busy:
+            QMessageBox.information(
+                dialog, "CRM operation in progress",
+                "The pending operation must finish before closing this dossier. "
+                "Review the result before retrying."
+            )
+            return False
+        if not drafts:
+            return True
+        answer = QMessageBox.question(
+            dialog, "Discard unsaved work?",
+            "The dossier contains unsaved {}.\n\n"
+            "Discard this work and close the dossier?".format(
+                ", ".join(drafts)
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def update_dossier_section_visibility(self, *_args):
         """Progressive disclosure without dropping any dossier section or ID."""
@@ -4022,6 +4124,10 @@ class EnkyronWindow(QMainWindow):
         else:
             container.layout().addWidget(editor)
         self.crm_dossier_contact_editor = editor
+        self.crm_dossier_contact_initial = {
+            key: widget.text() for key, widget in inputs.items()
+        }
+        self.crm_dossier_contact_pending = False
         self.crm_dossier_contact_inputs = inputs
         self.crm_dossier_contact_submit = save
         self.crm_dossier_contact_cancel = cancel
@@ -4072,6 +4178,8 @@ class EnkyronWindow(QMainWindow):
                 return
             if self.crm_dossier_contact_editor is editor:
                 self.crm_dossier_contact_editor = None
+                self.crm_dossier_contact_initial = None
+                self.crm_dossier_contact_pending = False
             editor.setParent(None)
             editor.deleteLater()
 
@@ -4081,6 +4189,7 @@ class EnkyronWindow(QMainWindow):
                     or company_id != self.crm_dossier_company_id):
                 return
             state["pending"] = False
+            self.crm_dossier_contact_pending = False
             cancel.setEnabled(True)
             if (error or not isinstance(result, dict)
                     or (creating and (
@@ -4118,6 +4227,7 @@ class EnkyronWindow(QMainWindow):
                     "confirmed": True
                 })
                 state["pending"] = True
+                self.crm_dossier_contact_pending = True
                 save.setEnabled(False)
                 cancel.setEnabled(False)
                 self.bridge.call(
@@ -4136,6 +4246,7 @@ class EnkyronWindow(QMainWindow):
                         "confirmed": True
                     }
                 state["pending"] = True
+                self.crm_dossier_contact_pending = True
                 save.setEnabled(False)
                 cancel.setEnabled(False)
                 self.bridge.call(
@@ -4144,6 +4255,7 @@ class EnkyronWindow(QMainWindow):
                 return
             # Preview is read-only and never authorizes creation by itself.
             state["pending"] = True
+            self.crm_dossier_contact_pending = True
             save.setEnabled(False)
             cancel.setEnabled(False)
 
@@ -4153,6 +4265,7 @@ class EnkyronWindow(QMainWindow):
                         or company_id != self.crm_dossier_company_id):
                     return
                 state["pending"] = False
+                self.crm_dossier_contact_pending = False
                 cancel.setEnabled(True)
                 if payload() != data:
                     changed()
@@ -4292,6 +4405,11 @@ class EnkyronWindow(QMainWindow):
         card.layout().addWidget(editor)
         self.crm_dossier_followup_editor = editor
         self.crm_dossier_followup_action = action
+        self.crm_dossier_followup_has_date = has_date
+        self.crm_dossier_followup_due = due
+        self.crm_dossier_followup_initial = (
+            action.toPlainText(), existing_date or None
+        )
         self.crm_dossier_followup_confirm = confirmed
         self.crm_dossier_followup_save = save
         self.crm_dossier_followup_cancel = cancel
@@ -4309,6 +4427,7 @@ class EnkyronWindow(QMainWindow):
             if self.crm_dossier_followup_editor is editor:
                 self.crm_dossier_followup_editor = None
                 self.crm_dossier_followup_saving = False
+                self.crm_dossier_followup_initial = None
             editor.setParent(None)
             editor.deleteLater()
 
