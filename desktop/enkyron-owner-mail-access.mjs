@@ -26,7 +26,8 @@ const ROLES=Object.freeze({
   organisation:'AGENTRISKLAYER LTD',
 });
 const PERMITTED_ACTIONS=new Set(['read','reply','send','link_ticket','link_company']);
-const MAIL_OPERATIONS=Object.freeze({read:'email:read',reply:'email:send',send:'email:send'});
+const MAIL_OPERATIONS=Object.freeze({read:'email:read',reply:'email:send',send:'email:send',
+  link_ticket:'crm:write',link_company:'crm:write'});
 
 export function ownerMailAccessCard(profile={}){
   // UI account card is a declaration of provisioned policy, NOT a live authorisation grant.
@@ -44,7 +45,7 @@ export function ownerMailAccessCard(profile={}){
   };
 }
 
-export function ownerMailboxPermission(principal,organizationId,mailboxKey,action){
+export function ownerMailboxPermission(principal,organizationId,mailboxKey,action,facts={}){
   if(!PERMITTED_ACTIONS.has(action))return false;
   const mailbox=OWNER_MAILBOXES.find(m=>m.key===mailboxKey);
   if(!mailbox||!mailbox.permissions.includes(action))return false;
@@ -53,10 +54,13 @@ export function ownerMailboxPermission(principal,organizationId,mailboxKey,actio
   // service may call this function with an already verified principal.
   if(principal?.loginName!==OWNER_LOGIN||principal?.role!==OWNER_ROLE)return false;
   const policyAction=MAIL_OPERATIONS[action];
-  if(!policyAction)return false; // ticket/company linking uses separate CRM policy
+  if(!policyAction)return false;
+  // For outgoing mail, caller must present human-confirmed, verified recipient
+  // facts from the trusted service. Mailbox assignment alone never sends.
   return authoriseEnkyronOperation(principal,policyAction,{
     organizationId,
     ...(policyAction==='email:send'
-      ?{humanConfirmed:true,recipientVerified:true}:{}),
+      ?{humanConfirmed:facts.humanConfirmed===true,
+        recipientVerified:facts.recipientVerified===true}:{}),
   }).allowed;
 }
