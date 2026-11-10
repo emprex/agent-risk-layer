@@ -266,6 +266,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
+        self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
         self.crm_dossier_seq = 0
@@ -1088,6 +1089,10 @@ class EnkyronWindow(QMainWindow):
         )
         followup_info.setWordWrap(True)
         followups_l.addWidget(followup_info)
+        company_tasks = QPushButton("View company follow-ups…")
+        company_tasks.setObjectName("crmCompanyFollowupsOverview")
+        company_tasks.clicked.connect(lambda: self.open_company_followups())
+        followups_l.addWidget(company_tasks)
         followup_actions = QHBoxLayout()
         self.crm_followup_search = QLineEdit()
         self.crm_followup_search.setMaxLength(100)
@@ -1598,8 +1603,14 @@ class EnkyronWindow(QMainWindow):
         self.load_tickets()
 
     def closeEvent(self, event):
-        # Standalone company windows must never outlive their local workspace
-        # (and leave customer details visible after ENKYRON is closed).
+        # Close both detached company views before the operator workspace exits.
+        # No customer records should remain visible after ENKYRON closes.
+        if (self.crm_company_followups_dialog is not None
+                and self.crm_company_followups_dialog.isVisible()):
+            self.crm_company_followups_dialog.close()
+            if self.crm_company_followups_dialog.isVisible():
+                event.ignore()
+                return
         if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
             self.crm_dossier_dialog.close()
             if self.crm_dossier_dialog.isVisible():
@@ -3124,6 +3135,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_edit_company.setEnabled(False)
         self.crm_dossier_edit_company.clicked.connect(self.open_dossier_company_editor)
         heading_row.addWidget(self.crm_dossier_edit_company)
+        self.crm_dossier_company_followups = QPushButton("Company follow-ups…")
+        self.crm_dossier_company_followups.setObjectName("crmCompanyFollowups")
+        self.crm_dossier_company_followups.clicked.connect(
+            lambda: self.open_company_followups(self.crm_dossier_company_id)
+        )
+        heading_row.addWidget(self.crm_dossier_company_followups)
         layout.addLayout(heading_row)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
@@ -3226,6 +3243,220 @@ class EnkyronWindow(QMainWindow):
         dialog.show()
         self.refresh_company_dossier()
 
+
+
+    def open_company_followups(self, company_id=None):
+        """Company-owned dated tasks, or a read-only cross-company upcoming view."""
+        if (self.crm_company_followups_dialog is not None
+                and self.crm_company_followups_dialog.isVisible()):
+            self.crm_company_followups_dialog.raise_()
+            self.crm_company_followups_dialog.activateWindow()
+            return
+        dialog = make_workspace_window("ENKYRON · Company follow-ups")
+        self.crm_company_followups_dialog = dialog
+        layout = QVBoxLayout(dialog)
+        title = section_title(
+            "Company follow-ups" if company_id else "Upcoming company follow-ups"
+        )
+        layout.addWidget(title)
+        info = QLabel(
+            "Manual reminders only. No messages are sent, and these records "
+            "do not imply customer interest, consent or a commercial opportunity."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        notice = QLabel("Loading company follow-ups…")
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        table = QTableWidget(0, 5 if company_id else 4)
+        table.setHorizontalHeaderLabels(
+            ["Action", "Due / attention", "Status", "Revision", "Updated"]
+            if company_id else
+            ["Company", "Action", "Due / attention", "Updated"]
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            0 if company_id else 1, QHeaderView.ResizeMode.Stretch
+        )
+        table.setAlternatingRowColors(True)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        layout.addWidget(table, 1)
+        state = {"items": [], "pending": False, "seq": 0}
+        form = QFormLayout()
+        action = QLineEdit()
+        action.setMaxLength(1000)
+        action.setPlaceholderText("e.g. Review whether an answer was received")
+        due = QDateEdit(QDate.currentDate().addDays(7))
+        due.setCalendarPopup(True)
+        due.setDisplayFormat("yyyy-MM-dd")
+        due.setMinimumDate(QDate(2000, 1, 1))
+        due.setMaximumDate(QDate(2099, 12, 31))
+        confirmation = QCheckBox("I confirm this manual follow-up record.")
+        if company_id:
+            form.addRow("Next action *", action)
+            form.addRow("Due date *", due)
+            layout.addLayout(form)
+            layout.addWidget(confirmation)
+        buttons = QHBoxLayout()
+        refresh = QPushButton("Refresh")
+        create = QPushButton("Add follow-up")
+        update = QPushButton("Reschedule / edit")
+        complete = QPushButton("Mark completed")
+        cancel_task = QPushButton("Cancel follow-up")
+        close = QPushButton("Close")
+        buttons.addWidget(refresh)
+        if company_id:
+            for button in (create, update, complete, cancel_task):
+                buttons.addWidget(button)
+        buttons.addStretch()
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+        close.clicked.connect(dialog.reject)
+
+        def selected():
+            row = table.currentRow()
+            return state["items"][row] if 0 <= row < len(state["items"]) else None
+
+        def controls(*_args):
+            ready = (
+                not state["pending"] and confirmation.isChecked()
+                and 5 <= len(action.text().strip()) <= 1000
+                and due.date().isValid()
+            )
+            item = selected()
+            create.setEnabled(bool(company_id and ready))
+            editable = bool(item and item.get("status") == "open")
+            update.setEnabled(bool(company_id and ready and editable))
+            complete.setEnabled(bool(company_id and not state["pending"]
+                                     and editable and confirmation.isChecked()))
+            cancel_task.setEnabled(bool(company_id and not state["pending"]
+                                        and editable and confirmation.isChecked()))
+
+        def reload():
+            if not dialog.isVisible():
+                return
+            state["seq"] += 1
+            sequence = state["seq"]
+            notice.setText("Reading company follow-ups…")
+            command = (
+                "crm-company-followups" if company_id
+                else "crm-company-followups-upcoming"
+            )
+            def received(data, error):
+                if (not dialog.isVisible() or sequence != state["seq"]):
+                    return
+                state["items"] = []
+                table.setRowCount(0)
+                if error or not data or not data.get("available"):
+                    notice.setText(
+                        error or (data or {}).get(
+                            "notice", "Company follow-ups unavailable."
+                        )
+                    )
+                    controls()
+                    return
+                state["items"] = data.get("items", [])
+                table.setRowCount(len(state["items"]))
+                for row, item in enumerate(state["items"]):
+                    attention = format_followup_due(
+                        item.get("due_date"), 
+                        "won" if item.get("status") != "open" else "research"
+                    )
+                    values = (
+                        [item.get("action_text") or "", attention,
+                         (item.get("status") or "").title(),
+                         item.get("version") or "",
+                         display_date(item.get("updated_at"))]
+                        if company_id else
+                        [item.get("company_name") or "",
+                         item.get("action_text") or "", attention,
+                         display_date(item.get("updated_at"))]
+                    )
+                    for col, value in enumerate(values):
+                        table.setItem(row, col, QTableWidgetItem(str(value)))
+                notice.setText(
+                    "Showing {} company follow-ups{}".format(
+                        len(state["items"]),
+                        " (first 100 only)" if data.get("more") else ""
+                    )
+                )
+                controls()
+            self.bridge.call(command, company_id or "", callback=received)
+
+        def load_selected():
+            item = selected()
+            if company_id and item is not None:
+                action.setText(item.get("action_text") or "")
+                date = QDate.fromString(
+                    str(item.get("due_date") or "")[:10], "yyyy-MM-dd"
+                )
+                if date.isValid():
+                    due.setDate(date)
+                confirmation.setChecked(False)
+            controls()
+
+        def save(mode):
+            if not company_id or state["pending"] or not confirmation.isChecked():
+                return
+            item = selected()
+            if mode != "create" and (not item or item.get("status") != "open"):
+                return
+            payload = {
+                "action_text": action.text().strip() if mode in ("create", "edit")
+                    else item.get("action_text"),
+                "due_date": due.date().toString("yyyy-MM-dd")
+                    if mode in ("create", "edit") else str(item.get("due_date"))[:10],
+                "confirmed": True
+            }
+            if mode == "create":
+                payload["company_id"] = company_id
+                command = "crm-company-followup-create"
+            else:
+                payload.update({
+                    "id": item["id"],
+                    "expected_version": item["version"],
+                    "status": "open" if mode == "edit" else
+                        "completed" if mode == "complete" else "cancelled"
+                })
+                command = "crm-company-followup-update"
+            state["pending"] = True
+            controls()
+
+            def saved(result, error):
+                if not dialog.isVisible():
+                    return
+                state["pending"] = False
+                if error or not result or not result.get("id"):
+                    notice.setText(
+                        "Save not confirmed. Refresh before retrying to avoid "
+                        "duplicate entries. " + str(error or "")
+                    )
+                    controls()
+                    return
+                confirmation.setChecked(False)
+                if mode == "create":
+                    action.clear()
+                reload()
+                if (self.crm_dossier_dialog
+                        and self.crm_dossier_dialog.isVisible()
+                        and self.crm_dossier_company_id == company_id):
+                    self.refresh_company_dossier()
+            self.bridge.call(command, payload=payload, callback=saved)
+
+        table.itemSelectionChanged.connect(load_selected)
+        refresh.clicked.connect(reload)
+        if company_id:
+            action.textChanged.connect(controls)
+            due.dateChanged.connect(controls)
+            confirmation.toggled.connect(controls)
+            create.clicked.connect(lambda: save("create"))
+            update.clicked.connect(lambda: save("edit"))
+            complete.clicked.connect(lambda: save("complete"))
+            cancel_task.clicked.connect(lambda: save("cancel"))
+        controls()
+        dialog.show()
+        reload()
 
     def open_dossier_company_editor(self):
         """Correct company CRM fields inside the dossier, not another dialog."""
@@ -3605,6 +3836,30 @@ class EnkyronWindow(QMainWindow):
                 "Latest recorded follow-up: " + next_action
                 if next_action else
                 "No next action recorded in the visible opportunities."
+            )
+            # Company tasks are independent of commercial opportunities.
+            # Guard against stale callbacks when a dossier is refreshed.
+            def company_followups_received(result, error):
+                if (not dialog.isVisible() or seq != self.crm_dossier_seq
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                if error or not result or not result.get("available"):
+                    return
+                open_tasks = [
+                    item for item in result.get("items", [])
+                    if item.get("status") == "open"
+                ]
+                if open_tasks:
+                    task = open_tasks[0]
+                    self.crm_dossier_next_action.setText(
+                        "Next company follow-up: {} · {}".format(
+                            format_followup_due(task.get("due_date"), "research"),
+                            task.get("action_text") or ""
+                        )
+                    )
+            self.bridge.call(
+                "crm-company-followups", company_id,
+                callback=company_followups_received
             )
             definitions = [
                 ("contacts", "Contacts", [
