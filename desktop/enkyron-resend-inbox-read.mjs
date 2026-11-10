@@ -107,7 +107,7 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         from:safeText(item.from,254),
         to:Array.isArray(item.to)?item.to.slice(0,20).map(x=>safeText(x,254)):[],
         text:safeText(item.text,20000),
-        created_at:safeText(item.created_at,64),
+        created_at:safeText(item.received_at??item.created_at,64),
         html_only:!item.text&&typeof item.html==='string',
       })),has_more:payload.has_more};
     },
