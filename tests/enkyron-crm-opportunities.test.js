@@ -26,7 +26,8 @@ test('validates business stages, actual calendar dates and manual action',()=>{
     null,{},[]
   ]) assert.throws(()=>validateOpportunityCreate(invalid),/CRM/);
   assert.equal(validateOpportunityUpdate(edit).stage,'qualified');
-  assert.equal(validateOpportunityUpdate({...edit,company_id:companyId}).company_id,companyId);
+  assert.equal(validateOpportunityUpdate({...edit,company_id:companyId,confirmed:true}).company_id,companyId);
+  assert.throws(()=>validateOpportunityUpdate({...edit,company_id:companyId}),/confirmation/);
   assert.throws(()=>validateOpportunityUpdate({...edit,company_id:'wrong'}),/CRM/);
   assert.equal(validateOpportunityProbability(null),null);
   assert.equal(validateOpportunityProbability(0),0);
@@ -157,7 +158,7 @@ test('company-bound update refuses stale/missing company association before writ
       },release:()=>{}
     };
     const db={connect:async()=>client};
-    const request={...edit,company_id:companyId};
+    const request={...edit,company_id:companyId,confirmed:true};
     if(linked){
       const result=await updateOpportunity(db,request,'ci-operator',
         {uuid:()=> 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'});
