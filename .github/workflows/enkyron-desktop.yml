@@ -1053,6 +1053,12 @@ jobs:
           assert window.crm_dossier_contact_editor is not None
           window.crm_dossier_contact_cancel.click()
           assert window.crm_dossier_contact_editor is None
+          # UX-09: avoid repeating the long follow-up above its own card.
+          assert window.crm_dossier_next_action.isVisible()
+          window.crm_dossier_nav.setCurrentRow(3)
+          app.processEvents()
+          assert window.crm_dossier_tabs.currentIndex() == 3
+          assert not window.crm_dossier_next_action.isVisible()
           opportunity_labels = [
               child.text() for child in
               window.crm_dossier_tabs.widget(3).findChildren(QLabel)
@@ -1067,6 +1073,13 @@ jobs:
           ]
           assert len(followup_buttons) == 1
           assert followup_buttons[0].isEnabled()
+          assert followup_buttons[0].maximumWidth() == 190
+          assert followup_buttons[0].width() <= 190
+          # The headline summary remains in other sections.
+          window.crm_dossier_nav.setCurrentRow(0)
+          assert window.crm_dossier_next_action.isVisible()
+          window.crm_dossier_nav.setCurrentRow(3)
+          assert not window.crm_dossier_next_action.isVisible()
           followup_buttons[0].click()
           assert window.crm_dossier_followup_editor is not None
           assert window.crm_dossier_followup_save.isEnabled() is False
