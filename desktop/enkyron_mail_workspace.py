@@ -198,9 +198,9 @@ class MailInboxView(QWidget):
             "error": "Mailbox is unavailable. Messages were not refreshed.",
         }
         self.connection_label.setText(str(explanation or defaults[state])[:360])
-        active = state == "connected" and bool(self._mailboxes)
+        active = state in ("connected", "error") and bool(self._mailboxes)
         self.refresh_button.setEnabled(active)
-        self.search.setEnabled(active)
+        self.search.setEnabled(state == "connected" and bool(self._mailboxes))
         if not active:
             self._clear_threads(
                 "Mail is not connected. No messages have been loaded."
@@ -229,7 +229,8 @@ class MailInboxView(QWidget):
             self.mailboxChanged.emit(self.selected_mailbox)
 
     def _refresh(self):
-        if self.connection_state == "connected" and self.selected_mailbox in self._mailboxes:
+        if (self.connection_state in ("connected", "error")
+                and self.selected_mailbox in self._mailboxes):
             self.refreshRequested.emit(self.selected_mailbox)
 
     def show_threads(self, mailbox, items, has_more=False):
