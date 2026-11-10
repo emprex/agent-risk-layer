@@ -1,7 +1,8 @@
 # ENKYRON — FEUILLE DE ROUTE DE LA PLATEFORME PSA / SERVICE DESK / CYBERSECURITY OPERATIONS
 
-**Version:** 1.1  
+**Version:** 1.2 — mise à jour de statut du 10 novembre 2026  
 **Établie:** 2026-11-05  
+**Dernier point d'arrêt opérateur:** 2026-11-10 — voir la section 11 (prioritaire sur les anciennes lignes « NEXT »)  
 **Branche de travail:** `feat/enkyron-desktop-20261105`  
 **Statut:** plan de développement ordonné, non promesse de livraison  
 **Total:** 17 blocs, 157 fonctions/critères de livraison
@@ -20,7 +21,7 @@
 
 La fenêtre **interne opérateur** reste une vraie application Qt, sans Electron ni interface browser. Un futur **formulaire de site** et un **portail client** sont des interfaces externes séparées, qui appellent des services sécurisés; ils ne sont jamais un remplacement du desktop.
 
-## 2. Ce qui est réellement démontré, au 5 novembre 2026
+## 2. État historique au 5 novembre 2026 (instantané, non état courant)
 
 - **Validation réelle sur Debian:** ENKYRON s'ouvre; lecture tickets, notes, master révision 15; inspection ARL en lecture seule au bon SHA après correction de timeout; lecture du workplan 108 contrôles; registre KB-013 avec 4 preuves non vérifiées et 4 tests inconclusifs; test-history et fiche de provenance affichés.
 - **Implémenté et CI réussie, MAIS pas encore accepté sur Debian:** bouton **+ New ticket · call / manual**, création locale de ticket, données de contact intégrées provisoirement au `scope_text`, changement de statut audité; commit `f3087e87282f4fadc68a93c781c1e32faab90ec6`.
@@ -565,7 +566,7 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Done si:** Une seconde société peut être installée et travailler sur ses propres clients sans voir ni modifier les données ARL.
 
-## 6. Prochain bloc exécutable et recette
+## 6. Recette initiale du 5 novembre — historique; le prochain travail courant est défini en section 11
 
 **Recette locale partielle réussie le 2026-11-05:** ticket manuel `ARL-2026-000002` créé sous `AGENTRISKLAYER LTD — Internal Lab`, historique `created` (18:43:25), transition `NEW → SCOPING` journalisée (18:46:02), puis **SCOPING conservé après fermeture et relancement** d’ENKYRON sur Debian 13. Tests documentés par captures opérateur. E01-02, E01-04, E01-05, E01-06 et E01-08 sont **DONE-LOCAL**; E01-01 (saisie téléphonique avec contact) et E01-07 (archivage contrôlé) demeurent à valider sur Debian; E01-03 est désormais DONE-LOCAL. Ce résultat ne prouve pas encore la création multi-utilisateur, le CRM ni les intégrations externes.
 
@@ -680,3 +681,81 @@ L'acceptation locale du dossier synthétique `ARL E2E Test 0711` a déjà couver
 Séparer deux critères : (a) recette interne technique du registre et du rejet des autorités non vérifiées, qui peut être `DONE-CI`/`DONE-LOCAL` ; (b) capacité contractuelle réelle de signer, autoriser les tests et ouvrir un projet, qui reste **BLOQUÉE** par l'absence de client vérifié, contrat signé, acceptation du SOW, décision NDA/DPA, et règles d'engagement adaptées. Les étapes globales E07-03, E07-04 et E07-05 ne deviennent pas `DONE` par le seul test synthétique. E07-06 fournisseur de signature, E07-07 suivi des engagements et E07-08 conversion contrat → projet restent planifiés avec validation humaine. Aucun automatisme LLM ne possède l'autorité contractuelle ou de sécurité. Pas de nouveaux écrans pour reproduire les mêmes preuves.
 
 L'orientation reste 17 blocs / 157 critères, puis les 26 scénarios de recette CRM A→Z. L'objectif opérateur est de réduire la saisie et de consacrer le temps aux assessments réels, pas de remplir davantage de CRM.
+
+## 11. Mise à jour opérationnelle ENKYRON — 10 novembre 2026 (point d'arrêt ACTUEL)
+
+**Cette section fait foi pour la reprise opérationnelle**. Les sections 2, 6, 9 et 10 documentent des étapes passées ; leurs anciennes mentions « NEXT », « prochain bloc exécutable » ou « étape active » ne doivent **pas** être reprises sans confrontation à ce point d'arrêt. **Ne pas réinitialiser le CRM, ne pas reprendre les 26 cas A→Z depuis zéro, ne pas recommencer des contrats synthétiques, ne pas interpréter DONE-CI comme DONE-LOCAL.** Les 17 blocs, 157 critères et contraintes de sécurité des sections précédentes restent en vigueur.
+
+### 11.1 Références et état exact de l'installation
+
+- **Produit :** ENKYRON, desktop Qt6/PySide6 natif sous Debian 13, pont Node.js et PostgreSQL local `arl_local`. Dépôt `emprex/agent-risk-layer`, branche de travail `feat/enkyron-desktop-20261105`. Dépôt du produit ARL et base d'évaluation distincts : aucune évaluation KYRTHOS ne doit être déclenchée par le CRM.
+- **Dernier SHA GitHub fusionné et passé en CI :** `792700663f8ef0d9262d88a8c4b17d2695e66a35` (PR #545, UX-15A). **Dernier SHA local confirmé dans la conversation :** `852fcec664d94cecf04a1cc9e7d54189445fe16f` (PR #543, correction Close); **le SHA #545 n'a pas encore été installé sur Debian**.
+- **Migrations confirmées sur Debian :** 105 (relances company-first), 106 (envois Gmail externes déclarés manuellement) et checksums vérifiés ; backups sécurisés créés. **107 (profil personnel opérateur) existe seulement dans GitHub** au point d'arrêt. Ne jamais prétendre qu'elle est installée avant le résultat de `--apply` puis `--check`.
+- **Historique local :** les données existantes sont sous la portée `local:emprex`. Le compte Linux/PostgreSQL `emprex` **reste techniquement inchangé** et les anciens `recorded_by` restent des traces historiques ; ne jamais effectuer de remplacement global vers un nom humain.
+- **État Git local observé avant le point d'arrêt :** branche `feat/enkyron-desktop-20261105`. Des fichiers non suivis existaient précédemment (rapport d'examen, sauvegardes, `__pycache__`, backups de scripts, diagnostics). Ne pas les effacer ni lancer de reset/clean ; utiliser `git merge --ff-only` et refuser tout conflit.
+- **CI exacte post-fusion PR #545 :** ENKYRON Desktop **SUCCESS** et General CI **SUCCESS** au SHA `79270066...`; tests unitaires, Qt natif et PostgreSQL synthétique inclus. Les tests CI **ne valent pas** la recette Debian.
+
+### 11.2 Parcours commercial réel — DONE-LOCAL (prospection non convertie)
+
+- Un dossier d'entreprise et son contact ont servi à tester le workflow ENKYRON. Dernier écran de recette : **1 contact, 0 opportunité, 4 messages/notes, 1 brouillon/envoi, 1 qualification**.
+- **Premier envoi :** effectué dans Gmail, puis associé manuellement à un brouillon ENKYRON. Après correction PR #542 (SHA `1a5c78357ef7d9751ca0cb228a1fa6dbebf2d6af`), relecture en **EXTERNAL SEND (OPERATOR REPORTED)**, contenu non modifiable. Cette déclaration ne prouve ni livraison ni lecture.
+- **Réponse entrante :** le prospect a indiqué ne pas acheter actuellement de services d'évaluation de sécurité ; possible collaboration technique future sans engagement. Réponse consignée manuellement.
+- **Dernière réponse sortante :** envoyée dans Gmail et vérifiée séparément, puis consignée en note CRM. Au total, 4 notes après le parcours.
+- **Relance :** réponse vérifiée, suivi company-first **Completed**, révision **2** ; aucune opportunité de vente créée.
+- **Qualification :** revue humaine **Company / `not_fit` / `low`** enregistrée ; le champ `Relationship: prospect` est indépendant de cette qualification.
+- **Correction Close :** PR #543, SHA `852fcec664d94cecf04a1cc9e7d54189445fe16f`, confirmée **DONE-LOCAL** : fermeture sans fausse alerte de qualification non enregistrée.
+- **Bilan :** prospection non convertie, mais flux réel sortant → entrant → notes → relance terminée → qualification, sans vente, facture, mandat d'évaluation ou connexion Gmail native.
+- **Confidentialité :** le dépôt est public. Les adresses des correspondants, identifiants de messages, textes d'emails et notes commerciales détaillées sont conservés uniquement dans les systèmes locaux/connectés autorisés, pas dans cette documentation.
+
+### 11.3 Backlog UX court — ordre de livraison, avec critères vérifiables
+
+| ID | État au 10-11-2026 | Résultat / porte de validation |
+| --- | --- | --- |
+| UX-13 — Relances sans opportunité | **DONE-LOCAL** | Migration 105 ; tâche company-first créée, persistante et terminée révision 2 ; aucune opportunité requise. |
+| UX-14 — Envoi externe manuel associé au brouillon | **DONE-LOCAL** sur dossier CRM déjà testé | Migration 106 ; correctif PR #542 du payload IPC et des droits d'écriture ; draft relu `external_send_reported`, inchangé et en lecture seule. Ne pas prétendre à une connexion Gmail. |
+| Correction UX Close | **DONE-LOCAL** | PR #543, statut `not_fit` conservé et Close fonctionne sans alerte injustifiée. |
+| **UX-15A — Mon compte / identité personnelle** | **DONE-CI, pas DONE-LOCAL** | PR #545 ; migration 107 et bouton Qt `My account…`. `display_name`, `job_title`, `organization_display`, `work_email` optionnel, historique append-only. **Prochaine recette Debian** : installer SHA, vérifier schéma, appliquer avec backup, saisir le profil et vérifier son rechargement après redémarrage. |
+| **UX-15B — Rôles et droits L1–L5 réels** | **PLANNED** | Reprendre E00-10 à E00-23 : authentification personnelle, rôles vérifiés côté services, RBAC/ABAC, interdictions/denials, MFA, révocation, séparation des tâches, tests inter-utilisateurs/tenant et administration sans pouvoir réécrire les preuves. **Aucun « L5 sécurisé » actuellement.** |
+| UX-16 — Simplification navigation et parcours | **PLANNED** | Après UX-15A locale : audit ciblé des écrans Home/CRM/My account, réduire saisie et fenêtres redondantes, garder le chemin entreprise→contact→notes/email→qualification→relances en peu de clics. Conserver UX-WINDOWS-01 en backlog, pas de réécriture. |
+| E04-01 à E04-08 — Gmail ARL uniquement | **PLANNED / NOT CONNECTED** | Autorisation OAuth volontairement séparée. Aucun accès massif aux emails personnels, aucun import silencieux ; voir §11.5. |
+| E06-01 et communications | **PLANNED** | Envoi Gmail depuis ENKYRON uniquement après permission distincte, revue du destinataire et clic de confirmation explicite ; pas d'envoi automatique par EIRYON. |
+| A→Z / E07 global | **IN-PROGRESS / critères globaux non clos** | Garder les recettes déjà acceptées ; les validations synthétiques ne prouvent ni mandat, ni signature, ni facturation réelle. |
+
+### 11.4 Prochaine action UNIQUE après ouverture du nouveau chat — UX-15A sur Debian
+
+1. **Fermer ENKYRON** ; vérifier branche/SHA/statut Git sans toucher aux fichiers non suivis. Mise à jour uniquement par fast-forward ciblé :
+   ```bash
+   cd ~/agent-risk-layer || exit 1
+   git fetch origin feat/enkyron-desktop-20261105 &&
+   git merge --ff-only 792700663f8ef0d9262d88a8c4b17d2695e66a35 &&
+   git rev-parse HEAD &&
+   node scripts/enkyron-operator-personal-profile-schema.mjs --check
+   ```
+   **Ne pas supposer que ce bloc a déjà été exécuté. Attendre la sortie réelle.**
+2. Si `--check` indique 107 absente avec historique conforme, faire confirmer l'installation avec sauvegarde vérifiée :
+   ```bash
+   cd ~/agent-risk-layer || exit 1
+   node scripts/enkyron-operator-personal-profile-schema.mjs --apply &&
+   node scripts/enkyron-operator-personal-profile-schema.mjs --check
+   ```
+   Vérifier backup owner-only, checksums et absence de mutation des données CRM existantes. Pas de migration implicite.
+3. Redémarrer ENKYRON, ouvrir **My account…**, saisir : `Guillaume Strohecker` / `Founder` / `AGENTRISKLAYER LTD` / `adresse Gmail autorisée de l'opérateur (non publiée)` **si confirmé par l'opérateur** ; cocher la déclaration et enregistrer. Cela **n'accorde pas de droits** ni une certification d'identité.
+4. Fermer et relancer l'application. Vérifier que le nom et titre apparaissent dans la barre supérieure et que l'écran conserve la révision/personne ; vérifier qu'un dossier comme dossier CRM déjà testé affiche toujours ses notes/qualification et que les auteurs historiques `emprex` restent inchangés.
+5. Documenter résultat et captures Debian, code SHA et éventuels bugs dans [issue #544](https://github.com/emprex/agent-risk-layer/issues/544) et PR de coordination #520 ; **UX-15A DONE-LOCAL seulement après** cette validation. En cas d'erreur, corriger la cause ciblée dans une petite PR, pas de reset/base neuve.
+6. **Ne pas démarrer Gmail E04 ni UX-15B RBAC tant qu'UX-15A n'est pas reçue localement**, et ne pas réafficher systématiquement les brouillons/messages dossier CRM déjà testé pour cette vérification.
+
+### 11.5 Gmail « pertinent pour ARL » — exigences de sécurité avant le Bloc 04
+
+- **Compte envisagé :** `adresse Gmail autorisée de l'opérateur (non publiée)` ; **non connecté à ENKYRON** au point d'arrêt. Les emails du cas dossier CRM déjà testé ont été **envoyés/consultés hors ENKYRON**, puis consignés comme déclarations humaines.
+- **Filtrage de collecte :** commencer par un libellé Gmail explicite `ARL/ENKYRON`, sélection manuelle/revue de correspondance société/contact, conservation seulement des conversations ARL retenues, pas d'import massif ni correspondance automatique du seul domaine ; prévoir traitement spécifique des **réponses qui n'héritent pas automatiquement du libellé du message parent**.
+- **Limite OAuth :** les scopes Gmail concernent la boîte, **pas uniquement un label** ; une règle de filtrage applicative n'est pas une barrière d'autorisation Gmail. Évaluer boîte professionnelle séparée pour séparation forte, OAuth restreint au minimum réellement nécessaire, consentement explicite, révocation et stockage local protégé des tokens.
+- **Phase lecture et tri** : métadonnées et candidats filtrés → revue humaine → rattachement audité ; lecture corps uniquement avec autorisation adaptée et confirmation ; éviter toute instruction exécutée depuis contenu non fiable. Idempotence par Gmail message ID, fil et provenance; données personnelles minimisées.
+- **Étape envoi distincte** : pas de permission d'envoyer avant E06-01; composer/réviser destinataire/sujet/corps, confirmation humaine, preuve de l'API fournisseur si disponible, refus de doublons et contrôle de panne. Un clic « enregistrer note » n'est jamais « envoyer ».
+- **Sécurité opérationnelle** : chiffrement/protection des jetons et logs, rétention/confidentialité, pièces jointes en quarantaine, tests de refus, échec synchronisation, révocation et annulation; validation spécifique Google avant commercialisation éventuelle. Ne pas prétendre « uniquement mails ARL » comme garantie d'isolation cryptographique d'une boîte personnelle.
+
+### 11.6 Passation fiable et traçabilité
+
+- Mémo et prompt du nouveau chat dans `docs/ENKYRON_UX_HANDOFF_2026-11-10.md`.
+- Références : [issue UX-15 #544](https://github.com/emprex/agent-risk-layer/issues/544), [PR UX-15A #545](https://github.com/emprex/agent-risk-layer/pull/545), [PR Close #543](https://github.com/emprex/agent-risk-layer/pull/543), [PR manual send #542](https://github.com/emprex/agent-risk-layer/pull/542), [UX-14 #540](https://github.com/emprex/agent-risk-layer/issues/540), [suivi principal #520](https://github.com/emprex/agent-risk-layer/pull/520).
+- **Méthode de travail :** avant toute modification, vérifier l'état réel de Git/SQL/UI ; un seul changement de fonctionnalité ; tests unitaires + Qt natif + PostgreSQL synthétique ; exact-head CI puis recette Debian ; ne rien affirmer pour la base locale par simple fusion GitHub. Ne jamais effacer les données, supprimer migrations passées ou inventer un résultat métier.
+
