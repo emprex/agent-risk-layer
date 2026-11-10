@@ -8,11 +8,16 @@ import path from 'node:path';
 import * as fs from 'node:fs/promises';
 import {constants as C} from 'node:fs';
 import pg from 'pg';
+import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
+import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
 import {
   loginLocalOwner, resolveLocalOwnerSession, logoutLocalOwner,
 } from './enkyron-owner-session.mjs';
 
-const OPERATIONS=new Set(['owner-login','owner-session-status','owner-logout']);
+const OPERATIONS=new Set([
+  'owner-login','owner-session-status','owner-logout',
+  'owner-mail-status','owner-mail-threads','owner-mail-messages',
+]);
 const KEY_DIRECTORY=path.join(os.homedir(),'.local','share','enkyron','auth');
 const KEY_FILE=path.join(KEY_DIRECTORY,'local-key-v1.bin');
 function emit(value){process.stdout.write(JSON.stringify(value)+'\n');}
@@ -26,7 +31,7 @@ async function readPayload(){
   const value=JSON.parse(raw);
   if(!value||Array.isArray(value)||typeof value!=='object')
     throw new Error('Invalid Owner request');
-  const allowed=['password','totp_code','session_token'];
+  const allowed=['password','totp_code','session_token','mailbox','thread_id'];
   if(Object.keys(value).some(x=>!allowed.includes(x)))
     throw new Error('Invalid Owner request');
   return value;
@@ -73,11 +78,45 @@ async function main(){
       emit({ok:true,result:{
         authenticated:true,login_name:principal.loginName,role:principal.role,
       }});
-    }else{
+    }else if(operation==='owner-logout'){
       const done=await logoutLocalOwner(pool,{
         operator,sessionToken:req.session_token,key,
       });
       emit({ok:true,result:done});
+    }else{
+      const principal=await resolveLocalOwnerSession(pool,{
+        operator,sessionToken:req.session_token,key,
+      });
+      let config;
+      try{config=await loadPrivateResendConfig();}
+      catch{
+        if(operation==='owner-mail-status'){
+          emit({ok:true,result:{
+            connected:false,notice:'Resend is not configured on this workstation',
+          }});
+          return;
+        }
+        throw new Error('Mail provider not configured');
+      }
+      if(operation==='owner-mail-status'){
+        emit({ok:true,result:{connected:true,notice:'Resend credentials configured'}});
+        return;
+      }
+      const reader=createResendInboxReader({
+        organizationId:principal.organizationId,
+        mailboxes:config.mailboxes,
+        credentialProvider:config.credentialProvider,
+      });
+      const mailbox=req.mailbox;
+      if(operation==='owner-mail-threads'){
+        emit({ok:true,result:await reader.listThreads({
+          principal,mailbox,limit:30,
+        })});
+      }else{
+        emit({ok:true,result:await reader.listThreadEmails({
+          principal,mailbox,threadId:req.thread_id,limit:30,
+        })});
+      }
     }
   }finally{
     await pool.end();
@@ -85,6 +124,9 @@ async function main(){
 }
 main().catch(()=>{
   // Never serialize SQL errors, passwords, tokens, encryption details or stack traces.
-  emit({ok:false,error:'Owner login unavailable or credentials not accepted'});
+  const mail=process.argv[2]?.startsWith('owner-mail-');
+  emit({ok:false,error:mail
+    ?'Mail unavailable; check Owner session and Resend configuration'
+    :'Owner login unavailable or credentials not accepted'});
   process.exitCode=1;
 });
