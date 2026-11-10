@@ -31,8 +31,8 @@ class CompanyFollowupsSmoke(unittest.TestCase):
             self.assertEqual(calls[-1][1], COMPANY)
             calls[-1][3]({"available": True, "items": [], "more": False}, None)
             inputs = dialog.findChildren(QLineEdit)
-            self.assertEqual(len(inputs), 1)
-            inputs[0].setText("Review if the synthetic introduction received a reply")
+            input_action = next(x for x in inputs if x.placeholderText().startswith("e.g."))
+            input_action.setText("Review if the synthetic introduction received a reply")
             confirmation = dialog.findChildren(QCheckBox)[0]
             confirmation.setChecked(True)
             self.assertEqual(len(dialog.findChildren(QDateEdit)), 1)
