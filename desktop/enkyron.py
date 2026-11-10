@@ -1256,6 +1256,12 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
         self.mail_inbox = MailInboxView()
+        self.mail_inbox.draftsRequested.connect(
+            lambda: self.crm_mail_folders.setCurrentIndex(2)
+        )
+        self.mail_inbox.deskRequested.connect(
+            lambda: self.navigation.setCurrentRow(1)
+        )
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
         sent_layout = QVBoxLayout(sent_page)
