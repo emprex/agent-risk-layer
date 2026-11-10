@@ -3134,6 +3134,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_activity_flash = ""
         self.crm_dossier_followup_editor = None
         self.crm_dossier_followup_saving = False
+        self.crm_dossier_contact_editor = None
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
         dialog.show()
@@ -3166,6 +3167,12 @@ class EnkyronWindow(QMainWindow):
             QMessageBox.information(
                 dialog, "Unsaved next action",
                 "Save or cancel the open next-action edit before refreshing."
+            )
+            return
+        if self.crm_dossier_contact_editor is not None:
+            QMessageBox.information(
+                dialog, "Unsaved contact",
+                "Save or cancel the open contact form before refreshing."
             )
             return
         self.crm_dossier_seq += 1
@@ -3458,6 +3465,17 @@ class EnkyronWindow(QMainWindow):
                     if section_id in ("contacts", "opportunities"):
                         # Present relationship data in human-readable cards.
                         # No inferred contact consent, identity or deal state.
+                        if section_id == "contacts":
+                            add_contact = QPushButton("New contact")
+                            add_contact.setObjectName("crmDossierNewContact")
+                            add_contact.clicked.connect(
+                                lambda _checked=False, container=page,
+                                       scoped_company=company_id:
+                                self.open_dossier_contact_editor(
+                                    container, None, scoped_company
+                                )
+                            )
+                            page_layout.addWidget(add_contact)
                         if not rows:
                             empty = QLabel(
                                 "No contacts recorded for this company yet."
@@ -3484,6 +3502,7 @@ class EnkyronWindow(QMainWindow):
                                     ("", str(item.get("full_name") or "Unnamed contact")),
                                     ("Role: ", str(item.get("job_title") or "Not recorded")),
                                     ("Email: ", str(item.get("email") or "Not recorded")),
+                                    ("Telephone: ", str(item.get("phone") or "Not recorded")),
                                     ("Marketing permission: ", str(
                                         item.get("marketing_permission") or "unknown"
                                     ))
@@ -3515,6 +3534,22 @@ class EnkyronWindow(QMainWindow):
                                 if n == 0:
                                     field.setStyleSheet("font-weight: bold;")
                                 content.addWidget(field)
+                            if section_id == "contacts":
+                                edit_contact = QPushButton("Edit contact")
+                                edit_contact.setObjectName("crmDossierEditContact")
+                                edit_contact.setEnabled(
+                                    isinstance(item.get("id"), str)
+                                    and isinstance(item.get("record_version"), int)
+                                    and item.get("record_version", 0) >= 1
+                                )
+                                edit_contact.clicked.connect(
+                                    lambda _checked=False, record=item,
+                                           parent=card, scoped_company=company_id:
+                                    self.open_dossier_contact_editor(
+                                        parent, record, scoped_company
+                                    )
+                                )
+                                content.addWidget(edit_contact)
                             if section_id == "opportunities":
                                 edit = QPushButton("Edit next action")
                                 edit.setObjectName("crmDossierEditFollowup")
@@ -3889,16 +3924,308 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("crm-company-dossier", company_id, callback=received)
 
 
+
+    def open_dossier_contact_editor(self, container, contact, company_id):
+        """Create or correct one contact inline, using existing audited services."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or company_id != self.crm_dossier_company_id):
+            return
+        if (self.crm_dossier_contact_editor is not None
+                or self.crm_dossier_followup_editor is not None):
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the open contact or next-action form first."
+            )
+            return
+        creating = contact is None
+        if not creating and (not isinstance(contact.get("record_version"), int)
+                             or contact["record_version"] < 1
+                             or not contact.get("id")):
+            QMessageBox.warning(
+                dialog, "Refresh required",
+                "This contact has no verifiable revision. Refresh dossier."
+            )
+            return
+
+        editor = QFrame(container)
+        editor.setObjectName("crmDossierContactEditor")
+        editor.setStyleSheet(
+            "QFrame#crmDossierContactEditor { background: #ffffff; "
+            "border: 1px solid #9cb9c6; border-radius: 5px; }"
+        )
+        layout = QVBoxLayout(editor)
+        notice = QLabel(
+            "Manual contact record only. Identity and marketing permission are "
+            "not verified; no message will be sent."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        fields = (
+            ("full_name", "Full name *", 160),
+            ("job_title", "Role", 160),
+            ("email", "Email", 254),
+            ("phone", "Telephone", 80)
+        )
+        inputs = {}
+        form = QFormLayout()
+        for key, label, limit in fields:
+            entry = QLineEdit()
+            entry.setMaxLength(limit)
+            entry.setText(str((contact or {}).get(key) or ""))
+            entry.setObjectName("crmDossierContact_" + key)
+            inputs[key] = entry
+            form.addRow(label, entry)
+        layout.addLayout(form)
+        rationale = QPlainTextEdit()
+        rationale.setObjectName("crmDossierContactReason")
+        rationale.setMaximumHeight(85)
+        rationale.setPlaceholderText(
+            "Explain the correction (20–1000 characters) or why the new contact "
+            "is distinct from possible duplicates (30–500 characters)."
+        )
+        reason_label = QLabel(
+            "Reason for correction *" if not creating
+            else "Reason for a separate duplicate record *"
+        )
+        reason_label.setWordWrap(True)
+        layout.addWidget(reason_label)
+        layout.addWidget(rationale)
+        reason_label.setVisible(not creating)
+        rationale.setVisible(not creating)
+        duplicates = QLabel("")
+        duplicates.setObjectName("crmDossierContactDuplicates")
+        duplicates.setTextFormat(Qt.TextFormat.PlainText)
+        duplicates.setWordWrap(True)
+        duplicates.setVisible(False)
+        layout.addWidget(duplicates)
+        confirm = QCheckBox(
+            "I confirm my correction is supported by the stated reason."
+            if not creating else
+            "I confirm this is a manually entered, unverified contact record."
+        )
+        layout.addWidget(confirm)
+        buttons = QHBoxLayout()
+        cancel = QPushButton("Cancel contact edit")
+        save = QPushButton(
+            "Check duplicates" if creating else "Save contact correction"
+        )
+        save.setObjectName("crmDossierContactSubmit")
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        layout.addLayout(buttons)
+        if not isinstance(container.layout(), QVBoxLayout):
+            raise RuntimeError("Contact editor requires a vertical container")
+        if creating:
+            # Put the new-contact form directly below its action, before cards.
+            container.layout().insertWidget(1, editor)
+        else:
+            container.layout().addWidget(editor)
+        self.crm_dossier_contact_editor = editor
+        self.crm_dossier_contact_inputs = inputs
+        self.crm_dossier_contact_submit = save
+        self.crm_dossier_contact_cancel = cancel
+        self.crm_dossier_contact_confirm = confirm
+        self.crm_dossier_contact_reason = rationale
+        state = {"pending": False, "review": None, "failed": False}
+
+        def payload():
+            return {
+                "company_id": company_id,
+                **{key: widget.text() for key, widget in inputs.items()}
+            }
+
+        def clean():
+            data = payload()
+            return bool(data["full_name"].strip()) and all(
+                not any(ord(ch) < 32 or ord(ch) == 127 for ch in str(value))
+                for value in data.values()
+            )
+
+        def enabled(*_unused):
+            if state["pending"] or state["failed"]:
+                save.setEnabled(False)
+                return
+            if creating and state["review"] is None:
+                save.setEnabled(clean())
+                return
+            lower, upper = ((30, 500) if creating else (20, 1000))
+            reason_needed = not creating or bool(state["review"]["matches"])
+            note_ok = (
+                lower <= len(rationale.toPlainText().strip()) <= upper
+                if reason_needed else True
+            )
+            save.setEnabled(clean() and confirm.isChecked() and note_ok)
+
+        def changed(*_unused):
+            if creating and state["review"] is not None:
+                state["review"] = None
+                duplicates.hide()
+                rationale.hide()
+                reason_label.hide()
+                confirm.setChecked(False)
+                save.setText("Check duplicates")
+            enabled()
+
+        def finish():
+            if state["pending"]:
+                return
+            if self.crm_dossier_contact_editor is editor:
+                self.crm_dossier_contact_editor = None
+            editor.setParent(None)
+            editor.deleteLater()
+
+        def saved(result, error):
+            if (self.crm_dossier_contact_editor is not editor
+                    or not dialog.isVisible()
+                    or company_id != self.crm_dossier_company_id):
+                return
+            state["pending"] = False
+            cancel.setEnabled(True)
+            if (error or not isinstance(result, dict)
+                    or (creating and (
+                        not result.get("id")
+                        or result.get("company_id") != company_id))
+                    or (not creating and (
+                        result.get("id") != contact["id"]
+                        or result.get("record_version") !=
+                        contact["record_version"] + 1))):
+                # A transport failure can leave the outcome uncertain:
+                # preserve the draft but never auto-retry a possible duplicate.
+                state["failed"] = True
+                enabled()
+                QMessageBox.warning(
+                    dialog, "Contact save not confirmed",
+                    (str(error or "Update confirmation missing.") +
+                     " Check CRM history before attempting again.")
+                )
+                return
+            finish()
+            self.refresh_company_dossier()
+
+        def submit():
+            if (state["pending"] or state["failed"] or
+                    self.crm_dossier_contact_editor is not editor
+                    or company_id != self.crm_dossier_company_id
+                    or not dialog.isVisible() or not save.isEnabled()):
+                return
+            data = payload()
+            if not creating:
+                data.update({
+                    "id": contact["id"],
+                    "expected_version": contact["record_version"],
+                    "review_note": rationale.toPlainText().strip(),
+                    "confirmed": True
+                })
+                state["pending"] = True
+                save.setEnabled(False)
+                cancel.setEnabled(False)
+                self.bridge.call(
+                    "crm-edit-contact", payload=data, callback=saved
+                )
+                return
+            if state["review"] is not None:
+                if data != state["review"]["data"]:
+                    changed()
+                    return
+                matches = state["review"]["matches"]
+                if matches:
+                    data["duplicate_review"] = {
+                        "match_ids": [item["id"] for item in matches],
+                        "review_note": rationale.toPlainText().strip(),
+                        "confirmed": True
+                    }
+                state["pending"] = True
+                save.setEnabled(False)
+                cancel.setEnabled(False)
+                self.bridge.call(
+                    "crm-create-contact", payload=data, callback=saved
+                )
+                return
+            # Preview is read-only and never authorizes creation by itself.
+            state["pending"] = True
+            save.setEnabled(False)
+            cancel.setEnabled(False)
+
+            def checked(result, error):
+                if (self.crm_dossier_contact_editor is not editor
+                        or not dialog.isVisible()
+                        or company_id != self.crm_dossier_company_id):
+                    return
+                state["pending"] = False
+                cancel.setEnabled(True)
+                if payload() != data:
+                    changed()
+                    QMessageBox.information(
+                        dialog, "Review again",
+                        "Contact details changed during duplicate review."
+                    )
+                    return
+                if (error or not isinstance(result, dict)
+                        or not result.get("available")
+                        or result.get("kind") != "contact"
+                        or result.get("company_id") != company_id
+                        or result.get("more")
+                        or not isinstance(result.get("matches"), list)
+                        or len(result["matches"]) > 25
+                        or any(not isinstance(item.get("id"), str)
+                               for item in result["matches"])):
+                    enabled()
+                    QMessageBox.warning(
+                        dialog, "Duplicate review unavailable",
+                        str(error or (result or {}).get(
+                            "notice", "No valid duplicate preview."))
+                    )
+                    return
+                matches = result["matches"]
+                state["review"] = {"data": data, "matches": matches}
+                save.setText("Save contact")
+                if matches:
+                    names = ", ".join(
+                        str(item.get("full_name") or "Unverified name")[:70]
+                        for item in matches[:10]
+                    )
+                    duplicates.setText(
+                        "{} possible matches: {}. These are clues, not "
+                        "verified identities. Explain why a separate contact "
+                        "should exist; no automatic merge.".format(
+                            len(matches), names
+                        )
+                    )
+                    duplicates.show()
+                    reason_label.show()
+                    rationale.show()
+                else:
+                    duplicates.setText(
+                        "No potential duplicate returned in this local preview."
+                    )
+                    duplicates.show()
+                confirm.setChecked(False)
+                enabled()
+
+            self.bridge.call(
+                "crm-contact-duplicates", payload=data, callback=checked
+            )
+
+        for widget in inputs.values():
+            widget.textChanged.connect(changed)
+        rationale.textChanged.connect(enabled)
+        confirm.toggled.connect(enabled)
+        cancel.clicked.connect(finish)
+        save.clicked.connect(submit)
+        enabled()
+
     def open_dossier_followup_editor(self, card, record, company_id):
         """Edit the already-linked next action in-place, without a new window."""
         dialog = self.crm_dossier_dialog
         if (not dialog or not dialog.isVisible()
                 or company_id != self.crm_dossier_company_id):
             return
-        if self.crm_dossier_followup_editor is not None:
+        if (self.crm_dossier_followup_editor is not None
+                or self.crm_dossier_contact_editor is not None):
             QMessageBox.information(
                 dialog, "Finish current edit",
-                "Save or cancel the current next-action edit first."
+                "Save or cancel the current contact or next-action edit first."
             )
             return
         opportunity_id = record.get("opportunity_id")

@@ -39,6 +39,11 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
     'BEGIN','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','SELECT','WITH','WITH','SELECT','SELECT','COMMIT'
   ]);
   assert.match(m.statements[0].sql,/REPEATABLE READ READ ONLY/);
+  // The dossier's edit metadata comes from the same read-only snapshot,
+  // scoped to this company; stale revisions are rejected by the write service.
+  assert.match(m.statements[2].sql,/phone,record_version,marketing_permission/);
+  assert.match(m.statements[2].sql,/workspace_key=[$]1 AND company_id=[$]2/);
+  assert.doesNotMatch(m.statements[2].sql,/\bUPDATE\b/);
   assert.equal(m.released(),1);
   assert.ok(m.statements.every(q=>!/\bINSERT INTO\b|\bUPDATE\b|\bDELETE FROM\b/i.test(q.sql)));
   for(const q of m.statements.filter(q=>q.params)){
