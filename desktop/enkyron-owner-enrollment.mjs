@@ -21,11 +21,15 @@ export async function inspectOwnerEnrollment(pool,operator){
   const workspace=workspaceFor(operator);
   const rows=(await pool.query(
     'SELECT '+
-    '(SELECT COUNT(*)::int FROM enkyron_identity_people) AS persons,'+
-    '(SELECT COUNT(*)::int FROM enkyron_identity_principals) AS principals,'+
-    '(SELECT COUNT(*)::int FROM enkyron_identity_credentials) AS credentials,'+
-    '(SELECT COUNT(*)::int FROM enkyron_identity_sessions) AS sessions'
-  )).rows[0];
+    '(SELECT COUNT(*)::int FROM enkyron_identity_people WHERE workspace_key=$1) AS persons,'+
+    '(SELECT COUNT(*)::int FROM enkyron_identity_principals WHERE workspace_key=$1) AS principals,'+
+    '(SELECT COUNT(*)::int FROM enkyron_identity_credentials c '+
+    ' JOIN enkyron_identity_principals p ON p.id=c.principal_id '+
+    ' WHERE p.workspace_key=$1) AS credentials,'+
+    '(SELECT COUNT(*)::int FROM enkyron_identity_sessions s '+
+    ' JOIN enkyron_identity_principals p ON p.id=s.principal_id '+
+    ' WHERE p.workspace_key=$1) AS sessions'
+  ,[workspace])).rows[0];
   if(!rows||Object.values(rows).some(n=>!Number.isSafeInteger(n)||n<0))
     throw new Error('ENKYRON identity census unavailable');
   return {workspace,empty:rows.persons===0&&rows.principals===0
@@ -58,11 +62,15 @@ export async function enrollPendingLocalOwner(pool,{
     await client.query('SELECT pg_advisory_xact_lock(814720269)');
     const census=(await client.query(
       'SELECT '+
-      '(SELECT COUNT(*)::int FROM enkyron_identity_people) AS persons,'+
-      '(SELECT COUNT(*)::int FROM enkyron_identity_principals) AS principals,'+
-      '(SELECT COUNT(*)::int FROM enkyron_identity_credentials) AS credentials,'+
-      '(SELECT COUNT(*)::int FROM enkyron_identity_sessions) AS sessions'
-    )).rows[0];
+      '(SELECT COUNT(*)::int FROM enkyron_identity_people WHERE workspace_key=$1) AS persons,'+
+      '(SELECT COUNT(*)::int FROM enkyron_identity_principals WHERE workspace_key=$1) AS principals,'+
+      '(SELECT COUNT(*)::int FROM enkyron_identity_credentials c '+
+      ' JOIN enkyron_identity_principals p ON p.id=c.principal_id '+
+      ' WHERE p.workspace_key=$1) AS credentials,'+
+      '(SELECT COUNT(*)::int FROM enkyron_identity_sessions s '+
+      ' JOIN enkyron_identity_principals p ON p.id=s.principal_id '+
+      ' WHERE p.workspace_key=$1) AS sessions'
+    ,[workspace])).rows[0];
     if(!census||Object.values(census).some(n=>n!==0))
       throw new Error('Owner bootstrap refused: identity records already exist');
 
