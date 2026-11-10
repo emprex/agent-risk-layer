@@ -5,6 +5,7 @@ import {
   listActivityTimeline,recordActivity
 } from '../desktop/enkyron-crm-activities.mjs';
 const opportunityId='11111111-2222-4333-8444-555555555555';
+const companyId='22222222-3333-4444-8555-666666666666';
 const input={opportunity_id:opportunityId,activity_type:'call_note',
   detail:'Reviewed prospect background before calling; no outcome verified.',
   reviewed:true};
@@ -14,7 +15,13 @@ test('rejects malformed and unconfirmed activity, permits multiline notes',()=>{
   assert.equal(validateActivity(input).activity_type,'call_note');
   assert.equal(validateActivity({...input,detail:'First step\nSecond step.'}).detail,
     'First step\nSecond step.');
+  assert.equal(validateActivity({
+    company_id:companyId,activity_type:'note',detail:'Research collected from public sources.',
+    reviewed:true
+  }).company_id,companyId);
   for(const bad of [
+    {...input,company_id:companyId},
+    {...input,opportunity_id:null},
     {...input,opportunity_id:'wrong'},
     {...input,activity_type:'send_email'},
     {...input,detail:'short'},
@@ -72,7 +79,7 @@ test('atomic activity insert under workspace, no source or email modification',a
     ['BEGIN','SELECT','INSERT','COMMIT']);
   assert.deepEqual(queries[1].values,['local:ci-operator',opportunityId]);
   assert.deepEqual(queries[2].values,
-    [id,'local:ci-operator',opportunityId,'call_note',input.detail,'ci-operator']);
+    [id,'local:ci-operator',opportunityId,null,'call_note',input.detail,'ci-operator']);
   assert.equal(releaseCount,1);
   assert.ok(!queries.some(c=>/INSERT INTO sales_messages|UPDATE sales_prospects/i.test(c.sql)));
 });
