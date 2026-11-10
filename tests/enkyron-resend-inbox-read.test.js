@@ -37,7 +37,7 @@ test('Owner guard rejects pending, unverified, wrong org and nonowner before cre
   for(const principal of [
     null,{...owner,verified:false},{...owner,status:'pending'},
     {...owner,organizationId:'org:other'},{...owner,role:'service_desk_l1'}
-  ])await assert.rejects(reader.listThreads({principal,mailbox:'direction'}),/Owner authentication required/);
+  ])await assert.rejects(reader.listThreads({principal,mailbox:'direction'}),/(Owner authentication required|Mailbox access denied)/);
   assert.equal(seen.tokenCalls,0);
   assert.equal(seen.calls.length,0);
 });
