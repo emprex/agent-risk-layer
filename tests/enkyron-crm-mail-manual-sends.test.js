@@ -12,7 +12,7 @@ const request={
   sent_at:'2026-11-10T07:52:16Z',confirmed:true
 };
 test('operator send report validates provenance, exact revision and timestamp',()=>{
-  assert.deepEqual(validateManualSend(request),request);
+  assert.deepEqual(validateManualSend(request),(({confirmed,...fields})=>fields)(request));
   for(const bad of [
     null,{},[],{...request,draft_id:'bad'},
     {...request,expected_revision:0},
