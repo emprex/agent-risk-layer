@@ -11,12 +11,12 @@ const content={opportunity_id:opportunityId,recipient_email:'',
   subject:'A manual proposal',body_text:'Hello,\nHere is the proposed scope.'};
 
 test('drafts require at least one content field and never auto-fill recipients',()=>{
-  assert.deepEqual(validateDraftCreate(content),{...content,company_id:null});
+  assert.deepEqual(validateDraftCreate(content),{...content,company_id:null,mailbox_key:'direction'});
   const companyId='33333333-4444-4555-8666-777777777777';
   assert.equal(validateDraftCreate({
     company_id:companyId,recipient_email:'',subject:'Internal research',body_text:''
   }).company_id,companyId);
-  assert.throws(()=>validateDraftCreate({...content,company_id:companyId}),/exactly one/);
+  assert.throws(()=>validateDraftCreate({...content,company_id:companyId}),/two CRM records/);
   assert.equal(validateDraftCreate({...content,recipient_email:'  '}).recipient_email,'');
   assert.equal(validateDraftCreate({...content,recipient_email:'person@example.invalid'}).recipient_email,
     'person@example.invalid');
@@ -43,7 +43,7 @@ test('draft list and detail read are bounded, parameterized and scoped',async()=
   const queries=[];
   const db={query:async(sql,params)=>{
     queries.push({sql,params});
-    return {rows:sql.includes('SELECT d.id,d.opportunity_id,d.company_id,d.recipient_email,d.subject,d.body_text')?
+    return {rows:sql.includes('SELECT d.id,d.opportunity_id,d.company_id,d.mailbox_key,d.recipient_email,d.subject,d.body_text')?
       [{id:draftId,body_text:'Private draft',revision:1}]:[]};
   }};
   const list=await listMailDrafts(db,'  hello  ','ci-operator');
@@ -80,8 +80,9 @@ test('creating draft inserts content and hashed metadata atomically',async()=>{
   const record=queries[2];
   assert.equal(record.params[1],'local:ci-operator');
   assert.equal(record.params[3],null);
-  assert.equal(record.params[4],null);
-  assert.equal(record.params[6],content.body_text);
+  assert.equal(record.params[4],'direction');
+  assert.equal(record.params[5],null);
+  assert.equal(record.params[7],content.body_text);
   const event=queries[3];
   assert.match(event.params[3],/^[a-f0-9]{64}$/);
   assert.ok(!event.params.includes(content.body_text));
@@ -116,7 +117,7 @@ test('updating draft increments revision and hashes audit without leaking body',
   const pool={connect:async()=>({
     query:async(sql,params)=>{
       statements.push({sql,params});
-      if(sql.startsWith('SELECT id,recipient_email'))return {rows:[{
+      if(sql.startsWith('SELECT id,mailbox_key,recipient_email'))return {rows:[{
         id:draftId,recipient_email:null,subject:'Original',body_text:'Old text',revision:1
       }]};
       if(sql.startsWith('UPDATE enkyron_crm_mail_drafts'))return {
