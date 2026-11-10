@@ -3416,6 +3416,14 @@ class EnkyronWindow(QMainWindow):
 
     def company_dossier_pending_or_unsaved(self):
         """Read only local Qt draft state. Never queries or writes customer data."""
+        # A company-owned unsent email draft uses the existing compose dialog.
+        # Do not silently orphan it when the independent dossier closes.
+        draft_dialog = getattr(self, "crm_draft_dialog", None)
+        draft_context = getattr(self, "crm_draft_context", None) or {}
+        if (draft_dialog and draft_dialog.isVisible()
+                and draft_context.get("dossier_company_id")
+                == self.crm_dossier_company_id):
+            return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
