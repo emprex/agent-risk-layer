@@ -2,7 +2,7 @@
 // draft revision. NOT a Gmail/SMTP integration and NOT proof of delivery.
 import {randomUUID} from 'node:crypto';
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function operatorScope(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
     throw new Error('CRM invalid local operator');
