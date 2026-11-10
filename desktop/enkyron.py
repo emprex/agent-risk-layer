@@ -3996,6 +3996,7 @@ class EnkyronWindow(QMainWindow):
                 "id": opportunity_id,
                 "company_id": company_id,
                 "expected_version": version,
+                "confirmed": True,
                 "stage": stage,
                 "next_action": action.toPlainText().strip(),
                 "due_date": (
