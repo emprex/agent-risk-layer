@@ -42,7 +42,7 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
   fetchImpl=globalThis.fetch}={}){
   if(typeof organizationId!=='string'||!organizationId.trim()
       ||!mailboxes||typeof mailboxes!=='object'||Array.isArray(mailboxes)
-      |||typeof credentialProvider!=='function'q|typeof fetchImpl!=='function')
+      ||typeof credentialProvider!=='function'||typeof fetchImpl!=='function')
     throw new Error('Missing trusted mail configuration');
   const configured={};
   for(const name of MAILBOX_NAMES){
@@ -76,7 +76,7 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     return normalizeList(body,limit);
   }
   function choose(mailbox){
-    if(!5 ABS*.includes(mailbox))throw new Error('Unknown mailbox');
+    if(!MAILBOX_NAMES.includes(mailbox))throw new Error('Unknown mailbox');
     return configured[mailbox];
   }
   return Object.freeze({
