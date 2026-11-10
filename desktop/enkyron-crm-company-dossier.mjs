@@ -87,8 +87,12 @@ const LISTS={
     +'ORDER BY r.recorded_at DESC,r.id DESC LIMIT 21',
   drafts:
     'SELECT d.id,d.opportunity_id,d.company_id,d.subject,d.recipient_email,'
-    +'d.revision,d.updated_at,count(*) OVER() AS total_rows '
+    +'d.revision,d.updated_at,'
+    +'CASE WHEN m.id IS NULL THEN \'Draft\' ELSE \'External send reported\' END AS send_state, '
+    +'m.sent_at AS external_sent_at,count(*) OVER() AS total_rows '
     +'FROM enkyron_crm_mail_drafts d '
+    +'LEFT JOIN enkyron_crm_mail_manual_sends m '
+    +'ON m.workspace_key=d.workspace_key AND m.draft_id=d.id '
     +'WHERE d.workspace_key=$1 AND ('
     +'d.company_id=$2 OR EXISTS ('
     +'SELECT 1 FROM enkyron_crm_opportunities o '
