@@ -107,6 +107,10 @@ export function validateOpportunityUpdate(data){
     throw new Error('CRM invalid opportunity identifier');
   if(!Number.isSafeInteger(data.expected_version)||data.expected_version<1)
     throw new Error('CRM invalid opportunity revision');
+  // Company-360 updates demand a fresh human assertion. Legacy internal
+  // follow-up edits without a company scope retain their existing contract.
+  if(Object.hasOwn(data,'company_id')&&data.confirmed!==true)
+    throw new Error('CRM company dossier update requires explicit human confirmation');
   if(!OPPORTUNITY_STAGES.includes(data.stage))
     throw new Error('CRM invalid commercial stage');
   return {
