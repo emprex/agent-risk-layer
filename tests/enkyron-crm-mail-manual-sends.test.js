@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {validateManualSend,recordManualSend}
   from '../desktop/enkyron-crm-mail-manual-sends.mjs';
 import {updateMailDraft} from '../desktop/enkyron-crm-mail-drafts.mjs';
@@ -86,4 +87,24 @@ test('reported external send prevents later edits to the source draft',async()=>
   },'ci-operator'),/cannot be edited/);
   assert.equal(statements.at(-1),'ROLLBACK');
   assert.ok(!statements.some(x=>x.startsWith('UPDATE')));
+});
+
+test('desktop bridge reads manual send JSON and gives the operation write access',async()=>{
+  // Prevent the previously shipped bug: the command was accepted but its
+  // payload was null and the PostgreSQL pool was mistakenly read-only.
+  const source=await readFile(new URL('../desktop/enkyron-bridge.mjs',import.meta.url),'utf8');
+  const lines=source.split('\n');
+  const command="'crm-mail-manual-send'";
+  const routes=[
+    lines.find(line=>line.includes("if (!['tickets'")),
+    lines.find(line=>line.includes('const payload = [')),
+    lines.find(line=>line.includes('const readOnly = !['))
+  ];
+  for(const [index,line] of routes.entries()){
+    assert.ok(line,'Missing desktop command classification '+index);
+    assert.equal(line.split(command).length-1,1,
+      'Manual send must be registered exactly once in command classification '+index);
+  }
+  assert.match(source,/if \(command === 'crm-mail-manual-send'\) validateManualSend\(payload\)/);
+  assert.match(source,/command === 'crm-mail-manual-send' \? await recordManualSend\(pool, payload,/);
 });
