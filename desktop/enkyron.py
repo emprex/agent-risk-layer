@@ -4049,30 +4049,20 @@ class EnkyronWindow(QMainWindow):
                     self.crm_dossier_activity_record = QPushButton("Record activity…")
                     self.crm_dossier_activity_record.setCheckable(True)
                     self.crm_dossier_activity_record.setEnabled(
-                        bool(self.crm_dossier_activity_opportunity_ids)
-                        and not self.crm_dossier_activity_saving
+                        not self.crm_dossier_activity_saving
                     )
                     page_layout.addWidget(
                         self.crm_dossier_activity_record,
                         alignment=Qt.AlignmentFlag.AlignLeft
                     )
-                    if not self.crm_dossier_activity_opportunity_ids:
-                        missing = QLabel(
-                            "To record an activity, first create a commercial "
-                            "opportunity for this company in Companies & Contacts."
-                        )
-                        missing.setWordWrap(True)
-                        page_layout.addWidget(missing)
-
                     self.crm_dossier_activity_editor = QWidget()
                     editor_layout = QVBoxLayout(self.crm_dossier_activity_editor)
                     editor_layout.setContentsMargins(6, 4, 6, 8)
                     activity_form = QFormLayout()
                     self.crm_dossier_activity_opportunity = QComboBox()
-                    if len(linked_opportunities) > 1:
-                        self.crm_dossier_activity_opportunity.addItem(
-                            "Select the relevant opportunity…", None
-                        )
+                    self.crm_dossier_activity_opportunity.addItem(
+                        "Company — general research / notes", None
+                    )
                     for pos, item in enumerate(linked_opportunities, 1):
                         stage = str(item.get("stage") or "Unspecified").replace(
                             "_", " "
@@ -4085,12 +4075,8 @@ class EnkyronWindow(QMainWindow):
                         self.crm_dossier_activity_opportunity.addItem(
                             description, item["opportunity_id"]
                         )
-                    if not linked_opportunities:
-                        self.crm_dossier_activity_opportunity.addItem(
-                            "No linked opportunity", None
-                        )
                     activity_form.addRow(
-                        "Related opportunity", self.crm_dossier_activity_opportunity
+                        "Record under", self.crm_dossier_activity_opportunity
                     )
                     if opportunity_section.get("more"):
                         limited = QLabel(
@@ -4789,7 +4775,8 @@ class EnkyronWindow(QMainWindow):
         detail = self.crm_dossier_activity_detail.toPlainText().strip()
         permitted = (
             self.crm_dossier_activity_company_id == self.crm_dossier_company_id
-            and opportunity in self.crm_dossier_activity_opportunity_ids
+            and (opportunity is None
+                 or opportunity in self.crm_dossier_activity_opportunity_ids)
             and not self.crm_dossier_activity_saving
             and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
@@ -4807,14 +4794,16 @@ class EnkyronWindow(QMainWindow):
                 not self.crm_dossier_activity_save.isEnabled()):
             return
         opportunity_id = self.crm_dossier_activity_opportunity.currentData()
-        if opportunity_id not in self.crm_dossier_activity_opportunity_ids:
+        if (opportunity_id is not None
+                and opportunity_id not in self.crm_dossier_activity_opportunity_ids):
             QMessageBox.warning(
                 dialog, "Opportunity not available",
                 "Refresh the company dossier before recording this activity."
             )
             return
         payload = {
-            "opportunity_id": opportunity_id,
+            ("company_id" if opportunity_id is None else "opportunity_id"):
+                (company_id if opportunity_id is None else opportunity_id),
             "activity_type": self.crm_dossier_activity_type.currentData(),
             "detail": self.crm_dossier_activity_detail.toPlainText().strip(),
             "reviewed": True
