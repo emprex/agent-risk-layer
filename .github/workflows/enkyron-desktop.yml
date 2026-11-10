@@ -1362,8 +1362,10 @@ jobs:
           assert window.crm_dossier_activity_detail.toPlainText() == pending_text
           assert window.crm_dossier_activity_confirm.isChecked()
           assert window.crm_dossier_activity_save.isEnabled()
-          # No new write operation happened during the read-only refresh.
-          assert calls[-1][0] == "crm-company-dossier"
+          # The dossier refresh now also reads company tasks; both operations remain read-only.
+          assert [call[0] for call in calls[-2:]] == [
+              "crm-company-dossier", "crm-company-followups"
+          ]
           # UX-07: both Close and the native X require an explicit discard.
           with patch("desktop.enkyron.QMessageBox.question",
                      return_value=QMessageBox.StandardButton.No) as ask:
