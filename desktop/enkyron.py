@@ -310,6 +310,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_context = None
         self.owner_session_token = None
         self.owner_login_dialog = None
+        self.owner_setup_state = "checking"
+        self.owner_account_check_pending = False
         self.crm_proposal_seq = 0
         self.crm_proposal_loaded = False
         self.crm_proposal_items = []
@@ -389,6 +391,17 @@ class EnkyronWindow(QMainWindow):
         self.account_profile_button.setObjectName("enkyronMyAccount")
         self.account_profile_button.clicked.connect(self.open_personal_profile)
         top_layout.addWidget(self.account_profile_button)
+        # One CEO sign-in for the whole native workspace. Mailboxes do NOT log in separately.
+        self.mail_owner_login = QPushButton("Checking CEO account…")
+        self.mail_owner_login.setObjectName("enkyronMailOwnerLogin")
+        self.mail_owner_login.setEnabled(False)
+        self.mail_owner_login.clicked.connect(self.open_owner_login)
+        top_layout.addWidget(self.mail_owner_login)
+        self.mail_owner_logout = QPushButton("Sign out")
+        self.mail_owner_logout.setObjectName("enkyronMailOwnerLogout")
+        self.mail_owner_logout.setEnabled(False)
+        self.mail_owner_logout.clicked.connect(self.logout_owner)
+        top_layout.addWidget(self.mail_owner_logout)
         self.operator_profile_state = None
         self.operator_profile_dialog = None
         outer.addWidget(top)
@@ -1259,15 +1272,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
         self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
         mail_head.addWidget(self.crm_mail_connection)
-        self.mail_owner_login = QPushButton("Sign in as CEO")
-        self.mail_owner_login.setObjectName("enkyronMailOwnerLogin")
-        self.mail_owner_login.clicked.connect(self.open_owner_login)
-        mail_head.addWidget(self.mail_owner_login)
-        self.mail_owner_logout = QPushButton("Sign out")
-        self.mail_owner_logout.setObjectName("enkyronMailOwnerLogout")
-        self.mail_owner_logout.setEnabled(False)
-        self.mail_owner_logout.clicked.connect(self.logout_owner)
-        mail_head.addWidget(self.mail_owner_logout)
+        # Authentication lives in the top-level My account area, not inside Mail.
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
@@ -1656,10 +1661,80 @@ class EnkyronWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.tab_changed)
         self.load_tickets()
         self.reload_operator_profile()
+        self.check_owner_account_setup()
+
+    def check_owner_account_setup(self):
+        """Show correct next action before requesting any private credentials."""
+        if self.owner_account_check_pending or self.owner_session_token:
+            return
+        self.owner_account_check_pending = True
+        self.owner_setup_state = "checking"
+        self.mail_owner_login.setEnabled(False)
+        self.mail_owner_login.setText("Checking CEO account…")
+
+        def received(result, error):
+            self.owner_account_check_pending = False
+            if self.owner_session_token:
+                return
+            state = result.get("state") if isinstance(result, dict) and not error else None
+            if state not in ("active", "pending", "not_enrolled",
+                             "schema_missing", "needs_review"):
+                state = "unavailable"
+            self.owner_setup_state = state
+            wording = {
+                "active": "Sign in as CEO",
+                "pending": "Activate CEO account",
+                "not_enrolled": "Set up CEO account",
+                "schema_missing": "CEO setup required",
+                "needs_review": "CEO account needs review",
+                "unavailable": "CEO account unavailable",
+            }
+            self.mail_owner_login.setText(wording[state])
+            self.mail_owner_login.setEnabled(state in ("active", "pending", "not_enrolled"))
+            if state == "not_enrolled":
+                self.crm_mail_connection.setText(
+                    "CEO account not set up · Direction and Support are assigned, not connected"
+                )
+            elif state == "pending":
+                self.crm_mail_connection.setText("CEO account pending activation")
+            elif state == "active":
+                self.crm_mail_connection.setText("Not connected · Sign in as CEO")
+            elif state == "schema_missing":
+                self.crm_mail_connection.setText("CEO setup requires identity migrations 108 / 109")
+            else:
+                self.crm_mail_connection.setText("CEO account needs configuration review")
+
+        self.bridge.call("owner-setup-status", callback=received)
 
     def open_owner_login(self):
         """Request a DB-verified CEO session; never transmit secrets on argv."""
         if self.owner_session_token:
+            return
+        if self.owner_setup_state != "active":
+            guidance = {
+                "not_enrolled": (
+                    "Your CEO passphrase has not been created yet.\n\n"
+                    "First, check and initialise your ONE CEO account on this "
+                    "workstation. It then provides access to both Direction "
+                    "and Support without any second mailbox login.\n\n"
+                    "Run from ~/agent-risk-layer:\n"
+                    "node scripts/enkyron-enroll-owner.mjs --check"
+                ),
+                "pending": (
+                    "Your CEO account exists but is PENDING activation. "
+                    "A pending account cannot sign in. "
+                    "Do not create another account or overwrite its secret."
+                ),
+                "schema_missing": (
+                    "Identity tables 108 / 109 are not installed. "
+                    "Check migrations before creating credentials."
+                ),
+            }
+            QMessageBox.information(
+                self, "CEO account setup",
+                guidance.get(self.owner_setup_state,
+                             "Verify the account setup before signing in.")
+            )
             return
         if self.owner_login_dialog and self.owner_login_dialog.isVisible():
             self.owner_login_dialog.raise_()
@@ -1737,6 +1812,7 @@ class EnkyronWindow(QMainWindow):
                                         "Account unavailable or credentials not accepted.")
                     return
                 self.owner_session_token = data["session_token"]
+                self.mail_owner_login.setText("CEO signed in")
                 self.mail_owner_login.setEnabled(False)
                 self.mail_owner_logout.setEnabled(True)
                 self.crm_mail_connection.setText(
@@ -1844,6 +1920,7 @@ class EnkyronWindow(QMainWindow):
         if not token:
             return
         self.owner_session_token = None
+        self.mail_owner_login.setText("Sign in as CEO")
         self.mail_owner_login.setEnabled(True)
         self.mail_owner_logout.setEnabled(False)
         self.crm_mail_connection.setText("Not connected · Owner sign-in required")
