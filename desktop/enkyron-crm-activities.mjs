@@ -1,6 +1,7 @@
 // ENKYRON CRM manual activity history; operator testimony, never email transport proof.
 // OS-user scope is only for the local single-operator workflow, not remote RBAC.
 import {randomUUID} from 'node:crypto';
+import {requireCompanyId} from './enkyron-crm-tickets.mjs';
 export const ACTIVITY_TYPES=Object.freeze([
   'note','call_note','meeting_note','email_note','task_note'
 ]);
@@ -18,7 +19,10 @@ export function requireOpportunityId(id){
 export function validateActivity(input){
   if(!input||typeof input!=='object'||Array.isArray(input))
     throw new Error('CRM invalid activity record');
-  const opportunity_id=requireOpportunityId(input.opportunity_id);
+  const company_id=input.company_id==null?null:requireCompanyId(input.company_id);
+  const opportunity_id=input.opportunity_id==null?null:requireOpportunityId(input.opportunity_id);
+  if((company_id===null)===(opportunity_id===null))
+    throw new Error('CRM activity requires exactly one company or opportunity');
   if(!ACTIVITY_TYPES.includes(input.activity_type))
     throw new Error('CRM invalid manual activity type');
   const detail=input.detail;
@@ -27,7 +31,7 @@ export function validateActivity(input){
     throw new Error('CRM manual activity detail must have 10–2000 characters');
   if(input.reviewed!==true)
     throw new Error('CRM operator confirmation required');
-  return {opportunity_id,activity_type:input.activity_type,detail:detail.trim()};
+  return {opportunity_id,company_id,activity_type:input.activity_type,detail:detail.trim()};
 }
 export async function listActivityTimeline(pool,id,actor){
   const opportunityId=requireOpportunityId(id),owner=scope(actor);
@@ -71,22 +75,26 @@ export async function recordActivity(pool,input,actor,options={}){
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
+    const companyMode=activity.company_id!==null;
+    const source=companyMode?'enkyron_crm_companies':'enkyron_crm_opportunities';
+    const parentId=companyMode?activity.company_id:activity.opportunity_id;
     const result=await client.query(
-      'SELECT id FROM enkyron_crm_opportunities '
-      +'WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
-      [owner.key,activity.opportunity_id]
+      'SELECT id FROM '+source+' WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [owner.key,parentId]
     );
-    if(!result.rows[0])throw new Error('CRM opportunity not found in local workspace');
+    if(!result.rows[0])throw new Error(
+      'CRM '+(companyMode?'company':'opportunity')+' not found in local workspace'
+    );
     const id=uuid();
     await client.query(
       'INSERT INTO enkyron_crm_activities '
-      +'(id,workspace_key,opportunity_id,activity_type,detail,recorded_by) '
-      +'VALUES ($1,$2,$3,$4,$5,$6)',
-      [id,owner.key,activity.opportunity_id,activity.activity_type,
-        activity.detail,owner.name]
+      +'(id,workspace_key,opportunity_id,company_id,activity_type,detail,recorded_by) '
+      +'VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id,owner.key,activity.opportunity_id,activity.company_id,
+        activity.activity_type,activity.detail,owner.name]
     );
     await client.query('COMMIT');
-    return {id,opportunity_id:activity.opportunity_id,
+    return {id,opportunity_id:activity.opportunity_id,company_id:activity.company_id,
       activity_type:activity.activity_type,
       notice:'Manual note recorded; no external communication performed.'};
   }catch(e){
