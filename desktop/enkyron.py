@@ -1603,8 +1603,14 @@ class EnkyronWindow(QMainWindow):
         self.load_tickets()
 
     def closeEvent(self, event):
-        # Standalone company windows must never outlive their local workspace
-        # (and leave customer details visible after ENKYRON is closed).
+        # Close both detached company views before the operator workspace exits.
+        # No customer records should remain visible after ENKYRON closes.
+        if (self.crm_company_followups_dialog is not None
+                and self.crm_company_followups_dialog.isVisible()):
+            self.crm_company_followups_dialog.close()
+            if self.crm_company_followups_dialog.isVisible():
+                event.ignore()
+                return
         if self.crm_dossier_dialog and self.crm_dossier_dialog.isVisible():
             self.crm_dossier_dialog.close()
             if self.crm_dossier_dialog.isVisible():
