@@ -181,7 +181,8 @@ class DesktopBridge:
         else:
             process.setProgram("node")
             target = (OWNER_LOGIN_BRIDGE if action in (
-                "owner-login", "owner-session-status", "owner-logout"
+                "owner-login", "owner-session-status", "owner-logout",
+                "owner-mail-status", "owner-mail-threads", "owner-mail-messages"
             ) else BRIDGE)
             args = [str(target), action]
             if arg:
@@ -1277,6 +1278,9 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
+        self.mail_inbox.refreshRequested.connect(self.refresh_owner_mail)
+        self.mail_inbox.mailboxChanged.connect(self.refresh_owner_mail)
+        self.mail_inbox.threadRequested.connect(self.read_owner_mail_thread)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
         sent_layout = QVBoxLayout(sent_page)
@@ -1743,11 +1747,96 @@ class EnkyronWindow(QMainWindow):
                     "CEO authenticated · Connect Resend to read professional messages."
                 )
                 dialog.accept()
+                self.check_owner_mail_connection()
             self.bridge.call("owner-login", payload=payload, callback=received)
 
         submit.clicked.connect(sign_in)
         dialog.finished.connect(lambda _: setattr(self, "owner_login_dialog", None))
         dialog.open()
+
+    def check_owner_mail_connection(self):
+        """Use an authenticated backend status, never an editable Qt role."""
+        token = self.owner_session_token
+        if not token:
+            return
+        self.crm_mail_connection.setText("CEO authenticated · Checking Resend…")
+        self.mail_inbox.set_connection_state("loading")
+        def received(data, error):
+            if token != self.owner_session_token:
+                return
+            if error or not data:
+                self.crm_mail_connection.setText(
+                    "CEO authenticated · Resend connection unavailable"
+                )
+                self.mail_inbox.set_connection_state(
+                    "disconnected", "Unable to check Resend configuration."
+                )
+                return
+            if data.get("mailboxes"):
+                self.mail_inbox.set_owner_mailboxes({
+                    "mailboxes": data["mailboxes"]
+                })
+            if not data.get("connected"):
+                self.crm_mail_connection.setText(
+                    "CEO authenticated · Resend setup required"
+                )
+                self.mail_inbox.set_connection_state(
+                    "disconnected", "Your Owner session is active. "
+                    "Resend has not been configured on this workstation."
+                )
+                return
+            self.refresh_owner_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("owner-mail-status",
+                         payload={"session_token": token}, callback=received)
+
+    def refresh_owner_mail(self, mailbox):
+        """Fetch threads only under an active Owner session, scoped to mailbox."""
+        token = self.owner_session_token
+        if not token or mailbox not in ("direction", "support"):
+            return
+        self.mail_inbox.set_connection_state("loading")
+        self.crm_mail_connection.setText("CEO authenticated · Loading inbox…")
+        def received(data, error):
+            if token != self.owner_session_token or mailbox != self.mail_inbox.selected_mailbox:
+                return
+            if error or not data or data.get("mailbox") != mailbox:
+                self.mail_inbox.set_connection_state(
+                    "error", "Unable to load this mailbox. Retry when connected."
+                )
+                self.crm_mail_connection.setText(
+                    "CEO authenticated · Mail synchronisation error"
+                )
+                return
+            self.mail_inbox.set_connection_state("connected")
+            self.mail_inbox.show_threads(
+                mailbox,data.get("items") or [],bool(data.get("has_more"))
+            )
+            self.crm_mail_connection.setText(
+                "CEO authenticated · {} inbox ready".format(mailbox.title())
+            )
+        self.bridge.call("owner-mail-threads", payload={
+            "session_token":token,"mailbox":mailbox
+        }, callback=received)
+
+    def read_owner_mail_thread(self, mailbox, thread_id):
+        """Read selected conversation in plain text. No external actions."""
+        token=self.owner_session_token
+        if not token or mailbox not in ("direction","support") or not thread_id:
+            return
+        def received(data,error):
+            if token!=self.owner_session_token or mailbox!=self.mail_inbox.selected_mailbox:
+                return
+            if error or not data or data.get("thread_id")!=thread_id:
+                self.mail_inbox.body.setPlainText(
+                    "Unable to read this conversation. Select it again to retry."
+                )
+                return
+            self.mail_inbox.show_messages(
+                mailbox,thread_id,data.get("items") or []
+            )
+        self.bridge.call("owner-mail-messages",payload={
+            "session_token":token,"mailbox":mailbox,"thread_id":thread_id
+        },callback=received)
 
     def logout_owner(self):
         """Sign out locally immediately, then revoke the DB session token."""
