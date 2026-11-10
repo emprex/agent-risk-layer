@@ -29,12 +29,15 @@ function request(payload,fields){
     throw new Error('CRM invalid expected record version');
   if(payload.confirmed!==true)
     throw new Error('CRM explicit correction confirmation required');
-  if(typeof payload.review_note!=='string'||CONTROL.test(payload.review_note)||
-    payload.review_note.length>1000||payload.review_note.trim().length<20)
-    throw new Error('CRM correction rationale must be 20–1000 characters');
+  // Routine CRM edits do not require a compliance-style explanation.
+  // Name/identity changes are checked against the locked record at write time.
+  const reason=payload.review_note??'';
+  if(typeof reason!=='string'||CONTROL.test(reason)||reason.length>1000||
+     (reason.trim().length>0&&reason.trim().length<20))
+    throw new Error('CRM rationale must be empty or 20–1000 characters');
   return {id:checkId(payload.id,'CRM record ID'),
     expected_version:payload.expected_version,
-    review_note:payload.review_note.trim()};
+    review_note:reason.trim()};
 }
 export function validateCompanyEdit(payload){
   const base=request(payload,COMPANY_FIELDS);
@@ -69,6 +72,15 @@ async function update(pool,payload,actor,kind,options={}){
       throw new Error('CRM contact cannot be moved by correction workflow');
     const changed=cols.filter(k=>(current[k]??'')!==(data[k]??''));
     if(!changed.length)throw new Error('CRM no changed fields; nothing recorded');
+    // Company/legal names and contact full names require a reason.
+    // Other changed fields stay versioned, attributed and append-only audited.
+    const sensitive=kind==='company'
+      ?changed.some(k=>k==='name'||k==='legal_name')
+      :changed.includes('full_name');
+    if(sensitive&&data.review_note.length<20)
+      throw new Error('CRM name change requires a 20–1000 character reason');
+    const auditNote=data.review_note||
+      'Routine CRM field update; no reason supplied by operator.';
     const assignments=cols.map((c,i)=>c+'=$'+(i+3));
     const values=[person.key,data.id,...cols.map(c=>data[c]||null)];
     const result=await client.query(
@@ -86,7 +98,7 @@ async function update(pool,payload,actor,kind,options={}){
       '(id,workspace_key,resource_kind,resource_id,old_version,new_version,changed_fields,review_note,actor_local) '+
       'VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
       [uuid(),person.key,kind,data.id,data.expected_version,row.record_version,
-       changed,data.review_note,person.actor]
+       changed,auditNote,person.actor]
     );
     await client.query(
       'INSERT INTO enkyron_crm_events '+
