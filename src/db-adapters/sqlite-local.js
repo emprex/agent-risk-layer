@@ -679,7 +679,42 @@ for (const migrationName of [
 ]) {
   const migrationPath = path.resolve(process.cwd(), 'migrations', migrationName);
   if (!fs.existsSync(migrationPath)) throw new Error(`Missing risk knowledge migration: ${migrationName}`);
-  rawDb.exec(fs.readFileSync(migrationPath, 'utf8'));
+  const sql = fs.readFileSync(migrationPath, 'utf8');
+  if (migrationName !== '062_technical_engineering_knowledge.sql') {
+    rawDb.exec(sql);
+    continue;
+  }
+
+  // This additive seed contains non-idempotent CREATE TABLE and INSERT statements.
+  // Production PostgreSQL migrations are immutable and tracked separately.
+  // A SQLite test fixture may be opened by several independent Node processes;
+  // replay only when the exact migration has not already committed in that fixture.
+  rawDb.exec(`CREATE TABLE IF NOT EXISTS arl_test_migration_revisions (
+    name TEXT PRIMARY KEY,
+    checksum TEXT NOT NULL
+  )`);
+  const digest = crypto.createHash('sha256').update(sql).digest('hex');
+  const previous = rawDb.prepare(
+    'SELECT checksum FROM arl_test_migration_revisions WHERE name=?'
+  ).get(migrationName);
+  if (previous) {
+    if (previous.checksum !== digest) {
+      throw new Error('SQLite test migration checksum mismatch: ' + migrationName);
+    }
+    continue;
+  }
+  rawDb.exec('SAVEPOINT sqlite_test_knowledge_062');
+  try {
+    rawDb.exec(sql);
+    rawDb.prepare(
+      'INSERT INTO arl_test_migration_revisions(name,checksum) VALUES (?,?)'
+    ).run(migrationName, digest);
+    rawDb.exec('RELEASE SAVEPOINT sqlite_test_knowledge_062');
+  } catch (error) {
+    rawDb.exec('ROLLBACK TO SAVEPOINT sqlite_test_knowledge_062');
+    rawDb.exec('RELEASE SAVEPOINT sqlite_test_knowledge_062');
+    throw error;
+  }
 }
 ensureColumn('control_test_executions', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
 ensureColumn('control_evidence_items', 'descriptor_json', "TEXT NOT NULL DEFAULT '{}'");
