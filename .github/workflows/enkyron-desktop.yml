@@ -935,7 +935,8 @@ jobs:
               "company_id": company_id,
               "recipient_email": "public@example.invalid",
               "subject": "Unsent synthetic introduction",
-              "body_text": "This message is only saved locally."
+              "body_text": "This message is only saved locally.",
+              "mailbox_key": "direction"
           }
           window.crm_draft_dialog.reject()
           # UX-08: company correction reuses an existing audited/versioned
