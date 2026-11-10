@@ -20,6 +20,7 @@ class MailInboxView(QWidget):
     threadRequested = Signal(str, str)
     draftsRequested = Signal()
     deskRequested = Signal()
+    newEmailRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,9 +35,16 @@ class MailInboxView(QWidget):
         root.setContentsMargins(16, 16, 16, 14)
         root.setSpacing(12)
 
+        title_row = QHBoxLayout()
         title = QLabel("INBOX · BUSINESS CORRESPONDENCE")
         title.setObjectName("sectionTitle")
-        root.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        self.new_email_button = QPushButton("New email")
+        self.new_email_button.setObjectName("enkyronMailCompose")
+        self.new_email_button.clicked.connect(lambda: self.newEmailRequested.emit())
+        title_row.addWidget(self.new_email_button)
+        root.addLayout(title_row)
 
         row = QHBoxLayout()
         row.addWidget(QLabel("Mailbox"))
@@ -51,13 +59,13 @@ class MailInboxView(QWidget):
         self.refresh_button = QPushButton("Refresh inbox")
         self.refresh_button.setObjectName("enkyronMailRefresh")
         self.refresh_button.setEnabled(False)
-        self.refresh_button.setToolTip("Connect an authenticated Owner session first.")
+        self.refresh_button.setToolTip("Refresh the selected professional mailbox.")
         self.refresh_button.clicked.connect(self._refresh)
         row.addWidget(self.refresh_button)
         root.addLayout(row)
 
         self.connection_label = QLabel(
-            "Not connected · Sign in as Owner and connect Resend before receiving mail."
+            "Write and save drafts now. Inbox and sending require a Resend connection."
         )
         self.connection_label.setObjectName("enkyronMailConnectionStatus")
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -142,8 +150,8 @@ class MailInboxView(QWidget):
         root.addWidget(self.splitter, 1)
 
         help_line = QLabel(
-            "Messages are shown as plain text; attachments and remote HTML are not opened. "
-            "Nothing is sent or converted into a ticket automatically."
+            "Incoming messages are displayed as plain text. Sending requires an explicit "
+            "recipient review; no CRM ticket is created automatically."
         )
         help_line.setWordWrap(True)
         help_line.setObjectName("subtle")
