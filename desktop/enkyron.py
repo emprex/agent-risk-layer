@@ -3203,7 +3203,8 @@ class EnkyronWindow(QMainWindow):
         if (self.crm_dossier_activity_editor is not None
                 and self.crm_dossier_activity_detail.toPlainText().strip()):
             pending.append("activity note")
-        if (getattr(self, "crm_qualification_rationale", None) is not None
+        if (self.crm_dossier_tabs.count() > 4
+                and getattr(self, "crm_qualification_rationale", None) is not None
                 and (
                     self.crm_qualification_rationale.toPlainText().strip()
                     or self.crm_qualification_source.text().strip()
