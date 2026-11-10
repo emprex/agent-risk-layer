@@ -781,9 +781,12 @@ jobs:
                   "contacts": {
                       "total": 1, "more": False,
                       "items": [{
+                          "id": "22222222-3333-4444-8555-666666666666",
+                          "record_version": 1,
                           "full_name": "Synthetic Contact",
                           "job_title": "Engineering",
                           "email": "contact@example.invalid",
+                          "phone": "",
                           "marketing_permission": "unknown"
                       }]
                   },
@@ -891,8 +894,96 @@ jobs:
           assert contact_labels == [
               "Synthetic Contact", "Role: Engineering",
               "Email: contact@example.invalid",
-              "Marketing permission: unknown"
+              "Telephone: Not recorded", "Marketing permission: unknown"
           ]
+          # UX-06B: existing contact correction stays within 360 and
+          # requires version, rationale and human confirmation.
+          inline_edit = [
+              b for b in window.crm_dossier_tabs.widget(0).findChildren(QPushButton)
+              if b.objectName() == "crmDossierEditContact"
+          ]
+          assert len(inline_edit) == 1 and inline_edit[0].isEnabled()
+          inline_edit[0].click()
+          assert window.crm_dossier_contact_editor is not None
+          assert window.crm_dossier_contact_inputs["full_name"].text() == "Synthetic Contact"
+          window.crm_dossier_contact_inputs["email"].setText("new@example.invalid")
+          assert not window.crm_dossier_contact_submit.isEnabled()
+          window.crm_dossier_contact_reason.setPlainText(
+              "Confirmed updated email after reviewing primary correspondence."
+          )
+          window.crm_dossier_contact_confirm.setChecked(True)
+          assert window.crm_dossier_contact_submit.isEnabled()
+          with patch("desktop.enkyron.QMessageBox.information") as info:
+              original_count = len(calls)
+              window.refresh_company_dossier()
+              info.assert_called_once()
+              assert len(calls) == original_count
+          window.crm_dossier_contact_submit.click()
+          assert calls[-1][0] == "crm-edit-contact"
+          assert calls[-1][2] == {
+              "company_id": company_id,
+              "id": "22222222-3333-4444-8555-666666666666",
+              "expected_version": 1,
+              "full_name": "Synthetic Contact",
+              "job_title": "Engineering",
+              "email": "new@example.invalid",
+              "phone": "",
+              "review_note": "Confirmed updated email after reviewing primary correspondence.",
+              "confirmed": True
+          }
+          with patch("desktop.enkyron.QMessageBox.warning") as warn:
+              calls[-1][3](None, "CRM record changed; refresh")
+              warn.assert_called_once()
+          assert window.crm_dossier_contact_inputs["email"].text() == "new@example.invalid"
+          window.crm_dossier_contact_cancel.click()
+          assert window.crm_dossier_contact_editor is None
+          # Creation must first preview duplicates, then explicitly explain
+          # why a second unverified record is appropriate.
+          new_contact = [
+              b for b in window.crm_dossier_tabs.widget(0).findChildren(QPushButton)
+              if b.objectName() == "crmDossierNewContact"
+          ]
+          assert len(new_contact) == 1
+          new_contact[0].click()
+          assert window.crm_dossier_contact_editor is not None
+          window.crm_dossier_contact_inputs["full_name"].setText("New Synthetic Contact")
+          window.crm_dossier_contact_inputs["email"].setText("new-person@example.invalid")
+          assert window.crm_dossier_contact_submit.text() == "Check duplicates"
+          window.crm_dossier_contact_submit.click()
+          assert calls[-1][0] == "crm-contact-duplicates"
+          assert calls[-1][2]["company_id"] == company_id
+          assert calls[-1][2]["full_name"] == "New Synthetic Contact"
+          calls[-1][3]({
+              "available": True, "kind": "contact",
+              "company_id": company_id, "more": False,
+              "matches": [{
+                  "id": "11111111-aaaa-4bbb-8ccc-dddddddddddd",
+                  "full_name": "Similar Contact"
+              }]
+          }, None)
+          assert window.crm_dossier_contact_submit.text() == "Save contact"
+          assert not window.crm_dossier_contact_submit.isEnabled()
+          assert "Similar Contact" in window.crm_dossier_contact_editor.findChild(
+              QLabel, "crmDossierContactDuplicates"
+          ).text()
+          window.crm_dossier_contact_reason.setPlainText(
+              "Operator confirmed that the two records refer to distinct people."
+          )
+          window.crm_dossier_contact_confirm.setChecked(True)
+          assert window.crm_dossier_contact_submit.isEnabled()
+          window.crm_dossier_contact_submit.click()
+          assert calls[-1][0] == "crm-create-contact"
+          assert calls[-1][2]["duplicate_review"] == {
+              "match_ids": ["11111111-aaaa-4bbb-8ccc-dddddddddddd"],
+              "review_note": "Operator confirmed that the two records refer to distinct people.",
+              "confirmed": True
+          }
+          with patch("desktop.enkyron.QMessageBox.warning") as warn:
+              calls[-1][3](None, "Duplicate candidate changed")
+              warn.assert_called_once()
+          assert window.crm_dossier_contact_editor is not None
+          window.crm_dossier_contact_cancel.click()
+          assert window.crm_dossier_contact_editor is None
           opportunity_labels = [
               child.text() for child in
               window.crm_dossier_tabs.widget(3).findChildren(QLabel)
