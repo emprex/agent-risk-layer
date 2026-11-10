@@ -23,8 +23,12 @@ class OwnerSignInSmoke(unittest.TestCase):
         window=None
         try:
             window=EnkyronWindow()
+            status=[x for x in calls if x[0]=="owner-setup-status"]
+            self.assertEqual(len(status),1)
+            status[0][3]({"state":"active"},None)
             self.assertIsNone(window.owner_session_token)
             self.assertTrue(window.mail_owner_login.isEnabled())
+            self.assertEqual(window.mail_owner_login.text(),"Sign in as CEO")
             self.assertFalse(window.mail_owner_logout.isEnabled())
             window.mail_owner_login.click()
             dialog=window.owner_login_dialog
@@ -77,6 +81,35 @@ class OwnerSignInSmoke(unittest.TestCase):
             if window: window.close()
             DesktopBridge.call=original
 
+    def test_one_global_account_and_no_fake_password_prompt_before_setup(self):
+        from unittest.mock import patch
+        from PySide6.QtWidgets import QMessageBox
+        prev=DesktopBridge.call
+        calls=[]
+        DesktopBridge.call=lambda _self,command,arg="",payload=None,callback=None: (
+            calls.append((command,arg,payload,callback))
+        )
+        window=None
+        try:
+            window=EnkyronWindow()
+            self.assertEqual(window.mail_owner_login.parentWidget().objectName(),"topbar")
+            self.assertEqual(len(window.findChildren(
+                QPushButton,"enkyronMailOwnerLogin")),1)
+            self.assertFalse(window.mail_owner_login.isEnabled())
+            status=[x for x in calls if x[0]=="owner-setup-status"]
+            self.assertEqual(len(status),1)
+            status[0][3]({"state":"not_enrolled"},None)
+            self.assertEqual(window.mail_owner_login.text(),"Set up CEO account")
+            with patch.object(QMessageBox,"information",return_value=None) as box:
+                window.mail_owner_login.click()
+                self.assertTrue(box.called)
+                self.assertIn("--enroll",box.call_args.args[-1])
+            self.assertIsNone(window.owner_login_dialog)
+            self.assertFalse(any(x[0]=="owner-login" for x in calls))
+        finally:
+            if window:window.close()
+            DesktopBridge.call=prev
+
     def test_cancelled_inflight_login_rejects_token_and_revokes_session(self):
         original=DesktopBridge.call
         calls=[]
@@ -86,6 +119,9 @@ class OwnerSignInSmoke(unittest.TestCase):
         window=None
         try:
             window=EnkyronWindow()
+            status=[x for x in calls if x[0]=="owner-setup-status"]
+            self.assertEqual(len(status),1)
+            status[0][3]({"state":"active"},None)
             window.open_owner_login()
             dialog=window.owner_login_dialog
             dialog.findChild(QLineEdit,"enkyronOwnerPassword").setText(
