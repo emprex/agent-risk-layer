@@ -42,8 +42,8 @@ async function event(client,principalId,type,reason){
 async function failLogin(client,principal,type){
   const attempts=Math.min(1000000,Number(principal.failed_attempts)+1);
   await client.query(
-    'UPDATE enkyron_identity_credentials SET failed_attempts=$2, '+
-    "locked_until=CASE WHEN $2 >= $3 THEN NOW()+INTERVAL '5 minutes' "+
+    'UPDATE enkyron_identity_credentials SET failed_attempts=$2::integer, '+
+    "locked_until=CASE WHEN $2::integer >= $3::integer THEN NOW()+INTERVAL '5 minutes' "+
     'ELSE locked_until END,updated_at=NOW() WHERE principal_id=$1',
     [principal.id,attempts,LOCK_AFTER]
   );
