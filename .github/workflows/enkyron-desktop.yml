@@ -773,6 +773,7 @@ jobs:
               "available": True,
               "company": {
                   "id": company_id, "name": "Synthetic Company",
+                  "record_version": 1,
                   "relationship_state": "prospect",
                   "sector": "Cybersecurity", "city": "London",
                   "country": "UK"
@@ -868,6 +869,63 @@ jobs:
           assert window.crm_dossier_heading.text() == "Synthetic Company"
           assert "1 contact(s)" in window.crm_dossier_glance.text()
           assert "2 messages / notes" in window.crm_dossier_glance.text()
+          # UX-08: company correction reuses an existing audited/versioned
+          # backend but never opens another window or shrinks the note timeline.
+          assert window.crm_dossier_edit_company.isEnabled()
+          window.crm_dossier_edit_company.click()
+          assert window.crm_dossier_company_editor is not None
+          assert not window.crm_dossier_nav.isEnabled()
+          assert window.crm_dossier_content_stack.currentWidget() is (
+              window.crm_dossier_company_editor
+          )
+          assert window.crm_dossier_company_inputs["sector"].text() == "Cybersecurity"
+          assert not window.crm_dossier_company_save.isEnabled()
+          window.crm_dossier_company_inputs["sector"].setText("Cybersecurity / GRC")
+          window.crm_dossier_company_reason.setPlainText(
+              "Correcting the sector label after checking internal research records."
+          )
+          window.crm_dossier_company_confirm.setChecked(True)
+          assert window.crm_dossier_company_save.isEnabled()
+          with patch("desktop.enkyron.QMessageBox.question",
+                     return_value=QMessageBox.StandardButton.No) as ask:
+              window.crm_dossier_dialog.reject()
+              ask.assert_called_once()
+              assert window.crm_dossier_dialog.isVisible()
+              assert window.crm_dossier_company_inputs["sector"].text() == (
+                  "Cybersecurity / GRC"
+              )
+          with patch("desktop.enkyron.QMessageBox.information") as notice:
+              before = len(calls)
+              window.refresh_company_dossier()
+              notice.assert_called_once()
+              assert len(calls) == before
+          window.crm_dossier_company_save.click()
+          assert calls[-1][0] == "crm-edit-company"
+          assert calls[-1][2] == {
+              "id": company_id, "expected_version": 1, "confirmed": True,
+              "review_note": "Correcting the sector label after checking internal research records.",
+              "name": "Synthetic Company", "legal_name": "",
+              "sector": "Cybersecurity / GRC", "city": "London",
+              "country": "UK", "website": ""
+          }
+          with patch("desktop.enkyron.QMessageBox.information") as notice:
+              window.crm_dossier_dialog.close()
+              notice.assert_called_once()
+              assert window.crm_dossier_dialog.isVisible()
+          with patch("desktop.enkyron.QMessageBox.warning") as warn:
+              calls[-1][3](None, "CRM record changed; refresh before editing")
+              warn.assert_called_once()
+          assert not window.crm_dossier_company_save.isEnabled()
+          assert window.crm_dossier_company_inputs["sector"].text() == (
+              "Cybersecurity / GRC"
+          )
+          window.crm_dossier_company_cancel.click()
+          assert window.crm_dossier_company_editor is None
+          assert window.crm_dossier_nav.isEnabled()
+          assert window.crm_dossier_content_stack.currentWidget() is (
+              window.crm_dossier_tabs
+          )
+          assert window.crm_dossier_summary.text().find("Sector: Cybersecurity") >= 0
           # UX-03: complete notes visible in their existing chronology without
           # a selected row, and no claimed synchronisation or inferred sender.
           activity_page = window.crm_dossier_tabs.widget(5)
