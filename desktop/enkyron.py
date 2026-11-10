@@ -3083,7 +3083,14 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_heading = QLabel("Company dossier")
         self.crm_dossier_heading.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_heading.setStyleSheet("font-size: 18px; font-weight: bold;")
-        layout.addWidget(self.crm_dossier_heading)
+        heading_row = QHBoxLayout()
+        heading_row.addWidget(self.crm_dossier_heading, 1)
+        self.crm_dossier_edit_company = QPushButton("Edit company details")
+        self.crm_dossier_edit_company.setObjectName("crmDossierEditCompany")
+        self.crm_dossier_edit_company.setEnabled(False)
+        self.crm_dossier_edit_company.clicked.connect(self.open_dossier_company_editor)
+        heading_row.addWidget(self.crm_dossier_edit_company)
+        layout.addLayout(heading_row)
         self.crm_dossier_summary = QLabel("Loading company details…")
         self.crm_dossier_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_dossier_summary.setWordWrap(True)
@@ -3147,7 +3154,9 @@ class EnkyronWindow(QMainWindow):
             self.crm_dossier_nav.setCurrentRow
         )
         dossier_body.addWidget(self.crm_dossier_nav)
-        dossier_body.addWidget(self.crm_dossier_tabs, 1)
+        self.crm_dossier_content_stack = QStackedWidget()
+        self.crm_dossier_content_stack.addWidget(self.crm_dossier_tabs)
+        dossier_body.addWidget(self.crm_dossier_content_stack, 1)
         layout.addLayout(dossier_body, 1)
         footer = QHBoxLayout()
         footer.addStretch()
@@ -3171,19 +3180,202 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_contact_initial = None
         self.crm_dossier_contact_pending = False
         self.crm_dossier_followup_initial = None
+        self.crm_dossier_company_snapshot = None
+        self.crm_dossier_company_editor = None
+        self.crm_dossier_company_pending = False
         dialog.close_guard = self.confirm_company_dossier_close
         # show() keeps the window modeless. QDialog.open() would make the
         # main ENKYRON window inaccessible while this dossier is displayed.
         dialog.show()
         self.refresh_company_dossier()
 
+
+    def open_dossier_company_editor(self):
+        """Correct company CRM fields inside the dossier, not another dialog."""
+        dialog, company_id = self.crm_dossier_dialog, self.crm_dossier_company_id
+        company = self.crm_dossier_company_snapshot
+        if (not dialog or not dialog.isVisible() or not company_id
+                or not isinstance(company, dict)
+                or company.get("id") != company_id
+                or self.crm_dossier_company_editor is not None):
+            return
+        if (self.crm_dossier_contact_editor is not None
+                or self.crm_dossier_followup_editor is not None):
+            QMessageBox.information(
+                dialog, "Finish current edit",
+                "Save or cancel the open contact or next action first."
+            )
+            return
+        version = company.get("record_version")
+        if not isinstance(version, int) or version < 1:
+            QMessageBox.warning(
+                dialog, "Refresh required",
+                "Company revision unavailable. Refresh dossier to correct it."
+            )
+            return
+        fields = (
+            ("name", "Company name *", 160),
+            ("legal_name", "Legal name (unverified)", 160),
+            ("sector", "Sector", 120),
+            ("city", "City", 120),
+            ("country", "Country", 90),
+            ("website", "Website", 500)
+        )
+        panel = QWidget()
+        panel.setObjectName("crmDossierCompanyEditorPanel")
+        layout = QVBoxLayout(panel)
+        header = QLabel("Correct company details")
+        header.setStyleSheet("font-size: 16px; font-weight: bold;")
+        layout.addWidget(header)
+        notice = QLabel(
+            "Operator-entered CRM fields only. This does not verify legal "
+            "identity, promote a client, change consent or send messages."
+        )
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        form = QFormLayout()
+        inputs, initial = {}, {}
+        for key, label, limit in fields:
+            control = QLineEdit()
+            control.setObjectName("crmDossierCompany_" + key)
+            control.setMaxLength(limit)
+            control.setText(str(company.get(key) or ""))
+            form.addRow(label, control)
+            inputs[key] = control
+            initial[key] = control.text()
+        rationale = QPlainTextEdit()
+        rationale.setObjectName("crmDossierCompanyReason")
+        rationale.setMaximumHeight(90)
+        rationale.setPlaceholderText(
+            "Why was this correction necessary? Which source was consulted? "
+            "20–1000 characters."
+        )
+        form.addRow("Correction rationale *", rationale)
+        layout.addLayout(form)
+        confirmed = QCheckBox(
+            "I confirm this correction does not prove company identity."
+        )
+        layout.addWidget(confirmed)
+        controls = QHBoxLayout()
+        cancel = QPushButton("Back to dossier")
+        cancel.setObjectName("crmDossierCompanyCancel")
+        save = QPushButton("Save company correction")
+        save.setObjectName("crmDossierCompanySave")
+        save.setEnabled(False)
+        controls.addWidget(cancel)
+        controls.addWidget(save)
+        layout.addLayout(controls)
+        layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setObjectName("crmDossierCompanyEditorScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(panel)
+        self.crm_dossier_content_stack.addWidget(scroll)
+        self.crm_dossier_content_stack.setCurrentWidget(scroll)
+        self.crm_dossier_nav.setEnabled(False)
+        self.crm_dossier_edit_company.setEnabled(False)
+        self.crm_dossier_company_editor = scroll
+        self.crm_dossier_company_inputs = inputs
+        self.crm_dossier_company_initial = initial
+        self.crm_dossier_company_reason = rationale
+        self.crm_dossier_company_confirm = confirmed
+        self.crm_dossier_company_save = save
+        self.crm_dossier_company_cancel = cancel
+        self.crm_dossier_company_pending = False
+        state = {"failed": False}
+
+        def refresh_save(*_unused):
+            note = rationale.toPlainText().strip()
+            vals = [field.text() for field in inputs.values()]
+            save.setEnabled(
+                not self.crm_dossier_company_pending and not state["failed"]
+                and inputs["name"].text().strip() != ""
+                and any(field.text() != initial[key]
+                        for key, field in inputs.items())
+                and all(not any(ord(char) < 32 or ord(char) == 127 for char in v)
+                        for v in vals)
+                and 20 <= len(note) <= 1000
+                and confirmed.isChecked()
+            )
+
+        def finish():
+            if self.crm_dossier_company_pending:
+                return
+            if self.crm_dossier_company_editor is scroll:
+                self.crm_dossier_company_editor = None
+                self.crm_dossier_company_inputs = {}
+                self.crm_dossier_company_initial = {}
+                self.crm_dossier_content_stack.setCurrentWidget(self.crm_dossier_tabs)
+                self.crm_dossier_content_stack.removeWidget(scroll)
+                self.crm_dossier_nav.setEnabled(True)
+                self.crm_dossier_edit_company.setEnabled(True)
+            scroll.deleteLater()
+
+        def submit():
+            if (self.crm_dossier_company_editor is not scroll
+                    or self.crm_dossier_company_pending or state["failed"]
+                    or company_id != self.crm_dossier_company_id
+                    or not dialog.isVisible() or not save.isEnabled()):
+                return
+            payload = {
+                "id": company_id, "expected_version": version,
+                "review_note": rationale.toPlainText().strip(),
+                "confirmed": True,
+                **{key: widget.text() for key, widget in inputs.items()}
+            }
+            self.crm_dossier_company_pending = True
+            cancel.setEnabled(False)
+            refresh_save()
+
+            def received(result, error):
+                if (self.crm_dossier_company_editor is not scroll
+                        or company_id != self.crm_dossier_company_id
+                        or not dialog.isVisible()):
+                    return
+                self.crm_dossier_company_pending = False
+                cancel.setEnabled(True)
+                if (error or not isinstance(result, dict)
+                        or result.get("id") != company_id
+                        or result.get("record_version") != version + 1):
+                    state["failed"] = True
+                    refresh_save()
+                    QMessageBox.warning(
+                        dialog, "Company correction not confirmed",
+                        str(error or "The update result is uncertain.") +
+                        " Review CRM history before trying again."
+                    )
+                    return
+                finish()
+                self.refresh_company_dossier()
+                if self.crm_company_id == company_id:
+                    self.crm_pending_company_id = company_id
+                    self.load_companies()
+
+            self.bridge.call("crm-edit-company", payload=payload, callback=received)
+
+        for field in inputs.values():
+            field.textChanged.connect(refresh_save)
+        rationale.textChanged.connect(refresh_save)
+        confirmed.toggled.connect(refresh_save)
+        cancel.clicked.connect(finish)
+        save.clicked.connect(submit)
+        refresh_save()
+
     def company_dossier_pending_or_unsaved(self):
         """Read only local Qt draft state. Never queries or writes customer data."""
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
-                or self.crm_dossier_contact_pending):
+                or self.crm_dossier_contact_pending
+                or self.crm_dossier_company_pending):
             return True, ["A CRM save or duplicate check is still in progress"]
         pending = []
+        if self.crm_dossier_company_editor is not None:
+            current = {key: field.text() for key, field in
+                       self.crm_dossier_company_inputs.items()}
+            if (current != self.crm_dossier_company_initial or
+                    self.crm_dossier_company_reason.toPlainText().strip()):
+                pending.append("company details")
         if self.crm_dossier_contact_editor is not None:
             current = {
                 key: widget.text()
@@ -3277,6 +3469,12 @@ class EnkyronWindow(QMainWindow):
                 "Save or cancel the open contact form before refreshing."
             )
             return
+        if self.crm_dossier_company_editor is not None:
+            QMessageBox.information(
+                dialog, "Unsaved company details",
+                "Save or cancel the company correction before refreshing."
+            )
+            return
         self.crm_dossier_seq += 1
         seq = self.crm_dossier_seq
         selected_tab = self.crm_dossier_tabs.currentIndex()
@@ -3294,6 +3492,12 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             company = data["company"]
+            self.crm_dossier_company_snapshot = dict(company)
+            self.crm_dossier_edit_company.setEnabled(
+                company.get("id") == company_id
+                and isinstance(company.get("record_version"), int)
+                and company.get("record_version", 0) >= 1
+            )
             name = str(company.get("name") or "Company")
             self.crm_dossier_heading.setText(name)
             dialog.setWindowTitle("ENKYRON · " + name[:75])

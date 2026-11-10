@@ -211,7 +211,7 @@ export async function getCompanyDossier(pool,id,operator){
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     inTx=true;
     const company=(await client.query(
-      'SELECT id,name,legal_name,website,sector,city,country,'
+      'SELECT id,name,legal_name,website,sector,city,country,record_version,'
       +'relationship_state,created_at,updated_at '
       +'FROM enkyron_crm_companies WHERE workspace_key=$1 AND id=$2',
       [key,companyId]
