@@ -22,7 +22,7 @@ function preview(rows,chronological=false){
 }
 const LISTS={
   contacts:
-    'SELECT id,full_name,job_title,email,marketing_permission,'
+    'SELECT id,full_name,job_title,email,phone,record_version,marketing_permission,'
     +'count(*) OVER() AS total_rows '
     +'FROM enkyron_crm_contacts WHERE workspace_key=$1 AND company_id=$2 '
     +'ORDER BY created_at DESC,id DESC LIMIT 21',
