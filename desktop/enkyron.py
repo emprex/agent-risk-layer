@@ -12001,12 +12001,25 @@ class EnkyronWindow(QMainWindow):
             "The operator recorded an external send. ENKYRON has not verified "
             "provider transmission, delivery or reading. This saved revision "
             "is read-only." if reported else
-            "This is a local draft, not an email sent by ENKYRON. "
-            "Check the recipient before recording any external sending."
+            "Compose a message, save it locally or send with explicit recipient "
+            "confirmation when Resend is configured. Saving never sends."
         )
         warning.setWordWrap(True)
         layout.addWidget(warning)
         form = QFormLayout()
+        self.crm_mail_from = QComboBox()
+        self.crm_mail_from.setObjectName("enkyronDraftFromMailbox")
+        self.crm_mail_from.addItem(
+            "Direction · guillaume.strohecker@agentrisklayer.com", "direction"
+        )
+        self.crm_mail_from.addItem(
+            "Support · support@agentrisklayer.com", "support"
+        )
+        self.crm_mail_from.setCurrentIndex(
+            max(0,self.crm_mail_from.findData(draft.get("mailbox_key") or "direction"))
+        )
+        self.crm_mail_from.setEnabled(not reported)
+        form.addRow("From",self.crm_mail_from)
         self.crm_mail_to = QLineEdit()
         self.crm_mail_to.setMaxLength(254)
         self.crm_mail_to.setPlaceholderText(
@@ -12049,9 +12062,14 @@ class EnkyronWindow(QMainWindow):
         buttons.addStretch()
         self.crm_mail_save = QPushButton("Save draft")
         self.crm_mail_save.setObjectName("primary")
-        self.crm_mail_save.clicked.connect(self.save_mail_draft)
+        self.crm_mail_save.clicked.connect(lambda: self.save_mail_draft())
         self.crm_mail_save.setVisible(not reported)
         buttons.addWidget(self.crm_mail_save)
+        self.crm_mail_send = QPushButton("Send email…")
+        self.crm_mail_send.setObjectName("enkyronMailSend")
+        self.crm_mail_send.setVisible(not reported)
+        self.crm_mail_send.clicked.connect(self.request_mail_send)
+        buttons.addWidget(self.crm_mail_send)
         if existing and not reported:
             report_button = QPushButton("Record external send…")
             report_button.setObjectName("crmMailManualSend")
@@ -12067,7 +12085,9 @@ class EnkyronWindow(QMainWindow):
             "mail_state": draft.get("mail_state", "draft"),
             "loaded_to": draft.get("recipient_email") or "",
             "loaded_subject": draft.get("subject") or "",
-            "loaded_body": draft.get("body_text") or ""
+            "loaded_body": draft.get("body_text") or "",
+            "mailbox_key": draft.get("mailbox_key") or "direction",
+            "loaded_mailbox": draft.get("mailbox_key") or "direction",
         }
         self.crm_draft_dialog = dialog
         dialog.open()
@@ -12191,13 +12211,14 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_send_save = record
         dialog.open()
 
-    def save_mail_draft(self):
+    def save_mail_draft(self, send_after=False):
         dialog = self.crm_draft_dialog
         if not dialog or not dialog.isVisible() or not self.crm_draft_context:
             return
         recipient = self.crm_mail_to.text().strip()
         subject = self.crm_mail_subject.text().strip()
         body = self.crm_mail_body.toPlainText().strip()
+        mailbox_key = self.crm_mail_from.currentData()
         if not subject and not body:
             QMessageBox.warning(dialog, "Empty draft",
                                 "Enter a subject or some text before saving.")
@@ -12214,18 +12235,21 @@ class EnkyronWindow(QMainWindow):
                 "expected_revision": context["revision"],
                 "recipient_email": recipient,
                 "subject": subject,
-                "body_text": body
+                "body_text": body,
+                "mailbox_key": mailbox_key,
             }
         else:
             command = "crm-mail-create"
             payload = {
-                ("company_id" if context["company_id"] else "opportunity_id"):
-                    (context["company_id"] if context["company_id"]
-                     else context["opportunity_id"]),
                 "recipient_email": recipient,
                 "subject": subject,
-                "body_text": body
+                "body_text": body,
+                "mailbox_key": mailbox_key,
             }
+            if context.get("company_id"):
+                payload["company_id"] = context["company_id"]
+            elif context.get("opportunity_id"):
+                payload["opportunity_id"] = context["opportunity_id"]
         self.crm_mail_save.setEnabled(False)
 
         def received(data, error):
@@ -12235,6 +12259,16 @@ class EnkyronWindow(QMainWindow):
                 self.crm_mail_save.setEnabled(True)
                 QMessageBox.warning(dialog, "Draft not saved",
                                     error or "The local draft could not be saved.")
+                return
+            if send_after:
+                # Save the exact revision before transmitting; provider receives
+                # only the backend-frozen database contents.
+                context.update({
+                    "id": data["id"], "revision": data["revision"],
+                    "mailbox_key":mailbox_key, "loaded_mailbox":mailbox_key,
+                    "loaded_to":recipient,"loaded_subject":subject,"loaded_body":body
+                })
+                self.submit_mail_send(data["id"],data["revision"])
                 return
             dialog.accept()
             if (context.get("dossier_company_id")
@@ -12249,6 +12283,77 @@ class EnkyronWindow(QMainWindow):
                 self.load_mail_drafts()
 
         self.bridge.call(command, payload=payload, callback=received)
+
+    def request_mail_send(self):
+        """Human-approved send of the exact saved draft revision."""
+        dialog = self.crm_draft_dialog
+        ctx = self.crm_draft_context or {}
+        if not dialog or not dialog.isVisible() or ctx.get("mail_state") == "external_send_reported":
+            return
+        to = self.crm_mail_to.text().strip()
+        subject = self.crm_mail_subject.text().strip()
+        body = self.crm_mail_body.toPlainText().strip()
+        mailbox = self.crm_mail_from.currentData()
+        if (not to or not subject or not body or
+                "@" not in to or any(x in to for x in (" ", ",", ";", "<", ">"))):
+            QMessageBox.warning(dialog, "Incomplete email",
+                "Enter one valid recipient, a subject and a message body.")
+            return
+        if not self.mail_provider_ready:
+            QMessageBox.information(dialog, "Resend connection needed",
+                "You can save the draft now. Sending requires the "
+                "professional Resend connection to be provisioned.")
+            return
+        sender = ("guillaume.strohecker@agentrisklayer.com"
+                  if mailbox=="direction" else "support@agentrisklayer.com")
+        decision = QMessageBox.question(
+            dialog, "Confirm email send",
+            "SEND this message now?\n\nFrom: {}\nTo: {}\nSubject: {}\n\n"
+            "Resend acceptance is not proof of delivery."
+            .format(sender,to,subject),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        modified = (
+            not ctx.get("id") or to != ctx.get("loaded_to") or
+            subject != ctx.get("loaded_subject") or body != ctx.get("loaded_body") or
+            mailbox != ctx.get("loaded_mailbox")
+        )
+        self.crm_mail_send.setEnabled(False)
+        if modified:
+            self.save_mail_draft(send_after=True)
+        else:
+            self.submit_mail_send(ctx["id"],ctx["revision"])
+
+    def submit_mail_send(self,draft_id,revision):
+        dialog=self.crm_draft_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        self.crm_mail_send.setEnabled(False)
+        self.bridge.call("mail-send-draft",payload={
+            "draft_id":draft_id,"expected_revision":revision,
+            "recipient_verified":True,"confirmed":True,
+        },callback=lambda result,error:self.mail_send_completed(dialog,result,error))
+
+    def mail_send_completed(self,dialog,result,error):
+        if not dialog.isVisible():
+            return
+        if error or not result:
+            self.crm_mail_send.setEnabled(True)
+            QMessageBox.warning(dialog,"Email not confirmed",
+                str(error or "Check local drafts and Resend before retrying."))
+            return
+        dialog.accept()
+        self.load_mail_drafts()
+        self.crm_tabs.setCurrentIndex(3)
+        self.crm_mail_folders.setCurrentIndex(1)
+        self.load_mail_sent()
+        QMessageBox.information(
+            self,"Resend send result",
+            result.get("notice") or "The email status could not be confirmed."
+        )
 
     def open_activity_history(self):
         row = self.crm_followup_table.currentRow()
