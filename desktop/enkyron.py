@@ -3150,6 +3150,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_nav.currentRowChanged.connect(
             self.crm_dossier_tabs.setCurrentIndex
         )
+        self.crm_dossier_nav.currentRowChanged.connect(
+            self.update_dossier_next_action_visibility
+        )
         self.crm_dossier_tabs.currentChanged.connect(
             self.crm_dossier_nav.setCurrentRow
         )
@@ -3433,6 +3436,13 @@ class EnkyronWindow(QMainWindow):
             QMessageBox.StandardButton.No
         )
         return answer == QMessageBox.StandardButton.Yes
+
+    def update_dossier_next_action_visibility(self, *_args):
+        """Keep the follow-up summary elsewhere, not twice in Opportunities."""
+        row = self.crm_dossier_nav.currentRow()
+        sections = getattr(self, "crm_dossier_sections", [])
+        selected = sections[row][0] if 0 <= row < len(sections) else None
+        self.crm_dossier_next_action.setVisible(selected != "opportunities")
 
     def update_dossier_section_visibility(self, *_args):
         """Progressive disclosure without dropping any dossier section or ID."""
@@ -3876,7 +3886,10 @@ class EnkyronWindow(QMainWindow):
                                         parent, record, scoped_company
                                     )
                                 )
-                                content.addWidget(edit)
+                                edit.setMaximumWidth(190)
+                                content.addWidget(
+                                    edit, alignment=Qt.AlignmentFlag.AlignRight
+                                )
                             page_layout.addWidget(card)
                         page_layout.addStretch(1)
                     elif section_id in {
@@ -4222,6 +4235,7 @@ class EnkyronWindow(QMainWindow):
             self.update_dossier_section_visibility()
             self.crm_dossier_tabs.setCurrentIndex(index)
             self.crm_dossier_nav.setCurrentRow(index)
+            self.update_dossier_next_action_visibility()
             self.crm_dossier_notice.setText(
                 "Internal CRM records: notes are not verified sent messages, "
                 "and drafts are not signed contracts or issued invoices."
