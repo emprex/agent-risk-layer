@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QLabel
 from desktop.enkyron import EnkyronWindow, DesktopBridge
 
 class PersonalProfileSmoke(unittest.TestCase):
@@ -68,9 +68,10 @@ class PersonalProfileSmoke(unittest.TestCase):
             self.assertEqual(reboot.operator_profile_fields["display_name"].text(),
                              "Synthetic Founder")
             self.assertEqual(reboot.operator_profile_context["expected_revision"],1)
-            self.assertIn("not implemented",reboot.operator_profile_dialog.findChildren(
-                type(reboot.account_identity_label)
-            )[1].text().lower())
+            self.assertTrue(any(
+                "not implemented" in label.text().lower()
+                for label in reboot.operator_profile_dialog.findChildren(QLabel)
+            ))
             reboot.operator_profile_dialog.reject()
         finally:
             if window is not None:window.close()
