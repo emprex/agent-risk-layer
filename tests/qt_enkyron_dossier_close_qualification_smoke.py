@@ -45,6 +45,9 @@ class DossierCloseAfterQualificationTest(unittest.TestCase):
             window.crm_dossier_followup_editor = None
             window.crm_dossier_contact_editor = None
             window.crm_dossier_company_editor = None
+            window.crm_dossier_followup_saving = False
+            window.crm_dossier_contact_pending = False
+            window.crm_dossier_company_pending = False
 
             # A user may select a different contact after recording a review.
             # Those combo choices alone cannot form a saveable review.
