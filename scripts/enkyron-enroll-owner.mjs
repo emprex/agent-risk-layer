@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {createInterface} from 'node:readline/promises';
 import pg from 'pg';
-import {createEnkyronTotpSecret} from '../desktop/enkyron-auth-crypto.mjs';
+import {createEnkyronTotpSecret,validateEnkyronPassword,matchEnkyronTotpCounter} from '../desktop/enkyron-auth-crypto.mjs';
 import {
   inspectOwnerEnrollment,enrollPendingLocalOwner,
 } from '../desktop/enkyron-owner-enrollment.mjs';
@@ -125,21 +125,27 @@ try{
     console.error('This enrolls ONE pending CEO principal for the current Linux user.');
     console.error('It does not log you into ENKYRON or grant live desktop rights.');
     if(!await confirmation())throw new Error('Enrollment not confirmed');
-    await backupDatabase();
-    const key=await encryptionKey();
-    const password=secretPrompt('New CEO passphrase (15+ characters): ');
+    // Validate all private inputs BEFORE backups, key creation or database writes.
+    // The same validator is used by the actual scrypt hashing function.
+    console.error('Passphrase rules: 15-200 characters, no control characters, not whitespace-only.');
+    const password=secretPrompt('New CEO passphrase: ');
+    validateEnkyronPassword(password);
     const repeated=secretPrompt('Repeat CEO passphrase: ');
     if(password!==repeated)throw new Error('Passphrases do not match');
-    // Reject weak input before displaying a one-time MFA setup secret.
-    if(password.length<15||password.length>200||!password.trim())
-      throw new Error('Passphrase does not meet requirements');
     const totpSecret=createEnkyronTotpSecret();
     console.error('\nAdd a new 6-digit time-based entry to your authenticator app.');
     console.error('Entry label: ENKYRON CEO | issuer: AGENTRISKLAYER LTD');
     console.error('Manual setup key (PRIVATE; do not paste into chat):',totpSecret);
     const code=secretPrompt('Enter the current 6-digit authenticator code: ');
+    const codeVerifiedAt=Date.now();
+    if(matchEnkyronTotpCounter(totpSecret,code,codeVerifiedAt)===null)
+      throw new Error('MFA setup code invalid or expired');
+    // Only a confirmed passphrase and valid MFA code may reach these operations.
+    // encryptionKey() opens the existing 0600 key; it never replaces it.
+    await backupDatabase();
+    const key=await encryptionKey();
     const result=await enrollPendingLocalOwner(pool,{
-      operator,password,totpSecret,totpCode:code,key,
+      operator,password,totpSecret,totpCode:code,key,nowMs:codeVerifiedAt,
     });
     console.log('CEO credential enrollment:',result.status.toUpperCase());
     console.log('Login name:',result.loginName);
