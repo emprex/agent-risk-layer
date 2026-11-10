@@ -980,7 +980,9 @@ jobs:
           # Changing a contact's name is a distinct identity-sensitive action.
           window.crm_dossier_contact_inputs["full_name"].setText("Renamed Contact")
           assert not window.crm_dossier_contact_submit.isEnabled()
-          assert window.crm_dossier_contact_confirm.isVisible()
+          # Qt isVisible() is false if the containing tab is not the active one
+          # in offscreen smoke; isHidden() reflects the widget's explicit state.
+          assert not window.crm_dossier_contact_confirm.isHidden()
           window.crm_dossier_contact_inputs["full_name"].setText("Synthetic Contact")
           assert window.crm_dossier_contact_submit.isEnabled()
           assert not window.crm_dossier_contact_confirm.isVisible()
