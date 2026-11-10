@@ -175,7 +175,10 @@ export async function updateMailDraft(pool,input,actor,options={}){
       'SELECT id,mailbox_key,recipient_email,subject,body_text,revision, '
       +'EXISTS (SELECT 1 FROM enkyron_crm_mail_manual_sends s '
       +'WHERE s.workspace_key=enkyron_crm_mail_drafts.workspace_key '
-      +'AND s.draft_id=enkyron_crm_mail_drafts.id) AS external_send_reported '
+      +'AND s.draft_id=enkyron_crm_mail_drafts.id) AS external_send_reported, '
+      +'EXISTS (SELECT 1 FROM enkyron_mail_send_attempts a '
+      +'WHERE a.workspace_key=enkyron_crm_mail_drafts.workspace_key '
+      +'AND a.draft_id=enkyron_crm_mail_drafts.id) AS provider_submitted '
       +'FROM enkyron_crm_mail_drafts WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
       [owner.key,data.id]
     )).rows[0];
@@ -184,6 +187,8 @@ export async function updateMailDraft(pool,input,actor,options={}){
       throw new Error('CRM draft was changed; reopen the latest revision');
     if(previous.external_send_reported)
       throw new Error('CRM draft has a manual external send record and cannot be edited');
+    if(previous.provider_submitted)
+      throw new Error('CRM draft was submitted to Resend and cannot be edited');
     const mailboxKey=data.mailbox_key??previous.mailbox_key;
     if((previous.recipient_email||'')===data.recipient_email
         && previous.mailbox_key===mailboxKey
