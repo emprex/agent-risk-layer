@@ -68,21 +68,12 @@
 
   <section class="band request-band" id="request"><div class="shell section request-wrap">
     <div><p class="eyebrow">Request an assessment</p><h2>Tell us what your agent can do.</h2><p>We review the scope before any testing begins. Do not include passwords, API keys, access tokens, private keys or customer data.</p></div>
-    <form id="requestForm" action="https://formspree.io/f/xjygkpwz" method="POST">
-      <div class="form-grid">
-        <label>Name<input name="name" required maxlength="120" autocomplete="name"></label>
-        <label>Company<input name="company" required maxlength="160" autocomplete="organization"></label>
-        <label>Email<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
-        <label>System / agent<input name="systemName" required maxlength="160"></label>
-      </div>
-      <label>What does the agent do?<textarea name="useCase" required maxlength="1800" rows="4"></textarea></label>
-      <label>What can it access or change?<textarea name="access" required maxlength="1800" rows="4"></textarea></label>
-      <label>What do you want assessed?<textarea name="concern" required maxlength="1800" rows="4"></textarea></label>
-      <button class="button" type="submit">Send assessment request</button>
-      <p class="fineprint" id="formStatus">Your request is sent directly to AgentRiskLayer through Formspree. Do not include secrets, credentials or customer data.</p>
-    </form>
+    <div class="stack">
+      <p>Send us an email with your company, the agent or system, and what you would like assessed. We will review the scope before any testing begins.</p>
+      <a class="button" href="mailto:support@agentrisklayer.com?subject=AgentRiskLayer%20assessment%20request&body=Company%3A%0ASystem%20or%20agent%3A%0AWhat%20would%20you%20like%20assessed%3F%0A">Email us to request an assessment</a>
+      <p class="fineprint">Opens your email application. Please do not include passwords, API keys, credentials or customer data.</p>
+    </div>
   </div></section>
 </main>
 <footer class="shell footer"><div><strong>AgentRiskLayer</strong><p>Human-led AI agent security assessment.</p></div><nav><a href="/guardian.html">Guardian</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="mailto:support@agentrisklayer.com">support@agentrisklayer.com</a></nav></footer>
-<script src="/request.js" defer></script>
 </body></html>
