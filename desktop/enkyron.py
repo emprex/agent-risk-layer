@@ -1831,8 +1831,8 @@ class EnkyronWindow(QMainWindow):
             "issuing-company profile. Founder / Owner is a local self-declared "
             "label, NOT an authentication role or a permission grant. "
             "My account is a saved local profile. Mailbox permissions are stored "
-            "separately in PostgreSQL. This local desktop is not a hardened "
-            "multi-user authentication system."
+            "separately in PostgreSQL. Multi-user RBAC is not implemented; "
+            "the local workstation uses its existing operator identity."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
