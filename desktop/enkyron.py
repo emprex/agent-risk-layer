@@ -1696,7 +1696,6 @@ class EnkyronWindow(QMainWindow):
         buttons.addStretch()
         submit = QPushButton("Sign in")
         submit.setObjectName("enkyronOwnerLoginSubmit")
-        submit.setObjectName("primary")
         buttons.addWidget(submit)
         layout.addLayout(buttons)
         self.owner_login_dialog = dialog
@@ -1717,6 +1716,15 @@ class EnkyronWindow(QMainWindow):
 
             def received(data, error):
                 if not dialog.isVisible():
+                    # User cancelled while authentication was in flight:
+                    # never adopt the token; revoke the newly issued session.
+                    if data and isinstance(data.get("session_token"), str):
+                        self.bridge.call("owner-logout", payload={
+                            "session_token": data["session_token"]
+                        })
+                    self.crm_mail_connection.setText(
+                        "Not connected · Owner sign-in required"
+                    )
                     return
                 if error or not data or not isinstance(data.get("session_token"), str):
                     submit.setEnabled(True)
