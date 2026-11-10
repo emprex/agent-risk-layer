@@ -81,7 +81,7 @@ test('UX-15 IPC contains all three command classifications exactly once',async()
       'Personal profile save command missing/duplicated in '+token);
   }
   assert.ok(source.includes("command === 'operator-profile' ? await"));
-  assert.ok(source.includes("readPersonalProfile(pool,os.userInfo().username)"));
+  assert.ok(source.includes("readPersonalProfile(pool,operator)"));
   assert.ok(source.includes("ownerMailAccessCard(personal.current||{})"));
   assert.match(source,/command === 'operator-profile-save' \? await recordPersonalProfile/);
 });
