@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+// Dedicated, bounded single-operator Owner login bridge.
+// This is NOT a remote service, mail transport or multi-user security boundary.
+// Password/OTP and session token are sent on private stdin, never on argv or logs.
+// The principal is ALWAYS resolved from DB status/session, never from IPC JSON.
+import os from 'node:os';
+import path from 'node:path';
+import * as fs from 'node:fs/promises';
+import {constants as C} from 'node:fs';
+import pg from 'pg';
+import {
+  loginLocalOwner, resolveLocalOwnerSession, logoutLocalOwner,
+} from './enkyron-owner-session.mjs';
+
+const OPERATIONS=new Set(['owner-login','owner-session-status','owner-logout']);
+const KEY_DIRECTORY=path.join(os.homedir(),'.local','share','enkyron','auth');
+const KEY_FILE=path.join(KEY_DIRECTORY,'local-key-v1.bin');
+function emit(value){process.stdout.write(JSON.stringify(value)+'\n');}
+async function readPayload(){
+  let raw='',length=0;
+  for await(const chunk of process.stdin){
+    length+=chunk.length;
+    if(length>4096)throw new Error('Invalid Owner request');
+    raw+=chunk.toString('utf8');
+  }
+  const value=JSON.parse(raw);
+  if(!value||Array.isArray(value)||typeof value!=='object')
+    throw new Error('Invalid Owner request');
+  const allowed=['password','totp_code','session_token'];
+  if(Object.keys(value).some(x=>!allowed.includes(x)))
+    throw new Error('Invalid Owner request');
+  return value;
+}
+async function trustedKey(){
+  const dir=await fs.lstat(KEY_DIRECTORY);
+  if(!dir.isDirectory()||dir.isSymbolicLink()||dir.uid!==process.getuid()
+      ||(dir.mode&0o077)!==0)
+    throw new Error('Owner private key is unavailable');
+  const fh=await fs.open(KEY_FILE,C.O_RDONLY|C.O_NOFOLLOW);
+  try{
+    const st=await fh.stat();
+    if(!st.isFile()||st.uid!==process.getuid()||st.nlink!==1
+       ||(st.mode&0o777)!==0o600||st.size!==32)
+      throw new Error('Owner private key is unavailable');
+    return await fh.readFile();
+  }finally{await fh.close();}
+}
+async function main(){
+  const operation=process.argv[2];
+  if(!OPERATIONS.has(operation)||process.argv.length!==3)
+    throw new Error('Unsupported Owner operation');
+  const req=await readPayload();
+  const key=await trustedKey();
+  const operator=os.userInfo().username;
+  const pool=new pg.Pool({
+    host:'/var/run/postgresql',database:'arl_local',user:operator,
+    connectionTimeoutMillis:5000,max:1,
+    options:"-c statement_timeout=10000 -c lock_timeout=4000"
+  });
+  try{
+    if(operation==='owner-login'){
+      const data=await loginLocalOwner(pool,{
+        operator,password:req.password,totpCode:req.totp_code,key,
+      });
+      emit({ok:true,result:{
+        session_token:data.sessionToken,expires_in_seconds:data.expiresInSeconds,
+        role:data.principal.role,login_name:data.principal.loginName,
+      }});
+    }else if(operation==='owner-session-status'){
+      const principal=await resolveLocalOwnerSession(pool,{
+        operator,sessionToken:req.session_token,key,
+      });
+      emit({ok:true,result:{
+        authenticated:true,login_name:principal.loginName,role:principal.role,
+      }});
+    }else{
+      const done=await logoutLocalOwner(pool,{
+        operator,sessionToken:req.session_token,key,
+      });
+      emit({ok:true,result:done});
+    }
+  }finally{
+    await pool.end();
+  }
+}
+main().catch(()=>{
+  // Never serialize SQL errors, passwords, tokens, encryption details or stack traces.
+  emit({ok:false,error:'Owner login unavailable or credentials not accepted'});
+  process.exitCode=1;
+});
