@@ -3416,6 +3416,14 @@ class EnkyronWindow(QMainWindow):
 
     def company_dossier_pending_or_unsaved(self):
         """Read only local Qt draft state. Never queries or writes customer data."""
+        # A company-owned unsent email draft uses the existing compose dialog.
+        # Do not silently orphan it when the independent dossier closes.
+        draft_dialog = getattr(self, "crm_draft_dialog", None)
+        draft_context = getattr(self, "crm_draft_context", None) or {}
+        if (draft_dialog and draft_dialog.isVisible()
+                and draft_context.get("dossier_company_id")
+                == self.crm_dossier_company_id):
+            return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
                 or self.crm_dossier_contact_pending
@@ -3737,6 +3745,52 @@ class EnkyronWindow(QMainWindow):
                 table.setHorizontalScrollMode(
                     QAbstractItemView.ScrollMode.ScrollPerPixel
                 )
+                if section_id == "drafts":
+                    draft_actions = QHBoxLayout()
+                    create_draft = QPushButton("New email draft")
+                    create_draft.setObjectName("crmDossierCreateDraft")
+                    create_draft.clicked.connect(
+                        lambda _checked=False, company_name=company.get("name", ""),
+                               scoped_company=company_id:
+                        self.open_dossier_company_mail_draft(
+                            scoped_company, company_name
+                        )
+                    )
+                    edit_draft = QPushButton("Edit selected draft")
+                    edit_draft.setObjectName("crmDossierEditDraft")
+                    edit_draft.setEnabled(False)
+
+                    def selected_draft(items=rows, listing=table):
+                        index = listing.currentRow()
+                        return items[index] if 0 <= index < len(items) else None
+
+                    def update_draft_actions():
+                        item = selected_draft()
+                        edit_draft.setEnabled(bool(
+                            item and item.get("id")
+                            and item.get("company_id") == company_id
+                        ))
+
+                    def launch_existing_draft():
+                        item = selected_draft()
+                        if item and item.get("company_id") == company_id:
+                            self.open_dossier_company_mail_draft(
+                                company_id, company.get("name", ""), item["id"]
+                            )
+
+                    table.itemSelectionChanged.connect(update_draft_actions)
+                    edit_draft.clicked.connect(launch_existing_draft)
+                    draft_actions.addWidget(create_draft)
+                    draft_actions.addWidget(edit_draft)
+                    draft_actions.addStretch()
+                    page_layout.addLayout(draft_actions)
+                    update_draft_actions()
+                    notice = QLabel(
+                        "Unsent local drafts only. No email account is connected "
+                        "and no message will be sent from ENKYRON."
+                    )
+                    notice.setWordWrap(True)
+                    page_layout.addWidget(notice)
                 if section_id == "qualifications":
                     # Keep the editor immediately usable. With zero reviews,
                     # a blank 190px history table obscured the save controls.
@@ -4049,30 +4103,20 @@ class EnkyronWindow(QMainWindow):
                     self.crm_dossier_activity_record = QPushButton("Record activity…")
                     self.crm_dossier_activity_record.setCheckable(True)
                     self.crm_dossier_activity_record.setEnabled(
-                        bool(self.crm_dossier_activity_opportunity_ids)
-                        and not self.crm_dossier_activity_saving
+                        not self.crm_dossier_activity_saving
                     )
                     page_layout.addWidget(
                         self.crm_dossier_activity_record,
                         alignment=Qt.AlignmentFlag.AlignLeft
                     )
-                    if not self.crm_dossier_activity_opportunity_ids:
-                        missing = QLabel(
-                            "To record an activity, first create a commercial "
-                            "opportunity for this company in Companies & Contacts."
-                        )
-                        missing.setWordWrap(True)
-                        page_layout.addWidget(missing)
-
                     self.crm_dossier_activity_editor = QWidget()
                     editor_layout = QVBoxLayout(self.crm_dossier_activity_editor)
                     editor_layout.setContentsMargins(6, 4, 6, 8)
                     activity_form = QFormLayout()
                     self.crm_dossier_activity_opportunity = QComboBox()
-                    if len(linked_opportunities) > 1:
-                        self.crm_dossier_activity_opportunity.addItem(
-                            "Select the relevant opportunity…", None
-                        )
+                    self.crm_dossier_activity_opportunity.addItem(
+                        "Company — general research / notes", None
+                    )
                     for pos, item in enumerate(linked_opportunities, 1):
                         stage = str(item.get("stage") or "Unspecified").replace(
                             "_", " "
@@ -4085,12 +4129,8 @@ class EnkyronWindow(QMainWindow):
                         self.crm_dossier_activity_opportunity.addItem(
                             description, item["opportunity_id"]
                         )
-                    if not linked_opportunities:
-                        self.crm_dossier_activity_opportunity.addItem(
-                            "No linked opportunity", None
-                        )
                     activity_form.addRow(
-                        "Related opportunity", self.crm_dossier_activity_opportunity
+                        "Record under", self.crm_dossier_activity_opportunity
                     )
                     if opportunity_section.get("more"):
                         limited = QLabel(
@@ -4789,7 +4829,8 @@ class EnkyronWindow(QMainWindow):
         detail = self.crm_dossier_activity_detail.toPlainText().strip()
         permitted = (
             self.crm_dossier_activity_company_id == self.crm_dossier_company_id
-            and opportunity in self.crm_dossier_activity_opportunity_ids
+            and (opportunity is None
+                 or opportunity in self.crm_dossier_activity_opportunity_ids)
             and not self.crm_dossier_activity_saving
             and self.crm_dossier_activity_record.isChecked()
             and 10 <= len(detail) <= 2000
@@ -4807,14 +4848,16 @@ class EnkyronWindow(QMainWindow):
                 not self.crm_dossier_activity_save.isEnabled()):
             return
         opportunity_id = self.crm_dossier_activity_opportunity.currentData()
-        if opportunity_id not in self.crm_dossier_activity_opportunity_ids:
+        if (opportunity_id is not None
+                and opportunity_id not in self.crm_dossier_activity_opportunity_ids):
             QMessageBox.warning(
                 dialog, "Opportunity not available",
                 "Refresh the company dossier before recording this activity."
             )
             return
         payload = {
-            "opportunity_id": opportunity_id,
+            ("company_id" if opportunity_id is None else "opportunity_id"):
+                (company_id if opportunity_id is None else opportunity_id),
             "activity_type": self.crm_dossier_activity_type.currentData(),
             "detail": self.crm_dossier_activity_detail.toPlainText().strip(),
             "reviewed": True
@@ -11287,6 +11330,41 @@ class EnkyronWindow(QMainWindow):
             0 <= row < len(self.crm_draft_items)
         )
 
+    def open_dossier_company_mail_draft(self, company_id, company_name, draft_id=None):
+        """Reuse the existing local draft editor without requiring an opportunity."""
+        dialog = self.crm_dossier_dialog
+        if (not dialog or not dialog.isVisible()
+                or self.crm_dossier_company_id != company_id):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            self.crm_draft_dialog.activateWindow()
+            return
+        if draft_id is None:
+            self.show_mail_draft_dialog({
+                "company_id": company_id,
+                "company_name_at_creation": company_name,
+                "_dossier_company_id": company_id
+            })
+            return
+
+        def received(data, error):
+            if (not dialog.isVisible()
+                    or self.crm_dossier_company_id != company_id):
+                return
+            if (error or not data or not data.get("available", True)
+                    or not isinstance(data.get("draft"), dict)
+                    or data["draft"].get("company_id") != company_id):
+                QMessageBox.warning(
+                    dialog, "Draft unavailable",
+                    str(error or "This draft no longer belongs to this company.")
+                )
+                return
+            data["draft"]["_dossier_company_id"] = company_id
+            self.show_mail_draft_dialog(data["draft"])
+
+        self.bridge.call("crm-mail-draft", draft_id, callback=received)
+
     def open_compose_draft(self):
         row = self.crm_followup_table.currentRow()
         if row < 0 or row >= len(self.crm_followup_items):
@@ -11336,7 +11414,7 @@ class EnkyronWindow(QMainWindow):
             "EDIT DRAFT" if existing else "NEW DRAFT"
         ))
         prospect = QLabel(
-            "Opportunity: {}".format(draft.get("company_name_at_creation") or "Unknown")
+            "Company: {}".format(draft.get("company_name_at_creation") or "Unknown")
         )
         prospect.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(prospect)
@@ -11379,7 +11457,9 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_context = {
             "id": draft.get("id"),
             "revision": draft.get("revision"),
-            "opportunity_id": draft["opportunity_id"]
+            "opportunity_id": draft.get("opportunity_id"),
+            "company_id": draft.get("company_id"),
+            "dossier_company_id": draft.get("_dossier_company_id")
         }
         self.crm_draft_dialog = dialog
         dialog.open()
@@ -11408,7 +11488,9 @@ class EnkyronWindow(QMainWindow):
         else:
             command = "crm-mail-create"
             payload = {
-                "opportunity_id": context["opportunity_id"],
+                ("company_id" if context["company_id"] else "opportunity_id"):
+                    (context["company_id"] if context["company_id"]
+                     else context["opportunity_id"]),
                 "recipient_email": recipient,
                 "subject": subject,
                 "body_text": body
@@ -11424,10 +11506,16 @@ class EnkyronWindow(QMainWindow):
                                     error or "The local draft could not be saved.")
                 return
             dialog.accept()
-            self.crm_tabs.setCurrentIndex(3)
-            self.crm_mail_folders.setCurrentIndex(2)
-            self.crm_draft_search.clear()
-            self.load_mail_drafts()
+            if (context.get("dossier_company_id")
+                    and self.crm_dossier_dialog
+                    and self.crm_dossier_dialog.isVisible()
+                    and self.crm_dossier_company_id == context["dossier_company_id"]):
+                self.refresh_company_dossier()
+            else:
+                self.crm_tabs.setCurrentIndex(3)
+                self.crm_mail_folders.setCurrentIndex(2)
+                self.crm_draft_search.clear()
+                self.load_mail_drafts()
 
         self.bridge.call(command, payload=payload, callback=received)
 

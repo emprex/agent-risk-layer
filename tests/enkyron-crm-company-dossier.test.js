@@ -92,6 +92,10 @@ test('reads only explicitly linked records under repeatable-read snapshot',async
     assert.match(sql,/enkyron_crm_prospect_links/);
     assert.match(sql,/workspace_key/);
   }
+  for(const index of [6,8]){
+    assert.match(m.statements[index].sql,/company_id=[$]2 OR EXISTS/);
+    assert.match(m.statements[index].sql,/enkyron_crm_opportunities/);
+  }
 });
 test('reject invalid operator, bad ID, missing company, and malformed counts',async()=>{
   const m=mockDatabase();
@@ -139,7 +143,7 @@ test('messages display oldest to newest within the most recent twenty without hi
     query:async(sql)=>{
       if(sql.startsWith('SELECT id,name,legal_name'))
         return {rows:[{id:company,name:'Threat ResQ'}]};
-      if(sql.includes('JOIN enkyron_crm_activities a'))
+      if(sql.includes('FROM enkyron_crm_activities a'))
         return {rows:Array.from({length:21},(_,i)=>({
           id:'message-'+(21-i),
           detail:i===0?'Most recent LinkedIn reply':'Earlier operator note',
