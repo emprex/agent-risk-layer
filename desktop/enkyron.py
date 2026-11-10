@@ -3250,14 +3250,15 @@ class EnkyronWindow(QMainWindow):
         rationale.setObjectName("crmDossierCompanyReason")
         rationale.setMaximumHeight(90)
         rationale.setPlaceholderText(
-            "Why was this correction necessary? Which source was consulted? "
-            "20–1000 characters."
+            "Optional for routine CRM updates. Required for company or legal "
+            "name changes (20–1000 characters)."
         )
-        form.addRow("Correction rationale *", rationale)
+        form.addRow("Reason (if applicable)", rationale)
         layout.addLayout(form)
         confirmed = QCheckBox(
-            "I confirm this correction does not prove company identity."
+            "I confirm this name correction does not verify legal identity."
         )
+        confirmed.hide()
         layout.addWidget(confirmed)
         controls = QHBoxLayout()
         cancel = QPushButton("Back to dossier")
@@ -3291,15 +3292,29 @@ class EnkyronWindow(QMainWindow):
         def refresh_save(*_unused):
             note = rationale.toPlainText().strip()
             vals = [field.text() for field in inputs.values()]
+            changed = {
+                key for key, field in inputs.items()
+                if field.text() != initial[key]
+            }
+            name_change = bool({"name", "legal_name"} & changed)
+            confirmed.setVisible(name_change)
+            rationale.setPlaceholderText(
+                "Reason required for this name change (20–1000 characters)."
+                if name_change else
+                "Optional context for the change (20–1000 characters if given)."
+            )
+            reason_ok = (
+                20 <= len(note) <= 1000 if name_change else
+                (not note or 20 <= len(note) <= 1000)
+            )
             save.setEnabled(
                 not self.crm_dossier_company_pending and not state["failed"]
                 and inputs["name"].text().strip() != ""
-                and any(field.text() != initial[key]
-                        for key, field in inputs.items())
+                and bool(changed)
                 and all(not any(ord(char) < 32 or ord(char) == 127 for char in v)
                         for v in vals)
-                and 20 <= len(note) <= 1000
-                and confirmed.isChecked()
+                and reason_ok
+                and (not name_change or confirmed.isChecked())
             )
 
         def finish():
