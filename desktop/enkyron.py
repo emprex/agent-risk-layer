@@ -181,7 +181,7 @@ class DesktopBridge:
         else:
             process.setProgram("node")
             target = (OWNER_LOGIN_BRIDGE if action in (
-                "owner-login", "owner-session-status", "owner-logout",
+                "owner-setup-status", "owner-login", "owner-session-status", "owner-logout",
                 "owner-mail-status", "owner-mail-threads", "owner-mail-messages"
             ) else BRIDGE)
             args = [str(target), action]
@@ -1717,13 +1717,20 @@ class EnkyronWindow(QMainWindow):
                     "First, check and initialise your ONE CEO account on this "
                     "workstation. It then provides access to both Direction "
                     "and Support without any second mailbox login.\n\n"
-                    "Run from ~/agent-risk-layer:\n"
-                    "node scripts/enkyron-enroll-owner.mjs --check"
+                    "From ~/agent-risk-layer, first verify your local database:\n"
+                    "node scripts/enkyron-enroll-owner.mjs --check\n\n"
+                    "Then run the one-time private CEO setup:\n"
+                    "node scripts/enkyron-enroll-owner.mjs --enroll\n\n"
+                    "Restart ENKYRON after setup. Never paste your passphrase "
+                    "or authenticator secret into a chat."
                 ),
                 "pending": (
                     "Your CEO account exists but is PENDING activation. "
-                    "A pending account cannot sign in. "
-                    "Do not create another account or overwrite its secret."
+                    "A pending account cannot sign in. Do not enrol a second account.\n\n"
+                    "From ~/agent-risk-layer, activate your existing identity:\n"
+                    "node scripts/enkyron-enroll-owner.mjs --activate\n\n"
+                    "Restart ENKYRON afterwards. Your private password and "
+                    "fresh authenticator code are requested locally."
                 ),
                 "schema_missing": (
                     "Identity tables 108 / 109 are not installed. "
