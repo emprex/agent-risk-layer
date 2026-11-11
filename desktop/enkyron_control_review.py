@@ -258,7 +258,7 @@ class ControlReviewDialog(QDialog):
                     requirement.get("route"), "Requires manual classification"
                 )
                 proof_lines.append(
-                    "{}. {}\\n   HOW TO OBTAIN: {}\\n   STATUS: Not verified".format(
+                    "{}. {}\n   HOW TO OBTAIN: {}\n   STATUS: Not verified".format(
                         requirement.get("number", len(proof_lines) + 1),
                         requirement.get("requirement", ""),
                         route
