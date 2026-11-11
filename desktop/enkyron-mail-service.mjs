@@ -74,8 +74,23 @@ async function readerFor(pool,operator,mailbox){
   });
 }
 export async function mailThreads(pool,operator,mailbox){
+  // One inbox view across the two existing Resend accounts; no new mailboxes.
+  if(mailbox==='all'){
+    const pages=await Promise.all(
+      ['direction','support'].map(name=>mailThreads(pool,operator,name))
+    );
+    return {
+      mailbox:'all',
+      items:pages.flatMap(p=>p.items)
+        .sort((a,b)=>String(b.last_message_at||'')
+          .localeCompare(String(a.last_message_at||'')))
+        .slice(0,50),
+      has_more:pages.some(p=>p.has_more),
+    };
+  }
   const reader=await readerFor(pool,operator,mailbox);
-  return reader.listThreads({mailbox,limit:30});
+  const page=await reader.listThreads({mailbox,limit:30});
+  return {...page,items:page.items.map(item=>({...item,mailbox}))};
 }
 export async function mailMessages(pool,operator,mailbox,threadId){
   const reader=await readerFor(pool,operator,mailbox);
