@@ -556,7 +556,7 @@ class MailInboxView(QWidget):
         if (self.connection_state != 'connected' or mailbox != self.selected_mailbox
                 or folder != self.selected_folder):
             return False
-        if not isinstance(items, list) or len(items) > 50:
+        if not isinstance(items, list) or len(items) > (200 if self.local_mode else 50):
             return False
         self._clear_threads("No conversations in this folder.")
         self.items = list(items)
@@ -574,7 +574,12 @@ class MailInboxView(QWidget):
             subject = str(item.get("subject") or "(No subject)")[:300]
             date = _display_date(item.get("last_message_at"))
             unread = item.get("unread") is True
-            label = ("● " if unread else "") + subject + ("\n" + date if date else "")
+            label = ("● " if unread else "") + subject
+            if self.local_mode:
+                tags = str(item.get("labels") or "").strip()
+                if tags:
+                    label += "   [" + tags[:80] + "]"
+            label += ("\n" + date if date else "")
             entry = QListWidgetItem(label)
             entry.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
             entry.setToolTip(subject + ("\n" + date if date else ""))
@@ -605,7 +610,7 @@ class MailInboxView(QWidget):
             if query else "{} conversation(s)".format(total)
         )
         self.count.setText(
-            summary + (" · more on provider" if self._has_more else "")
+            summary + (" · more available" if self._has_more else "")
         )
         selected = self.thread_list.currentItem()
         if selected is not None and selected.isHidden():
@@ -614,7 +619,10 @@ class MailInboxView(QWidget):
             return
         if total == 0:
             title = {'inbox':'Inbox is empty', 'archive':'Archive is empty',
-                     'spam':'No spam', 'trash':'Trash is empty'}[self.selected_folder]
+                     'spam':'No spam', 'trash':'Trash is empty',
+                     'sent':'No sent mail', 'drafts':'No drafts'}.get(
+                         self.selected_folder, 'Folder is empty'
+                     )
             self._show_empty(title,
                 'No conversations in this folder.')
         elif visible == 0:
