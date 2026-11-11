@@ -43,6 +43,19 @@ def format_mail_messages(messages):
         body = str(item.get("text") or "")[:20000]
         if not body and item.get("html_only"):
             body = "[HTML-only message: safe text preview not available]"
+        if item.get("preview_truncated") is True:
+            body += ("\n\n[PREVIEW ONLY: full original text is stored in "
+                     "NEMORYTH. This pane shows at most 20,000 characters.]")
+        if item.get("archive_state") == "incomplete":
+            body += "\n\n[ARCHIVE INCOMPLETE: verify provider source.]"
+        try:
+            quarantined = int(item.get("attachment_count") or 0)
+        except (ValueError, TypeError):
+            quarantined = 0
+        if quarantined > 0:
+            body += ("\n\n[{} attachment reference(s) quarantined in "
+                     "NEMORYTH: file contents are NOT stored or approved "
+                     "for opening yet.]").format(quarantined)
         parts.append(header + "\n\n" + body)
     return ("\n\n" + ("─" * 30) + "\n\n").join(parts)
 
