@@ -1337,6 +1337,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.mail_inbox.localRecordRequested.connect(self.preview_mail_local_record)
         self.mail_inbox.localRecordOpenRequested.connect(self.open_mail_local_record)
+        self.mail_inbox.localRecordLinkRequested.connect(self.link_mail_local_record)
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
@@ -2260,6 +2261,15 @@ class EnkyronWindow(QMainWindow):
                         item.setToolTip(
                             "Resend event: {}. Delivery not confirmed.".format(event)
                         )
+            if not (error or not isinstance(data, dict) or not data.get("verified")):
+                self.mail_sent_items[row]["_delivery_event"] = event
+                status = ("✓ Delivered" if event == "delivered"
+                          else "× " + event.capitalize()
+                          if event in ("bounced", "failed", "suppressed", "complained")
+                          else "· " + event + " (not confirmed)")
+            else:
+                status = "? Delivery not verified"
+            self.mail_inbox.update_local_sent_delivery(row, status)
             self._verify_next_sent_mail()
 
         self.bridge.call("mail-provider-status", str(draft_id), callback=received)
@@ -2533,6 +2543,15 @@ class EnkyronWindow(QMainWindow):
             )
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
+    def link_mail_local_record(self, index):
+        """Keep existing human CRM association available from Sent context menu."""
+        if not isinstance(index, int) or not 0 <= index < len(self.mail_sent_items):
+            return
+        if index >= self.mail_sent_table.rowCount():
+            return
+        self.mail_sent_table.selectRow(index)
+        self.link_selected_sent_mail()
+
     def _detached_notice(self, label, window_getter):
         placeholder = QWidget()
         layout = QVBoxLayout(placeholder)
@@ -2642,7 +2661,11 @@ class EnkyronWindow(QMainWindow):
             return
         address = str(item.get("recipient_email") or "Not set")[:254]
         if kind == "sent":
-            note = ("Submitted to Resend — delivery not confirmed"
+            delivered_event = item.get("_delivery_event")
+            note = ("Delivered — confirmed by Resend" if delivered_event == "delivered"
+                    else "Resend event: " + str(delivered_event)
+                    if delivered_event in ("bounced", "failed", "suppressed", "complained")
+                    else "Submitted to Resend — delivery not confirmed"
                     if item.get("outcome") == "accepted"
                     else "Submission uncertain — verify before resending")
         else:
