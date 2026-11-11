@@ -718,7 +718,8 @@ class MailInboxView(QWidget):
         # Automatic Inbox updates must not discard the selected conversation
         # or any unsent inline reply currently being typed by the operator.
         live = bool(preserve_reader and self.local_mode and folder == "inbox"
-                    and page == 0 and not self.search.text().strip()
+                    and page == 0 and self._local_page == 0
+                    and not self.search.text().strip()
                     and not self._local_search_query)
         if preserve_reader and not live:
             return False
