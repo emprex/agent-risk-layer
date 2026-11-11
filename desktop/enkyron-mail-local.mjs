@@ -67,6 +67,7 @@ export async function createLocalMailFolder(pool,actor,input){
   });
 }
 // Existing NEMORYTH folder keys are stable; renaming changes only the title.
+// Schema 112 cannot audit rename/delete events without migration.
 export async function renameLocalMailFolder(pool,actor,input){
   const key=scope(actor),folder=requireFolderKey(input?.folder);
   if(SYSTEM.includes(folder))throw Error('System Mail folders cannot be renamed');
@@ -84,8 +85,6 @@ export async function renameLocalMailFolder(pool,actor,input){
       'UPDATE enkyron_mail_local_folders SET name=$3 '+
       'WHERE workspace_key=$1 AND folder_key=$2',[key,folder,name]
     );
-    await audit(client,key,actor,'folder_renamed',
-      {folder_key:folder,from:before.name,to:name});
     return {key:folder,name,changed:true};
   });
 }
@@ -110,7 +109,6 @@ export async function deleteEmptyLocalMailFolder(pool,actor,input){
       'DELETE FROM enkyron_mail_local_folders '+
       'WHERE workspace_key=$1 AND folder_key=$2',[key,folder]
     );
-    await audit(client,key,actor,'folder_deleted',{folder_key:folder});
     return {deleted:true,folder,mail_unchanged:true};
   });
 }
@@ -425,7 +423,8 @@ export async function moveLocalThread(pool,actor,input){
   });
 }
 // Read/unread state belongs to NEMORYTH, not to the mail provider.
-// Only a local operator action changes it; each change is immutably audited.
+// Schema 112 has no matching audit event_kind: never forge one. This remains
+// a documented audit gap until an explicitly approved additive migration.
 export async function setLocalThreadRead(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   if(typeof input.unread!=='boolean')throw Error('Invalid local Mail unread state');
@@ -445,9 +444,6 @@ export async function setLocalThreadRead(pool,actor,input){
       if(!found)throw Error('Mail thread not found');
       return {unread:found.unread,changed:false};
     }
-    await audit(client,key,actor,
-      input.unread?'thread_marked_unread':'thread_marked_read',
-      {},mailbox,thread);
     return {unread:input.unread,changed:true,provider_unchanged:true};
   });
 }
