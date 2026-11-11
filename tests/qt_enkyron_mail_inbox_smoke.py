@@ -75,6 +75,78 @@ class MailNativeUXSmoke(unittest.TestCase):
             finally:
                 self._dispose(window)
 
+    def test_engine_reads_current_snapshot_without_master_document(self):
+        calls = []
+        project = "prj_fixture_2"
+        assessment = "asm_fixture_2"
+        snapshot = "sys_fixture_2"
+        sha = "a" * 40
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command == "assessment-context" and callback:
+                callback({"available":True, "target_kind":"git",
+                          "target_reference":"/home/test/frozen-agent", "target_sha":sha,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot}, None)
+            elif command == "operator-state" and callback:
+                self.assertEqual(payload["snapshot_id"],snapshot)
+                callback({"available":True,"project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot,"target_sha":sha,
+                          "environment":"not_recorded","evidence_state":"not_inspected",
+                          "control_outcomes":"not_inspected",
+                          "security_verdict":"not_assessed",
+                          "readiness_decision":"not_evaluated",
+                          "notice":"Read-only canonical inspection."},None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={"target_kind":"git","linked_project_id":project,
+                                       "linked_assessment_id":assessment}
+                window.inspect_engine()
+                self.assertIn("CANONICAL ARL ASSESSMENT",window.engine_view.toPlainText())
+                self.assertIn("Master Dossier",window.engine_view.toPlainText())
+                self.assertEqual(calls.count("assessment-context"),1)
+                self.assertEqual(calls.count("operator-state"),1)
+                self.assertNotIn("master",calls)
+            finally:
+                self._dispose(window)
+
+    def test_evidence_plan_reads_current_snapshot_without_master_document(self):
+        calls=[]
+        project,assessment,snapshot="prj_2","asm_2","sys_2"
+        ticket="3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command=="assessment-context" and callback:
+                callback({"available":True,"target_kind":"git",
+                          "target_reference":"/home/test/frozen-agent","target_sha":"b"*40,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot},None)
+            elif command=="evidence-summary" and callback:
+                self.assertEqual(payload["snapshot_id"],snapshot)
+                callback({"available":True,"kind":"summary","assessment_controls":108,
+                          "other_workflow_controls":0,"criterion_count":0,
+                          "counts":{"staticCandidates":0,"staticMissing":0,
+                                    "humanRequirements":0,"runtimeRequirements":0,
+                                    "sourceLineageIssues":0},
+                          "packs":[]},None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={"target_kind":"git","linked_project_id":project,
+                                       "linked_assessment_id":assessment}
+                window.inspect_evidence()
+                self.assertIn("ARL CONTROL REGISTER: 108",
+                              window.evidence_summary.toPlainText())
+                self.assertIn("assessment-context",calls)
+                self.assertIn("evidence-summary",calls)
+                self.assertNotIn("master",calls)
+            finally:
+                self._dispose(window)
+
     def test_sent_mail_not_listed_as_active_draft(self):
         """Mail Drafts uses SQL-filtered unsent records; CRM history is separate."""
         previous = DesktopBridge.call
