@@ -141,6 +141,10 @@ class MailNativeUXSmoke(unittest.TestCase):
                 window.inspect_evidence()
                 self.assertIn("ARL CONTROL REGISTER: 108",
                               window.evidence_summary.toPlainText())
+                self.assertGreaterEqual(window.evidence_summary.minimumHeight(), 270)
+                self.assertLessEqual(window.evidence_packs.maximumHeight(), 72)
+                self.assertIn("No evidence request packs",
+                              window.evidence_details.toPlainText())
                 self.assertIn("assessment-context",calls)
                 self.assertIn("evidence-summary",calls)
                 self.assertNotIn("master",calls)
