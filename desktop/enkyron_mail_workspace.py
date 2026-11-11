@@ -57,6 +57,7 @@ class MailInboxView(QWidget):
     threadRequested = Signal(str, str)
     threadOpenRequested = Signal(str, str)
     draftsRequested = Signal()
+    sentRequested = Signal()
     deskRequested = Signal()
     newEmailRequested = Signal()
     localMoveRequested = Signal(str, str, str)
@@ -356,6 +357,9 @@ class MailInboxView(QWidget):
         folder = item.data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(folder, str) or folder == self._folder:
             return
+        if folder in ('sent', 'drafts'):
+            (self.sentRequested if folder == 'sent' else self.draftsRequested).emit()
+            return
         self._folder = folder
         self._clear_threads("No saved messages in this folder.")
         if self.selected_mailbox is not None:
@@ -508,11 +512,13 @@ class MailInboxView(QWidget):
         if item is None or self.connection_state != 'connected':
             return
         details = item.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(details, tuple) or details[0] not in self._filing_mailboxes:
+        if not isinstance(details, tuple) or len(details) != 2:
             return
         self.thread_list.setCurrentItem(item)
         if self.local_mode:
             self._local_context_menu(item, pos)
+            return
+        if details[0] not in self._filing_mailboxes:
             return
         menu = QMenu(self)
         current = self.selected_folder
