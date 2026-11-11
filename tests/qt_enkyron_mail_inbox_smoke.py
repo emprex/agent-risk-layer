@@ -180,7 +180,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(ui.selected_folder, "sent")
             self.assertTrue(ui.show_local_records("sent", [
                 {"mailbox_key": "direction", "recipient_email": "buyer@example.invalid",
-                 "subject": "Proposal", "outcome": "accepted"}
+                 "subject": "Proposal", "outcome": "accepted",
+                 "draft_id": "11111111-1111-4111-8111-111111111111"}
             ]))
             self.assertEqual(ui.thread_list.count(), 1)
             self.assertTrue(ui.update_local_sent_delivery(0, "✓ Delivered"))
