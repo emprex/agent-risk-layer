@@ -70,6 +70,9 @@ function safeControlItem(item){
   if(!CONTROL.test(item?.controlId||'') || !VALID_STAGE.has(item?.currentStage))
     refused('unexpected canonical control identity or workflow stage');
   return {control_id:item.controlId,stage:item.currentStage,
+    title:String(item.controlTitle||item.controlId).slice(0,220),
+    category:String(item.category||'').slice(0,100),
+    suggested_by_arl:item.suggested?.level==='suggested',
     chain_status:String(item.chainStatus||'unknown').slice(0,100),
     next_action:String(item.nextAction||'').slice(0,500)};
 }
