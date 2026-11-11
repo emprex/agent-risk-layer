@@ -381,6 +381,17 @@ Les comptes de l'entreprise utilisatrice sont **des personnes**, pas des identit
 
 **Done si:** Un vrai email autorisé apparaît dans ENKYRON une seule fois, au bon client, sans exécuter d'instructions de contenu.
 
+### ENKYRON Mail — reprise locale du 11 novembre 2026
+
+**État : IN-PROGRESS, non accepté sur Debian.** Ce point de reprise complète les critères E04/E06; il ne remplace pas la roadmap et ne vaut pas validation de production.
+
+- **Architecture inchangée :** ENKYRON (Qt natif) → pont Node local → NEMORYTH (PostgreSQL `arl_local`). Resend transporte les emails; la base conserve et organise les copies. KYRTHOS et EIRYON n'obtiennent aucun droit implicite depuis le contenu des emails.
+- **Développement GitHub PR #562 :** pagination des conversations/messages, insertion idempotente PostgreSQL, reprise après coupure, dossiers personnels, labels, recherche locale sur messages enregistrés, drapeaux de suivi, lu/non lu, renommage de dossier et suppression uniquement si vide. Une erreur de lecture Resend laisse le dossier à reprendre; pas de fausse confirmation de synchronisation.
+- **Tests :** scénarios PostgreSQL synthétiques, incluant 65 conversations/messages, interruption, rejeu, recherche, séparation des comptes, drapeaux, dossiers et absence de mutation Resend. Le passage en CI n'est pas une recette opérateur Debian.
+- **Limite du schéma 112 :** `body_text` est borné à 20 000 caractères; les pièces jointes et le HTML intégral ne sont pas conservés ici. Ne jamais annoncer un archivage complet avec ces limites. Les types d'événements du journal sont limités par une contrainte SQL : les nouveaux changements de statut lu/non lu et renommage/suppression de dossier ne sont **pas encore audités**. Ne pas forger d'anciens types d'événements. Les nouvelles traces demandent une migration additive explicitement approuvée.
+- **Critères ouverts :** sauvegarde intégrale sécurisée des messages/pièces jointes, récupération/affichage fiable des très longues conversations, dossiers/labels avancés, signatures, Reply All/Forward, intégration CRM/tickets contrôlée, tests sécurité des fichiers entrants, sauvegarde/restauration, droits multi-utilisateurs et recette sur Debian 13.
+- **Déploiement :** ne fusionner aucune PR empilée, ne pas appliquer la migration 112 automatiquement et ne pas modifier les vraies boîtes pour vérifier le code. Confronter les SHAs et les schémas locaux avant la première recette.
+
 ### Bloc 05 — Site web — réception des demandes
 
 **Objectif:** Recevoir les demandes du site sans exposer PostgreSQL ni le moteur ARL.
