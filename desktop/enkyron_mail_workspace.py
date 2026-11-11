@@ -65,6 +65,7 @@ class MailInboxView(QWidget):
     localCreateLabelRequested = Signal(str)
     localAssignLabelRequested = Signal(str, str, str, bool)
     localFlagRequested = Signal(str, str, bool)
+    localReadRequested = Signal(str, str, bool)
     localSearchRequested = Signal(str)
     localPageRequested = Signal(int)
     localRecordRequested = Signal(str, int)
@@ -474,6 +475,12 @@ class MailInboxView(QWidget):
         entry_index = self.thread_list.row(item)
         entry = self.items[entry_index] if 0 <= entry_index < len(self.items) else {}
         flagged = bool(isinstance(entry, dict) and entry.get("flagged") is True)
+        unread = bool(isinstance(entry, dict) and entry.get("unread") is True)
+        read_action = menu.addAction("Mark as read" if unread else "Mark as unread")
+        read_action.triggered.connect(
+            lambda _checked=False: self.localReadRequested.emit(
+                mailbox, thread_id, not unread))
+        menu.addSeparator()
         action = menu.addAction("Remove follow-up flag" if flagged else "Flag for follow-up")
         action.triggered.connect(
             lambda _checked=False: self.localFlagRequested.emit(
