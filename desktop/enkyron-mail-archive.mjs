@@ -71,7 +71,8 @@ export async function archiveNextMailBatch(pool,actor,input={},{
         throw Error('Provider archive message identity mismatch');
       const fullText=boundedText(detail.text);
       const fullHtml=boundedText(detail.html);
-      const state=detail.text===undefined&&detail.html===undefined
+      const state=(detail.text===undefined&&detail.html===undefined)
+          ||detail.attachments_known===false
         ?'incomplete':'complete';
       const list=Array.isArray(detail.attachments)?detail.attachments:[];
       if(list.length>100)throw Error('Archive attachment count exceeded');
