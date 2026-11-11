@@ -364,3 +364,32 @@ test('saved-mail search finds cached bodies, recipients and labels across folder
     }),/not found/);
   }finally{await pool.end();}
 });
+
+
+test('oversized received bodies are never stored as complete in schema 112',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-body-limit-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID();
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,subject) VALUES($1,$2,$3,$4)',
+      [scope,'direction',thread,'Large synthetic body']
+    );
+    await assert.rejects(fetchAndCacheThread(pool,owner,{
+      mailbox:'direction',thread_id:thread
+    },{listMessages:async()=>({
+      items:[{id:crypto.randomUUID(),from:'client@example.invalid',
+        to:['owner@example.invalid'],subject:'Large synthetic body',
+        text:'X'.repeat(20001),created_at:'2026-11-11T10:00:00Z'}],
+      has_more:false
+    })}),/exceeds local schema limit/);
+    const rows=(await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_local_messages '+
+      'WHERE workspace_key=$1',[scope]
+    )).rows;
+    assert.equal(rows[0].n,0);
+  }finally{await pool.end();}
+});
