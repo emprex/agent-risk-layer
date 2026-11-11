@@ -31,7 +31,7 @@ import {readPersonalProfile,recordPersonalProfile,validatePersonalProfile} from 
 import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
 import {explainLocalError} from './enkyron-db-errors.mjs';
 import {explainMailOperationError} from './enkyron-mail-errors.mjs';
-import {localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
+import {localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
   createLocalLabel,labelLocalThread,flagLocalThread,setLocalThreadRead} from './enkyron-mail-local.mjs';
 import {calendarList,calendarCreate,calendarCreateTask,calendarCompleteTask}
@@ -428,6 +428,8 @@ async function main() {
       command === 'mail-threads' ? await mailThreads(pool,os.userInfo().username,payload?.mailbox,payload?.folder??'inbox') :
       command === 'mail-local-folders' ? await localMailFolders(pool,os.userInfo().username) :
       command === 'mail-local-folder-create' ? await createLocalMailFolder(pool,os.userInfo().username,payload) :
+      command === 'mail-local-folder-rename' ? await renameLocalMailFolder(pool,os.userInfo().username,payload) :
+      command === 'mail-local-folder-delete' ? await deleteEmptyLocalMailFolder(pool,os.userInfo().username,payload) :
       command === 'mail-local-list' ? await localMailList(pool,os.userInfo().username,payload) :
       command === 'mail-local-sync' ? await syncMailHeaders(pool,os.userInfo().username,payload) :
       command === 'mail-local-sync-bodies' ? await syncLocalMailBodies(pool,os.userInfo().username,payload) :
@@ -477,7 +479,7 @@ main().catch(error => {
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|CRM )/.test(message);
   const operation=process.argv[2];
   const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
-  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-sync-bodies','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','mail-local-flag','mail-local-read','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
+  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-folder-rename','mail-local-folder-delete','mail-local-list','mail-local-sync','mail-local-sync-bodies','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','mail-local-flag','mail-local-read','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
   emit({ ok: false, error: profileOperation
     ? explainLocalError(error)
     : mailOperation ? explainMailOperationError(error)
