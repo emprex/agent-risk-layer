@@ -30,6 +30,7 @@ if __package__:
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
     from .enkyron_calendar_view import MailCalendarView
+    from .enkyron_control_review import ControlReviewDialog
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -39,6 +40,7 @@ else:
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
     from enkyron_calendar_view import MailCalendarView
+    from enkyron_control_review import ControlReviewDialog
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -291,6 +293,7 @@ class EnkyronWindow(QMainWindow):
         self.current_id = None
         self.current_ticket = None
         self.assessment_link_dialog = None
+        self.control_review_dialog = None
         self.list_seq = 0
         self.evidence_seq = 0
         self.evidence_context = None
@@ -755,7 +758,15 @@ class EnkyronWindow(QMainWindow):
         self.evidence_button.setObjectName("primary")
         self.evidence_button.setEnabled(False)
         self.evidence_button.clicked.connect(self.inspect_evidence)
-        evidence_l.addWidget(self.evidence_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        work_actions = QHBoxLayout()
+        self.control_review_button = QPushButton("Review applicability · 108 controls…")
+        self.control_review_button.setObjectName("primary")
+        self.control_review_button.setEnabled(False)
+        self.control_review_button.clicked.connect(self.open_control_review)
+        work_actions.addWidget(self.control_review_button)
+        work_actions.addWidget(self.evidence_button)
+        work_actions.addStretch()
+        evidence_l.addLayout(work_actions)
         self.evidence_summary = make_text_area()
         self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
         self.evidence_summary.setMinimumHeight(270)
@@ -15669,6 +15680,9 @@ class EnkyronWindow(QMainWindow):
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
         self.engine_button.setEnabled(False)
+        self.control_review_button.setEnabled(False)
+        if self.control_review_dialog is not None and self.control_review_dialog.isVisible():
+            self.control_review_dialog.reject()
         self.evidence_seq += 1
         self.evidence_context = None
         self.evidence_page = 0
@@ -15822,6 +15836,11 @@ class EnkyronWindow(QMainWindow):
                 and bool(ticket.get("linked_assessment_id"))
             )
             self.evidence_button.setEnabled(self.engine_button.isEnabled())
+            self.control_review_button.setEnabled(
+                self.engine_button.isEnabled()
+                and not ticket.get("archived_at")
+                and ticket.get("status") != "closed"
+            )
             self.record_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
@@ -15942,6 +15961,29 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("operator-state", payload=request, callback=state_loaded)
 
         self.bridge.call("assessment-context", ticket_id, callback=context_loaded)
+
+    def open_control_review(self):
+        """Open the authoritative human applicability workflow for this ticket."""
+        ticket = self.current_ticket
+        ticket_id = self.current_id
+        if (not ticket_id or not ticket or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or ticket.get("archived_at") or ticket.get("status") == "closed"):
+            return
+        existing = self.control_review_dialog
+        if existing is not None and existing.isVisible():
+            if existing.ticket_id == ticket_id:
+                existing.raise_()
+                existing.activateWindow()
+                return
+            existing.reject()
+        dialog = ControlReviewDialog(
+            self, self.bridge, ticket_id, on_recorded=self.inspect_evidence
+        )
+        self.control_review_dialog = dialog
+        dialog.show()
+        dialog.load_queue()
 
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
