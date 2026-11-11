@@ -90,6 +90,7 @@ export async function listCompanies(pool, search, actor) {
               source_type,record_version,created_at,updated_at
        FROM enkyron_crm_companies
        WHERE workspace_key=$1 AND
+        ($2<>'' OR relationship_state<>'inactive') AND
         ($2='' OR POSITION(LOWER($2) IN LOWER(name))>0
                OR POSITION(LOWER($2) IN LOWER(COALESCE(legal_name,'')))>0)
        ORDER BY created_at ASC,id ASC LIMIT 101`,
