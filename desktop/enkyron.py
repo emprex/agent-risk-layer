@@ -1310,6 +1310,14 @@ class EnkyronWindow(QMainWindow):
         sent_layout.addWidget(sent_note)
         sent_actions = QHBoxLayout()
         sent_actions.addStretch()
+        self.mail_sent_view_button = QPushButton("View message")
+        self.mail_sent_view_button.setEnabled(False)
+        self.mail_sent_view_button.clicked.connect(self.view_selected_sent_mail)
+        sent_actions.addWidget(self.mail_sent_view_button)
+        self.mail_sent_check_button = QPushButton("Check Resend status")
+        self.mail_sent_check_button.setEnabled(False)
+        self.mail_sent_check_button.clicked.connect(self.check_selected_mail_status)
+        sent_actions.addWidget(self.mail_sent_check_button)
         self.mail_sent_link_button = QPushButton("Link selected email to CRM…")
         self.mail_sent_link_button.setEnabled(False)
         self.mail_sent_link_button.clicked.connect(self.link_selected_sent_mail)
@@ -1788,6 +1796,8 @@ class EnkyronWindow(QMainWindow):
         def received(data,error):
             self.mail_sent_items = []
             self.mail_sent_link_button.setEnabled(False)
+            self.mail_sent_check_button.setEnabled(False)
+            self.mail_sent_view_button.setEnabled(False)
             self.mail_sent_table.setRowCount(0)
             if error or not data or not data.get("available"):
                 self.mail_sent_status.setText(
@@ -1821,6 +1831,64 @@ class EnkyronWindow(QMainWindow):
             bool(selected.get("draft_id"))
             and not selected.get("company_id")
         )
+        self.mail_sent_view_button.setEnabled(bool(selected.get("draft_id")))
+        self.mail_sent_check_button.setEnabled(bool(selected.get("draft_id")))
+
+    def view_selected_sent_mail(self):
+        row = self.mail_sent_table.currentRow()
+        if not 0 <= row < len(self.mail_sent_items):
+            return
+        sent = self.mail_sent_items[row]
+        if not sent.get("draft_id"):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            self.crm_draft_dialog.activateWindow()
+            return
+
+        def received(data, error):
+            if error or not isinstance(data, dict) or not isinstance(
+                    data.get("draft"), dict):
+                QMessageBox.warning(self, "Email unavailable",
+                    str(error or "Cannot read the submitted email."))
+                return
+            self.show_mail_draft_dialog(data["draft"])
+
+        self.bridge.call("crm-mail-draft", sent["draft_id"], callback=received)
+
+    def check_selected_mail_status(self):
+        row = self.mail_sent_table.currentRow()
+        if not 0 <= row < len(self.mail_sent_items):
+            return
+        sent = self.mail_sent_items[row]
+        draft_id = sent.get("draft_id")
+        if not draft_id:
+            return
+        self.mail_sent_check_button.setEnabled(False)
+
+        def received(data, error):
+            self.sent_mail_selected()
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Resend lookup unavailable",
+                    str(error or "Provider lookup failed. Do not resend."))
+                return
+            if not data.get("verified"):
+                QMessageBox.information(self, "Delivery still unverified",
+                    str(data.get("notice") or "Resend could not verify this message."))
+                return
+            event = data.get("last_event") or "unknown"
+            note = (
+                "Resend reports the message reached the recipient mail server."
+                if event == "delivered" else
+                "Resend reports the message was opened; this is a tracking event."
+                if event == "opened" else
+                "Resend reports: " + str(event) + ". Delivery is not established."
+            )
+            QMessageBox.information(self, "Resend provider status",
+                "Last provider event: {}\n\n{}\n\nNo email was sent by this check."
+                .format(event, note))
+
+        self.bridge.call("mail-provider-status", str(draft_id), callback=received)
 
     def link_selected_sent_mail(self):
         row = self.mail_sent_table.currentRow()
