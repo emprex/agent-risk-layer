@@ -217,6 +217,12 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertIsNotNone(window.calendar_detached_window)
             self.assertIs(window.mail_detached_window.centralWidget(), mail_widget)
             self.assertIs(window.calendar_detached_window.centralWidget(), calendar_widget)
+            self.app.processEvents()
+            # Regression: the detached windows previously showed a blank page.
+            self.assertTrue(mail_widget.isVisible())
+            self.assertTrue(calendar_widget.isVisible())
+            self.assertTrue(mail_widget.findChild(MailInboxView).isVisible())
+            self.assertTrue(calendar_widget.calendar.isVisible())
             self.assertIsNone(window.mail_detached_window.parent())
             self.assertIsNone(window.calendar_detached_window.parent())
             self.assertTrue(window.mail_detached_window.isVisible())
