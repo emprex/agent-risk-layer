@@ -179,7 +179,7 @@ test('approved first revision uses a single locked transaction and existing bigi
       snapshot_id:snapshot,target_sha:frozen
     },'emprex',deps),error=>{
       assert.match(error.message,
-        /Master initialization: Master revision INSERT failed: check constraint conflict \\[SQLSTATE 23514\\]/);
+        /Master initialization: Master revision INSERT failed: check constraint conflict \[SQLSTATE 23514\]/);
       assert.doesNotMatch(error.message,/SECRET DATABASE DETAILS/);
       return true;
     });
