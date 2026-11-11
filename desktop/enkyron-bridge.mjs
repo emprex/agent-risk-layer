@@ -33,7 +33,7 @@ import {explainLocalError} from './enkyron-db-errors.mjs';
 import {explainMailOperationError} from './enkyron-mail-errors.mjs';
 import {localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
-  createLocalLabel,labelLocalThread} from './enkyron-mail-local.mjs';
+  createLocalLabel,labelLocalThread,flagLocalThread} from './enkyron-mail-local.mjs';
 import {calendarList,calendarCreate,calendarCreateTask,calendarCompleteTask}
   from './enkyron-calendar.mjs';
 import {readBuyerReview,recordBuyerReview,validateBuyerReview} from './enkyron-crm-buyer-review.mjs';
@@ -437,6 +437,7 @@ async function main() {
       command === 'mail-local-labels' ? await localMailLabels(pool,os.userInfo().username) :
       command === 'mail-local-label-create' ? await createLocalLabel(pool,os.userInfo().username,payload) :
       command === 'mail-local-label-assign' ? await labelLocalThread(pool,os.userInfo().username,payload) :
+      command === 'mail-local-flag' ? await flagLocalThread(pool,os.userInfo().username,payload) :
       command === 'calendar-list' ? await calendarList(pool,os.userInfo().username,payload) :
       command === 'calendar-create' ? await calendarCreate(pool,os.userInfo().username,payload) :
       command === 'calendar-task-create' ? await calendarCreateTask(pool,os.userInfo().username,payload) :
