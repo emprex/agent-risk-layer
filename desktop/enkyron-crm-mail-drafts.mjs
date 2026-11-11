@@ -73,8 +73,9 @@ export async function listMailDrafts(pool,search,actor){
     const result=await pool.query(
       'SELECT d.id,d.opportunity_id,d.company_id,d.mailbox_key,d.recipient_email,d.subject,d.revision,'
       +'d.updated_at,COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
-      +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
-      +'s.sent_at AS external_sent_at '
+      +'CASE WHEN a.id IS NOT NULL THEN \'provider_submitted\' '
+      +'WHEN s.id IS NOT NULL THEN \'external_send_reported\' ELSE \'draft\' END AS mail_state, '
+      +'s.sent_at AS external_sent_at,a.outcome AS provider_outcome '
       +'FROM enkyron_crm_mail_drafts d '
       +'LEFT JOIN enkyron_crm_opportunities o '
       +'ON o.id=d.opportunity_id AND o.workspace_key=d.workspace_key '
@@ -82,6 +83,8 @@ export async function listMailDrafts(pool,search,actor){
       +'ON c.id=d.company_id AND c.workspace_key=d.workspace_key '
       +'LEFT JOIN enkyron_crm_mail_manual_sends s '
       +'ON s.draft_id=d.id AND s.workspace_key=d.workspace_key '
+      +'LEFT JOIN enkyron_mail_send_attempts a '
+      +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
@@ -105,7 +108,9 @@ export async function readMailDraft(pool,id,actor){
       'SELECT d.id,d.opportunity_id,d.company_id,d.mailbox_key,d.recipient_email,d.subject,d.body_text,'
       +'d.revision,d.updated_at,'
       +'COALESCE(c.name,o.company_name_at_creation) AS company_name_at_creation, '
-      +'CASE WHEN s.id IS NULL THEN \'draft\' ELSE \'external_send_reported\' END AS mail_state, '
+      +'CASE WHEN a.id IS NOT NULL THEN \'provider_submitted\' '
+      +'WHEN s.id IS NOT NULL THEN \'external_send_reported\' ELSE \'draft\' END AS mail_state, '
+      +'a.outcome AS provider_outcome,a.provider_message_id, '
       +'s.provider AS manual_send_provider,s.provider_message_id AS manual_message_id, '
       +'s.sender_email AS manual_sender_email,s.sent_at AS external_sent_at, '
       +'s.draft_revision AS sent_draft_revision '
@@ -116,6 +121,8 @@ export async function readMailDraft(pool,id,actor){
       +'ON c.workspace_key=d.workspace_key AND c.id=d.company_id '
       +'LEFT JOIN enkyron_crm_mail_manual_sends s '
       +'ON s.draft_id=d.id AND s.workspace_key=d.workspace_key '
+      +'LEFT JOIN enkyron_mail_send_attempts a '
+      +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 AND d.id=$2',
       [owner.key,id]
     )).rows[0];
