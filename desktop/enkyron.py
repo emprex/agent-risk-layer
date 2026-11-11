@@ -1291,16 +1291,21 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
         self.mail_inbox = MailInboxView()
+        self.mail_inbox.set_local_mode()
+        self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
+        self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
+        self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
+        self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
         self.mail_inbox.draftsRequested.connect(
             lambda: self.crm_mail_folders.setCurrentIndex(2)
         )
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
-        self.mail_inbox.refreshRequested.connect(self.refresh_mail)
-        self.mail_inbox.mailboxChanged.connect(self.refresh_mail)
+        self.mail_inbox.refreshRequested.connect(self.sync_local_mail)
+        self.mail_inbox.mailboxChanged.connect(self.load_local_mail)
         self.mail_inbox.folderChanged.connect(
-            lambda _folder: self.refresh_mail(self.mail_inbox.selected_mailbox)
+            lambda _folder: self.load_local_mail(self.mail_inbox.selected_mailbox)
         )
         self.mail_inbox.threadMoveRequested.connect(self.file_mail_thread)
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
@@ -1755,11 +1760,122 @@ class EnkyronWindow(QMainWindow):
             else:
                 msg = "Email configured · Direction and Support"
             self.crm_mail_connection.setText(msg)
-            if self.mail_provider_ready and permitted:
-                self.refresh_mail(self.mail_inbox.selected_mailbox)
-            else:
-                self.mail_inbox.set_connection_state("disconnected", msg)
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
         self.bridge.call("mail-status", callback=received)
+
+    def load_local_mail_metadata(self):
+        def folders(data, error):
+            if not error and isinstance(data, dict):
+                self.mail_inbox.set_local_folders(data.get("folders") or [])
+        def labels(data, error):
+            if not error and isinstance(data, dict):
+                self.mail_inbox.set_local_labels(data.get("labels") or [])
+        self.bridge.call("mail-local-folders", callback=folders)
+        self.bridge.call("mail-local-labels", callback=labels)
+
+    def load_local_mail(self, mailbox=None):
+        if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
+            return
+        mailbox = mailbox or self.mail_inbox.selected_mailbox or "all"
+        if mailbox not in ("all", "direction", "support"):
+            return
+        folder = self.mail_inbox.selected_folder
+        if folder in ("sent", "drafts"):
+            self.crm_mail_folders.setCurrentIndex(1 if folder=="sent" else 2)
+            return
+        self.mail_inbox.set_connection_state("connected")
+        self.mail_inbox.search.setEnabled(True)
+        self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
+        self.mail_inbox.connection_label.setVisible(False)
+        self.mail_inbox._clear_threads("Loading saved mail…")
+        def received(data, error):
+            if (self.mail_inbox.selected_mailbox not in (None, mailbox)
+                    or folder != self.mail_inbox.selected_folder):
+                return
+            if error or not isinstance(data, dict):
+                self.mail_inbox._show_empty(
+                    "Local mail unavailable",
+                    "Apply the local Mail database update (schema 112)."
+                )
+                return
+            self.mail_inbox.show_threads(mailbox,
+                data.get("items") or [], bool(data.get("has_more")), folder)
+        self.bridge.call("mail-local-list",
+            payload={"mailbox":mailbox, "folder":folder}, callback=received)
+
+    def sync_local_mail(self, mailbox=None):
+        if not self.mail_provider_ready:
+            self.mail_inbox.connection_label.setText(
+                "Resend unavailable. Cached ENKYRON messages remain accessible."
+            )
+            self.mail_inbox.connection_label.setVisible(True)
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            return
+        chosen = mailbox if mailbox in ("all","direction","support") else "all"
+        self.mail_inbox.refresh_button.setEnabled(False)
+        self.mail_inbox.connection_label.setText(
+            "Receiving new message headers from Resend…"
+        )
+        self.mail_inbox.connection_label.setVisible(True)
+        def received(data, error):
+            self.mail_inbox.refresh_button.setEnabled(True)
+            if error or not isinstance(data, dict) or not data.get("synced"):
+                self.mail_inbox.connection_label.setText(
+                    "Receiving failed. Saved local mail is still available."
+                )
+            elif data.get("partial"):
+                self.mail_inbox.connection_label.setText(
+                    "Some provider folders could not be synchronized. "
+                    "Saved local mail was preserved."
+                )
+            else:
+                self.mail_inbox.connection_label.setVisible(False)
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-sync",
+            payload={"mailbox":chosen}, callback=received)
+
+    def create_local_folder(self, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail folders",
+                    "Could not create local folder. Check name and database.")
+                return
+            self.load_local_mail_metadata()
+        self.bridge.call("mail-local-folder-create",
+            payload={"name":name},callback=received)
+
+    def move_local_mail(self, mailbox, thread_id, folder):
+        # Local-only operation; never changes the Resend Inbox or sends an email.
+        def received(data, error):
+            if error or not isinstance(data, dict) or not data.get("moved"):
+                QMessageBox.warning(self, "Mail folders",
+                    "Could not move message locally. No provider changes.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-move",
+            payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
+            callback=received)
+
+    def create_local_label(self, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail labels", "Could not create label.")
+                return
+            self.load_local_mail_metadata()
+        self.bridge.call("mail-local-label-create",
+            payload={"name":name},callback=received)
+
+    def assign_local_label(self, mailbox, thread_id, label, applied):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail labels", "Could not update label.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-label-assign",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "label_id":label,"applied":applied},callback=received)
 
     def refresh_mail(self, mailbox):
         """Read selected Resend Inbox under the local DB mailbox permission."""
