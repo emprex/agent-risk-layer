@@ -68,6 +68,22 @@ export function existingEvidenceWorkplan({
      summary.packs.length>150)
     throw new Error('Incomplete or malformed canonical evidence request inventory.');
 
+  const laneNames=[
+    'human_applicability','test_planning','evidence_collection',
+    'human_decision','follow_up_blocked','review_required'
+  ];
+  const rawLanes=summary.queueLanes;
+  let queueLanes=null;
+  if(rawLanes !== undefined) {
+    if(!rawLanes || typeof rawLanes!=='object' || Array.isArray(rawLanes) ||
+       Object.keys(rawLanes).length!==laneNames.length ||
+       laneNames.some(lane=>!validCount(rawLanes[lane])) ||
+       laneNames.reduce((n,lane)=>n+rawLanes[lane],0)!==108 ||
+       rawLanes.test_planning+rawLanes.evidence_collection!==summary.controlsReviewed)
+      throw new Error('Canonical control work queue stages do not reconcile.');
+    queueLanes=Object.fromEntries(laneNames.map(lane=>[lane,rawLanes[lane]]));
+  }
+
   const packs=summary.packs.map((item,i)=>{
     if(item?.number!==i+1 || !validCount(item.taskCount) ||
        !validCount(item.controlCount) ||
@@ -94,6 +110,7 @@ export function existingEvidenceWorkplan({
     assessmentControls:summary.controlsReviewed,
     otherWorkflowControls:summary.excludedControls,
     criterionCount:summary.criterionCount,
+    ...(queueLanes ? {queueLanes} : {}),
     counts:Object.fromEntries(COUNT_KEYS.map(key=>[key,totals[key]])),
     packs,
     interpretation:'Work plan counts and candidate observations only; no evidence was accepted and no control outcome was verified.'
