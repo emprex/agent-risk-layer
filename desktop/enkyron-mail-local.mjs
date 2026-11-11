@@ -405,12 +405,16 @@ export async function fetchAndCacheThread(pool,actor,input,{
 export async function moveLocalThread(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   const target=requireFolderKey(input?.folder);
-  if(!SYSTEM.includes(target)){
-    const row=(await pool.query('SELECT folder_key FROM enkyron_mail_local_folders '+
-      'WHERE workspace_key=$1 AND folder_key=$2',[key,target])).rows[0];
-    if(!row)throw Error('Local Mail folder not found');
-  }
   return withTransaction(pool,async c=>{
+    // Serialize moves with empty-folder deletion so mail cannot be left
+    // referring to a folder concurrently removed by the operator.
+    if(!SYSTEM.includes(target)){
+      const row=(await c.query(
+        'SELECT folder_key FROM enkyron_mail_local_folders '+
+        'WHERE workspace_key=$1 AND folder_key=$2 FOR SHARE',[key,target]
+      )).rows[0];
+      if(!row)throw Error('Local Mail folder not found');
+    }
     const changed=await c.query(
       'UPDATE enkyron_mail_local_threads SET folder_key=$4 WHERE workspace_key=$1 '+
       'AND mailbox_key=$2 AND thread_id=$3 AND folder_key<>$4 '+
