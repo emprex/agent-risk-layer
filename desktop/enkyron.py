@@ -678,11 +678,15 @@ class EnkyronWindow(QMainWindow):
         notes_l = QVBoxLayout(notes)
         notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
-        notes_l.addWidget(self.notes_view, 1)
-        notes_l.addWidget(section_title("INTERNAL TICKET ACTIONS — NOT TEST AUTHORISATION"))
+        self.notes_view.setObjectName("ticketRecordedNotes")
+        self.notes_view.setMinimumHeight(170)
+        self.notes_view.setPlaceholderText("No recorded work notes yet.")
+        notes_l.addWidget(self.notes_view, 3)
+        notes_l.addWidget(section_title("INTERNAL ACTIONS · NOT TEST APPROVAL"))
         self.ticket_actions_view = make_text_area()
-        self.ticket_actions_view.setMaximumHeight(150)
-        self.ticket_actions_view.setPlainText("Select a ticket to load its action checklist.")
+        self.ticket_actions_view.setObjectName("ticketActionSummary")
+        self.ticket_actions_view.setFixedHeight(48)
+        self.ticket_actions_view.setPlainText("Select a ticket to view planned actions.")
         notes_l.addWidget(self.ticket_actions_view)
         self.ticket_actions_button = QPushButton("Plan / update ticket action…")
         self.ticket_actions_button.setEnabled(False)
@@ -694,7 +698,7 @@ class EnkyronWindow(QMainWindow):
         notes_l.addWidget(section_title("NEW MANUAL OBSERVATION (NOT VERIFIED EVIDENCE)"))
         self.note_editor = make_text_area(False)
         self.note_editor.setPlaceholderText("Enter factual observations or next actions…")
-        self.note_editor.setMaximumHeight(124)
+        self.note_editor.setMaximumHeight(108)
         notes_l.addWidget(self.note_editor)
         self.save_button = QPushButton("Save note to ticket")
         self.save_button.setObjectName("primary")
@@ -3075,6 +3079,7 @@ class EnkyronWindow(QMainWindow):
             self.account_identity_label.setText(
                 current.get("display_name") or "LOCAL WORKSPACE"
             )
+            self._refresh_ticket_identity_labels()
         self.bridge.call("operator-profile", callback=received)
 
     def open_personal_profile(self):
@@ -15002,11 +15007,17 @@ class EnkyronWindow(QMainWindow):
         )
         self.update_status_button.setEnabled(can_change)
 
+    def _set_ticket_actions_height(self, item_count=0, unavailable=False):
+        """Give real actions space, but never let an empty checklist bury work notes."""
+        height = 72 if unavailable else min(165, 44 + 48 * item_count) if item_count else 48
+        self.ticket_actions_view.setFixedHeight(height)
+
     def load_ticket_actions(self, ticket_id):
         """Read the bounded internal checklist for one selected ticket."""
         if ticket_id != self.current_id:
             return
         self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self._set_ticket_actions_height()
         self.ticket_actions_button.setEnabled(False)
         self.ticket_actions = []
         self.ticket_actions_available = False
@@ -15018,11 +15029,13 @@ class EnkyronWindow(QMainWindow):
                 self.ticket_actions_view.setPlainText(
                     "Action checklist unavailable: " + str(error or "Read failed")
                 )
+                self._set_ticket_actions_height(unavailable=True)
                 return
             if not data.get("available"):
                 self.ticket_actions_view.setPlainText(
                     data.get("notice") or "Action checklist unavailable (migration 102 required)."
                 )
+                self._set_ticket_actions_height(unavailable=True)
                 return
             items = data.get("items") or []
             self.ticket_actions = items
@@ -15040,6 +15053,7 @@ class EnkyronWindow(QMainWindow):
                     for item in items
                 ) or "No actions recorded for this ticket."
             )
+            self._set_ticket_actions_height(item_count=len(items))
             ticket = self.current_ticket or {}
             self.ticket_actions_button.setEnabled(
                 not ticket.get("archived_at") and ticket.get("status") != "closed"
@@ -15323,6 +15337,34 @@ class EnkyronWindow(QMainWindow):
             callback=completed,
         )
 
+    def ticket_operator_display(self, account):
+        """Display the local personal name only for its matching OS principal."""
+        technical = str(account or "").strip()
+        if not technical:
+            return "Unassigned"
+        profile = self.operator_profile_state or {}
+        if profile.get("local_operator") == technical:
+            display = (profile.get("current") or {}).get("display_name")
+            if isinstance(display, str) and display.strip():
+                return display.strip()
+        return technical
+
+    def _refresh_ticket_identity_labels(self):
+        ticket = self.current_ticket
+        if not ticket:
+            return
+        operator = self.ticket_operator_display(ticket.get("assessor_name"))
+        self.meta.setText("{}  ·  {}  ·  Engineer: {}{}".format(
+            ticket["client_name"], ticket["status"].replace("_", " ").upper(),
+            operator, " · ARCHIVED" if ticket.get("archived_at") else ""
+        ))
+        self.owner_label.setText(
+            "Assigned to: {}".format(self.ticket_operator_display(ticket.get("assigned_to")))
+        )
+        self.owner_label.setToolTip(
+            "Display name comes from My account; assignment and audit retain the local OS login."
+        )
+
     def change_ticket_assignment(self):
         ticket = self.current_ticket
         if not ticket or not self.current_id or ticket.get("archived_at"):
@@ -15504,10 +15546,7 @@ class EnkyronWindow(QMainWindow):
             ticket = data["ticket"]
             self.current_ticket = ticket
             self.title.setText("{}   |   {}".format(ticket["ticket_number"], ticket["title"]))
-            self.meta.setText("{}  ·  {}  ·  Engineer: {}".format(
-                ticket["client_name"], ticket["status"].replace("_", " ").upper(),
-                ticket["assessor_name"]
-            ))
+            self._refresh_ticket_identity_labels()
             self.scope.setPlainText(
                 "System owner: {}\nTarget: {} ({})\n\n{}".format(
                     ticket["system_owner"], ticket["target_reference"],
@@ -15563,7 +15602,7 @@ class EnkyronWindow(QMainWindow):
             self.save_button.setEnabled(active and ticket["status"] != "closed")
             owner = ticket.get("assigned_to")
             self.owner_label.setText(
-                "Assigned to: {}".format(owner or "Unassigned")
+                "Assigned to: {}".format(self.ticket_operator_display(owner))
             )
             self.assign_button.setText(
                 "Unassign" if owner else "Assign to me"
@@ -15596,8 +15635,7 @@ class EnkyronWindow(QMainWindow):
                     active and ticket["status"] != "closed"
                 )
             self.load_ticket_actions(ticket_id)
-            if not active:
-                self.meta.setText(self.meta.text() + " · ARCHIVED")
+            self._refresh_ticket_identity_labels()
             self.engine_button.setEnabled(
                 ticket["target_kind"] == "git"
                 and bool(ticket.get("linked_project_id"))
