@@ -7,6 +7,7 @@ import {ownerMailboxPermission} from './enkyron-owner-mail-access.mjs';
 
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const MAILBOX_NAMES=['direction','support'];
+const FOLDERS=new Set(['inbox','archive','spam','trash']);
 const API_ORIGIN='https://api.resend.com';
 function requireUuid(value){
   if(typeof value!=='string'||!UUID.test(value))
@@ -73,18 +74,24 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     try{body=await response.json();}catch{throw new Error('Resend returned invalid JSON');}
     return normalizeList(body,limit);
   }
+  function requireFolder(folder){
+    if(typeof folder!=='string'||!FOLDERS.has(folder))
+      throw new Error('Invalid inbox folder');
+    return folder;
+  }
   function choose(mailbox){
     if(!MAILBOX_NAMES.includes(mailbox))throw new Error('Unknown mailbox');
     return configured[mailbox];
   }
   return Object.freeze({
-    async listThreads({principal,mailbox,limit=30,after=null}={}){
+    async listThreads({principal,mailbox,folder='inbox',limit=30,after=null}={}){
       const inbox=choose(mailbox),count=pageLimit(limit);
+      const safeFolder=requireFolder(folder);
       if(typeof authoriseRead==='function'
         ?authoriseRead(mailbox)!==true
         :!ownerMailboxPermission(principal,organisation,mailbox,'read'))
         throw new Error('Mailbox access denied');
-    const query=new URLSearchParams({folders:'inbox',limit:String(count)});
+    const query=new URLSearchParams({folders:safeFolder,limit:String(count)});
     if(after!==null)query.set('after',requireUuid(after));
     const payload=await get(`/inboxes/${inbox}/threads?${query}`,principal,count);
       return {mailbox,items:payload.data.map(item=>({
