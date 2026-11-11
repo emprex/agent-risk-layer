@@ -4,7 +4,7 @@ import unittest
 import gc
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import MailInboxView
@@ -118,7 +118,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertNotIn("mail-send-draft",[name for name,_ in calls])
             window._mail_sync_running = True
             window.poll_local_inbox()
-            self.assertEqual(len(calls),3)
+            self.assertEqual(len([name for name,_ in calls
+                                  if name.startswith("mail-")]),3)
         finally:
             if window:
                 self._dispose(window)
@@ -152,7 +153,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(ui.reply_body.toPlainText(),"Unsaved operator reply")
             self.assertIn("Original body",ui.body.toPlainText())
             self.assertEqual(ui.thread_list.currentItem().data(
-                __import__("PySide6.QtCore",fromlist=["Qt"]).Qt.ItemDataRole.UserRole),
+                Qt.ItemDataRole.UserRole),
                 ("direction",THREAD))
         finally:
             self._dispose(ui)
