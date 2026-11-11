@@ -18,7 +18,7 @@ CREATE TABLE enkyron_mail_full_messages (
   body_text_full TEXT,
   body_html_inert TEXT,
   provider_sha256 TEXT NOT NULL CHECK(provider_sha256 ~ '^[0-9a-f]{64}$'),
-  archive_state TEXT NOT NULL CHECK(archive_state IN ('complete','incomplete')),
+  archive_state TEXT NOT NULL CHECK(archive_state IN ('body_captured','incomplete')),
   source_type TEXT NOT NULL DEFAULT 'resend_inbox_email_get'
     CHECK(source_type='resend_inbox_email_get'),
   captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
