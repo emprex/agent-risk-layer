@@ -368,6 +368,32 @@ export async function moveLocalThread(pool,actor,input){
     return {moved:true,folder:target,provider_unchanged:true};
   });
 }
+// Flag is local-only and versioned by the already immutable Mail event log.
+export async function flagLocalThread(pool,actor,input){
+  const key=scope(actor),{mailbox,thread}=checkTarget(input);
+  if(typeof input.flagged!=='boolean')throw Error('Invalid local Mail flag');
+  return withTransaction(pool,async client=>{
+    const changed=await client.query(
+      'UPDATE enkyron_mail_local_threads SET flagged=$4 '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
+      'AND flagged IS DISTINCT FROM $4 RETURNING flagged',
+      [key,mailbox,thread,input.flagged]
+    );
+    if(changed.rowCount===0){
+      const found=(await client.query(
+        'SELECT flagged FROM enkyron_mail_local_threads WHERE workspace_key=$1 '+
+        'AND mailbox_key=$2 AND thread_id=$3',
+        [key,mailbox,thread]
+      )).rows[0];
+      if(!found)throw Error('Mail thread not found');
+      return {flagged:found.flagged,changed:false};
+    }
+    await audit(client,key,actor,
+      input.flagged?'thread_flagged':'thread_unflagged',
+      {},mailbox,thread);
+    return {flagged:input.flagged,changed:true};
+  });
+}
 export async function localMailLabels(pool,actor){
   return {labels:(await pool.query(
     'SELECT label_id AS id,name FROM enkyron_mail_local_labels '+
