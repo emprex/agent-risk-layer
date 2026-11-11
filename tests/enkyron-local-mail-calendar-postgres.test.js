@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import {
-  localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
+  localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
   createLocalLabel,labelLocalThread,flagLocalThread,setLocalThreadRead
 } from '../desktop/enkyron-mail-local.mjs';
@@ -465,5 +465,56 @@ test('failed support folder remains in cursor continuation until recovered',{
       'WHERE workspace_key=$1',[scope])).rows[0].n,1);
     assert.deepEqual(attempts.filter(
       row=>row[0]==='support'&&row[1]==='inbox').map(x=>x[2]),[null,null]);
+  }finally{await pool.end();}
+});
+
+
+test('folder rename keeps stable keys and deletion refuses stored messages',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-folder-life-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID();
+  try{
+    const folder=await createLocalMailFolder(pool,owner,{name:'First Name'});
+    const renamed=await renameLocalMailFolder(pool,owner,{
+      folder:folder.key,name:'Client Support'
+    });
+    assert.equal(renamed.changed,true);
+    assert.equal(renamed.key,folder.key);
+    assert.ok((await localMailFolders(pool,owner)).folders.some(
+      row=>row.key===folder.key&&row.name==='Client Support'));
+    assert.equal((await renameLocalMailFolder(pool,owner,{
+      folder:folder.key,name:'Client Support'
+    })).changed,false);
+    await assert.rejects(renameLocalMailFolder(pool,owner,{
+      folder:'inbox',name:'Not allowed'
+    }),/System Mail folders/);
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'inbox',$3,'Synthetic folder mail')",
+      [scope,thread,folder.key]
+    );
+    await assert.rejects(deleteEmptyLocalMailFolder(pool,owner,{
+      folder:folder.key
+    }),/Move saved messages/);
+    assert.equal((await localMailList(pool,owner,{folder:folder.key})).items.length,1);
+    await moveLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:thread,folder:'inbox'
+    });
+    const deleted=await deleteEmptyLocalMailFolder(pool,owner,{folder:folder.key});
+    assert.equal(deleted.deleted,true);
+    assert.equal(deleted.mail_unchanged,true);
+    assert.equal((await localMailList(pool,owner,{folder:'inbox'})).items.length,1);
+    assert.ok(!(await localMailFolders(pool,owner)).folders.some(
+      row=>row.key===folder.key));
+    const events=(await pool.query(
+      'SELECT event_kind FROM enkyron_mail_local_events '+
+      'WHERE workspace_key=$1 ORDER BY created_at',[scope]
+    )).rows.map(row=>row.event_kind);
+    assert.deepEqual(events,[
+      'folder_created','folder_renamed','thread_moved','folder_deleted'
+    ]);
   }finally{await pool.end();}
 });
