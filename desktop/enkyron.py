@@ -31,6 +31,7 @@ if __package__:
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
     from .enkyron_calendar_view import MailCalendarView
     from .enkyron_control_review import ControlReviewDialog
+    from .enkyron_scope_review import ScopeReviewDialog
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -41,6 +42,7 @@ else:
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
     from enkyron_calendar_view import MailCalendarView
     from enkyron_control_review import ControlReviewDialog
+    from enkyron_scope_review import ScopeReviewDialog
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -294,6 +296,7 @@ class EnkyronWindow(QMainWindow):
         self.current_ticket = None
         self.assessment_link_dialog = None
         self.control_review_dialog = None
+        self.scope_review_dialog = None
         self.list_seq = 0
         self.evidence_seq = 0
         self.evidence_source_seq = 0
@@ -673,6 +676,10 @@ class EnkyronWindow(QMainWindow):
         self.assessment_link_button.setEnabled(False)
         self.assessment_link_button.clicked.connect(self.open_assessment_link_dialog)
         assessment_row.addWidget(self.assessment_link_button)
+        self.scope_review_button = QPushButton("Review technical scope & authorisation…")
+        self.scope_review_button.setEnabled(False)
+        self.scope_review_button.clicked.connect(self.open_technical_scope_review)
+        assessment_row.addWidget(self.scope_review_button)
         overview_l.addLayout(assessment_row)
         self.binding = make_text_area()
         self.binding.setMaximumHeight(160)
@@ -15270,6 +15277,26 @@ class EnkyronWindow(QMainWindow):
         save.clicked.connect(submit)
         dialog.open()
 
+    def open_technical_scope_review(self):
+        """Documentary scope review: never a technical test authorisation."""
+        ticket_id = self.current_id
+        ticket = self.current_ticket or {}
+        if (not ticket_id or not self.scope_review_button.isEnabled()
+                or ticket.get("status") == "closed"
+                or ticket.get("archived_at")):
+            return
+        dialog = self.scope_review_dialog
+        if dialog is not None and dialog.isVisible():
+            if dialog.ticket_id == ticket_id:
+                dialog.raise_()
+                dialog.activateWindow()
+                return
+            dialog.reject()
+        dialog = ScopeReviewDialog(self, self.bridge, ticket_id)
+        self.scope_review_dialog = dialog
+        dialog.open()
+        dialog.load()
+
     def open_ticket_triage(self):
         ticket_id = self.current_id
         if (not ticket_id or not self.current_ticket or
@@ -15769,6 +15796,7 @@ class EnkyronWindow(QMainWindow):
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
         self.assessment_link_button.setEnabled(False)
+        self.scope_review_button.setEnabled(False)
         self.ticket_status.clear()
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
@@ -15856,6 +15884,12 @@ class EnkyronWindow(QMainWindow):
             self.assessment_link_button.setText(
                 "Assessment linked" if ticket.get("linked_project_id")
                 else "Select Git target / Link assessment…"
+            )
+            self.scope_review_button.setEnabled(
+                active and ticket["status"] != "closed"
+                and ticket.get("target_kind") == "git"
+                and bool(ticket.get("linked_project_id"))
+                and bool(ticket.get("linked_assessment_id"))
             )
             owner = ticket.get("assigned_to")
             self.owner_label.setText(
