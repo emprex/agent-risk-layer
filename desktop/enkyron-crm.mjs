@@ -92,7 +92,7 @@ export async function listCompanies(pool, search, actor) {
        WHERE workspace_key=$1 AND
         ($2='' OR POSITION(LOWER($2) IN LOWER(name))>0
                OR POSITION(LOWER($2) IN LOWER(COALESCE(legal_name,'')))>0)
-       ORDER BY updated_at DESC,id LIMIT 101`,
+       ORDER BY created_at ASC,id ASC LIMIT 101`,
       [key, query]
     );
     return {
