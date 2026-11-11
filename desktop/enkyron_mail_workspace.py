@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QSplitter,
+    QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -51,6 +51,8 @@ class MailInboxView(QWidget):
     """Compact Inbox with an empty state, searchable list and reading pane."""
 
     mailboxChanged = Signal(str)
+    folderChanged = Signal(str)
+    threadMoveRequested = Signal(str, str, str, str)
     refreshRequested = Signal(str)
     threadRequested = Signal(str, str)
     threadOpenRequested = Signal(str, str)
@@ -66,6 +68,7 @@ class MailInboxView(QWidget):
         self.items = []
         self._has_more = False
         self._mailboxes = {}
+        self._folder = 'inbox'
         self._build()
 
     def _build(self):
@@ -83,6 +86,14 @@ class MailInboxView(QWidget):
         self.account_picker.setToolTip("Inbox account")
         self.account_picker.currentIndexChanged.connect(self._account_changed)
         toolbar.addWidget(self.account_picker, 0)
+        self.folder_picker = QComboBox()
+        self.folder_picker.setObjectName('enkyronMailFolderPicker')
+        self.folder_picker.setAccessibleName('Mail folder')
+        for label, key in [('Inbox','inbox'), ('Archive','archive'),
+                           ('Spam','spam'), ('Trash','trash')]:
+            self.folder_picker.addItem(label, key)
+        self.folder_picker.currentIndexChanged.connect(self._folder_changed)
+        toolbar.addWidget(self.folder_picker, 0)
         self.search = QLineEdit()
         self.search.setObjectName("enkyronMailSearch")
         self.search.setPlaceholderText("Search loaded conversations…")
@@ -184,6 +195,8 @@ class MailInboxView(QWidget):
         )
         self.thread_list.currentItemChanged.connect(self._selected)
         self.thread_list.itemDoubleClicked.connect(self._open_current_thread)
+        self.thread_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.thread_list.customContextMenuRequested.connect(self._thread_context_menu)
         left_layout.addWidget(self.thread_list, 1)
         self.splitter.addWidget(left)
 
@@ -236,6 +249,10 @@ class MailInboxView(QWidget):
     @property
     def selected_mailbox(self):
         return self.account_picker.currentData()
+
+    @property
+    def selected_folder(self):
+        return self.folder_picker.currentData()
 
     def _show_empty(self, title, detail):
         self.empty_title.setText(title)
@@ -323,19 +340,58 @@ class MailInboxView(QWidget):
         if self.selected_mailbox is not None:
             self.mailboxChanged.emit(self.selected_mailbox)
 
+    def _folder_changed(self, _index):
+        folder = self.selected_folder
+        if folder not in ('inbox','archive','spam','trash'):
+            return
+        self._folder = folder
+        self._clear_threads('No conversations in this folder.')
+        if self.selected_mailbox is not None:
+            self.folderChanged.emit(folder)
+
+    def _thread_context_menu(self, pos):
+        item = self.thread_list.itemAt(pos)
+        if item is None or self.connection_state != 'connected':
+            return
+        self.thread_list.setCurrentItem(item)
+        menu = QMenu(self)
+        current = self.selected_folder
+        for label, target in [('Move to Inbox','inbox'), ('Archive','archive'),
+                              ('Mark as Spam','spam'), ('Move to Trash','trash')]:
+            if target == current:
+                continue
+            action = menu.addAction(label)
+            action.triggered.connect(
+                lambda checked=False, folder=target: self._request_thread_move(folder)
+            )
+        menu.exec(self.thread_list.mapToGlobal(pos))
+
+    def _request_thread_move(self, target):
+        if (self.connection_state != 'connected' or target not in
+                ('inbox','archive','spam','trash') or target == self.selected_folder):
+            return
+        selected = self.thread_list.currentItem()
+        if selected is None:
+            return
+        source = selected.data(Qt.ItemDataRole.UserRole)
+        if isinstance(source, tuple) and len(source) == 2 and source[0] in self._mailboxes:
+            self.threadMoveRequested.emit(source[0], source[1],
+                                          self.selected_folder, target)
+
     def _refresh(self):
         if (self.connection_state in ("connected", "error")
                 and (self.selected_mailbox in self._mailboxes
                      or self.selected_mailbox == "all")):
             self.refreshRequested.emit(self.selected_mailbox)
 
-    def show_threads(self, mailbox, items, has_more=False):
+    def show_threads(self, mailbox, items, has_more=False, folder='inbox'):
         """Provider-scoped, bounded plain-text thread listing."""
-        if self.connection_state != "connected" or mailbox != self.selected_mailbox:
+        if (self.connection_state != 'connected' or mailbox != self.selected_mailbox
+                or folder != self.selected_folder):
             return False
         if not isinstance(items, list) or len(items) > 50:
             return False
-        self._clear_threads("No conversations in this inbox.")
+        self._clear_threads("No conversations in this folder.")
         self.items = list(items)
         self._has_more = bool(has_more)
         self.thread_list.blockSignals(True)
@@ -390,8 +446,10 @@ class MailInboxView(QWidget):
         if self.connection_state != "connected":
             return
         if total == 0:
-            self._show_empty("Inbox is empty",
-                "No conversations in this mailbox. New messages will appear here.")
+            title = {'inbox':'Inbox is empty', 'archive':'Archive is empty',
+                     'spam':'No spam', 'trash':'Trash is empty'}[self.selected_folder]
+            self._show_empty(title,
+                'No conversations in this folder.')
         elif visible == 0:
             self._show_empty("No matching conversations",
                 "Try a different search term.")
