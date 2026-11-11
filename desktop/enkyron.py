@@ -296,6 +296,8 @@ class EnkyronWindow(QMainWindow):
         self.control_review_dialog = None
         self.list_seq = 0
         self.evidence_seq = 0
+        self.evidence_source_seq = 0
+        self.evidence_source_ticket = None
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
@@ -759,11 +761,37 @@ class EnkyronWindow(QMainWindow):
         evidence.setWidget(evidence_content)
         evidence_l.addWidget(section_title("NEMORYTH · CANONICAL ARL EVIDENCE REQUESTS"))
         self.evidence_intro = QLabel(
-            "Read-only evidence requirements from ARL's 108-control register. "
-            "Candidate counts are NOT accepted or verified evidence."
+            "One assessment, 108 controls. ARL prepares the technical information; "
+            "an engineer reviews applicability and validates evidence. "
+            "Nothing here is an automatic PASS, FAIL, or authorisation to test."
         )
         self.evidence_intro.setWordWrap(True)
         evidence_l.addWidget(self.evidence_intro)
+        self.evidence_source_notice = QLabel(
+            "ARL technical preparation: opens automatically for a linked Git assessment."
+        )
+        self.evidence_source_notice.setObjectName("subtle")
+        self.evidence_source_notice.setWordWrap(True)
+        self.evidence_source_notice.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        evidence_l.addWidget(self.evidence_source_notice)
+        self.evidence_step_guide = QLabel(
+            "HOW THE ASSESSMENT WORKS\n"
+            "1 · Applicability — Decide whether each security question concerns this agent.\n"
+            "2 · Evidence collection — Gather code references, documents and observed records.\n"
+            "3 · Test planning — Define a safe test; permission is still required before execution.\n"
+            "4 · Human decision — Review the results and record the accountable conclusion.\n"
+            "5 · Blocked follow-up — Resolve missing information, findings or retesting needs.\n"
+            "Other review — The control needs another specialist or additional context."
+        )
+        self.evidence_step_guide.setObjectName("ticketEvidenceGuide")
+        self.evidence_step_guide.setWordWrap(True)
+        self.evidence_step_guide.setStyleSheet(
+            "background: #eff6f9; border: 1px solid #d7e5ec; "
+            "border-radius: 6px; padding: 10px; line-height: 1.35;"
+        )
+        evidence_l.addWidget(self.evidence_step_guide)
         self.evidence_button = QPushButton("Read existing 108-control evidence workplan")
         self.evidence_button.setObjectName("primary")
         self.evidence_button.setEnabled(False)
@@ -779,11 +807,18 @@ class EnkyronWindow(QMainWindow):
         evidence_l.addLayout(work_actions)
         self.evidence_summary = make_text_area()
         self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
-        self.evidence_summary.setMinimumHeight(190)
-        self.evidence_summary.setMaximumHeight(245)
+        self.evidence_summary.setMinimumHeight(150)
+        self.evidence_summary.setMaximumHeight(190)
         evidence_l.addWidget(self.evidence_summary)
-        self.evidence_pack_heading = section_title("EVIDENCE REQUEST PACKS")
+        self.evidence_pack_heading = section_title("EVIDENCE PACKS · REQUESTS READY TO COLLECT")
         evidence_l.addWidget(self.evidence_pack_heading)
+        self.evidence_pack_explanation = QLabel(
+            "A pack groups the specific proof to request for controls already "
+            "reviewed for applicability. An empty list means the workflow has "
+            "not reached this stage — not that the security checks passed."
+        )
+        self.evidence_pack_explanation.setWordWrap(True)
+        evidence_l.addWidget(self.evidence_pack_explanation)
         self.evidence_packs = QListWidget()
         self.evidence_packs.setObjectName("ticketEvidencePacks")
         self.evidence_packs.setMaximumHeight(72)
@@ -15696,6 +15731,11 @@ class EnkyronWindow(QMainWindow):
         if self.control_review_dialog is not None and self.control_review_dialog.isVisible():
             self.control_review_dialog.reject()
         self.evidence_seq += 1
+        self.evidence_source_seq += 1
+        self.evidence_source_ticket = None
+        self.evidence_source_notice.setText(
+            "ARL technical preparation: opens automatically for a linked Git assessment."
+        )
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
@@ -15857,11 +15897,15 @@ class EnkyronWindow(QMainWindow):
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
                 self.load_master()
+            elif self.tabs.currentIndex() == 5:
+                self.prepare_source_review()
         self.bridge.call("ticket", ticket_id, callback=received)
 
     def tab_changed(self, index):
         if index == 1 and self.current_ticket:
             self.load_master()
+        elif index == 5 and self.current_ticket:
+            self.prepare_source_review()
 
     def load_master(self):
         ticket_id = self.current_id
@@ -15996,6 +16040,56 @@ class EnkyronWindow(QMainWindow):
         self.control_review_dialog = dialog
         dialog.show()
         dialog.load_queue()
+
+    def prepare_source_review(self):
+        """Run ARL's existing frozen-source Inspector once per selected ticket."""
+        ticket = self.current_ticket or {}
+        ticket_id = self.current_id
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or self.evidence_source_ticket == ticket_id):
+            return
+        self.evidence_source_ticket = ticket_id
+        self.evidence_source_seq += 1
+        sequence = self.evidence_source_seq
+        self.evidence_source_notice.setText(
+            "ARL is preparing a read-only technical review of the frozen Git "
+            "source. No tests, modifications or security decisions."
+        )
+        def prepared(data, error):
+            if (ticket_id != self.current_id or
+                    sequence != self.evidence_source_seq):
+                return
+            if error or not isinstance(data, dict) or not data.get("available"):
+                self.evidence_source_ticket = None
+                self.evidence_source_notice.setText(
+                    "ARL source preparation unavailable: "
+                    + str(error or "Unverified inspection") +
+                    ". No decisions were recorded."
+                )
+                return
+            if (data.get("snapshot_id") != ticket.get("linked_snapshot_id") and
+                    data.get("target_sha") is None):
+                self.evidence_source_notice.setText(
+                    "ARL source review returned incomplete snapshot information."
+                )
+                return
+            files = data.get("files_inspected")
+            candidates = data.get("candidate_count")
+            self.evidence_source_notice.setText(
+                "ARL source preparation · Git SHA {} · {} files inspected · "
+                "{} Inspector observations for engineer review. "
+                "These are preliminary source indicators, NOT verified control "
+                "results. Purpose, environment, owner and approvals still "
+                "require declared evidence.{}".format(
+                    str(data.get("target_sha") or "")[:12],
+                    files if isinstance(files, int) else "unknown",
+                    candidates if isinstance(candidates, int) else "unknown",
+                    " Scan truncated by limits." if data.get("truncated") else "",
+                )
+            )
+        self.bridge.call("source-review", ticket_id, callback=prepared)
 
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
