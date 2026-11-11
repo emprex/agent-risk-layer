@@ -320,6 +320,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
         self._reply_context = None
+        self._sent_followup_context = None
         self.mail_detached_window = None
         self.calendar_detached_window = None
         self.mail_detach_placeholder = None
@@ -1352,6 +1353,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
         self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
+        self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
@@ -2136,6 +2138,9 @@ class EnkyronWindow(QMainWindow):
 
     def send_inline_mail_reply(self):
         """Persist exact text first; a separately confirmed send stays in-thread."""
+        if self._sent_followup_context is not None:
+            self.send_inline_sent_follow_up()
+            return
         ctx = self._reply_context
         inbox = self.mail_inbox
         if not isinstance(ctx,dict) or not inbox.reply_editor.isVisible():
@@ -2695,6 +2700,116 @@ class EnkyronWindow(QMainWindow):
         self.mail_sent_table.selectRow(index)
         self.link_selected_sent_mail()
 
+    def prepare_sent_follow_up(self, index):
+        """Compose an actual new outreach follow-up, without inventing threading."""
+        inbox = self.mail_inbox
+        self._sent_followup_context = None
+        if (not isinstance(index, int) or inbox.selected_folder != "sent"
+                or not 0 <= index < len(self.mail_sent_items)):
+            return
+        selected = inbox.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if reference != ("local-sent", index):
+            return
+        sent = self.mail_sent_items[index]
+        if not isinstance(sent, dict) or sent.get("outcome") != "accepted":
+            return
+        mailbox = sent.get("mailbox_key")
+        recipient = str(sent.get("recipient_email") or "").strip()
+        subject = str(sent.get("subject") or "").strip()
+        if (mailbox not in ("direction", "support")
+                or not recipient or len(recipient) > 254
+                or "@" not in recipient
+                or any(c in recipient for c in (" ", "<", ">", ",", ";", "\r", "\n"))):
+            QMessageBox.warning(self, "Follow-up unavailable",
+                                "Cannot safely identify this sent message recipient.")
+            return
+        if not inbox.show_followup_editor(index, recipient):
+            return
+        self._reply_context = None
+        self._sent_followup_context = {
+            "index":index,"mailbox":mailbox,"recipient":recipient,
+            "subject":subject if subject.lower().startswith("re:")
+            else "Re: " + (subject or "Following up"),
+            "draft_id":sent.get("draft_id"),
+        }
+
+    def send_inline_sent_follow_up(self):
+        """A new outbound message, not a falsely claimed Resend thread reply."""
+        ctx = self._sent_followup_context
+        inbox = self.mail_inbox
+        if not isinstance(ctx, dict) or not inbox.reply_editor.isVisible():
+            return
+        index = ctx["index"]
+        selected = inbox.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if (inbox.selected_folder != "sent"
+                or reference != ("local-sent", index)
+                or not 0 <= index < len(self.mail_sent_items)):
+            return
+        sent = self.mail_sent_items[index]
+        if (sent.get("draft_id") != ctx["draft_id"]
+                or sent.get("recipient_email") != ctx["recipient"]
+                or sent.get("mailbox_key") != ctx["mailbox"]):
+            return
+        body = inbox.reply_body.toPlainText().strip()
+        if not body or len(body.encode("utf-8")) > 12000:
+            QMessageBox.warning(self, "Follow-up text",
+                                "Enter a follow-up (maximum 12 KB).")
+            return
+        if not self.mail_provider_ready:
+            QMessageBox.information(self,"Sending unavailable",
+                                    "Save your work when Resend is connected.")
+            return
+        decision = QMessageBox.question(
+            self, "Confirm new follow-up",
+            ("SEND a new email to this recipient?\n\n"
+             "From: {}\nTo: {}\nSubject: {}\n\n"
+             "This is a new outgoing email; it is not yet linked by "
+             "Message-ID to the previous outbound email.").format(
+                inbox._mailboxes.get(ctx["mailbox"], ctx["mailbox"]),
+                ctx["recipient"],ctx["subject"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        inbox.reply_send.setEnabled(False)
+        draft = {
+            "mailbox_key":ctx["mailbox"],
+            "recipient_email":ctx["recipient"],
+            "subject":ctx["subject"],
+            "body_text":body,
+        }
+        def saved(data,error):
+            if error or not isinstance(data,dict) or not data.get("id"):
+                inbox.reply_send.setEnabled(True)
+                QMessageBox.warning(self,"Follow-up not saved",
+                                    str(error or "Could not save draft."))
+                return
+            payload = {
+                "draft_id":data["id"],"expected_revision":data["revision"],
+                "recipient_verified":True,"confirmed":True,
+            }
+            def sent_result(result,send_error):
+                if send_error or not isinstance(result,dict):
+                    inbox.reply_send.setEnabled(False)
+                    QMessageBox.warning(
+                        self,"Follow-up outcome unknown",
+                        "The follow-up draft was saved; sending could not be "
+                        "confirmed. Check Sent and Resend before attempting again."
+                    )
+                    return
+                inbox.hide_reply_editor()
+                self._sent_followup_context = None
+                self.load_mail_sent()
+                QMessageBox.information(self,"Follow-up status",
+                     str(result.get("notice") or "Provider result unavailable."))
+            self.bridge.call("mail-send-draft",payload=payload,callback=sent_result)
+        self.bridge.call("crm-mail-create",payload=draft,callback=saved)
+
     def _detached_notice(self, label, window_getter):
         placeholder = QWidget()
         layout = QVBoxLayout(placeholder)
@@ -2702,22 +2817,28 @@ class EnkyronWindow(QMainWindow):
         title = QLabel(label + " is open in another window.")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
-        button = QPushButton("Bring " + label + " to front")
+        button = QPushButton("Switch to " + label)
+        button.setToolTip("Minimise ENKYRON to reveal the separate window")
         def focus_window():
             window = window_getter()
             if window is None:
                 return
-            # Show even if the operator minimized the module. Qt can request
-            # activation only; GNOME/Wayland may limit focus stealing.
+            # Mutter/GNOME may reject requestActivate() from another window;
+            # minimising the covering ENKYRON window is a dependable fallback
+            # that does not require changing GNOME settings or installing tools.
             window.showNormal()
+            self.showMinimized()
             window.raise_()
             window.activateWindow()
-            handle = window.windowHandle()
-            if handle is not None:
-                handle.requestActivate()
-            QApplication.alert(window, 1500)
         button.clicked.connect(focus_window)
         layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+        explanation = QLabel(
+            "This switches away from ENKYRON. Use Alt+Tab to return "
+            "or select the other window from the desktop overview."
+        )
+        explanation.setWordWrap(True)
+        explanation.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(explanation)
         layout.addStretch()
         return placeholder
 
