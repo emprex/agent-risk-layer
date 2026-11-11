@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QProcess, QTimer, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QFileDialog,
@@ -1310,14 +1311,6 @@ class EnkyronWindow(QMainWindow):
         sent_layout.addWidget(sent_note)
         sent_actions = QHBoxLayout()
         sent_actions.addStretch()
-        self.mail_sent_view_button = QPushButton("View message")
-        self.mail_sent_view_button.setEnabled(False)
-        self.mail_sent_view_button.clicked.connect(self.view_selected_sent_mail)
-        sent_actions.addWidget(self.mail_sent_view_button)
-        self.mail_sent_check_button = QPushButton("Check Resend status")
-        self.mail_sent_check_button.setEnabled(False)
-        self.mail_sent_check_button.clicked.connect(self.check_selected_mail_status)
-        sent_actions.addWidget(self.mail_sent_check_button)
         self.mail_sent_link_button = QPushButton("Link selected email to CRM…")
         self.mail_sent_link_button.setEnabled(False)
         self.mail_sent_link_button.clicked.connect(self.link_selected_sent_mail)
@@ -1343,6 +1336,9 @@ class EnkyronWindow(QMainWindow):
         )
         self.mail_sent_table.itemSelectionChanged.connect(
             self.sent_mail_selected
+        )
+        self.mail_sent_table.cellDoubleClicked.connect(
+            lambda row, _column: self.view_sent_mail_row(row)
         )
         sent_layout.addWidget(self.mail_sent_table,1)
         self.mail_sent_status = QLabel("Sent history has not been loaded.")
@@ -1789,53 +1785,141 @@ class EnkyronWindow(QMainWindow):
             payload={"mailbox":mailbox,"thread_id":thread_id},callback=received)
 
     def load_mail_sent(self):
-        """Show actual ENKYRON provider send attempts, never fabricated delivery."""
-        if not hasattr(self,"mail_sent_table"):
+        """Display recorded submissions; refresh delivery status read-only."""
+        if not hasattr(self, "mail_sent_table"):
             return
-        self.mail_sent_status.setText("Loading sent history…")
-        def received(data,error):
+        self.mail_sent_generation = getattr(self, "mail_sent_generation", 0) + 1
+        generation = self.mail_sent_generation
+        self.mail_sent_status.setText("Loading submitted messages…")
+        self.mail_sent_items = []
+        self.mail_sent_verification_queue = []
+        self.mail_sent_verified_rows = set()
+        self.mail_sent_verifying = False
+
+        def received(data, error):
+            if generation != self.mail_sent_generation:
+                return
             self.mail_sent_items = []
             self.mail_sent_link_button.setEnabled(False)
-            self.mail_sent_check_button.setEnabled(False)
-            self.mail_sent_view_button.setEnabled(False)
+            self.mail_sent_table.blockSignals(True)
             self.mail_sent_table.setRowCount(0)
             if error or not data or not data.get("available"):
+                self.mail_sent_table.blockSignals(False)
                 self.mail_sent_status.setText(
-                    "Sent history needs the Mail database workspace update."
+                    "Submitted message history unavailable."
                 )
                 return
-            entries=data.get("items") or []
+            entries = data.get("items") or []
             self.mail_sent_items = entries
             self.mail_sent_table.setRowCount(len(entries))
-            for n,row in enumerate(entries):
-                fields=[
-                    "Direction" if row.get("mailbox_key")=="direction" else "Support",
-                    row.get("recipient_email") or "",
-                    row.get("subject") or "",
-                    "Accepted by Resend" if row.get("outcome")=="accepted"
-                    else "Status uncertain · check provider",
-                    row.get("company_name") or "Not linked"
+            for n, entry in enumerate(entries):
+                fields = [
+                    "Direction" if entry.get("mailbox_key") == "direction" else "Support",
+                    entry.get("recipient_email") or "",
+                    entry.get("subject") or "",
+                    "·" if entry.get("outcome") == "accepted" else "?",
+                    entry.get("company_name") or "Not linked"
                 ]
-                for column,value in enumerate(fields):
-                    self.mail_sent_table.setItem(
-                        n,column,QTableWidgetItem(str(value))
-                    )
-            self.mail_sent_status.setText("{} submitted message(s).".format(len(entries)))
-        self.bridge.call("mail-sent",callback=received)
+                for column, value in enumerate(fields):
+                    item = QTableWidgetItem(str(value))
+                    if column == 3:
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        item.setForeground(QColor("#66788a"))
+                        item.setToolTip(
+                            "Accepted by Resend; delivery not yet confirmed."
+                            if entry.get("outcome") == "accepted" else
+                            "Provider submission outcome uncertain; do not resend."
+                        )
+                    self.mail_sent_table.setItem(n, column, item)
+            self.mail_sent_table.blockSignals(False)
+            self.mail_sent_status.setText(
+                "{} submitted message(s). A green tick means Resend "
+                "confirmed delivery.".format(len(entries))
+            )
+            # Read-only checks, sequential and bounded to avoid provider flooding.
+            # Older rows can be verified by selecting them.
+            self.mail_sent_verification_queue = list(range(min(len(entries), 12)))
+            if entries:
+                self.mail_sent_table.selectRow(0)
+            self._verify_next_sent_mail()
+
+        self.bridge.call("mail-sent", callback=received)
 
     def sent_mail_selected(self):
         row = self.mail_sent_table.currentRow()
         selected = (self.mail_sent_items[row]
                     if 0 <= row < len(self.mail_sent_items) else {})
         self.mail_sent_link_button.setEnabled(
-            bool(selected.get("draft_id"))
-            and not selected.get("company_id")
+            bool(selected.get("draft_id")) and not selected.get("company_id")
         )
-        self.mail_sent_view_button.setEnabled(bool(selected.get("draft_id")))
-        self.mail_sent_check_button.setEnabled(bool(selected.get("draft_id")))
+        # Only display the association action when it is applicable.
+        self.mail_sent_link_button.setVisible(
+            bool(selected.get("draft_id")) and not selected.get("company_id")
+        )
+        if selected and hasattr(self, "mail_sent_verification_queue"):
+            if (row not in self.mail_sent_verified_rows
+                    and row not in self.mail_sent_verification_queue):
+                self.mail_sent_verification_queue.insert(0, row)
+            self._verify_next_sent_mail()
 
-    def view_selected_sent_mail(self):
-        row = self.mail_sent_table.currentRow()
+    def _verify_next_sent_mail(self):
+        if (not hasattr(self, "mail_sent_items")
+                or self.mail_sent_verifying
+                or not self.mail_sent_verification_queue):
+            return
+        row = self.mail_sent_verification_queue.pop(0)
+        if row in self.mail_sent_verified_rows or not (
+                0 <= row < len(self.mail_sent_items)):
+            self._verify_next_sent_mail()
+            return
+        draft_id = self.mail_sent_items[row].get("draft_id")
+        if not draft_id:
+            self.mail_sent_verified_rows.add(row)
+            self._verify_next_sent_mail()
+            return
+        generation = self.mail_sent_generation
+        self.mail_sent_verifying = True
+        item = self.mail_sent_table.item(row, 3)
+        if item:
+            item.setText("…")
+            item.setToolTip("Checking Resend status (read-only)…")
+
+        def received(data, error):
+            if generation != self.mail_sent_generation:
+                return
+            self.mail_sent_verifying = False
+            self.mail_sent_verified_rows.add(row)
+            item = self.mail_sent_table.item(row, 3)
+            if item:
+                if error or not isinstance(data, dict) or not data.get("verified"):
+                    item.setText("?")
+                    item.setForeground(QColor("#9b6b24"))
+                    item.setToolTip(
+                        str(error or (data or {}).get("notice")
+                            or "Delivery could not be verified.")[:400]
+                    )
+                else:
+                    event = data.get("last_event") or "unknown"
+                    if event == "delivered":
+                        item.setText("✓")
+                        item.setForeground(QColor("#17803d"))
+                        item.setToolTip("Delivered — confirmed by Resend.")
+                    elif event in ("bounced", "failed", "suppressed", "complained"):
+                        item.setText("×")
+                        item.setForeground(QColor("#b42318"))
+                        item.setToolTip("Resend event: " + event)
+                    else:
+                        item.setText("·")
+                        item.setForeground(QColor("#66788a"))
+                        item.setToolTip(
+                            "Resend event: {}. Delivery not confirmed.".format(event)
+                        )
+            self._verify_next_sent_mail()
+
+        self.bridge.call("mail-provider-status", str(draft_id), callback=received)
+
+    def view_sent_mail_row(self, row):
+        """Double-click opens the existing standalone, read-only message viewer."""
         if not 0 <= row < len(self.mail_sent_items):
             return
         sent = self.mail_sent_items[row]
@@ -1855,40 +1939,6 @@ class EnkyronWindow(QMainWindow):
             self.show_mail_draft_dialog(data["draft"])
 
         self.bridge.call("crm-mail-draft", sent["draft_id"], callback=received)
-
-    def check_selected_mail_status(self):
-        row = self.mail_sent_table.currentRow()
-        if not 0 <= row < len(self.mail_sent_items):
-            return
-        sent = self.mail_sent_items[row]
-        draft_id = sent.get("draft_id")
-        if not draft_id:
-            return
-        self.mail_sent_check_button.setEnabled(False)
-
-        def received(data, error):
-            self.sent_mail_selected()
-            if error or not isinstance(data, dict):
-                QMessageBox.warning(self, "Resend lookup unavailable",
-                    str(error or "Provider lookup failed. Do not resend."))
-                return
-            if not data.get("verified"):
-                QMessageBox.information(self, "Delivery still unverified",
-                    str(data.get("notice") or "Resend could not verify this message."))
-                return
-            event = data.get("last_event") or "unknown"
-            note = (
-                "Resend reports the message reached the recipient mail server."
-                if event == "delivered" else
-                "Resend reports the message was opened; this is a tracking event."
-                if event == "opened" else
-                "Resend reports: " + str(event) + ". Delivery is not established."
-            )
-            QMessageBox.information(self, "Resend provider status",
-                "Last provider event: {}\n\n{}\n\nNo email was sent by this check."
-                .format(event, note))
-
-        self.bridge.call("mail-provider-status", str(draft_id), callback=received)
 
     def link_selected_sent_mail(self):
         row = self.mail_sent_table.currentRow()
