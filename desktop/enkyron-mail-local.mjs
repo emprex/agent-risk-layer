@@ -163,6 +163,76 @@ export async function localMailList(pool,actor,input={}){
   return {mailbox,folder,search,page,items:rows.slice(0,50),
     has_more:rows.length>50,source:'local'};
 }
+// E04-04A. Existing schema 112 already has crm_company_id on each thread.
+// Human-only link to ONE already-existing active CRM company. The mailbox,
+// company and thread must all belong to the current local workspace.
+// NOTE: schema 112 cannot record a truthful mail-company-link event_kind;
+// do not forge a different event or claim this is a complete audit trail.
+export function validateMailCompanyLink(input){
+  const {mailbox,thread}=checkTarget(input);
+  const company=requireUuid(input?.company_id);
+  if(input?.confirmed!==true)
+    throw Error('Explicit operator confirmation required to link Mail to CRM');
+  return {mailbox,thread,company};
+}
+async function ensureMailReadAccess(client,key,mailbox){
+  const acl=(await client.query(
+    'SELECT can_read FROM enkyron_local_mail_access '+
+    "WHERE workspace_key=$1 AND mailbox_key=$2 AND role='organization_owner_l5'",
+    [key,mailbox]
+  )).rows[0];
+  if(acl?.can_read!==true)throw Error('Mail read permission not granted');
+}
+export async function localMailCompanyLink(pool,actor,input){
+  const key=scope(actor),{mailbox,thread}=checkTarget(input);
+  await ensureMailReadAccess(pool,key,mailbox);
+  const row=(await pool.query(
+    'SELECT t.crm_company_id AS company_id,c.name AS company_name,'+
+    't.folder_key FROM enkyron_mail_local_threads t '+
+    'LEFT JOIN enkyron_crm_companies c '+
+    'ON c.workspace_key=t.workspace_key AND c.id=t.crm_company_id::text '+
+    'WHERE t.workspace_key=$1 AND t.mailbox_key=$2 AND t.thread_id=$3',
+    [key,mailbox,thread]
+  )).rows[0];
+  if(!row)throw Error('Mail conversation not found in NEMORYTH');
+  return {mailbox,thread_id:thread,company_id:row.company_id,
+    company_name:row.company_name??null,
+    linked:row.company_id!==null};
+}
+export async function linkLocalMailCompany(pool,actor,input){
+  const key=scope(actor),{mailbox,thread,company}=validateMailCompanyLink(input);
+  return withTransaction(pool,async client=>{
+    await ensureMailReadAccess(client,key,mailbox);
+    const row=(await client.query(
+      'SELECT crm_company_id,folder_key FROM enkyron_mail_local_threads '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 FOR UPDATE',
+      [key,mailbox,thread]
+    )).rows[0];
+    if(!row)throw Error('Mail conversation not found');
+    if(row.folder_key==='spam'||row.folder_key==='trash')
+      throw Error('Review and move spam/trash before CRM association');
+    if(row.crm_company_id!==null)
+      throw Error('Mail conversation is already linked. Correction requires a reviewed workflow');
+    const target=(await client.query(
+      'SELECT id,name,relationship_state FROM enkyron_crm_companies '+
+      'WHERE workspace_key=$1 AND id=$2 FOR KEY SHARE',
+      [key,company]
+    )).rows[0];
+    if(!target||target.relationship_state==='inactive')
+      throw Error('Selected CRM company unavailable or inactive');
+    const updated=await client.query(
+      'UPDATE enkyron_mail_local_threads SET crm_company_id=$4 '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
+      'AND crm_company_id IS NULL RETURNING crm_company_id',
+      [key,mailbox,thread,company]
+    );
+    if(updated.rowCount!==1)throw Error('Mail CRM association changed; review again');
+    return {linked:true,mailbox,thread_id:thread,company_id:company,
+      company_name:target.name,provider_unchanged:true,
+      notice:'Reviewed local CRM company link saved. No message, ticket, contact, assessment or provider data changed. Event audit remains pending schema review.'};
+  });
+}
+
 // One provider page per mailbox/folder and call. Each successful page commits
 // independently, so interruption never rolls back other inboxes or folders.
 // Callers carry the returned cursors forward; restarting from page one is safe
