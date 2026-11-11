@@ -57,3 +57,54 @@ test('link cannot reach a database without matching human-confirmed frozen SHA',
     /target folder is not available/
   );
 });
+
+test('existing canonical project is linked atomically using the original ticket audit schema',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.homedir(),'.enkyron-assessment-link-'));
+  const git=(...args)=>execFileSync('git',['-C',dir,...args],{stdio:'pipe'});
+  try {
+    git('init','-q');
+    git('config','user.email','test@example.invalid');
+    git('config','user.name','Synthetic Test');
+    fs.writeFileSync(path.join(dir,'README.txt'),'reviewed fixture\\n');
+    git('add','README.txt');
+    git('commit','-qm','test');
+    const revision=frozenLocalTarget(dir).sha;
+    const queries=[];
+    const project='prj_synthetic_2',assessment='asm_synthetic_2',snapshot='sys_synthetic_2';
+    const candidate={
+      id:project,name:'Synthetic pilot',agent_assessment_id:assessment
+    };
+    const ctx={
+      targetBinding:{source:'git',revision},
+      assessmentBinding:{assessmentId:assessment}
+    };
+    const run=async(sql,params=[])=>{
+      queries.push({sql,params});
+      if(sql.includes('FROM arl_workbench_tickets WHERE id=$1'))
+        return {rows:[{id:ticket,ticket_number:'ARL-2026-000002',
+          title:'Synthetic pilot',status:'scoping',archived_at:null,
+          assigned_to:'emprex',linked_project_id:null,linked_assessment_id:null}]};
+      if(sql.includes('FROM security_projects p JOIN users u'))
+        return {rows:[candidate]};
+      if(sql.includes('FROM system_snapshots'))
+        return {rows:[{id:snapshot,assessment_configuration_json:ctx}]};
+      return {rows:[]};
+    };
+    const pool={query:run,connect:async()=>({query:run,release(){}})};
+    const preflight=await (await import('../desktop/enkyron-ticket-assessment.mjs'))
+      .assessmentPreflight(pool,{ticket_id:ticket,repository_path:dir},'emprex');
+    assert.equal(preflight.mode,'link_existing');
+    assert.equal(preflight.project.snapshotId,snapshot);
+    const linked=await linkOrCreateTicketAssessment(pool,{
+      ticket_id:ticket,repository_path:dir,expected_sha:revision,
+      operation:'link_existing',confirmed:true
+    },'emprex');
+    assert.equal(linked.linked,true);
+    const event=queries.find(q=>q.sql.includes('INSERT INTO arl_workbench_ticket_events'));
+    assert.ok(event);
+    assert.match(event.sql,/note_added/);
+    assert.ok(queries.some(q=>q.sql.includes('INSERT INTO arl_workbench_notes')));
+    assert.ok(queries.some(q=>q.sql.includes("target_kind='git'")));
+    assert.ok(queries.some(q=>q.sql.trim()==='COMMIT'));
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
