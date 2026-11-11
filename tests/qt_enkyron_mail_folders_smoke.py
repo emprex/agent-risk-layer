@@ -26,6 +26,7 @@ class MailFoldersSmoke(unittest.TestCase):
             filed.append((mailbox,tid,source,target)))
         try:
             view.set_owner_mailboxes(CARD)
+            view.set_filing_mailboxes(["direction"])
             view.set_connection_state("connected")
             self.assertEqual(view.folder_picker.count(),4)
             self.assertEqual(
