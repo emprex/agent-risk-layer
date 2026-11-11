@@ -258,7 +258,7 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action == "operator-state" else
                     60000 if action in ("evidence-summary", "evidence-pack") else
-                    45000 if action == "crm-csv-import-commit" else
+                    45000 if action in ("crm-csv-import-commit", "mail-local-sync") else
                     15000)
 
 
@@ -1963,18 +1963,31 @@ class EnkyronWindow(QMainWindow):
     def read_mail_thread(self, mailbox, thread_id):
         if mailbox not in ("direction","support") or not thread_id:
             return
-        def received(data,error):
+        payload={"mailbox":mailbox,"thread_id":thread_id}
+        def display(data,error):
             if (mailbox != self.mail_inbox.current_thread_mailbox
                     or thread_id != self.mail_inbox.current_thread_id):
                 return
-            if error or not data or data.get("thread_id") != thread_id:
+            if error or not isinstance(data,dict):
                 self.mail_inbox.body.setPlainText(
-                    "Unable to read this conversation. Please select it again."
+                    "Unable to read saved mail. No email was changed."
                 )
                 return
-            self.mail_inbox.show_messages(mailbox,thread_id,data.get("items") or [])
-        self.bridge.call("mail-messages",
-            payload={"mailbox":mailbox,"thread_id":thread_id},callback=received)
+            self.mail_inbox.show_messages(
+                mailbox,thread_id,data.get("items") or []
+            )
+        def cached(data,error):
+            if error or not isinstance(data,dict):
+                display(data,error)
+                return
+            if data.get("items"):
+                display(data,None)
+            elif self.mail_provider_ready:
+                self.bridge.call("mail-local-fetch",
+                    payload=payload,callback=display)
+            else:
+                display(data,None)
+        self.bridge.call("mail-local-messages",payload=payload,callback=cached)
 
     def open_mail_thread_window(self, mailbox, thread_id):
         """Double-click: detachable, read-only plain-text conversation."""
@@ -2036,9 +2049,17 @@ class EnkyronWindow(QMainWindow):
                 format_mail_messages(messages) or "No messages in this thread."
             )
 
-        self.bridge.call("mail-messages",
-            payload={"mailbox": mailbox, "thread_id": thread_id},
-            callback=received)
+        payload = {"mailbox":mailbox,"thread_id":thread_id}
+        def cached(data,error):
+            if error:
+                received(data,error)
+            elif isinstance(data,dict) and data.get("items"):
+                received(data,None)
+            elif self.mail_provider_ready:
+                self.bridge.call("mail-local-fetch",payload=payload,callback=received)
+            else:
+                received(data,None)
+        self.bridge.call("mail-local-messages",payload=payload,callback=cached)
 
     def load_mail_sent(self):
         """Display recorded submissions; refresh delivery status read-only."""
