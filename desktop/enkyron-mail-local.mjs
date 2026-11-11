@@ -341,12 +341,20 @@ export async function syncLocalMailBodies(pool,actor,input={},{
         note:'Body import incomplete. Previously committed pages are preserved.'};
     }
   }
+  // Automatic polling revisits the most recent provider Inbox threads, even
+  // when already cached: a new reply may arrive inside an existing thread.
+  // The explicit Send / Receive path still scans every thread with cursors.
+  if(input?.recent!==undefined&&typeof input.recent!=='boolean')
+    throw Error('Invalid Mail recent poll');
+  const recent=input?.recent===true;
   const candidates=(await pool.query(
     'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
     'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
-    'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
-    'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
-    'AND m.thread_id=t.thread_id) '+
+    (recent
+      ? "AND t.provider_folder='inbox' "
+      : 'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
+        'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
+        'AND m.thread_id=t.thread_id) ')+
     'ORDER BY t.last_message_at DESC LIMIT $3',
     [key,selected,9]
   )).rows;
@@ -363,7 +371,9 @@ export async function syncLocalMailBodies(pool,actor,input={},{
   return {cached_threads:cached,failed_threads:failed,
     requires_safe_html_viewer:html,
     more_pending:candidates.length>8,
-    note:'Use the full rescan to finish previously interrupted conversations.'};
+    note:recent
+      ?'Automatic Inbox poll checks 8 recent conversations; run Send / Receive for full history.'
+      :'Use the full rescan to finish previously interrupted conversations.'};
 }
 
 export async function localMailMessages(pool,actor,input){
