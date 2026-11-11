@@ -2592,7 +2592,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_tabs.setCurrentIndex(slot)
         self.mail_detach_placeholder = placeholder
         window = DetachableModuleWindow(
-            "ENKYRON — Mail", self._return_mail_window, self
+            "ENKYRON — Mail", self._return_mail_window, None
         )
         self.mail_detached_window = window
         window.setCentralWidget(self.mail_page)
@@ -2631,7 +2631,7 @@ class EnkyronWindow(QMainWindow):
         self.pages.setCurrentIndex(slot)
         self.calendar_detach_placeholder = placeholder
         window = DetachableModuleWindow(
-            "ENKYRON — Calendar", self._return_calendar_window, self
+            "ENKYRON — Calendar", self._return_calendar_window, None
         )
         self.calendar_detached_window = window
         window.setCentralWidget(self.calendar_view)
