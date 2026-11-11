@@ -180,6 +180,15 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_followups_smoke.py'
 
+      - name: ENKYRON New company movable window smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_new_company_window_smoke.py'
+
+      - name: Validate strictly scoped local CRM test-cleanup script syntax
+        run: node --check scripts/enkyron-clean-test-companies.mjs
+
       - name: ENKYRON Mail native inbox UX smoke (offline)
         env:
           QT_QPA_PLATFORM: offscreen
