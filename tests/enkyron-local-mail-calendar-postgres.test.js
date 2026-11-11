@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import {archiveNextMailBatch,mailArchiveStatus,quarantineAttachmentBytes} from '../desktop/enkyron-mail-archive.mjs';
+import {archiveNextMailBatch,mailArchiveStatus,quarantineAttachmentBytes,readArchivedFullText} from '../desktop/enkyron-mail-archive.mjs';
 import {
   localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
@@ -696,6 +696,25 @@ test('schema 113 archives full mail and quarantines attachment metadata idempote
       'SELECT body_text FROM enkyron_mail_local_messages '+
       'WHERE workspace_key=$1',[workspace]
     )).rows[0].body_text,'Short preview'); // historical table untouched
+    const fullRead=await readArchivedFullText(pool,owner,{
+      mailbox:'direction',thread_id:thread,message_id:id
+    });
+    assert.equal(fullRead.available,true);
+    assert.equal(fullRead.text.length,25000);
+    assert.equal(fullRead.archive_state,'body_captured');
+    assert.equal(fullRead.mailbox,'direction');
+    assert.equal(fullRead.message_id,id);
+    assert.equal(Object.hasOwn(fullRead,'body_html_inert'),false);
+    assert.equal(Object.hasOwn(fullRead,'attachment_bytes'),false);
+    await assert.rejects(readArchivedFullText(pool,'another-user',{
+      mailbox:'direction',thread_id:thread,message_id:id
+    }),/Archived Mail message not found/);
+    await assert.rejects(readArchivedFullText(pool,owner,{
+      mailbox:'support',thread_id:thread,message_id:id
+    }),/Archived Mail message not found/);
+    await assert.rejects(readArchivedFullText(pool,owner,{
+      mailbox:'direction',thread_id:thread,message_id:'bad'
+    }),/Invalid Mail identifier/);
     const other=await mailArchiveStatus(pool,'another-user');
     assert.equal(other.body_captured,0);
   }finally{await pool.end();}
