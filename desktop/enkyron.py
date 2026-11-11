@@ -1849,63 +1849,100 @@ class EnkyronWindow(QMainWindow):
             payload={"mailbox":mailbox, "folder":folder}, callback=received)
 
     def sync_local_mail(self, mailbox=None):
+        """Continue bounded Resend pages into NEMORYTH; never mutate provider mail.
+
+        A restart may replay pages, but PostgreSQL's existing unique message
+        keys prevent duplicate copies. The UI keeps progress while running and
+        between button presses; no new schema or local state file is needed.
+        """
         if not self.mail_provider_ready:
             self.mail_inbox.connection_label.setText(
-                "Resend unavailable. Cached ENKYRON messages remain accessible."
+                "Resend unavailable. Saved NEMORYTH mail is still accessible."
             )
             self.mail_inbox.connection_label.setVisible(True)
             self.load_local_mail(self.mail_inbox.selected_mailbox)
             return
-        chosen = mailbox if mailbox in ("all","direction","support") else "all"
+        if getattr(self, "_mail_sync_running", False):
+            return
+        chosen = mailbox if mailbox in ("all", "direction", "support") else "all"
+        state = getattr(self, "_mail_sync_state", None)
+        if not isinstance(state, dict) or state.get("mailbox") != chosen:
+            state = {"mailbox": chosen, "stage": "headers",
+                     "cursors": None, "body": None, "partial": False}
+        self._mail_sync_state = state
+        self._mail_sync_running = True
         self.mail_inbox.refresh_button.setEnabled(False)
-        self.mail_inbox.connection_label.setText(
-            "Receiving new message headers from Resend…"
-        )
         self.mail_inbox.connection_label.setVisible(True)
-        def received(data, error):
+        steps = [0]
+
+        def stop(message, preserve=True):
+            self._mail_sync_running = False
             self.mail_inbox.refresh_button.setEnabled(True)
-            if error or not isinstance(data, dict) or not data.get("synced"):
-                self.mail_inbox.connection_label.setText(
-                    "Receiving failed. Saved local mail is still available."
-                )
-            elif data.get("partial"):
-                self.mail_inbox.connection_label.setText(
-                    "Some provider folders could not be synchronized. "
-                    "Saved local mail was preserved."
-                )
-            else:
-                self.mail_inbox.connection_label.setText(
-                    "Importing received message contents into ENKYRON…"
-                )
-                self.mail_inbox.connection_label.setVisible(True)
-            if error or not isinstance(data, dict) or not data.get("synced"):
-                self.load_local_mail(self.mail_inbox.selected_mailbox)
-                self.mail_inbox.connection_label.setText(
-                    "Receiving failed. Saved ENKYRON mail remains accessible."
-                )
-                self.mail_inbox.connection_label.setVisible(True)
+            if not preserve:
+                self._mail_sync_state = None
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            self.mail_inbox.connection_label.setText(message)
+            self.mail_inbox.connection_label.setVisible(bool(message))
+
+        def step():
+            # No runaway request loop or unlimited background synchronisation.
+            if steps[0] >= 25:
+                stop("More mail remains to be imported. "
+                     "Press Send / Receive again to continue.")
                 return
+            steps[0] += 1
+            if state["stage"] == "headers":
+                self.mail_inbox.connection_label.setText(
+                    "Receiving conversations into NEMORYTH…")
+                payload = {"mailbox": chosen}
+                if state["cursors"] is not None:
+                    payload["cursors"] = state["cursors"]
+
+                def received(data, error):
+                    if error or not isinstance(data, dict) or not data.get("synced"):
+                        stop("Resend header import paused. Saved mail is preserved; "
+                             "press Send / Receive to retry.")
+                        return
+                    state["partial"] = state["partial"] or bool(data.get("partial"))
+                    state["cursors"] = data.get("continuation") or None
+                    if data.get("more_pending"):
+                        step()
+                        return
+                    state["stage"] = "bodies"
+                    state["body"] = None
+                    step()
+                self.bridge.call("mail-local-sync", payload=payload, callback=received)
+                return
+
+            self.mail_inbox.connection_label.setText(
+                "Saving received message contents in NEMORYTH…")
+            payload = {"mailbox": chosen, "rescan": True}
+            if isinstance(state["body"], dict):
+                payload.update(state["body"])
+
             def cached(result, failure):
-                self.load_local_mail_metadata()
-                self.load_local_mail(self.mail_inbox.selected_mailbox)
-                if failure or not isinstance(result, dict):
-                    self.mail_inbox.connection_label.setText(
-                        "Message content import incomplete; saved messages are safe."
-                    )
-                    self.mail_inbox.connection_label.setVisible(True)
-                elif (result.get("failed_threads") or result.get("more_pending")
-                      or data.get("partial")):
-                    self.mail_inbox.connection_label.setText(
-                        "Some messages are not yet cached locally. "
-                        "Use Send / Receive again to continue importing."
-                    )
-                    self.mail_inbox.connection_label.setVisible(True)
+                if failure or not isinstance(result, dict) or result.get("failed_threads"):
+                    state["body"] = (result or {}).get("continuation") if (
+                        isinstance(result, dict)) else state["body"]
+                    stop("Message import paused; saved pages are preserved. "
+                         "Press Send / Receive to retry.")
+                    return
+                state["body"] = result.get("continuation")
+                if result.get("more_pending"):
+                    if not state["body"]:
+                        stop("Message import incomplete; progress unavailable.")
+                        return
+                    step()
+                    return
+                if state["partial"]:
+                    stop("Saved local mail updated. Some Resend folders failed; "
+                         "press Send / Receive again to retry them.", preserve=False)
                 else:
-                    self.mail_inbox.connection_label.setVisible(False)
+                    stop("", preserve=False)
             self.bridge.call("mail-local-sync-bodies",
-                payload={"mailbox":chosen}, callback=cached)
-        self.bridge.call("mail-local-sync",
-            payload={"mailbox":chosen}, callback=received)
+                             payload=payload, callback=cached)
+        step()
 
     def create_local_folder(self, name):
         def received(data, error):
