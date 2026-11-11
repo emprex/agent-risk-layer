@@ -354,6 +354,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_entries = []
         self.crm_drafts_seq = 0
         self.crm_drafts_loaded = False
+        self.mail_unsent_items = []
+        self._mail_unsent_seq = 0
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
@@ -1863,7 +1865,8 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.connection_label.setVisible(False)
         if folder in ("sent", "drafts"):
             self.mail_inbox._clear_threads("Loading {}…".format(folder))
-            (self.load_mail_sent if folder == "sent" else self.load_mail_drafts)()
+            (self.load_mail_sent if folder == "sent"
+             else self.load_unsent_mail_drafts)()
             return
         query = (self.mail_inbox._local_search_query or ""
                  if search is None else str(search).strip())
@@ -3272,7 +3275,7 @@ class EnkyronWindow(QMainWindow):
         """Preview saved drafts and sent submissions inside the Mail reading pane."""
         if kind not in ("sent", "drafts") or not isinstance(index, int):
             return
-        records = self.mail_sent_items if kind == "sent" else self.crm_draft_items
+        records = self.mail_sent_items if kind == "sent" else self.mail_unsent_items
         if not 0 <= index < len(records):
             return
         item = records[index]
@@ -3321,10 +3324,26 @@ class EnkyronWindow(QMainWindow):
             return
         if kind == "sent" and 0 <= index < len(self.mail_sent_items):
             self.view_sent_mail_row(index)
-        elif kind == "drafts" and 0 <= index < len(self.crm_draft_items):
-            if index < self.crm_draft_table.rowCount():
-                self.crm_draft_table.selectRow(index)
-                self.open_selected_draft()
+        elif kind == "drafts" and 0 <= index < len(self.mail_unsent_items):
+            selected = self.mail_unsent_items[index]
+            if not isinstance(selected, dict) or selected.get("mail_state") != "draft":
+                return
+            draft_id = selected.get("id")
+            if not isinstance(draft_id, str):
+                return
+            if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+                self.crm_draft_dialog.raise_()
+                return
+            def received(data, error):
+                if (error or not isinstance(data, dict)
+                        or not isinstance(data.get("draft"), dict)
+                        or data["draft"].get("mail_state") != "draft"):
+                    QMessageBox.warning(self, "Draft unavailable",
+                        "This message is no longer an unsent draft.")
+                    self.load_unsent_mail_drafts()
+                    return
+                self.show_mail_draft_dialog(data["draft"])
+            self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def closeEvent(self, event):
         # Reattach each module before the owning workstation exits.
@@ -13367,6 +13386,49 @@ class EnkyronWindow(QMainWindow):
         self.crm_drafts_seq += 1
         self.crm_draft_search_timer.start()
 
+    def load_unsent_mail_drafts(self):
+        """Only actual unsent drafts belong in Mail → Drafts.
+
+        Historical CRM draft records stay unchanged, including provider
+        submissions and operator-reported external sends. All filtering
+        happens in the scoped PostgreSQL query before the 100-row limit.
+        """
+        if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
+            return
+        if self.mail_inbox.selected_folder != "drafts":
+            return
+        self._mail_unsent_seq += 1
+        generation = self._mail_unsent_seq
+        mailbox = self.mail_inbox.selected_mailbox
+        self.mail_unsent_items = []
+
+        def received(data, error):
+            if (generation != self._mail_unsent_seq
+                    or self.mail_inbox.selected_folder != "drafts"
+                    or mailbox != self.mail_inbox.selected_mailbox):
+                return
+            if error or not isinstance(data, dict) or not data.get("available", True):
+                self.mail_inbox.show_local_records("drafts", [])
+                self.mail_inbox.connection_label.setText(
+                    "Could not load unsent drafts from NEMORYTH.")
+                self.mail_inbox.connection_label.setVisible(True)
+                return
+            items = data.get("items")
+            if not isinstance(items, list) or any(
+                not isinstance(item, dict) or item.get("mail_state") != "draft"
+                for item in items
+            ):
+                self.mail_inbox.show_local_records("drafts", [])
+                self.mail_inbox.connection_label.setText(
+                    "Draft listing returned invalid states; no messages changed.")
+                self.mail_inbox.connection_label.setVisible(True)
+                return
+            self.mail_unsent_items = items
+            self.mail_inbox.show_local_records(
+                "drafts", items, bool(data.get("more")))
+
+        self.bridge.call("mail-unsent-drafts", "", callback=received)
+
     def load_mail_drafts(self):
         self.crm_drafts_seq += 1
         seq = self.crm_drafts_seq
@@ -13993,6 +14055,9 @@ class EnkyronWindow(QMainWindow):
             return
         dialog.accept()
         self.load_mail_drafts()
+        # The submitted draft leaves Mail → Drafts immediately. The original
+        # immutable draft and send-attempt records remain in PostgreSQL.
+        self.mail_inbox.activate_local_folder("sent")
         self.crm_tabs.setCurrentIndex(3)
         self.crm_mail_folders.setCurrentIndex(1)
         self.load_mail_sent()
