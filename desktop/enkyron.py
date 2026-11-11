@@ -1310,7 +1310,6 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.folderChanged.connect(
             lambda _folder: self.load_local_mail(self.mail_inbox.selected_mailbox)
         )
-        self.mail_inbox.threadMoveRequested.connect(self.file_mail_thread)
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
