@@ -576,6 +576,9 @@ class MailInboxView(QWidget):
             unread = item.get("unread") is True
             label = ("● " if unread else "") + subject
             if self.local_mode:
+                sender = str(item.get("sender") or "").strip()[:120]
+                if sender:
+                    label = ("● " if unread else "") + sender + "\n" + subject
                 tags = str(item.get("labels") or "").strip()
                 if tags:
                     label += "   [" + tags[:80] + "]"
