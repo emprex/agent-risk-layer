@@ -64,6 +64,8 @@ class MailInboxView(QWidget):
     localCreateFolderRequested = Signal(str)
     localCreateLabelRequested = Signal(str)
     localAssignLabelRequested = Signal(str, str, str, bool)
+    localRecordRequested = Signal(str, int)
+    localRecordOpenRequested = Signal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -357,9 +359,6 @@ class MailInboxView(QWidget):
         folder = item.data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(folder, str) or folder == self._folder:
             return
-        if folder in ('sent', 'drafts'):
-            (self.sentRequested if folder == 'sent' else self.draftsRequested).emit()
-            return
         self._folder = folder
         self._clear_threads("No saved messages in this folder.")
         if self.selected_mailbox is not None:
@@ -378,6 +377,8 @@ class MailInboxView(QWidget):
         if not isinstance(record, tuple) or len(record) != 2:
             return
         mailbox, thread_id = record
+        if mailbox not in self._mailboxes:
+            return  # Sent/draft history is not an imported conversation.
         menu = QMenu(self)
         move = menu.addMenu("Move to folder")
         for folder in self.local_folders:
@@ -599,6 +600,52 @@ class MailInboxView(QWidget):
         self._filter(self.search.text())
         return True
 
+    def show_local_records(self, kind, records, more=False):
+        """Show Sent and Drafts in the same three-pane workspace as Inbox."""
+        if not self.local_mode or kind not in ("sent", "drafts") or self._folder != kind:
+            return False
+        if not isinstance(records, list):
+            return False
+        self._clear_threads("No messages in this folder.")
+        self.items = list(records[:200])
+        self._has_more = bool(more or len(records) > 200)
+        self.thread_list.blockSignals(True)
+        for index, record in enumerate(self.items):
+            if not isinstance(record, dict):
+                continue
+            account = record.get("mailbox_key")
+            # Do not attribute a draft with missing account metadata to an account.
+            if self.selected_mailbox != "all" and account != self.selected_mailbox:
+                continue
+            subject = str(record.get("subject") or "(No subject)")[:300]
+            recipient = str(record.get("recipient_email") or "Recipient not set")[:120]
+            date = _display_date(record.get("updated_at") or record.get("created_at"))
+            state = (str(record.get("mail_state") or "draft").replace("_", " ")
+                     if kind == "drafts" else
+                     "Submitted to provider" if record.get("outcome") == "accepted"
+                     else "Submission uncertain")
+            label = recipient + "\\n" + subject + "\\n" + state
+            if date:
+                label += " · " + date
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ("local-" + kind, index))
+            item.setToolTip(subject)
+            self.thread_list.addItem(item)
+        self.thread_list.blockSignals(False)
+        self._filter(self.search.text())
+        return True
+
+    def show_local_record_preview(self, kind, index, body, metadata):
+        """Render fetched CRM draft content as inert plain text only."""
+        selected = self.thread_list.currentItem()
+        if (selected is None or selected.data(Qt.ItemDataRole.UserRole)
+                != ("local-" + kind, index) or kind != self._folder):
+            return False
+        self.body.setPlainText(str(body or "")[:20000])
+        self.meta.setText(str(metadata or "")[:500])
+        self.reader_stack.setCurrentIndex(1)
+        return True
+
     def _filter(self, value):
         query = value.strip().casefold()
         visible = 0
@@ -647,6 +694,17 @@ class MailInboxView(QWidget):
         if not isinstance(reference, tuple) or len(reference) != 2:
             return
         source, thread_id = reference
+        if self.local_mode and source in ("local-sent", "local-drafts"):
+            kind = source.removeprefix("local-")
+            if not isinstance(thread_id, int) or not 0 <= thread_id < len(self.items):
+                return
+            record = self.items[thread_id]
+            self.subject.setText(str(record.get("subject") or "(No subject)")[:300])
+            self.meta.setText("Loading saved message…")
+            self.body.setPlainText("Loading saved message…")
+            self.reader_stack.setCurrentIndex(1)
+            self.localRecordRequested.emit(kind, thread_id)
+            return
         if source not in self._mailboxes:
             return
         self.current_thread_mailbox = source
@@ -669,7 +727,10 @@ class MailInboxView(QWidget):
         if not isinstance(reference, tuple) or len(reference) != 2:
             return
         source, thread_id = reference
-        if source in self._mailboxes:
+        if self.local_mode and source in ("local-sent", "local-drafts"):
+            if isinstance(thread_id, int):
+                self.localRecordOpenRequested.emit(source.removeprefix("local-"), thread_id)
+        elif source in self._mailboxes:
             self.threadOpenRequested.emit(source, thread_id)
 
     def show_messages(self, mailbox, thread_id, messages):
