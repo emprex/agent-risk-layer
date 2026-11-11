@@ -397,7 +397,7 @@ export async function localMailMessages(pool,actor,input){
   )).rows[0]?.ready===true;
   const query=archive?(
     'SELECT m.message_id AS id,m.sender AS "from",m.recipients AS "to",'+
-    'm.subject,CASE WHEN a.archive_state=\'complete\' '+
+    'm.subject,CASE WHEN a.archive_state=\'body_captured\' '+
     'AND a.body_text_full IS NOT NULL THEN LEFT(a.body_text_full,20000) '+
     'ELSE m.body_text END AS text,m.html_only,m.created_at,'+
     'a.archive_state,COALESCE(length(a.body_text_full)>20000,FALSE) '+
