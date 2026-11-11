@@ -678,11 +678,11 @@ jobs:
           assert len(fields) == 5
           sector_selectors = [
               box for box in window.crm_record_edit_dialog.findChildren(QComboBox)
-              if box.findText("Cybersecurity") >= 0
+              if box.findText("AI & Automation") >= 0
           ]
           assert len(sector_selectors) == 1
           assert not sector_selectors[0].isEditable()
-          sector_selectors[0].setCurrentText("Cybersecurity")
+          sector_selectors[0].setCurrentText("AI & Automation")
           rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
           rationale.setPlainText(
               "Correcting an operator-entered sector after checking the original source."
@@ -697,7 +697,7 @@ jobs:
           assert calls[-1][0] == "crm-edit-company"
           assert calls[-1][2]["id"] == company_id
           assert calls[-1][2]["expected_version"] == 1
-          assert calls[-1][2]["sector"] == "Cybersecurity"
+          assert calls[-1][2]["sector"] == "AI & Automation"
           assert calls[-1][2]["confirmed"] is True
           assert "relationship_state" not in calls[-1][2]
           window.crm_record_edit_dialog.reject()
