@@ -71,14 +71,15 @@ class ManualSendSmoke(unittest.TestCase):
             window.crm_draft_dialog.reject()
         finally:
             if window:
-                if window.crm_mail_send_dialog and window.crm_mail_send_dialog.isVisible():
-                    window.crm_mail_send_dialog.close()
-                if window.crm_draft_dialog and window.crm_draft_dialog.isVisible():
-                    window.crm_draft_dialog.close()
-                window.close()
-                window.deleteLater()
+                # Two separate top-level draft windows are intentionally opened
+                # during this test. Dispose *all* top-level Qt windows in the
+                # same application lifetime, not only the last draft reference.
+                for top in list(QApplication.topLevelWidgets()):
+                    top.close()
+                    top.deleteLater()
                 QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-                QApplication.processEvents()
+                self.app.processEvents()
+                window = None
                 gc.collect()
             DesktopBridge.call=prev
 
