@@ -74,6 +74,7 @@ class MailInboxView(QWidget):
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
     replyRequested = Signal(str, str)
+    forwardRequested = Signal(str, str)
     replySubmitRequested = Signal()
     sentFollowUpRequested = Signal(int)
 
@@ -281,6 +282,13 @@ class MailInboxView(QWidget):
         self.reply_button.clicked.connect(self._request_reply)
         self.reply_button.hide()
         reply_toolbar.addWidget(self.reply_button)
+        self.forward_button = QPushButton("Forward")
+        self.forward_button.setObjectName("enkyronMailForward")
+        self.forward_button.setToolTip(
+            "Prepare a text-only forward for review; never sends automatically")
+        self.forward_button.clicked.connect(self._request_forward)
+        self.forward_button.hide()
+        reply_toolbar.addWidget(self.forward_button)
         reply_toolbar.addStretch()
         right_layout.addLayout(reply_toolbar)
         self.reply_editor = QFrame()
@@ -608,6 +616,7 @@ class MailInboxView(QWidget):
     def _clear_threads(self, explanation, preserve_search=False):
         self.hide_reply_editor()
         self.reply_button.hide()
+        self.forward_button.hide()
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
@@ -886,6 +895,7 @@ class MailInboxView(QWidget):
     def _selected(self, current, _previous):
         self.hide_reply_editor()
         self.reply_button.hide()
+        self.forward_button.hide()
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.subject.setText("Select a message")
@@ -955,6 +965,14 @@ class MailInboxView(QWidget):
             return
         self.replyRequested.emit(self.current_thread_mailbox, self.current_thread_id)
 
+    def _request_forward(self):
+        if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
+                or not self.current_thread_id
+                or self.selected_folder in ("sent", "drafts")):
+            return
+        self.forwardRequested.emit(
+            self.current_thread_mailbox, self.current_thread_id)
+
     def show_reply_editor(self, mailbox, thread_id, recipient):
         if (mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id
@@ -1003,4 +1021,6 @@ class MailInboxView(QWidget):
         self.reply_button.setToolTip("Reply in this conversation")
         self.reply_button.setVisible(self.local_mode and bool(messages)
                                      and self.selected_folder not in ("sent","drafts"))
+        self.forward_button.setVisible(self.local_mode and bool(messages)
+                                       and self.selected_folder not in ("sent","drafts"))
         return True
