@@ -476,7 +476,7 @@ main().catch(error => {
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|CRM )/.test(message);
   const operation=process.argv[2];
   const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
-  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-sync-bodies','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
+  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-sync-bodies','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','mail-local-flag','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
   emit({ ok: false, error: profileOperation
     ? explainLocalError(error)
     : mailOperation ? explainMailOperationError(error)
