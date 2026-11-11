@@ -757,12 +757,15 @@ class EnkyronWindow(QMainWindow):
         self.evidence_button.clicked.connect(self.inspect_evidence)
         evidence_l.addWidget(self.evidence_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.evidence_summary = make_text_area()
-        self.evidence_summary.setMaximumHeight(190)
-        evidence_l.addWidget(self.evidence_summary)
+        self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
+        self.evidence_summary.setMinimumHeight(270)
+        self.evidence_summary.setMaximumHeight(360)
+        evidence_l.addWidget(self.evidence_summary, 3)
         evidence_l.addWidget(section_title("EVIDENCE REQUEST PACKS"))
         self.evidence_packs = QListWidget()
-        self.evidence_packs.setMaximumHeight(190)
-        evidence_l.addWidget(self.evidence_packs)
+        self.evidence_packs.setObjectName("ticketEvidencePacks")
+        self.evidence_packs.setMaximumHeight(72)
+        evidence_l.addWidget(self.evidence_packs, 1)
         actions = QHBoxLayout()
         self.evidence_open = QPushButton("Inspect selected pack")
         self.evidence_open.setEnabled(False)
@@ -779,6 +782,7 @@ class EnkyronWindow(QMainWindow):
         actions.addStretch()
         evidence_l.addLayout(actions)
         self.evidence_details = make_text_area()
+        self.evidence_details.setMaximumHeight(100)
         evidence_l.addWidget(self.evidence_details, 1)
         self.tabs.addTab(evidence, "Evidence Requests")
 
@@ -15954,6 +15958,8 @@ class EnkyronWindow(QMainWindow):
         self.evidence_previous.setEnabled(False)
         self.evidence_next.setEnabled(False)
         self.evidence_packs.clear()
+        self.evidence_packs.setMaximumHeight(72)
+        self.evidence_details.setMaximumHeight(100)
         self.evidence_details.clear()
         self.evidence_summary.setPlainText("Verifying the current canonical snapshot and Git target…")
 
@@ -16026,10 +16032,11 @@ class EnkyronWindow(QMainWindow):
                     ]
                 self.evidence_summary.setPlainText("\n".join([
                     "ARL CONTROL REGISTER: 108",
+                    *stage_lines,
+                    "",
                     "Controls ready for evidence planning: " + str(data["assessment_controls"]),
                     "Controls in other workflow stages: " + str(data["other_workflow_controls"]),
                     "Evidence criteria in current workplan: " + str(data["criterion_count"]),
-                    *stage_lines,
                     "",
                     "Static candidates: " + str(counts["staticCandidates"]),
                     "Static missing: " + str(counts["staticMissing"]),
@@ -16052,9 +16059,19 @@ class EnkyronWindow(QMainWindow):
                     )
                     widget.setData(Qt.ItemDataRole.UserRole, pack["number"])
                     self.evidence_packs.addItem(widget)
-                self.evidence_open.setEnabled(self.evidence_packs.count() > 0)
-                if self.evidence_packs.count():
+                has_packs = self.evidence_packs.count() > 0
+                self.evidence_open.setEnabled(has_packs)
+                self.evidence_packs.setMaximumHeight(190 if has_packs else 72)
+                self.evidence_details.setMaximumHeight(260 if has_packs else 100)
+                if has_packs:
                     self.evidence_packs.setCurrentRow(0)
+                else:
+                    self.evidence_details.setPlainText(
+                        "No evidence request packs at this stage. "
+                        "Review the workflow stage counts above. "
+                        "Human applicability and scope decisions must be completed "
+                        "in the authoritative ARL workflow before evidence planning."
+                    )
                 self.status.setText(
                     "ARL evidence workplan read-only. Candidate records are NOT accepted proof."
                 )
