@@ -12431,6 +12431,8 @@ class EnkyronWindow(QMainWindow):
             }
             if context.get("company_id"):
                 payload["company_id"] = context["company_id"]
+                if context.get("recipient_contact_id"):
+                    payload["recipient_contact_id"] = context["recipient_contact_id"]
             elif context.get("opportunity_id"):
                 payload["opportunity_id"] = context["opportunity_id"]
         self.crm_mail_save.setEnabled(False)
