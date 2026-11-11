@@ -2468,6 +2468,9 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
     def closeEvent(self, event):
+        # Calendar editors are independent windows and must close with ENKYRON.
+        if hasattr(self, "calendar_view"):
+            self.calendar_view.close_editors()
         # Close independently opened mail conversations on workstation exit.
         for window in list(self.mail_thread_windows.values()):
             window.close()
