@@ -121,6 +121,7 @@ class CalendarEntryDialog(QDialog):
 
 
 class MailCalendarView(QWidget):
+    detachRequested = Signal()
     rangeRequested = Signal(dict)
     eventCreateRequested = Signal(dict)
     taskCreateRequested = Signal(dict)
@@ -138,6 +139,10 @@ class MailCalendarView(QWidget):
         title.setStyleSheet("font-size: 20px; font-weight: 600;")
         top.addWidget(title)
         top.addStretch()
+        self.detach_button = QPushButton("Open in window")
+        self.detach_button.setObjectName("enkyronCalendarDetach")
+        self.detach_button.clicked.connect(self.detachRequested.emit)
+        top.addWidget(self.detach_button)
         self.add_event_button = QPushButton("New appointment")
         self.add_event_button.clicked.connect(lambda: self.open_editor("event"))
         self.add_task_button = QPushButton("New task")

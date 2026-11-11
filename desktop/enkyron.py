@@ -262,6 +262,27 @@ class DesktopBridge:
                     15000)
 
 
+class DetachableModuleWindow(QMainWindow):
+    """Native non-modal module window; closing reattaches the original widget."""
+
+    def __init__(self, title, on_return, owner):
+        super().__init__(owner, Qt.WindowType.Window)
+        self.setWindowTitle(title)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.resize(1180, 760)
+        self.setMinimumSize(650, 450)
+        self._on_return = on_return
+        toolbar = self.addToolBar("Window")
+        toolbar.setMovable(False)
+        button = QPushButton("Return to ENKYRON")
+        button.clicked.connect(self.close)
+        toolbar.addWidget(button)
+
+    def closeEvent(self, event):
+        self._on_return()
+        super().closeEvent(event)
+
+
 class EnkyronWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -297,6 +318,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
+        self.mail_detached_window = None
+        self.calendar_detached_window = None
+        self.mail_detach_placeholder = None
+        self.calendar_detach_placeholder = None
         self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
@@ -1276,6 +1301,7 @@ class EnkyronWindow(QMainWindow):
         # One professional Mail workspace, reusing the existing local Drafts.
         # No network calls until trusted Owner authentication is connected.
         mail_page = QWidget()
+        self.mail_page = mail_page
         mail_l = QVBoxLayout(mail_page)
         mail_l.setSpacing(10)
         mail_head = QHBoxLayout()
@@ -1286,9 +1312,16 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
         self.crm_mail_connection.hide()  # Status lives once, inside Inbox.
         mail_head.addWidget(self.crm_mail_connection)
+        self.mail_detach_button = QPushButton("Open in window")
+        self.mail_detach_button.setObjectName("enkyronMailDetach")
+        self.mail_detach_button.clicked.connect(self.toggle_mail_window)
+        mail_head.addWidget(self.mail_detach_button)
         # Mail is one workspace; mailbox transport configuration is back-office.
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
+        # Legacy Sent/Drafts tables remain as backing records, but navigation
+        # is exclusively through the persistent Mail folder tree.
+        self.crm_mail_folders.tabBar().hide()
         mail_l.addWidget(self.crm_mail_folders, 1)
         self.mail_inbox = MailInboxView()
         self.mail_inbox.set_local_mode()
@@ -1297,11 +1330,14 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
         self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
         self.mail_inbox.draftsRequested.connect(
-            lambda: self.crm_mail_folders.setCurrentIndex(2)
+            lambda: self.mail_inbox.activate_local_folder("drafts")
         )
         self.mail_inbox.sentRequested.connect(
-            lambda: self.crm_mail_folders.setCurrentIndex(1)
+            lambda: self.mail_inbox.activate_local_folder("sent")
         )
+        self.mail_inbox.localRecordRequested.connect(self.preview_mail_local_record)
+        self.mail_inbox.localRecordOpenRequested.connect(self.open_mail_local_record)
+        self.mail_inbox.localRecordLinkRequested.connect(self.link_mail_local_record)
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
@@ -1363,6 +1399,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_mail_folders.addTab(sent_page, "Sent")
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
+        self.crm_mail_folders.tabBar().hide()
         self.crm_mail_folders.setCurrentIndex(0)
         self.crm_tabs.addTab(mail_page, "Mail")
 
@@ -1678,6 +1715,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_tabs.addTab(invoice_page, "Invoices")
         self.pages.addWidget(crm_page)
         self.calendar_view = MailCalendarView()
+        self.calendar_view.detachRequested.connect(self.toggle_calendar_window)
         self.calendar_view.rangeRequested.connect(self.load_calendar)
         self.calendar_view.eventCreateRequested.connect(self.create_calendar_event)
         self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
@@ -1783,13 +1821,14 @@ class EnkyronWindow(QMainWindow):
         if mailbox not in ("all", "direction", "support"):
             return
         folder = self.mail_inbox.selected_folder
-        if folder in ("sent", "drafts"):
-            self.crm_mail_folders.setCurrentIndex(1 if folder=="sent" else 2)
-            return
         self.mail_inbox.set_connection_state("connected")
         self.mail_inbox.search.setEnabled(True)
         self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
         self.mail_inbox.connection_label.setVisible(False)
+        if folder in ("sent", "drafts"):
+            self.mail_inbox._clear_threads("Loading {}…".format(folder))
+            (self.load_mail_sent if folder == "sent" else self.load_mail_drafts)()
+            return
         self.mail_inbox._clear_threads("Loading saved mail…")
         def received(data, error):
             if (self.mail_inbox.selected_mailbox not in (None, mailbox)
@@ -2114,9 +2153,11 @@ class EnkyronWindow(QMainWindow):
                 self.mail_sent_status.setText(
                     "Submitted message history unavailable."
                 )
+                self.mail_inbox.show_local_records("sent", [])
                 return
             entries = data.get("items") or []
             self.mail_sent_items = entries
+            self.mail_inbox.show_local_records("sent", entries)
             self.mail_sent_table.setRowCount(len(entries))
             for n, entry in enumerate(entries):
                 fields = [
@@ -2195,6 +2236,12 @@ class EnkyronWindow(QMainWindow):
                 return
             self.mail_sent_verifying = False
             self.mail_sent_verified_rows.add(row)
+            event = (str(data.get("last_event") or "unknown")
+                     if isinstance(data, dict) else "unknown")
+            if event not in ("delivered", "bounced", "failed",
+                             "suppressed", "complained", "sent", "queued",
+                             "opened", "clicked", "unknown"):
+                event = "unknown"
             item = self.mail_sent_table.item(row, 3)
             if item:
                 if error or not isinstance(data, dict) or not data.get("verified"):
@@ -2205,7 +2252,6 @@ class EnkyronWindow(QMainWindow):
                             or "Delivery could not be verified.")[:400]
                     )
                 else:
-                    event = data.get("last_event") or "unknown"
                     if event == "delivered":
                         item.setText("✓")
                         item.setForeground(QColor("#17803d"))
@@ -2220,6 +2266,15 @@ class EnkyronWindow(QMainWindow):
                         item.setToolTip(
                             "Resend event: {}. Delivery not confirmed.".format(event)
                         )
+            if not (error or not isinstance(data, dict) or not data.get("verified")):
+                self.mail_sent_items[row]["_delivery_event"] = event
+                status = ("✓ Delivered" if event == "delivered"
+                          else "× " + event.capitalize()
+                          if event in ("bounced", "failed", "suppressed", "complained")
+                          else "· " + event + " (not confirmed)")
+            else:
+                status = "? Delivery not verified"
+            self.mail_inbox.update_local_sent_delivery(row, status)
             self._verify_next_sent_mail()
 
         self.bridge.call("mail-provider-status", str(draft_id), callback=received)
@@ -2493,7 +2548,176 @@ class EnkyronWindow(QMainWindow):
             )
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
+    def link_mail_local_record(self, index):
+        """Keep existing human CRM association available from Sent context menu."""
+        if not isinstance(index, int) or not 0 <= index < len(self.mail_sent_items):
+            return
+        if index >= self.mail_sent_table.rowCount():
+            return
+        self.mail_sent_table.selectRow(index)
+        self.link_selected_sent_mail()
+
+    def _detached_notice(self, label, window_getter):
+        placeholder = QWidget()
+        layout = QVBoxLayout(placeholder)
+        layout.addStretch()
+        title = QLabel(label + " is open in another window.")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        button = QPushButton("Bring " + label + " to front")
+        def focus_window():
+            window = window_getter()
+            if window is not None:
+                window.showNormal()
+                window.raise_()
+                window.activateWindow()
+        button.clicked.connect(focus_window)
+        layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch()
+        return placeholder
+
+    def toggle_mail_window(self):
+        """Open the *same* Mail workspace as a genuine movable native window."""
+        if self.mail_detached_window is not None:
+            self.mail_detached_window.close()
+            return
+        slot = self.crm_tabs.indexOf(self.mail_page)
+        if slot < 0:
+            return
+        placeholder = self._detached_notice(
+            "Mail", lambda: self.mail_detached_window
+        )
+        self.crm_tabs.removeTab(slot)
+        self.crm_tabs.insertTab(slot, placeholder, "Mail")
+        self.crm_tabs.setCurrentIndex(slot)
+        self.mail_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — Mail", self._return_mail_window, None
+        )
+        self.mail_detached_window = window
+        window.setCentralWidget(self.mail_page)
+        self.mail_detach_button.setText("Return to ENKYRON")
+        window.show()
+
+    def _return_mail_window(self):
+        window = self.mail_detached_window
+        if window is None:
+            return
+        page = window.takeCentralWidget()
+        slot = self.crm_tabs.indexOf(self.mail_detach_placeholder)
+        if page is not None and slot >= 0:
+            self.crm_tabs.removeTab(slot)
+            self.crm_tabs.insertTab(slot, page, "Mail")
+            self.crm_tabs.setCurrentIndex(slot)
+        if self.mail_detach_placeholder is not None:
+            self.mail_detach_placeholder.deleteLater()
+        self.mail_detach_button.setText("Open in window")
+        self.mail_detach_placeholder = None
+        self.mail_detached_window = None
+
+    def toggle_calendar_window(self):
+        """Allow Mail and Calendar to occupy separate monitors simultaneously."""
+        if self.calendar_detached_window is not None:
+            self.calendar_detached_window.close()
+            return
+        slot = self.pages.indexOf(self.calendar_view)
+        if slot < 0:
+            return
+        placeholder = self._detached_notice(
+            "Calendar", lambda: self.calendar_detached_window
+        )
+        self.pages.removeWidget(self.calendar_view)
+        self.pages.insertWidget(slot, placeholder)
+        self.pages.setCurrentIndex(slot)
+        self.calendar_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — Calendar", self._return_calendar_window, None
+        )
+        self.calendar_detached_window = window
+        window.setCentralWidget(self.calendar_view)
+        self.calendar_view.detach_button.setText("Return to ENKYRON")
+        window.show()
+
+    def _return_calendar_window(self):
+        window = self.calendar_detached_window
+        if window is None:
+            return
+        view = window.takeCentralWidget()
+        slot = self.pages.indexOf(self.calendar_detach_placeholder)
+        if view is not None and slot >= 0:
+            self.pages.removeWidget(self.calendar_detach_placeholder)
+            self.pages.insertWidget(slot, view)
+            self.pages.setCurrentIndex(slot)
+        if self.calendar_detach_placeholder is not None:
+            self.calendar_detach_placeholder.deleteLater()
+        self.calendar_view.detach_button.setText("Open in window")
+        self.calendar_detach_placeholder = None
+        self.calendar_detached_window = None
+
+    def preview_mail_local_record(self, kind, index):
+        """Preview saved drafts and sent submissions inside the Mail reading pane."""
+        if kind not in ("sent", "drafts") or not isinstance(index, int):
+            return
+        records = self.mail_sent_items if kind == "sent" else self.crm_draft_items
+        if not 0 <= index < len(records):
+            return
+        item = records[index]
+        if not isinstance(item, dict):
+            return
+        address = str(item.get("recipient_email") or "Not set")[:254]
+        if kind == "sent":
+            delivered_event = item.get("_delivery_event")
+            note = ("Delivered — confirmed by Resend" if delivered_event == "delivered"
+                    else "Resend event: " + str(delivered_event)
+                    if delivered_event in ("bounced", "failed", "suppressed", "complained")
+                    else "Submitted to Resend — delivery not confirmed"
+                    if item.get("outcome") == "accepted"
+                    else "Submission uncertain — verify before resending")
+        else:
+            state = item.get("mail_state") or "draft"
+            note = ("External send reported by operator — not provider verified"
+                    if state == "external_send_reported" else
+                    "Draft — not sent" if state == "draft"
+                    else "Provider submission recorded — delivery not confirmed")
+        fallback = "Message content unavailable in the local draft record."
+        draft_id = item.get("draft_id") if kind == "sent" else item.get("id")
+        meta = "To: {} · {}".format(address, note)
+        if not draft_id:
+            self.mail_inbox.show_local_record_preview(kind, index, fallback, meta)
+            return
+
+        def received(data, error):
+            draft = data.get("draft") if isinstance(data, dict) else None
+            if error or not isinstance(draft, dict):
+                self.mail_inbox.show_local_record_preview(
+                    kind, index, "Saved message could not be loaded.", meta
+                )
+                return
+            self.mail_inbox.show_local_record_preview(
+                kind, index, draft.get("body_text") or "(Empty message)",
+                "From: {} · {}".format(
+                    draft.get("mailbox_key") or "Unspecified account", meta
+                )
+            )
+        self.bridge.call("crm-mail-draft", str(draft_id), callback=received)
+
+    def open_mail_local_record(self, kind, index):
+        """Double-click preserves the existing secure draft/detail editor."""
+        if not isinstance(index, int):
+            return
+        if kind == "sent" and 0 <= index < len(self.mail_sent_items):
+            self.view_sent_mail_row(index)
+        elif kind == "drafts" and 0 <= index < len(self.crm_draft_items):
+            if index < self.crm_draft_table.rowCount():
+                self.crm_draft_table.selectRow(index)
+                self.open_selected_draft()
+
     def closeEvent(self, event):
+        # Reattach each module before the owning workstation exits.
+        if self.mail_detached_window is not None:
+            self.mail_detached_window.close()
+        if self.calendar_detached_window is not None:
+            self.calendar_detached_window.close()
         # Calendar editors are independent windows and must close with ENKYRON.
         if hasattr(self, "calendar_view"):
             self.calendar_view.close_editors()
@@ -2530,6 +2754,10 @@ class EnkyronWindow(QMainWindow):
         if index == 4:
             self.pages.setCurrentIndex(3)
             self.load_calendar()
+            if self.calendar_detached_window is not None:
+                self.calendar_detached_window.showNormal()
+                self.calendar_detached_window.raise_()
+                self.calendar_detached_window.activateWindow()
             return
         if index == 3:
             self.pages.setCurrentIndex(2)
@@ -2537,6 +2765,10 @@ class EnkyronWindow(QMainWindow):
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
             self.load_mail_status()
+            if self.mail_detached_window is not None:
+                self.mail_detached_window.showNormal()
+                self.mail_detached_window.raise_()
+                self.mail_detached_window.activateWindow()
             return
         if index < 0 or index >= self.pages.count():
             return
@@ -12540,14 +12772,18 @@ class EnkyronWindow(QMainWindow):
             self.crm_draft_table.blockSignals(False)
             if error:
                 self.crm_draft_notice.setText("Unable to load drafts.")
+                self.mail_inbox.show_local_records("drafts", [])
                 self.show_error(error)
                 return
             if not data or not data.get("available", True):
                 self.crm_draft_notice.setText(
                     (data or {}).get("notice", "Drafts are currently unavailable. Check the application setup.")
                 )
+                self.mail_inbox.show_local_records("drafts", [])
                 return
             self.crm_draft_items = data.get("items", [])
+            self.mail_inbox.show_local_records("drafts", self.crm_draft_items,
+                                               bool(data.get("more")))
             self.crm_draft_table.blockSignals(True)
             self.crm_draft_table.setRowCount(len(self.crm_draft_items))
             for row, draft in enumerate(self.crm_draft_items):
