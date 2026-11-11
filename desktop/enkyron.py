@@ -1329,6 +1329,10 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
         self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
         self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
+        self.mail_inbox.localFlagRequested.connect(self.flag_local_mail)
+        self.mail_inbox.localSearchRequested.connect(self.search_local_mail)
+        self.mail_inbox.localPageRequested.connect(
+            lambda page: self.load_local_mail(page=page))
         self.mail_inbox.draftsRequested.connect(
             lambda: self.mail_inbox.activate_local_folder("drafts")
         )
@@ -1817,7 +1821,13 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-folders", callback=folders)
         self.bridge.call("mail-local-labels", callback=labels)
 
-    def load_local_mail(self, mailbox=None):
+    def search_local_mail(self, query):
+        # Only explicitly submitted searches query NEMORYTH, never Resend.
+        if not isinstance(query, str) or len(query) > 120:
+            return
+        self.load_local_mail(search=query.strip(), page=0)
+
+    def load_local_mail(self, mailbox=None, *, search=None, page=0):
         if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
             return
         mailbox = mailbox or self.mail_inbox.selected_mailbox or "all"
@@ -1832,21 +1842,35 @@ class EnkyronWindow(QMainWindow):
             self.mail_inbox._clear_threads("Loading {}…".format(folder))
             (self.load_mail_sent if folder == "sent" else self.load_mail_drafts)()
             return
-        self.mail_inbox._clear_threads("Loading saved mail…")
+        query = (self.mail_inbox._local_search_query or ""
+                 if search is None else str(search).strip())
+        if not isinstance(page, int) or not 0 <= page <= 1000:
+            return
+        self.mail_inbox._clear_threads(
+            "Searching saved messages…" if query else "Loading saved mail…",
+            preserve_search=bool(query)
+        )
+        request_folder = "all" if query else folder
         def received(data, error):
             if (self.mail_inbox.selected_mailbox not in (None, mailbox)
-                    or folder != self.mail_inbox.selected_folder):
+                    or folder != self.mail_inbox.selected_folder
+                    or (query and self.mail_inbox.search.text().strip().casefold()
+                        != query.casefold())):
                 return
             if error or not isinstance(data, dict):
                 self.mail_inbox._show_empty(
                     "Local mail unavailable",
-                    "Apply the local Mail database update (schema 112)."
+                    "Check the PostgreSQL Mail schema and local access."
                 )
                 return
-            self.mail_inbox.show_threads(mailbox,
-                data.get("items") or [], bool(data.get("has_more")), folder)
+            self.mail_inbox.show_threads(
+                mailbox, data.get("items") or [],
+                bool(data.get("has_more")), folder,
+                search_query=query if query else None, page=page
+            )
         self.bridge.call("mail-local-list",
-            payload={"mailbox":mailbox, "folder":folder}, callback=received)
+            payload={"mailbox":mailbox,"folder":request_folder,
+                     "search":query,"page":page},callback=received)
 
     def sync_local_mail(self, mailbox=None):
         """Continue bounded Resend pages into NEMORYTH; never mutate provider mail.
@@ -1965,6 +1989,18 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def flag_local_mail(self, mailbox, thread_id, flagged):
+        """Keep follow-up flags in NEMORYTH; never mutate Resend."""
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail follow-up",
+                    "Could not update the saved follow-up flag.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-flag",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "flagged":bool(flagged)},callback=received)
 
     def create_local_label(self, name):
         def received(data, error):
