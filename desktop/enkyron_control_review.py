@@ -110,7 +110,7 @@ class ControlReviewDialog(QDialog):
         close.clicked.connect(self.reject)
         buttons.addWidget(close)
         root.addLayout(buttons)
-        self.load_queue()
+        # The parent shows the dialog before starting asynchronous IPC.
 
     def same_ticket(self):
         return self.isVisible() and self.parent().current_id == self.ticket_id
@@ -126,7 +126,9 @@ class ControlReviewDialog(QDialog):
         self.status.setText("Verifying the current frozen Git target and 108-control register…")
         self.context = None
         self.detail = None
+        self.controls.blockSignals(True)
         self.controls.clear()
+        self.controls.blockSignals(False)
         self.info.clear()
 
         def loaded(data, error):
