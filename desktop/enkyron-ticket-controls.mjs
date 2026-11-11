@@ -35,6 +35,16 @@ export function validateControlReviewRequest(payload,{decision=false}={}) {
 export async function canonicalControlBinding(pool,ticketId){
   if(!UUID.test(ticketId||''))refused('valid ticket required');
   const scope=await readLinkedAssessmentContext(pool,ticketId);
+  // ENKYRON itself connects through the local Unix socket; the canonical
+  // ARL Control Intelligence adapter requires DATABASE_URL. The same
+  // product .env already used by assess:local is loaded only for this
+  // explicitly requested control operation, before importing src/db.js.
+  if(!process.env.DATABASE_URL?.trim()){
+    try{process.loadEnvFile?.(new URL('../.env',import.meta.url).pathname);}
+    catch(error){if(error?.code!=='ENOENT')throw error;}
+  }
+  if(!process.env.DATABASE_URL?.trim())
+    refused('canonical PostgreSQL DATABASE_URL is not configured');
   process.env.ARL_LOCAL_MODE='1';
   const [{enableLocalCliMode},{findExistingLocalAssessmentContext}] = await Promise.all([
     import('../src/agent/local-cli-mode.mjs'),
