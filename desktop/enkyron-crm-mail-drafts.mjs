@@ -67,7 +67,8 @@ function fingerprint(item){
     item.mailbox_key||'direction',item.recipient_email||'',item.subject,item.body_text
   ])).digest('hex');
 }
-export async function listMailDrafts(pool,search,actor){
+export async function listMailDrafts(pool,search,actor,{unsentOnly=false}={}){
+  if(typeof unsentOnly!=='boolean')throw new Error('CRM invalid draft list mode');
   const query=boundedSearch(search),owner=scope(actor);
   try{
     const result=await pool.query(
@@ -86,6 +87,7 @@ export async function listMailDrafts(pool,search,actor){
       +'LEFT JOIN enkyron_mail_send_attempts a '
       +'ON a.draft_id=d.id AND a.workspace_key=d.workspace_key '
       +'WHERE d.workspace_key=$1 '
+      +(unsentOnly?'AND a.id IS NULL AND s.id IS NULL ':'')
       +"AND ($2='' OR POSITION(lower($2) IN lower(COALESCE(c.name,o.company_name_at_creation,'')))>0 "
       +"OR POSITION(lower($2) IN lower(d.subject))>0 "
       +"OR POSITION(lower($2) IN lower(coalesce(d.recipient_email,'')))>0) "
@@ -93,7 +95,8 @@ export async function listMailDrafts(pool,search,actor){
       [owner.key,query]
     );
     return {available:true,items:result.rows.slice(0,100),
-      more:result.rows.length>100,kind:'local_drafts_and_manual_send_reports'};
+      more:result.rows.length>100,
+      kind:unsentOnly?'unsent_mail_drafts':'local_drafts_and_manual_send_reports'};
   }catch(e){
     if(e?.code==='42P01')return {available:false,items:[],more:false,
       notice:'CRM mail draft schema 070 not installed locally.'};
