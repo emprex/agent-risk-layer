@@ -1327,6 +1327,8 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.set_local_mode()
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
+        self.mail_inbox.localRenameFolderRequested.connect(self.rename_local_folder)
+        self.mail_inbox.localDeleteFolderRequested.connect(self.delete_empty_local_folder)
         self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
         self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
         self.mail_inbox.localFlagRequested.connect(self.flag_local_mail)
@@ -1968,6 +1970,37 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("mail-local-sync-bodies",
                              payload=payload, callback=cached)
         step()
+
+    def rename_local_folder(self, folder, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(
+                    self, "Mail folders", "Could not rename the saved folder.")
+                return
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-folder-rename",
+            payload={"folder":folder,"name":name},callback=received)
+
+    def delete_empty_local_folder(self, folder):
+        answer = QMessageBox.question(
+            self, "Delete empty folder",
+            "Delete this local folder? The operation will be refused if it contains mail.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail folders",
+                    "Folder not deleted. Move all saved messages out first.")
+                return
+            if self.mail_inbox.selected_folder == folder:
+                self.mail_inbox._folder = "inbox"
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-folder-delete",
+            payload={"folder":folder},callback=received)
 
     def create_local_folder(self, name):
         def received(data, error):
