@@ -367,34 +367,53 @@ test('saved-mail search finds cached bodies, recipients and labels across folder
 });
 
 
-test('oversized received bodies are never stored as complete in schema 112',{
+test('large inbound body uses explicit 112 marker and complete 113 archive only after provider GET',{
   skip:!url&&'Disposable PostgreSQL CI only'
 },async()=>{
   const pool=new pg.Pool({connectionString:ciConnection(),max:2});
   const owner='ci-body-limit-'+crypto.randomUUID().slice(0,8);
-  const scope='local:'+owner,thread=crypto.randomUUID();
+  const scope='local:'+owner,thread=crypto.randomUUID(),id=crypto.randomUUID();
+  const content='X'.repeat(25000);
   try{
     await pool.query(
       'INSERT INTO enkyron_mail_local_threads '+
       '(workspace_key,mailbox_key,thread_id,subject) VALUES($1,$2,$3,$4)',
       [scope,'direction',thread,'Large synthetic body']
     );
-    await assert.rejects(fetchAndCacheThread(pool,owner,{
+    const saved=await fetchAndCacheThread(pool,owner,{
       mailbox:'direction',thread_id:thread
     },{listMessages:async()=>({
-      items:[{id:crypto.randomUUID(),from:'client@example.invalid',
+      items:[{id,from:'client@example.invalid',
         to:['owner@example.invalid'],subject:'Large synthetic body',
-        text:'X'.repeat(20001),created_at:'2026-11-11T10:00:00Z'}],
+        text:content,created_at:'2026-11-11T10:00:00Z'}],
       has_more:false
-    })}),/exceeds local schema limit/);
-    const rows=(await pool.query(
-      'SELECT count(*)::int AS n FROM enkyron_mail_local_messages '+
+    })});
+    assert.equal(saved.items.length,1);
+    const before=(await pool.query(
+      'SELECT body_text FROM enkyron_mail_local_messages WHERE workspace_key=$1',
+      [scope]
+    )).rows[0].body_text;
+    assert.match(before,/Full message exceeds preview limit/);
+    assert.equal(before.includes(content),false);
+    const archived=await archiveNextMailBatch(pool,owner,{mailbox:'direction'},{
+      getDetails:async()=>({id,mailbox:'direction',thread_id:thread,
+        direction:'inbound',from:'client@example.invalid',
+        to:['owner@example.invalid'],cc:[],bcc:[],reply_to:[],
+        text:content,html:null,attachments:[],attachments_known:true})
+    });
+    assert.equal(archived.archived,1);
+    const result=await localMailMessages(pool,owner,{
+      mailbox:'direction',thread_id:thread
+    });
+    assert.equal(result.items[0].text.length,20000);
+    assert.equal(result.items[0].preview_truncated,true);
+    assert.equal(result.items[0].archive_state,'complete');
+    assert.equal((await pool.query(
+      'SELECT length(body_text_full)::int AS n FROM enkyron_mail_full_messages '+
       'WHERE workspace_key=$1',[scope]
-    )).rows;
-    assert.equal(rows[0].n,0);
+    )).rows[0].n,25000);
   }finally{await pool.end();}
 });
-
 
 test('read and unread transitions persist without forging unsupported schema 112 audit events',{
   skip:!url&&'Disposable PostgreSQL CI only'
