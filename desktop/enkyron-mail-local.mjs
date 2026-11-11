@@ -96,90 +96,183 @@ export async function localMailList(pool,actor,input={}){
   )).rows;
   return {mailbox,folder,items:rows.slice(0,50),has_more:rows.length>50,source:'local'};
 }
-export async function syncMailHeaders(pool,actor,input,{listThreads=mailThreads}={}){
+// One provider page per mailbox/folder and call. Each successful page commits
+// independently, so interruption never rolls back other inboxes or folders.
+// Callers carry the returned cursors forward; restarting from page one is safe
+// because existing PostgreSQL keys are idempotent.
+export async function syncMailHeaders(pool,actor,input={},{
+  listThreads=mailThreads
+}={}){
   const key=scope(actor),chosen=input?.mailbox||'all';
   if(chosen!=='all')requireMailbox(chosen);
-  const selected=chosen==='all'?MAILBOXES:[chosen];
-  const requests=selected.flatMap(mailbox=>PROVIDER.map(folder=>({mailbox,folder})));
-  const results=[];
-  // Bounded concurrency of 2 avoids hammering Resend. No destructive action.
-  for(let offset=0;offset<requests.length;offset+=2){
-    const batch=await Promise.allSettled(requests.slice(offset,offset+2).map(
-      async request=>({
-        ...request,
-        result:await listThreads(pool,actor,request.mailbox,request.folder)
-      })
-    ));
-    results.push(...batch);
-  }
-  const successes=results.filter(x=>x.status==='fulfilled').map(x=>x.value);
-  if(!successes.length)throw Error('Resend Mail sync failed for all selected inboxes');
+  const permitted=(chosen==='all'?MAILBOXES:[chosen])
+    .flatMap(mailbox=>PROVIDER.map(folder=>({mailbox,folder,
+      key:mailbox+'/'+folder})));
+  const continuation=input?.cursors;
+  if(continuation!==undefined&&(!continuation||typeof continuation!=='object'
+      ||Array.isArray(continuation)))throw Error('Invalid Mail pagination state');
+  const requested=continuation===undefined?permitted:
+    permitted.filter(item=>Object.hasOwn(continuation,item.key));
+  if(continuation!==undefined&&Object.keys(continuation).some(
+    k=>!permitted.some(item=>item.key===k)
+      ||continuation[k]!==null&&!UUID.test(continuation[k])))
+    throw Error('Invalid Mail pagination state');
   let imported=0;
-  await withTransaction(pool,async client=>{
-    for(const {mailbox,folder,result} of successes){
-      for(const item of result.items.slice(0,30)){
-        const id=requireUuid(item.id);
-        await client.query(
-          'INSERT INTO enkyron_mail_local_threads '+
-          '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,'+
-          'subject,last_message_at,unread) '+
-          'VALUES($1,$2,$3,$4,$4,$5,$6,$7) '+
-          'ON CONFLICT(workspace_key,mailbox_key,thread_id) DO UPDATE SET '+
-          'provider_folder=EXCLUDED.provider_folder,'+
-          'subject=EXCLUDED.subject,last_message_at=EXCLUDED.last_message_at,'+
-          'last_synced=NOW()',
-          [key,mailbox,id,folder,String(item.subject||'').slice(0,400),
-            String(item.last_message_at||'').slice(0,64),item.unread===true]
-        );
-        imported++;
+  const unavailable=[],next={};
+  // Never make more than two simultaneous provider calls.
+  for(let offset=0;offset<requested.length;offset+=2){
+    const results=await Promise.allSettled(
+      requested.slice(offset,offset+2).map(async task=>{
+        const after=continuation?.[task.key]??null;
+        const page=await listThreads(pool,actor,task.mailbox,task.folder,after);
+        if(!page||!Array.isArray(page.items)||typeof page.has_more!=='boolean'
+            ||page.items.length>30||(page.has_more&&!page.items.length))
+          throw Error('Incomplete Resend Mail page');
+        const rows=page.items.map(item=>({
+          id:requireUuid(item.id),
+          subject:String(item.subject||'').slice(0,400),
+          last:String(item.last_message_at||'').slice(0,64),
+          unread:item.unread===true
+        }));
+        const cursor=page.has_more?rows.at(-1).id:null;
+        if(cursor===after)throw Error('Resend Mail cursor did not advance');
+        await withTransaction(pool,async client=>{
+          for(const row of rows){
+            await client.query(
+              'INSERT INTO enkyron_mail_local_threads '+
+              '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,'+
+              'subject,last_message_at,unread) '+
+              'VALUES($1,$2,$3,$4,$4,$5,$6,$7) '+
+              'ON CONFLICT(workspace_key,mailbox_key,thread_id) DO UPDATE SET '+
+              'provider_folder=EXCLUDED.provider_folder,'+
+              'subject=EXCLUDED.subject,last_message_at=EXCLUDED.last_message_at,'+
+              'last_synced=NOW()',
+              [key,task.mailbox,row.id,task.folder,row.subject,row.last,row.unread]
+            );
+          }
+        });
+        return {task,cursor,count:rows.length};
+      })
+    );
+    for(let i=0;i<results.length;i++){
+      const result=results[i],task=requested[offset+i];
+      if(result.status==='rejected'){
+        unavailable.push(task.key);
+        continue;
       }
+      imported+=result.value.count;
+      if(result.value.cursor)next[task.key]=result.value.cursor;
     }
-  });
-  return {synced:true,imported,partial:successes.length!==requests.length,
-    unavailable:requests.filter((_,i)=>results[i].status!=='fulfilled')
-      .map(x=>x.mailbox+'/'+x.folder)};
+  }
+  if(requested.length&&unavailable.length===requested.length)
+    throw Error('Resend Mail sync failed for all selected folders');
+  return {synced:true,imported,partial:unavailable.length>0,unavailable,
+    continuation:next,more_pending:Object.keys(next).length>0,
+    note:'Each completed provider page is saved in PostgreSQL; retries are idempotent.'};
 }
-// Explicit receive operation: copy previously uncached plain-text bodies into
-// ENKYRON PostgreSQL. No Resend mail movement/deletion and no automatic send.
-// Bound the work per click so the UI stays responsive and the sync can resume.
+
+// The normal quick pass imports previously uncached threads. The full rescan
+// pass is keyset-paginated (not OFFSET) and revisits partial threads, including
+// threads already containing some messages. On interruption, start the rescan
+// again: ON CONFLICT prevents duplicate messages; no provider data is mutated.
 export async function syncLocalMailBodies(pool,actor,input={},{
   listMessages=mailMessages
 }={}){
   const key=scope(actor),selected=input?.mailbox||'all';
   if(selected!=='all')requireMailbox(selected);
-  const limit=8;
+  if(input?.rescan===true){
+    const anchor=input?.after_thread??null,resume=input?.resume??null;
+    function pointer(value){
+      if(!value||typeof value!=='object'||Array.isArray(value))
+        throw Error('Invalid Mail body progress');
+      return {mailbox:requireMailbox(value.mailbox),
+        thread:requireUuid(value.thread_id)};
+    }
+    const previous=anchor?pointer(anchor):null;
+    const pending=resume?pointer(resume):null;
+    if(previous&&selected!=='all'&&previous.mailbox!==selected)
+      throw Error('Invalid Mail body progress');
+    if(pending&&selected!=='all'&&pending.mailbox!==selected)
+      throw Error('Invalid Mail body progress');
+    if(resume&&(!UUID.test(resume.after)||!pending))
+      throw Error('Invalid Mail body progress');
+    let current=pending;
+    if(!current){
+      const row=(await pool.query(
+        'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
+        'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
+        'AND ($3::text IS NULL OR (t.mailbox_key,t.thread_id) > '+
+        '($3::text,$4::uuid)) '+
+        'ORDER BY t.mailbox_key,t.thread_id LIMIT 1',
+        [key,selected,previous?.mailbox??null,previous?.thread??null]
+      )).rows[0];
+      if(!row)return {cached_threads:0,failed_threads:0,
+        more_pending:false,requires_safe_html_viewer:0};
+      current={mailbox:requireMailbox(row.mailbox_key),
+        thread:requireUuid(row.thread_id)};
+    }
+    let after=resume?.after??null,html=0,pages=0;
+    try{
+      for(;pages<2;pages++){
+        const page=await fetchAndCacheThread(pool,actor,{
+          mailbox:current.mailbox,thread_id:current.thread,after
+        },{listMessages});
+        if(page.items.some(m=>m.html_only===true))html=1;
+        if(page.has_more){
+          if(!page.next_after||page.next_after===after)
+            throw Error('Resend Mail body cursor did not advance');
+          after=page.next_after;
+          continue;
+        }
+        const next={mailbox:current.mailbox,thread_id:current.thread};
+        const more=(await pool.query(
+          'SELECT 1 FROM enkyron_mail_local_threads t '+
+          'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
+          'AND (t.mailbox_key,t.thread_id)>($3::text,$4::uuid) LIMIT 1',
+          [key,selected,current.mailbox,current.thread]
+        )).rows.length>0;
+        return {cached_threads:1,failed_threads:0,
+          requires_safe_html_viewer:html,more_pending:more,
+          continuation:more?{after_thread:next}:null};
+      }
+      return {cached_threads:1,failed_threads:0,
+        requires_safe_html_viewer:html,more_pending:true,
+        continuation:{after_thread:previous?{
+          mailbox:previous.mailbox,thread_id:previous.thread
+        }:null,resume:{mailbox:current.mailbox,thread_id:current.thread,after}}};
+    }catch{
+      return {cached_threads:0,failed_threads:1,more_pending:true,
+        requires_safe_html_viewer:html,
+        continuation:{after_thread:previous?{
+          mailbox:previous.mailbox,thread_id:previous.thread
+        }:null,resume:resume||(
+          after?{mailbox:current.mailbox,thread_id:current.thread,after}:null)},
+        note:'Body import incomplete. Previously committed pages are preserved.'};
+    }
+  }
   const candidates=(await pool.query(
     'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
-    'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
+    'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
     'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
     'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
     'AND m.thread_id=t.thread_id) '+
     'ORDER BY t.last_message_at DESC LIMIT $3',
-    [key,selected,limit+1]
+    [key,selected,9]
   )).rows;
-  let cached=0,failed=0,plainTextOnly=0;
-  const selectedRows=candidates.slice(0,limit);
-  for(let start=0;start<selectedRows.length;start+=2){
-    const batch=selectedRows.slice(start,start+2);
-    const results=await Promise.all(batch.map(async row=>{
-      try{
-        const result=await fetchAndCacheThread(pool,actor,{
-          mailbox:row.mailbox_key,thread_id:row.thread_id
-        },{listMessages});
-        return {count:result.items.length,
-          html:result.items.some(m=>m.html_only===true)};
-      }catch{return {count:0,html:false};}
-    }));
-    for(const result of results){
-      if(result.count){cached++;if(result.html)plainTextOnly++;}
-      else failed++;
-    }
+  let cached=0,failed=0,html=0;
+  for(const row of candidates.slice(0,8)){
+    try{
+      const page=await fetchAndCacheThread(pool,actor,{
+        mailbox:row.mailbox_key,thread_id:row.thread_id
+      },{listMessages});
+      if(page.items.length)cached++;
+      if(page.items.some(m=>m.html_only===true))html++;
+    }catch{failed++;}
   }
   return {cached_threads:cached,failed_threads:failed,
-    requires_safe_html_viewer:plainTextOnly,
-    more_pending:candidates.length>limit,
-    note:'Local body import is capped at 8 threads per request. '
-      +'Uncached mail can be imported with Send / Receive again.'};
+    requires_safe_html_viewer:html,
+    more_pending:candidates.length>8,
+    note:'Use the full rescan to finish previously interrupted conversations.'};
 }
 
 export async function localMailMessages(pool,actor,input){
@@ -188,34 +281,53 @@ export async function localMailMessages(pool,actor,input){
     'SELECT message_id AS id,sender AS "from",recipients AS "to",subject,'+
     'body_text AS text,html_only,created_at FROM enkyron_mail_local_messages '+
     'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
-    'ORDER BY created_at ASC LIMIT 50',[key,mailbox,thread])).rows;
-  return {mailbox,thread_id:thread,items:rows,source:'local'};
+    'ORDER BY created_at ASC LIMIT 51',[key,mailbox,thread])).rows;
+  return {mailbox,thread_id:thread,items:rows.slice(0,50),
+    has_more:rows.length>50,source:'local'};
 }
-export async function fetchAndCacheThread(pool,actor,input,{listMessages=mailMessages}={}){
+
+export async function fetchAndCacheThread(pool,actor,input,{
+  listMessages=mailMessages
+}={}){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
+  const after=input?.after??null;
+  if(after!==null)requireUuid(after);
   const exists=(await pool.query(
     'SELECT thread_id FROM enkyron_mail_local_threads WHERE workspace_key=$1 '+
     'AND mailbox_key=$2 AND thread_id=$3',[key,mailbox,thread])).rows[0];
   if(!exists)throw Error('Mail thread not yet indexed locally');
-  const response=await listMessages(pool,actor,mailbox,thread);
-  const items=(response.items||[]).slice(0,30);
+  const response=await listMessages(pool,actor,mailbox,thread,after);
+  if(!response||!Array.isArray(response.items)||response.items.length>30
+     ||(response.has_more===true&&!response.items.length))
+    throw Error('Incomplete Resend Mail body page');
+  const items=response.items;
+  const last=items.at(-1)?.id??null;
+  if(response.has_more===true&&(!UUID.test(last)||last===after))
+    throw Error('Resend Mail body cursor did not advance');
   await withTransaction(pool,async client=>{
     for(const item of items){
-      if(!UUID.test(item.id))continue;
+      const id=requireUuid(item.id);
+      const body=String(item.text||'');
+      // Existing schema has a 20,000-character field. Do not silently
+      // claim an oversized provider message has been preserved in full.
+      if(body.length>20000)throw Error('Mail body exceeds local schema limit');
       await client.query(
         'INSERT INTO enkyron_mail_local_messages '+
         '(workspace_key,mailbox_key,thread_id,message_id,sender,recipients,'+
         'subject,body_text,html_only,created_at) '+
         'VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10) '+
         'ON CONFLICT(workspace_key,mailbox_key,message_id) DO NOTHING',
-        [key,mailbox,thread,item.id,String(item.from||'').slice(0,254),
-          JSON.stringify((item.to||[]).slice(0,20)),String(item.subject||'').slice(0,400),
-          String(item.text||'').slice(0,20000),item.html_only===true,
-          String(item.created_at||'').slice(0,64)]
+        [key,mailbox,thread,id,String(item.from||'').slice(0,254),
+          JSON.stringify((item.to||[]).slice(0,20)),
+          String(item.subject||'').slice(0,400),body,
+          item.html_only===true,String(item.created_at||'').slice(0,64)]
       );
     }
   });
-  return localMailMessages(pool,actor,{mailbox,thread_id:thread});
+  const local=await localMailMessages(pool,actor,{mailbox,thread_id:thread});
+  return {...local,has_more:response.has_more===true,
+    next_after:response.has_more===true?last:null,
+    cached_page_messages:items.length};
 }
 export async function moveLocalThread(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
