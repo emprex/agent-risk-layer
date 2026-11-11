@@ -35,6 +35,46 @@ class MailNativeUXSmoke(unittest.TestCase):
         self.app.processEvents()
         gc.collect()
 
+    def test_ticket_notes_space_and_local_display_identity(self):
+        # ENKYRON should prioritise recorded work over empty action space.
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                self.assertGreaterEqual(window.notes_view.minimumHeight(), 170)
+                self.assertEqual(window.ticket_actions_view.height(), 48)
+                window._set_ticket_actions_height(item_count=2)
+                self.assertGreater(window.ticket_actions_view.height(), 48)
+                window._set_ticket_actions_height()
+                self.assertEqual(window.ticket_actions_view.height(), 48)
+                window.operator_profile_state = {
+                    "local_operator": "emprex",
+                    "current": {"display_name": "Guillaume Strohecker"},
+                }
+                window.current_ticket = {
+                    "client_name": "Internal Lab", "status": "scoping",
+                    "assessor_name": "emprex", "assigned_to": "emprex",
+                    "archived_at": None,
+                }
+                window._refresh_ticket_identity_labels()
+                self.assertIn("Engineer: Guillaume Strohecker", window.meta.text())
+                self.assertEqual(window.owner_label.text(),
+                                 "Assigned to: Guillaume Strohecker")
+                self.assertEqual(window.ticket_operator_display("another_user"),
+                                 "another_user")
+                self.assertEqual(window.ticket_operator_display(None), "Unassigned")
+            finally:
+                self._dispose(window)
+
+    def test_ticket_assessment_button_has_explicit_preflight(self):
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                self.assertIn("Link assessment", window.assessment_link_button.text())
+                self.assertFalse(window.assessment_link_button.isEnabled())
+                self.assertIsNone(window.assessment_link_dialog)
+            finally:
+                self._dispose(window)
+
     def test_sent_mail_not_listed_as_active_draft(self):
         """Mail Drafts uses SQL-filtered unsent records; CRM history is separate."""
         previous = DesktopBridge.call
