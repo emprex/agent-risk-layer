@@ -2531,6 +2531,157 @@ class EnkyronWindow(QMainWindow):
             )
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
+    def _detached_notice(self, label, window_getter):
+        placeholder = QWidget()
+        layout = QVBoxLayout(placeholder)
+        layout.addStretch()
+        title = QLabel(label + " is open in another window.")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        button = QPushButton("Bring " + label + " to front")
+        def focus_window():
+            window = window_getter()
+            if window is not None:
+                window.showNormal()
+                window.raise_()
+                window.activateWindow()
+        button.clicked.connect(focus_window)
+        layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch()
+        return placeholder
+
+    def toggle_mail_window(self):
+        """Open the *same* Mail workspace as a genuine movable native window."""
+        if self.mail_detached_window is not None:
+            self.mail_detached_window.close()
+            return
+        slot = self.crm_tabs.indexOf(self.mail_page)
+        if slot < 0:
+            return
+        placeholder = self._detached_notice(
+            "Mail", lambda: self.mail_detached_window
+        )
+        self.crm_tabs.removeTab(slot)
+        self.crm_tabs.insertTab(slot, placeholder, "Mail")
+        self.crm_tabs.setCurrentIndex(slot)
+        self.mail_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — Mail", self._return_mail_window, self
+        )
+        self.mail_detached_window = window
+        window.setCentralWidget(self.mail_page)
+        self.mail_detach_button.setText("Return to ENKYRON")
+        window.show()
+
+    def _return_mail_window(self):
+        window = self.mail_detached_window
+        if window is None:
+            return
+        page = window.takeCentralWidget()
+        slot = self.crm_tabs.indexOf(self.mail_detach_placeholder)
+        if page is not None and slot >= 0:
+            self.crm_tabs.removeTab(slot)
+            self.crm_tabs.insertTab(slot, page, "Mail")
+            self.crm_tabs.setCurrentIndex(slot)
+        if self.mail_detach_placeholder is not None:
+            self.mail_detach_placeholder.deleteLater()
+        self.mail_detach_button.setText("Open in window")
+        self.mail_detach_placeholder = None
+        self.mail_detached_window = None
+
+    def toggle_calendar_window(self):
+        """Allow Mail and Calendar to occupy separate monitors simultaneously."""
+        if self.calendar_detached_window is not None:
+            self.calendar_detached_window.close()
+            return
+        slot = self.pages.indexOf(self.calendar_view)
+        if slot < 0:
+            return
+        placeholder = self._detached_notice(
+            "Calendar", lambda: self.calendar_detached_window
+        )
+        self.pages.removeWidget(self.calendar_view)
+        self.pages.insertWidget(slot, placeholder)
+        self.pages.setCurrentIndex(slot)
+        self.calendar_detach_placeholder = placeholder
+        window = DetachableModuleWindow(
+            "ENKYRON — Calendar", self._return_calendar_window, self
+        )
+        self.calendar_detached_window = window
+        window.setCentralWidget(self.calendar_view)
+        self.calendar_view.detach_button.setText("Return to ENKYRON")
+        window.show()
+
+    def _return_calendar_window(self):
+        window = self.calendar_detached_window
+        if window is None:
+            return
+        view = window.takeCentralWidget()
+        slot = self.pages.indexOf(self.calendar_detach_placeholder)
+        if view is not None and slot >= 0:
+            self.pages.removeWidget(self.calendar_detach_placeholder)
+            self.pages.insertWidget(slot, view)
+            self.pages.setCurrentIndex(slot)
+        if self.calendar_detach_placeholder is not None:
+            self.calendar_detach_placeholder.deleteLater()
+        self.calendar_view.detach_button.setText("Open in window")
+        self.calendar_detach_placeholder = None
+        self.calendar_detached_window = None
+
+    def preview_mail_local_record(self, kind, index):
+        """Preview saved drafts and sent submissions inside the Mail reading pane."""
+        if kind not in ("sent", "drafts") or not isinstance(index, int):
+            return
+        records = self.mail_sent_items if kind == "sent" else self.crm_draft_items
+        if not 0 <= index < len(records):
+            return
+        item = records[index]
+        if not isinstance(item, dict):
+            return
+        address = str(item.get("recipient_email") or "Not set")[:254]
+        if kind == "sent":
+            note = ("Submitted to Resend — delivery not confirmed"
+                    if item.get("outcome") == "accepted"
+                    else "Submission uncertain — verify before resending")
+        else:
+            state = item.get("mail_state") or "draft"
+            note = ("External send reported by operator — not provider verified"
+                    if state == "external_send_reported" else
+                    "Draft — not sent" if state == "draft"
+                    else "Provider submission recorded — delivery not confirmed")
+        fallback = "Message content unavailable in the local draft record."
+        draft_id = item.get("draft_id") if kind == "sent" else item.get("id")
+        meta = "To: {} · {}".format(address, note)
+        if not draft_id:
+            self.mail_inbox.show_local_record_preview(kind, index, fallback, meta)
+            return
+
+        def received(data, error):
+            draft = data.get("draft") if isinstance(data, dict) else None
+            if error or not isinstance(draft, dict):
+                self.mail_inbox.show_local_record_preview(
+                    kind, index, "Saved message could not be loaded.", meta
+                )
+                return
+            self.mail_inbox.show_local_record_preview(
+                kind, index, draft.get("body_text") or "(Empty message)",
+                "From: {} · {}".format(
+                    draft.get("mailbox_key") or "Unspecified account", meta
+                )
+            )
+        self.bridge.call("crm-mail-draft", str(draft_id), callback=received)
+
+    def open_mail_local_record(self, kind, index):
+        """Double-click preserves the existing secure draft/detail editor."""
+        if not isinstance(index, int):
+            return
+        if kind == "sent" and 0 <= index < len(self.mail_sent_items):
+            self.view_sent_mail_row(index)
+        elif kind == "drafts" and 0 <= index < len(self.crm_draft_items):
+            if index < self.crm_draft_table.rowCount():
+                self.crm_draft_table.selectRow(index)
+                self.open_selected_draft()
+
     def closeEvent(self, event):
         # Reattach each module before the owning workstation exits.
         if self.mail_detached_window is not None:
