@@ -395,7 +395,7 @@ test('oversized received bodies are never stored as complete in schema 112',{
 });
 
 
-test('read and unread transitions are durable and audited without provider mutations',{
+test('read and unread transitions persist without forging unsupported schema 112 audit events',{
   skip:!url&&'Disposable PostgreSQL CI only'
 },async()=>{
   const pool=new pg.Pool({connectionString:ciConnection(),max:2});
@@ -420,9 +420,9 @@ test('read and unread transitions are durable and audited without provider mutat
     })).items[0].unread,true);
     const audit=(await pool.query(
       'SELECT event_kind FROM enkyron_mail_local_events '+
-      'WHERE workspace_key=$1 ORDER BY created_at',[scope]
+      'WHERE workspace_key=$1 ORDER BY occurred_at',[scope]
     )).rows.map(row=>row.event_kind);
-    assert.deepEqual(audit,['thread_marked_read','thread_marked_unread']);
+    assert.deepEqual(audit,[]); // No fabricated event kind allowed in schema 112.
     await assert.rejects(setLocalThreadRead(pool,owner,{
       ...target,unread:'yes'
     }),/Invalid local Mail unread state/);
@@ -469,7 +469,7 @@ test('failed support folder remains in cursor continuation until recovered',{
 });
 
 
-test('folder rename keeps stable keys and deletion refuses stored messages',{
+test('folder rename and empty-delete preserve mail without unsupported audit kinds',{
   skip:!url&&'Disposable PostgreSQL CI only'
 },async()=>{
   const pool=new pg.Pool({connectionString:ciConnection(),max:2});
@@ -511,10 +511,8 @@ test('folder rename keeps stable keys and deletion refuses stored messages',{
       row=>row.key===folder.key));
     const events=(await pool.query(
       'SELECT event_kind FROM enkyron_mail_local_events '+
-      'WHERE workspace_key=$1 ORDER BY created_at',[scope]
+      'WHERE workspace_key=$1 ORDER BY occurred_at',[scope]
     )).rows.map(row=>row.event_kind);
-    assert.deepEqual(events,[
-      'folder_created','folder_renamed','thread_moved','folder_deleted'
-    ]);
+    assert.deepEqual(events,['folder_created','thread_moved']);
   }finally{await pool.end();}
 });
