@@ -68,6 +68,7 @@ class MailInboxView(QWidget):
         self.items = []
         self._has_more = False
         self._mailboxes = {}
+        self._filing_mailboxes = set()
         self._folder = 'inbox'
         self._build()
 
@@ -259,6 +260,10 @@ class MailInboxView(QWidget):
         self.empty_explanation.setText(detail)
         self.mail_stack.setCurrentIndex(0)
 
+    def set_filing_mailboxes(self, keys):
+        # Read-only presentation hint, not a security permission grant.
+        self._filing_mailboxes = set(keys or []) & {'direction','support'}
+
     def set_owner_mailboxes(self, card):
         """Labels supplied by trusted Owner card; no permission derived in Qt."""
         entries = card.get("mailboxes", []) if isinstance(card, dict) else []
@@ -353,6 +358,9 @@ class MailInboxView(QWidget):
         item = self.thread_list.itemAt(pos)
         if item is None or self.connection_state != 'connected':
             return
+        details = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(details, tuple) or details[0] not in self._filing_mailboxes:
+            return
         self.thread_list.setCurrentItem(item)
         menu = QMenu(self)
         current = self.selected_folder
@@ -374,7 +382,8 @@ class MailInboxView(QWidget):
         if selected is None:
             return
         source = selected.data(Qt.ItemDataRole.UserRole)
-        if isinstance(source, tuple) and len(source) == 2 and source[0] in self._mailboxes:
+        if (isinstance(source, tuple) and len(source) == 2
+                and source[0] in self._filing_mailboxes):
             self.threadMoveRequested.emit(source[0], source[1],
                                           self.selected_folder, target)
 
