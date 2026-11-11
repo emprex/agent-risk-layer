@@ -147,7 +147,7 @@ export async function syncLocalMailBodies(pool,actor,input={},{
 }={}){
   const key=scope(actor),selected=input?.mailbox||'all';
   if(selected!=='all')requireMailbox(selected);
-  const limit=20;
+  const limit=8;
   const candidates=(await pool.query(
     'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
     'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
@@ -158,25 +158,27 @@ export async function syncLocalMailBodies(pool,actor,input={},{
     [key,selected,limit+1]
   )).rows;
   let cached=0,failed=0,plainTextOnly=0;
-  for(const row of candidates.slice(0,limit)){
-    try{
-      const result=await fetchAndCacheThread(pool,actor,{
-        mailbox:row.mailbox_key,thread_id:row.thread_id
-      },{listMessages});
-      if(result.items.length){
-        cached++;
-        if(result.items.some(m=>m.html_only===true))plainTextOnly++;
-      }else{
-        failed++;
-      }
-    }catch{
-      failed++;
+  const selectedRows=candidates.slice(0,limit);
+  for(let start=0;start<selectedRows.length;start+=2){
+    const batch=selectedRows.slice(start,start+2);
+    const results=await Promise.all(batch.map(async row=>{
+      try{
+        const result=await fetchAndCacheThread(pool,actor,{
+          mailbox:row.mailbox_key,thread_id:row.thread_id
+        },{listMessages});
+        return {count:result.items.length,
+          html:result.items.some(m=>m.html_only===true)};
+      }catch{return {count:0,html:false};}
+    }));
+    for(const result of results){
+      if(result.count){cached++;if(result.html)plainTextOnly++;}
+      else failed++;
     }
   }
   return {cached_threads:cached,failed_threads:failed,
     requires_safe_html_viewer:plainTextOnly,
     more_pending:candidates.length>limit,
-    note:'Local body import is capped at 20 threads per request. '
+    note:'Local body import is capped at 8 threads per request. '
       +'Uncached mail can be imported with Send / Receive again.'};
 }
 
