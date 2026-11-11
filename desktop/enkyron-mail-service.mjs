@@ -55,8 +55,19 @@ export async function mailStatus(pool,operator){
   const access=await mailAccess(pool,operator);
   let providerConfigured=false;
   try{await loadPrivateResendConfig();providerConfigured=true;}catch{}
+  let filing=[];
+  try{
+    filing=(await pool.query(
+      'SELECT mailbox_key,can_manage FROM enkyron_local_mail_access '+
+      'WHERE workspace_key=$1',[workspace(operator)]
+    )).rows;
+  }catch(e){if(e?.code!=='42703'&&e?.code!=='42P01')throw e;}
   return {
-    ...access,provider_configured:providerConfigured,
+    ...access,
+    mailboxes:access.mailboxes.map(row=>({...row,
+      can_manage:filing.some(x=>x.mailbox_key===row.key&&x.can_manage===true)
+    })),
+    provider_configured:providerConfigured,
     notice:!access.schema_ready
       ?'Mail workspace database update needed before saving drafts.'
       :!providerConfigured?'Compose drafts locally; connect Resend to send and receive.'
