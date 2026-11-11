@@ -407,7 +407,7 @@ test('large inbound body uses explicit 112 marker and complete 113 archive only 
     });
     assert.equal(result.items[0].text.length,20000);
     assert.equal(result.items[0].preview_truncated,true);
-    assert.equal(result.items[0].archive_state,'complete');
+    assert.equal(result.items[0].archive_state,'body_captured');
     assert.equal((await pool.query(
       'SELECT length(body_text_full)::int AS n FROM enkyron_mail_full_messages '+
       'WHERE workspace_key=$1',[scope]
@@ -674,7 +674,7 @@ test('schema 113 archives full mail and quarantines attachment metadata idempote
     )).rows;
     assert.equal(full.length,1);
     assert.equal(full[0].body_text_full.length,25000);
-    assert.equal(full[0].archive_state,'complete');
+    assert.equal(full[0].archive_state,'body_captured');
     assert.match(full[0].body_html_inert,/tracker.invalid/);
     assert.match(full[0].provider_sha256,/^[0-9a-f]{64}$/);
     const unsafe=(await pool.query(
@@ -690,14 +690,14 @@ test('schema 113 archives full mail and quarantines attachment metadata idempote
     const status=await mailArchiveStatus(pool,owner,{mailbox:'direction'});
     assert.equal(status.available,true);
     assert.equal(status.cached,1);
-    assert.equal(status.complete,1);
+    assert.equal(status.body_captured,1);
     assert.equal(status.quarantined_metadata,1);
     assert.equal((await pool.query(
       'SELECT body_text FROM enkyron_mail_local_messages '+
       'WHERE workspace_key=$1',[workspace]
     )).rows[0].body_text,'Short preview'); // historical table untouched
     const other=await mailArchiveStatus(pool,'another-user');
-    assert.equal(other.complete,0);
+    assert.equal(other.body_captured,0);
   }finally{await pool.end();}
 });
 
