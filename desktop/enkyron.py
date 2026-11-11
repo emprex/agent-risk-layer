@@ -1330,6 +1330,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
         self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
         self.mail_inbox.localFlagRequested.connect(self.flag_local_mail)
+        self.mail_inbox.localReadRequested.connect(self.set_local_mail_read)
         self.mail_inbox.localSearchRequested.connect(self.search_local_mail)
         self.mail_inbox.localPageRequested.connect(
             lambda page: self.load_local_mail(page=page))
@@ -1989,6 +1990,18 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def set_local_mail_read(self, mailbox, thread_id, unread):
+        """Persist operator-selected unread status in NEMORYTH only."""
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(
+                    self, "Mail status", "Could not change the saved read status.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-read",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "unread":bool(unread)},callback=received)
 
     def flag_local_mail(self, mailbox, thread_id, flagged):
         """Keep follow-up flags in NEMORYTH; never mutate Resend."""
