@@ -66,6 +66,55 @@ export async function createLocalMailFolder(pool,actor,input){
     return {key:code,name};
   });
 }
+// Existing NEMORYTH folder keys are stable; renaming changes only the title.
+export async function renameLocalMailFolder(pool,actor,input){
+  const key=scope(actor),folder=requireFolderKey(input?.folder);
+  if(SYSTEM.includes(folder))throw Error('System Mail folders cannot be renamed');
+  const name=safeText(input?.name,80);
+  if(!name||SYSTEM.some(x=>x.toLowerCase()===name.toLowerCase()))
+    throw Error('Invalid local Mail folder name');
+  return withTransaction(pool,async client=>{
+    const before=(await client.query(
+      'SELECT name FROM enkyron_mail_local_folders '+
+      'WHERE workspace_key=$1 AND folder_key=$2 FOR UPDATE',[key,folder]
+    )).rows[0];
+    if(!before)throw Error('Local Mail folder not found');
+    if(before.name===name)return {key:folder,name,changed:false};
+    await client.query(
+      'UPDATE enkyron_mail_local_folders SET name=$3 '+
+      'WHERE workspace_key=$1 AND folder_key=$2',[key,folder,name]
+    );
+    await audit(client,key,actor,'folder_renamed',
+      {folder_key:folder,from:before.name,to:name});
+    return {key:folder,name,changed:true};
+  });
+}
+
+// Deleting a user folder is allowed only when it contains no local threads.
+// The key is never reused; deleting a folder cannot cascade into mail.
+export async function deleteEmptyLocalMailFolder(pool,actor,input){
+  const key=scope(actor),folder=requireFolderKey(input?.folder);
+  if(SYSTEM.includes(folder))throw Error('System Mail folders cannot be deleted');
+  return withTransaction(pool,async client=>{
+    const found=(await client.query(
+      'SELECT folder_key FROM enkyron_mail_local_folders '+
+      'WHERE workspace_key=$1 AND folder_key=$2 FOR UPDATE',[key,folder]
+    )).rows[0];
+    if(!found)throw Error('Local Mail folder not found');
+    const used=(await client.query(
+      'SELECT 1 FROM enkyron_mail_local_threads '+
+      'WHERE workspace_key=$1 AND folder_key=$2 LIMIT 1',[key,folder]
+    )).rows.length>0;
+    if(used)throw Error('Move saved messages before deleting this folder');
+    await client.query(
+      'DELETE FROM enkyron_mail_local_folders '+
+      'WHERE workspace_key=$1 AND folder_key=$2',[key,folder]
+    );
+    await audit(client,key,actor,'folder_deleted',{folder_key:folder});
+    return {deleted:true,folder,mail_unchanged:true};
+  });
+}
+
 export async function localMailList(pool,actor,input={}){
   const key=scope(actor),folder=requireFolderKey(input.folder||'inbox');
   const mailbox=input.mailbox||'all';
