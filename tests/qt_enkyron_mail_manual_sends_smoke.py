@@ -1,6 +1,8 @@
 """UX-14 Qt smoke: manual send claim never sends an email or edits draft bodies."""
 import os
 import unittest
+import gc
+from PySide6.QtCore import QEvent
 
 os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -69,7 +71,15 @@ class ManualSendSmoke(unittest.TestCase):
             window.crm_draft_dialog.reject()
         finally:
             if window:
+                if window.crm_mail_send_dialog and window.crm_mail_send_dialog.isVisible():
+                    window.crm_mail_send_dialog.close()
+                if window.crm_draft_dialog and window.crm_draft_dialog.isVisible():
+                    window.crm_draft_dialog.close()
                 window.close()
+                window.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                QApplication.processEvents()
+                gc.collect()
             DesktopBridge.call=prev
 
 if __name__=="__main__":
