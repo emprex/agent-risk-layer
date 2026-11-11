@@ -36,15 +36,15 @@ class MailNativeUXSmoke(unittest.TestCase):
         ui = MailInboxView()
         try:
             ui.set_owner_mailboxes(CARD)
-            self.assertEqual(ui.account_picker.count(), 2)
-            self.assertIn("Direction", ui.account_picker.itemText(0))
-            self.assertIn("Support", ui.account_picker.itemText(1))
+            self.assertEqual(ui.account_picker.count(), 3)
+            self.assertEqual(ui.account_picker.itemText(0), "All mail")
+            self.assertIn("guillaume.strohecker@", ui.account_picker.itemText(1))
             self.assertFalse(ui.refresh_button.isEnabled())
             self.assertFalse(ui.reply_button.isEnabled())
             self.assertFalse(ui.ticket_button.isEnabled())
             self.assertFalse(ui.company_button.isEnabled())
             self.assertTrue(ui.body.isReadOnly())
-            self.assertIn("not connected", ui.body.toPlainText().lower())
+            self.assertIn("no messages yet", ui.body.toPlainText().lower())
             # Untrusted data cannot inject fake conversations while disconnected.
             self.assertFalse(ui.show_threads("direction", [{"id": THREAD, "subject": "fake"}]))
             self.assertEqual(ui.thread_list.count(), 0)
@@ -64,9 +64,9 @@ class MailNativeUXSmoke(unittest.TestCase):
             ui.set_connection_state("connected")
             self.assertTrue(ui.refresh_button.isEnabled())
             ui.refresh_button.click()
-            self.assertEqual(refreshed, ["direction"])
-            self.assertTrue(ui.show_threads("direction", [{
-                "id": THREAD, "subject": "Security <img src=x>",
+            self.assertEqual(refreshed, ["all"])
+            self.assertTrue(ui.show_threads("all", [{
+                "id": THREAD, "mailbox": "direction", "subject": "Security <img src=x>",
                 "last_message_at": "2026-11-10", "unread": True,
             }]))
             self.assertEqual(ui.thread_list.count(), 1)
@@ -85,12 +85,11 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertIn("<script>alert(1)</script>", ui.body.toPlainText())
             self.assertTrue(ui.body.isReadOnly())
             self.assertFalse(ui.ticket_button.isEnabled())
-            ui.account_picker.setCurrentIndex(1)
+            ui.account_picker.setCurrentIndex(2)
             self.assertEqual(changed[-1], "support")
             self.assertEqual(ui.thread_list.count(), 0)
             self.assertIsNone(ui.current_thread_id)
-            self.assertEqual(ui.body.toPlainText(),
-                             "Mailbox changed. No messages are shown from the previous account.")
+            self.assertEqual(ui.body.toPlainText(), "No messages yet.")
             # A late response from Direction cannot be shown under Support.
             self.assertFalse(ui.show_threads("direction", [{
                 "id": THREAD, "subject": "stale",
