@@ -351,7 +351,8 @@ class MailInboxView(QWidget):
         self.folder_picker.hide()
         self.refresh_button.setText("Send / Receive")
         self.refresh_button.setToolTip(
-            "Import new Resend conversations into ENKYRON; does not move provider mail."
+            "Automatic Inbox check every 60 seconds while ENKYRON is open. "
+            "Send / Receive runs the full manual synchronization; no provider mail is moved."
         )
         self.search.setPlaceholderText("Search all saved mail · press Enter")
         self.search.setAccessibleName("Search saved mail in NEMORYTH; press Enter")
@@ -707,15 +708,30 @@ class MailInboxView(QWidget):
             self.refreshRequested.emit(self.selected_mailbox)
 
     def show_threads(self, mailbox, items, has_more=False, folder='inbox',
-                     search_query=None, page=0):
+                     search_query=None, page=0, preserve_reader=False):
         """Provider-scoped, bounded plain-text thread listing."""
         if (self.connection_state != 'connected' or mailbox != self.selected_mailbox
                 or folder != self.selected_folder):
             return False
         if not isinstance(items, list) or len(items) > (200 if self.local_mode else 50):
             return False
-        self._clear_threads("No conversations in this folder.",
-                            preserve_search=search_query is not None)
+        # Automatic Inbox updates must not discard the selected conversation
+        # or any unsent inline reply currently being typed by the operator.
+        live = bool(preserve_reader and self.local_mode and folder == "inbox"
+                    and page == 0 and not self.search.text().strip()
+                    and not self._local_search_query)
+        if preserve_reader and not live:
+            return False
+        selected = self.thread_list.currentItem() if live else None
+        selected_ref = (selected.data(Qt.ItemDataRole.UserRole)
+                        if selected is not None else None)
+        if live:
+            self.thread_list.blockSignals(True)
+            self.thread_list.clear()
+            self.thread_list.blockSignals(False)
+        else:
+            self._clear_threads("No conversations in this folder.",
+                                preserve_search=search_query is not None)
         self._local_search_query = (
             search_query.strip().casefold()
             if self.local_mode and isinstance(search_query, str) and search_query.strip()
@@ -761,6 +777,12 @@ class MailInboxView(QWidget):
                 font.setBold(True)
                 entry.setFont(font)
             self.thread_list.addItem(entry)
+        if live and selected_ref:
+            for i in range(self.thread_list.count()):
+                row = self.thread_list.item(i)
+                if row.data(Qt.ItemDataRole.UserRole) == selected_ref:
+                    self.thread_list.setCurrentItem(row)
+                    break
         self.thread_list.blockSignals(False)
         count = self.thread_list.count()
         self.count.setText(
