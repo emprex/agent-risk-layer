@@ -151,6 +151,84 @@ class MailNativeUXSmoke(unittest.TestCase):
             finally:
                 self._dispose(window)
 
+    def test_native_108_control_review_is_human_confirmed_and_canonical(self):
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        project, assessment, snapshot = "prj_fixture", "asm_fixture", "sys_fixture_108"
+        calls = []
+        items = [
+            {"control_id":"ARL-KB-{:03d}".format(n),
+             "stage":"applicability","chain_status":"context_required",
+             "next_action":"Human applicability review"}
+            for n in range(1, 109)
+        ]
+
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload))
+            if command == "control-queue":
+                callback({"available":True,"ticket_id":ticket,"total":108,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot,"target_sha":"a"*40,
+                          "stages":{"applicability":108},"items":items},None)
+            elif command == "control-detail":
+                callback({"available":True,"ticket_id":ticket,
+                          "control_id":payload["control_id"],"project_id":project,
+                          "snapshot_id":snapshot,"target_sha":"a"*40,
+                          "title":"Synthetic canonical control",
+                          "category":"Synthetic category","stage":"applicability",
+                          "chain_status":"context_required",
+                          "next_action":"Review applicability",
+                          "applicability_status":"context_required",
+                          "applicability_reason":"No human decision recorded",
+                          "evaluation_digest":"b"*64,
+                          "check_objective":"Inspect relevant trust boundary",
+                          "check_method":"Human evidence verification",
+                          "confirmed_facts":[]},None)
+            elif command == "control-applicability-save":
+                callback({"saved":True,"control_id":payload["control_id"],
+                          "snapshot_id":payload["snapshot_id"],
+                          "decision":payload["decision"],
+                          "revision_id":"cap_synthetic",
+                          "next_stage":"test"},None)
+
+        with patch.object(DesktopBridge, "call", new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={
+                    "target_kind":"git", "linked_project_id":project,
+                    "linked_assessment_id":assessment,"status":"scoping",
+                    "archived_at":None}
+                window.open_control_review()
+                dialog=window.control_review_dialog
+                self.assertIsNotNone(dialog)
+                self.assertTrue(dialog.isVisible())
+                self.assertEqual(dialog.controls.count(),108)
+                self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
+                self.assertFalse(dialog.save.isEnabled())
+                # Non-applicable is unavailable without confirmed architecture facts.
+                self.assertFalse(dialog.decision.model().item(3).isEnabled())
+                dialog.decision.setCurrentIndex(1)
+                dialog.reason.setPlainText(
+                    "Human reviewer confirms this control applies to the frozen "
+                    "miniagent assessment scope; effectiveness remains untested."
+                )
+                self.assertFalse(dialog.save.isEnabled())
+                dialog.confirm.setChecked(True)
+                self.assertTrue(dialog.save.isEnabled())
+                with patch.object(QMessageBox, "question",
+                                  return_value=QMessageBox.StandardButton.Yes):
+                    dialog.save_decision()
+                saved=[c for c in calls if c[0]=="control-applicability-save"]
+                self.assertEqual(len(saved),1)
+                self.assertEqual(saved[0][2]["control_id"],"ARL-KB-001")
+                self.assertEqual(saved[0][2]["snapshot_id"],snapshot)
+                self.assertEqual(saved[0][2]["evaluation_digest"],"b"*64)
+                self.assertTrue(saved[0][2]["confirmed"])
+                self.assertFalse(any(c[0]=="master" for c in calls))
+                dialog.reject()
+            finally:
+                self._dispose(window)
+
     def test_sent_mail_not_listed_as_active_draft(self):
         """Mail Drafts uses SQL-filtered unsent records; CRM history is separate."""
         previous = DesktopBridge.call
