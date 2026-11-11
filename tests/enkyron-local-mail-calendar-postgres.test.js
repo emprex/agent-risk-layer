@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import pg from 'pg';
 import {
   localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
-  localMailMessages,fetchAndCacheThread,moveLocalThread,localMailLabels,
+  localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
   createLocalLabel,labelLocalThread
 } from '../desktop/enkyron-mail-local.mjs';
 import {calendarCreate,calendarCreateTask,calendarCompleteTask,calendarList,
@@ -120,4 +120,45 @@ test('Calendar input is validated and cannot produce implicit invitations',()=>{
     starts_at:'2026-11-12T10:00:00+00:00',
     ends_at:'2026-11-12T11:00:00+00:00',timezone:'fake/unknown'
   }),/timezone/);
+});
+
+test('bounded body import persists received text once, without transport mutation',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-local-body-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID(),message=crypto.randomUUID();
+  const calls=[];
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'trash','inbox','Saved internal mail')",
+      [scope,thread]
+    );
+    const options={listMessages:async(_pool,_actor,mailbox,requested)=>{
+      calls.push({mailbox,requested,verb:'GET'});
+      return {items:[{id:message,from:'client@example.invalid',
+        to:['guillaume@example.invalid'],subject:'Saved internal mail',
+        text:'Retained in ENKYRON even if provider later removes thread',
+        created_at:'2026-11-11T10:00:00Z',html_only:false}]};
+    }};
+    const first=await syncLocalMailBodies(pool,owner,{mailbox:'direction'},options);
+    assert.equal(first.cached_threads,1);
+    assert.equal(first.failed_threads,0);
+    assert.deepEqual(calls.map(x=>x.verb),['GET']);
+    const snapshot=await localMailMessages(pool,owner,{
+      mailbox:'direction',thread_id:thread
+    });
+    assert.equal(snapshot.items.length,1);
+    assert.match(snapshot.items[0].text,/Retained in ENKYRON/);
+    const second=await syncLocalMailBodies(pool,owner,{mailbox:'direction'},options);
+    assert.equal(second.cached_threads,0);
+    assert.equal(calls.length,1);
+    assert.equal((await localMailList(pool,owner,{folder:'inbox'})).items.length,1);
+    assert.equal((await pool.query(
+      'SELECT provider_folder FROM enkyron_mail_local_threads '+
+      'WHERE workspace_key=$1 AND thread_id=$2',[scope,thread]
+    )).rows[0].provider_folder,'trash');
+  }finally{await pool.end();}
 });
