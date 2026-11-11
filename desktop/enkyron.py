@@ -316,6 +316,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
+        self.mail_full_text_windows = {}
         self._reply_context = None
         self._sent_followup_context = None
         self.mail_detached_window = None
@@ -1357,6 +1358,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
         self.mail_inbox.forwardRequested.connect(self.prepare_mail_forward)
+        self.mail_inbox.fullTextRequested.connect(self.open_archived_full_text)
         self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
         self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
@@ -2430,6 +2432,64 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("mail-reply-draft",payload=payload,callback=sent)
         self.bridge.call("crm-mail-create",payload=fields,callback=saved)
 
+    def open_archived_full_text(self, mailbox, thread_id, message_id):
+        """Read full archived plain text, never external HTML or file bytes."""
+        if (mailbox not in ("direction", "support")
+                or not isinstance(thread_id, str) or len(thread_id) != 36
+                or not isinstance(message_id, str) or len(message_id) != 36):
+            return
+        key = (mailbox, thread_id, message_id)
+        existing = self.mail_full_text_windows.get(key)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · Full archived email", size=(910, 690), minimum=(600, 420))
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Read-only NEMORYTH archive · plain text only")
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(label)
+        status = QLabel("Loading archived text…")
+        status.setObjectName("enkyronMailFullTextStatus")
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        body = QPlainTextEdit()
+        body.setObjectName("enkyronMailFullTextBody")
+        body.setAccessibleName("Full locally archived plain-text message")
+        body.setReadOnly(True)
+        layout.addWidget(body, 1)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        self.mail_full_text_windows[key] = dialog
+        dialog.finished.connect(
+            lambda _value, ref=key: self.mail_full_text_windows.pop(ref, None))
+        dialog.show()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if (error or not isinstance(data, dict)
+                    or not data.get("available")
+                    or data.get("mailbox") != mailbox
+                    or data.get("thread_id") != thread_id
+                    or data.get("message_id") != message_id
+                    or not isinstance(data.get("text"), str)):
+                status.setText("Full text unavailable in NEMORYTH. "
+                               "Check schema 113 and the archived message.")
+                return
+            body.setPlainText(data["text"])
+            status.setText(str(data.get("notice") or
+                "Locally stored message; not a security-verified attachment.")[:500])
+        self.bridge.call("mail-local-full-text",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "message_id":message_id},callback=received)
+
     def open_mail_thread_window(self, mailbox, thread_id):
         """Double-click: detachable, read-only plain-text conversation."""
         if (mailbox not in ("direction", "support")
@@ -3276,6 +3336,9 @@ class EnkyronWindow(QMainWindow):
         if hasattr(self, "calendar_view"):
             self.calendar_view.close_editors()
         # Close independently opened mail conversations on workstation exit.
+        for window in list(self.mail_full_text_windows.values()):
+            window.close()
+        self.mail_full_text_windows.clear()
         for window in list(self.mail_thread_windows.values()):
             window.close()
         self.mail_thread_windows.clear()
