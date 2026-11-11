@@ -73,7 +73,7 @@ export async function archiveNextMailBatch(pool,actor,input={},{
       const fullHtml=boundedText(detail.html);
       const state=(detail.text===undefined&&detail.html===undefined)
           ||detail.attachments_known===false
-        ?'incomplete':'complete';
+        ?'incomplete':'body_captured';
       const list=Array.isArray(detail.attachments)?detail.attachments:[];
       if(list.length>100)throw Error('Archive attachment count exceeded');
       const seen=new Set();
@@ -124,7 +124,7 @@ export async function archiveNextMailBatch(pool,actor,input={},{
         }
         await client.query('COMMIT');
         if(saved.rowCount){
-          if(state==='complete')archived++;
+          if(state==='body_captured')archived++;
           else incomplete++;
           metadata+=list.length;
         }
@@ -153,7 +153,7 @@ export async function mailArchiveStatus(pool,actor,input={}){
     'WHERE m.workspace_key=$1 AND ($2::text=\'all\' OR m.mailbox_key=$2)) AS cached,'+
     '(SELECT count(*)::int FROM enkyron_mail_full_messages f '+
     'WHERE f.workspace_key=$1 AND ($2::text=\'all\' OR f.mailbox_key=$2) '+
-    "AND f.archive_state='complete') AS complete,"+
+    "AND f.archive_state='body_captured') AS body_captured,"+
     '(SELECT count(*)::int FROM enkyron_mail_full_messages f '+
     'WHERE f.workspace_key=$1 AND ($2::text=\'all\' OR f.mailbox_key=$2) '+
     "AND f.archive_state='incomplete') AS incomplete,"+
