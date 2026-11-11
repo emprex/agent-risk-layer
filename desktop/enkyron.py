@@ -1838,8 +1838,14 @@ class EnkyronWindow(QMainWindow):
                 self.mail_inbox.connection_label.setVisible(True)
             if error or not isinstance(data, dict) or not data.get("synced"):
                 self.load_local_mail(self.mail_inbox.selected_mailbox)
+                self.mail_inbox.connection_label.setText(
+                    "Receiving failed. Saved ENKYRON mail remains accessible."
+                )
+                self.mail_inbox.connection_label.setVisible(True)
                 return
             def cached(result, failure):
+                self.load_local_mail_metadata()
+                self.load_local_mail(self.mail_inbox.selected_mailbox)
                 if failure or not isinstance(result, dict):
                     self.mail_inbox.connection_label.setText(
                         "Message content import incomplete; saved messages are safe."
@@ -1854,8 +1860,6 @@ class EnkyronWindow(QMainWindow):
                     self.mail_inbox.connection_label.setVisible(True)
                 else:
                     self.mail_inbox.connection_label.setVisible(False)
-                self.load_local_mail_metadata()
-                self.load_local_mail(self.mail_inbox.selected_mailbox)
             self.bridge.call("mail-local-sync-bodies",
                 payload={"mailbox":chosen}, callback=cached)
         self.bridge.call("mail-local-sync",
