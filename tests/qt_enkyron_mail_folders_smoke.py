@@ -16,6 +16,26 @@ class MailFoldersSmoke(unittest.TestCase):
     def setUpClass(cls):
         cls.app=QApplication.instance() or QApplication([])
 
+    def test_error_replaces_loading_state_and_allows_refresh(self):
+        view = MailInboxView()
+        try:
+            view.set_owner_mailboxes(CARD)
+            view.set_connection_state("loading")
+            self.assertEqual(view.mail_stack.currentIndex(), 0)
+            self.assertIn("Checking", view.empty_title.text())
+            view.set_connection_state(
+                "error", "Could not read all / trash (Resend HTTP 422)."
+            )
+            self.assertEqual(view.mail_stack.currentIndex(), 0)
+            self.assertEqual(view.empty_title.text(), "Couldn't load mail")
+            self.assertIn("HTTP 422", view.empty_explanation.text())
+            self.assertNotIn("Checking", view.empty_title.text())
+            self.assertTrue(view.refresh_button.isEnabled())
+            self.assertFalse(view.search.isEnabled())
+        finally:
+            view.close()
+            view.deleteLater()
+
     def test_folder_navigation_and_explicit_archive_request(self):
         view=MailInboxView()
         changed=[]
