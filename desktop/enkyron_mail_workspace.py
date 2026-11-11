@@ -109,6 +109,30 @@ def format_mail_message_cards(messages):
         if attachments:
             notices.append("{} attachment reference(s) — file contents "
                            "not approved for opening".format(attachments))
+        # Only manifest metadata is presented. No download button or file URL.
+        attachment_lines = []
+        refs = item.get("attachment_previews")
+        if isinstance(refs, list):
+            for detail in refs[:8]:
+                if not isinstance(detail, dict):
+                    continue
+                filename = escape(str(detail.get("filename") or
+                                      "Unnamed attachment")[:120], quote=True)
+                try:
+                    size = int(detail.get("size"))
+                except (TypeError, ValueError):
+                    size = -1
+                display_size = (" · {} bytes".format(size)
+                                if 0 <= size <= 26214400 else "")
+                stage = str(detail.get("state") or "metadata_only")
+                state_label = ("Binary stored in quarantine — NOT scanned"
+                               if stage == "quarantined_unscanned"
+                               else "Blocked" if stage == "blocked"
+                               else "Metadata only — file NOT downloaded")
+                attachment_lines.append(
+                    "<p style='margin:2px 0;color:#536c80;'>"
+                    + filename + escape(display_size, quote=True)
+                    + " · " + escape(state_label, quote=True) + "</p>")
         notes = "".join(
             "<p style='color:#785e28;background-color:#fff8e6;"
             "padding:6px;border:1px solid #ead9af;'>"
@@ -126,7 +150,8 @@ def format_mail_message_cards(messages):
             + subject + "</span></td></tr>"
             "<tr><td style='padding:12px 14px;'>"
             "<p style='margin:0;white-space:pre-wrap;'>"
-            + body + "</p>" + notes + "</td></tr></table>"
+            + body + "</p>" + notes + "".join(attachment_lines)
+            + "</td></tr></table>"
             "<p style='margin:0 0 12px 0;'>&nbsp;</p>"
         )
     return "<html><body style='font-family:DejaVu Sans;font-size:12px;" + (
