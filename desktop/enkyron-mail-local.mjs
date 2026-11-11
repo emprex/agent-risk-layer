@@ -439,13 +439,21 @@ export async function fetchAndCacheThread(pool,actor,input,{
   const last=items.at(-1)?.id??null;
   if(response.has_more===true&&(!UUID.test(last)||last===after))
     throw Error('Resend Mail body cursor did not advance');
+  // The legacy 112 preview column cannot hold long messages. When additive
+  // archive 113 is installed, store an EXPLICIT placeholder pending the full
+  // provider GET. Before 113, reject instead of pretending truncation is safe.
+  const archiveReady=(await pool.query(
+    "SELECT to_regclass('enkyron_mail_full_messages') IS NOT NULL AS ready"
+  )).rows[0]?.ready===true;
   await withTransaction(pool,async client=>{
     for(const item of items){
       const id=requireUuid(item.id);
-      const body=String(item.text||'');
-      // Existing schema has a 20,000-character field. Do not silently
-      // claim an oversized provider message has been preserved in full.
-      if(body.length>20000)throw Error('Mail body exceeds local schema limit');
+      const original=String(item.text||'');
+      if(original.length>20000&&!archiveReady)
+        throw Error('Mail body exceeds local schema limit');
+      const body=original.length>20000
+        ?'[Full message exceeds preview limit; archival verification pending]'
+        :original;
       await client.query(
         'INSERT INTO enkyron_mail_local_messages '+
         '(workspace_key,mailbox_key,thread_id,message_id,sender,recipients,'+
