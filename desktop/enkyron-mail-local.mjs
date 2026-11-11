@@ -172,8 +172,13 @@ export async function syncMailHeaders(pool,actor,input={},{
 }={}){
   const key=scope(actor),chosen=input?.mailbox||'all';
   if(chosen!=='all')requireMailbox(chosen);
+  // Automatic polling reads only provider Inboxes; full Send / Receive keeps
+  // its existing four-folder reconciliation. Never mutate provider folders.
+  if(input?.inbox_only!==undefined&&typeof input.inbox_only!=='boolean')
+    throw Error('Invalid Mail inbox poll');
+  const providerFolders=input?.inbox_only===true?['inbox']:PROVIDER;
   const permitted=(chosen==='all'?MAILBOXES:[chosen])
-    .flatMap(mailbox=>PROVIDER.map(folder=>({mailbox,folder,
+    .flatMap(mailbox=>providerFolders.map(folder=>({mailbox,folder,
       key:mailbox+'/'+folder})));
   const continuation=input?.cursors;
   if(continuation!==undefined&&(!continuation||typeof continuation!=='object'
@@ -184,7 +189,7 @@ export async function syncMailHeaders(pool,actor,input={},{
     k=>!permitted.some(item=>item.key===k)
       ||continuation[k]!==null&&!UUID.test(continuation[k])))
     throw Error('Invalid Mail pagination state');
-  let imported=0;
+  let imported=0,newThreads=0,changedThreads=0;
   const unavailable=[],next={};
   // Never make more than two simultaneous provider calls.
   for(let offset=0;offset<requested.length;offset+=2){
@@ -204,7 +209,15 @@ export async function syncMailHeaders(pool,actor,input={},{
         const cursor=page.has_more?rows.at(-1).id:null;
         if(page.has_more&&cursor===after)
           throw Error('Resend Mail cursor did not advance');
-        await withTransaction(pool,async client=>{
+        const changes=await withTransaction(pool,async client=>{
+          // This is only for operator notifications, not an authority record.
+          // PostgreSQL primary keys remain the idempotence guarantee.
+          const prior=rows.length?(await client.query(
+            'SELECT thread_id,last_message_at FROM enkyron_mail_local_threads '+
+            'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=ANY($3::uuid[])',
+            [key,task.mailbox,rows.map(row=>row.id)]
+          )).rows:[];
+          const old=new Map(prior.map(item=>[String(item.thread_id),item.last_message_at]));
           for(const row of rows){
             await client.query(
               'INSERT INTO enkyron_mail_local_threads '+
@@ -218,8 +231,12 @@ export async function syncMailHeaders(pool,actor,input={},{
               [key,task.mailbox,row.id,task.folder,row.subject,row.last,row.unread]
             );
           }
+          return {
+            newly:rows.filter(row=>!old.has(row.id)).length,
+            updated:rows.filter(row=>old.has(row.id)&&old.get(row.id)!==row.last).length
+          };
         });
-        return {task,cursor,count:rows.length};
+        return {task,cursor,count:rows.length,changes};
       })
     );
     for(let i=0;i<results.length;i++){
@@ -232,12 +249,15 @@ export async function syncMailHeaders(pool,actor,input={},{
         continue;
       }
       imported+=result.value.count;
+      newThreads+=result.value.changes.newly;
+      changedThreads+=result.value.changes.updated;
       if(result.value.cursor)next[task.key]=result.value.cursor;
     }
   }
   if(requested.length&&unavailable.length===requested.length)
     throw Error('Resend Mail sync failed for all selected folders');
-  return {synced:true,imported,partial:unavailable.length>0,unavailable,
+  return {synced:true,imported,new_threads:newThreads,updated_threads:changedThreads,
+    partial:unavailable.length>0,unavailable,
     continuation:next,more_pending:Object.keys(next).length>0,
     note:'Each completed provider page is saved in PostgreSQL; retries are idempotent.'};
 }
