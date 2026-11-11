@@ -143,8 +143,14 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         principal,null);
       if(requireUuid(raw.id)!==email)
         throw new Error('Resend email identity mismatch');
-      const array=(value)=>Array.isArray(value)
-        ?value.slice(0,100).map(x=>safeText(x,2048)):[];
+      const array=(value)=>{
+        if(value===null||value===undefined)return [];
+        if(!Array.isArray(value)||value.length>100
+            ||value.some(x=>typeof x!=='string'
+              ||Buffer.byteLength(x,'utf8')>2048))
+          throw new Error('Unbounded provider address list');
+        return value;
+      };
       const textField=(value)=>{
         if(value===null)return null;
         if(typeof value!=='string'||Buffer.byteLength(value,'utf8')>2097152)
@@ -163,6 +169,7 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         reply_to:array(raw.reply_to),
         text:Object.hasOwn(raw,'text')?textField(raw.text):undefined,
         html:Object.hasOwn(raw,'html')?textField(raw.html):undefined,
+        attachments_known:Array.isArray(raw.attachments),
         attachments:details.map(a=>({
           id:requireUuid(a.id),
           filename:safeText(a.filename,512),
