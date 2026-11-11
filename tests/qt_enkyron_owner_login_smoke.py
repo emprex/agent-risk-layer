@@ -71,7 +71,7 @@ class MailAccountUXSmoke(unittest.TestCase):
             },None)
             self.assertIn("Compose drafts now",window.crm_mail_connection.text())
             self.assertFalse(window.mail_inbox.refresh_button.isEnabled())
-            self.assertEqual(window.mail_inbox.account_picker.count(),2)
+            self.assertEqual(window.mail_inbox.account_picker.count(),3)
             self.assertTrue(window.mail_inbox.new_email_button.isEnabled())
             self.assertFalse(any(action.startswith("owner-") for action,*_ in calls))
         finally:
