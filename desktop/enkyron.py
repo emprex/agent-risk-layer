@@ -12157,17 +12157,22 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def show_mail_draft_dialog(self, draft):
-        dialog = QDialog(self)
         existing = bool(draft.get("id"))
-        reported = draft.get("mail_state") == "external_send_reported"
-        dialog.setWindowTitle(
+        state = draft.get("mail_state", "draft")
+        reported = state == "external_send_reported"
+        submitted = state == "provider_submitted"
+        read_only = reported or submitted
+        title = (
+            "ENKYRON · Resend submission" if submitted else
             "ENKYRON · Reported external send" if reported else
             "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
         )
-        dialog.resize(720, 590)
-        dialog.setMinimumSize(610, 500)
+        dialog = make_workspace_window(
+            title, size=(770, 620), minimum=(610, 500)
+        )
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
+            "MESSAGE SUBMITTED THROUGH RESEND" if submitted else
             "EXTERNAL SEND (OPERATOR REPORTED)" if reported else
             "EDIT DRAFT" if existing else "NEW DRAFT"
         ))
@@ -12181,6 +12186,9 @@ class EnkyronWindow(QMainWindow):
             "The operator recorded an external send. ENKYRON has not verified "
             "provider transmission, delivery or reading. This saved revision "
             "is read-only." if reported else
+            "ENKYRON has recorded a submission to Resend. "
+            "The provider's acceptance is not delivery confirmation. "
+            "This submitted message is read-only; do not resend it." if submitted else
             "Compose a message, save it locally or send with explicit recipient "
             "confirmation when Resend is configured. Saving never sends."
         )
@@ -12198,7 +12206,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_from.setCurrentIndex(
             max(0,self.crm_mail_from.findData(draft.get("mailbox_key") or "direction"))
         )
-        self.crm_mail_from.setEnabled(not reported)
+        self.crm_mail_from.setEnabled(not read_only)
         form.addRow("From",self.crm_mail_from)
         self.crm_mail_to = QLineEdit()
         self.crm_mail_to.setMaxLength(254)
@@ -12206,7 +12214,7 @@ class EnkyronWindow(QMainWindow):
             "Type a CRM contact name or email…"
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
-        self.crm_mail_to.setReadOnly(reported)
+        self.crm_mail_to.setReadOnly(read_only)
         self.crm_mail_to_completer = QCompleter([], self.crm_mail_to)
         self.crm_mail_to_completer.setCompletionMode(
             QCompleter.CompletionMode.UnfilteredPopupCompletion
@@ -12219,7 +12227,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_subject.setMaxLength(200)
         self.crm_mail_subject.setPlaceholderText("Subject")
         self.crm_mail_subject.setText(draft.get("subject") or "")
-        self.crm_mail_subject.setReadOnly(reported)
+        self.crm_mail_subject.setReadOnly(read_only)
         form.addRow("Subject", self.crm_mail_subject)
         layout.addLayout(form)
         self.crm_mail_body = QPlainTextEdit()
@@ -12227,7 +12235,7 @@ class EnkyronWindow(QMainWindow):
             "Write your message here."
         )
         self.crm_mail_body.setPlainText(draft.get("body_text") or "")
-        self.crm_mail_body.setReadOnly(reported)
+        self.crm_mail_body.setReadOnly(read_only)
         layout.addWidget(self.crm_mail_body, 1)
         if reported:
             receipt = QLabel(
@@ -12242,22 +12250,36 @@ class EnkyronWindow(QMainWindow):
             receipt.setTextFormat(Qt.TextFormat.PlainText)
             receipt.setWordWrap(True)
             layout.addWidget(receipt)
+        if submitted:
+            outcome = draft.get("provider_outcome") or "uncertain"
+            receipt = QLabel(
+                "Provider response: {}\nResend email ID: {}\n"
+                "Delivery status: not independently verified".format(
+                    "Accepted by Resend" if outcome == "accepted"
+                    else "Uncertain — check provider",
+                    draft.get("provider_message_id") or "Not available"
+                )
+            )
+            receipt.setObjectName("enkyronSubmittedMailReceipt")
+            receipt.setTextFormat(Qt.TextFormat.PlainText)
+            receipt.setWordWrap(True)
+            layout.addWidget(receipt)
         buttons = QHBoxLayout()
-        close = QPushButton("Close without saving")
+        close = QPushButton("Close" if read_only else "Close without saving")
         close.clicked.connect(dialog.reject)
         buttons.addWidget(close)
         buttons.addStretch()
         self.crm_mail_save = QPushButton("Save draft")
         self.crm_mail_save.setObjectName("primary")
         self.crm_mail_save.clicked.connect(lambda: self.save_mail_draft())
-        self.crm_mail_save.setVisible(not reported)
+        self.crm_mail_save.setVisible(not read_only)
         buttons.addWidget(self.crm_mail_save)
         self.crm_mail_send = QPushButton("Send email…")
         self.crm_mail_send.setObjectName("enkyronMailSend")
-        self.crm_mail_send.setVisible(not reported)
+        self.crm_mail_send.setVisible(not read_only)
         self.crm_mail_send.clicked.connect(self.request_mail_send)
         buttons.addWidget(self.crm_mail_send)
-        if existing and not reported:
+        if existing and not read_only:
             report_button = QPushButton("Record external send…")
             report_button.setObjectName("crmMailManualSend")
             report_button.clicked.connect(self.open_mail_manual_send)
@@ -12285,10 +12307,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_recipient_timer.setSingleShot(True)
         self.crm_mail_recipient_timer.setInterval(250)
         self.crm_mail_recipient_timer.timeout.connect(self.search_mail_recipients)
-        if not reported:
+        if not read_only:
             self.crm_mail_to.textEdited.connect(self.mail_recipient_text_edited)
             self.crm_mail_to_completer.activated[str].connect(self.choose_mail_recipient)
-        dialog.open()
+        dialog.show()
 
 
     def mail_recipient_text_edited(self, _text):
