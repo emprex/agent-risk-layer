@@ -181,11 +181,14 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertTrue(ui.show_local_records("sent", [
                 {"mailbox_key": "direction", "recipient_email": "buyer@example.invalid",
                  "subject": "Proposal", "outcome": "accepted",
+                 "recorded_at": "2026-11-11T13:00:00Z",
                  "draft_id": "11111111-1111-4111-8111-111111111111"}
             ]))
             self.assertEqual(ui.thread_list.count(), 1)
+            self.assertIn("11 Nov 2026", ui.thread_list.item(0).text())
             self.assertTrue(ui.update_local_sent_delivery(0, "✓ Delivered"))
             self.assertIn("✓ Delivered", ui.thread_list.item(0).text())
+            self.assertIn("11 Nov 2026", ui.thread_list.item(0).text())
             ui.thread_list.setCurrentRow(0)
             self.assertEqual(requests, [("sent", 0)])
             self.assertTrue(ui.show_local_record_preview(
