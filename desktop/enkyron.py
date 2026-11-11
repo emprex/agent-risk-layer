@@ -745,8 +745,18 @@ class EnkyronWindow(QMainWindow):
         engine_l.addWidget(self.engine_view, 1)
         self.tabs.addTab(engine, "ARL Engine")
 
-        evidence = QWidget()
-        evidence_l = QVBoxLayout(evidence)
+        # The Evidence tab needs more vertical space than a compact laptop
+        # viewport can always provide. Put its sections into one scrollable
+        # document; never let a large minimum-height summary overlap the packs.
+        evidence = QScrollArea()
+        evidence.setObjectName("ticketEvidencePage")
+        evidence.setWidgetResizable(True)
+        evidence.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        evidence_content = QWidget()
+        evidence_l = QVBoxLayout(evidence_content)
+        evidence_l.setContentsMargins(12, 12, 12, 12)
+        evidence_l.setSpacing(8)
+        evidence.setWidget(evidence_content)
         evidence_l.addWidget(section_title("NEMORYTH · CANONICAL ARL EVIDENCE REQUESTS"))
         self.evidence_intro = QLabel(
             "Read-only evidence requirements from ARL's 108-control register. "
@@ -769,14 +779,15 @@ class EnkyronWindow(QMainWindow):
         evidence_l.addLayout(work_actions)
         self.evidence_summary = make_text_area()
         self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
-        self.evidence_summary.setMinimumHeight(270)
-        self.evidence_summary.setMaximumHeight(360)
-        evidence_l.addWidget(self.evidence_summary, 3)
-        evidence_l.addWidget(section_title("EVIDENCE REQUEST PACKS"))
+        self.evidence_summary.setMinimumHeight(190)
+        self.evidence_summary.setMaximumHeight(245)
+        evidence_l.addWidget(self.evidence_summary)
+        self.evidence_pack_heading = section_title("EVIDENCE REQUEST PACKS")
+        evidence_l.addWidget(self.evidence_pack_heading)
         self.evidence_packs = QListWidget()
         self.evidence_packs.setObjectName("ticketEvidencePacks")
         self.evidence_packs.setMaximumHeight(72)
-        evidence_l.addWidget(self.evidence_packs, 1)
+        evidence_l.addWidget(self.evidence_packs)
         actions = QHBoxLayout()
         self.evidence_open = QPushButton("Inspect selected pack")
         self.evidence_open.setEnabled(False)
@@ -794,7 +805,8 @@ class EnkyronWindow(QMainWindow):
         evidence_l.addLayout(actions)
         self.evidence_details = make_text_area()
         self.evidence_details.setMaximumHeight(100)
-        evidence_l.addWidget(self.evidence_details, 1)
+        evidence_l.addWidget(self.evidence_details)
+        evidence_l.addStretch()
         self.tabs.addTab(evidence, "Evidence Requests")
 
         ledger = QWidget()
