@@ -107,7 +107,7 @@ test('record rejects absent approval or changed preview before starting a transa
   },'emprex',deps),/preview is stale/);
 });
 
-test('approved first revision uses a single locked transaction and existing bigint ID',async()=>{
+test('approved first revision lets PostgreSQL generate identity and commits atomically',async()=>{
   const dir=fs.mkdtempSync(path.join(os.homedir(),'.enkyron-master-test-'));
   const git=(...args)=>execFileSync('git',['-C',dir,...args],{stdio:'pipe'});
   try{
@@ -131,7 +131,6 @@ test('approved first revision uses a single locked transaction and existing bigi
           targetBinding:{revision:frozen},assessmentBinding:{assessmentId:assessment}
         }
       }]};
-      if(sql.includes('COALESCE(MAX(id)'))return {rows:[{next_id:'41'}]};
       if(sql.includes('INSERT INTO assessment_master_dossier_revisions'))
         return {rows:[{id:'41',recorded_at:'2026-11-11T22:00:00Z'}]};
       return {rows:[]};
@@ -151,11 +150,15 @@ test('approved first revision uses a single locked transaction and existing bigi
     assert.equal(result.document_sha256,candidate.document_sha256);
     const insert=statements.find(q=>q.sql.startsWith('INSERT INTO assessment_master_dossier_revisions'));
     assert.ok(insert);
-    assert.equal(insert.values[0],'41');
-    assert.equal(insert.values[4],'ARL-2026-000002');
-    assert.equal(insert.values[7],candidate.document_sha256);
-    assert.equal(JSON.parse(insert.values[8]).controls.length,108);
-    assert.ok(statements.some(q=>q.sql.startsWith('LOCK TABLE')));
+    assert.match(insert.sql,/\(project_id,system_snapshot_id,assessment_id,dossier_key,revision,target_sha,/);
+    assert.doesNotMatch(insert.sql,/\(id,project_id/);
+    assert.doesNotMatch(insert.sql,/OVERRIDING SYSTEM VALUE/);
+    assert.equal(insert.values.length,9);
+    assert.equal(insert.values[0],project);
+    assert.equal(insert.values[3],'ARL-2026-000002');
+    assert.equal(insert.values[6],candidate.document_sha256);
+    assert.equal(JSON.parse(insert.values[7]).controls.length,108);
+    assert.ok(!statements.some(q=>/COALESCE\(MAX\(id\)|LOCK TABLE assessment_master_dossier_revisions/.test(q.sql)));
     assert.ok(statements.some(q=>q.sql==='COMMIT'));
     assert.ok(!statements.some(q=>q.sql==='ROLLBACK'));
     // A real PostgreSQL failure must disclose a safe stage and SQLSTATE,
