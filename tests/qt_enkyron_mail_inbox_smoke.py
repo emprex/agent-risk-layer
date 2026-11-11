@@ -40,10 +40,12 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(ui.account_picker.itemText(0), "All mail")
             self.assertIn("guillaume.strohecker@", ui.account_picker.itemText(1))
             self.assertFalse(ui.refresh_button.isEnabled())
-            self.assertFalse(ui.reply_button.isEnabled())
-            self.assertFalse(ui.ticket_button.isEnabled())
-            self.assertFalse(ui.company_button.isEnabled())
             self.assertTrue(ui.body.isReadOnly())
+            self.assertEqual(ui.mail_stack.currentIndex(), 0)
+            self.assertIn("unavailable", ui.empty_title.text().lower())
+            self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailReply"))
+            self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailTicket"))
+            self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailCompany"))
             self.assertIn("no messages yet", ui.body.toPlainText().lower())
             # Untrusted data cannot inject fake conversations while disconnected.
             self.assertFalse(ui.show_threads("direction", [{"id": THREAD, "subject": "fake"}]))
@@ -76,7 +78,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertFalse(ui.thread_list.item(0).isHidden())
             ui.thread_list.setCurrentRow(0)
             self.assertEqual(requested, [("direction", THREAD)])
-            self.assertFalse(ui.reply_button.isEnabled())
+            self.assertEqual(ui.mail_stack.currentIndex(), 1)
             self.assertTrue(ui.show_messages("direction", THREAD, [{
                 "from": "test@example.invalid", "to": ["support@example.invalid"],
                 "subject": "<img src=x>", "text": "<script>alert(1)</script>",
@@ -84,7 +86,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             }]))
             self.assertIn("<script>alert(1)</script>", ui.body.toPlainText())
             self.assertTrue(ui.body.isReadOnly())
-            self.assertFalse(ui.ticket_button.isEnabled())
+            self.assertEqual(ui.reader_stack.currentIndex(), 1)
             ui.account_picker.setCurrentIndex(2)
             self.assertEqual(changed[-1], "support")
             self.assertEqual(ui.thread_list.count(), 0)
@@ -133,7 +135,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.findChild(type(window.mail_inbox.refresh_button), "enkyronHomeOpenMail").click()
             self.assertEqual(window.navigation.currentRow(), 3)
             self.assertEqual(window.crm_tabs.currentIndex(), 3)
-            self.assertFalse(window.mail_inbox.reply_button.isEnabled())
+            self.assertFalse(window.mail_inbox.findChildren(
+                type(window.mail_inbox.new_email_button), "enkyronMailReply"))
         finally:
             if window:
                 self._dispose(window)
