@@ -217,6 +217,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertIsNotNone(window.calendar_detached_window)
             self.assertIs(window.mail_detached_window.centralWidget(), mail_widget)
             self.assertIs(window.calendar_detached_window.centralWidget(), calendar_widget)
+            self.assertIsNone(window.mail_detached_window.parent())
+            self.assertIsNone(window.calendar_detached_window.parent())
             self.assertTrue(window.mail_detached_window.isVisible())
             self.assertTrue(window.calendar_detached_window.isVisible())
             self.assertEqual(window.pages.count(), 4)
