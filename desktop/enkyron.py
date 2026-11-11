@@ -2567,10 +2567,17 @@ class EnkyronWindow(QMainWindow):
         button = QPushButton("Bring " + label + " to front")
         def focus_window():
             window = window_getter()
-            if window is not None:
-                window.showNormal()
-                window.raise_()
-                window.activateWindow()
+            if window is None:
+                return
+            # Show even if the operator minimized the module. Qt can request
+            # activation only; GNOME/Wayland may limit focus stealing.
+            window.showNormal()
+            window.raise_()
+            window.activateWindow()
+            handle = window.windowHandle()
+            if handle is not None:
+                handle.requestActivate()
+            QApplication.alert(window, 1500)
         button.clicked.connect(focus_window)
         layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addStretch()
@@ -2598,6 +2605,11 @@ class EnkyronWindow(QMainWindow):
         window.setCentralWidget(self.mail_page)
         self.mail_detach_button.setText("Return to ENKYRON")
         window.show()
+        # QTabWidget.removeTab hides the old page. Re-parenting alone does not
+        # make the explicitly hidden page visible in its new native window.
+        self.mail_page.show()
+        self.mail_page.raise_()
+        window.activateWindow()
 
     def _return_mail_window(self):
         window = self.mail_detached_window
@@ -2637,6 +2649,10 @@ class EnkyronWindow(QMainWindow):
         window.setCentralWidget(self.calendar_view)
         self.calendar_view.detach_button.setText("Return to ENKYRON")
         window.show()
+        # QStackedWidget.removeWidget hides its former page.
+        self.calendar_view.show()
+        self.calendar_view.raise_()
+        window.activateWindow()
 
     def _return_calendar_window(self):
         window = self.calendar_detached_window
