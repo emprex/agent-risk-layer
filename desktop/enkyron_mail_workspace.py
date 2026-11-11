@@ -1,9 +1,4 @@
-"""ENKYRON Mail: native, account-scoped inbox presentation.
-
-This is a display/controller for a future trusted Owner/Resend reader.
-No email access, SMTP, browser content, secrets or implicit send is available here.
-The Qt UI is NOT the authentication/authorization boundary.
-"""
+"""Native ENKYRON email inbox presentation; provider permissions stay server-side."""
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
@@ -26,6 +21,7 @@ class MailInboxView(QWidget):
         super().__init__(parent)
         self.connection_state = "disconnected"
         self.current_thread_id = None
+        self.current_thread_mailbox = None
         self.items = []
         self._mailboxes = {}
         self._build()
@@ -36,7 +32,7 @@ class MailInboxView(QWidget):
         root.setSpacing(12)
 
         title_row = QHBoxLayout()
-        title = QLabel("INBOX · BUSINESS CORRESPONDENCE")
+        title = QLabel("Inbox")
         title.setObjectName("sectionTitle")
         title_row.addWidget(title)
         title_row.addStretch()
@@ -47,16 +43,16 @@ class MailInboxView(QWidget):
         root.addLayout(title_row)
 
         row = QHBoxLayout()
-        row.addWidget(QLabel("Mailbox"))
+        row.addWidget(QLabel("Show"))
         self.account_picker = QComboBox()
         self.account_picker.setObjectName("enkyronMailAccountPicker")
-        self.account_picker.setMinimumWidth(310)
-        self.account_picker.setAccessibleName("Select professional mailbox")
-        self.account_picker.setToolTip("Direction and Support are separate mailboxes.")
+        self.account_picker.setMinimumWidth(170)
+        self.account_picker.setAccessibleName("Filter messages by email account")
+        self.account_picker.setToolTip("All mail or one address")
         self.account_picker.currentIndexChanged.connect(self._account_changed)
         row.addWidget(self.account_picker)
         row.addStretch()
-        self.refresh_button = QPushButton("Refresh inbox")
+        self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setObjectName("enkyronMailRefresh")
         self.refresh_button.setEnabled(False)
         self.refresh_button.setToolTip("Refresh the selected professional mailbox.")
@@ -65,7 +61,7 @@ class MailInboxView(QWidget):
         root.addLayout(row)
 
         self.connection_label = QLabel(
-            "Write and save drafts now. Inbox and sending require a Resend connection."
+            "Email is offline. Connect the mail service to receive messages."
         )
         self.connection_label.setObjectName("enkyronMailConnectionStatus")
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -82,6 +78,8 @@ class MailInboxView(QWidget):
         self.client_desk_button.clicked.connect(lambda: self.deskRequested.emit())
         quick.addWidget(self.client_desk_button)
         quick.addStretch()
+        self.local_drafts_button.hide()
+        self.client_desk_button.hide()
         root.addLayout(quick)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -91,11 +89,11 @@ class MailInboxView(QWidget):
         left = QFrame()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.addWidget(QLabel("Conversations"))
+        left_layout.addWidget(QLabel("Messages"))
         self.search = QLineEdit()
         self.search.setObjectName("enkyronMailSearch")
         self.search.setAccessibleName("Search loaded conversations")
-        self.search.setPlaceholderText("Search loaded conversation subjects…")
+        self.search.setPlaceholderText("Search messages…")
         self.search.setMaxLength(120)
         self.search.setEnabled(False)
         self.search.textChanged.connect(self._filter)
@@ -109,7 +107,7 @@ class MailInboxView(QWidget):
         )
         self.thread_list.currentItemChanged.connect(self._selected)
         left_layout.addWidget(self.thread_list, 1)
-        self.count = QLabel("No messages loaded.")
+        self.count = QLabel("0 messages")
         self.count.setTextFormat(Qt.TextFormat.PlainText)
         left_layout.addWidget(self.count)
         self.splitter.addWidget(left)
@@ -117,12 +115,12 @@ class MailInboxView(QWidget):
         right = QFrame()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(12, 8, 8, 8)
-        self.subject = QLabel("No conversation selected")
+        self.subject = QLabel("Select a message")
         self.subject.setObjectName("enkyronMailSubject")
         self.subject.setTextFormat(Qt.TextFormat.PlainText)
         self.subject.setWordWrap(True)
         right_layout.addWidget(self.subject)
-        self.meta = QLabel("Choose a conversation after your mailbox is connected.")
+        self.meta = QLabel("")
         self.meta.setTextFormat(Qt.TextFormat.PlainText)
         self.meta.setWordWrap(True)
         right_layout.addWidget(self.meta)
@@ -130,7 +128,7 @@ class MailInboxView(QWidget):
         self.body.setObjectName("enkyronMailPlainTextPreview")
         self.body.setAccessibleName("Read-only conversation content")
         self.body.setReadOnly(True)
-        self.body.setPlainText("Mail is not connected. No messages have been loaded.")
+        self.body.setPlainText("")
         right_layout.addWidget(self.body, 1)
         actions = QHBoxLayout()
         self.reply_button = QPushButton("Reply")
@@ -149,13 +147,7 @@ class MailInboxView(QWidget):
         self.splitter.setSizes([360, 700])
         root.addWidget(self.splitter, 1)
 
-        help_line = QLabel(
-            "Incoming messages are displayed as plain text. Sending requires an explicit "
-            "recipient review; no CRM ticket is created automatically."
-        )
-        help_line.setWordWrap(True)
-        help_line.setObjectName("subtle")
-        root.addWidget(help_line)
+        # Technical integration notes do not belong in the everyday inbox.
 
     @property
     def selected_mailbox(self):
@@ -179,20 +171,19 @@ class MailInboxView(QWidget):
             self.account_picker.blockSignals(True)
             self.account_picker.clear()
             self.account_picker.blockSignals(False)
-            self._clear_threads("Mail accounts have not been verified in the local profile.")
+            self._clear_threads("Email accounts unavailable.")
             return
         previous = self.selected_mailbox
         self._mailboxes = dict(validated)
         self.account_picker.blockSignals(True)
         self.account_picker.clear()
+        self.account_picker.addItem("All mail", "all")
         for key, address in validated:
-            self.account_picker.addItem(
-                ("Direction" if key == "direction" else "Support") + " · " + address, key
-            )
+            self.account_picker.addItem(address, key)
         idx = self.account_picker.findData(previous)
         self.account_picker.setCurrentIndex(idx if idx >= 0 else 0)
         self.account_picker.blockSignals(False)
-        self._clear_threads("Mail is not connected. No messages have been loaded.")
+        self._clear_threads("No messages yet.")
 
     def set_connection_state(self, state, explanation=None):
         """Presentation state only; this cannot grant authorization to Resend."""
@@ -200,45 +191,45 @@ class MailInboxView(QWidget):
             raise ValueError("Invalid mail connection state")
         self.connection_state = state
         defaults = {
-            "disconnected": "Not connected · Owner sign-in and Resend authorisation required.",
-            "loading": "Checking mailbox connection…",
-            "connected": "Connected · Read-only mailbox",
-            "error": "Mailbox is unavailable. Messages were not refreshed.",
+            "disconnected": "Email is offline. Connect the mail service to receive messages.",
+            "loading": "Loading messages…",
+            "connected": "",
+            "error": "Unable to load messages. Try Refresh.",
         }
-        self.connection_label.setText(str(explanation or defaults[state])[:360])
+        self.connection_label.setText(str(explanation or defaults[state])[:180])
+        self.connection_label.setVisible(state != "connected")
         active = state in ("connected", "error") and bool(self._mailboxes)
         self.refresh_button.setEnabled(active)
         self.search.setEnabled(state == "connected" and bool(self._mailboxes))
         if not active:
             self._clear_threads(
-                "Mail is not connected. No messages have been loaded."
-                if state == "disconnected" else defaults[state]
+                "No messages yet." if state == "disconnected" else defaults[state]
             )
 
     def _clear_threads(self, explanation):
         self.current_thread_id = None
+        self.current_thread_mailbox = None
         self.items = []
         self.thread_list.blockSignals(True)
         self.thread_list.clear()
         self.thread_list.blockSignals(False)
         self.search.clear()
-        self.count.setText("No messages loaded.")
-        self.subject.setText("No conversation selected")
-        self.meta.setText("Select a conversation after your mailbox is connected.")
+        self.count.setText("0 messages")
+        self.subject.setText("Select a message")
+        self.meta.setText("")
         self.body.setPlainText(explanation)
         for b in (self.reply_button, self.ticket_button, self.company_button):
             b.setEnabled(False)
 
     def _account_changed(self, _index):
-        self._clear_threads(
-            "Mailbox changed. No messages are shown from the previous account."
-        )
+        self._clear_threads("No messages yet.")
         if self.selected_mailbox is not None:
             self.mailboxChanged.emit(self.selected_mailbox)
 
     def _refresh(self):
         if (self.connection_state in ("connected", "error")
-                and self.selected_mailbox in self._mailboxes):
+                and (self.selected_mailbox in self._mailboxes
+                     or self.selected_mailbox == "all")):
             self.refreshRequested.emit(self.selected_mailbox)
 
     def show_threads(self, mailbox, items, has_more=False):
@@ -260,7 +251,10 @@ class MailInboxView(QWidget):
             date = str(item.get("last_message_at") or "")[:32]
             text = ("● " if item.get("unread") else "") + subject + ("\n" + date if date else "")
             row = QListWidgetItem(text)
-            row.setData(Qt.ItemDataRole.UserRole, thread_id)
+            source = str(item.get("mailbox") or mailbox)
+            if source not in self._mailboxes:
+                continue
+            row.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
             self.thread_list.addItem(row)
         self.thread_list.blockSignals(False)
         count = self.thread_list.count()
@@ -285,25 +279,30 @@ class MailInboxView(QWidget):
 
     def _selected(self, current, _previous):
         self.current_thread_id = None
-        self.subject.setText("No conversation selected")
+        self.current_thread_mailbox = None
+        self.subject.setText("Select a message")
         self.body.clear()
         self.meta.setText("Select a conversation to load its messages.")
         for b in (self.reply_button, self.ticket_button, self.company_button):
             b.setEnabled(False)
         if (not current or self.connection_state != "connected"
-                or self.selected_mailbox not in self._mailboxes):
+                or not self._mailboxes):
             return
-        thread_id = current.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(thread_id, str):
+        reference = current.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(reference, tuple) or len(reference) != 2:
             return
+        source,thread_id = reference
+        if source not in self._mailboxes:
+            return
+        self.current_thread_mailbox = source
         self.current_thread_id = thread_id
         self.subject.setText(current.text().split("\n", 1)[0].removeprefix("● "))
         self.body.setPlainText("Loading conversation…")
-        self.threadRequested.emit(self.selected_mailbox, thread_id)
+        self.threadRequested.emit(source, thread_id)
 
     def show_messages(self, mailbox, thread_id, messages):
         """Render text only. External links and embedded images are never loaded."""
-        if (self.connection_state != "connected" or mailbox != self.selected_mailbox
+        if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
         view = []
