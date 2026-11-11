@@ -1299,6 +1299,9 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.draftsRequested.connect(
             lambda: self.crm_mail_folders.setCurrentIndex(2)
         )
+        self.mail_inbox.sentRequested.connect(
+            lambda: self.crm_mail_folders.setCurrentIndex(1)
+        )
         self.mail_inbox.deskRequested.connect(
             lambda: self.navigation.setCurrentRow(1)
         )
