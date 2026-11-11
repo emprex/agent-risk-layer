@@ -162,8 +162,8 @@ export async function readLinkedAssessmentContext(pool, ticketId) {
     assessment_id:existing.assessmentId,
     snapshot_id:existing.snapshotId,
     source:'canonical_current_snapshot',
-    master_recorded:false,
-    notice:'Existing current snapshot verified. A Master Dossier is separately required for historical master/evidence validation. No tests authorised.'
+    master_validation:'not_performed',
+    notice:'Existing current snapshot verified. Master Dossier integrity is checked separately. No tests authorised.'
   };
 }
 
