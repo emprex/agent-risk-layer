@@ -1308,16 +1308,33 @@ class EnkyronWindow(QMainWindow):
         sent_note.setTextFormat(Qt.TextFormat.PlainText)
         sent_note.setWordWrap(True)
         sent_layout.addWidget(sent_note)
-        self.mail_sent_table = QTableWidget(0,4)
+        sent_actions = QHBoxLayout()
+        sent_actions.addStretch()
+        self.mail_sent_link_button = QPushButton("Link selected email to CRM…")
+        self.mail_sent_link_button.setEnabled(False)
+        self.mail_sent_link_button.clicked.connect(self.link_selected_sent_mail)
+        sent_actions.addWidget(self.mail_sent_link_button)
+        sent_layout.addLayout(sent_actions)
+        self.mail_sent_items = []
+        self.mail_sent_table = QTableWidget(0,5)
         self.mail_sent_table.setObjectName("enkyronMailSentTable")
         self.mail_sent_table.setHorizontalHeaderLabels(
-            ["From","To","Subject","Status"]
+            ["From","To","Subject","Status","CRM"]
         )
         self.mail_sent_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers
         )
         self.mail_sent_table.horizontalHeader().setSectionResizeMode(
             2,QHeaderView.ResizeMode.Stretch
+        )
+        self.mail_sent_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.mail_sent_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.mail_sent_table.itemSelectionChanged.connect(
+            self.sent_mail_selected
         )
         sent_layout.addWidget(self.mail_sent_table,1)
         self.mail_sent_status = QLabel("Sent history has not been loaded.")
@@ -1769,6 +1786,8 @@ class EnkyronWindow(QMainWindow):
             return
         self.mail_sent_status.setText("Loading sent history…")
         def received(data,error):
+            self.mail_sent_items = []
+            self.mail_sent_link_button.setEnabled(False)
             self.mail_sent_table.setRowCount(0)
             if error or not data or not data.get("available"):
                 self.mail_sent_status.setText(
@@ -1776,6 +1795,7 @@ class EnkyronWindow(QMainWindow):
                 )
                 return
             entries=data.get("items") or []
+            self.mail_sent_items = entries
             self.mail_sent_table.setRowCount(len(entries))
             for n,row in enumerate(entries):
                 fields=[
@@ -1783,7 +1803,8 @@ class EnkyronWindow(QMainWindow):
                     row.get("recipient_email") or "",
                     row.get("subject") or "",
                     "Accepted by Resend" if row.get("outcome")=="accepted"
-                    else "Status uncertain · check provider"
+                    else "Status uncertain · check provider",
+                    row.get("company_name") or "Not linked"
                 ]
                 for column,value in enumerate(fields):
                     self.mail_sent_table.setItem(
