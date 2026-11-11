@@ -1813,6 +1813,81 @@ class EnkyronWindow(QMainWindow):
             self.mail_sent_status.setText("{} submitted message(s).".format(len(entries)))
         self.bridge.call("mail-sent",callback=received)
 
+    def sent_mail_selected(self):
+        row = self.mail_sent_table.currentRow()
+        selected = (self.mail_sent_items[row]
+                    if 0 <= row < len(self.mail_sent_items) else {})
+        self.mail_sent_link_button.setEnabled(
+            bool(selected.get("draft_id"))
+            and not selected.get("company_id")
+        )
+
+    def link_selected_sent_mail(self):
+        row = self.mail_sent_table.currentRow()
+        if not 0 <= row < len(self.mail_sent_items):
+            return
+        sent = self.mail_sent_items[row]
+        if sent.get("company_id") or not sent.get("draft_id"):
+            return
+        email = str(sent.get("recipient_email") or "")
+        if not email:
+            return
+        draft_id = sent["draft_id"]
+        self.mail_sent_link_button.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                self.sent_mail_selected()
+                QMessageBox.warning(self, "CRM lookup unavailable",
+                    str(error or "Could not search CRM contacts."))
+                return
+            matches = [
+                c for c in (data.get("items") or [])
+                if isinstance(c, dict)
+                and str(c.get("email") or "").casefold() == email.casefold()
+            ]
+            if len(matches) != 1 or data.get("more"):
+                self.sent_mail_selected()
+                QMessageBox.information(self, "No unique CRM match",
+                    "There is no unique CRM contact for this exact address. "
+                    "No association has been changed.")
+                return
+            match = matches[0]
+            decision = QMessageBox.question(
+                self, "Confirm CRM association",
+                "Link this already submitted message to\n\n"
+                "{} · {}\n{}\n\n"
+                "Only CRM metadata will change. No email will be sent."
+                .format(match.get("company_name") or "Company",
+                        match.get("full_name") or "Contact", email),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if decision != QMessageBox.StandardButton.Yes:
+                self.sent_mail_selected()
+                return
+            payload = {
+                "draft_id": draft_id,
+                "company_id": match["company_id"],
+                "contact_id": match["contact_id"],
+                "confirmed": True
+            }
+
+            def linked(result, failure):
+                if failure or not result or not result.get("linked"):
+                    self.sent_mail_selected()
+                    QMessageBox.warning(self, "Link not recorded",
+                        str(failure or "Could not confirm CRM association."))
+                    return
+                self.load_mail_sent()
+                QMessageBox.information(self, "CRM association recorded",
+                    "The message is now associated with the CRM company. "
+                    "It has NOT been sent again.")
+
+            self.bridge.call("mail-link-sent", payload=payload, callback=linked)
+
+        self.bridge.call("crm-mail-recipients", email, callback=received)
+
     def open_mail_compose(self):
         """New business email from Mail, no CRM company or login required."""
         if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
