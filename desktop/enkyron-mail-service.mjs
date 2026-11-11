@@ -144,6 +144,14 @@ export async function mailMessages(pool,operator,mailbox,threadId,after=null){
   const reader=await readerFor(pool,operator,mailbox);
   return reader.listThreadEmails({mailbox,threadId,limit:30,after});
 }
+// Archive-only endpoint. This is never exposed directly as a Qt IPC action.
+// Provider HTML is untrusted and must be stored inert in NEMORYTH.
+export async function mailEmailDetails(pool,operator,mailbox,threadId,emailId){
+  if(!UUID.test(threadId)||!UUID.test(emailId))
+    throw new Error('Invalid mail archive message reference');
+  const reader=await readerFor(pool,operator,mailbox);
+  return reader.getThreadEmail({mailbox,threadId,emailId});
+}
 export async function mailSent(pool,operator){
   const key=workspace(operator);
   const access=await mailAccess(pool,operator);
