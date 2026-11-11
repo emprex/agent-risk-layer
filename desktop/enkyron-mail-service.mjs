@@ -85,22 +85,36 @@ async function readerFor(pool,operator,mailbox){
     authoriseRead:key=>key===mailbox,
   });
 }
+// A broken support inbox must not hide healthy direction mail (or vice versa).
+// However, an entirely failed lookup is NEVER reported as an empty folder.
+export function combineMailboxPages(folder,settled){
+  const names=['direction','support'];
+  if(!['inbox','archive','spam','trash'].includes(folder)
+    ||!Array.isArray(settled)||settled.length!==names.length)
+    throw new Error('Invalid mailbox page combination');
+  const usable=settled.filter(x=>x.status==='fulfilled').map(x=>x.value);
+  const unavailable=names.filter((name,i)=>settled[i].status!=='fulfilled');
+  if(usable.length===0)
+    throw new Error('Both mail accounts are unavailable. Check provider access.');
+  const combined=usable.flatMap(p=>p.items)
+    .sort((a,b)=>String(b.last_message_at||'')
+      .localeCompare(String(a.last_message_at||'')));
+  return {
+    mailbox:'all',folder,items:combined.slice(0,50),
+    has_more:usable.some(p=>p.has_more)||combined.length>50,
+    unavailable_mailboxes:unavailable,
+    partial:unavailable.length!==0,
+  };
+}
 export async function mailThreads(pool,operator,mailbox,folder='inbox'){
   if(!['inbox','archive','spam','trash'].includes(folder))
     throw new Error('Invalid mailbox folder');
-  // One inbox view across the two existing Resend accounts; no new mailboxes.
+  // The two mail accounts are read independently and failures are explicit.
   if(mailbox==='all'){
-    const pages=await Promise.all(
+    const pages=await Promise.allSettled(
       ['direction','support'].map(name=>mailThreads(pool,operator,name,folder))
     );
-    return {
-      mailbox:'all',folder,
-      items:pages.flatMap(p=>p.items)
-        .sort((a,b)=>String(b.last_message_at||'')
-          .localeCompare(String(a.last_message_at||'')))
-        .slice(0,50),
-      has_more:pages.some(p=>p.has_more),
-    };
+    return combineMailboxPages(folder,pages);
   }
   const reader=await readerFor(pool,operator,mailbox);
   const page=await reader.listThreads({mailbox,folder,limit:30});
