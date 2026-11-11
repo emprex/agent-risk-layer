@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from email.utils import parseaddr
 from datetime import datetime, timezone
 import json
 import re
@@ -272,11 +273,8 @@ class DetachableModuleWindow(QMainWindow):
         self.resize(1180, 760)
         self.setMinimumSize(650, 450)
         self._on_return = on_return
-        toolbar = self.addToolBar("Window")
-        toolbar.setMovable(False)
-        button = QPushButton("Return to ENKYRON")
-        button.clicked.connect(self.close)
-        toolbar.addWidget(button)
+        # Only the module's own Open/Return action is visible.
+        # No duplicate navigation toolbar inside this native window.
 
     def closeEvent(self, event):
         self._on_return()
@@ -318,6 +316,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
+        self.mail_full_text_windows = {}
+        self.mail_company_link_dialog = None
+        self._reply_context = None
+        self._sent_followup_context = None
         self.mail_detached_window = None
         self.calendar_detached_window = None
         self.mail_detach_placeholder = None
@@ -353,6 +355,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_activity_entries = []
         self.crm_drafts_seq = 0
         self.crm_drafts_loaded = False
+        self.mail_unsent_items = []
+        self._mail_unsent_seq = 0
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
@@ -1327,8 +1331,15 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.set_local_mode()
         self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
         self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
+        self.mail_inbox.localRenameFolderRequested.connect(self.rename_local_folder)
+        self.mail_inbox.localDeleteFolderRequested.connect(self.delete_empty_local_folder)
         self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
         self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
+        self.mail_inbox.localFlagRequested.connect(self.flag_local_mail)
+        self.mail_inbox.localReadRequested.connect(self.set_local_mail_read)
+        self.mail_inbox.localSearchRequested.connect(self.search_local_mail)
+        self.mail_inbox.localPageRequested.connect(
+            lambda page: self.load_local_mail(page=page))
         self.mail_inbox.draftsRequested.connect(
             lambda: self.mail_inbox.activate_local_folder("drafts")
         )
@@ -1348,6 +1359,12 @@ class EnkyronWindow(QMainWindow):
         )
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
+        self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
+        self.mail_inbox.forwardRequested.connect(self.prepare_mail_forward)
+        self.mail_inbox.fullTextRequested.connect(self.open_archived_full_text)
+        self.mail_inbox.localCompanyLinkRequested.connect(self.open_mail_company_link)
+        self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
+        self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
@@ -1760,6 +1777,13 @@ class EnkyronWindow(QMainWindow):
         self.navigation.currentRowChanged.connect(self.module_changed)
         self.navigation.setCurrentRow(0)
 
+        # Mail reception runs only while the native workstation is open.
+        # No daemon, listening port, database migration or provider write.
+        self.mail_poll_timer = QTimer(self)
+        self.mail_poll_timer.setInterval(60000)
+        self.mail_poll_timer.timeout.connect(self.poll_local_inbox)
+        self._mail_auto_running = False
+        self._mail_archive_running = False
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
@@ -1779,6 +1803,7 @@ class EnkyronWindow(QMainWindow):
             if error or not data:
                 self.mail_status_loaded = False
                 self.mail_provider_ready = False
+                self.mail_poll_timer.stop()
                 self.crm_mail_connection.setText("Email connection unavailable · Drafts remain local")
                 self.mail_inbox.set_connection_state(
                     "disconnected", "Compose an email or use saved local drafts."
@@ -1802,6 +1827,15 @@ class EnkyronWindow(QMainWindow):
             self.crm_mail_connection.setText(msg)
             self.load_local_mail_metadata()
             self.load_local_mail(self.mail_inbox.selected_mailbox)
+            # Only a configured, readable provider Inbox may be polled.
+            eligible = (self.mail_provider_ready and data.get("schema_ready") is True
+                        and any(x.get("can_read") is True
+                                for x in permitted if isinstance(x, dict)))
+            if eligible:
+                self.mail_poll_timer.start()
+                self.poll_local_inbox()
+            else:
+                self.mail_poll_timer.stop()
         self.bridge.call("mail-status", callback=received)
 
     def load_local_mail_metadata(self):
@@ -1814,7 +1848,13 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-folders", callback=folders)
         self.bridge.call("mail-local-labels", callback=labels)
 
-    def load_local_mail(self, mailbox=None):
+    def search_local_mail(self, query):
+        # Only explicitly submitted searches query NEMORYTH, never Resend.
+        if not isinstance(query, str) or len(query) > 120:
+            return
+        self.load_local_mail(search=query.strip(), page=0)
+
+    def load_local_mail(self, mailbox=None, *, search=None, page=0):
         if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
             return
         mailbox = mailbox or self.mail_inbox.selected_mailbox or "all"
@@ -1827,82 +1867,260 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.connection_label.setVisible(False)
         if folder in ("sent", "drafts"):
             self.mail_inbox._clear_threads("Loading {}…".format(folder))
-            (self.load_mail_sent if folder == "sent" else self.load_mail_drafts)()
+            (self.load_mail_sent if folder == "sent"
+             else self.load_unsent_mail_drafts)()
             return
-        self.mail_inbox._clear_threads("Loading saved mail…")
+        query = (self.mail_inbox._local_search_query or ""
+                 if search is None else str(search).strip())
+        if not isinstance(page, int) or not 0 <= page <= 1000:
+            return
+        self.mail_inbox._clear_threads(
+            "Searching saved messages…" if query else "Loading saved mail…",
+            preserve_search=bool(query)
+        )
+        request_folder = "all" if query else folder
         def received(data, error):
             if (self.mail_inbox.selected_mailbox not in (None, mailbox)
-                    or folder != self.mail_inbox.selected_folder):
+                    or folder != self.mail_inbox.selected_folder
+                    or (query and self.mail_inbox.search.text().strip().casefold()
+                        != query.casefold())):
                 return
             if error or not isinstance(data, dict):
                 self.mail_inbox._show_empty(
                     "Local mail unavailable",
-                    "Apply the local Mail database update (schema 112)."
+                    "Check the PostgreSQL Mail schema and local access."
                 )
                 return
-            self.mail_inbox.show_threads(mailbox,
-                data.get("items") or [], bool(data.get("has_more")), folder)
+            self.mail_inbox.show_threads(
+                mailbox, data.get("items") or [],
+                bool(data.get("has_more")), folder,
+                search_query=query if query else None, page=page
+            )
         self.bridge.call("mail-local-list",
-            payload={"mailbox":mailbox, "folder":folder}, callback=received)
+            payload={"mailbox":mailbox,"folder":request_folder,
+                     "search":query,"page":page},callback=received)
+
+    def archive_mail_batch(self):
+        """Archive up to four saved messages in NEMORYTH, if schema 113 exists.
+
+        No exposed attachments, no HTML rendering, no provider mutation,
+        no automatic database migration and no LLM access.
+        """
+        if self._mail_archive_running or not self.mail_provider_ready:
+            return
+        self._mail_archive_running = True
+        def received(data, error):
+            self._mail_archive_running = False
+            if error or not isinstance(data, dict) or not data.get("available"):
+                return
+            count = int(data.get("archived") or 0)
+            rejected = int(data.get("incomplete") or 0)
+            if (count or rejected) and self.mail_inbox.selected_folder == "inbox":
+                status = self.mail_inbox.connection_label.text()
+                summary = (" · NEMORYTH: {} full content archived"
+                           " (attachments remain quarantined)").format(count)
+                self.mail_inbox.connection_label.setText(status + summary)
+                self.mail_inbox.connection_label.setVisible(True)
+        self.bridge.call("mail-local-archive-sync",
+                         payload={"mailbox":"all"},callback=received)
+
+    def poll_local_inbox(self):
+        """Check provider Inboxes automatically and cache recent text locally.
+
+        Initial check runs when Mail is configured, then every 60 seconds.
+        Resend calls are GET only. No sending, deletion, folder mutation,
+        external CRM actions or implicit authorisation can happen here.
+        """
+        if (not self.mail_provider_ready or not self.mail_status_loaded
+                or getattr(self, "_mail_sync_running", False)
+                or self._mail_auto_running):
+            return
+        self._mail_auto_running = True
+        self.mail_inbox.refresh_button.setEnabled(False)
+
+        def complete(note="", refresh=False):
+            self._mail_auto_running = False
+            self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
+            if note and self.mail_inbox.selected_folder == "inbox":
+                self.mail_inbox.connection_label.setText(note)
+                self.mail_inbox.connection_label.setVisible(True)
+            if not refresh or self.mail_inbox.selected_folder != "inbox":
+                return
+            if (self.mail_inbox._local_page != 0
+                    or self.mail_inbox.search.text().strip()
+                    or self.mail_inbox._local_search_query):
+                return
+            mailbox = self.mail_inbox.selected_mailbox or "all"
+            def updated(data, error):
+                if error or not isinstance(data, dict):
+                    return
+                self.mail_inbox.show_threads(
+                    mailbox, data.get("items") or [],
+                    bool(data.get("has_more")), "inbox",
+                    page=0, preserve_reader=True
+                )
+            self.bridge.call("mail-local-list",
+                payload={"mailbox":mailbox,"folder":"inbox","page":0},
+                callback=updated)
+
+        def received_headers(data, error):
+            if error or not isinstance(data, dict) or not data.get("synced"):
+                complete("Automatic Inbox check unavailable; retrying in 60 seconds.")
+                return
+            changed = bool(data.get("new_threads") or data.get("updated_threads"))
+            partial = bool(data.get("partial"))
+            def received_bodies(result, failure):
+                warning = ""
+                if failure or not isinstance(result, dict) or result.get("failed_threads"):
+                    warning = ("Some received mail could not be cached; "
+                               "automatic checking will retry.")
+                elif partial:
+                    warning = ("One provider Inbox was unavailable; "
+                               "automatic checking will retry.")
+                else:
+                    checked = datetime.now().astimezone().strftime("%H:%M")
+                    new = int(data.get("new_threads") or 0)
+                    updated = int(data.get("updated_threads") or 0)
+                    warning = ("Inbox checked automatically at {} · "
+                               "{} new, {} updated conversation(s).").format(
+                                   checked, new, updated)
+                complete(warning, refresh=changed)
+                if not failure and isinstance(result, dict):
+                    self.archive_mail_batch()
+            self.bridge.call("mail-local-sync-bodies",
+                payload={"mailbox":"all","recent":True},
+                callback=received_bodies)
+
+        self.bridge.call("mail-local-sync",
+            payload={"mailbox":"all","inbox_only":True},
+            callback=received_headers)
 
     def sync_local_mail(self, mailbox=None):
+        """Continue bounded Resend pages into NEMORYTH; never mutate provider mail.
+
+        A restart may replay pages, but PostgreSQL's existing unique message
+        keys prevent duplicate copies. The UI keeps progress while running and
+        between button presses; no new schema or local state file is needed.
+        """
         if not self.mail_provider_ready:
             self.mail_inbox.connection_label.setText(
-                "Resend unavailable. Cached ENKYRON messages remain accessible."
+                "Resend unavailable. Saved NEMORYTH mail is still accessible."
             )
             self.mail_inbox.connection_label.setVisible(True)
             self.load_local_mail(self.mail_inbox.selected_mailbox)
             return
-        chosen = mailbox if mailbox in ("all","direction","support") else "all"
+        if getattr(self, "_mail_sync_running", False) or self._mail_auto_running:
+            return
+        chosen = mailbox if mailbox in ("all", "direction", "support") else "all"
+        state = getattr(self, "_mail_sync_state", None)
+        if not isinstance(state, dict) or state.get("mailbox") != chosen:
+            state = {"mailbox": chosen, "stage": "headers",
+                     "cursors": None, "body": None, "partial": False}
+        self._mail_sync_state = state
+        self._mail_sync_running = True
         self.mail_inbox.refresh_button.setEnabled(False)
-        self.mail_inbox.connection_label.setText(
-            "Receiving new message headers from Resend…"
-        )
         self.mail_inbox.connection_label.setVisible(True)
-        def received(data, error):
+        steps = [0]
+
+        def stop(message, preserve=True):
+            self._mail_sync_running = False
             self.mail_inbox.refresh_button.setEnabled(True)
-            if error or not isinstance(data, dict) or not data.get("synced"):
-                self.mail_inbox.connection_label.setText(
-                    "Receiving failed. Saved local mail is still available."
-                )
-            elif data.get("partial"):
-                self.mail_inbox.connection_label.setText(
-                    "Some provider folders could not be synchronized. "
-                    "Saved local mail was preserved."
-                )
-            else:
-                self.mail_inbox.connection_label.setText(
-                    "Importing received message contents into ENKYRON…"
-                )
-                self.mail_inbox.connection_label.setVisible(True)
-            if error or not isinstance(data, dict) or not data.get("synced"):
-                self.load_local_mail(self.mail_inbox.selected_mailbox)
-                self.mail_inbox.connection_label.setText(
-                    "Receiving failed. Saved ENKYRON mail remains accessible."
-                )
-                self.mail_inbox.connection_label.setVisible(True)
+            if not preserve:
+                self._mail_sync_state = None
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            self.mail_inbox.connection_label.setText(message)
+            self.mail_inbox.connection_label.setVisible(bool(message))
+
+        def step():
+            # No runaway request loop or unlimited background synchronisation.
+            if steps[0] >= 25:
+                stop("More mail remains to be imported. "
+                     "Press Send / Receive again to continue.")
                 return
+            steps[0] += 1
+            if state["stage"] == "headers":
+                self.mail_inbox.connection_label.setText(
+                    "Receiving conversations into NEMORYTH…")
+                payload = {"mailbox": chosen}
+                if state["cursors"] is not None:
+                    payload["cursors"] = state["cursors"]
+
+                def received(data, error):
+                    if error or not isinstance(data, dict) or not data.get("synced"):
+                        stop("Resend header import paused. Saved mail is preserved; "
+                             "press Send / Receive to retry.")
+                        return
+                    state["partial"] = bool(data.get("partial"))
+                    state["cursors"] = data.get("continuation") or None
+                    if data.get("more_pending"):
+                        step()
+                        return
+                    state["stage"] = "bodies"
+                    state["body"] = None
+                    step()
+                self.bridge.call("mail-local-sync", payload=payload, callback=received)
+                return
+
+            self.mail_inbox.connection_label.setText(
+                "Saving received message contents in NEMORYTH…")
+            payload = {"mailbox": chosen, "rescan": True}
+            if isinstance(state["body"], dict):
+                payload.update(state["body"])
+
             def cached(result, failure):
-                self.load_local_mail_metadata()
-                self.load_local_mail(self.mail_inbox.selected_mailbox)
-                if failure or not isinstance(result, dict):
-                    self.mail_inbox.connection_label.setText(
-                        "Message content import incomplete; saved messages are safe."
-                    )
-                    self.mail_inbox.connection_label.setVisible(True)
-                elif (result.get("failed_threads") or result.get("more_pending")
-                      or data.get("partial")):
-                    self.mail_inbox.connection_label.setText(
-                        "Some messages are not yet cached locally. "
-                        "Use Send / Receive again to continue importing."
-                    )
-                    self.mail_inbox.connection_label.setVisible(True)
+                if failure or not isinstance(result, dict) or result.get("failed_threads"):
+                    state["body"] = (result or {}).get("continuation") if (
+                        isinstance(result, dict)) else state["body"]
+                    stop("Message import paused; saved pages are preserved. "
+                         "Press Send / Receive to retry.")
+                    return
+                state["body"] = result.get("continuation")
+                if result.get("more_pending"):
+                    if not state["body"]:
+                        stop("Message import incomplete; progress unavailable.")
+                        return
+                    step()
+                    return
+                if state["partial"]:
+                    stop("Saved local mail updated. Some Resend folders failed; "
+                         "press Send / Receive again to retry them.", preserve=False)
                 else:
-                    self.mail_inbox.connection_label.setVisible(False)
+                    stop("", preserve=False)
             self.bridge.call("mail-local-sync-bodies",
-                payload={"mailbox":chosen}, callback=cached)
-        self.bridge.call("mail-local-sync",
-            payload={"mailbox":chosen}, callback=received)
+                             payload=payload, callback=cached)
+        step()
+
+    def rename_local_folder(self, folder, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(
+                    self, "Mail folders", "Could not rename the saved folder.")
+                return
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-folder-rename",
+            payload={"folder":folder,"name":name},callback=received)
+
+    def delete_empty_local_folder(self, folder):
+        answer = QMessageBox.question(
+            self, "Delete empty folder",
+            "Delete this local folder? The operation will be refused if it contains mail.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail folders",
+                    "Folder not deleted. Move all saved messages out first.")
+                return
+            if self.mail_inbox.selected_folder == folder:
+                self.mail_inbox._folder = "inbox"
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-folder-delete",
+            payload={"folder":folder},callback=received)
 
     def create_local_folder(self, name):
         def received(data, error):
@@ -1925,6 +2143,30 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-local-move",
             payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
             callback=received)
+
+    def set_local_mail_read(self, mailbox, thread_id, unread):
+        """Persist operator-selected unread status in NEMORYTH only."""
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(
+                    self, "Mail status", "Could not change the saved read status.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-read",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "unread":bool(unread)},callback=received)
+
+    def flag_local_mail(self, mailbox, thread_id, flagged):
+        """Keep follow-up flags in NEMORYTH; never mutate Resend."""
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail follow-up",
+                    "Could not update the saved follow-up flag.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-flag",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "flagged":bool(flagged)},callback=received)
 
     def create_local_label(self, name):
         def received(data, error):
@@ -2041,9 +2283,9 @@ class EnkyronWindow(QMainWindow):
                     "Unable to read saved mail. No email was changed."
                 )
                 return
-            self.mail_inbox.show_messages(
-                mailbox,thread_id,data.get("items") or []
-            )
+            if self.mail_inbox.show_messages(
+                    mailbox, thread_id, data.get("items") or []):
+                self.load_mail_company_link(mailbox, thread_id)
         def cached(data,error):
             if error or not isinstance(data,dict):
                 display(data,error)
@@ -2056,6 +2298,374 @@ class EnkyronWindow(QMainWindow):
             else:
                 display(data,None)
         self.bridge.call("mail-local-messages",payload=payload,callback=cached)
+
+    def load_mail_company_link(self, mailbox, thread_id):
+        """Read the exact locally stored company link; never guess identity."""
+        def received(data, error):
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data, dict):
+                self.mail_inbox.crm_link_button.setText("CRM unavailable")
+                self.mail_inbox.crm_link_button.setEnabled(False)
+                return
+            self.mail_inbox.show_company_link(mailbox, thread_id, data)
+        self.bridge.call("mail-local-company",
+            payload={"mailbox":mailbox,"thread_id":thread_id},
+            callback=received)
+
+    def open_mail_company_link(self, mailbox, thread_id):
+        """E04-04: operator-selected existing company, not inferred client."""
+        if (mailbox != self.mail_inbox.current_thread_mailbox
+                or thread_id != self.mail_inbox.current_thread_id
+                or self.mail_inbox.selected_folder in ("spam","trash","sent","drafts")
+                or not self.mail_inbox.crm_link_button.isEnabled()):
+            return
+        old = self.mail_company_link_dialog
+        if old is not None and old.isVisible():
+            old.raise_()
+            old.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Link Mail to existing CRM company")
+        dialog.setMinimumWidth(610)
+        layout = QVBoxLayout(dialog)
+        heading = QLabel("Human-reviewed CRM company association")
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(heading)
+        warning = QLabel(
+            "Select the correct EXISTING company. An email sender or domain "
+            "does not prove client identity, contact identity or consent. "
+            "This action only links the saved conversation to the company "
+            "in NEMORYTH. It does not create a ticket, contact, assessment, "
+            "email or provider change. Changing the link later requires "
+            "a separate reviewed workflow; schema 112 has no dedicated "
+            "append-only audit event for this link."
+        )
+        warning.setTextFormat(Qt.TextFormat.PlainText)
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        search_row = QHBoxLayout()
+        search = QLineEdit()
+        search.setObjectName("enkyronMailCompanySearch")
+        search.setMaxLength(120)
+        search.setPlaceholderText("Search existing company name (2+ characters)")
+        search_row.addWidget(search, 1)
+        find = QPushButton("Find companies")
+        find.setObjectName("enkyronMailCompanyFind")
+        search_row.addWidget(find)
+        layout.addLayout(search_row)
+        status = QLabel("No company selected. No link created.")
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        choice = QComboBox()
+        choice.setObjectName("enkyronMailCompanyChoice")
+        choice.addItem("Choose a reviewed company…", None)
+        layout.addWidget(choice)
+        agree = QCheckBox(
+            "I checked the selected company record and explicitly approve "
+            "linking this conversation to it."
+        )
+        agree.setObjectName("enkyronMailCompanyConfirm")
+        layout.addWidget(agree)
+        actions = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        actions.addWidget(cancel)
+        actions.addStretch()
+        link = QPushButton("Link conversation")
+        link.setObjectName("enkyronMailCompanySubmit")
+        link.setEnabled(False)
+        actions.addWidget(link)
+        layout.addLayout(actions)
+        self.mail_company_link_dialog = dialog
+        state = {"seq":0,"records":{}}
+
+        def update_enabled():
+            link.setEnabled(
+                agree.isChecked() and choice.currentData() in state["records"]
+            )
+        choice.currentIndexChanged.connect(update_enabled)
+        agree.toggled.connect(update_enabled)
+
+        def search_companies():
+            query = search.text().strip()
+            if len(query) < 2:
+                status.setText("Enter at least two characters to search.")
+                return
+            state["seq"] += 1
+            generation = state["seq"]
+            state["records"] = {}
+            choice.clear()
+            choice.addItem("Searching…", None)
+            link.setEnabled(False)
+            status.setText("Searching existing CRM records…")
+            def received(data, error):
+                if (not dialog.isVisible() or generation != state["seq"]
+                        or search.text().strip() != query):
+                    return
+                choice.clear()
+                choice.addItem("Choose a reviewed company…", None)
+                if (error or not isinstance(data, dict)
+                        or not data.get("available")):
+                    status.setText("Company search unavailable. Nothing changed.")
+                    return
+                records = data.get("items")
+                if not isinstance(records, list):
+                    status.setText("Invalid CRM search response.")
+                    return
+                for record in records[:100]:
+                    if not isinstance(record, dict):
+                        continue
+                    cid = str(record.get("id") or "")
+                    if (len(cid) != 36 or
+                            record.get("relationship_state") == "inactive"):
+                        continue
+                    name = str(record.get("name") or "").strip()
+                    if not name:
+                        continue
+                    state["records"][cid] = name
+                    choice.addItem(name[:150] + " · " + cid[:8], cid)
+                status.setText(
+                    "{} eligible company record(s) loaded{}".format(
+                        len(state["records"]),
+                        " · narrow the search to see all candidates"
+                        if data.get("more") else "")
+                )
+            self.bridge.call("crm-companies", query, callback=received)
+        find.clicked.connect(search_companies)
+        search.returnPressed.connect(search_companies)
+
+        def submit():
+            cid = choice.currentData()
+            if (not dialog.isVisible() or cid not in state["records"]
+                    or not agree.isChecked()
+                    or mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            answer = QMessageBox.question(
+                dialog, "Confirm Mail → CRM association",
+                "Link this saved conversation to the existing CRM company "
+                "'{}'?\n\nNo automatic contact, ticket, assessment or provider "
+                "operation will occur.".format(state["records"][cid]),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            link.setEnabled(False)
+            def saved(result, error):
+                if not dialog.isVisible():
+                    return
+                if error or not isinstance(result, dict) or not result.get("linked"):
+                    status.setText(
+                        "Association not saved: " + str(error or "Review required")[:200])
+                    update_enabled()
+                    return
+                dialog.accept()
+                self.load_mail_company_link(mailbox, thread_id)
+            self.bridge.call("mail-local-company-link",
+                payload={"mailbox":mailbox,"thread_id":thread_id,
+                         "company_id":cid,"confirmed":True}, callback=saved)
+        link.clicked.connect(submit)
+        dialog.open()
+
+    def prepare_mail_reply(self, mailbox, thread_id):
+        """Resolve the real reply target from Resend before opening the editor."""
+        self._sent_followup_context = None
+        self._reply_context = None
+        if not self.mail_provider_ready:
+            QMessageBox.information(
+                self, "Reply unavailable",
+                "Saved messages remain readable, but replying requires Resend."
+            )
+            return
+        if mailbox not in ("direction", "support") or not thread_id:
+            return
+        self.mail_inbox.reply_button.setEnabled(False)
+
+        def received(data, error):
+            self.mail_inbox.reply_button.setEnabled(True)
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Reply unavailable",
+                    str(error or "Cannot verify the selected conversation."))
+                return
+            messages = data.get("items")
+            if not isinstance(messages, list):
+                return
+            own = self.mail_inbox._mailboxes.get(mailbox, "").casefold()
+            selected = None
+            address = None
+            for message in reversed(messages):
+                if not isinstance(message, dict):
+                    continue
+                _, from_email = parseaddr(str(message.get("from") or ""))
+                if not from_email or from_email.casefold() == own:
+                    continue
+                proposed = message.get("reply_to") or []
+                if not isinstance(proposed, list):
+                    proposed = [proposed] if isinstance(proposed, str) else []
+                if len(proposed) > 1:
+                    QMessageBox.warning(self, "Reply unavailable",
+                        "This message has multiple Reply-To recipients. "
+                        "Review them before sending a separate email.")
+                    return
+                _, target = parseaddr(str(proposed[0] if proposed else
+                                          message.get("from") or ""))
+                if (not target or "@" not in target or
+                        any(c in target for c in (" ", ",", ";", "<", ">", "\r", "\n")) or
+                        target.casefold() == own):
+                    QMessageBox.warning(self, "Reply unavailable",
+                        "The message recipient could not be verified.")
+                    return
+                selected, address = message, target.lower()
+                break
+            if not selected:
+                QMessageBox.information(self, "Reply unavailable",
+                    "No external sender could be found in this conversation.")
+                return
+            email_id = str(selected.get("id") or "")
+            if not email_id:
+                return
+            if not self.mail_inbox.show_reply_editor(mailbox,thread_id,address):
+                return
+            subject = str(selected.get("subject") or
+                          self.mail_inbox.subject.text() or "Message")[:180]
+            self._reply_context = {
+                "mailbox":mailbox,"thread_id":thread_id,"email_id":email_id,
+                "recipient":address,"subject":subject if subject.lower().startswith("re:")
+                else "Re: " + subject,
+            }
+
+        self.bridge.call("mail-messages",payload={
+            "mailbox":mailbox,"thread_id":thread_id
+        },callback=received)
+
+    def send_inline_mail_reply(self):
+        """Persist exact text first; a separately confirmed send stays in-thread."""
+        if self._sent_followup_context is not None:
+            self.send_inline_sent_follow_up()
+            return
+        ctx = self._reply_context
+        inbox = self.mail_inbox
+        if not isinstance(ctx,dict) or not inbox.reply_editor.isVisible():
+            return
+        if (ctx["mailbox"] != inbox.current_thread_mailbox
+                or ctx["thread_id"] != inbox.current_thread_id):
+            return
+        body = inbox.reply_body.toPlainText().strip()
+        if not body or len(body.encode("utf-8")) > 12000:
+            QMessageBox.warning(self, "Reply text",
+                "Enter your reply (maximum 12 KB of text).")
+            return
+        decision = QMessageBox.question(
+            self, "Confirm reply in conversation",
+            ("Send this reply in the existing Resend thread?\n\n"
+             "From: {}\nTo: {}\nSubject: {}\n\n"
+             "The exact recipient is rechecked by the backend. "
+             "If it changes, sending is blocked.").format(
+                 self.mail_inbox._mailboxes.get(ctx["mailbox"],ctx["mailbox"]),
+                 ctx["recipient"],ctx["subject"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        inbox.reply_send.setEnabled(False)
+        fields = {
+            "mailbox_key":ctx["mailbox"],"recipient_email":ctx["recipient"],
+            "subject":ctx["subject"],"body_text":body
+        }
+        def saved(data,error):
+            if error or not isinstance(data,dict) or not data.get("id"):
+                inbox.reply_send.setEnabled(True)
+                QMessageBox.warning(self, "Reply not saved",
+                    str(error or "Could not save the reply draft."))
+                return
+            payload = {
+                "draft_id":data["id"],"expected_revision":data["revision"],
+                "mailbox":ctx["mailbox"],"thread_id":ctx["thread_id"],
+                "email_id":ctx["email_id"],
+                "recipient_verified":True,"confirmed":True,
+            }
+            def sent(result,send_error):
+                if send_error or not isinstance(result,dict):
+                    inbox.reply_send.setEnabled(False)
+                    QMessageBox.warning(self, "Reply outcome unknown",
+                        "The reply was saved locally, but sending could not be "
+                        "confirmed. Check Sent and Resend before attempting another.")
+                    return
+                inbox.hide_reply_editor()
+                self._reply_context = None
+                self.load_mail_sent()
+                if result.get("outcome") == "accepted":
+                    self.sync_local_mail(ctx["mailbox"])
+                QMessageBox.information(self, "Reply status",
+                    str(result.get("notice") or "Provider result unavailable."))
+            self.bridge.call("mail-reply-draft",payload=payload,callback=sent)
+        self.bridge.call("crm-mail-create",payload=fields,callback=saved)
+
+    def open_archived_full_text(self, mailbox, thread_id, message_id):
+        """Read full archived plain text, never external HTML or file bytes."""
+        if (mailbox not in ("direction", "support")
+                or not isinstance(thread_id, str) or len(thread_id) != 36
+                or not isinstance(message_id, str) or len(message_id) != 36):
+            return
+        key = (mailbox, thread_id, message_id)
+        existing = self.mail_full_text_windows.get(key)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · Full archived email", size=(910, 690), minimum=(600, 420))
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Read-only NEMORYTH archive · plain text only")
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(label)
+        status = QLabel("Loading archived text…")
+        status.setObjectName("enkyronMailFullTextStatus")
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        body = QPlainTextEdit()
+        body.setObjectName("enkyronMailFullTextBody")
+        body.setAccessibleName("Full locally archived plain-text message")
+        body.setReadOnly(True)
+        layout.addWidget(body, 1)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        self.mail_full_text_windows[key] = dialog
+        dialog.finished.connect(
+            lambda _value, ref=key: self.mail_full_text_windows.pop(ref, None))
+        dialog.show()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if (error or not isinstance(data, dict)
+                    or not data.get("available")
+                    or data.get("mailbox") != mailbox
+                    or data.get("thread_id") != thread_id
+                    or data.get("message_id") != message_id
+                    or not isinstance(data.get("text"), str)):
+                status.setText("Full text unavailable in NEMORYTH. "
+                               "Check schema 113 and the archived message.")
+                return
+            body.setPlainText(data["text"])
+            status.setText(str(data.get("notice") or
+                "Locally stored message; not a security-verified attachment.")[:500])
+        self.bridge.call("mail-local-full-text",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "message_id":message_id},callback=received)
 
     def open_mail_thread_window(self, mailbox, thread_id):
         """Double-click: detachable, read-only plain-text conversation."""
@@ -2367,6 +2977,79 @@ class EnkyronWindow(QMainWindow):
 
         self.bridge.call("crm-mail-recipients", email, callback=received)
 
+    def prepare_mail_forward(self, mailbox, thread_id):
+        """Copy an explicitly chosen saved text message into an unsent draft.
+
+        This is a text-only forward, never a provider-side forward and never
+        an automated send. No attachments are copied or silently claimed.
+        """
+        if mailbox not in ("direction", "support") or not isinstance(thread_id, str):
+            return
+        if (self.mail_inbox.current_thread_mailbox != mailbox
+                or self.mail_inbox.current_thread_id != thread_id):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+
+        def received(data, error):
+            if (self.mail_inbox.current_thread_mailbox != mailbox
+                    or self.mail_inbox.current_thread_id != thread_id):
+                return
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Forward",
+                    "Saved messages are unavailable in NEMORYTH.")
+                return
+            if data.get("has_more"):
+                QMessageBox.warning(self, "Forward",
+                    "This conversation has more than 50 saved messages. "
+                    "Forwarding it from an incomplete preview is blocked.")
+                return
+            items = data.get("items")
+            if not isinstance(items, list) or not items:
+                QMessageBox.warning(self, "Forward",
+                    "No saved message is available to forward.")
+                return
+            source = items[-1]
+            if not isinstance(source, dict):
+                return
+            body = str(source.get("text") or "")
+            if not body.strip() or source.get("html_only") and not body.strip():
+                QMessageBox.warning(self, "Forward",
+                    "This message has no saved plain-text content. "
+                    "HTML or attachments cannot be forwarded here.")
+                return
+            header = (
+                "\n\n---------- Forwarded text-only message ----------\n"
+                "From: {}\nDate: {}\nSubject: {}\n\n"
+            ).format(
+                str(source.get("from") or "")[:254],
+                str(source.get("created_at") or "")[:64],
+                str(source.get("subject") or "")[:190])
+            content = header + body
+            if len(content.encode("utf-8")) > 11000:
+                QMessageBox.warning(self, "Forward",
+                    "This saved message is too large for the current "
+                    "text-only draft limit. Nothing was truncated or sent.")
+                return
+            QMessageBox.information(self, "Text-only forwarding",
+                "A new unsent draft will open. Review its contents and enter "
+                "the recipient yourself. Attachments and HTML are not included.")
+            subject = str(source.get("subject") or
+                          self.mail_inbox.subject.text() or "Message")[:190]
+            self.show_mail_draft_dialog({
+                "mailbox_key": mailbox,
+                "recipient_email": "",
+                "subject": subject if subject.casefold().startswith("fwd:")
+                           else "Fwd: " + subject[:185],
+                "body_text": content,
+                "company_name_at_creation": "Independent email"
+            })
+
+        self.bridge.call("mail-local-messages",
+            payload={"mailbox": mailbox, "thread_id": thread_id},
+            callback=received)
+
     def open_mail_compose(self):
         """New business email from Mail, no CRM company or login required."""
         if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
@@ -2557,22 +3240,125 @@ class EnkyronWindow(QMainWindow):
         self.mail_sent_table.selectRow(index)
         self.link_selected_sent_mail()
 
-    def _detached_notice(self, label, window_getter):
+    def prepare_sent_follow_up(self, index):
+        """Compose an actual new outreach follow-up, without inventing threading."""
+        inbox = self.mail_inbox
+        self._sent_followup_context = None
+        if (not isinstance(index, int) or inbox.selected_folder != "sent"
+                or not 0 <= index < len(self.mail_sent_items)):
+            return
+        selected = inbox.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if reference != ("local-sent", index):
+            return
+        sent = self.mail_sent_items[index]
+        if not isinstance(sent, dict) or sent.get("outcome") != "accepted":
+            return
+        mailbox = sent.get("mailbox_key")
+        recipient = str(sent.get("recipient_email") or "").strip()
+        subject = str(sent.get("subject") or "").strip()
+        if (mailbox not in ("direction", "support")
+                or not recipient or len(recipient) > 254
+                or "@" not in recipient
+                or any(c in recipient for c in (" ", "<", ">", ",", ";", "\r", "\n"))):
+            QMessageBox.warning(self, "Follow-up unavailable",
+                                "Cannot safely identify this sent message recipient.")
+            return
+        if not inbox.show_followup_editor(index, recipient):
+            return
+        self._reply_context = None
+        self._sent_followup_context = {
+            "index":index,"mailbox":mailbox,"recipient":recipient,
+            "subject":subject if subject.lower().startswith("re:")
+            else "Re: " + (subject or "Following up"),
+            "draft_id":sent.get("draft_id"),
+        }
+
+    def send_inline_sent_follow_up(self):
+        """A new outbound message, not a falsely claimed Resend thread reply."""
+        ctx = self._sent_followup_context
+        inbox = self.mail_inbox
+        if not isinstance(ctx, dict) or not inbox.reply_editor.isVisible():
+            return
+        index = ctx["index"]
+        selected = inbox.thread_list.currentItem()
+        reference = (selected.data(Qt.ItemDataRole.UserRole)
+                     if selected is not None else None)
+        if (inbox.selected_folder != "sent"
+                or reference != ("local-sent", index)
+                or not 0 <= index < len(self.mail_sent_items)):
+            return
+        sent = self.mail_sent_items[index]
+        if (sent.get("draft_id") != ctx["draft_id"]
+                or sent.get("recipient_email") != ctx["recipient"]
+                or sent.get("mailbox_key") != ctx["mailbox"]):
+            return
+        body = inbox.reply_body.toPlainText().strip()
+        if not body or len(body.encode("utf-8")) > 12000:
+            QMessageBox.warning(self, "Follow-up text",
+                                "Enter a follow-up (maximum 12 KB).")
+            return
+        if not self.mail_provider_ready:
+            QMessageBox.information(self,"Sending unavailable",
+                                    "Save your work when Resend is connected.")
+            return
+        decision = QMessageBox.question(
+            self, "Confirm new follow-up",
+            ("SEND a new email to this recipient?\n\n"
+             "From: {}\nTo: {}\nSubject: {}\n\n"
+             "This is a new outgoing email; it is not yet linked by "
+             "Message-ID to the previous outbound email.").format(
+                inbox._mailboxes.get(ctx["mailbox"], ctx["mailbox"]),
+                ctx["recipient"],ctx["subject"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        inbox.reply_send.setEnabled(False)
+        draft = {
+            "mailbox_key":ctx["mailbox"],
+            "recipient_email":ctx["recipient"],
+            "subject":ctx["subject"],
+            "body_text":body,
+        }
+        def saved(data,error):
+            if error or not isinstance(data,dict) or not data.get("id"):
+                inbox.reply_send.setEnabled(True)
+                QMessageBox.warning(self,"Follow-up not saved",
+                                    str(error or "Could not save draft."))
+                return
+            payload = {
+                "draft_id":data["id"],"expected_revision":data["revision"],
+                "recipient_verified":True,"confirmed":True,
+            }
+            def sent_result(result,send_error):
+                if send_error or not isinstance(result,dict):
+                    inbox.reply_send.setEnabled(False)
+                    QMessageBox.warning(
+                        self,"Follow-up outcome unknown",
+                        "The follow-up draft was saved; sending could not be "
+                        "confirmed. Check Sent and Resend before attempting again."
+                    )
+                    return
+                inbox.hide_reply_editor()
+                self._sent_followup_context = None
+                self.load_mail_sent()
+                QMessageBox.information(self,"Follow-up status",
+                     str(result.get("notice") or "Provider result unavailable."))
+            self.bridge.call("mail-send-draft",payload=payload,callback=sent_result)
+        self.bridge.call("crm-mail-create",payload=draft,callback=saved)
+
+    def _detached_notice(self, label):
+        """Passive placeholder: window management belongs to the desktop."""
         placeholder = QWidget()
         layout = QVBoxLayout(placeholder)
         layout.addStretch()
         title = QLabel(label + " is open in another window.")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(title)
-        button = QPushButton("Bring " + label + " to front")
-        def focus_window():
-            window = window_getter()
-            if window is not None:
-                window.showNormal()
-                window.raise_()
-                window.activateWindow()
-        button.clicked.connect(focus_window)
-        layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addStretch()
         return placeholder
 
@@ -2584,9 +3370,7 @@ class EnkyronWindow(QMainWindow):
         slot = self.crm_tabs.indexOf(self.mail_page)
         if slot < 0:
             return
-        placeholder = self._detached_notice(
-            "Mail", lambda: self.mail_detached_window
-        )
+        placeholder = self._detached_notice("Mail")
         self.crm_tabs.removeTab(slot)
         self.crm_tabs.insertTab(slot, placeholder, "Mail")
         self.crm_tabs.setCurrentIndex(slot)
@@ -2598,6 +3382,11 @@ class EnkyronWindow(QMainWindow):
         window.setCentralWidget(self.mail_page)
         self.mail_detach_button.setText("Return to ENKYRON")
         window.show()
+        # QTabWidget.removeTab hides the old page. Re-parenting alone does not
+        # make the explicitly hidden page visible in its new native window.
+        self.mail_page.show()
+        self.mail_page.raise_()
+        window.activateWindow()
 
     def _return_mail_window(self):
         window = self.mail_detached_window
@@ -2623,9 +3412,7 @@ class EnkyronWindow(QMainWindow):
         slot = self.pages.indexOf(self.calendar_view)
         if slot < 0:
             return
-        placeholder = self._detached_notice(
-            "Calendar", lambda: self.calendar_detached_window
-        )
+        placeholder = self._detached_notice("Calendar")
         self.pages.removeWidget(self.calendar_view)
         self.pages.insertWidget(slot, placeholder)
         self.pages.setCurrentIndex(slot)
@@ -2637,6 +3424,10 @@ class EnkyronWindow(QMainWindow):
         window.setCentralWidget(self.calendar_view)
         self.calendar_view.detach_button.setText("Return to ENKYRON")
         window.show()
+        # QStackedWidget.removeWidget hides its former page.
+        self.calendar_view.show()
+        self.calendar_view.raise_()
+        window.activateWindow()
 
     def _return_calendar_window(self):
         window = self.calendar_detached_window
@@ -2658,7 +3449,7 @@ class EnkyronWindow(QMainWindow):
         """Preview saved drafts and sent submissions inside the Mail reading pane."""
         if kind not in ("sent", "drafts") or not isinstance(index, int):
             return
-        records = self.mail_sent_items if kind == "sent" else self.crm_draft_items
+        records = self.mail_sent_items if kind == "sent" else self.mail_unsent_items
         if not 0 <= index < len(records):
             return
         item = records[index]
@@ -2707,10 +3498,26 @@ class EnkyronWindow(QMainWindow):
             return
         if kind == "sent" and 0 <= index < len(self.mail_sent_items):
             self.view_sent_mail_row(index)
-        elif kind == "drafts" and 0 <= index < len(self.crm_draft_items):
-            if index < self.crm_draft_table.rowCount():
-                self.crm_draft_table.selectRow(index)
-                self.open_selected_draft()
+        elif kind == "drafts" and 0 <= index < len(self.mail_unsent_items):
+            selected = self.mail_unsent_items[index]
+            if not isinstance(selected, dict) or selected.get("mail_state") != "draft":
+                return
+            draft_id = selected.get("id")
+            if not isinstance(draft_id, str):
+                return
+            if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+                self.crm_draft_dialog.raise_()
+                return
+            def received(data, error):
+                if (error or not isinstance(data, dict)
+                        or not isinstance(data.get("draft"), dict)
+                        or data["draft"].get("mail_state") != "draft"):
+                    QMessageBox.warning(self, "Draft unavailable",
+                        "This message is no longer an unsent draft.")
+                    self.load_unsent_mail_drafts()
+                    return
+                self.show_mail_draft_dialog(data["draft"])
+            self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def closeEvent(self, event):
         # Reattach each module before the owning workstation exits.
@@ -2722,6 +3529,9 @@ class EnkyronWindow(QMainWindow):
         if hasattr(self, "calendar_view"):
             self.calendar_view.close_editors()
         # Close independently opened mail conversations on workstation exit.
+        for window in list(self.mail_full_text_windows.values()):
+            window.close()
+        self.mail_full_text_windows.clear()
         for window in list(self.mail_thread_windows.values()):
             window.close()
         self.mail_thread_windows.clear()
@@ -2753,11 +3563,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_tabs.tabBar().setVisible(index != 3)
         if index == 4:
             self.pages.setCurrentIndex(3)
-            self.load_calendar()
-            if self.calendar_detached_window is not None:
-                self.calendar_detached_window.showNormal()
-                self.calendar_detached_window.raise_()
-                self.calendar_detached_window.activateWindow()
+            # Do not raise or minimise another window. Desktop users decide
+            # which monitor and window to focus.
+            if self.calendar_detached_window is None:
+                self.load_calendar()
             return
         if index == 3:
             self.pages.setCurrentIndex(2)
@@ -2765,10 +3574,6 @@ class EnkyronWindow(QMainWindow):
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
             self.load_mail_status()
-            if self.mail_detached_window is not None:
-                self.mail_detached_window.showNormal()
-                self.mail_detached_window.raise_()
-                self.mail_detached_window.activateWindow()
             return
         if index < 0 or index >= self.pages.count():
             return
@@ -12755,6 +13560,49 @@ class EnkyronWindow(QMainWindow):
         self.crm_drafts_seq += 1
         self.crm_draft_search_timer.start()
 
+    def load_unsent_mail_drafts(self):
+        """Only actual unsent drafts belong in Mail → Drafts.
+
+        Historical CRM draft records stay unchanged, including provider
+        submissions and operator-reported external sends. All filtering
+        happens in the scoped PostgreSQL query before the 100-row limit.
+        """
+        if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
+            return
+        if self.mail_inbox.selected_folder != "drafts":
+            return
+        self._mail_unsent_seq += 1
+        generation = self._mail_unsent_seq
+        mailbox = self.mail_inbox.selected_mailbox
+        self.mail_unsent_items = []
+
+        def received(data, error):
+            if (generation != self._mail_unsent_seq
+                    or self.mail_inbox.selected_folder != "drafts"
+                    or mailbox != self.mail_inbox.selected_mailbox):
+                return
+            if error or not isinstance(data, dict) or not data.get("available", True):
+                self.mail_inbox.show_local_records("drafts", [])
+                self.mail_inbox.connection_label.setText(
+                    "Could not load unsent drafts from NEMORYTH.")
+                self.mail_inbox.connection_label.setVisible(True)
+                return
+            items = data.get("items")
+            if not isinstance(items, list) or any(
+                not isinstance(item, dict) or item.get("mail_state") != "draft"
+                for item in items
+            ):
+                self.mail_inbox.show_local_records("drafts", [])
+                self.mail_inbox.connection_label.setText(
+                    "Draft listing returned invalid states; no messages changed.")
+                self.mail_inbox.connection_label.setVisible(True)
+                return
+            self.mail_unsent_items = items
+            self.mail_inbox.show_local_records(
+                "drafts", items, bool(data.get("more")))
+
+        self.bridge.call("mail-unsent-drafts", "", callback=received)
+
     def load_mail_drafts(self):
         self.crm_drafts_seq += 1
         seq = self.crm_drafts_seq
@@ -13231,6 +14079,8 @@ class EnkyronWindow(QMainWindow):
                     self.refresh_company_dossier()
                 else:
                     self.load_mail_drafts()
+                if self.mail_inbox.selected_folder == "drafts":
+                    self.load_unsent_mail_drafts()
             self.bridge.call("crm-mail-manual-send",
                              payload=payload, callback=saved)
         record.clicked.connect(submit)
@@ -13316,6 +14166,8 @@ class EnkyronWindow(QMainWindow):
                 self.crm_mail_folders.setCurrentIndex(2)
                 self.crm_draft_search.clear()
                 self.load_mail_drafts()
+            if self.mail_inbox.selected_folder == "drafts":
+                self.load_unsent_mail_drafts()
 
         self.bridge.call(command, payload=payload, callback=received)
 
@@ -13381,6 +14233,9 @@ class EnkyronWindow(QMainWindow):
             return
         dialog.accept()
         self.load_mail_drafts()
+        # The submitted draft leaves Mail → Drafts immediately. The original
+        # immutable draft and send-attempt records remain in PostgreSQL.
+        self.mail_inbox.activate_local_folder("sent")
         self.crm_tabs.setCurrentIndex(3)
         self.crm_mail_folders.setCurrentIndex(1)
         self.load_mail_sent()

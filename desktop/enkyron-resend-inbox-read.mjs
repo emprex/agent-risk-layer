@@ -72,7 +72,11 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
     }
     let body;
     try{body=await response.json();}catch{throw new Error('Resend returned invalid JSON');}
-    return normalizeList(body,limit);
+    if(limit!==null)return normalizeList(body,limit);
+    if(!body||typeof body!=='object'||Array.isArray(body)
+        ||Buffer.byteLength(JSON.stringify(body),'utf8')>5000000)
+      throw new Error('Resend returned oversized or invalid email detail');
+    return body;
   }
   function requireFolder(folder){
     if(typeof folder!=='string'||!FOLDERS.has(folder))
@@ -116,10 +120,64 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         subject:safeText(item.subject,400),
         from:safeText(item.from,254),
         to:Array.isArray(item.to)?item.to.slice(0,20).map(x=>safeText(x,254)):[],
-        text:safeText(item.text,20000),
+        // Envelope reply target is displayed to a human, never auto-trusted.
+        reply_to:Array.isArray(item.reply_to)
+          ?item.reply_to.slice(0,10).map(x=>safeText(x,254))
+          :typeof item.reply_to==='string'?[safeText(item.reply_to,254)]:[],
+        // One extra character signals an over-limit body to the local
+        // repository. Never silently persist a shortened email as complete.
+        text:safeText(item.text,20001),
         created_at:safeText(item.received_at??item.created_at,64),
         html_only:!item.text&&typeof item.html==='string',
       })),has_more:payload.has_more};
+    },
+    // Trusted backend only. Never give this content directly to Qt or an LLM:
+    // HTML, attachment names and headers are untrusted external bytes.
+    async getThreadEmail({principal,mailbox,threadId,emailId}={}){
+      const inbox=choose(mailbox),thread=requireUuid(threadId),email=requireUuid(emailId);
+      if(typeof authoriseRead==='function'
+        ?authoriseRead(mailbox)!==true
+        :!ownerMailboxPermission(principal,organisation,mailbox,'read'))
+        throw new Error('Mailbox access denied');
+      const raw=await get('/inboxes/'+inbox+'/threads/'+thread+'/emails/'+email,
+        principal,null);
+      if(requireUuid(raw.id)!==email)
+        throw new Error('Resend email identity mismatch');
+      const array=(value)=>{
+        if(value===null||value===undefined)return [];
+        if(!Array.isArray(value)||value.length>100
+            ||value.some(x=>typeof x!=='string'
+              ||Buffer.byteLength(x,'utf8')>2048))
+          throw new Error('Unbounded provider address list');
+        return value;
+      };
+      const textField=(value)=>{
+        if(value===null)return null;
+        if(typeof value!=='string'||Buffer.byteLength(value,'utf8')>2097152)
+          throw new Error('Full email body exceeds archive limit');
+        return value;
+      };
+      const details=Array.isArray(raw.attachments)?raw.attachments:[];
+      if(details.length>100)throw new Error('Too many email attachments');
+      return {
+        id:email, mailbox,thread_id:thread,
+        rfc_message_id:safeText(raw.message_id,998),
+        direction:['inbound','outbound'].includes(raw.direction)
+          ?raw.direction:'unknown',
+        from:safeText(raw.from,2048),
+        to:array(raw.to),cc:array(raw.cc),bcc:array(raw.bcc),
+        reply_to:array(raw.reply_to),
+        text:Object.hasOwn(raw,'text')?textField(raw.text):undefined,
+        html:Object.hasOwn(raw,'html')?textField(raw.html):undefined,
+        attachments_known:Array.isArray(raw.attachments),
+        attachments:details.map(a=>({
+          id:requireUuid(a.id),
+          filename:safeText(a.filename,512),
+          content_type:safeText(a.content_type,256),
+          size: Number.isSafeInteger(a.size)&&a.size>=0&&a.size<=26214400
+            ?a.size:null
+        }))
+      };
     },
   });
 }

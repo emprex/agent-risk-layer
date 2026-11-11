@@ -140,3 +140,29 @@ test('updating draft increments revision and hashes audit without leaking body',
   assert.match(statements[3].params[4],/^[a-f0-9]{64}$/);
   assert.ok(!statements[3].params.includes(next.body_text));
 });
+
+
+test('Mail Drafts excludes provider submissions and external sends at SQL source',async()=>{
+  const logs=[];
+  const db={query:async(sql,params)=>{
+    logs.push({sql,params});
+    return {rows:[{
+      id:draftId,mailbox_key:'direction',subject:'Still unsent',
+      mail_state:'draft',revision:1
+    }]};
+  }};
+  const unsent=await listMailDrafts(db,'  hello  ','ci-operator',{unsentOnly:true});
+  assert.equal(unsent.kind,'unsent_mail_drafts');
+  assert.deepEqual(unsent.items.map(row=>row.mail_state),['draft']);
+  assert.match(logs[0].sql,/WHERE d\.workspace_key=\$1\s+AND a\.id IS NULL AND s\.id IS NULL/);
+  assert.match(logs[0].sql,/LEFT JOIN enkyron_mail_send_attempts a/);
+  assert.match(logs[0].sql,/LEFT JOIN enkyron_crm_mail_manual_sends s/);
+  assert.match(logs[0].sql,/LIMIT 101/);
+  assert.ok(!logs[0].sql.includes('d.body_text'));
+  assert.deepEqual(logs[0].params,['local:ci-operator','hello']);
+  await listMailDrafts(db,'','ci-operator');
+  assert.ok(!logs[1].sql.includes('AND a.id IS NULL AND s.id IS NULL'));
+  assert.equal(logs[1].sql.includes('LEFT JOIN enkyron_mail_send_attempts a'),true);
+  await assert.rejects(listMailDrafts(db,'','ci-operator',{unsentOnly:'yes'}),
+    /CRM invalid draft list mode/);
+});

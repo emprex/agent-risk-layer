@@ -106,9 +106,10 @@ export function combineMailboxPages(folder,settled){
     partial:unavailable.length!==0,
   };
 }
-export async function mailThreads(pool,operator,mailbox,folder='inbox'){
+export async function mailThreads(pool,operator,mailbox,folder='inbox',after=null){
   if(!['inbox','archive','spam','trash'].includes(folder))
     throw new Error('Invalid mailbox folder');
+  if(after!==null&&!UUID.test(after))throw new Error('Invalid mail pagination cursor');
   // The two mail accounts are read independently and failures are explicit.
   if(mailbox==='all'){
     const pages=await Promise.allSettled(
@@ -117,7 +118,7 @@ export async function mailThreads(pool,operator,mailbox,folder='inbox'){
     return combineMailboxPages(folder,pages);
   }
   const reader=await readerFor(pool,operator,mailbox);
-  const page=await reader.listThreads({mailbox,folder,limit:30});
+  const page=await reader.listThreads({mailbox,folder,limit:30,after});
   const items=page.items.map(item=>({...item,mailbox}));
   // Best-effort local index: never misrepresent a failed cache write as an
   // unavailable provider inbox. Full email bodies are not silently stored.
@@ -138,9 +139,18 @@ export async function mailThreads(pool,operator,mailbox,folder='inbox'){
   }catch(error){if(error?.code!=='42P01')throw error;}
   return {...page,folder,items};
 }
-export async function mailMessages(pool,operator,mailbox,threadId){
+export async function mailMessages(pool,operator,mailbox,threadId,after=null){
+  if(after!==null&&!UUID.test(after))throw new Error('Invalid mail pagination cursor');
   const reader=await readerFor(pool,operator,mailbox);
-  return reader.listThreadEmails({mailbox,threadId,limit:30});
+  return reader.listThreadEmails({mailbox,threadId,limit:30,after});
+}
+// Archive-only endpoint. This is never exposed directly as a Qt IPC action.
+// Provider HTML is untrusted and must be stored inert in NEMORYTH.
+export async function mailEmailDetails(pool,operator,mailbox,threadId,emailId){
+  if(!UUID.test(threadId)||!UUID.test(emailId))
+    throw new Error('Invalid mail archive message reference');
+  const reader=await readerFor(pool,operator,mailbox);
+  return reader.getThreadEmail({mailbox,threadId,emailId});
 }
 export async function mailSent(pool,operator){
   const key=workspace(operator);
@@ -374,4 +384,143 @@ export async function mailSendDraft(pool,actor,input,{fetchImpl=globalThis.fetch
       ?'Resend accepted the message. Delivery has not been verified.'
       :'Provider outcome uncertain. Check Resend before trying another email; no automatic retry.',
   };
+}
+
+
+/**
+ * Native Resend Inbox replies. The recipient is re-read from the provider and
+ * compared to the exact saved draft before sending; Qt cannot specify the
+ * actual reply target, privilege, credential, or provider mailbox ID.
+ */
+export function validateMailReplyRequest(input){
+  const base=validateMailSendRequest(input);
+  if(typeof input.mailbox!=='string'||!MAILBOXES.has(input.mailbox)
+    ||typeof input.thread_id!=='string'||!UUID.test(input.thread_id)
+    ||typeof input.email_id!=='string'||!UUID.test(input.email_id))
+    throw new Error('CRM invalid reply conversation reference');
+  return {...base,mailbox:input.mailbox,threadId:input.thread_id,
+    emailId:input.email_id};
+}
+
+function senderAddress(value){
+  if(typeof value!=='string'||/[\r\n\u0000]/.test(value))return null;
+  const text=value.trim();
+  const match=/^[^<>]*<([^<>]+)>$/.exec(text);
+  const address=(match?match[1]:text).trim();
+  return EMAIL.test(address)?address.toLowerCase():null;
+}
+
+export function replyRecipientFromMessage(message,ownAddress){
+  if(!message||typeof message!=='object')
+    throw new Error('CRM cannot resolve reply recipient');
+  const to=message.reply_to;
+  const candidates=Array.isArray(to)?to:
+    typeof to==='string'&&to.trim()?[to]:[];
+  if(candidates.length>1)
+    throw new Error('CRM multiple Reply-To recipients; use a reviewed manual email');
+  const raw=candidates.length?candidates[0]:message.from;
+  const address=senderAddress(raw);
+  if(!address||address===String(ownAddress||'').toLowerCase())
+    throw new Error('CRM cannot safely resolve an external reply recipient');
+  return address;
+}
+
+export async function mailReplyDraft(pool,actor,input,{
+  fetchImpl=globalThis.fetch,credentialsLoader=loadPrivateResendConfig,
+  listMessages=mailMessages,uuid=randomUUID}={}){
+  const {draftId,revision,mailbox,threadId,emailId}=
+    validateMailReplyRequest(input);
+  // Re-check both rights at execution time, including the read scope.
+  await canAccess(pool,actor,mailbox,'read');
+  await canAccess(pool,actor,mailbox,'send');
+  const current=await listMessages(pool,actor,mailbox,threadId);
+  const original=(current?.items||[]).find(x=>x.id===emailId);
+  if(!original)
+    throw new Error('CRM reply message unavailable in current provider thread');
+  const recipient=replyRecipientFromMessage(original,MAILBOXES.get(mailbox));
+  const cfg=await credentialsLoader();
+  const apiKey=await cfg.credentialProvider();
+  if(!apiKey||!cfg.mailboxes?.[mailbox]||!UUID.test(cfg.mailboxes[mailbox]))
+    throw new Error('CRM mail provider not configured');
+
+  const scope=workspace(actor),client=await pool.connect();
+  let prepared;
+  try{
+    await client.query('BEGIN');
+    const local=(await client.query(
+      'SELECT sender FROM enkyron_mail_local_messages '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 AND message_id=$4',
+      [scope,mailbox,threadId,emailId])).rows[0];
+    if(!local||local.sender!==original.from)
+      throw new Error('CRM reply message is not verified against the saved conversation');
+    const draft=(await client.query(
+      'SELECT id,revision,mailbox_key,recipient_email,subject,body_text '+
+      'FROM enkyron_crm_mail_drafts WHERE workspace_key=$1 AND id=$2 FOR UPDATE',
+      [scope,draftId])).rows[0];
+    if(!draft||draft.revision!==revision||draft.mailbox_key!==mailbox
+      ||typeof draft.body_text!=='string'||!draft.body_text.trim()
+      ||typeof draft.subject!=='string'||!draft.subject.trim()
+      ||String(draft.recipient_email||'').toLowerCase()!==recipient)
+      throw new Error('CRM reply draft or recipient changed; review before sending');
+    const access=(await client.query(
+      'SELECT can_send,can_read FROM enkyron_local_mail_access '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND role=$3',
+      [scope,mailbox,'organization_owner_l5'])).rows[0];
+    if(access?.can_send!==true||access?.can_read!==true)
+      throw new Error('CRM mailbox reply permission not granted');
+    const prior=(await client.query(
+      'SELECT id FROM enkyron_mail_send_attempts '+
+      'WHERE workspace_key=$1 AND draft_id=$2',[scope,draftId])).rows[0];
+    if(prior)throw new Error('CRM reply already submitted; review Sent before continuing');
+    const reported=(await client.query(
+      'SELECT id FROM enkyron_crm_mail_manual_sends '+
+      'WHERE workspace_key=$1 AND draft_id=$2',[scope,draftId])).rows[0];
+    if(reported)throw new Error('CRM draft has an external send record');
+    const idempotency=uuid(),attemptId=uuid();
+    const request={text:draft.body_text};
+    const hash=createHash('sha256').update(JSON.stringify({
+      mailbox,threadId,emailId,recipient,request
+    })).digest('hex');
+    await client.query(
+      'INSERT INTO enkyron_mail_send_attempts '+
+      '(id,workspace_key,draft_id,draft_revision,mailbox_key,recipient_email,'+
+      'payload_sha256,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [attemptId,scope,draftId,revision,mailbox,recipient,hash,idempotency]
+    );
+    await client.query('COMMIT');
+    prepared={attemptId,idempotency,request,apiKey,
+      inboxId:cfg.mailboxes[mailbox]};
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{client.release();}
+
+  const url='https://api.resend.com/inboxes/'+prepared.inboxId+
+    '/threads/'+threadId+'/emails/'+emailId+'/reply';
+  let providerId=null;
+  try{
+    const response=await fetchImpl(url,{
+      method:'POST',redirect:'error',signal:AbortSignal.timeout(12000),
+      headers:{Authorization:'Bearer '+prepared.apiKey,
+        'Content-Type':'application/json',
+        'Idempotency-Key':prepared.idempotency},
+      body:JSON.stringify(prepared.request)
+    });
+    if(response?.ok){
+      const data=await response.json();
+      if(typeof data?.id==='string'&&UUID.test(data.id))
+        providerId=data.id;
+    }
+  }catch{
+    // Unknown provider outcome is intentionally NOT retried.
+  }
+  const outcome=providerId?'accepted':'uncertain';
+  await pool.query(
+    'UPDATE enkyron_mail_send_attempts SET outcome=$2,'+
+    'provider_message_id=$3,completed_at=NOW() WHERE id=$1',
+    [prepared.attemptId,outcome,providerId]);
+  return {outcome,provider_message_id:providerId,
+    notice:providerId
+      ?'Resend accepted this reply in the existing thread. Delivery not confirmed.'
+      :'Reply outcome uncertain. Do not resend without reviewing the provider.'};
 }
