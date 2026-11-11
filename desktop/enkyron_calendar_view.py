@@ -3,7 +3,7 @@
 Qt's date/time widgets produce wall-clock input. Europe/London timezone is
 converted to an explicit offset-aware timestamp before submitting to backend.
 """
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QDate, Qt, QTime, Signal
@@ -22,8 +22,18 @@ def _utc_string(date_value):
 
 
 def _local_datetime(day, hour):
-    return datetime(day.year(), day.month(), day.day(),
-                    hour.hour(), hour.minute(), tzinfo=TZ)
+    naive = datetime(day.year(), day.month(), day.day(),
+                     hour.hour(), hour.minute())
+    result = naive.replace(tzinfo=TZ, fold=0)
+    # Never silently shift an appointment that falls into the DST gap, nor
+    # guess which of two repeated local hours the user intended.
+    round_trip = result.astimezone(timezone.utc).astimezone(TZ)
+    if round_trip.replace(tzinfo=None) != naive:
+        raise ValueError("This local time does not exist due to the clock change.")
+    other = naive.replace(tzinfo=TZ, fold=1)
+    if other.utcoffset() != result.utcoffset():
+        raise ValueError("This local time occurs twice due to the clock change.")
+    return result
 
 
 class CalendarEntryDialog(QDialog):
