@@ -125,6 +125,7 @@ class MailNativeUXSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
+            window.mail_provider_ready = True  # Synthetic Resend fetch allowed in this test.
             inbox = window.mail_inbox
             inbox.set_owner_mailboxes(CARD)
             inbox.set_connection_state("connected")
