@@ -1766,18 +1766,40 @@ class EnkyronWindow(QMainWindow):
                 return
             if (error or not data or data.get("mailbox") != mailbox
                     or data.get("folder") != folder):
+                # Never expose provider responses, API keys or raw IPC errors.
+                import re
+                status = re.search(r"HTTP (\\d{3})", str(error or ""))
+                detail = (" (Resend HTTP {})".format(status.group(1))
+                          if status else "")
                 self.mail_inbox.set_connection_state(
-                    "error", "Could not read this mailbox. Retry with Refresh inbox."
+                    "error", "Could not read {} / {}{}. "
+                    "Check the account or try Refresh.".format(
+                        mailbox, folder, detail)
                 )
-                self.crm_mail_connection.setText("Email unavailable · Check Resend connection")
+                self.crm_mail_connection.setText(
+                    "Mail unavailable · Folder read failed"
+                )
                 return
             self.mail_inbox.set_connection_state("connected")
             self.mail_inbox.show_threads(
                 mailbox, data.get("items") or [], bool(data.get("has_more")), folder
             )
-            self.crm_mail_connection.setText(
-                "{} · Inbox refreshed".format(mailbox.title())
-            )
+            unavailable = (data.get("unavailable_mailboxes") or []) if mailbox == "all" else []
+            unavailable = [key for key in unavailable
+                           if key in ("direction", "support")]
+            if unavailable:
+                note = ("Partial results: {} unavailable. "
+                        "Choose an account to diagnose or try Refresh.".format(
+                            ", ".join(unavailable)))
+                self.mail_inbox.connection_label.setText(note)
+                self.mail_inbox.connection_label.setVisible(True)
+                if not self.mail_inbox.thread_list.count():
+                    self.mail_inbox._show_empty("Mail partially loaded", note)
+                self.crm_mail_connection.setText("Mail partially loaded")
+            else:
+                self.crm_mail_connection.setText(
+                    "{} · {} refreshed".format(mailbox.title(), folder.title())
+                )
         self.bridge.call("mail-threads", payload={"mailbox":mailbox,
                                                   "folder":folder}, callback=received)
 
