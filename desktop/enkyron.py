@@ -16133,6 +16133,7 @@ class EnkyronWindow(QMainWindow):
                 return
             if (error or not isinstance(context, dict) or
                     not context.get("available")):
+                self.evidence_workplan_ticket = None
                 self.evidence_summary.setPlainText(
                     "Evidence workplan blocked: " + str(error or (
                         context.get("reason", "Canonical snapshot unavailable")
@@ -16143,6 +16144,7 @@ class EnkyronWindow(QMainWindow):
                 return
             if (context.get("project_id") != ticket["linked_project_id"] or
                     context.get("assessment_id") != ticket["linked_assessment_id"]):
+                self.evidence_workplan_ticket = None
                 self.evidence_summary.setPlainText(
                     "Evidence workplan blocked: linked assessment identity mismatch."
                 )
@@ -16167,6 +16169,7 @@ class EnkyronWindow(QMainWindow):
                 self.evidence_button.setEnabled(True)
                 if (summary_error or not isinstance(data, dict)
                     or not data.get("available") or data.get("kind") != "summary"):
+                    self.evidence_workplan_ticket = None
                     self.evidence_summary.setPlainText(
                         "Evidence workplan blocked: "
                         + (summary_error or (
