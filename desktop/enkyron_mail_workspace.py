@@ -188,6 +188,7 @@ class MailInboxView(QWidget):
     localRecordLinkRequested = Signal(int)
     replyRequested = Signal(str, str)
     forwardRequested = Signal(str, str)
+    fullTextRequested = Signal(str, str, str)
     replySubmitRequested = Signal()
     sentFollowUpRequested = Signal(int)
 
@@ -206,6 +207,7 @@ class MailInboxView(QWidget):
         self.local_mode = False
         self.local_folders = []
         self.local_labels = []
+        self._full_text_options = []
         self._build()
 
     def _build(self):
@@ -407,6 +409,13 @@ class MailInboxView(QWidget):
         self.forward_button.clicked.connect(self._request_forward)
         self.forward_button.hide()
         reply_toolbar.addWidget(self.forward_button)
+        self.full_text_button = QPushButton("Read full text…")
+        self.full_text_button.setObjectName("enkyronMailReadFullText")
+        self.full_text_button.setToolTip(
+            "Open complete saved plain text from NEMORYTH (never provider HTML)")
+        self.full_text_button.clicked.connect(self._request_full_text)
+        self.full_text_button.hide()
+        reply_toolbar.addWidget(self.full_text_button)
         reply_toolbar.addStretch()
         right_layout.addLayout(reply_toolbar)
         self.reply_editor = QFrame()
@@ -736,6 +745,8 @@ class MailInboxView(QWidget):
         self.hide_reply_editor()
         self.reply_button.hide()
         self.forward_button.hide()
+        self.full_text_button.hide()
+        self._full_text_options = []
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
@@ -1039,6 +1050,8 @@ class MailInboxView(QWidget):
         self.hide_reply_editor()
         self.reply_button.hide()
         self.forward_button.hide()
+        self.full_text_button.hide()
+        self._full_text_options = []
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.subject.setText("Select a message")
@@ -1108,6 +1121,25 @@ class MailInboxView(QWidget):
             return
         self.replyRequested.emit(self.current_thread_mailbox, self.current_thread_id)
 
+    def _request_full_text(self):
+        if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
+                or not self.current_thread_id or not self._full_text_options):
+            return
+        selected = self._full_text_options[0]
+        if len(self._full_text_options) > 1:
+            titles = [x[1] for x in self._full_text_options]
+            title, accepted = QInputDialog.getItem(
+                self, "Read full archived message", "Choose message:",
+                titles, 0, False)
+            if not accepted:
+                return
+            index = titles.index(title) if title in titles else -1
+            if index < 0:
+                return
+            selected = self._full_text_options[index]
+        self.fullTextRequested.emit(
+            self.current_thread_mailbox, self.current_thread_id, selected[0])
+
     def _request_forward(self):
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
                 or not self.current_thread_id
@@ -1169,4 +1201,16 @@ class MailInboxView(QWidget):
                                      and self.selected_folder not in ("sent","drafts"))
         self.forward_button.setVisible(self.local_mode and bool(messages)
                                        and self.selected_folder not in ("sent","drafts"))
+        self._full_text_options = [
+            (str(m.get("id")),
+             "{} · {}".format(
+                 _safe_sender_label(m.get("from")),
+                 _display_date(m.get("created_at")) or "Saved message"))
+            for m in messages[:50]
+            if (isinstance(m, dict) and m.get("preview_truncated") is True
+                and isinstance(m.get("id"), str)
+                and len(m["id"]) == 36)
+        ]
+        self.full_text_button.setVisible(
+            self.local_mode and bool(self._full_text_options))
         return True
