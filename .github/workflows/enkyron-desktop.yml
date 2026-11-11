@@ -1869,7 +1869,7 @@ jobs:
                   "requirement_instances": 2, "affected_controls": 2
               }],
           }, None)
-          assert "ARL CONTROL REGISTER: 108" in window.evidence_summary.toPlainText()
+          assert "ASSESSMENT PROGRESS · 108 SECURITY CONTROLS" in window.evidence_summary.toPlainText()
           assert window.evidence_packs.count() == 1
           window.open_evidence_pack()
           assert calls[-1][0] == "evidence-pack"
