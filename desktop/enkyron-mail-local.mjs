@@ -85,10 +85,10 @@ export async function localMailList(pool,actor,input={}){
     'AND ($3::text=\'all\' OR t.mailbox_key=$3) '+
     "AND ($4::text='' OR t.subject ILIKE '%' || $4 || '%') "+
     'GROUP BY t.mailbox_key,t.thread_id,t.subject,t.last_message_at,t.unread,'+
-    't.flagged,t.folder_key,t.provider_folder ORDER BY t.last_message_at DESC LIMIT 200',
+    't.flagged,t.folder_key,t.provider_folder ORDER BY t.last_message_at DESC LIMIT 51',
     [key,folder,mailbox,search]
   )).rows;
-  return {mailbox,folder,items:rows,has_more:rows.length>=200,source:'local'};
+  return {mailbox,folder,items:rows.slice(0,50),has_more:rows.length>50,source:'local'};
 }
 export async function syncMailHeaders(pool,actor,input,{listThreads=mailThreads}={}){
   const key=scope(actor),chosen=input?.mailbox||'all';
