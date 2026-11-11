@@ -1777,6 +1777,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_poll_timer.setInterval(60000)
         self.mail_poll_timer.timeout.connect(self.poll_local_inbox)
         self._mail_auto_running = False
+        self._mail_archive_running = False
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
@@ -1892,6 +1893,30 @@ class EnkyronWindow(QMainWindow):
             payload={"mailbox":mailbox,"folder":request_folder,
                      "search":query,"page":page},callback=received)
 
+    def archive_mail_batch(self):
+        """Archive up to four saved messages in NEMORYTH, if schema 113 exists.
+
+        No exposed attachments, no HTML rendering, no provider mutation,
+        no automatic database migration and no LLM access.
+        """
+        if self._mail_archive_running or not self.mail_provider_ready:
+            return
+        self._mail_archive_running = True
+        def received(data, error):
+            self._mail_archive_running = False
+            if error or not isinstance(data, dict) or not data.get("available"):
+                return
+            count = int(data.get("archived") or 0)
+            rejected = int(data.get("incomplete") or 0)
+            if (count or rejected) and self.mail_inbox.selected_folder == "inbox":
+                status = self.mail_inbox.connection_label.text()
+                summary = (" · NEMORYTH: {} full content archived"
+                           " (attachments remain quarantined)").format(count)
+                self.mail_inbox.connection_label.setText(status + summary)
+                self.mail_inbox.connection_label.setVisible(True)
+        self.bridge.call("mail-local-archive-sync",
+                         payload={"mailbox":"all"},callback=received)
+
     def poll_local_inbox(self):
         """Check provider Inboxes automatically and cache recent text locally.
 
@@ -1953,6 +1978,8 @@ class EnkyronWindow(QMainWindow):
                                "{} new, {} updated conversation(s).").format(
                                    checked, new, updated)
                 complete(warning, refresh=changed)
+                if not failure and isinstance(result, dict):
+                    self.archive_mail_batch()
             self.bridge.call("mail-local-sync-bodies",
                 payload={"mailbox":"all","recent":True},
                 callback=received_bodies)
