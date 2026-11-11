@@ -73,6 +73,11 @@ export async function localMailList(pool,actor,input={}){
   const search=String(input.search||'').trim();
   if(search.length>120||/[\u0000-\u001f\u007f]/.test(search))
     throw Error('Invalid Mail search');
+  // "all" is for an explicit operator search, never the default folder view.
+  if(folder==='all'&&!search)throw Error('A search term is required across folders');
+  const page=input.page??0;
+  if(!Number.isSafeInteger(page)||page<0||page>1000)
+    throw Error('Invalid Mail page');
   const rows=(await pool.query(
     'SELECT t.mailbox_key AS mailbox,t.thread_id AS id,t.subject,'+
     'COALESCE(last_mail.sender, \'\') AS sender,'+
@@ -86,15 +91,30 @@ export async function localMailList(pool,actor,input={}){
     'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
     'AND m.thread_id=t.thread_id ORDER BY m.created_at DESC LIMIT 1) '+
     'last_mail ON TRUE '+
-    'WHERE t.workspace_key=$1 AND t.folder_key=$2 '+
+    'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.folder_key=$2) '+
     'AND ($3::text=\'all\' OR t.mailbox_key=$3) '+
-    "AND ($4::text='' OR t.subject ILIKE '%' || $4 || '%') "+
+    'AND ($4::text=\'\' OR '+
+    'POSITION(LOWER($4) IN LOWER(t.subject))>0 OR '+
+    'EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
+    'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
+    'AND m.thread_id=t.thread_id AND ('+
+    'POSITION(LOWER($4) IN LOWER(m.sender))>0 OR '+
+    'POSITION(LOWER($4) IN LOWER(m.subject))>0 OR '+
+    'POSITION(LOWER($4) IN LOWER(m.recipients::text))>0 OR '+
+    'POSITION(LOWER($4) IN LOWER(m.body_text))>0)) OR '+
+    'EXISTS (SELECT 1 FROM enkyron_mail_thread_labels tl2 '+
+    'JOIN enkyron_mail_local_labels l2 '+
+    'ON l2.workspace_key=tl2.workspace_key AND l2.label_id=tl2.label_id '+
+    'WHERE tl2.workspace_key=t.workspace_key AND tl2.mailbox_key=t.mailbox_key '+
+    'AND tl2.thread_id=t.thread_id AND '+
+    'POSITION(LOWER($4) IN LOWER(l2.name))>0)) '+
     'GROUP BY t.mailbox_key,t.thread_id,t.subject,last_mail.sender,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder '+
-    'ORDER BY t.last_message_at DESC LIMIT 51',
-    [key,folder,mailbox,search]
+    'ORDER BY t.last_message_at DESC,t.mailbox_key,t.thread_id LIMIT 51 OFFSET $5',
+    [key,folder,mailbox,search,page*50]
   )).rows;
-  return {mailbox,folder,items:rows.slice(0,50),has_more:rows.length>50,source:'local'};
+  return {mailbox,folder,search,page,items:rows.slice(0,50),
+    has_more:rows.length>50,source:'local'};
 }
 // One provider page per mailbox/folder and call. Each successful page commits
 // independently, so interruption never rolls back other inboxes or folders.
