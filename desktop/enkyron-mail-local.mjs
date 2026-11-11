@@ -135,7 +135,8 @@ export async function syncMailHeaders(pool,actor,input={},{
           unread:item.unread===true
         }));
         const cursor=page.has_more?rows.at(-1).id:null;
-        if(cursor===after)throw Error('Resend Mail cursor did not advance');
+        if(page.has_more&&cursor===after)
+          throw Error('Resend Mail cursor did not advance');
         await withTransaction(pool,async client=>{
           for(const row of rows){
             await client.query(
