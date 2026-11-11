@@ -37,6 +37,8 @@ Provider source: Resend **Inboxes** (Oct 2026) exposes a GET endpoint for detail
 5. The Qt reading pane can show up to 20,000 characters of full archived plain text with an explicit preview notice. It never renders the archived HTML or offers quarantined attachments as downloads.
 6. Errors stay per-message and preserve earlier previews. The operator can inspect metadata with `mail-archive-status`; missing/malformed provider information is not reported as a complete email archive.
 
+- **E04-06B internal storage primitive (GitHub, not enabled for provider downloads):** `quarantineAttachmentBytes` can atomically save byte buffers that match a pre-existing attachment manifest and declared size, record SHA-256, and mark `quarantined_unscanned`. Rejects oversized, mismatched, cross-workspace, blocked and contradictory content. Repeat with an identical hash is idempotent. The primitive has **no IPC action and no attachment release path**. Provider discovery, secure signed-URL acquisition, content fetching and malware scanning have deliberately not been claimed as complete.
+
 ## Security, knowledge and retention boundary
 
 - Emails are **untrusted customer input**, not EIRYON instructions, KYRTHOS findings or verified evidence.
@@ -58,7 +60,7 @@ Required Debian acceptance: confirm `--check`, inspect backup policy, then appro
 
 ## Explicit remaining gaps
 
-- Actual attachment *bytes*, quarantine scanner and safe manual release.
+- Verified Resend **Inboxes** attachment source / signed download mapping and content transfer, quarantine scanner and safe manual release. The separate Resend **Receiving Emails** attachment endpoints do **not** establish an equivalent Inbox message-ID contract; never substitute one identifier for the other.
 - Complete display of very long messages (not only their 20k preview).
 - Rich HTML sanitisation/viewer and remote-content blocking.
 - Reply All, multirecipient compose, CC/BCC, signatures, full forward handling.
