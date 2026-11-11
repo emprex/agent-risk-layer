@@ -130,7 +130,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             inbox.set_connection_state("connected")
             self.assertTrue(inbox.show_threads("all", []))
             self.assertEqual(inbox.mail_stack.currentIndex(), 1)
-            self.assertTrue(inbox.splitter.isVisible())
+            self.assertEqual(inbox.splitter.parentWidget(), inbox.mail_stack)
             self.assertIn("empty", inbox.empty_title.text().lower())
             self.assertTrue(inbox.show_threads("all", [{
                 "id": THREAD, "mailbox": "direction",
