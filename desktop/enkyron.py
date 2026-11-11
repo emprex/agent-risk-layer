@@ -40,6 +40,25 @@ ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
 OWNER_LOGIN_BRIDGE = ROOT / "desktop" / "enkyron-owner-login-bridge.mjs"
 
+# Controlled primary-sector vocabulary. Preserve old values until reviewed.
+CRM_SECTORS = (
+    "AI & Automation", "Software & IT Services", "Cybersecurity",
+    "Financial Services", "Healthcare & Life Sciences", "Retail & E-commerce",
+    "Manufacturing & Industrial", "Professional Services",
+    "Telecommunications", "Education", "Public Sector", "Other",
+)
+
+
+def crm_sector_selector(current=""):
+    selector = QComboBox()
+    selector.setEditable(False)
+    selector.addItems(["", *CRM_SECTORS])
+    if current and current not in CRM_SECTORS:
+        selector.addItem(current)  # Keep this record's previous value.
+    selector.setCurrentText(current)
+    return selector
+
+
 STYLE = """
 QMainWindow { background: #edf2f6; }
 QWidget { color: #20354a; font-family: 'DejaVu Sans', sans-serif; font-size: 13px; }
@@ -2892,9 +2911,12 @@ class EnkyronWindow(QMainWindow):
         form = QFormLayout()
         inputs = {}
         for key, label, maximum in fields:
-            editor = QLineEdit()
-            editor.setMaxLength(maximum)
-            editor.setText(str(record.get(key) or ""))
+            if kind == "company" and key == "sector":
+                editor = crm_sector_selector(str(record.get(key) or ""))
+            else:
+                editor = QLineEdit()
+                editor.setMaxLength(maximum)
+                editor.setText(str(record.get(key) or ""))
             inputs[key] = editor
             form.addRow(label, editor)
         rationale = QPlainTextEdit()
@@ -2920,7 +2942,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         record_id = record["id"]
         company_id = self.crm_company_id
-        baseline = {key: editor.text() for key, editor in inputs.items()}
+        def edit_value(editor):
+            return (editor.currentText() if isinstance(editor, QComboBox)
+                    else editor.text())
+
+        baseline = {key: edit_value(editor) for key, editor in inputs.items()}
         history = QPushButton("View correction history…")
         history.clicked.connect(
             lambda: self.open_crm_record_history(kind, record_id)
@@ -2930,7 +2956,7 @@ class EnkyronWindow(QMainWindow):
         def changed_fields():
             return {
                 key for key, editor in inputs.items()
-                if editor.text() != baseline[key]
+                if edit_value(editor) != baseline[key]
             }
 
         def sensitive_change():
@@ -2971,7 +2997,7 @@ class EnkyronWindow(QMainWindow):
             payload = {
                 "id": record_id, "expected_version": expected,
                 "review_note": note, "confirmed": True,
-                **{k: editor.text() for k, editor in inputs.items()}
+                **{k: edit_value(editor) for k, editor in inputs.items()}
             }
             if kind == "contact":
                 payload["company_id"] = company_id
@@ -3000,7 +3026,8 @@ class EnkyronWindow(QMainWindow):
             )
 
         for widget in inputs.values():
-            widget.textChanged.connect(update_save)
+            (widget.currentTextChanged if isinstance(widget, QComboBox)
+             else widget.textChanged).connect(update_save)
         rationale.textChanged.connect(update_save)
         confirmed.toggled.connect(update_save)
         update_save()
@@ -6248,8 +6275,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_legal_input = QLineEdit()
         self.crm_legal_input.setMaxLength(160)
         form.addRow("Legal name", self.crm_legal_input)
-        self.crm_sector_input = QLineEdit()
-        self.crm_sector_input.setMaxLength(120)
+        self.crm_sector_input = crm_sector_selector()
         form.addRow("Sector", self.crm_sector_input)
         self.crm_city_input = QLineEdit()
         self.crm_city_input.setMaxLength(120)
@@ -6282,7 +6308,7 @@ class EnkyronWindow(QMainWindow):
         payload = {
             "name": self.crm_name_input.text(),
             "legal_name": self.crm_legal_input.text(),
-            "sector": self.crm_sector_input.text(),
+            "sector": self.crm_sector_input.currentText(),
             "city": self.crm_city_input.text(),
             "country": self.crm_country_input.text(),
             "website": self.crm_website_input.text()
@@ -6308,7 +6334,7 @@ class EnkyronWindow(QMainWindow):
             current = {
                 "name": self.crm_name_input.text(),
                 "legal_name": self.crm_legal_input.text(),
-                "sector": self.crm_sector_input.text(),
+                "sector": self.crm_sector_input.currentText(),
                 "city": self.crm_city_input.text(),
                 "country": self.crm_country_input.text(),
                 "website": self.crm_website_input.text()
