@@ -5,7 +5,7 @@ import gc
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPlainTextEdit
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import (MailInboxView, format_mail_messages,
     format_mail_message_cards, _safe_sender_label)
@@ -333,7 +333,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertIsNone(popout.parent())
             self.assertFalse(popout.isModal())
             body = popout.findChild(
-                type(inbox.body), "enkyronMailDetachedBody")
+                QPlainTextEdit, "enkyronMailDetachedBody")
             self.assertTrue(body.isReadOnly())
             self.assertIn("<script>not markup</script>", body.toPlainText())
             self.assertFalse(any(x[0] == "mail-send-draft" for x in commands))
