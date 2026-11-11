@@ -410,17 +410,13 @@ class MailNativeUXSmoke(unittest.TestCase):
                 type(window.mail_detach_button), "enkyronMailDetach")), 1)
             self.assertEqual(len(calendar.findChildren(
                 type(window.calendar_view.detach_button), "enkyronCalendarDetach")), 1)
-            self.assertEqual(len(mail.findChildren(
-                type(window.mail_detach_button), "enkyronMailDetach")), 1)
-            self.assertEqual(len(mail.toolBars()) if hasattr(mail, "toolBars")
-                             else len(mail.findChildren(__import__(
-                               "PySide6.QtWidgets", fromlist=["QToolBar"]).QToolBar)), 0)
-            from PySide6.QtWidgets import QPushButton
+            from PySide6.QtWidgets import QPushButton, QToolBar, QLabel
+            self.assertEqual(len(mail.findChildren(QToolBar)), 0)
+            self.assertEqual(len(calendar.findChildren(QToolBar)), 0)
             self.assertFalse(window.mail_detach_placeholder.findChildren(QPushButton))
             self.assertFalse(window.calendar_detach_placeholder.findChildren(QPushButton))
             self.assertIn("another window",
-                          window.mail_detach_placeholder.findChildren(
-                            __import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel)[0].text())
+                          window.mail_detach_placeholder.findChildren(QLabel)[0].text())
             # Switching modules must never minimise ENKYRON or force-focus
             # either detached window.
             window.navigation.setCurrentRow(1)
