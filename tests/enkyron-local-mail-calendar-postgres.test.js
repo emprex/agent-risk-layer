@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
-import {archiveNextMailBatch,mailArchiveStatus} from '../desktop/enkyron-mail-archive.mjs';
+import {archiveNextMailBatch,mailArchiveStatus,quarantineAttachmentBytes} from '../desktop/enkyron-mail-archive.mjs';
 import {
   localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
@@ -743,5 +743,78 @@ test('schema 113 rejects untrusted archive payload without false full-content cl
       'SELECT count(*)::int AS n FROM enkyron_mail_attachment_quarantine '+
       'WHERE workspace_key=$1',[workspace]
     )).rows[0].n,0);
+  }finally{await pool.end();}
+});
+
+
+test('attachment bytes enter NEMORYTH quarantine with hash and no release path',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-mail-bytes-'+crypto.randomUUID().slice(0,8);
+  const workspace='local:'+owner,thread=crypto.randomUUID();
+  const message=crypto.randomUUID(),attachment=crypto.randomUUID();
+  const bytes=Buffer.from('%PDF-1.4\nsynthetic inert fixture\n','utf8');
+  const digest=crypto.createHash('sha256').update(bytes).digest('hex');
+  const target={mailbox:'direction',message_id:message,attachment_id:attachment};
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'inbox','inbox','Quarantine synthetic')",
+      [workspace,thread]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_messages '+
+      '(workspace_key,mailbox_key,thread_id,message_id,sender,subject,body_text) '+
+      "VALUES($1,'direction',$2,$3,'client@example.invalid','Quarantine','Preview')",
+      [workspace,thread,message]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_attachment_quarantine '+
+      '(workspace_key,mailbox_key,message_id,attachment_id,'+
+      'original_filename,content_type,declared_size,safety_state) '+
+      "VALUES($1,'direction',$2,$3,'test.pdf','application/pdf',$4,'metadata_only')",
+      [workspace,message,attachment,bytes.length]
+    );
+    await assert.rejects(quarantineAttachmentBytes(pool,owner,{
+      ...target,bytes:Buffer.from('wrong bytes')
+    }),/size differs/);
+    await assert.rejects(quarantineAttachmentBytes(pool,'other-owner',{
+      ...target,bytes
+    }),/manifest not found/);
+    await assert.rejects(quarantineAttachmentBytes(pool,owner,{
+      ...target,bytes,expected_sha256:'0'.repeat(64)
+    }),/digest mismatch/);
+    const first=await quarantineAttachmentBytes(pool,owner,{
+      ...target,bytes,expected_sha256:digest
+    });
+    assert.equal(first.already_present,false);
+    assert.equal(first.safety_state,'quarantined_unscanned');
+    assert.equal(first.sha256,digest);
+    const repeated=await quarantineAttachmentBytes(pool,owner,{...target,bytes});
+    assert.equal(repeated.already_present,true);
+    const row=(await pool.query(
+      'SELECT content_bytes,content_sha256,safety_state FROM '+
+      'enkyron_mail_attachment_quarantine WHERE workspace_key=$1',
+      [workspace]
+    )).rows[0];
+    assert.deepEqual(row.content_bytes,bytes);
+    assert.equal(row.content_sha256,digest);
+    assert.equal(row.safety_state,'quarantined_unscanned');
+    assert.equal(Object.hasOwn(first,'content_bytes'),false);
+    assert.equal(Object.hasOwn(repeated,'content_bytes'),false);
+    assert.equal((await mailArchiveStatus(pool,owner)).quarantined_metadata,1);
+    await assert.rejects(quarantineAttachmentBytes(pool,owner,{
+      ...target,bytes:Buffer.alloc(26214401)
+    }),/Invalid attachment quarantine bytes/);
+    await pool.query(
+      'UPDATE enkyron_mail_attachment_quarantine '+
+      "SET safety_state='blocked' WHERE workspace_key=$1",
+      [workspace]
+    );
+    await assert.rejects(quarantineAttachmentBytes(pool,owner,{
+      ...target,bytes
+    }),/Attachment is blocked/);
   }finally{await pool.end();}
 });
