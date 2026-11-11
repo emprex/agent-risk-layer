@@ -127,6 +127,46 @@ export async function assessmentPreflight(pool, input, actor) {
     activeTestsAuthorised:false,securityVerdict:false};
 }
 
+/**
+ * Read-only ticket -> canonical existing snapshot lookup. A new assessment
+ * normally has no recorded Master Dossier yet; that is NOT a reason to
+ * prevent operator inspection or evidence request planning.
+ * Master verification, evidence acceptance and testing keep their own gates.
+ */
+export async function readLinkedAssessmentContext(pool, ticketId) {
+  if (typeof ticketId !== 'string' || !UUID.test(ticketId))
+    invalid('requires a valid ticket identifier');
+  const {rows} = await pool.query(
+    `SELECT id,ticket_number,target_kind,target_reference,
+            linked_project_id,linked_assessment_id
+       FROM arl_workbench_tickets WHERE id=$1`,
+    [ticketId]);
+  const ticket=rows[0];
+  if(!ticket) invalid('ticket not found');
+  if(ticket.target_kind!=='git' || !ticket.linked_project_id ||
+     !ticket.linked_assessment_id) invalid('ticket has no linked local Git assessment');
+  if(typeof ticket.target_reference!=='string' ||
+     !path.isAbsolute(ticket.target_reference))
+    invalid('ticket has no valid frozen Git target reference');
+  const frozen=frozenLocalTarget(ticket.target_reference);
+  const existing=await eligibleProject(pool,frozen);
+  if(!existing || existing.projectId!==ticket.linked_project_id ||
+     existing.assessmentId!==ticket.linked_assessment_id)
+    invalid('ticket does not match the canonical frozen project and assessment');
+  return {
+    available:true,
+    target_kind:'git',
+    target_reference:frozen.repositoryPath,
+    target_sha:frozen.sha,
+    project_id:existing.projectId,
+    assessment_id:existing.assessmentId,
+    snapshot_id:existing.snapshotId,
+    source:'canonical_current_snapshot',
+    master_recorded:false,
+    notice:'Existing current snapshot verified. A Master Dossier is separately required for historical master/evidence validation. No tests authorised.'
+  };
+}
+
 async function commitLink(pool, ticketId, actor, target, candidate) {
   const client=await pool.connect();
   try {
