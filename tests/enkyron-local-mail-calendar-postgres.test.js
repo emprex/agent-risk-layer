@@ -6,7 +6,7 @@ import {archiveNextMailBatch,mailArchiveStatus,quarantineAttachmentBytes,readArc
 import {
   localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
-  createLocalLabel,labelLocalThread,flagLocalThread,setLocalThreadRead
+  createLocalLabel,labelLocalThread,flagLocalThread,setLocalThreadRead,localMailCompanyLink,linkLocalMailCompany
 } from '../desktop/enkyron-mail-local.mjs';
 import {calendarCreate,calendarCreateTask,calendarCompleteTask,calendarList,
   validateCalendarEvent} from '../desktop/enkyron-calendar.mjs';
@@ -835,5 +835,77 @@ test('attachment bytes enter NEMORYTH quarantine with hash and no release path',
     await assert.rejects(quarantineAttachmentBytes(pool,owner,{
       ...target,bytes
     }),/Attachment is blocked/);
+  }finally{await pool.end();}
+});
+
+
+test('Mail E04-04 company link uses existing schema 112 field, never sends or changes tickets',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const actor='ci-mail-crm-'+crypto.randomUUID().slice(0,8);
+  const key='local:'+actor;
+  const thread=crypto.randomUUID(),company=crypto.randomUUID();
+  const second=crypto.randomUUID();
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_local_mail_access '+
+      '(workspace_key,mailbox_key,role,can_read,can_send) '+
+      "VALUES($1,'direction','organization_owner_l5',TRUE,FALSE)",
+      [key]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      "(workspace_key,mailbox_key,thread_id,folder_key,subject) "+
+      "VALUES($1,'direction',$2,'inbox','Reviewed incoming request')",
+      [key,thread]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_crm_companies '+
+      '(id,workspace_key,name,owner_local) VALUES($1,$2,$3,$4)',
+      [company,key,'Synthetic Company',actor]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_crm_companies '+
+      "(id,workspace_key,name,owner_local,relationship_state) "+
+      "VALUES($1,$2,$3,$4,'inactive')",
+      [second,key,'Inactive synthetic client',actor]
+    );
+    const source={mailbox:'direction',thread_id:thread};
+    assert.equal((await localMailCompanyLink(pool,actor,source)).linked,false);
+    await assert.rejects(linkLocalMailCompany(pool,actor,{
+      ...source,company_id:company,confirmed:false
+    }),/confirmation/);
+    await assert.rejects(linkLocalMailCompany(pool,actor,{
+      ...source,company_id:second,confirmed:true
+    }),/inactive/);
+    const result=await linkLocalMailCompany(pool,actor,{
+      ...source,company_id:company,confirmed:true
+    });
+    assert.equal(result.linked,true);
+    assert.equal(result.company_id,company);
+    assert.equal(result.provider_unchanged,true);
+    const after=await localMailCompanyLink(pool,actor,source);
+    assert.equal(after.company_id,company);
+    assert.equal(after.company_name,'Synthetic Company');
+    await assert.rejects(linkLocalMailCompany(pool,actor,{
+      ...source,company_id:second,confirmed:true
+    }),/already linked/);
+    await assert.rejects(localMailCompanyLink(pool,'ci-other-user',source),
+      /permission/);
+    const saved=(await pool.query(
+      'SELECT crm_company_id::text AS company FROM enkyron_mail_local_threads '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3',
+      [key,'direction',thread]
+    )).rows[0];
+    assert.equal(saved.company,company);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS count FROM arl_workbench_ticket_events '+
+      "WHERE detail LIKE '%Synthetic Company%'"
+    )).rows[0].count,0);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS count FROM enkyron_mail_send_attempts '+
+      'WHERE workspace_key=$1',[key]
+    )).rows[0].count,0);
   }finally{await pool.end();}
 });
