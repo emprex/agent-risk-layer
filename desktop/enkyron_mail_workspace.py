@@ -312,8 +312,9 @@ class MailInboxView(QWidget):
         active = state in ("connected", "error") and bool(self._mailboxes)
         self.refresh_button.setEnabled(active)
         self.search.setEnabled(state == "connected" and bool(self._mailboxes))
-        if not active:
-            self._clear_threads(defaults[state])
+        if state in ("disconnected", "loading", "error"):
+            # The previous loading pane must never remain visible on failure.
+            self._clear_threads(str(explanation or defaults[state])[:180])
 
     def _clear_threads(self, explanation):
         self.current_thread_id = None
