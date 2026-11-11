@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {
-  validateAssessmentSelection,frozenLocalTarget,linkOrCreateTicketAssessment
+  validateAssessmentSelection,frozenLocalTarget,linkOrCreateTicketAssessment,
+  readLinkedAssessmentContext
 } from '../desktop/enkyron-ticket-assessment.mjs';
 
 const ticket='3385aa99-e08a-4471-b8e5-9d0b36a8412b';
@@ -107,4 +108,66 @@ test('existing canonical project is linked atomically using the original ticket 
     assert.ok(queries.some(q=>q.sql.includes("target_kind='git'")));
     assert.ok(queries.some(q=>q.sql.trim()==='COMMIT'));
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('linked current assessment is inspectable without any Master Dossier query',async()=>{
+  const dir=fs.mkdtempSync(path.join(os.homedir(),'.enkyron-existing-read-'));
+  const git=(...args)=>execFileSync('git',['-C',dir,...args],{stdio:'pipe'});
+  try {
+    git('init','-q');
+    git('config','user.email','test@example.invalid');
+    git('config','user.name','Synthetic Test');
+    fs.writeFileSync(path.join(dir,'README.txt'),'test fixture\n');
+    git('add','README.txt');git('commit','-qm','test');
+    const sha=frozenLocalTarget(dir).sha;
+    const project='prj_fixture_2',assessment='asm_fixture_2',snapshot='sys_fixture_2';
+    const queries=[];
+    let projectId=project, expectedRevision=sha;
+    const pool={query:async(sql)=>{
+      queries.push(sql);
+      if(sql.includes('FROM arl_workbench_tickets'))return {rows:[{
+        id:ticket,ticket_number:'ARL-2026-000002',
+        target_kind:'git',target_reference:dir,
+        linked_project_id:project,linked_assessment_id:assessment
+      }]};
+      if(sql.includes('FROM security_projects'))return {rows:[{
+        id:projectId,name:'fixture',agent_assessment_id:assessment
+      }]};
+      if(sql.includes('FROM system_snapshots'))return {rows:[{
+        id:snapshot,assessment_configuration_json:JSON.stringify({
+          targetBinding:{source:'git',revision:expectedRevision},
+          assessmentBinding:{assessmentId:assessment}
+        })
+      }]};
+      throw Error('Unexpected query: '+sql);
+    }};
+    const verified=await readLinkedAssessmentContext(pool,ticket);
+    assert.equal(verified.available,true);
+    assert.equal(verified.snapshot_id,snapshot);
+    assert.equal(verified.target_sha,sha);
+    assert.equal(verified.master_validation,'not_performed');
+    assert.ok(!queries.some(q=>q.includes('assessment_master_dossier_revisions')));
+
+    projectId='prj_another_target';
+    await assert.rejects(readLinkedAssessmentContext(pool,ticket),
+      /ticket does not match/);
+    projectId=project;
+    expectedRevision='0'.repeat(40);
+    await assert.rejects(readLinkedAssessmentContext(pool,ticket),
+      /current snapshot is not bound/);
+
+    expectedRevision=sha;
+    fs.writeFileSync(path.join(dir,'not-committed.txt'),'dirty');
+    await assert.rejects(readLinkedAssessmentContext(pool,ticket),
+      /uncommitted or untracked/);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('no linked assessment is refused before any inspection',async()=>{
+  const pool={query:async(sql)=>({rows:[{
+    id:ticket,target_kind:'other',target_reference:'intake:manual',
+    linked_project_id:null,linked_assessment_id:null
+  }]})};
+  await assert.rejects(readLinkedAssessmentContext(pool,ticket),
+    /no linked local Git assessment/);
 });
