@@ -7,6 +7,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {loadPrivateResendConfig} from './enkyron-mail-private-config.mjs';
 import {createResendInboxReader} from './enkyron-resend-inbox-read.mjs';
 import {OWNER_MAILBOXES} from './enkyron-owner-mail-access.mjs';
+import {uniqueCompanyForRecipient,verifiedContactForCompany} from './enkyron-crm-mail-recipients.mjs';
 
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const EMAIL=/^[^\s@<>;,]+@[^\s@<>;,]+\.[^\s@<>;,]+$/;
@@ -102,13 +103,72 @@ export async function mailSent(pool,operator){
   if(!access.schema_ready)return {available:false,items:[]};
   const rows=(await pool.query(
     'SELECT s.id,s.draft_id,s.mailbox_key,s.recipient_email,s.outcome,'+
-    's.provider_message_id,s.recorded_at,s.completed_at,d.subject '+
+    's.provider_message_id,s.recorded_at,s.completed_at,d.subject,'+
+    'd.company_id,co.name AS company_name '+
     'FROM enkyron_mail_send_attempts s JOIN enkyron_crm_mail_drafts d '+
     'ON d.workspace_key=s.workspace_key AND d.id=s.draft_id '+
+    'LEFT JOIN enkyron_crm_companies co '+
+    'ON co.workspace_key=d.workspace_key AND co.id=d.company_id '+
     'WHERE s.workspace_key=$1 ORDER BY s.recorded_at DESC LIMIT 100',
     [key]
   )).rows;
   return {available:true,items:rows};
+}
+// Link metadata for an existing submitted email. This NEVER calls Resend,
+// changes the recipient, or pretends a provider acceptance is delivery.
+export function validateMailLinkRequest(input){
+  if(!input||Array.isArray(input)||typeof input!=='object'
+      ||!UUID.test(input.draft_id||'')
+      ||!UUID.test(input.company_id||'')
+      ||!UUID.test(input.contact_id||'')
+      ||input.confirmed!==true)
+    throw new Error('CRM explicit sent-mail link confirmation required');
+  return {draftId:input.draft_id,companyId:input.company_id,
+    contactId:input.contact_id};
+}
+export async function mailLinkSent(pool,actor,input,{uuid=randomUUID}={}){
+  const data=validateMailLinkRequest(input),scope=workspace(actor);
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const draft=(await client.query(
+      'SELECT d.id,d.company_id,d.opportunity_id,d.recipient_email,d.subject,'+
+      'd.body_text,d.mailbox_key,d.revision FROM enkyron_crm_mail_drafts d '+
+      'JOIN enkyron_mail_send_attempts s ON s.workspace_key=d.workspace_key '+
+      'AND s.draft_id=d.id WHERE d.workspace_key=$1 AND d.id=$2 FOR UPDATE OF d',
+      [scope,data.draftId]
+    )).rows[0];
+    if(!draft)throw new Error('CRM submitted message not found');
+    if(draft.company_id||draft.opportunity_id)
+      throw new Error('CRM submitted message is already linked');
+    const unique=await uniqueCompanyForRecipient(client,draft.recipient_email,actor);
+    if(!unique||unique!==data.companyId)
+      throw new Error('CRM recipient has no unique active contact-company match');
+    await verifiedContactForCompany(client,data.contactId,data.companyId,
+      draft.recipient_email,actor);
+    const version=draft.revision+1;
+    await client.query(
+      'UPDATE enkyron_crm_mail_drafts SET company_id=$3,revision=$4,'+
+      'updated_by=$5,updated_at=NOW() WHERE workspace_key=$1 AND id=$2',
+      [scope,data.draftId,data.companyId,version,actor]
+    );
+    const digest=createHash('sha256').update(JSON.stringify([
+      draft.mailbox_key,draft.recipient_email,draft.subject,draft.body_text,
+      'crm_link',data.companyId,data.contactId
+    ])).digest('hex');
+    await client.query(
+      'INSERT INTO enkyron_crm_mail_draft_events '+
+      '(id,workspace_key,draft_id,revision,event_type,content_sha256,actor_local) '+
+      "VALUES($1,$2,$3,$4,'edited',$5,$6)",
+      [uuid(),scope,data.draftId,version,digest,actor]
+    );
+    await client.query('COMMIT');
+    return {linked:true,company_id:data.companyId,revision:version,
+      notice:'CRM association recorded. The email was not sent again.'};
+  }catch(e){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw e;
+  }finally{client.release();}
 }
 export function validateMailSendRequest(input){
   if(!input||Array.isArray(input)||typeof input!=='object'
