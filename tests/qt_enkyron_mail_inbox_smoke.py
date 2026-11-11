@@ -387,7 +387,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             QMessageBox.question = prior_question
             QMessageBox.information = prior_info
 
-    def test_detached_window_switch_minimizes_covering_main_window(self):
+    def test_detached_windows_have_one_return_action_and_keep_main_usable(self):
         prior_bridge = DesktopBridge.call
         DesktopBridge.call = lambda *_args, **_kwargs: None
         window = None
@@ -395,18 +395,52 @@ class MailNativeUXSmoke(unittest.TestCase):
             window = EnkyronWindow()
             window.show()
             window.toggle_mail_window()
-            self.assertTrue(window.mail_detached_window.isVisible())
+            window.toggle_calendar_window()
+            self.app.processEvents()
+            self.assertFalse(window.isMinimized())
+            self.assertTrue(window.isVisible())
+            mail = window.mail_detached_window
+            calendar = window.calendar_detached_window
+            self.assertIsNotNone(mail)
+            self.assertIsNotNone(calendar)
+            self.assertTrue(mail.isVisible())
+            self.assertTrue(calendar.isVisible())
+            # Standard window borders + a single return button in the module.
+            self.assertEqual(len(mail.findChildren(
+                type(window.mail_detach_button), "enkyronMailDetach")), 1)
+            self.assertEqual(len(calendar.findChildren(
+                type(window.calendar_view.detach_button), "enkyronCalendarDetach")), 1)
+            self.assertEqual(len(mail.findChildren(
+                type(window.mail_detach_button), "enkyronMailDetach")), 1)
+            self.assertEqual(len(mail.toolBars()) if hasattr(mail, "toolBars")
+                             else len(mail.findChildren(__import__(
+                               "PySide6.QtWidgets", fromlist=["QToolBar"]).QToolBar)), 0)
             from PySide6.QtWidgets import QPushButton
-            switch = window.mail_detach_placeholder.findChild(QPushButton)
-            self.assertEqual(switch.text(), "Switch to Mail")
-            switch.click()
-            self.assertTrue(window.isMinimized())
-            self.assertTrue(window.mail_detached_window.isVisible())
-            window.mail_detached_window.close()
+            self.assertFalse(window.mail_detach_placeholder.findChildren(QPushButton))
+            self.assertFalse(window.calendar_detach_placeholder.findChildren(QPushButton))
+            self.assertIn("another window",
+                          window.mail_detach_placeholder.findChildren(
+                            __import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel)[0].text())
+            # Switching modules must never minimise ENKYRON or force-focus
+            # either detached window.
+            window.navigation.setCurrentRow(1)
+            window.navigation.setCurrentRow(3)
+            window.navigation.setCurrentRow(4)
+            self.assertFalse(window.isMinimized())
+            self.assertTrue(mail.isVisible())
+            self.assertTrue(calendar.isVisible())
+            window.mail_detach_button.click()
+            self.assertIsNone(window.mail_detached_window)
+            self.assertIs(window.crm_tabs.widget(3), window.mail_page)
+            self.assertTrue(window.isVisible())
+            window.calendar_view.detach_button.click()
+            self.assertIsNone(window.calendar_detached_window)
+            self.assertIs(window.pages.widget(3), window.calendar_view)
         finally:
             if window:
                 self._dispose(window)
             DesktopBridge.call = prior_bridge
+
 
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
