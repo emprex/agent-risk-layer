@@ -354,12 +354,23 @@ class MailInboxView(QWidget):
         self.local_labels = labels if isinstance(labels, list) else []
 
     def select_local_folder(self, item, _column):
-        if not self.local_mode:
+        self.activate_local_folder(item.data(0, Qt.ItemDataRole.UserRole))
+
+    def activate_local_folder(self, folder):
+        """Navigate with one folder tree, with no secondary Sent/Drafts pages."""
+        if not self.local_mode or not isinstance(folder, str):
             return
-        folder = item.data(0, Qt.ItemDataRole.UserRole)
-        if not isinstance(folder, str) or folder == self._folder:
+        keys = {f.get("key") for f in self.local_folders if isinstance(f, dict)}
+        if folder not in keys or folder == self._folder:
             return
         self._folder = folder
+        for row in range(self.folder_tree.topLevelItemCount()):
+            node = self.folder_tree.topLevelItem(row)
+            if node.data(0, Qt.ItemDataRole.UserRole) == folder:
+                self.folder_tree.blockSignals(True)
+                self.folder_tree.setCurrentItem(node)
+                self.folder_tree.blockSignals(False)
+                break
         self._clear_threads("No saved messages in this folder.")
         if self.selected_mailbox is not None:
             self.folderChanged.emit(folder)
@@ -624,7 +635,7 @@ class MailInboxView(QWidget):
                      if kind == "drafts" else
                      "Submitted to provider" if record.get("outcome") == "accepted"
                      else "Submission uncertain")
-            label = recipient + "\\n" + subject + "\\n" + state
+            label = recipient + "\n" + subject + "\n" + state
             if date:
                 label += " · " + date
             item = QListWidgetItem(label)
