@@ -90,7 +90,7 @@ export async function localMailList(pool,actor,input={}){
   )).rows;
   return {mailbox,folder,items:rows,has_more:rows.length>=200,source:'local'};
 }
-export async function syncMailHeaders(pool,actor,input){
+export async function syncMailHeaders(pool,actor,input,{listThreads=mailThreads}={}){
   const key=scope(actor),chosen=input?.mailbox||'all';
   if(chosen!=='all')requireMailbox(chosen);
   const selected=chosen==='all'?MAILBOXES:[chosen];
@@ -101,7 +101,7 @@ export async function syncMailHeaders(pool,actor,input){
     const batch=await Promise.allSettled(requests.slice(offset,offset+2).map(
       async request=>({
         ...request,
-        result:await mailThreads(pool,actor,request.mailbox,request.folder)
+        result:await listThreads(pool,actor,request.mailbox,request.folder)
       })
     ));
     results.push(...batch);
@@ -142,13 +142,13 @@ export async function localMailMessages(pool,actor,input){
     'ORDER BY created_at ASC LIMIT 50',[key,mailbox,thread])).rows;
   return {mailbox,thread_id:thread,items:rows,source:'local'};
 }
-export async function fetchAndCacheThread(pool,actor,input){
+export async function fetchAndCacheThread(pool,actor,input,{listMessages=mailMessages}={}){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   const exists=(await pool.query(
     'SELECT thread_id FROM enkyron_mail_local_threads WHERE workspace_key=$1 '+
     'AND mailbox_key=$2 AND thread_id=$3',[key,mailbox,thread])).rows[0];
   if(!exists)throw Error('Mail thread not yet indexed locally');
-  const response=await mailMessages(pool,actor,mailbox,thread);
+  const response=await listMessages(pool,actor,mailbox,thread);
   const items=(response.items||[]).slice(0,30);
   await withTransaction(pool,async client=>{
     for(const item of items){
