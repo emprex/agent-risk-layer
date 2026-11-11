@@ -166,6 +166,70 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self._dispose(window)
             DesktopBridge.call = prior
 
+    def test_unified_sent_draft_list_and_stale_preview_guard(self):
+        ui = MailInboxView()
+        requests = []
+        ui.localRecordRequested.connect(
+            lambda kind, row: requests.append((kind, row))
+        )
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.activate_local_folder("sent")
+            self.assertEqual(ui.selected_folder, "sent")
+            self.assertTrue(ui.show_local_records("sent", [
+                {"mailbox_key": "direction", "recipient_email": "buyer@example.invalid",
+                 "subject": "Proposal", "outcome": "accepted"}
+            ]))
+            self.assertEqual(ui.thread_list.count(), 1)
+            ui.thread_list.setCurrentRow(0)
+            self.assertEqual(requests, [("sent", 0)])
+            self.assertTrue(ui.show_local_record_preview(
+                "sent", 0, "Safe text only", "Delivery not confirmed"
+            ))
+            self.assertEqual(ui.body.toPlainText(), "Safe text only")
+            ui.activate_local_folder("drafts")
+            self.assertTrue(ui.show_local_records("drafts", [
+                {"mailbox_key": "support", "recipient_email": "lead@example.invalid",
+                 "subject": "Initial response", "mail_state": "draft"}
+            ]))
+            self.assertEqual(ui.thread_list.count(), 1)
+            self.assertFalse(ui.show_local_record_preview(
+                "sent", 0, "Stale content", "Wrong folder"
+            ))
+            self.assertNotEqual(ui.body.toPlainText(), "Stale content")
+        finally:
+            self._dispose(ui)
+
+    def test_mail_and_calendar_detach_and_reattach(self):
+        prior = DesktopBridge.call
+        DesktopBridge.call = lambda _self, command, arg="", payload=None, callback=None: None
+        window = None
+        try:
+            window = EnkyronWindow()
+            mail_widget = window.mail_page
+            calendar_widget = window.calendar_view
+            window.toggle_mail_window()
+            window.toggle_calendar_window()
+            self.assertIsNotNone(window.mail_detached_window)
+            self.assertIsNotNone(window.calendar_detached_window)
+            self.assertIs(window.mail_detached_window.centralWidget(), mail_widget)
+            self.assertIs(window.calendar_detached_window.centralWidget(), calendar_widget)
+            self.assertTrue(window.mail_detached_window.isVisible())
+            self.assertTrue(window.calendar_detached_window.isVisible())
+            self.assertEqual(window.pages.count(), 4)
+            window.mail_detached_window.close()
+            self.assertIsNone(window.mail_detached_window)
+            self.assertIs(window.crm_tabs.widget(3), mail_widget)
+            window.calendar_detached_window.close()
+            self.assertIsNone(window.calendar_detached_window)
+            self.assertIs(window.pages.widget(3), calendar_widget)
+            self.assertEqual(window.pages.count(), 4)
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = prior
+
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
         calls = []
@@ -188,8 +252,13 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(window.crm_tabs.currentIndex(), 3)
             self.assertIn("crm-mail-drafts", [call[0] for call in calls])
             self.assertEqual(window.crm_mail_folders.currentIndex(), 0)
+            self.assertFalse(window.crm_mail_folders.tabBar().isVisible())
             window.mail_inbox.local_drafts_button.click()
-            self.assertEqual(window.crm_mail_folders.currentIndex(), 2)
+            self.assertEqual(window.mail_inbox.selected_folder, "drafts")
+            self.assertEqual(window.crm_mail_folders.currentIndex(), 0)
+            window.mail_inbox.activate_local_folder("sent")
+            self.assertEqual(window.mail_inbox.selected_folder, "sent")
+            self.assertEqual(window.crm_mail_folders.currentIndex(), 0)
             window.mail_inbox.client_desk_button.click()
             self.assertEqual(window.navigation.currentRow(), 1)
             window.navigation.setCurrentRow(2)
