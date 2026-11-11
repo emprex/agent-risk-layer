@@ -113,7 +113,7 @@ async function readAllAssessmentTriages(options) {
   for (const batch of index.batches) {
     triages.push(await triageAssessmentBatch(queue, options, batch));
   }
-  return { index, triages };
+  return { index, triages, queue };
 }
 
 function numberedReviewPacks(review) {
@@ -1256,7 +1256,7 @@ export async function runLocalAssessment(repositoryPath, request, options, local
   }
 
   if (/^show assessment evidence requests[.!?]*$/i.test(request.trim())) {
-    const { index, triages } = await readAllAssessmentTriages(options);
+    const { index, triages, queue } = await readAllAssessmentTriages(options);
     const review = buildAssessmentEvidenceReviewPacks(index, triages);
     const packs = numberedReviewPacks(review);
     const presentation = {
@@ -1264,6 +1264,9 @@ export async function runLocalAssessment(repositoryPath, request, options, local
       controlsReviewed: review.assessmentControls,
       excludedControls: review.excludedControls,
       criterionCount: review.criterionCount,
+      queueLanes: Object.fromEntries(
+        Object.entries(queue.lanes).map(([lane,items]) => [lane,items.length])
+      ),
       summary: review.summary,
       activeLineageExceptions: review.lineageExceptions,
       packs: packs.map(pack => ({
