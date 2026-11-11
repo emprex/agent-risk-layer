@@ -82,3 +82,20 @@ test('rejects malformed provider list and duplicate inbox IDs',async()=>{
   assert.throws(()=>createResendInboxReader({organizationId:org,
     mailboxes:{direction,support:direction},credentialProvider:async()=>''}),/distinct/);
 });
+
+
+test('provider reader never silently truncates an over-limit received text body',async()=>{
+  const seen={tokenCalls:0,calls:[]};
+  const reader=setup(async()=>({ok:true,json:async()=>({
+    data:[{id:email,from:'client@example.invalid',
+      text:'X'.repeat(20010),subject:'Long mail'}],has_more:false
+  })}),seen);
+  const data=await reader.listThreadEmails({
+    principal:owner,mailbox:'direction',threadId:thread
+  });
+  // 20,001 triggers repository refusal under schema 112; 20,000 would
+  // silently store a truncated message as though the full body were saved.
+  assert.equal(data.items[0].text.length,20001);
+  assert.equal(seen.calls.length,1);
+  assert.equal(seen.calls[0].options.method,'GET');
+});
