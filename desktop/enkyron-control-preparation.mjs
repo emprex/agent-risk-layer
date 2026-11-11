@@ -141,3 +141,20 @@ export async function prepareTicketControlDossiers(pool,ticketId,{
     refusal('assessment changed during preparation; reopen the ticket');
   return {...proposal,ticket_id:ticketId};
 }
+
+/**
+ * The dialog gets a complete queue + preparation in ONE IPC request.
+ * This avoids reopening 108 control details just to discover the required
+ * evidence and avoids a duplicate operator button for batch preparation.
+ */
+export async function readPreparedTicketControlQueue(pool,ticketId,{
+  queueReader=null,
+  scopeReader=readLinkedAssessmentContext
+}={}){
+  const {readTicketControlQueue}=await import('./enkyron-ticket-controls.mjs');
+  const queue=await (queueReader||readTicketControlQueue)(pool,ticketId);
+  const preparation=await prepareTicketControlDossiers(pool,ticketId,{
+    scopeReader,queueReader:async()=>queue
+  });
+  return {...queue,preparation};
+}
