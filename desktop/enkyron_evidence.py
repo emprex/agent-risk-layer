@@ -74,11 +74,24 @@ def read_evidence_request(
             or not isinstance(result.get("packs"), list)
         ):
             return refused("ARL evidence scope or authority mismatch")
+        lanes = result.get("queue_lanes")
+        lane_names = (
+            "human_applicability", "test_planning", "evidence_collection",
+            "human_decision", "follow_up_blocked", "review_required",
+        )
+        if lanes is not None and (
+            not isinstance(lanes, dict) or set(lanes) != set(lane_names) or
+            any(type(lanes[key]) is not int or lanes[key] < 0 for key in lane_names) or
+            sum(lanes.values()) != 108 or
+            lanes["test_planning"] + lanes["evidence_collection"] != result["assessment_controls"]
+        ):
+            return refused("Control work queue scope mismatch")
         return {
             "available": True, "kind": "summary",
             "assessment_controls": result["assessment_controls"],
             "other_workflow_controls": result["other_workflow_controls"],
             "criterion_count": result["criterion_count"],
+            "queue_lanes": lanes,
             "counts": result["counts"], "packs": result["packs"],
             "evidence_accepted": False, "tests_executed": 0,
             "readiness_decision": "not_evaluated",
