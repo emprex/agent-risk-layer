@@ -1356,6 +1356,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
+        self.mail_inbox.forwardRequested.connect(self.prepare_mail_forward)
         self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
         self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
@@ -2626,6 +2627,79 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("mail-link-sent", payload=payload, callback=linked)
 
         self.bridge.call("crm-mail-recipients", email, callback=received)
+
+    def prepare_mail_forward(self, mailbox, thread_id):
+        """Copy an explicitly chosen saved text message into an unsent draft.
+
+        This is a text-only forward, never a provider-side forward and never
+        an automated send. No attachments are copied or silently claimed.
+        """
+        if mailbox not in ("direction", "support") or not isinstance(thread_id, str):
+            return
+        if (self.mail_inbox.current_thread_mailbox != mailbox
+                or self.mail_inbox.current_thread_id != thread_id):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+
+        def received(data, error):
+            if (self.mail_inbox.current_thread_mailbox != mailbox
+                    or self.mail_inbox.current_thread_id != thread_id):
+                return
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Forward",
+                    "Saved messages are unavailable in NEMORYTH.")
+                return
+            if data.get("has_more"):
+                QMessageBox.warning(self, "Forward",
+                    "This conversation has more than 50 saved messages. "
+                    "Forwarding it from an incomplete preview is blocked.")
+                return
+            items = data.get("items")
+            if not isinstance(items, list) or not items:
+                QMessageBox.warning(self, "Forward",
+                    "No saved message is available to forward.")
+                return
+            source = items[-1]
+            if not isinstance(source, dict):
+                return
+            body = str(source.get("text") or "")
+            if not body.strip() or source.get("html_only") and not body.strip():
+                QMessageBox.warning(self, "Forward",
+                    "This message has no saved plain-text content. "
+                    "HTML or attachments cannot be forwarded here.")
+                return
+            header = (
+                "\n\n---------- Forwarded text-only message ----------\n"
+                "From: {}\nDate: {}\nSubject: {}\n\n"
+            ).format(
+                str(source.get("from") or "")[:254],
+                str(source.get("created_at") or "")[:64],
+                str(source.get("subject") or "")[:190])
+            content = header + body
+            if len(content.encode("utf-8")) > 11000:
+                QMessageBox.warning(self, "Forward",
+                    "This saved message is too large for the current "
+                    "text-only draft limit. Nothing was truncated or sent.")
+                return
+            QMessageBox.information(self, "Text-only forwarding",
+                "A new unsent draft will open. Review its contents and enter "
+                "the recipient yourself. Attachments and HTML are not included.")
+            subject = str(source.get("subject") or
+                          self.mail_inbox.subject.text() or "Message")[:190]
+            self.show_mail_draft_dialog({
+                "mailbox_key": mailbox,
+                "recipient_email": "",
+                "subject": subject if subject.casefold().startswith("fwd:")
+                           else "Fwd: " + subject[:185],
+                "body_text": content,
+                "company_name_at_creation": "Independent email"
+            })
+
+        self.bridge.call("mail-local-messages",
+            payload={"mailbox": mailbox, "thread_id": thread_id},
+            callback=received)
 
     def open_mail_compose(self):
         """New business email from Mail, no CRM company or login required."""
