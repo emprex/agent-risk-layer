@@ -77,10 +77,18 @@ class CalendarEntryDialog(QDialog):
         cancel.clicked.connect(self.reject)
         self.save_button = QPushButton("Save")
         self.save_button.setObjectName("enkyronCalendarSave")
-        self.save_button.clicked.connect(self.accept)
+        self.save_button.clicked.connect(self._validated_accept)
         buttons.addWidget(cancel)
         buttons.addWidget(self.save_button)
         layout.addLayout(buttons)
+
+    def _validated_accept(self):
+        try:
+            self.build_payload()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Check entry", str(exc))
+            return
+        self.accept()
 
     def build_payload(self):
         title = self.title_input.text().strip()
