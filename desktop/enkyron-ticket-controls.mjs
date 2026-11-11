@@ -74,6 +74,55 @@ function safeControlItem(item){
     next_action:String(item.nextAction||'').slice(0,500)};
 }
 
+/**
+ * Read-only source preparation from the existing ARL frozen Inspector.
+ * This is a cross-control technical brief, NOT 108 applicability verdicts.
+ * No database changes, provider calls, active tools or model conclusions.
+ */
+export async function prepareTicketSourceReview(pool,ticketId,{
+  inspector=null,scopeReader=readLinkedAssessmentContext
+}={}) {
+  if(!UUID.test(ticketId||''))refused('valid ticket required for source review');
+  const scope=await scopeReader(pool,ticketId);
+  const runInspector=inspector || (await import('../src/agent/tools/inspect-frozen-repository.mjs')).inspectFrozenRepository;
+  const frozen=await runInspector(scope.target_reference);
+  const bundle=frozen?.inspection;
+  if(frozen?.type!=='frozen_inspection' ||
+     frozen?.binding?.verified!==true ||
+     frozen?.target?.dirty!==false ||
+     frozen?.target?.revision!==scope.target_sha ||
+     frozen?.binding?.revisionBefore!==scope.target_sha ||
+     frozen?.binding?.revisionAfter!==scope.target_sha ||
+     bundle?.schema!=='arl.inspection.bundle.v1' ||
+     bundle?.scope?.mode!=='read-only-static-inspection' ||
+     !Array.isArray(bundle.findings))
+    refused('source inspection has no verified exact-SHA binding');
+  const current=await scopeReader(pool,ticketId);
+  if(current.snapshot_id!==scope.snapshot_id ||
+     current.project_id!==scope.project_id ||
+     current.target_sha!==scope.target_sha)
+    refused('assessment changed while the source was inspected');
+  const safeInteger=n=>Number.isSafeInteger(n)&&n>=0?n:null;
+  const findings=bundle.findings.slice(0,5).map(f=>({
+    rule_id:String(f.ruleId||'').slice(0,48),
+    title:String(f.title||'').slice(0,160),
+    severity:String(f.severity||'').slice(0,20)
+  }));
+  return {
+    available:true,ticket_id:ticketId,snapshot_id:scope.snapshot_id,
+    target_sha:scope.target_sha,
+    scanner_version:String(bundle.scanner?.version||'').slice(0,40),
+    files_inspected:safeInteger(bundle.scope?.filesInspected),
+    files_discovered:safeInteger(bundle.scope?.filesDiscovered),
+    truncated:bundle.scope?.truncatedByLimit===true,
+    candidate_count:bundle.findings.length,observations:findings,
+    scope:'frozen_source_only',
+    decisions_recorded:0,security_verdict:false,tests_executed:0,
+    human_review_required:true,
+    notice:'Prepared by ARL frozen source Inspector. Candidate observations are NOT validated findings or control applicability decisions. Declared purpose, architecture, permissions and change approval still require human evidence.'
+  };
+}
+
 export async function readTicketControlQueue(pool,ticketId){
   const {scope,binding}=await canonicalControlBinding(pool,ticketId);
   const {getControlIntelligence}=await controlApi();
