@@ -35,8 +35,15 @@ class NewCompanyWindowSmoke(unittest.TestCase):
             dialog.move(120,100)
             self.assertEqual(dialog.pos().x(),120)
             self.assertEqual(dialog.pos().y(),100)
-            # Existing customer text fields are unchanged and the URL stays
-            # left-aligned after pasting from a browser.
+            # Sector is a controlled vocabulary; users cannot invent variants.
+            self.assertFalse(app.crm_sector_input.isEditable())
+            sectors = [app.crm_sector_input.itemText(i)
+                       for i in range(app.crm_sector_input.count())]
+            self.assertIn("AI & Automation", sectors)
+            self.assertIn("Software & IT Services", sectors)
+            app.crm_sector_input.setCurrentText("AI & Automation")
+            self.assertEqual(app.crm_sector_input.currentText(), "AI & Automation")
+            # The URL stays left-aligned after pasting from a browser.
             self.assertTrue(app.crm_website_input.alignment()
                             & Qt.AlignmentFlag.AlignLeft)
             app.crm_website_input.setText("https://get-zeus.co/")
