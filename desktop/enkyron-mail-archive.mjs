@@ -143,6 +143,57 @@ export async function archiveNextMailBatch(pool,actor,input={},{
     note:'Full content stored inert. Attachments metadata quarantined; bytes not yet retrieved or released.'};
 }
 
+// Internal-only storage primitive. A future authenticated Resend adapter must
+// verify the provider message/attachment mapping BEFORE passing any bytes.
+// Do not expose through the bridge; there is deliberately no release/open API.
+export async function quarantineAttachmentBytes(pool,actor,input){
+  const key=scope(actor),mailbox=mailboxName(input?.mailbox);
+  const message=uuid(input?.message_id),attachment=uuid(input?.attachment_id);
+  const bytes=input?.bytes;
+  if(!Buffer.isBuffer(bytes)||bytes.length>26214400)
+    throw Error('Invalid attachment quarantine bytes');
+  const digest=createHash('sha256').update(bytes).digest('hex');
+  if(input?.expected_sha256!==undefined&&
+      (typeof input.expected_sha256!=='string'||
+       !/^[0-9a-f]{64}$/.test(input.expected_sha256)||
+       input.expected_sha256!==digest))
+    throw Error('Attachment content digest mismatch');
+  if(!(await archiveSchemaReady(pool)))throw Error('Mail archive schema 113 not applied');
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const row=(await client.query(
+      'SELECT declared_size,content_sha256,safety_state FROM '+
+      'enkyron_mail_attachment_quarantine WHERE workspace_key=$1 '+
+      'AND mailbox_key=$2 AND message_id=$3 AND attachment_id=$4 FOR UPDATE',
+      [key,mailbox,message,attachment]
+    )).rows[0];
+    if(!row)throw Error('Attachment manifest not found in NEMORYTH');
+    if(row.safety_state==='blocked')throw Error('Attachment is blocked');
+    if(row.declared_size!==null&&Number(row.declared_size)!==bytes.length)
+      throw Error('Attachment size differs from provider manifest');
+    if(row.content_sha256!==null){
+      if(row.content_sha256!==digest)
+        throw Error('Attachment archive digest conflict');
+      await client.query('COMMIT');
+      return {quarantined:true,already_present:true,sha256:digest,
+        size:bytes.length,safety_state:'quarantined_unscanned'};
+    }
+    if(row.safety_state!=='metadata_only')
+      throw Error('Attachment quarantine state inconsistent');
+    await client.query(
+      'UPDATE enkyron_mail_attachment_quarantine SET '+
+      "content_bytes=$5,content_sha256=$6,safety_state='quarantined_unscanned' "+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND message_id=$3 AND attachment_id=$4',
+      [key,mailbox,message,attachment,bytes,digest]
+    );
+    await client.query('COMMIT');
+    return {quarantined:true,already_present:false,sha256:digest,
+      size:bytes.length,safety_state:'quarantined_unscanned'};
+  }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}
+  finally{client.release();}
+}
+
 // Status only: neither HTML nor attachment bytes may exit this IPC boundary.
 export async function mailArchiveStatus(pool,actor,input={}){
   const workspace=scope(actor),selected=input?.mailbox||'all';
