@@ -390,11 +390,33 @@ export async function syncLocalMailBodies(pool,actor,input={},{
 
 export async function localMailMessages(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
-  const rows=(await pool.query(
+  // On schema 113, prefer full archived plain text but return only a bounded
+  // preview to Qt. HTML and attachment bytes never cross the bridge.
+  const archive=(await pool.query(
+    "SELECT to_regclass('enkyron_mail_full_messages') IS NOT NULL AS ready"
+  )).rows[0]?.ready===true;
+  const query=archive?(
+    'SELECT m.message_id AS id,m.sender AS "from",m.recipients AS "to",'+
+    'm.subject,CASE WHEN a.archive_state=\'complete\' '+
+    'AND a.body_text_full IS NOT NULL THEN LEFT(a.body_text_full,20000) '+
+    'ELSE m.body_text END AS text,m.html_only,m.created_at,'+
+    'a.archive_state,COALESCE(length(a.body_text_full)>20000,FALSE) '+
+    'AS preview_truncated,'+
+    '(SELECT count(*)::int FROM enkyron_mail_attachment_quarantine q '+
+    'WHERE q.workspace_key=m.workspace_key AND q.mailbox_key=m.mailbox_key '+
+    'AND q.message_id=m.message_id) AS attachment_count '+
+    'FROM enkyron_mail_local_messages m LEFT JOIN enkyron_mail_full_messages a '+
+    'ON a.workspace_key=m.workspace_key AND a.mailbox_key=m.mailbox_key '+
+    'AND a.message_id=m.message_id '+
+    'WHERE m.workspace_key=$1 AND m.mailbox_key=$2 AND m.thread_id=$3 '+
+    'ORDER BY m.created_at ASC LIMIT 51'
+  ):(
     'SELECT message_id AS id,sender AS "from",recipients AS "to",subject,'+
     'body_text AS text,html_only,created_at FROM enkyron_mail_local_messages '+
     'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
-    'ORDER BY created_at ASC LIMIT 51',[key,mailbox,thread])).rows;
+    'ORDER BY created_at ASC LIMIT 51'
+  );
+  const rows=(await pool.query(query,[key,mailbox,thread])).rows;
   return {mailbox,thread_id:thread,items:rows.slice(0,50),
     has_more:rows.length>50,source:'local'};
 }
