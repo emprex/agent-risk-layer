@@ -80,6 +80,83 @@ class MailNativeUXSmoke(unittest.TestCase):
         finally:
             self._dispose(ui)
 
+    def test_automatic_inbox_poll_is_read_only_and_updates_ui(self):
+        previous = DesktopBridge.call
+        calls = []
+        def fake(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, payload))
+            if command == "mail-local-sync" and callback:
+                callback({"synced":True,"new_threads":1,"updated_threads":0,
+                          "partial":False}, None)
+            elif command == "mail-local-sync-bodies" and callback:
+                callback({"cached_threads":1,"failed_threads":0}, None)
+            elif command == "mail-local-list" and callback:
+                callback({"mailbox":"all","folder":"inbox","items":[{
+                    "id":THREAD,"mailbox":"direction","subject":"Gmail synthetic test",
+                    "sender":"tester@example.invalid",
+                    "last_message_at":"2026-11-11T16:00:00Z"
+                }],"has_more":False}, None)
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.mail_provider_ready = True
+            window.mail_status_loaded = True
+            window.mail_inbox.set_owner_mailboxes(CARD)
+            window.mail_inbox.set_connection_state("connected")
+            window.poll_local_inbox()
+            mail_calls = [(name,payload) for name,payload in calls
+                          if name.startswith("mail-")]
+            self.assertEqual([name for name,_ in mail_calls],[
+                "mail-local-sync","mail-local-sync-bodies","mail-local-list"])
+            self.assertEqual(mail_calls[0][1],{
+                "mailbox":"all","inbox_only":True})
+            self.assertEqual(mail_calls[1][1],{
+                "mailbox":"all","recent":True})
+            self.assertEqual(window.mail_inbox.thread_list.count(),1)
+            self.assertFalse(window._mail_auto_running)
+            self.assertNotIn("mail-send-draft",[name for name,_ in calls])
+            window._mail_sync_running = True
+            window.poll_local_inbox()
+            self.assertEqual(len(calls),3)
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = previous
+
+    def test_live_inbox_refresh_keeps_selected_reader_and_unsent_reply(self):
+        ui = MailInboxView()
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.set_connection_state("connected")
+            original={"id":THREAD,"mailbox":"direction","subject":"Existing request",
+                      "last_message_at":"2026-11-11T15:00:00Z"}
+            incoming={"id":"22222222-3333-4444-8555-666666666666",
+                      "mailbox":"direction","subject":"New incoming request",
+                      "last_message_at":"2026-11-11T16:00:00Z"}
+            self.assertTrue(ui.show_threads("all",[original]))
+            ui.thread_list.setCurrentRow(0)
+            self.assertTrue(ui.show_messages("direction",THREAD,[{
+                "text":"Original body","from":"client@example.invalid",
+                "subject":"Existing request"
+            }]))
+            self.assertTrue(ui.show_reply_editor(
+                "direction",THREAD,"client@example.invalid"))
+            ui.reply_body.setPlainText("Unsaved operator reply")
+            self.assertTrue(ui.show_threads(
+                "all",[incoming,original],False,"inbox",
+                page=0,preserve_reader=True))
+            self.assertEqual(ui.thread_list.count(),2)
+            self.assertEqual(ui.current_thread_id,THREAD)
+            self.assertEqual(ui.reply_body.toPlainText(),"Unsaved operator reply")
+            self.assertIn("Original body",ui.body.toPlainText())
+            self.assertEqual(ui.thread_list.currentItem().data(
+                __import__("PySide6.QtCore",fromlist=["Qt"]).Qt.ItemDataRole.UserRole),
+                ("direction",THREAD))
+        finally:
+            self._dispose(ui)
+
     def test_account_switch_clears_old_threads_and_never_changes_mail(self):
         ui = MailInboxView()
         changed = []
