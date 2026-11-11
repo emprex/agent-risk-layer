@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import pg from 'pg';
+import {archiveNextMailBatch,mailArchiveStatus} from '../desktop/enkyron-mail-archive.mjs';
 import {
   localMailFolders,createLocalMailFolder,renameLocalMailFolder,deleteEmptyLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
@@ -595,5 +596,133 @@ test('automatic Inbox poll uses GET-only pages and refreshes existing threads id
     await assert.rejects(syncLocalMailBodies(pool,owner,{
       mailbox:'all',recent:'yes'
     },{listMessages}),/Invalid Mail recent poll/);
+  }finally{await pool.end();}
+});
+
+
+test('schema 113 archives full mail and quarantines attachment metadata idempotently',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-mail-archive-'+crypto.randomUUID().slice(0,8);
+  const workspace='local:'+owner,thread=crypto.randomUUID();
+  const id=crypto.randomUUID(),attachment=crypto.randomUUID();
+  let providerCalls=0;
+  const getDetails=async(_pool,_actor,mailbox,threadId,messageId)=>{
+    providerCalls++;
+    assert.equal(mailbox,'direction');
+    assert.equal(threadId,thread);
+    assert.equal(messageId,id);
+    return {
+      id,mailbox,thread_id:thread,rfc_message_id:'<synthetic@example.invalid>',
+      direction:'inbound',from:'sender@example.invalid',
+      to:['direction@agentrisklayer.com'],cc:[],bcc:[],reply_to:[],
+      text:'LONG-'.repeat(5000),html:'<img src="https://tracker.invalid/x">',
+      attachments:[{
+        id:attachment,filename:'invoice.pdf',
+        content_type:'application/pdf',size:1234
+      }]
+    };
+  };
+  try{
+    const ready=(await pool.query(
+      "SELECT to_regclass('enkyron_mail_full_messages') IS NOT NULL AS ok"
+    )).rows[0].ok;
+    assert.equal(ready,true,'CI migrator must apply additive schema 113');
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'inbox','inbox','Archive test')",
+      [workspace,thread]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_messages '+
+      '(workspace_key,mailbox_key,thread_id,message_id,sender,subject,body_text) '+
+      "VALUES($1,'direction',$2,$3,'sender@example.invalid','Archive test','Short preview')",
+      [workspace,thread,id]
+    );
+    const first=await archiveNextMailBatch(pool,owner,{mailbox:'direction'},{getDetails});
+    assert.equal(first.available,true);
+    assert.equal(first.archived,1);
+    assert.equal(first.attachments_metadata,1);
+    assert.equal(first.failed,0);
+    const second=await archiveNextMailBatch(pool,owner,{mailbox:'direction'},{getDetails});
+    assert.equal(second.archived,0);
+    assert.equal(providerCalls,1); // no provider re-fetch of archived message
+    const full=(await pool.query(
+      'SELECT body_text_full,body_html_inert,provider_sha256,archive_state '+
+      'FROM enkyron_mail_full_messages WHERE workspace_key=$1',[workspace]
+    )).rows;
+    assert.equal(full.length,1);
+    assert.equal(full[0].body_text_full.length,25000);
+    assert.equal(full[0].archive_state,'complete');
+    assert.match(full[0].body_html_inert,/tracker.invalid/);
+    assert.match(full[0].provider_sha256,/^[0-9a-f]{64}$/);
+    const unsafe=(await pool.query(
+      'SELECT original_filename,content_type,declared_size,content_bytes,'+
+      'content_sha256,safety_state FROM enkyron_mail_attachment_quarantine '+
+      'WHERE workspace_key=$1',[workspace]
+    )).rows;
+    assert.equal(unsafe.length,1);
+    assert.equal(unsafe[0].original_filename,'invoice.pdf');
+    assert.equal(unsafe[0].content_bytes,null);
+    assert.equal(unsafe[0].content_sha256,null);
+    assert.equal(unsafe[0].safety_state,'metadata_only');
+    const status=await mailArchiveStatus(pool,owner,{mailbox:'direction'});
+    assert.equal(status.available,true);
+    assert.equal(status.cached,1);
+    assert.equal(status.complete,1);
+    assert.equal(status.quarantined_metadata,1);
+    assert.equal((await pool.query(
+      'SELECT body_text FROM enkyron_mail_local_messages '+
+      'WHERE workspace_key=$1',[workspace]
+    )).rows[0].body_text,'Short preview'); // historical table untouched
+    const other=await mailArchiveStatus(pool,'another-user');
+    assert.equal(other.complete,0);
+  }finally{await pool.end();}
+});
+
+test('schema 113 rejects untrusted archive payload without false full-content claims',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-mail-archive-refuse-'+crypto.randomUUID().slice(0,8);
+  const workspace='local:'+owner,thread=crypto.randomUUID();
+  const id=crypto.randomUUID(),attachment=crypto.randomUUID();
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'inbox','inbox','Safe check')",
+      [workspace,thread]
+    );
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_messages '+
+      '(workspace_key,mailbox_key,thread_id,message_id,sender,subject,body_text) '+
+      "VALUES($1,'direction',$2,$3,'client@example.invalid','Safe check','preview')",
+      [workspace,thread,id]
+    );
+    const wrong=await archiveNextMailBatch(pool,owner,{},{
+      getDetails:async()=>({id:attachment,mailbox:'direction',thread_id:thread})
+    });
+    assert.equal(wrong.failed,1);
+    assert.equal(wrong.archived,0);
+    const corrupt=await archiveNextMailBatch(pool,owner,{},{
+      getDetails:async()=>({
+        id,mailbox:'direction',thread_id:thread,
+        text:'original',html:null,from:'client@example.invalid',
+        to:[],cc:[],bcc:[],reply_to:[],
+        attachments:[{id:attachment,filename:'a.pdf',size:999999999}]
+      })
+    });
+    assert.equal(corrupt.failed,1);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_full_messages WHERE workspace_key=$1',
+      [workspace]
+    )).rows[0].n,0);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_attachment_quarantine '+
+      'WHERE workspace_key=$1',[workspace]
+    )).rows[0].n,0);
   }finally{await pool.end();}
 });
