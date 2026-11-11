@@ -516,3 +516,84 @@ test('folder rename and empty-delete preserve mail without unsupported audit kin
     assert.deepEqual(events,['folder_created','thread_moved']);
   }finally{await pool.end();}
 });
+
+
+test('automatic Inbox poll uses GET-only pages and refreshes existing threads idempotently',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-mail-auto-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID();
+  const message1=crypto.randomUUID(),message2=crypto.randomUUID();
+  const providerCalls=[];
+  let last='2026-11-11T16:00:00Z';
+  let messages=[{
+    id:message1,from:'gmail@example.invalid',to:['direction@example.invalid'],
+    subject:'Synthetic Gmail test',text:'Hello, automatic Inbox',
+    created_at:last,html_only:false
+  }];
+  const listThreads=async(_pool,_actor,mailbox,folder,after=null)=>{
+    providerCalls.push(['GET','threads',mailbox,folder,after]);
+    assert.equal(folder,'inbox');
+    return {items:mailbox==='direction'?[{
+      id:thread,subject:'Synthetic Gmail test',last_message_at:last,
+      unread:true
+    }]:[],has_more:false};
+  };
+  const listMessages=async(_pool,_actor,mailbox,id,after=null)=>{
+    providerCalls.push(['GET','messages',mailbox,id,after]);
+    assert.equal(mailbox,'direction');
+    assert.equal(id,thread);
+    return {items:messages,has_more:false};
+  };
+  try{
+    const first=await syncMailHeaders(pool,owner,{
+      mailbox:'all',inbox_only:true
+    },{listThreads});
+    assert.equal(first.new_threads,1);
+    assert.equal(first.updated_threads,0);
+    assert.equal(first.partial,false);
+    assert.equal(providerCalls.filter(x=>x[1]==='threads').length,2);
+    const cached=await syncLocalMailBodies(pool,owner,{
+      mailbox:'all',recent:true
+    },{listMessages});
+    assert.equal(cached.cached_threads,1);
+    assert.equal(cached.failed_threads,0);
+    const repeat=await syncMailHeaders(pool,owner,{
+      mailbox:'all',inbox_only:true
+    },{listThreads});
+    assert.equal(repeat.new_threads,0);
+    assert.equal(repeat.updated_threads,0);
+    // A new Gmail reply to an existing thread must be imported too.
+    last='2026-11-11T16:05:00Z';
+    messages.push({
+      id:message2,from:'gmail@example.invalid',to:['direction@example.invalid'],
+      subject:'Re: Synthetic Gmail test',text:'Second message in the same thread',
+      created_at:last,html_only:false
+    });
+    const newer=await syncMailHeaders(pool,owner,{
+      mailbox:'all',inbox_only:true
+    },{listThreads});
+    assert.equal(newer.new_threads,0);
+    assert.equal(newer.updated_threads,1);
+    await syncLocalMailBodies(pool,owner,{mailbox:'all',recent:true},{listMessages});
+    await syncLocalMailBodies(pool,owner,{mailbox:'all',recent:true},{listMessages});
+    const unique=(await pool.query(
+      'SELECT count(*)::int AS total, '+
+      'count(DISTINCT message_id)::int AS distinct_messages '+
+      'FROM enkyron_mail_local_messages WHERE workspace_key=$1',[scope]
+    )).rows[0];
+    assert.equal(unique.total,2);
+    assert.equal(unique.distinct_messages,2);
+    assert.equal((await localMailMessages(pool,owner,{
+      mailbox:'direction',thread_id:thread
+    })).items.length,2);
+    assert.ok(providerCalls.every(x=>x[0]==='GET'));
+    await assert.rejects(syncMailHeaders(pool,owner,{
+      mailbox:'all',inbox_only:'true'
+    },{listThreads}),/Invalid Mail inbox poll/);
+    await assert.rejects(syncLocalMailBodies(pool,owner,{
+      mailbox:'all',recent:'yes'
+    },{listMessages}),/Invalid Mail recent poll/);
+  }finally{await pool.end();}
+});
