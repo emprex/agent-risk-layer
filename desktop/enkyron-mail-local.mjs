@@ -75,17 +75,23 @@ export async function localMailList(pool,actor,input={}){
     throw Error('Invalid Mail search');
   const rows=(await pool.query(
     'SELECT t.mailbox_key AS mailbox,t.thread_id AS id,t.subject,'+
+    'COALESCE(last_mail.sender, \'\') AS sender,'+
     't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder,'+
     "COALESCE(string_agg(DISTINCT l.name, ', '), '') AS labels "+
     'FROM enkyron_mail_local_threads t LEFT JOIN enkyron_mail_thread_labels tl '+
     'ON tl.workspace_key=t.workspace_key AND tl.mailbox_key=t.mailbox_key '+
     'AND tl.thread_id=t.thread_id LEFT JOIN enkyron_mail_local_labels l '+
     'ON l.workspace_key=tl.workspace_key AND l.label_id=tl.label_id '+
+    'LEFT JOIN LATERAL (SELECT m.sender FROM enkyron_mail_local_messages m '+
+    'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
+    'AND m.thread_id=t.thread_id ORDER BY m.created_at DESC LIMIT 1) '+
+    'last_mail ON TRUE '+
     'WHERE t.workspace_key=$1 AND t.folder_key=$2 '+
     'AND ($3::text=\'all\' OR t.mailbox_key=$3) '+
     "AND ($4::text='' OR t.subject ILIKE '%' || $4 || '%') "+
-    'GROUP BY t.mailbox_key,t.thread_id,t.subject,t.last_message_at,t.unread,'+
-    't.flagged,t.folder_key,t.provider_folder ORDER BY t.last_message_at DESC LIMIT 51',
+    'GROUP BY t.mailbox_key,t.thread_id,t.subject,last_mail.sender,'+
+    't.last_message_at,t.unread,t.flagged,t.folder_key,t.provider_folder '+
+    'ORDER BY t.last_message_at DESC LIMIT 51',
     [key,folder,mailbox,search]
   )).rows;
   return {mailbox,folder,items:rows.slice(0,50),has_more:rows.length>50,source:'local'};
