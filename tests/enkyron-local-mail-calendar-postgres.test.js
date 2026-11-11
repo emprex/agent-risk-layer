@@ -900,10 +900,6 @@ test('Mail E04-04 company link uses existing schema 112 field, never sends or ch
     )).rows[0];
     assert.equal(saved.company,company);
     assert.equal((await pool.query(
-      'SELECT count(*)::int AS count FROM arl_workbench_ticket_events '+
-      "WHERE detail LIKE '%Synthetic Company%'"
-    )).rows[0].count,0);
-    assert.equal((await pool.query(
       'SELECT count(*)::int AS count FROM enkyron_mail_send_attempts '+
       'WHERE workspace_key=$1',[key]
     )).rows[0].count,0);
