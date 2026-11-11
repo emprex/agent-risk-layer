@@ -146,12 +146,12 @@ async function commitLink(pool, ticketId, actor, target, candidate) {
          linked_assessment_id=$2,target_kind='git',target_reference=$3,updated_at=NOW()
        WHERE id=$4`,
       [current.projectId,current.assessmentId,target.repositoryPath,ticketId]);
-    const auditNote = 'Canonical ARL assessment linked by local operator.\\n' +
-      'Project: ' + current.projectId + '\\n' +
-      'Assessment: ' + current.assessmentId + '\\n' +
-      'Snapshot: ' + current.snapshotId + '\\n' +
-      'Git target: ' + target.repositoryPath + '\\n' +
-      'Frozen commit: ' + target.sha + '\\n' +
+    const auditNote = 'Canonical ARL assessment linked by local operator.\n' +
+      'Project: ' + current.projectId + '\n' +
+      'Assessment: ' + current.assessmentId + '\n' +
+      'Snapshot: ' + current.snapshotId + '\n' +
+      'Git target: ' + target.repositoryPath + '\n' +
+      'Frozen commit: ' + target.sha + '\n' +
       'Administrative binding only; no test authorisation or finding validation.';
     // Reuse the EXISTING ticket note/event ledger, whose event_type CHECK
     // permits note_added. Do not fabricate a new event enum or run a migration.
