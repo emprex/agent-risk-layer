@@ -433,7 +433,7 @@ async function main() {
       command === 'mail-local-folder-delete' ? await deleteEmptyLocalMailFolder(pool,os.userInfo().username,payload) :
       command === 'mail-local-list' ? await localMailList(pool,os.userInfo().username,payload) :
       command === 'mail-local-sync' ? await syncMailHeaders(pool,os.userInfo().username,payload) :
-      command === 'mail-local-sync-bodies','mail-local-archive-sync','mail-archive-status' ? await syncLocalMailBodies(pool,os.userInfo().username,payload) :
+      command === 'mail-local-sync-bodies' ? await syncLocalMailBodies(pool,os.userInfo().username,payload) :
       command === 'mail-local-archive-sync' ? await archiveNextMailBatch(pool,os.userInfo().username,payload) :
       command === 'mail-archive-status' ? await mailArchiveStatus(pool,os.userInfo().username,payload) :
       command === 'mail-local-messages' ? await localMailMessages(pool,os.userInfo().username,payload) :
