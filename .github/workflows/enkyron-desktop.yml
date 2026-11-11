@@ -226,7 +226,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget, QComboBox
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
@@ -675,8 +675,14 @@ jobs:
           assert window.crm_record_history_dialog.isVisible()
           window.crm_record_history_dialog.reject()
           fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
-          assert len(fields) == 6
-          fields[2].setText("Cybersecurity services")
+          assert len(fields) == 5
+          sector_selectors = [
+              box for box in window.crm_record_edit_dialog.findChildren(QComboBox)
+              if box.findText("Cybersecurity") >= 0
+          ]
+          assert len(sector_selectors) == 1
+          assert not sector_selectors[0].isEditable()
+          sector_selectors[0].setCurrentText("Cybersecurity")
           rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
           rationale.setPlainText(
               "Correcting an operator-entered sector after checking the original source."
@@ -691,7 +697,7 @@ jobs:
           assert calls[-1][0] == "crm-edit-company"
           assert calls[-1][2]["id"] == company_id
           assert calls[-1][2]["expected_version"] == 1
-          assert calls[-1][2]["sector"] == "Cybersecurity services"
+          assert calls[-1][2]["sector"] == "Cybersecurity"
           assert calls[-1][2]["confirmed"] is True
           assert "relationship_state" not in calls[-1][2]
           window.crm_record_edit_dialog.reject()
