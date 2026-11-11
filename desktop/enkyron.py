@@ -1768,7 +1768,7 @@ class EnkyronWindow(QMainWindow):
                     or data.get("folder") != folder):
                 # Never expose provider responses, API keys or raw IPC errors.
                 import re
-                status = re.search(r"HTTP (\\d{3})", str(error or ""))
+                status = re.search(r"HTTP (\d{3})", str(error or ""))
                 detail = (" (Resend HTTP {})".format(status.group(1))
                           if status else "")
                 self.mail_inbox.set_connection_state(
