@@ -33,6 +33,50 @@ class MailNativeUXSmoke(unittest.TestCase):
         self.app.processEvents()
         gc.collect()
 
+    def test_sent_mail_not_listed_as_active_draft(self):
+        """Mail Drafts uses SQL-filtered unsent records; CRM history is separate."""
+        previous = DesktopBridge.call
+        calls = []
+        draft_id = "a24c4dba-723c-42e4-85e6-0fef70de3a92"
+        pending = [{
+            "id":draft_id, "mailbox_key":"direction",
+            "recipient_email":"client@example.invalid",
+            "subject":"Unsent proposal","mail_state":"draft","revision":1
+        }]
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command,arg))
+            if command == "mail-unsent-drafts" and callback:
+                callback({"available":True,"items":list(pending),
+                          "more":False,"kind":"unsent_mail_drafts"},None)
+            elif command == "crm-mail-draft" and callback:
+                callback({"available":True,"draft":dict(pending[0])},None)
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.mail_inbox.set_owner_mailboxes(CARD)
+            window.mail_inbox.set_connection_state("connected")
+            window.mail_inbox.activate_local_folder("drafts")
+            window.load_unsent_mail_drafts()
+            self.assertEqual(window.mail_inbox.thread_list.count(),1)
+            self.assertEqual(window.mail_unsent_items[0]["id"],draft_id)
+            self.assertTrue(any(c[0]=="mail-unsent-drafts" for c in calls))
+            captured=[]
+            window.show_mail_draft_dialog=lambda record:captured.append(record)
+            window.open_mail_local_record("drafts",0)
+            self.assertEqual([x["id"] for x in captured],[draft_id])
+            # A provider-submitted record must not be offered as an edit draft
+            # even if a backend regression accidentally returns it.
+            pending[0]["mail_state"]="provider_submitted"
+            window.load_unsent_mail_drafts()
+            self.assertEqual(window.mail_unsent_items,[])
+            self.assertEqual(window.mail_inbox.thread_list.count(),0)
+            self.assertNotIn("mail-send-draft",[x[0] for x in calls])
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = previous
+
     def test_read_full_archived_text_requires_explicit_selection(self):
         ui = MailInboxView()
         seen = []
