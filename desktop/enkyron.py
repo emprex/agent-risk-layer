@@ -1928,7 +1928,7 @@ class EnkyronWindow(QMainWindow):
                         stop("Resend header import paused. Saved mail is preserved; "
                              "press Send / Receive to retry.")
                         return
-                    state["partial"] = state["partial"] or bool(data.get("partial"))
+                    state["partial"] = bool(data.get("partial"))
                     state["cursors"] = data.get("continuation") or None
                     if data.get("more_pending"):
                         step()
