@@ -257,7 +257,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action == "operator-state" else
+        timer.start(95000 if action in ("operator-state", "assessment-link") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -290,6 +290,7 @@ class EnkyronWindow(QMainWindow):
         self.bridge = DesktopBridge(self)
         self.current_id = None
         self.current_ticket = None
+        self.assessment_link_dialog = None
         self.list_seq = 0
         self.evidence_seq = 0
         self.evidence_context = None
@@ -658,7 +659,15 @@ class EnkyronWindow(QMainWindow):
         overview_l.addWidget(self.crm_ticket_company_label)
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
-        overview_l.addWidget(section_title("OPTIONAL ARL ENGINE LINK"))
+        assessment_row = QHBoxLayout()
+        assessment_row.addWidget(section_title("CANONICAL ARL ASSESSMENT"))
+        assessment_row.addStretch()
+        self.assessment_link_button = QPushButton("Select Git target / Link assessment…")
+        self.assessment_link_button.setObjectName("primary")
+        self.assessment_link_button.setEnabled(False)
+        self.assessment_link_button.clicked.connect(self.open_assessment_link_dialog)
+        assessment_row.addWidget(self.assessment_link_button)
+        overview_l.addLayout(assessment_row)
         self.binding = make_text_area()
         self.binding.setMaximumHeight(160)
         overview_l.addWidget(self.binding)
@@ -15365,6 +15374,163 @@ class EnkyronWindow(QMainWindow):
             "Display name comes from My account; assignment and audit retain the local OS login."
         )
 
+    def open_assessment_link_dialog(self):
+        """Human-confirmed local onboarding, never an automatic target test."""
+        ticket = self.current_ticket
+        ticket_id = self.current_id
+        if (not ticket or not ticket_id or ticket.get("archived_at")
+                or ticket.get("status") == "closed"
+                or ticket.get("linked_project_id") or ticket.get("linked_assessment_id")):
+            return
+        if self.assessment_link_dialog and self.assessment_link_dialog.isVisible():
+            self.assessment_link_dialog.raise_()
+            self.assessment_link_dialog.activateWindow()
+            return
+        dialog = QDialog(self)
+        self.assessment_link_dialog = dialog
+        dialog.setWindowTitle("ENKYRON · Link an ARL assessment")
+        dialog.setMinimumWidth(690)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("CONNECT A FROZEN LOCAL GIT TARGET"))
+        explanation = QLabel(
+            "Choose the exact local Git repository for this ticket. ENKYRON "
+            "checks its commit and finds an existing canonical ARL assessment. "
+            "If none exists, you may explicitly confirm creation using the "
+            "existing ARL engine. This does not authorise security tests."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        path_row = QHBoxLayout()
+        target_field = QLineEdit()
+        target_field.setReadOnly(True)
+        target_field.setPlaceholderText("Choose a local Git repository folder")
+        path_row.addWidget(target_field, 1)
+        browse = QPushButton("Choose folder…")
+        path_row.addWidget(browse)
+        layout.addLayout(path_row)
+        status = QLabel("Nothing selected. No assessment or database changed.")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        details = make_text_area()
+        details.setMinimumHeight(115)
+        details.setMaximumHeight(175)
+        details.setPlainText("After selecting a folder, its exact SHA and existing assessment will appear here.")
+        layout.addWidget(details)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        apply = QPushButton("Confirm assessment link")
+        apply.setObjectName("primary")
+        apply.setEnabled(False)
+        buttons.addWidget(apply)
+        layout.addLayout(buttons)
+        state = {"preflight": None, "busy": False}
+
+        def choose_folder():
+            if state["busy"]:
+                return
+            folder = QFileDialog.getExistingDirectory(
+                dialog, "Select frozen Git target", str(Path.home()))
+            if not folder:
+                return
+            target_field.setText(folder)
+            state["preflight"] = None
+            state["busy"] = True
+            browse.setEnabled(False)
+            apply.setEnabled(False)
+            status.setText("Verifying the selected Git commit and canonical assessment…")
+            details.clear()
+
+            def received(data, error):
+                state["busy"] = False
+                if not dialog.isVisible() or ticket_id != self.current_id:
+                    return
+                browse.setEnabled(True)
+                if error or not isinstance(data, dict) or not data.get("available"):
+                    status.setText("Preflight blocked: " + str(error or "Not available"))
+                    return
+                state["preflight"] = data
+                candidate = data.get("project") or {}
+                target = data.get("target") or {}
+                details.setPlainText(
+                    "Git folder: {}\nCommit: {}\nMode: {}\nProject: {}\n"
+                    "Snapshot: {}\nNo active tests authorised.".format(
+                        target.get("path"), target.get("sha"),
+                        "Link existing" if data.get("mode") == "link_existing"
+                        else "Create canonical assessment then link",
+                        candidate.get("projectId") or "Not created",
+                        candidate.get("snapshotId") or "Not created")
+                )
+                apply.setText(
+                    "Link existing assessment" if data.get("mode") == "link_existing"
+                    else "Create and link assessment"
+                )
+                status.setText(data.get("notice") or "Ready for human confirmation.")
+                apply.setEnabled(True)
+
+            self.bridge.call(
+                "assessment-preflight",
+                payload={"ticket_id": ticket_id, "repository_path": folder},
+                callback=received
+            )
+
+        def confirm_link():
+            data = state["preflight"]
+            if not data or state["busy"] or ticket_id != self.current_id:
+                return
+            target = data.get("target") or {}
+            existing = data.get("mode") == "link_existing"
+            action = "link this existing assessment" if existing else "create a new canonical assessment and link it"
+            answer = QMessageBox.question(
+                dialog, "Confirm exact assessment target",
+                "Ticket: {}\nAction: {}\nGit target: {}\nSHA: {}\n\n"
+                "No security tests, findings or approvals are authorised by this step. "
+                "Proceed?".format(ticket.get("ticket_number"), action,
+                                   target.get("path"), target.get("sha")),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            state["busy"] = True
+            apply.setEnabled(False)
+            browse.setEnabled(False)
+            status.setText("Running the canonical ARL assessment binding checks…")
+            def linked(result, error):
+                state["busy"] = False
+                if not dialog.isVisible() or ticket_id != self.current_id:
+                    return
+                if error or not result or not result.get("linked"):
+                    status.setText("Assessment link blocked: " + str(error or "Not recorded"))
+                    browse.setEnabled(True)
+                    state["preflight"] = None
+                    return
+                QMessageBox.information(
+                    dialog, "Canonical assessment linked",
+                    "Project: {}\nSnapshot: {}\n\n{}".format(
+                        result.get("projectId"), result.get("snapshotId"),
+                        result.get("notice"))
+                )
+                dialog.accept()
+                selected = self.ticket_list.currentItem()
+                if selected:
+                    self.ticket_changed(selected, None)
+            self.bridge.call(
+                "assessment-link",
+                payload={"ticket_id": ticket_id,
+                         "repository_path": target.get("path"),
+                         "expected_sha": target.get("sha"),
+                         "operation": data.get("mode"),
+                         "confirmed": True},
+                callback=linked
+            )
+
+        browse.clicked.connect(choose_folder)
+        apply.clicked.connect(confirm_link)
+        dialog.show()
+
     def change_ticket_assignment(self):
         ticket = self.current_ticket
         if not ticket or not self.current_id or ticket.get("archived_at"):
@@ -15521,6 +15687,7 @@ class EnkyronWindow(QMainWindow):
         self.record_button.setEnabled(False)
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
+        self.assessment_link_button.setEnabled(False)
         self.ticket_status.clear()
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
@@ -15600,6 +15767,15 @@ class EnkyronWindow(QMainWindow):
             self.ticket_status.setCurrentIndex(0)
             self.refresh_status_action()
             self.save_button.setEnabled(active and ticket["status"] != "closed")
+            self.assessment_link_button.setEnabled(
+                active and ticket["status"] != "closed"
+                and not ticket.get("linked_project_id")
+                and not ticket.get("linked_assessment_id")
+            )
+            self.assessment_link_button.setText(
+                "Assessment linked" if ticket.get("linked_project_id")
+                else "Select Git target / Link assessment…"
+            )
             owner = ticket.get("assigned_to")
             self.owner_label.setText(
                 "Assigned to: {}".format(self.ticket_operator_display(owner))
