@@ -5,14 +5,14 @@ synthetic PASS, no test authorisation, no invented applicability or evidence.
 """
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QListWidget,
+    QCheckBox, QComboBox, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QSplitter,
     QVBoxLayout, QWidget,
 )
 
 
-class ControlReviewDialog(QDialog):
-    """One ticket, one canonical snapshot, one explicit human decision at a time."""
+class ControlReviewDialog(QWidget):
+    """Embedded ticket review pane; never a second desktop window."""
 
     def __init__(self, parent, bridge, ticket_id, on_recorded=None):
         super().__init__(parent)
@@ -23,11 +23,10 @@ class ControlReviewDialog(QDialog):
         self.detail = None
         self.sequence = 0
         self.busy = False
-        self.setWindowTitle("ENKYRON · 108-control assessment review")
-        self.resize(1040, 710)
-        self.setMinimumSize(850, 570)
-
+        self.setObjectName("enkyronEmbeddedControlReview")
         root = QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(8)
         heading = QLabel("CANONICAL CONTROL APPLICABILITY — HUMAN REVIEW")
         heading.setStyleSheet("font-weight: bold; font-size: 15px;")
         root.addWidget(heading)
@@ -46,7 +45,7 @@ class ControlReviewDialog(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.controls = QListWidget()
         self.controls.setObjectName("enkyronCanonicalControls")
-        self.controls.setMinimumWidth(285)
+        self.controls.setMinimumWidth(210)
         self.controls.currentItemChanged.connect(self.select_control)
         splitter.addWidget(self.controls)
 
@@ -59,6 +58,7 @@ class ControlReviewDialog(QDialog):
         self.info = QPlainTextEdit()
         self.info.setReadOnly(True)
         self.info.setPlaceholderText("Canonical control title, workflow stage and test objective")
+        self.info.setMinimumHeight(105)
         side_l.addWidget(self.info, 3)
 
         side_l.addWidget(QLabel("Applicability decision (never a test verdict):"))
@@ -73,7 +73,7 @@ class ControlReviewDialog(QDialog):
         self.facts_heading = QLabel("Confirmed architecture facts for non-applicability:")
         side_l.addWidget(self.facts_heading)
         self.facts = QListWidget()
-        self.facts.setMaximumHeight(90)
+        self.facts.setMaximumHeight(72)
         self.facts.itemChanged.connect(self.validate_save)
         side_l.addWidget(self.facts)
 
@@ -83,7 +83,7 @@ class ControlReviewDialog(QDialog):
             "Explain this control's applicability to the actual miniagent architecture. "
             "If information is missing, state precisely what must be verified."
         )
-        self.reason.setMaximumHeight(115)
+        self.reason.setMaximumHeight(100)
         self.reason.textChanged.connect(self.validate_save)
         side_l.addWidget(self.reason)
         self.confirm = QCheckBox(
@@ -94,6 +94,7 @@ class ControlReviewDialog(QDialog):
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 2)
         splitter.setStretchFactor(1, 5)
+        splitter.setChildrenCollapsible(False)
         root.addWidget(splitter, 1)
 
         buttons = QHBoxLayout()
@@ -106,14 +107,35 @@ class ControlReviewDialog(QDialog):
         self.save.setEnabled(False)
         self.save.clicked.connect(self.save_decision)
         buttons.addWidget(self.save)
-        close = QPushButton("Close")
-        close.clicked.connect(self.reject)
-        buttons.addWidget(close)
         root.addLayout(buttons)
-        # The parent shows the dialog before starting asynchronous IPC.
+        # Parent tab controls visibility. No separate dialog and no close button.
+
+    def set_ticket(self, ticket_id):
+        """Invalidate callbacks and draft decisions when the ticket changes."""
+        self.sequence += 1
+        self.ticket_id = ticket_id
+        self.busy = False
+        self.context = None
+        self.detail = None
+        self.refresh.setEnabled(True)
+        self.controls.setEnabled(True)
+        self.controls.blockSignals(True)
+        self.controls.clear()
+        self.controls.blockSignals(False)
+        self.title.setText("Choose a control")
+        self.info.clear()
+        self.reason.clear()
+        self.facts.clear()
+        self.decision.setCurrentIndex(0)
+        self.confirm.setChecked(False)
+        self.save.setEnabled(False)
+        self.status.setText(
+            "Open this tab to inspect the existing 108-control register."
+            if ticket_id else "Choose a linked assessment ticket."
+        )
 
     def same_ticket(self):
-        return self.isVisible() and self.parent().current_id == self.ticket_id
+        return bool(self.ticket_id) and self.parent().current_id == self.ticket_id
 
     def load_queue(self, select_next=False):
         if self.busy:
