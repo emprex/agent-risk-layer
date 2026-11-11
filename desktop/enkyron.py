@@ -1735,6 +1735,9 @@ class EnkyronWindow(QMainWindow):
             permitted = data.get("mailboxes") or []
             if permitted:
                 self.mail_inbox.set_owner_mailboxes({"mailboxes": permitted})
+            self.mail_inbox.set_filing_mailboxes(
+                [x.get("key") for x in permitted if x.get("can_manage") is True]
+            )
             if not data.get("schema_ready"):
                 msg = "Mail database update required for new drafts and saved messages."
             elif not permitted:
