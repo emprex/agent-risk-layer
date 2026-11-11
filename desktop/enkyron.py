@@ -259,7 +259,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save") else
+        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -16069,10 +16069,12 @@ class EnkyronWindow(QMainWindow):
                     ". No decisions were recorded."
                 )
                 return
-            if (data.get("snapshot_id") != ticket.get("linked_snapshot_id") and
-                    data.get("target_sha") is None):
+            if (data.get("ticket_id") != ticket_id or
+                    not str(data.get("snapshot_id") or "").startswith("sys_") or
+                    len(str(data.get("target_sha") or "")) != 40):
+                self.evidence_source_ticket = None
                 self.evidence_source_notice.setText(
-                    "ARL source review returned incomplete snapshot information."
+                    "ARL source review refused: the ticket, snapshot or frozen SHA is incomplete."
                 )
                 return
             files = data.get("files_inspected")
