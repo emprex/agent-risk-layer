@@ -64,6 +64,7 @@ class MailInboxView(QWidget):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._has_more = False
         self._mailboxes = {}
         self._build()
 
@@ -84,7 +85,7 @@ class MailInboxView(QWidget):
         toolbar.addWidget(self.account_picker, 0)
         self.search = QLineEdit()
         self.search.setObjectName("enkyronMailSearch")
-        self.search.setPlaceholderText("Search conversations…")
+        self.search.setPlaceholderText("Search loaded conversations…")
         self.search.setAccessibleName("Search loaded conversations")
         self.search.setMaxLength(120)
         self.search.setEnabled(False)
@@ -296,6 +297,7 @@ class MailInboxView(QWidget):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
+        self._has_more = False
         self.thread_list.blockSignals(True)
         self.thread_list.clear()
         self.thread_list.blockSignals(False)
@@ -335,6 +337,7 @@ class MailInboxView(QWidget):
             return False
         self._clear_threads("No conversations in this inbox.")
         self.items = list(items)
+        self._has_more = bool(has_more)
         self.thread_list.blockSignals(True)
         for item in items:
             if not isinstance(item, dict):
@@ -374,10 +377,16 @@ class MailInboxView(QWidget):
             item.setHidden(hidden)
             visible += not hidden
         total = self.thread_list.count()
-        self.count.setText(
+        summary = (
             "{} of {} conversations".format(visible, total)
             if query else "{} conversation(s)".format(total)
         )
+        self.count.setText(
+            summary + (" · more on provider" if self._has_more else "")
+        )
+        selected = self.thread_list.currentItem()
+        if selected is not None and selected.isHidden():
+            self.thread_list.setCurrentRow(-1)
         if self.connection_state != "connected":
             return
         if total == 0:
