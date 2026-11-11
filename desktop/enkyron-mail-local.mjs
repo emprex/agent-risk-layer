@@ -133,6 +133,47 @@ export async function syncMailHeaders(pool,actor,input,{listThreads=mailThreads}
     unavailable:requests.filter((_,i)=>results[i].status!=='fulfilled')
       .map(x=>x.mailbox+'/'+x.folder)};
 }
+// Explicit receive operation: copy previously uncached plain-text bodies into
+// ENKYRON PostgreSQL. No Resend mail movement/deletion and no automatic send.
+// Bound the work per click so the UI stays responsive and the sync can resume.
+export async function syncLocalMailBodies(pool,actor,input={},{
+  listMessages=mailMessages
+}={}){
+  const key=scope(actor),selected=input?.mailbox||'all';
+  if(selected!=='all')requireMailbox(selected);
+  const limit=20;
+  const candidates=(await pool.query(
+    'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
+    'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
+    'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
+    'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
+    'AND m.thread_id=t.thread_id) '+
+    'ORDER BY t.last_message_at DESC LIMIT $3',
+    [key,selected,limit+1]
+  )).rows;
+  let cached=0,failed=0,plainTextOnly=0;
+  for(const row of candidates.slice(0,limit)){
+    try{
+      const result=await fetchAndCacheThread(pool,actor,{
+        mailbox:row.mailbox_key,thread_id:row.thread_id
+      },{listMessages});
+      if(result.items.length){
+        cached++;
+        if(result.items.some(m=>m.html_only===true))plainTextOnly++;
+      }else{
+        failed++;
+      }
+    }catch{
+      failed++;
+    }
+  }
+  return {cached_threads:cached,failed_threads:failed,
+    requires_safe_html_viewer:plainTextOnly,
+    more_pending:candidates.length>limit,
+    note:'Local body import is capped at 20 threads per request. '
+      +'Uncached mail can be imported with Send / Receive again.'};
+}
+
 export async function localMailMessages(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
   const rows=(await pool.query(
