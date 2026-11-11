@@ -66,6 +66,7 @@ class MailInboxView(QWidget):
     localAssignLabelRequested = Signal(str, str, str, bool)
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
+    localRecordLinkRequested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -388,8 +389,27 @@ class MailInboxView(QWidget):
         if not isinstance(record, tuple) or len(record) != 2:
             return
         mailbox, thread_id = record
+        if mailbox in ("local-sent", "local-drafts"):
+            menu = QMenu(self)
+            action = menu.addAction(
+                "Open sent message" if mailbox == "local-sent" else "Edit draft"
+            )
+            action.triggered.connect(
+                lambda _checked=False: self.localRecordOpenRequested.emit(
+                    mailbox.removeprefix("local-"), thread_id
+                )
+            )
+            if mailbox == "local-sent":
+                entry = self.items[thread_id] if 0 <= thread_id < len(self.items) else {}
+                if entry.get("draft_id") and not entry.get("company_id"):
+                    link = menu.addAction("Link to CRM…")
+                    link.triggered.connect(
+                        lambda _checked=False: self.localRecordLinkRequested.emit(thread_id)
+                    )
+            menu.exec(self.thread_list.mapToGlobal(pos))
+            return
         if mailbox not in self._mailboxes:
-            return  # Sent/draft history is not an imported conversation.
+            return
         menu = QMenu(self)
         move = menu.addMenu("Move to folder")
         for folder in self.local_folders:
@@ -645,6 +665,27 @@ class MailInboxView(QWidget):
         self.thread_list.blockSignals(False)
         self._filter(self.search.text())
         return True
+
+    def update_local_sent_delivery(self, index, status):
+        """Expose verified provider state in the same Sent message list."""
+        if not self.local_mode or self._folder != "sent":
+            return False
+        if not 0 <= index < len(self.items):
+            return False
+        record = self.items[index]
+        if not isinstance(record, dict):
+            return False
+        for row in range(self.thread_list.count()):
+            item = self.thread_list.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) != ("local-sent", index):
+                continue
+            recipient = str(record.get("recipient_email") or "Recipient not set")[:120]
+            subject = str(record.get("subject") or "(No subject)")[:300]
+            date = _display_date(record.get("updated_at") or record.get("created_at"))
+            item.setText(recipient + "\n" + subject + "\n"
+                         + str(status)[:100] + (" · " + date if date else ""))
+            return True
+        return False
 
     def show_local_record_preview(self, kind, index, body, metadata):
         """Render fetched CRM draft content as inert plain text only."""
