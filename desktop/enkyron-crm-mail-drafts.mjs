@@ -5,6 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {boundedSearch} from './enkyron-contract.mjs';
 import {requireOpportunityId} from './enkyron-crm-activities.mjs';
 import {requireCompanyId} from './enkyron-crm-tickets.mjs';
+import {uniqueCompanyForRecipient,verifiedContactForCompany} from './enkyron-crm-mail-recipients.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function scope(actor){
   if(typeof actor!=='string'||!/^[A-Za-z0-9_.-]{1,80}$/.test(actor))
@@ -44,7 +45,11 @@ export function validateDraftCreate(input){
     throw new Error('CRM draft cannot belong to two CRM records');
   if(opportunity_id===null&&company_id===null&&mailbox_key===null)
     throw new Error('CRM draft requires a company, opportunity or mailbox');
-  return {opportunity_id,company_id,mailbox_key:mailbox_key??'direction',...content};
+  const recipient_contact_id=input.recipient_contact_id??null;
+  if(recipient_contact_id!==null&&(!UUID.test(recipient_contact_id)||!company_id))
+    throw new Error('CRM selected contact requires an identified company');
+  return {opportunity_id,company_id,mailbox_key:mailbox_key??'direction',...content,
+    ...(recipient_contact_id===null?{}:{recipient_contact_id})};
 }
 export function validateDraftUpdate(input){
   const content=contentFields(input);
@@ -137,8 +142,17 @@ async function transact(pool,work){
 export async function createMailDraft(pool,input,actor,options={}){
   const data=validateDraftCreate(input),owner=scope(actor),uuid=options.uuid??randomUUID;
   return transact(pool,async client=>{
-    const companyMode=data.company_id!==null;
-    const parentId=companyMode?data.company_id:data.opportunity_id;
+    // Exact, unique address match on a standalone message is the only
+    // automatic company association. Never infer from a domain or name.
+    const linkedCompany = (data.company_id===null&&data.opportunity_id===null
+      &&data.recipient_email)
+      ? await uniqueCompanyForRecipient(client,data.recipient_email,actor)
+      : data.company_id;
+    if(data.recipient_contact_id)
+      await verifiedContactForCompany(client,data.recipient_contact_id,
+        linkedCompany,data.recipient_email,actor);
+    const companyMode=linkedCompany!==null;
+    const parentId=companyMode?linkedCompany:data.opportunity_id;
     if(parentId!==null){
       const source=companyMode?'enkyron_crm_companies':'enkyron_crm_opportunities';
       const parent=(await client.query(
@@ -154,7 +168,7 @@ export async function createMailDraft(pool,input,actor,options={}){
       'INSERT INTO enkyron_crm_mail_drafts '
       +'(id,workspace_key,opportunity_id,company_id,mailbox_key,recipient_email,subject,body_text,'
       +'created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)',
-      [id,owner.key,data.opportunity_id,data.company_id,data.mailbox_key,
+      [id,owner.key,data.opportunity_id,linkedCompany,data.mailbox_key,
         data.recipient_email||null,data.subject,data.body_text,owner.name]
     );
     await client.query(
@@ -163,7 +177,7 @@ export async function createMailDraft(pool,input,actor,options={}){
       +"VALUES($1,$2,$3,1,'created',$4,$5)",
       [uuid(),owner.key,id,fingerprint(data),owner.name]
     );
-    return {id,revision:1,opportunity_id:data.opportunity_id,company_id:data.company_id,
+    return {id,revision:1,opportunity_id:data.opportunity_id,company_id:linkedCompany,
       mailbox_key:data.mailbox_key,
       notice:'Saved locally as an unsent draft. No email has been transmitted.'};
   });
