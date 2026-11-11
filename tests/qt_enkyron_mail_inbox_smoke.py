@@ -6,7 +6,7 @@ import gc
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (QApplication, QPlainTextEdit, QComboBox,
-    QLineEdit, QCheckBox, QPushButton, QMessageBox)
+    QLineEdit, QCheckBox, QPushButton, QMessageBox, QScrollArea, QDialog)
 from unittest.mock import patch
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import (MailInboxView, format_mail_messages,
@@ -34,6 +34,303 @@ class MailNativeUXSmoke(unittest.TestCase):
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
         gc.collect()
+
+    def test_evidence_sections_do_not_overlap_on_compact_window(self):
+        from desktop.enkyron_control_review import ControlReviewDialog
+        # The control inspector remains a movable dialog; it is not an
+        # oversized replacement pane or a second workflow.
+        self.assertTrue(issubclass(ControlReviewDialog, QDialog))
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                window.resize(1000, 650)
+                window.show()
+                window.ticket_views.setCurrentIndex(1)
+                window.tabs.setCurrentIndex(5)
+                self.app.processEvents()
+                page = window.tabs.widget(5)
+                self.assertIsInstance(page, QScrollArea)
+                self.assertTrue(page.widgetResizable())
+                summary = window.evidence_summary
+                heading = window.evidence_pack_heading
+                # Both widgets have the same content parent. A scroll viewport
+                # must keep section boundaries separate at laptop dimensions.
+                self.assertIs(summary.parentWidget(), heading.parentWidget())
+                layout = page.widget().layout()
+                self.assertIsNotNone(layout)
+                # Qt assigns child geometry only while a stacked page is
+                # visible. Structural ordering is stable even headlessly;
+                # the scroll area ensures space is available at small sizes.
+                self.assertLess(layout.indexOf(summary), layout.indexOf(heading))
+                self.assertLess(layout.indexOf(heading),
+                                layout.indexOf(window.evidence_pack_explanation))
+                self.assertLess(layout.indexOf(window.evidence_pack_explanation),
+                                layout.indexOf(window.evidence_packs))
+                self.assertEqual(page.horizontalScrollBarPolicy(),
+                                 Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            finally:
+                self._dispose(window)
+
+    def test_ticket_notes_space_and_local_display_identity(self):
+        # ENKYRON should prioritise recorded work over empty action space.
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                self.assertGreaterEqual(window.notes_view.minimumHeight(), 170)
+                self.assertEqual(window.ticket_actions_view.height(), 48)
+                window._set_ticket_actions_height(item_count=2)
+                self.assertGreater(window.ticket_actions_view.height(), 48)
+                window._set_ticket_actions_height()
+                self.assertEqual(window.ticket_actions_view.height(), 48)
+                window.operator_profile_state = {
+                    "local_operator": "emprex",
+                    "current": {"display_name": "Guillaume Strohecker"},
+                }
+                window.current_ticket = {
+                    "client_name": "Internal Lab", "status": "scoping",
+                    "assessor_name": "emprex", "assigned_to": "emprex",
+                    "archived_at": None,
+                }
+                window._refresh_ticket_identity_labels()
+                self.assertIn("Engineer: Guillaume Strohecker", window.meta.text())
+                self.assertEqual(window.owner_label.text(),
+                                 "Assigned to: Guillaume Strohecker")
+                self.assertEqual(window.ticket_operator_display("another_user"),
+                                 "another_user")
+                self.assertEqual(window.ticket_operator_display(None), "Unassigned")
+            finally:
+                self._dispose(window)
+
+    def test_ticket_assessment_button_has_explicit_preflight(self):
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                self.assertIn("Link assessment", window.assessment_link_button.text())
+                self.assertFalse(window.assessment_link_button.isEnabled())
+                self.assertIsNone(window.assessment_link_dialog)
+            finally:
+                self._dispose(window)
+
+    def test_engine_reads_current_snapshot_without_master_document(self):
+        calls = []
+        project = "prj_fixture_2"
+        assessment = "asm_fixture_2"
+        snapshot = "sys_fixture_2"
+        sha = "a" * 40
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command == "assessment-context" and callback:
+                callback({"available":True, "target_kind":"git",
+                          "target_reference":"/home/test/frozen-agent", "target_sha":sha,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot}, None)
+            elif command == "operator-state" and callback:
+                self.assertEqual(payload["snapshot_id"],snapshot)
+                callback({"available":True,"project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot,"target_sha":sha,
+                          "environment":"not_recorded","evidence_state":"not_inspected",
+                          "control_outcomes":"not_inspected",
+                          "security_verdict":"not_assessed",
+                          "readiness_decision":"not_evaluated",
+                          "notice":"Read-only canonical inspection."},None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={"target_kind":"git","linked_project_id":project,
+                                       "linked_assessment_id":assessment}
+                window.inspect_engine()
+                self.assertIn("CANONICAL ARL ASSESSMENT",window.engine_view.toPlainText())
+                self.assertIn("Master Dossier",window.engine_view.toPlainText())
+                self.assertEqual(calls.count("assessment-context"),1)
+                self.assertEqual(calls.count("operator-state"),1)
+                self.assertNotIn("master",calls)
+            finally:
+                self._dispose(window)
+
+    def test_evidence_plan_reads_current_snapshot_without_master_document(self):
+        calls=[]
+        project,assessment,snapshot="prj_2","asm_2","sys_2"
+        ticket="3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command=="assessment-context" and callback:
+                callback({"available":True,"target_kind":"git",
+                          "target_reference":"/home/test/frozen-agent","target_sha":"b"*40,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot},None)
+            elif command=="evidence-summary" and callback:
+                self.assertEqual(payload["snapshot_id"],snapshot)
+                callback({"available":True,"kind":"summary","assessment_controls":108,
+                          "other_workflow_controls":0,"criterion_count":0,
+                          "counts":{"staticCandidates":0,"staticMissing":0,
+                                    "humanRequirements":0,"runtimeRequirements":0,
+                                    "sourceLineageIssues":0},
+                          "packs":[]},None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={"target_kind":"git","linked_project_id":project,
+                                       "linked_assessment_id":assessment}
+                window.inspect_evidence()
+                self.assertIn("ASSESSMENT PROGRESS · 108 SECURITY CONTROLS",
+                              window.evidence_summary.toPlainText())
+                self.assertGreaterEqual(window.evidence_summary.minimumHeight(), 150)
+                self.assertIn("Applicability", window.evidence_step_guide.text())
+                self.assertIn("not that the security checks passed",
+                              window.evidence_pack_explanation.text())
+                self.assertIn("Continue assessment",window.control_review_button.text())
+                self.assertFalse(window.evidence_button.isVisible())
+                self.assertLessEqual(window.evidence_packs.maximumHeight(), 72)
+                self.assertIn("No evidence request packs",
+                              window.evidence_details.toPlainText())
+                self.assertIn("assessment-context",calls)
+                self.assertIn("evidence-summary",calls)
+                self.assertNotIn("master",calls)
+            finally:
+                self._dispose(window)
+
+    def test_evidence_source_preparation_runs_once_without_new_controls(self):
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        calls = []
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command == "source-review" and callback:
+                callback({
+                    "available":True,"ticket_id":ticket,
+                    "snapshot_id":"sys_fixture_108","target_sha":"a"*40,
+                    "files_inspected":9,"candidate_count":2,
+                    "truncated":False
+                },None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={
+                    "target_kind":"git",
+                    "linked_project_id":"prj_fixture",
+                    "linked_assessment_id":"asm_fixture"
+                }
+                window.tabs.setCurrentIndex(5)
+                window.prepare_source_review()
+                self.assertEqual(calls.count("source-review"),1)
+                notice=window.evidence_source_notice.text()
+                self.assertIn("9 files inspected",notice)
+                self.assertIn("2 Inspector observations",notice)
+                self.assertIn("NOT verified",notice)
+                # Refresh of the tab never runs an extra scan for the same ticket.
+                window.prepare_source_review()
+                self.assertEqual(calls.count("source-review"),1)
+            finally:
+                self._dispose(window)
+
+    def test_native_108_control_review_is_human_confirmed_and_canonical(self):
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        project, assessment, snapshot = "prj_fixture", "asm_fixture", "sys_fixture_108"
+        calls = []
+        items = [
+            {"control_id":"ARL-KB-{:03d}".format(n),
+             "title":"Synthetic human-readable control {:03d}".format(n),
+             "stage":"applicability","chain_status":"context_required",
+             "next_action":"Human applicability review"}
+            for n in range(1, 109)
+        ]
+
+        preparation = {
+            "available": True,"snapshot_id":snapshot,"target_sha":"a"*40,
+            "controls_total":108,
+            "dossiers":[{
+                "control_id":"ARL-KB-{:03d}".format(n),
+                "next_step":"Review the actual agent purpose before deciding.",
+                "required_evidence":[{
+                    "number":1,"requirement":"Approved agent purpose and change history",
+                    "route":"human_only"
+                }]
+            } for n in range(1,109)]
+        }
+
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, arg, payload))
+            if command == "control-queue":
+                callback({"available":True,"ticket_id":ticket,"total":108,
+                          "project_id":project,"assessment_id":assessment,
+                          "snapshot_id":snapshot,"target_sha":"a"*40,
+                          "stages":{"applicability":108},"items":items,
+                          "preparation":preparation},None)
+            elif command == "control-detail":
+                callback({"available":True,"ticket_id":ticket,
+                          "control_id":payload["control_id"],"project_id":project,
+                          "snapshot_id":snapshot,"target_sha":"a"*40,
+                          "title":"Synthetic canonical control",
+                          "category":"Synthetic category","stage":"applicability",
+                          "chain_status":"context_required",
+                          "next_action":"Review applicability",
+                          "applicability_status":"context_required",
+                          "applicability_reason":"No human decision recorded",
+                          "evaluation_digest":"b"*64,
+                          "check_objective":"Inspect relevant trust boundary",
+                          "check_method":"Human evidence verification",
+                          "confirmed_facts":[]},None)
+            elif command == "control-applicability-save":
+                callback({"saved":True,"control_id":payload["control_id"],
+                          "snapshot_id":payload["snapshot_id"],
+                          "decision":payload["decision"],
+                          "revision_id":"cap_synthetic",
+                          "next_stage":"test"},None)
+
+        with patch.object(DesktopBridge, "call", new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={
+                    "target_kind":"git", "linked_project_id":project,
+                    "linked_assessment_id":assessment,"status":"scoping",
+                    "archived_at":None}
+                window.open_control_review()
+                dialog=window.control_review_dialog
+                self.assertIsNotNone(dialog)
+                self.assertTrue(dialog.isVisible())
+                self.assertEqual(dialog.controls.count(),108)
+                self.assertIn("Synthetic human-readable control 001",
+                              dialog.controls.item(0).text())
+                self.assertIn("Not applicable requires verified architecture facts",
+                              dialog.facts_help.text())
+                self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
+                self.assertEqual(len(dialog.preparation_by_id),108)
+                self.assertIn("Approved agent purpose and change history",
+                              dialog.info.toPlainText())
+                self.assertIn("HUMAN VERIFICATION REQUIRED",
+                              dialog.info.toPlainText())
+                self.assertFalse(dialog.save.isEnabled())
+                dialog.controls.setCurrentRow(1)
+                dialog.controls.setCurrentRow(0)
+                self.assertEqual(len([c for c in calls if c[0]=="control-detail"]),2)
+                self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
+                # Non-applicable is unavailable without confirmed architecture facts.
+                self.assertFalse(dialog.decision.model().item(3).isEnabled())
+                dialog.decision.setCurrentIndex(1)
+                dialog.reason.setPlainText(
+                    "Human reviewer confirms this control applies to the frozen "
+                    "miniagent assessment scope; effectiveness remains untested."
+                )
+                self.assertFalse(dialog.save.isEnabled())
+                dialog.confirm.setChecked(True)
+                self.assertTrue(dialog.save.isEnabled())
+                with patch.object(QMessageBox, "question",
+                                  return_value=QMessageBox.StandardButton.Yes):
+                    dialog.save_decision()
+                saved=[c for c in calls if c[0]=="control-applicability-save"]
+                self.assertEqual(len(saved),1)
+                self.assertEqual(saved[0][2]["control_id"],"ARL-KB-001")
+                self.assertEqual(saved[0][2]["snapshot_id"],snapshot)
+                self.assertEqual(saved[0][2]["evaluation_digest"],"b"*64)
+                self.assertTrue(saved[0][2]["confirmed"])
+                self.assertFalse(any(c[0]=="master" for c in calls))
+                dialog.reject()
+            finally:
+                self._dispose(window)
 
     def test_sent_mail_not_listed_as_active_draft(self):
         """Mail Drafts uses SQL-filtered unsent records; CRM history is separate."""

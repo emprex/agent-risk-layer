@@ -30,6 +30,7 @@ if __package__:
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
     from .enkyron_calendar_view import MailCalendarView
+    from .enkyron_control_review import ControlReviewDialog
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -39,6 +40,7 @@ else:
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
     from enkyron_calendar_view import MailCalendarView
+    from enkyron_control_review import ControlReviewDialog
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -257,7 +259,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action == "operator-state" else
+        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -290,8 +292,13 @@ class EnkyronWindow(QMainWindow):
         self.bridge = DesktopBridge(self)
         self.current_id = None
         self.current_ticket = None
+        self.assessment_link_dialog = None
+        self.control_review_dialog = None
         self.list_seq = 0
         self.evidence_seq = 0
+        self.evidence_source_seq = 0
+        self.evidence_source_ticket = None
+        self.evidence_workplan_ticket = None
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
@@ -658,7 +665,15 @@ class EnkyronWindow(QMainWindow):
         overview_l.addWidget(self.crm_ticket_company_label)
         self.scope = make_text_area()
         overview_l.addWidget(self.scope, 1)
-        overview_l.addWidget(section_title("OPTIONAL ARL ENGINE LINK"))
+        assessment_row = QHBoxLayout()
+        assessment_row.addWidget(section_title("CANONICAL ARL ASSESSMENT"))
+        assessment_row.addStretch()
+        self.assessment_link_button = QPushButton("Select Git target / Link assessment…")
+        self.assessment_link_button.setObjectName("primary")
+        self.assessment_link_button.setEnabled(False)
+        self.assessment_link_button.clicked.connect(self.open_assessment_link_dialog)
+        assessment_row.addWidget(self.assessment_link_button)
+        overview_l.addLayout(assessment_row)
         self.binding = make_text_area()
         self.binding.setMaximumHeight(160)
         overview_l.addWidget(self.binding)
@@ -678,11 +693,15 @@ class EnkyronWindow(QMainWindow):
         notes_l = QVBoxLayout(notes)
         notes_l.addWidget(section_title("RECORDED WORK NOTES"))
         self.notes_view = make_text_area()
-        notes_l.addWidget(self.notes_view, 1)
-        notes_l.addWidget(section_title("INTERNAL TICKET ACTIONS — NOT TEST AUTHORISATION"))
+        self.notes_view.setObjectName("ticketRecordedNotes")
+        self.notes_view.setMinimumHeight(170)
+        self.notes_view.setPlaceholderText("No recorded work notes yet.")
+        notes_l.addWidget(self.notes_view, 3)
+        notes_l.addWidget(section_title("INTERNAL ACTIONS · NOT TEST APPROVAL"))
         self.ticket_actions_view = make_text_area()
-        self.ticket_actions_view.setMaximumHeight(150)
-        self.ticket_actions_view.setPlainText("Select a ticket to load its action checklist.")
+        self.ticket_actions_view.setObjectName("ticketActionSummary")
+        self.ticket_actions_view.setFixedHeight(48)
+        self.ticket_actions_view.setPlainText("Select a ticket to view planned actions.")
         notes_l.addWidget(self.ticket_actions_view)
         self.ticket_actions_button = QPushButton("Plan / update ticket action…")
         self.ticket_actions_button.setEnabled(False)
@@ -694,7 +713,7 @@ class EnkyronWindow(QMainWindow):
         notes_l.addWidget(section_title("NEW MANUAL OBSERVATION (NOT VERIFIED EVIDENCE)"))
         self.note_editor = make_text_area(False)
         self.note_editor.setPlaceholderText("Enter factual observations or next actions…")
-        self.note_editor.setMaximumHeight(124)
+        self.note_editor.setMaximumHeight(108)
         notes_l.addWidget(self.note_editor)
         self.save_button = QPushButton("Save note to ticket")
         self.save_button.setObjectName("primary")
@@ -729,26 +748,82 @@ class EnkyronWindow(QMainWindow):
         engine_l.addWidget(self.engine_view, 1)
         self.tabs.addTab(engine, "ARL Engine")
 
-        evidence = QWidget()
-        evidence_l = QVBoxLayout(evidence)
+        # The Evidence tab needs more vertical space than a compact laptop
+        # viewport can always provide. Put its sections into one scrollable
+        # document; never let a large minimum-height summary overlap the packs.
+        evidence = QScrollArea()
+        evidence.setObjectName("ticketEvidencePage")
+        evidence.setWidgetResizable(True)
+        evidence.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        evidence_content = QWidget()
+        evidence_l = QVBoxLayout(evidence_content)
+        evidence_l.setContentsMargins(12, 12, 12, 12)
+        evidence_l.setSpacing(8)
+        evidence.setWidget(evidence_content)
         evidence_l.addWidget(section_title("NEMORYTH · CANONICAL ARL EVIDENCE REQUESTS"))
         self.evidence_intro = QLabel(
-            "Read-only evidence requirements from ARL's 108-control register. "
-            "Candidate counts are NOT accepted or verified evidence."
+            "One assessment, 108 controls. ARL prepares the technical information; "
+            "an engineer reviews applicability and validates evidence. "
+            "Nothing here is an automatic PASS, FAIL, or authorisation to test."
         )
         self.evidence_intro.setWordWrap(True)
         evidence_l.addWidget(self.evidence_intro)
-        self.evidence_button = QPushButton("Read existing 108-control evidence workplan")
-        self.evidence_button.setObjectName("primary")
+        self.evidence_source_notice = QLabel(
+            "ARL technical preparation: opens automatically for a linked Git assessment."
+        )
+        self.evidence_source_notice.setObjectName("subtle")
+        self.evidence_source_notice.setWordWrap(True)
+        self.evidence_source_notice.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        evidence_l.addWidget(self.evidence_source_notice)
+        self.evidence_step_guide = QLabel(
+            "HOW THE ASSESSMENT WORKS\n"
+            "1 · Applicability — Decide whether each security question concerns this agent.\n"
+            "2 · Test planning — Define a safe test; permission is required before execution.\n"
+            "3 · Evidence collection — Gather source references, observed results and records.\n"
+            "4 · Human decision — Review the results and record the accountable conclusion.\n"
+            "5 · Blocked follow-up — Resolve missing information, findings or retesting needs.\n"
+            "Other review — The control needs another specialist or additional context."
+        )
+        self.evidence_step_guide.setObjectName("ticketEvidenceGuide")
+        self.evidence_step_guide.setWordWrap(True)
+        self.evidence_step_guide.setStyleSheet(
+            "background: #eff6f9; border: 1px solid #d7e5ec; "
+            "border-radius: 6px; padding: 10px; line-height: 1.35;"
+        )
+        evidence_l.addWidget(self.evidence_step_guide)
+        # Requirements load when the tab opens; a second read-only button
+        # should not compete with the engineer's one meaningful next action.
+        self.evidence_button = QPushButton("Refresh evidence requirements")
+        self.evidence_button.setVisible(False)
         self.evidence_button.setEnabled(False)
         self.evidence_button.clicked.connect(self.inspect_evidence)
-        evidence_l.addWidget(self.evidence_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        work_actions = QHBoxLayout()
+        self.control_review_button = QPushButton("Continue assessment · Review controls…")
+        self.control_review_button.setObjectName("primary")
+        self.control_review_button.setEnabled(False)
+        self.control_review_button.clicked.connect(self.open_control_review)
+        work_actions.addWidget(self.control_review_button)
+        work_actions.addStretch()
+        evidence_l.addLayout(work_actions)
         self.evidence_summary = make_text_area()
+        self.evidence_summary.setObjectName("ticketEvidenceWorkflowSummary")
+        self.evidence_summary.setMinimumHeight(150)
         self.evidence_summary.setMaximumHeight(190)
         evidence_l.addWidget(self.evidence_summary)
-        evidence_l.addWidget(section_title("EVIDENCE REQUEST PACKS"))
+        self.evidence_pack_heading = section_title("EVIDENCE PACKS · REQUESTS READY TO COLLECT")
+        evidence_l.addWidget(self.evidence_pack_heading)
+        self.evidence_pack_explanation = QLabel(
+            "A pack groups the specific proof to request for controls already "
+            "reviewed for applicability. An empty list means the workflow has "
+            "not reached this stage — not that the security checks passed."
+        )
+        self.evidence_pack_explanation.setWordWrap(True)
+        evidence_l.addWidget(self.evidence_pack_explanation)
         self.evidence_packs = QListWidget()
-        self.evidence_packs.setMaximumHeight(190)
+        self.evidence_packs.setObjectName("ticketEvidencePacks")
+        self.evidence_packs.setMaximumHeight(72)
         evidence_l.addWidget(self.evidence_packs)
         actions = QHBoxLayout()
         self.evidence_open = QPushButton("Inspect selected pack")
@@ -766,7 +841,9 @@ class EnkyronWindow(QMainWindow):
         actions.addStretch()
         evidence_l.addLayout(actions)
         self.evidence_details = make_text_area()
-        evidence_l.addWidget(self.evidence_details, 1)
+        self.evidence_details.setMaximumHeight(100)
+        evidence_l.addWidget(self.evidence_details)
+        evidence_l.addStretch()
         self.tabs.addTab(evidence, "Evidence Requests")
 
         ledger = QWidget()
@@ -3075,6 +3152,7 @@ class EnkyronWindow(QMainWindow):
             self.account_identity_label.setText(
                 current.get("display_name") or "LOCAL WORKSPACE"
             )
+            self._refresh_ticket_identity_labels()
         self.bridge.call("operator-profile", callback=received)
 
     def open_personal_profile(self):
@@ -15002,11 +15080,17 @@ class EnkyronWindow(QMainWindow):
         )
         self.update_status_button.setEnabled(can_change)
 
+    def _set_ticket_actions_height(self, item_count=0, unavailable=False):
+        """Give real actions space, but never let an empty checklist bury work notes."""
+        height = 72 if unavailable else min(165, 44 + 48 * item_count) if item_count else 48
+        self.ticket_actions_view.setFixedHeight(height)
+
     def load_ticket_actions(self, ticket_id):
         """Read the bounded internal checklist for one selected ticket."""
         if ticket_id != self.current_id:
             return
         self.ticket_actions_view.setPlainText("Loading internal actions…")
+        self._set_ticket_actions_height()
         self.ticket_actions_button.setEnabled(False)
         self.ticket_actions = []
         self.ticket_actions_available = False
@@ -15018,11 +15102,13 @@ class EnkyronWindow(QMainWindow):
                 self.ticket_actions_view.setPlainText(
                     "Action checklist unavailable: " + str(error or "Read failed")
                 )
+                self._set_ticket_actions_height(unavailable=True)
                 return
             if not data.get("available"):
                 self.ticket_actions_view.setPlainText(
                     data.get("notice") or "Action checklist unavailable (migration 102 required)."
                 )
+                self._set_ticket_actions_height(unavailable=True)
                 return
             items = data.get("items") or []
             self.ticket_actions = items
@@ -15040,6 +15126,7 @@ class EnkyronWindow(QMainWindow):
                     for item in items
                 ) or "No actions recorded for this ticket."
             )
+            self._set_ticket_actions_height(item_count=len(items))
             ticket = self.current_ticket or {}
             self.ticket_actions_button.setEnabled(
                 not ticket.get("archived_at") and ticket.get("status") != "closed"
@@ -15323,6 +15410,191 @@ class EnkyronWindow(QMainWindow):
             callback=completed,
         )
 
+    def ticket_operator_display(self, account):
+        """Display the local personal name only for its matching OS principal."""
+        technical = str(account or "").strip()
+        if not technical:
+            return "Unassigned"
+        profile = self.operator_profile_state or {}
+        if profile.get("local_operator") == technical:
+            display = (profile.get("current") or {}).get("display_name")
+            if isinstance(display, str) and display.strip():
+                return display.strip()
+        return technical
+
+    def _refresh_ticket_identity_labels(self):
+        ticket = self.current_ticket
+        if not ticket:
+            return
+        operator = self.ticket_operator_display(ticket.get("assessor_name"))
+        self.meta.setText("{}  ·  {}  ·  Engineer: {}{}".format(
+            ticket["client_name"], ticket["status"].replace("_", " ").upper(),
+            operator, " · ARCHIVED" if ticket.get("archived_at") else ""
+        ))
+        self.owner_label.setText(
+            "Assigned to: {}".format(self.ticket_operator_display(ticket.get("assigned_to")))
+        )
+        self.owner_label.setToolTip(
+            "Display name comes from My account; assignment and audit retain the local OS login."
+        )
+
+    def open_assessment_link_dialog(self):
+        """Human-confirmed local onboarding, never an automatic target test."""
+        ticket = self.current_ticket
+        ticket_id = self.current_id
+        if (not ticket or not ticket_id or ticket.get("archived_at")
+                or ticket.get("status") == "closed"
+                or ticket.get("linked_project_id") or ticket.get("linked_assessment_id")):
+            return
+        if self.assessment_link_dialog and self.assessment_link_dialog.isVisible():
+            self.assessment_link_dialog.raise_()
+            self.assessment_link_dialog.activateWindow()
+            return
+        dialog = QDialog(self)
+        self.assessment_link_dialog = dialog
+        dialog.setWindowTitle("ENKYRON · Link an ARL assessment")
+        dialog.setMinimumWidth(690)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(section_title("CONNECT A FROZEN LOCAL GIT TARGET"))
+        explanation = QLabel(
+            "Choose the exact local Git repository for this ticket. ENKYRON "
+            "checks its commit and finds an existing canonical ARL assessment. "
+            "If none exists, you may explicitly confirm creation using the "
+            "existing ARL engine. This does not authorise security tests."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        path_row = QHBoxLayout()
+        target_field = QLineEdit()
+        target_field.setReadOnly(True)
+        target_field.setPlaceholderText("Choose a local Git repository folder")
+        path_row.addWidget(target_field, 1)
+        browse = QPushButton("Choose folder…")
+        path_row.addWidget(browse)
+        layout.addLayout(path_row)
+        status = QLabel("Nothing selected. No assessment or database changed.")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        details = make_text_area()
+        details.setMinimumHeight(115)
+        details.setMaximumHeight(175)
+        details.setPlainText("After selecting a folder, its exact SHA and existing assessment will appear here.")
+        layout.addWidget(details)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        buttons.addWidget(cancel)
+        apply = QPushButton("Confirm assessment link")
+        apply.setObjectName("primary")
+        apply.setEnabled(False)
+        buttons.addWidget(apply)
+        layout.addLayout(buttons)
+        state = {"preflight": None, "busy": False}
+
+        def choose_folder():
+            if state["busy"]:
+                return
+            folder = QFileDialog.getExistingDirectory(
+                dialog, "Select frozen Git target", str(Path.home()))
+            if not folder:
+                return
+            target_field.setText(folder)
+            state["preflight"] = None
+            state["busy"] = True
+            browse.setEnabled(False)
+            apply.setEnabled(False)
+            status.setText("Verifying the selected Git commit and canonical assessment…")
+            details.clear()
+
+            def received(data, error):
+                state["busy"] = False
+                if not dialog.isVisible() or ticket_id != self.current_id:
+                    return
+                browse.setEnabled(True)
+                if error or not isinstance(data, dict) or not data.get("available"):
+                    status.setText("Preflight blocked: " + str(error or "Not available"))
+                    return
+                state["preflight"] = data
+                candidate = data.get("project") or {}
+                target = data.get("target") or {}
+                details.setPlainText(
+                    "Git folder: {}\nCommit: {}\nMode: {}\nProject: {}\n"
+                    "Snapshot: {}\nNo active tests authorised.".format(
+                        target.get("path"), target.get("sha"),
+                        "Link existing" if data.get("mode") == "link_existing"
+                        else "Create canonical assessment then link",
+                        candidate.get("projectId") or "Not created",
+                        candidate.get("snapshotId") or "Not created")
+                )
+                apply.setText(
+                    "Link existing assessment" if data.get("mode") == "link_existing"
+                    else "Create and link assessment"
+                )
+                status.setText(data.get("notice") or "Ready for human confirmation.")
+                apply.setEnabled(True)
+
+            self.bridge.call(
+                "assessment-preflight",
+                payload={"ticket_id": ticket_id, "repository_path": folder},
+                callback=received
+            )
+
+        def confirm_link():
+            data = state["preflight"]
+            if not data or state["busy"] or ticket_id != self.current_id:
+                return
+            target = data.get("target") or {}
+            existing = data.get("mode") == "link_existing"
+            action = "link this existing assessment" if existing else "create a new canonical assessment and link it"
+            answer = QMessageBox.question(
+                dialog, "Confirm exact assessment target",
+                "Ticket: {}\nAction: {}\nGit target: {}\nSHA: {}\n\n"
+                "No security tests, findings or approvals are authorised by this step. "
+                "Proceed?".format(ticket.get("ticket_number"), action,
+                                   target.get("path"), target.get("sha")),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            state["busy"] = True
+            apply.setEnabled(False)
+            browse.setEnabled(False)
+            status.setText("Running the canonical ARL assessment binding checks…")
+            def linked(result, error):
+                state["busy"] = False
+                if not dialog.isVisible() or ticket_id != self.current_id:
+                    return
+                if error or not result or not result.get("linked"):
+                    status.setText("Assessment link blocked: " + str(error or "Not recorded"))
+                    browse.setEnabled(True)
+                    state["preflight"] = None
+                    return
+                QMessageBox.information(
+                    dialog, "Canonical assessment linked",
+                    "Project: {}\nSnapshot: {}\n\n{}".format(
+                        result.get("projectId"), result.get("snapshotId"),
+                        result.get("notice"))
+                )
+                dialog.accept()
+                selected = self.ticket_list.currentItem()
+                if selected:
+                    self.ticket_changed(selected, None)
+            self.bridge.call(
+                "assessment-link",
+                payload={"ticket_id": ticket_id,
+                         "repository_path": target.get("path"),
+                         "expected_sha": target.get("sha"),
+                         "operation": data.get("mode"),
+                         "confirmed": True},
+                callback=linked
+            )
+
+        browse.clicked.connect(choose_folder)
+        apply.clicked.connect(confirm_link)
+        dialog.show()
+
     def change_ticket_assignment(self):
         ticket = self.current_ticket
         if not ticket or not self.current_id or ticket.get("archived_at"):
@@ -15457,7 +15729,16 @@ class EnkyronWindow(QMainWindow):
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
         self.engine_button.setEnabled(False)
+        self.control_review_button.setEnabled(False)
+        if self.control_review_dialog is not None and self.control_review_dialog.isVisible():
+            self.control_review_dialog.reject()
         self.evidence_seq += 1
+        self.evidence_source_seq += 1
+        self.evidence_source_ticket = None
+        self.evidence_workplan_ticket = None
+        self.evidence_source_notice.setText(
+            "ARL technical preparation: opens automatically for a linked Git assessment."
+        )
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
@@ -15479,6 +15760,7 @@ class EnkyronWindow(QMainWindow):
         self.record_button.setEnabled(False)
         self.engine_info.setText("Select a linked Git assessment to inspect.")
         self.save_button.setEnabled(False)
+        self.assessment_link_button.setEnabled(False)
         self.ticket_status.clear()
         self.ticket_status.setEnabled(False)
         self.update_status_button.setEnabled(False)
@@ -15504,10 +15786,7 @@ class EnkyronWindow(QMainWindow):
             ticket = data["ticket"]
             self.current_ticket = ticket
             self.title.setText("{}   |   {}".format(ticket["ticket_number"], ticket["title"]))
-            self.meta.setText("{}  ·  {}  ·  Engineer: {}".format(
-                ticket["client_name"], ticket["status"].replace("_", " ").upper(),
-                ticket["assessor_name"]
-            ))
+            self._refresh_ticket_identity_labels()
             self.scope.setPlainText(
                 "System owner: {}\nTarget: {} ({})\n\n{}".format(
                     ticket["system_owner"], ticket["target_reference"],
@@ -15561,9 +15840,18 @@ class EnkyronWindow(QMainWindow):
             self.ticket_status.setCurrentIndex(0)
             self.refresh_status_action()
             self.save_button.setEnabled(active and ticket["status"] != "closed")
+            self.assessment_link_button.setEnabled(
+                active and ticket["status"] != "closed"
+                and not ticket.get("linked_project_id")
+                and not ticket.get("linked_assessment_id")
+            )
+            self.assessment_link_button.setText(
+                "Assessment linked" if ticket.get("linked_project_id")
+                else "Select Git target / Link assessment…"
+            )
             owner = ticket.get("assigned_to")
             self.owner_label.setText(
-                "Assigned to: {}".format(owner or "Unassigned")
+                "Assigned to: {}".format(self.ticket_operator_display(owner))
             )
             self.assign_button.setText(
                 "Unassign" if owner else "Assign to me"
@@ -15596,23 +15884,31 @@ class EnkyronWindow(QMainWindow):
                     active and ticket["status"] != "closed"
                 )
             self.load_ticket_actions(ticket_id)
-            if not active:
-                self.meta.setText(self.meta.text() + " · ARCHIVED")
+            self._refresh_ticket_identity_labels()
             self.engine_button.setEnabled(
                 ticket["target_kind"] == "git"
                 and bool(ticket.get("linked_project_id"))
                 and bool(ticket.get("linked_assessment_id"))
             )
             self.evidence_button.setEnabled(self.engine_button.isEnabled())
+            self.control_review_button.setEnabled(
+                self.engine_button.isEnabled()
+                and not ticket.get("archived_at")
+                and ticket.get("status") != "closed"
+            )
             self.record_button.setEnabled(self.engine_button.isEnabled())
             self.status.setText("Ticket loaded from PostgreSQL. This is not a security verdict.")
             if self.tabs.currentIndex() == 1:
                 self.load_master()
+            elif self.tabs.currentIndex() == 5:
+                self.show_evidence_workflow()
         self.bridge.call("ticket", ticket_id, callback=received)
 
     def tab_changed(self, index):
         if index == 1 and self.current_ticket:
             self.load_master()
+        elif index == 5 and self.current_ticket:
+            self.show_evidence_workflow()
 
     def load_master(self):
         ticket_id = self.current_id
@@ -15641,44 +15937,47 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("master", ticket_id, callback=received)
 
     def inspect_engine(self):
-        """Use the verified master to scope the existing ARL Operator inspection."""
+        """Inspect the canonical current Git snapshot even before a Master is written."""
         ticket_id = self.current_id
         ticket = self.current_ticket
         if not ticket or not ticket_id:
             return
         if (ticket.get("target_kind") != "git" or
-            not ticket.get("linked_project_id") or
-            not ticket.get("linked_assessment_id")):
+                not ticket.get("linked_project_id") or
+                not ticket.get("linked_assessment_id")):
             self.engine_view.setPlainText("A linked local Git assessment is required.")
             return
         self.engine_button.setEnabled(False)
-        self.engine_view.setPlainText("Verifying historical master and frozen target…")
+        self.engine_view.setPlainText("Verifying the existing canonical snapshot and frozen Git target…")
 
-        def master_loaded(master, error):
+        def context_loaded(context, error):
             if self.current_id != ticket_id:
                 return
-            if error or not isinstance(master, dict) or not master.get("available"):
+            if error or not isinstance(context, dict) or not context.get("available"):
                 self.engine_view.setPlainText(
-                    "ARL inspection blocked: verified master dossier unavailable."
+                    "ARL inspection blocked: " + str(error or (
+                        context.get("reason", "Canonical snapshot unavailable")
+                        if isinstance(context, dict) else "Canonical snapshot unavailable"
+                    ))
                 )
                 self.engine_button.setEnabled(True)
                 return
-            if master.get("snapshot_status") != "current":
-                self.engine_view.setPlainText(
-                    "ARL inspection blocked: the recorded master snapshot is not current."
-                )
+            if (context.get("project_id") != ticket["linked_project_id"] or
+                    context.get("assessment_id") != ticket["linked_assessment_id"] or
+                    context.get("target_kind") != "git"):
+                self.engine_view.setPlainText("ARL inspection blocked: ticket and canonical scope mismatch.")
                 self.engine_button.setEnabled(True)
                 return
             request = {
                 "target_kind": "git",
-                "target_reference": ticket["target_reference"],
-                "target_sha": master["target_sha"],
-                "project_id": ticket["linked_project_id"],
-                "assessment_id": ticket["linked_assessment_id"],
-                "snapshot_id": master["snapshot_id"],
+                "target_reference": context["target_reference"],
+                "target_sha": context["target_sha"],
+                "project_id": context["project_id"],
+                "assessment_id": context["assessment_id"],
+                "snapshot_id": context["snapshot_id"],
             }
             self.engine_view.setPlainText(
-                "Inspecting existing assessment through canonical ARL Operator…"
+                "Reading existing assessment through the canonical ARL Operator…"
             )
 
             def state_loaded(data, state_error):
@@ -15709,15 +16008,105 @@ class EnkyronWindow(QMainWindow):
                     "Readiness: " + data["readiness_decision"],
                     "Human review required: YES",
                     "",
+                    "Master Dossier: check the separate Master Dossier tab.",
+                    "Current snapshot inspection does NOT validate a Master Dossier.",
+                    "",
                     data["notice"],
                 ]))
                 self.status.setText(
-                    "Canonical ARL identity confirmed. No security state was changed."
+                    "Canonical current snapshot identity confirmed. No security state changed."
                 )
 
             self.bridge.call("operator-state", payload=request, callback=state_loaded)
 
-        self.bridge.call("master", ticket_id, callback=master_loaded)
+        self.bridge.call("assessment-context", ticket_id, callback=context_loaded)
+
+    def open_control_review(self):
+        """Open the authoritative human applicability workflow for this ticket."""
+        ticket = self.current_ticket
+        ticket_id = self.current_id
+        if (not ticket_id or not ticket or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or ticket.get("archived_at") or ticket.get("status") == "closed"):
+            return
+        existing = self.control_review_dialog
+        if existing is not None and existing.isVisible():
+            if existing.ticket_id == ticket_id:
+                existing.raise_()
+                existing.activateWindow()
+                return
+            existing.reject()
+        dialog = ControlReviewDialog(
+            self, self.bridge, ticket_id, on_recorded=self.inspect_evidence
+        )
+        self.control_review_dialog = dialog
+        dialog.show()
+        dialog.load_queue()
+
+    def show_evidence_workflow(self):
+        """Load the read-only workplan and source preparation without extra clicks."""
+        ticket = self.current_ticket or {}
+        if (not self.current_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")):
+            return
+        if self.evidence_workplan_ticket != self.current_id:
+            self.evidence_workplan_ticket = self.current_id
+            self.inspect_evidence()
+        self.prepare_source_review()
+
+    def prepare_source_review(self):
+        """Run ARL's existing frozen-source Inspector once per selected ticket."""
+        ticket = self.current_ticket or {}
+        ticket_id = self.current_id
+        if (not ticket_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")
+                or self.evidence_source_ticket == ticket_id):
+            return
+        self.evidence_source_ticket = ticket_id
+        self.evidence_source_seq += 1
+        sequence = self.evidence_source_seq
+        self.evidence_source_notice.setText(
+            "ARL is preparing a read-only technical review of the frozen Git "
+            "source. No tests, modifications or security decisions."
+        )
+        def prepared(data, error):
+            if (ticket_id != self.current_id or
+                    sequence != self.evidence_source_seq):
+                return
+            if error or not isinstance(data, dict) or not data.get("available"):
+                self.evidence_source_ticket = None
+                self.evidence_source_notice.setText(
+                    "ARL source preparation unavailable: "
+                    + str(error or "Unverified inspection") +
+                    ". No decisions were recorded."
+                )
+                return
+            if (data.get("ticket_id") != ticket_id or
+                    not str(data.get("snapshot_id") or "").startswith("sys_") or
+                    len(str(data.get("target_sha") or "")) != 40):
+                self.evidence_source_ticket = None
+                self.evidence_source_notice.setText(
+                    "ARL source review refused: the ticket, snapshot or frozen SHA is incomplete."
+                )
+                return
+            files = data.get("files_inspected")
+            candidates = data.get("candidate_count")
+            self.evidence_source_notice.setText(
+                "ARL source preparation · Git SHA {} · {} files inspected · "
+                "{} Inspector observations for engineer review. "
+                "These are preliminary source indicators, NOT verified control "
+                "results. Purpose, environment, owner and approvals still "
+                "require declared evidence.{}".format(
+                    str(data.get("target_sha") or "")[:12],
+                    files if isinstance(files, int) else "unknown",
+                    candidates if isinstance(candidates, int) else "unknown",
+                    " Scan truncated by limits." if data.get("truncated") else "",
+                )
+            )
+        self.bridge.call("source-review", ticket_id, callback=prepared)
 
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
@@ -15734,28 +16123,41 @@ class EnkyronWindow(QMainWindow):
         self.evidence_previous.setEnabled(False)
         self.evidence_next.setEnabled(False)
         self.evidence_packs.clear()
+        self.evidence_packs.setMaximumHeight(72)
+        self.evidence_details.setMaximumHeight(100)
         self.evidence_details.clear()
-        self.evidence_summary.setPlainText("Verifying master and exact snapshot binding…")
+        self.evidence_summary.setPlainText("Verifying the current canonical snapshot and Git target…")
 
-        def master_loaded(master, error):
+        def context_loaded(context, error):
             if ticket_id != self.current_id or sequence != self.evidence_seq:
                 return
-            if (error or not isinstance(master, dict)
-                or not master.get("available")
-                or master.get("snapshot_status") != "current"):
+            if (error or not isinstance(context, dict) or
+                    not context.get("available")):
+                self.evidence_workplan_ticket = None
                 self.evidence_summary.setPlainText(
-                    "Evidence workplan blocked: current verified master unavailable."
+                    "Evidence workplan blocked: " + str(error or (
+                        context.get("reason", "Canonical snapshot unavailable")
+                        if isinstance(context, dict) else "Canonical snapshot unavailable"
+                    ))
+                )
+                self.evidence_button.setEnabled(True)
+                return
+            if (context.get("project_id") != ticket["linked_project_id"] or
+                    context.get("assessment_id") != ticket["linked_assessment_id"]):
+                self.evidence_workplan_ticket = None
+                self.evidence_summary.setPlainText(
+                    "Evidence workplan blocked: linked assessment identity mismatch."
                 )
                 self.evidence_button.setEnabled(True)
                 return
             request = {
                 "action": "summary",
                 "target_kind": "git",
-                "target_reference": ticket["target_reference"],
-                "target_sha": master["target_sha"],
-                "project_id": ticket["linked_project_id"],
-                "assessment_id": ticket["linked_assessment_id"],
-                "snapshot_id": master["snapshot_id"],
+                "target_reference": context["target_reference"],
+                "target_sha": context["target_sha"],
+                "project_id": context["project_id"],
+                "assessment_id": context["assessment_id"],
+                "snapshot_id": context["snapshot_id"],
             }
             self.evidence_summary.setPlainText(
                 "Reading canonical ARL evidence requirements…"
@@ -15767,6 +16169,7 @@ class EnkyronWindow(QMainWindow):
                 self.evidence_button.setEnabled(True)
                 if (summary_error or not isinstance(data, dict)
                     or not data.get("available") or data.get("kind") != "summary"):
+                    self.evidence_workplan_ticket = None
                     self.evidence_summary.setPlainText(
                         "Evidence workplan blocked: "
                         + (summary_error or (
@@ -15782,19 +16185,33 @@ class EnkyronWindow(QMainWindow):
                     "snapshot_id": request["snapshot_id"],
                 }
                 counts = data["counts"]
+                lanes = data.get("queue_lanes")
+                if isinstance(lanes, dict):
+                    stage_lines = [
+                        "NEEDS APPLICABILITY REVIEW: " + str(lanes["human_applicability"]),
+                        "TESTS TO PLAN (NOT AUTHORISED): " + str(lanes["test_planning"]),
+                        "PROOF TO COLLECT: " + str(lanes["evidence_collection"]),
+                        "AWAITING HUMAN DECISION: " + str(lanes["human_decision"]),
+                        "BLOCKED / FOLLOW-UP: " + str(lanes["follow_up_blocked"]),
+                        "OTHER REVIEW REQUIRED: " + str(lanes["review_required"]),
+                    ]
+                else:
+                    stage_lines = ["Current control stages have not been returned."]
+                next_step = (
+                    "NEXT: Verify the agent's purpose, architecture and permissions; "
+                    "review applicability using the control list."
+                    if isinstance(lanes, dict) and lanes["human_applicability"] else
+                    "NEXT: Examine the controls at the current workflow stage."
+                )
                 self.evidence_summary.setPlainText("\n".join([
-                    "ARL CONTROL REGISTER: 108",
-                    "Assessment controls: " + str(data["assessment_controls"]),
-                    "Other workflow controls: " + str(data["other_workflow_controls"]),
-                    "Criterion count: " + str(data["criterion_count"]),
+                    "ASSESSMENT PROGRESS · 108 SECURITY CONTROLS",
+                    *stage_lines,
                     "",
-                    "Static candidates: " + str(counts["staticCandidates"]),
-                    "Static missing: " + str(counts["staticMissing"]),
-                    "Human requirements: " + str(counts["humanRequirements"]),
-                    "Runtime requirements: " + str(counts["runtimeRequirements"]),
-                    "Source lineage issues: " + str(counts["sourceLineageIssues"]),
+                    "Evidence requests ready: " + str(len(data["packs"])),
+                    "Criteria in the current evidence plan: " + str(data["criterion_count"]),
                     "",
-                    "No evidence accepted. No tests executed. Human review required.",
+                    next_step,
+                    "These counts are work stages, not PASS/FAIL results.",
                 ]))
                 for pack in data["packs"]:
                     widget = QListWidgetItem(
@@ -15803,16 +16220,26 @@ class EnkyronWindow(QMainWindow):
                     )
                     widget.setData(Qt.ItemDataRole.UserRole, pack["number"])
                     self.evidence_packs.addItem(widget)
-                self.evidence_open.setEnabled(self.evidence_packs.count() > 0)
-                if self.evidence_packs.count():
+                has_packs = self.evidence_packs.count() > 0
+                self.evidence_open.setEnabled(has_packs)
+                self.evidence_packs.setMaximumHeight(190 if has_packs else 72)
+                self.evidence_details.setMaximumHeight(260 if has_packs else 100)
+                if has_packs:
                     self.evidence_packs.setCurrentRow(0)
+                else:
+                    self.evidence_details.setPlainText(
+                        "No evidence request packs at this stage. "
+                        "Review the workflow stage counts above. "
+                        "Human applicability and scope decisions must be completed "
+                        "in the authoritative ARL workflow before evidence planning."
+                    )
                 self.status.setText(
                     "ARL evidence workplan read-only. Candidate records are NOT accepted proof."
                 )
 
             self.bridge.call("evidence-summary", payload=request, callback=summary_loaded)
 
-        self.bridge.call("master", ticket_id, callback=master_loaded)
+        self.bridge.call("assessment-context", ticket_id, callback=context_loaded)
 
     def open_evidence_pack(self):
         if not self.evidence_context or not self.evidence_packs.currentItem():

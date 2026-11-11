@@ -128,6 +128,10 @@ jobs:
           node --check scripts/enkyron-client-desk-schema.mjs
           node --test tests/enkyron-desktop.test.js tests/enkyron-evidence-register.test.js tests/enkyron-ticket-intake.test.js tests/enkyron-ticket-triage.test.js tests/enkyron-ticket-actions.test.js tests/enkyron-crm-prospects.test.js tests/enkyron-crm.test.js tests/enkyron-crm-duplicates.test.js tests/enkyron-crm-edit.test.js tests/enkyron-crm-contact-tickets.test.js tests/enkyron-crm-ticket-corrections.test.js tests/enkyron-crm-ticket-reassignments.test.js tests/enkyron-crm-privacy.test.js tests/enkyron-crm-retention.test.js tests/enkyron-crm-csv.test.js tests/enkyron-crm-csv-import.test.js tests/enkyron-crm-csv-export-audit.test.js tests/enkyron-crm-link.test.js tests/enkyron-crm-tickets.test.js tests/enkyron-crm-opportunities.test.js tests/enkyron-crm-company-opportunities.test.js tests/enkyron-crm-direct-opportunities.test.js tests/enkyron-crm-activities.test.js tests/enkyron-crm-mail-drafts.test.js tests/enkyron-crm-overview.test.js tests/enkyron-crm-pipeline.test.js tests/enkyron-crm-company-dossier.test.js tests/enkyron-crm-qualification.test.js tests/enkyron-crm-proposals.test.js tests/enkyron-crm-proposal-lines.test.js tests/enkyron-crm-service-catalog.test.js tests/enkyron-crm-proposal-export.test.js tests/enkyron-crm-sow-sources.test.js tests/enkyron-crm-sow-drafts.test.js tests/enkyron-crm-contract-references.test.js tests/enkyron-crm-buyer-review.test.js tests/enkyron-crm-commercial-terms.test.js tests/enkyron-crm-internal-review.test.js tests/enkyron-crm-billing-worksheet.test.js tests/enkyron-crm-invoice-drafts.test.js tests/enkyron-crm-invoice-issue-review.test.js tests/enkyron-crm-invoice-issuance.test.js tests/enkyron-crm-quote-preflight.test.js tests/enkyron-crm-quote-evidence-review.test.js tests/enkyron-crm-quote-external-report.test.js tests/enkyron-crm-tax-review.test.js tests/enkyron-company-profile.test.js tests/enkyron-db-errors.test.js
           python3 -B -m unittest desktop.test_assessment_bridge desktop.test_enkyron_operator_state desktop.test_enkyron_evidence
+          node --check desktop/enkyron-ticket-controls.mjs
+          node --check desktop/enkyron-control-preparation.mjs
+          node --check desktop/enkyron-bridge.mjs
+          node --test tests/enkyron-ticket-controls.test.js tests/enkyron-control-preparation.test.js tests/enkyron-ticket-assessment.test.js
       - name: Install native Qt system libraries
         run: |
           sudo apt-get update -qq
@@ -1825,11 +1829,13 @@ jobs:
               "linked_project_id": "prj_test", "linked_assessment_id": "asm_test",
           }
           window.inspect_engine()
-          assert calls[-1][0] == "master"
+          assert calls[-1][0] == "assessment-context"
           assert calls[-1][1] == ticket_id
           calls[-1][3]({
-              "available": True, "snapshot_status": "current",
-              "target_sha": "a" * 40, "snapshot_id": "sys_test",
+              "available": True, "target_kind": "git",
+              "target_reference": "/tmp/agent", "target_sha": "a" * 40,
+              "project_id": "prj_test", "assessment_id": "asm_test",
+              "snapshot_id": "sys_test",
           }, None)
           assert calls[-1][0] == "operator-state"
           assert calls[-1][2]["assessment_id"] == "asm_test"
@@ -1844,10 +1850,12 @@ jobs:
           }, None)
           assert "not_assessed" in window.engine_view.toPlainText()
           window.inspect_evidence()
-          assert calls[-1][0] == "master"
+          assert calls[-1][0] == "assessment-context"
           calls[-1][3]({
-              "available": True, "snapshot_status": "current",
-              "target_sha": "a" * 40, "snapshot_id": "sys_test",
+              "available": True, "target_kind": "git",
+              "target_reference": "/tmp/agent", "target_sha": "a" * 40,
+              "project_id": "prj_test", "assessment_id": "asm_test",
+              "snapshot_id": "sys_test",
           }, None)
           assert calls[-1][0] == "evidence-summary"
           assert calls[-1][2]["snapshot_id"] == "sys_test"
@@ -1865,7 +1873,7 @@ jobs:
                   "requirement_instances": 2, "affected_controls": 2
               }],
           }, None)
-          assert "ARL CONTROL REGISTER: 108" in window.evidence_summary.toPlainText()
+          assert "ASSESSMENT PROGRESS · 108 SECURITY CONTROLS" in window.evidence_summary.toPlainText()
           assert window.evidence_packs.count() == 1
           window.open_evidence_pack()
           assert calls[-1][0] == "evidence-pack"
