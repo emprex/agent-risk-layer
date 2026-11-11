@@ -5,7 +5,9 @@ import gc
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QApplication, QPlainTextEdit
+from PySide6.QtWidgets import (QApplication, QPlainTextEdit, QComboBox,
+    QLineEdit, QCheckBox, QPushButton, QMessageBox)
+from unittest.mock import patch
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import (MailInboxView, format_mail_messages,
     format_mail_message_cards, _safe_sender_label)
@@ -72,6 +74,81 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(window.mail_unsent_items,[])
             self.assertEqual(window.mail_inbox.thread_list.count(),0)
             self.assertNotIn("mail-send-draft",[x[0] for x in calls])
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = previous
+
+    def test_explicit_mail_to_crm_company_link(self):
+        company = "22222222-3333-4333-8444-666666666666"
+        message = "a24c4dba-723c-42e4-85e6-0fef70de3a92"
+        previous = DesktopBridge.call
+        calls = []
+        linked = {"value": False}
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append((command, payload if payload is not None else arg))
+            if callback is None:
+                return
+            if command == "mail-local-messages":
+                callback({"mailbox":"direction","thread_id":THREAD,
+                    "items":[{"id":message,"text":"A client request",
+                         "from":"unknown@example.invalid",
+                         "subject":"Request assessment"}]}, None)
+            elif command == "mail-local-company":
+                callback({"mailbox":"direction","thread_id":THREAD,
+                    "company_id":company if linked["value"] else None,
+                    "company_name":"Verified manually" if linked["value"] else None,
+                    "linked":linked["value"]}, None)
+            elif command == "crm-companies":
+                callback({"available":True,"more":False,"items":[{
+                    "id":company,"name":"Verified manually",
+                    "relationship_state":"prospect"
+                },{
+                    "id":"33333333-4444-4555-8666-777777777777",
+                    "name":"Inactive", "relationship_state":"inactive"
+                }]},None)
+            elif command == "mail-local-company-link":
+                linked["value"]=True
+                callback({"linked":True,"company_id":company},None)
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.mail_inbox.set_owner_mailboxes(CARD)
+            window.mail_inbox.set_connection_state("connected")
+            self.assertTrue(window.mail_inbox.show_threads("all",[{
+                "id":THREAD,"mailbox":"direction","subject":"Request assessment",
+                "last_message_at":"2026-11-11T17:50:00Z"
+            }]))
+            window.mail_inbox.thread_list.setCurrentRow(0)
+            self.assertTrue(window.mail_inbox.crm_link_button.isEnabled())
+            window.mail_inbox.crm_link_button.click()
+            dialog = window.mail_company_link_dialog
+            self.assertTrue(dialog.isVisible())
+            submit = dialog.findChild(QPushButton,"enkyronMailCompanySubmit")
+            search = dialog.findChild(QLineEdit,"enkyronMailCompanySearch")
+            find = dialog.findChild(QPushButton,"enkyronMailCompanyFind")
+            choice = dialog.findChild(QComboBox,"enkyronMailCompanyChoice")
+            agree = dialog.findChild(QCheckBox,"enkyronMailCompanyConfirm")
+            self.assertFalse(submit.isEnabled())
+            self.assertFalse(any(x[0]=="mail-local-company-link" for x in calls))
+            search.setText("Verified")
+            find.click()
+            self.assertEqual(choice.count(),2)  # Inactive company excluded
+            choice.setCurrentIndex(1)
+            self.assertFalse(submit.isEnabled())
+            agree.setChecked(True)
+            self.assertTrue(submit.isEnabled())
+            with patch.object(QMessageBox,"question",
+                  return_value=QMessageBox.StandardButton.Yes):
+                submit.click()
+            self.assertTrue(linked["value"])
+            self.assertEqual(len([x for x in calls
+                                  if x[0]=="mail-local-company-link"]),1)
+            self.assertFalse(window.mail_inbox.crm_link_button.isEnabled())
+            self.assertIn("Verified manually",window.mail_inbox.crm_link_button.text())
+            self.assertFalse(any(x[0] in ("mail-send-draft","mail-reply-draft",
+                "create-ticket") for x in calls))
         finally:
             if window:
                 self._dispose(window)
