@@ -46,7 +46,7 @@ class ControlReviewDialog(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.controls = QListWidget()
         self.controls.setObjectName("enkyronCanonicalControls")
-        self.controls.setMinimumWidth(285)
+        self.controls.setMinimumWidth(315)
         self.controls.currentItemChanged.connect(self.select_control)
         splitter.addWidget(self.controls)
 
@@ -76,6 +76,14 @@ class ControlReviewDialog(QDialog):
         self.facts.setMaximumHeight(90)
         self.facts.itemChanged.connect(self.validate_save)
         side_l.addWidget(self.facts)
+        self.facts_help = QLabel(
+            "Not applicable requires verified architecture facts. "
+            "If none are recorded, choose Architecture information missing; "
+            "the source Inspector cannot declare absence or approve scope."
+        )
+        self.facts_help.setObjectName("subtle")
+        self.facts_help.setWordWrap(True)
+        side_l.addWidget(self.facts_help)
 
         side_l.addWidget(QLabel("Specific human rationale (20–1800 characters):"))
         self.reason = QPlainTextEdit()
@@ -146,11 +154,33 @@ class ControlReviewDialog(QDialog):
             if not isinstance(items, list) or len(items) != 108:
                 self.status.setText("Control queue refused: incomplete 108-control register.")
                 return
+            stages = {
+                "applicability": "Needs scope review",
+                "test": "Test planning",
+                "evidence": "Evidence collection",
+                "finding": "Finding review",
+                "remediation": "Remediation",
+                "retest": "Retest required",
+                "approval": "Approval",
+                "deployment_decision": "Human decision"
+            }
             for entry in items:
-                item = QListWidgetItem(
-                    "{} · {}".format(entry.get("control_id"), entry.get("stage", "unknown"))
+                control_id = str(entry.get("control_id") or "")
+                title = str(entry.get("title") or control_id)
+                label = "{} · {}{}".format(
+                    control_id, title,
+                    " · ARL suggests review" if entry.get("suggested_by_arl") else ""
                 )
-                item.setData(Qt.ItemDataRole.UserRole, entry.get("control_id"))
+                item = QListWidgetItem(label)
+                item.setToolTip(
+                    "{}\\nStage: {}\\n{}".format(
+                        title, stages.get(entry.get("stage"), "Review required"),
+                        "ARL source/architecture suggestion is NOT an applicability decision."
+                        if entry.get("suggested_by_arl")
+                        else "Human applicability review is required."
+                    )
+                )
+                item.setData(Qt.ItemDataRole.UserRole, control_id)
                 self.controls.addItem(item)
             pending = (data.get("stages") or {}).get("applicability", 0)
             self.status.setText(
