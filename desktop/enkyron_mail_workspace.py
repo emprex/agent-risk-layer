@@ -10,7 +10,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QInputDialog,
 )
 
 
@@ -59,6 +59,10 @@ class MailInboxView(QWidget):
     draftsRequested = Signal()
     deskRequested = Signal()
     newEmailRequested = Signal()
+    localMoveRequested = Signal(str, str, str)
+    localCreateFolderRequested = Signal(str)
+    localCreateLabelRequested = Signal(str)
+    localAssignLabelRequested = Signal(str, str, str, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -70,6 +74,9 @@ class MailInboxView(QWidget):
         self._mailboxes = {}
         self._filing_mailboxes = set()
         self._folder = 'inbox'
+        self.local_mode = False
+        self.local_folders = []
+        self.local_labels = []
         self._build()
 
     def _build(self):
@@ -207,6 +214,7 @@ class MailInboxView(QWidget):
         choose_layout = QVBoxLayout(choose_page)
         choose_layout.addStretch()
         choose_text = QLabel("Select a conversation to read it")
+        self.reader_empty_text = choose_text
         choose_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         choose_text.setStyleSheet("color: #60768a; font-size: 14px;")
         choose_layout.addWidget(choose_text)
@@ -253,12 +261,152 @@ class MailInboxView(QWidget):
 
     @property
     def selected_folder(self):
-        return self.folder_picker.currentData()
+        return self._folder if self.local_mode else self.folder_picker.currentData()
 
     def _show_empty(self, title, detail):
         self.empty_title.setText(title)
         self.empty_explanation.setText(detail)
-        self.mail_stack.setCurrentIndex(0)
+        if self.local_mode:
+            self.reader_empty_text.setText(title + '\n\n' + detail)
+            self.reader_stack.setCurrentIndex(0)
+            self.mail_stack.setCurrentIndex(1)
+        else:
+            self.mail_stack.setCurrentIndex(0)
+
+    def set_local_mode(self):
+        """Local folders own the organization; Resend is transport only."""
+        if self.local_mode:
+            return
+        self.local_mode = True
+        self.folder_picker.hide()
+        self.refresh_button.setText("Send / Receive")
+        self.refresh_button.setToolTip(
+            "Import new Resend conversations into ENKYRON; does not move provider mail."
+        )
+        self.search.setPlaceholderText("Search saved subjects…")
+        left = QFrame()
+        left.setObjectName("enkyronMailFolderSidebar")
+        layout = QVBoxLayout(left)
+        layout.setContentsMargins(4, 2, 6, 2)
+        head = QHBoxLayout()
+        head.addWidget(QLabel("FOLDERS"))
+        head.addStretch()
+        add = QPushButton("+")
+        add.setObjectName("enkyronMailFolderAdd")
+        add.setFixedWidth(34)
+        add.setToolTip("Create a folder inside ENKYRON")
+        add.clicked.connect(self.create_folder_prompt)
+        head.addWidget(add)
+        layout.addLayout(head)
+        self.folder_tree = QTreeWidget()
+        self.folder_tree.setObjectName("enkyronMailLocalFolderTree")
+        self.folder_tree.setHeaderHidden(True)
+        self.folder_tree.setRootIsDecorated(False)
+        self.folder_tree.setMinimumWidth(145)
+        self.folder_tree.setMaximumWidth(270)
+        self.folder_tree.itemClicked.connect(self.select_local_folder)
+        layout.addWidget(self.folder_tree)
+        self.splitter.insertWidget(0, left)
+        self.splitter.setSizes([195, 380, 700])
+        self._local_folder_rows([
+            {"key":key, "name":name, "system":True}
+            for key,name in [
+                ("inbox","Inbox"), ("sent","Sent"), ("drafts","Drafts"),
+                ("archive","Archive"), ("spam","Spam"), ("trash","Trash")
+            ]
+        ])
+        self.set_connection_state("connected")
+        self._show_empty("Inbox is empty",
+                         "Press Send / Receive to import from Resend.")
+
+    def _local_folder_rows(self, folders):
+        current = self._folder
+        self.local_folders = list(folders)
+        if not self.local_mode:
+            return
+        self.folder_tree.blockSignals(True)
+        self.folder_tree.clear()
+        selected = None
+        for folder in self.local_folders:
+            if not isinstance(folder, dict):
+                continue
+            key = folder.get("key")
+            name = folder.get("name")
+            if not isinstance(key, str) or not isinstance(name, str):
+                continue
+            item = QTreeWidgetItem([name])
+            item.setData(0, Qt.ItemDataRole.UserRole, key)
+            self.folder_tree.addTopLevelItem(item)
+            if key == current:
+                selected = item
+        if selected:
+            self.folder_tree.setCurrentItem(selected)
+        self.folder_tree.blockSignals(False)
+
+    def set_local_folders(self, folders):
+        if isinstance(folders, list):
+            self._local_folder_rows(folders)
+
+    def set_local_labels(self, labels):
+        self.local_labels = labels if isinstance(labels, list) else []
+
+    def select_local_folder(self, item, _column):
+        if not self.local_mode:
+            return
+        folder = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(folder, str) or folder == self._folder:
+            return
+        self._folder = folder
+        self._clear_threads("No saved messages in this folder.")
+        if self.selected_mailbox is not None:
+            self.folderChanged.emit(folder)
+
+    def create_folder_prompt(self):
+        if not self.local_mode:
+            return
+        name, accepted = QInputDialog.getText(
+            self, "New local folder", "Folder name:")
+        if accepted and name.strip():
+            self.localCreateFolderRequested.emit(name.strip())
+
+    def _local_context_menu(self, item, pos):
+        record = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(record, tuple) or len(record) != 2:
+            return
+        mailbox, thread_id = record
+        menu = QMenu(self)
+        move = menu.addMenu("Move to folder")
+        for folder in self.local_folders:
+            key = folder.get("key")
+            if key in ("sent","drafts",self._folder):
+                continue
+            action = move.addAction(folder.get("name") or key)
+            action.triggered.connect(
+                lambda _checked=False, destination=key:
+                self.localMoveRequested.emit(mailbox, thread_id, destination)
+            )
+        labels = menu.addMenu("Labels")
+        for entry in self.local_labels:
+            ident = entry.get("id")
+            action = labels.addAction(str(entry.get("name") or "Label"))
+            action.setCheckable(True)
+            applied = str(entry.get("name") or "") in (
+                self.items[self.thread_list.row(item)].get("labels") or ""
+            ).split(", ")
+            action.setChecked(applied)
+            action.triggered.connect(
+                lambda checked=False, label=ident:
+                self.localAssignLabelRequested.emit(mailbox, thread_id, label, checked)
+            )
+        labels.addSeparator()
+        labels.addAction("Create new label…", self.create_label_prompt)
+        menu.exec(self.thread_list.mapToGlobal(pos))
+
+    def create_label_prompt(self):
+        name, accepted = QInputDialog.getText(
+            self, "New mail label", "Label name:")
+        if accepted and name.strip():
+            self.localCreateLabelRequested.emit(name.strip())
 
     def set_filing_mailboxes(self, keys):
         # Read-only presentation hint, not a security permission grant.
@@ -363,6 +511,9 @@ class MailInboxView(QWidget):
         if not isinstance(details, tuple) or details[0] not in self._filing_mailboxes:
             return
         self.thread_list.setCurrentItem(item)
+        if self.local_mode:
+            self._local_context_menu(item, pos)
+            return
         menu = QMenu(self)
         current = self.selected_folder
         for label, target in [('Move to Inbox','inbox'), ('Archive','archive'),
