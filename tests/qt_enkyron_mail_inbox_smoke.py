@@ -240,6 +240,78 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self._dispose(window)
             DesktopBridge.call = prior
 
+    def test_inline_reply_is_thread_scoped_and_requires_approval(self):
+        prior_bridge = DesktopBridge.call
+        prior_question = __import__("desktop.enkyron", fromlist=["QMessageBox"]).QMessageBox.question
+        prior_info = __import__("desktop.enkyron", fromlist=["QMessageBox"]).QMessageBox.information
+        commands = []
+        approved = [False]
+
+        def fake(_self, command, arg="", payload=None, callback=None):
+            commands.append((command, payload))
+            if command == "mail-local-messages" and callback:
+                callback({"items":[{
+                    "id":"33333333-3333-4333-8333-333333333333",
+                    "from":"client@example.invalid",
+                    "to":["guillaume.strohecker@agentrisklayer.com"],
+                    "subject":"Meeting", "text":"Hello", "created_at":"2026-11-11"
+                }]}, None)
+            elif command == "mail-messages" and callback:
+                callback({"items":[{
+                    "id":"33333333-3333-4333-8333-333333333333",
+                    "from":"client@example.invalid","reply_to":[],
+                    "subject":"Meeting"
+                }]},None)
+            elif command == "crm-mail-create" and callback:
+                callback({"id":"11111111-1111-4111-8111-111111111111",
+                          "revision":1},None)
+            elif command == "mail-reply-draft" and callback:
+                callback({"outcome":"accepted","notice":"Test acceptance only"},None)
+
+        from PySide6.QtWidgets import QMessageBox
+        DesktopBridge.call = fake
+        QMessageBox.question = lambda *args,**kwargs: (
+            QMessageBox.StandardButton.Yes if approved[0] else
+            QMessageBox.StandardButton.No
+        )
+        QMessageBox.information = lambda *args,**kwargs: None
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.show()
+            window.navigation.setCurrentRow(3)
+            window.mail_provider_ready = True
+            inbox = window.mail_inbox
+            inbox.set_owner_mailboxes(CARD)
+            inbox.set_connection_state("connected")
+            self.assertTrue(inbox.show_threads("all", [{
+                "id":THREAD,"mailbox":"direction","subject":"Meeting"
+            }]))
+            inbox.thread_list.setCurrentRow(0)
+            self.assertTrue(inbox.reply_button.isVisible())
+            inbox.reply_button.click()
+            self.assertTrue(inbox.reply_editor.isVisible())
+            self.assertIn("client@example.invalid", inbox.reply_target.text())
+            inbox.reply_body.setPlainText("Thanks, let's talk.")
+            inbox.reply_send.click()
+            self.assertFalse(any(c[0]=="crm-mail-create" for c in commands))
+            self.assertFalse(any(c[0]=="mail-reply-draft" for c in commands))
+            approved[0] = True
+            inbox.reply_send.click()
+            self.assertTrue(any(c[0]=="crm-mail-create" for c in commands))
+            sends = [p for name,p in commands if name=="mail-reply-draft"]
+            self.assertEqual(len(sends),1)
+            self.assertEqual(sends[0]["mailbox"],"direction")
+            self.assertEqual(sends[0]["thread_id"],THREAD)
+            self.assertTrue(sends[0]["confirmed"])
+            self.assertFalse(inbox.reply_editor.isVisible())
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = prior_bridge
+            QMessageBox.question = prior_question
+            QMessageBox.information = prior_info
+
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
         calls = []
