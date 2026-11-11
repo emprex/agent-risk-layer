@@ -170,6 +170,66 @@ export async function mailLinkSent(pool,actor,input,{uuid=randomUUID}={}){
     throw e;
   }finally{client.release();}
 }
+// Read-only delivery/status check for a locally recorded provider message.
+// Uses only the stored Resend ID; never accepts arbitrary URLs or sends mail.
+// Does not persist a verdict or transform provider acceptance into delivery.
+export async function mailCheckProviderStatus(pool,actor,draftId,{
+  fetchImpl=globalThis.fetch,credentialsLoader=loadPrivateResendConfig
+}={}){
+  if(typeof draftId!=='string'||!UUID.test(draftId))
+    throw new Error('CRM invalid submitted draft identifier');
+  const key=workspace(actor);
+  const row=(await pool.query(
+    'SELECT s.provider_message_id,s.outcome,s.mailbox_key,s.recipient_email,'
+    +'d.subject FROM enkyron_mail_send_attempts s '
+    +'JOIN enkyron_crm_mail_drafts d ON d.workspace_key=s.workspace_key '
+    +'AND d.id=s.draft_id WHERE s.workspace_key=$1 AND s.draft_id=$2',
+    [key,draftId]
+  )).rows[0];
+  if(!row)throw new Error('CRM no Resend submission for this draft');
+  await canAccess(pool,actor,row.mailbox_key,'read');
+  if(!row.provider_message_id||!UUID.test(row.provider_message_id))
+    return {verified:false,local_outcome:row.outcome||'uncertain',
+      notice:'No provider ID recorded; review Resend Emails / Logs. Do not resend.'};
+  const cfg=await credentialsLoader(),token=await cfg.credentialProvider();
+  if(!token||!cfg.mailboxes?.[row.mailbox_key])
+    throw new Error('CRM Resend access unavailable');
+  let response;
+  try{
+    response=await fetchImpl(
+      'https://api.resend.com/emails/'+row.provider_message_id,
+      {method:'GET',redirect:'error',signal:AbortSignal.timeout(12000),
+       headers:{Authorization:'Bearer '+token}}
+    );
+  }catch{
+    return {verified:false,notice:'Resend status lookup unavailable. Do not resend.'};
+  }
+  if(response.status===404)return {verified:false,notice:
+    'Resend did not find this email ID under the configured account. '
+    +'Check the account/Emails logs; do not resend.'};
+  if(!response.ok)return {verified:false,notice:
+    'Resend lookup failed (HTTP '+String(response.status)+'). Do not resend.'};
+  let record;
+  try{record=await response.json();}catch{
+    return {verified:false,notice:'Resend returned invalid status data.'};
+  }
+  // Reconcile expected immutable local identifiers before displaying status.
+  const actual=Array.isArray(record?.to)?record.to:[];
+  if(record?.id!==row.provider_message_id ||
+     !actual.some(x=>typeof x==='string' &&
+       x.trim().toLowerCase()===String(row.recipient_email).toLowerCase()) ||
+     record?.subject!==row.subject)
+    return {verified:false,notice:'Resend response did not match the locally '
+      +'recorded recipient, subject and provider ID. No status asserted.'};
+  const event=typeof record.last_event==='string'
+    ?record.last_event.slice(0,48):'unknown';
+  const allowed=['sent','delivered','bounced','complained','opened',
+    'clicked','failed','suppressed','delivery_delayed','scheduled'];
+  return {verified:true,provider_message_id:row.provider_message_id,
+    last_event:allowed.includes(event)?event:'unknown',
+    note:'Provider status describes Resend tracking, not a confirmed human read.'};
+}
+
 export function validateMailSendRequest(input){
   if(!input||Array.isArray(input)||typeof input!=='object'
       ||typeof input.draft_id!=='string'||!UUID.test(input.draft_id)
