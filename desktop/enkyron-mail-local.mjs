@@ -179,6 +179,9 @@ export async function syncMailHeaders(pool,actor,input={},{
       const result=results[i],task=requested[offset+i];
       if(result.status==='rejected'){
         unavailable.push(task.key);
+        // Explicitly retain failed folder at its last durable cursor. Null
+        // means retry its first page; never report it as complete.
+        next[task.key]=continuation?.[task.key]??null;
         continue;
       }
       imported+=result.value.count;
