@@ -259,7 +259,7 @@ class DesktopBridge:
         process.start()
         # Allow the canonical ARL reader's bounded 75s timeout to finish and
         # return a structured refusal before the Qt supervisor terminates it.
-        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review") else
+        timer.start(95000 if action in ("operator-state", "assessment-link", "control-queue", "control-detail", "control-applicability-save", "source-review", "master-init-preview", "master-init-record") else
                     60000 if action in ("evidence-summary", "evidence-pack") else
                     45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
@@ -684,6 +684,12 @@ class EnkyronWindow(QMainWindow):
         self.master_meta = QLabel("Select a linked ticket to inspect its verified dossier.")
         self.master_meta.setWordWrap(True)
         master_l.addWidget(self.master_meta)
+        self.master_initial_preview = None
+        self.master_create = QPushButton("Preview initial Master revision…")
+        self.master_create.setObjectName("initialMasterCreate")
+        self.master_create.setVisible(False)
+        self.master_create.clicked.connect(self.create_initial_master)
+        master_l.addWidget(self.master_create, alignment=Qt.AlignmentFlag.AlignLeft)
         self.master_doc = make_text_area()
         self.master_doc.setPlaceholderText("No master dossier loaded.")
         master_l.addWidget(self.master_doc, 1)
@@ -15726,6 +15732,8 @@ class EnkyronWindow(QMainWindow):
         self.current_id = ticket_id
         self.current_ticket = None
         self.master_doc.clear()
+        self.master_initial_preview = None
+        self.master_create.setVisible(False)
         self.master_meta.setText("Master dossier not loaded.")
         self.engine_view.clear()
         self.engine_button.setEnabled(False)
@@ -15914,6 +15922,10 @@ class EnkyronWindow(QMainWindow):
         ticket_id = self.current_id
         if not ticket_id:
             return
+        self.master_initial_preview = None
+        self.master_create.setVisible(False)
+        self.master_create.setEnabled(True)
+        self.master_create.setText("Preview initial Master revision…")
         self.master_meta.setText("Verifying master document and frozen target binding…")
         self.master_doc.clear()
         def received(data, error):
@@ -15924,7 +15936,19 @@ class EnkyronWindow(QMainWindow):
                 self.show_error(error)
                 return
             if not data.get("available"):
-                self.master_meta.setText(data.get("reason", "Master not found"))
+                reason = data.get("reason", "Master not found")
+                self.master_meta.setText(reason)
+                ticket = self.current_ticket or {}
+                if (reason == "No recorded master dossier" and
+                        ticket.get("target_kind") == "git" and
+                        ticket.get("linked_project_id") and ticket.get("linked_assessment_id")):
+                    self.master_create.setVisible(True)
+                    self.master_doc.setPlainText(
+                        "This linked assessment has no Master revision yet.\n"
+                        "Preview a read-only documentary revision based on the frozen "
+                        "snapshot and 108 canonical controls; then explicitly confirm.\n"
+                        "This will not accept evidence, run tests or issue a verdict."
+                    )
                 return
             self.master_meta.setText(
                 "{} · revision {} · SHA-256 VERIFIED\nSnapshot: {} / {}  |  target SHA: {}\n{}".format(
@@ -15935,6 +15959,71 @@ class EnkyronWindow(QMainWindow):
             self.master_doc.setPlainText(data["document_md"])
             self.status.setText("Master integrity and target binding verified. Historical record only.")
         self.bridge.call("master", ticket_id, callback=received)
+
+    def create_initial_master(self):
+        """Preview first, then require explicit confirmation for documentary revision 1."""
+        ticket_id = self.current_id
+        if not ticket_id or self.tabs.currentIndex() != 1:
+            return
+        if self.master_initial_preview:
+            draft = self.master_initial_preview
+            decision = QMessageBox.question(
+                self, "Record initial Master Dossier",
+                "Record documentary revision 1 for {}?\n\n"
+                "Snapshot: {}\nTarget SHA: {}\n108 prepared controls.\n\n"
+                "This does NOT accept evidence, approve tests or decide security status."
+                .format(draft["dossier_key"], draft["snapshot_id"], draft["target_sha"]),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if decision != QMessageBox.StandardButton.Yes:
+                return
+            self.master_create.setEnabled(False)
+            self.master_meta.setText("Recording explicitly confirmed documentary revision 1…")
+            payload = {
+                "ticket_id": ticket_id,
+                "snapshot_id": draft["snapshot_id"],
+                "target_sha": draft["target_sha"],
+                "preview_digest": draft["preview_digest"],
+                "confirmed": True,
+            }
+            def recorded(result, error):
+                if ticket_id != self.current_id or self.tabs.currentIndex() != 1:
+                    return
+                if error or not isinstance(result, dict) or result.get("saved") is not True:
+                    self.master_create.setEnabled(True)
+                    self.master_meta.setText(
+                        "Master NOT recorded: " + str(error or "Unverified write")
+                        + ". Reload this tab and review a fresh preview."
+                    )
+                    self.master_initial_preview = None
+                    self.master_create.setText("Preview initial Master revision…")
+                    return
+                self.load_master()  # Re-read and verify SHA-256 via the existing Master reader.
+            self.bridge.call("master-init-record", payload=payload, callback=recorded)
+            return
+
+        self.master_create.setEnabled(False)
+        self.master_meta.setText("Reading exact frozen snapshot and prepared canonical controls…")
+        def prepared(result, error):
+            if ticket_id != self.current_id or self.tabs.currentIndex() != 1:
+                return
+            self.master_create.setEnabled(True)
+            if error or not isinstance(result, dict) or result.get("available") is not True:
+                self.master_meta.setText(
+                    "Master preview unavailable: " + str(error or
+                        (result or {}).get("reason", "No canonical preview"))
+                )
+                return
+            self.master_initial_preview = result
+            self.master_doc.setPlainText(result["document_md"])
+            self.master_meta.setText(
+                "PREVIEW ONLY — NOT RECORDED. Review all 13 sections and 108 "
+                "control entries before confirming. SHA-256: "
+                + result["document_sha256"]
+            )
+            self.master_create.setText("Confirm and record revision 1…")
+        self.bridge.call("master-init-preview", ticket_id, callback=prepared)
 
     def inspect_engine(self):
         """Inspect the canonical current Git snapshot even before a Master is written."""
