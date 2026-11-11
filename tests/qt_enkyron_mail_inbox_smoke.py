@@ -168,7 +168,10 @@ class MailNativeUXSmoke(unittest.TestCase):
                 window.inspect_evidence()
                 self.assertIn("ARL CONTROL REGISTER: 108",
                               window.evidence_summary.toPlainText())
-                self.assertGreaterEqual(window.evidence_summary.minimumHeight(), 270)
+                self.assertGreaterEqual(window.evidence_summary.minimumHeight(), 150)
+                self.assertIn("Applicability", window.evidence_step_guide.text())
+                self.assertIn("not that the security checks passed",
+                              window.evidence_pack_explanation.text())
                 self.assertLessEqual(window.evidence_packs.maximumHeight(), 72)
                 self.assertIn("No evidence request packs",
                               window.evidence_details.toPlainText())
@@ -178,12 +181,47 @@ class MailNativeUXSmoke(unittest.TestCase):
             finally:
                 self._dispose(window)
 
+    def test_evidence_source_preparation_runs_once_without_new_controls(self):
+        ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
+        calls = []
+        def fake(_bridge, command, arg="", payload=None, callback=None):
+            calls.append(command)
+            if command == "source-review" and callback:
+                callback({
+                    "available":True,"ticket_id":ticket,
+                    "snapshot_id":"sys_fixture_108","target_sha":"a"*40,
+                    "files_inspected":9,"candidate_count":2,
+                    "truncated":False
+                },None)
+        with patch.object(DesktopBridge,"call",new=fake):
+            window=EnkyronWindow()
+            try:
+                window.current_id=ticket
+                window.current_ticket={
+                    "target_kind":"git",
+                    "linked_project_id":"prj_fixture",
+                    "linked_assessment_id":"asm_fixture"
+                }
+                window.tabs.setCurrentIndex(5)
+                window.prepare_source_review()
+                self.assertEqual(calls.count("source-review"),1)
+                notice=window.evidence_source_notice.text()
+                self.assertIn("9 files inspected",notice)
+                self.assertIn("2 Inspector observations",notice)
+                self.assertIn("NOT verified",notice)
+                # Refresh of the tab never runs an extra scan for the same ticket.
+                window.prepare_source_review()
+                self.assertEqual(calls.count("source-review"),1)
+            finally:
+                self._dispose(window)
+
     def test_native_108_control_review_is_human_confirmed_and_canonical(self):
         ticket = "3385aa99-e08a-4471-b8e5-9d0b36a8412b"
         project, assessment, snapshot = "prj_fixture", "asm_fixture", "sys_fixture_108"
         calls = []
         items = [
             {"control_id":"ARL-KB-{:03d}".format(n),
+             "title":"Synthetic human-readable control {:03d}".format(n),
              "stage":"applicability","chain_status":"context_required",
              "next_action":"Human applicability review"}
             for n in range(1, 109)
@@ -230,6 +268,10 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self.assertIsNotNone(dialog)
                 self.assertTrue(dialog.isVisible())
                 self.assertEqual(dialog.controls.count(),108)
+                self.assertIn("Synthetic human-readable control 001",
+                              dialog.controls.item(0).text())
+                self.assertIn("Not applicable requires verified architecture facts",
+                              dialog.facts_help.text())
                 self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
                 self.assertFalse(dialog.save.isEnabled())
                 # Non-applicable is unavailable without confirmed architecture facts.
