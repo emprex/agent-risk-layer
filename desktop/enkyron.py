@@ -2065,6 +2065,7 @@ class EnkyronWindow(QMainWindow):
 
     def prepare_mail_reply(self, mailbox, thread_id):
         """Resolve the real reply target from Resend before opening the editor."""
+        self._sent_followup_context = None
         self._reply_context = None
         if not self.mail_provider_ready:
             QMessageBox.information(
