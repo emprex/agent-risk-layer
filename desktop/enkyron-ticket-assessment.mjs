@@ -146,14 +146,25 @@ async function commitLink(pool, ticketId, actor, target, candidate) {
          linked_assessment_id=$2,target_kind='git',target_reference=$3,updated_at=NOW()
        WHERE id=$4`,
       [current.projectId,current.assessmentId,target.repositoryPath,ticketId]);
+    const auditNote = 'Canonical ARL assessment linked by local operator.\\n' +
+      'Project: ' + current.projectId + '\\n' +
+      'Assessment: ' + current.assessmentId + '\\n' +
+      'Snapshot: ' + current.snapshotId + '\\n' +
+      'Git target: ' + target.repositoryPath + '\\n' +
+      'Frozen commit: ' + target.sha + '\\n' +
+      'Administrative binding only; no test authorisation or finding validation.';
+    // Reuse the EXISTING ticket note/event ledger, whose event_type CHECK
+    // permits note_added. Do not fabricate a new event enum or run a migration.
+    await client.query(
+      `INSERT INTO arl_workbench_notes
+       (id,ticket_id,body,source_type,entered_by)
+       VALUES($1,$2,$3,'manual',$4)`,
+      [randomUUID(),ticketId,auditNote,actor]);
     await client.query(
       `INSERT INTO arl_workbench_ticket_events
        (id,ticket_id,event_type,detail,actor)
-       VALUES($1,$2,'assessment_linked',$3,$4)`,
-      [randomUUID(),ticketId,
-        'Canonical assessment '+current.assessmentId+
-        '; project '+current.projectId+'; snapshot '+current.snapshotId+
-        '; target SHA '+target.sha,actor]);
+       VALUES($1,$2,'note_added',$3,$4)`,
+      [randomUUID(),ticketId,'Canonical ARL assessment binding recorded as a work note',actor]);
     await client.query('COMMIT');
     return {linked:true,ticketNumber:ticket.ticket_number,
       projectId:current.projectId,assessmentId:current.assessmentId,
