@@ -194,6 +194,37 @@ export async function quarantineAttachmentBytes(pool,actor,input){
   finally{client.release();}
 }
 
+// Explicit operator read of one archived plain-text message. No provider GET,
+// no untrusted HTML, attachments, credentials or content from other workspaces.
+export async function readArchivedFullText(pool,actor,input={}){
+  const workspace=scope(actor),mailbox=mailboxName(input?.mailbox);
+  const thread=uuid(input?.thread_id),message=uuid(input?.message_id);
+  if(!(await archiveSchemaReady(pool)))
+    return {available:false,reason:'Full mail archive schema 113 not applied'};
+  const row=(await pool.query(
+    'SELECT a.body_text_full AS text,a.archive_state,a.provider_sha256, '+
+    'm.subject,m.sender AS "from",m.created_at '+
+    'FROM enkyron_mail_local_messages m '+
+    'JOIN enkyron_mail_full_messages a ON '+
+    'a.workspace_key=m.workspace_key AND a.mailbox_key=m.mailbox_key '+
+    'AND a.message_id=m.message_id AND a.thread_id=m.thread_id '+
+    'WHERE m.workspace_key=$1 AND m.mailbox_key=$2 AND m.thread_id=$3 '+
+    'AND m.message_id=$4 LIMIT 1',
+    [workspace,mailbox,thread,message]
+  )).rows[0];
+  if(!row)throw Error('Archived Mail message not found');
+  if(typeof row.text!=='string')
+    return {available:false,reason:'Plain-text body not available in this archive'};
+  if(Buffer.byteLength(row.text,'utf8')>2097152)
+    throw Error('Archived Mail text is larger than approved limit');
+  return {available:true,mailbox,thread_id:thread,message_id:message,
+    subject:row.subject,from:row.from,created_at:row.created_at,
+    text:row.text,archive_state:row.archive_state,sha256:row.provider_sha256,
+    notice:row.archive_state==='body_captured'
+      ?'Body captured in NEMORYTH; attachments are not certified archived.'
+      :'Archive incomplete; verify source before relying on this content.'};
+}
+
 // Status only: neither HTML nor attachment bytes may exit this IPC boundary.
 export async function mailArchiveStatus(pool,actor,input={}){
   const workspace=scope(actor),selected=input?.mailbox||'all';
