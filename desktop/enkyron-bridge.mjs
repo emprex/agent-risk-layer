@@ -13,7 +13,6 @@ import { listMailDrafts, readMailDraft, createMailDraft, updateMailDraft, valida
 import {suggestMailRecipients,recipientSearchTerm} from './enkyron-crm-mail-recipients.mjs';
 import {recordManualSend,validateManualSend} from './enkyron-crm-mail-manual-sends.mjs';
 import {mailAccess,mailStatus,mailThreads,mailMessages,mailSent,mailSendDraft,mailLinkSent,mailCheckProviderStatus,validateMailSendRequest,validateMailLinkRequest} from './enkyron-mail-service.mjs';
-import {moveMailThread,validateFiling} from './enkyron-mail-filing.mjs';
 import { getSalesOverview } from './enkyron-crm-overview.mjs';
 import { getSalesPipeline } from './enkyron-crm-pipeline.mjs';
 import { getCompanyDossier } from './enkyron-crm-company-dossier.mjs';
@@ -473,7 +472,7 @@ main().catch(error => {
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|CRM )/.test(message);
   const operation=process.argv[2];
   const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
-  const mailOperation=['mail-threads','mail-messages','mail-status','mail-file-thread','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
+  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
   emit({ ok: false, error: profileOperation
     ? explainLocalError(error)
     : mailOperation ? explainMailOperationError(error)
