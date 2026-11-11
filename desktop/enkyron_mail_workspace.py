@@ -651,7 +651,13 @@ class MailInboxView(QWidget):
             return
         self.current_thread_mailbox = source
         self.current_thread_id = thread_id
-        self.subject.setText(current.text().split("\n", 1)[0].removeprefix("● "))
+        row = self.thread_list.row(current)
+        record = self.items[row] if 0 <= row < len(self.items) else {}
+        self.subject.setText(
+            str(record.get("subject") or "(No subject)")[:300]
+            if isinstance(record, dict)
+            else current.text().split("\n", 1)[0].removeprefix("● ")
+        )
         self.body.setPlainText("Loading conversation…")
         self.reader_stack.setCurrentIndex(1)
         self.threadRequested.emit(source, thread_id)
