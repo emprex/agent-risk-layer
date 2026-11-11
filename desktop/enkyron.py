@@ -6223,9 +6223,16 @@ class EnkyronWindow(QMainWindow):
     def open_new_company(self):
         if not self.crm_company_add.isEnabled():
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · New company")
-        dialog.setMinimumWidth(540)
+        # A standalone, modeless window can be dragged freely (also to
+        # another monitor); keep the existing CRM form and save workflow.
+        if self.crm_company_dialog and self.crm_company_dialog.isVisible():
+            self.crm_company_dialog.raise_()
+            self.crm_company_dialog.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · New company",
+            size=(620, 555), minimum=(540, 495)
+        )
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title("REGISTER A COMPANY"))
         explanation = QLabel(
@@ -6251,6 +6258,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_country_input.setMaxLength(90)
         form.addRow("Country", self.crm_country_input)
         self.crm_website_input = QLineEdit()
+        self.crm_website_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.crm_website_input.setMaxLength(500)
         self.crm_website_input.setPlaceholderText("https://example.com (optional)")
         form.addRow("Website (optional)", self.crm_website_input)
@@ -6265,7 +6273,7 @@ class EnkyronWindow(QMainWindow):
         buttons.addWidget(self.crm_company_submit)
         layout.addLayout(buttons)
         self.crm_company_dialog = dialog
-        dialog.open()
+        dialog.show()
 
     def create_company(self):
         dialog = self.crm_company_dialog
