@@ -27,7 +27,7 @@ if __package__:
     from .enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
-    from .enkyron_mail_workspace import MailInboxView
+    from .enkyron_mail_workspace import MailInboxView, format_mail_messages
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -35,7 +35,7 @@ else:
     from enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
-    from enkyron_mail_workspace import MailInboxView
+    from enkyron_mail_workspace import MailInboxView, format_mail_messages
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -294,6 +294,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
+        self.mail_thread_windows = {}
         self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
@@ -1297,6 +1298,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.refreshRequested.connect(self.refresh_mail)
         self.mail_inbox.mailboxChanged.connect(self.refresh_mail)
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
+        self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
@@ -1784,6 +1786,70 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("mail-messages",
             payload={"mailbox":mailbox,"thread_id":thread_id},callback=received)
 
+    def open_mail_thread_window(self, mailbox, thread_id):
+        """Double-click: detachable, read-only plain-text conversation."""
+        if (mailbox not in ("direction", "support")
+                or not isinstance(thread_id, str) or not thread_id):
+            return
+        key = (mailbox, thread_id)
+        opened = self.mail_thread_windows.get(key)
+        if opened is not None and opened.isVisible():
+            opened.raise_()
+            opened.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · Mail conversation", size=(850, 640), minimum=(580, 410)
+        )
+        layout = QVBoxLayout(dialog)
+        subject = QLabel(self.mail_inbox.subject.text() or "Conversation")
+        subject.setTextFormat(Qt.TextFormat.PlainText)
+        subject.setWordWrap(True)
+        subject.setObjectName("enkyronMailDetachedSubject")
+        layout.addWidget(subject)
+        account = QLabel("Inbox: {}".format(
+            self.mail_inbox._mailboxes.get(mailbox) or mailbox
+        ))
+        account.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(account)
+        body = QPlainTextEdit()
+        body.setObjectName("enkyronMailDetachedBody")
+        body.setReadOnly(True)
+        body.setPlainText("Loading conversation…")
+        layout.addWidget(body, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.close)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close)
+        layout.addLayout(actions)
+        self.mail_thread_windows[key] = dialog
+        dialog.finished.connect(
+            lambda _value, ref=key: self.mail_thread_windows.pop(ref, None)
+        )
+        dialog.show()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if (error or not isinstance(data, dict)
+                    or data.get("mailbox") != mailbox
+                    or data.get("thread_id") != thread_id):
+                body.setPlainText(
+                    "Unable to load this conversation. Close and try again."
+                )
+                return
+            messages = data.get("items")
+            if not isinstance(messages, list):
+                body.setPlainText("Invalid conversation response.")
+                return
+            body.setPlainText(
+                format_mail_messages(messages) or "No messages in this thread."
+            )
+
+        self.bridge.call("mail-messages",
+            payload={"mailbox": mailbox, "thread_id": thread_id},
+            callback=received)
+
     def load_mail_sent(self):
         """Display recorded submissions; refresh delivery status read-only."""
         if not hasattr(self, "mail_sent_table"):
@@ -2188,6 +2254,10 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
     def closeEvent(self, event):
+        # Close independently opened mail conversations on workstation exit.
+        for window in list(self.mail_thread_windows.values()):
+            window.close()
+        self.mail_thread_windows.clear()
         # Detached drafts must not expose customer data after workstation exit.
         # Closing a draft first avoids an orphan/read-only dossier dependency.
         if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
