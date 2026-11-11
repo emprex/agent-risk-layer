@@ -62,6 +62,8 @@ class MailInboxView(QWidget):
     newEmailRequested = Signal()
     localMoveRequested = Signal(str, str, str)
     localCreateFolderRequested = Signal(str)
+    localRenameFolderRequested = Signal(str, str)
+    localDeleteFolderRequested = Signal(str)
     localCreateLabelRequested = Signal(str)
     localAssignLabelRequested = Signal(str, str, str, bool)
     localFlagRequested = Signal(str, str, bool)
@@ -370,6 +372,8 @@ class MailInboxView(QWidget):
         self.folder_tree.setMinimumWidth(145)
         self.folder_tree.setMaximumWidth(270)
         self.folder_tree.itemClicked.connect(self.select_local_folder)
+        self.folder_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.folder_tree.customContextMenuRequested.connect(self._folder_context_menu)
         layout.addWidget(self.folder_tree)
         self.splitter.insertWidget(0, left)
         self.splitter.setSizes([195, 380, 700])
@@ -407,6 +411,32 @@ class MailInboxView(QWidget):
         if selected:
             self.folder_tree.setCurrentItem(selected)
         self.folder_tree.blockSignals(False)
+
+    def _folder_context_menu(self, pos):
+        """Rename or remove only user-created folders, never provider mail."""
+        if not self.local_mode:
+            return
+        item = self.folder_tree.itemAt(pos)
+        if item is None:
+            return
+        key = item.data(0, Qt.ItemDataRole.UserRole)
+        folder = next((f for f in self.local_folders
+                       if isinstance(f, dict) and f.get("key") == key), None)
+        if not folder or folder.get("system") is not False:
+            return
+        menu = QMenu(self)
+        rename = menu.addAction("Rename folder…")
+        delete = menu.addAction("Delete empty folder…")
+        selected = menu.exec(self.folder_tree.viewport().mapToGlobal(pos))
+        if selected == rename:
+            name, accepted = QInputDialog.getText(
+                self, "Rename local folder", "Folder name:",
+                text=str(folder.get("name") or ""))
+            if accepted and name.strip() and name.strip() != folder.get("name"):
+                self.localRenameFolderRequested.emit(key, name.strip())
+        elif selected == delete:
+            # The server additionally refuses deletion when messages remain.
+            self.localDeleteFolderRequested.emit(key)
 
     def set_local_folders(self, folders):
         if isinstance(folders, list):
