@@ -1771,6 +1771,12 @@ class EnkyronWindow(QMainWindow):
         self.navigation.currentRowChanged.connect(self.module_changed)
         self.navigation.setCurrentRow(0)
 
+        # Mail reception runs only while the native workstation is open.
+        # No daemon, listening port, database migration or provider write.
+        self.mail_poll_timer = QTimer(self)
+        self.mail_poll_timer.setInterval(60000)
+        self.mail_poll_timer.timeout.connect(self.poll_local_inbox)
+        self._mail_auto_running = False
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
@@ -1790,6 +1796,7 @@ class EnkyronWindow(QMainWindow):
             if error or not data:
                 self.mail_status_loaded = False
                 self.mail_provider_ready = False
+                self.mail_poll_timer.stop()
                 self.crm_mail_connection.setText("Email connection unavailable · Drafts remain local")
                 self.mail_inbox.set_connection_state(
                     "disconnected", "Compose an email or use saved local drafts."
@@ -1813,6 +1820,15 @@ class EnkyronWindow(QMainWindow):
             self.crm_mail_connection.setText(msg)
             self.load_local_mail_metadata()
             self.load_local_mail(self.mail_inbox.selected_mailbox)
+            # Only a configured, readable provider Inbox may be polled.
+            eligible = (self.mail_provider_ready and data.get("schema_ready") is True
+                        and any(x.get("can_read") is True
+                                for x in permitted if isinstance(x, dict)))
+            if eligible:
+                self.mail_poll_timer.start()
+                self.poll_local_inbox()
+            else:
+                self.mail_poll_timer.stop()
         self.bridge.call("mail-status", callback=received)
 
     def load_local_mail_metadata(self):
@@ -1876,6 +1892,68 @@ class EnkyronWindow(QMainWindow):
             payload={"mailbox":mailbox,"folder":request_folder,
                      "search":query,"page":page},callback=received)
 
+    def poll_local_inbox(self):
+        """Check provider Inboxes automatically and cache recent text locally.
+
+        Initial check runs when Mail is configured, then every 60 seconds.
+        Resend calls are GET only. No sending, deletion, folder mutation,
+        external CRM actions or implicit authorisation can happen here.
+        """
+        if (not self.mail_provider_ready or not self.mail_status_loaded
+                or getattr(self, "_mail_sync_running", False)
+                or self._mail_auto_running):
+            return
+        self._mail_auto_running = True
+        self.mail_inbox.refresh_button.setEnabled(False)
+
+        def complete(note="", refresh=False):
+            self._mail_auto_running = False
+            self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
+            if note and self.mail_inbox.selected_folder == "inbox":
+                self.mail_inbox.connection_label.setText(note)
+                self.mail_inbox.connection_label.setVisible(True)
+            if not refresh or self.mail_inbox.selected_folder != "inbox":
+                return
+            if (self.mail_inbox._local_page != 0
+                    or self.mail_inbox.search.text().strip()
+                    or self.mail_inbox._local_search_query):
+                return
+            mailbox = self.mail_inbox.selected_mailbox or "all"
+            def updated(data, error):
+                if error or not isinstance(data, dict):
+                    return
+                self.mail_inbox.show_threads(
+                    mailbox, data.get("items") or [],
+                    bool(data.get("has_more")), "inbox",
+                    page=0, preserve_reader=True
+                )
+            self.bridge.call("mail-local-list",
+                payload={"mailbox":mailbox,"folder":"inbox","page":0},
+                callback=updated)
+
+        def received_headers(data, error):
+            if error or not isinstance(data, dict) or not data.get("synced"):
+                complete("Automatic Inbox check unavailable; retrying in 60 seconds.")
+                return
+            changed = bool(data.get("new_threads") or data.get("updated_threads"))
+            partial = bool(data.get("partial"))
+            def received_bodies(result, failure):
+                warning = ""
+                if failure or not isinstance(result, dict) or result.get("failed_threads"):
+                    warning = ("Some received mail could not be cached; "
+                               "automatic checking will retry.")
+                elif partial:
+                    warning = ("One provider Inbox was unavailable; "
+                               "automatic checking will retry.")
+                complete(warning, refresh=changed)
+            self.bridge.call("mail-local-sync-bodies",
+                payload={"mailbox":"all","recent":True},
+                callback=received_bodies)
+
+        self.bridge.call("mail-local-sync",
+            payload={"mailbox":"all","inbox_only":True},
+            callback=received_headers)
+
     def sync_local_mail(self, mailbox=None):
         """Continue bounded Resend pages into NEMORYTH; never mutate provider mail.
 
@@ -1890,7 +1968,7 @@ class EnkyronWindow(QMainWindow):
             self.mail_inbox.connection_label.setVisible(True)
             self.load_local_mail(self.mail_inbox.selected_mailbox)
             return
-        if getattr(self, "_mail_sync_running", False):
+        if getattr(self, "_mail_sync_running", False) or self._mail_auto_running:
             return
         chosen = mailbox if mailbox in ("all", "direction", "support") else "all"
         state = getattr(self, "_mail_sync_state", None)
