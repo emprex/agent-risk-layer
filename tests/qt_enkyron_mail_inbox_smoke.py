@@ -6,7 +6,7 @@ import gc
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (QApplication, QPlainTextEdit, QComboBox,
-    QLineEdit, QCheckBox, QPushButton, QMessageBox)
+    QLineEdit, QCheckBox, QPushButton, QMessageBox, QScrollArea, QDialog)
 from unittest.mock import patch
 from desktop.enkyron import DesktopBridge, EnkyronWindow
 from desktop.enkyron_mail_workspace import (MailInboxView, format_mail_messages,
@@ -34,6 +34,33 @@ class MailNativeUXSmoke(unittest.TestCase):
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
         gc.collect()
+
+    def test_evidence_sections_do_not_overlap_on_compact_window(self):
+        from desktop.enkyron_control_review import ControlReviewDialog
+        # The control inspector remains a movable dialog; it is not an
+        # oversized replacement pane or a second workflow.
+        self.assertTrue(issubclass(ControlReviewDialog, QDialog))
+        with patch.object(DesktopBridge, "call", return_value=None):
+            window = EnkyronWindow()
+            try:
+                window.resize(1000, 650)
+                window.show()
+                window.ticket_views.setCurrentIndex(1)
+                window.tabs.setCurrentIndex(5)
+                self.app.processEvents()
+                page = window.tabs.widget(5)
+                self.assertIsInstance(page, QScrollArea)
+                self.assertTrue(page.widgetResizable())
+                summary = window.evidence_summary
+                heading = window.evidence_pack_heading
+                # Both widgets have the same content parent. A scroll viewport
+                # must keep section boundaries separate at laptop dimensions.
+                self.assertIs(summary.parentWidget(), heading.parentWidget())
+                self.assertLess(summary.geometry().bottom(), heading.geometry().top())
+                self.assertLess(heading.geometry().bottom(),
+                                window.evidence_packs.geometry().top())
+            finally:
+                self._dispose(window)
 
     def test_ticket_notes_space_and_local_display_identity(self):
         # ENKYRON should prioritise recorded work over empty action space.
