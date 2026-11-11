@@ -28,6 +28,7 @@ if __package__:
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from .enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from .enkyron_calendar_view import MailCalendarView
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -36,6 +37,7 @@ else:
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
     from enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from enkyron_calendar_view import MailCalendarView
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
@@ -429,8 +431,8 @@ class EnkyronWindow(QMainWindow):
         nav_l.addWidget(QLabel("WORKSPACE"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
-        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail"])
-        self.navigation.setMaximumHeight(204)
+        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
+        self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
         workspace.addWidget(navigation)
@@ -1668,6 +1670,12 @@ class EnkyronWindow(QMainWindow):
         invoice_l.addLayout(invoice_buttons)
         self.crm_tabs.addTab(invoice_page, "Invoices")
         self.pages.addWidget(crm_page)
+        self.calendar_view = MailCalendarView()
+        self.calendar_view.rangeRequested.connect(self.load_calendar)
+        self.calendar_view.eventCreateRequested.connect(self.create_calendar_event)
+        self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
+        self.calendar_view.taskCompleteRequested.connect(self.complete_calendar_task)
+        self.pages.addWidget(self.calendar_view)
 
         self.crm_search_timer = QTimer(self)
         self.crm_search_timer.setSingleShot(True)
@@ -2350,6 +2358,10 @@ class EnkyronWindow(QMainWindow):
         # Reuse the CRM data pages without surrounding Mail in CRM controls.
         self.crm_header_panel.setVisible(index != 3)
         self.crm_tabs.tabBar().setVisible(index != 3)
+        if index == 4:
+            self.pages.setCurrentIndex(3)
+            self.load_calendar()
+            return
         if index == 3:
             self.pages.setCurrentIndex(2)
             self.crm_tabs.setCurrentIndex(3)
@@ -2374,6 +2386,56 @@ class EnkyronWindow(QMainWindow):
                 self.load_mail_drafts()
             if not self.crm_proposal_loaded:
                 self.load_proposals()
+
+    def load_calendar(self, interval=None):
+        if not hasattr(self, "calendar_view"):
+            return
+        if not isinstance(interval, dict):
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            day = self.calendar_view.calendar.selectedDate()
+            first = QDate(day.year(), day.month(), 1)
+            last = first.addMonths(1)
+            tz = ZoneInfo("Europe/London")
+            interval = {
+                "start": datetime(first.year(),first.month(),first.day(),
+                                  tzinfo=tz).isoformat(),
+                "end": datetime(last.year(),last.month(),last.day(),
+                                tzinfo=tz).isoformat(),
+            }
+        self.calendar_view.status.setText("Loading local calendar…")
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                self.calendar_view.status.setText(
+                    "Calendar unavailable. Local schema may need updating."
+                )
+                return
+            self.calendar_view.show_data(data)
+        self.bridge.call("calendar-list", payload=interval, callback=received)
+
+    def create_calendar_event(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("id"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not save appointment."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-create", payload=data, callback=received)
+
+    def create_calendar_task(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("id"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not save task."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-task-create", payload=data, callback=received)
+
+    def complete_calendar_task(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("completed"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not complete task."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-task-complete", payload=data, callback=received)
 
     def crm_tab_changed(self, index):
         if index == 3:
