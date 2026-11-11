@@ -268,6 +268,7 @@ class DetachableModuleWindow(QMainWindow):
     def __init__(self, title, on_return, owner):
         super().__init__(owner, Qt.WindowType.Window)
         self.setWindowTitle(title)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.resize(1180, 760)
         self.setMinimumSize(650, 450)
         self._on_return = on_return
@@ -1397,6 +1398,7 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_mail_folders.addTab(sent_page, "Sent")
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
+        self.crm_mail_folders.tabBar().hide()
         self.crm_mail_folders.setCurrentIndex(0)
         self.crm_tabs.addTab(mail_page, "Mail")
 
