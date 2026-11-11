@@ -16186,39 +16186,32 @@ class EnkyronWindow(QMainWindow):
                 }
                 counts = data["counts"]
                 lanes = data.get("queue_lanes")
-                stage_lines = []
                 if isinstance(lanes, dict):
                     stage_lines = [
-                        "",
-                        "CURRENT CONTROL WORKFLOW STAGES (not verdicts):",
-                        "Human applicability decisions pending: " + str(lanes["human_applicability"]),
-                        "Evidence collection: " + str(lanes["evidence_collection"]),
-                        "Test planning (not authorisation): " + str(lanes["test_planning"]),
-                        "Human decision / review: " + str(lanes["human_decision"]),
-                        "Blocked follow-up: " + str(lanes["follow_up_blocked"]),
-                        "Other review required: " + str(lanes["review_required"]),
+                        "NEEDS APPLICABILITY REVIEW: " + str(lanes["human_applicability"]),
+                        "TESTS TO PLAN (NOT AUTHORISED): " + str(lanes["test_planning"]),
+                        "PROOF TO COLLECT: " + str(lanes["evidence_collection"]),
+                        "AWAITING HUMAN DECISION: " + str(lanes["human_decision"]),
+                        "BLOCKED / FOLLOW-UP: " + str(lanes["follow_up_blocked"]),
+                        "OTHER REVIEW REQUIRED: " + str(lanes["review_required"]),
                     ]
+                else:
+                    stage_lines = ["Current control stages have not been returned."]
+                next_step = (
+                    "NEXT: Verify the agent's purpose, architecture and permissions; "
+                    "review applicability using the control list."
+                    if isinstance(lanes, dict) and lanes["human_applicability"] else
+                    "NEXT: Examine the controls at the current workflow stage."
+                )
                 self.evidence_summary.setPlainText("\n".join([
-                    "ARL CONTROL REGISTER: 108",
+                    "ASSESSMENT PROGRESS · 108 SECURITY CONTROLS",
                     *stage_lines,
                     "",
-                    "Controls ready for evidence planning: " + str(data["assessment_controls"]),
-                    "Controls in other workflow stages: " + str(data["other_workflow_controls"]),
-                    "Evidence criteria in current workplan: " + str(data["criterion_count"]),
+                    "Evidence requests ready: " + str(len(data["packs"])),
+                    "Criteria in the current evidence plan: " + str(data["criterion_count"]),
                     "",
-                    "Static candidates: " + str(counts["staticCandidates"]),
-                    "Static missing: " + str(counts["staticMissing"]),
-                    "Human requirements: " + str(counts["humanRequirements"]),
-                    "Runtime requirements: " + str(counts["runtimeRequirements"]),
-                    "Source lineage issues: " + str(counts["sourceLineageIssues"]),
-                    "",
-                    "No evidence accepted. No tests executed. Human review required.",
-                    *(
-                        ["",
-                         "No evidence packs yet: begin with human applicability and",
-                         "scope decisions. This is NOT 108 NOT APPLICABLE/PASS."]
-                        if data["assessment_controls"] == 0 else []
-                    ),
+                    next_step,
+                    "These counts are work stages, not PASS/FAIL results.",
                 ]))
                 for pack in data["packs"]:
                     widget = QListWidgetItem(
