@@ -358,19 +358,31 @@ export async function syncLocalMailBodies(pool,actor,input={},{
     'ORDER BY t.last_message_at DESC LIMIT $3',
     [key,selected,9]
   )).rows;
-  let cached=0,failed=0,html=0;
-  for(const row of candidates.slice(0,8)){
-    try{
-      const page=await fetchAndCacheThread(pool,actor,{
-        mailbox:row.mailbox_key,thread_id:row.thread_id
-      },{listMessages});
-      if(page.items.length)cached++;
-      if(page.items.some(m=>m.html_only===true))html++;
-    }catch{failed++;}
+  let cached=0,failed=0,html=0,unfinishedPages=0;
+  // Max two concurrent reads, eight threads per check. This keeps normal
+  // operation beneath the Qt bridge timeout even if provider GETs are slow.
+  const selectedRows=candidates.slice(0,8);
+  for(let offset=0;offset<selectedRows.length;offset+=2){
+    const attempts=await Promise.all(selectedRows.slice(offset,offset+2).map(async row=>{
+      try{
+        const page=await fetchAndCacheThread(pool,actor,{
+          mailbox:row.mailbox_key,thread_id:row.thread_id
+        },{listMessages});
+        return {saved:page.items.length>0,
+          html:page.items.some(m=>m.html_only===true),
+          incomplete:page.has_more===true,failed:false};
+      }catch{return {saved:false,html:false,incomplete:false,failed:true};}
+    }));
+    for(const attempt of attempts){
+      if(attempt.saved)cached++;
+      if(attempt.html)html++;
+      if(attempt.incomplete)unfinishedPages++;
+      if(attempt.failed)failed++;
+    }
   }
   return {cached_threads:cached,failed_threads:failed,
     requires_safe_html_viewer:html,
-    more_pending:candidates.length>8,
+    more_pending:candidates.length>8||unfinishedPages>0,
     note:recent
       ?'Automatic Inbox poll checks 8 recent conversations; run Send / Receive for full history.'
       :'Use the full rescan to finish previously interrupted conversations.'};
