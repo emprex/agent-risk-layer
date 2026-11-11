@@ -90,6 +90,8 @@ class MailNativeUXSmoke(unittest.TestCase):
                           "partial":False}, None)
             elif command == "mail-local-sync-bodies" and callback:
                 callback({"cached_threads":1,"failed_threads":0}, None)
+            elif command == "mail-local-archive-sync" and callback:
+                callback({"available":False,"archived":0}, None)
             elif command == "mail-local-list" and callback:
                 callback({"mailbox":"all","folder":"inbox","items":[{
                     "id":THREAD,"mailbox":"direction","subject":"Gmail synthetic test",
@@ -108,7 +110,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             mail_calls = [(name,payload) for name,payload in calls
                           if name.startswith("mail-")]
             self.assertEqual([name for name,_ in mail_calls],[
-                "mail-local-sync","mail-local-sync-bodies","mail-local-list"])
+                "mail-local-sync","mail-local-sync-bodies",
+                "mail-local-list","mail-local-archive-sync"])
             self.assertEqual(mail_calls[0][1],{
                 "mailbox":"all","inbox_only":True})
             self.assertEqual(mail_calls[1][1],{
@@ -119,7 +122,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             window._mail_sync_running = True
             window.poll_local_inbox()
             self.assertEqual(len([name for name,_ in calls
-                                  if name.startswith("mail-")]),3)
+                                  if name.startswith("mail-")]),4)
+            self.assertFalse(window._mail_archive_running)
         finally:
             if window:
                 self._dispose(window)
