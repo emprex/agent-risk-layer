@@ -74,14 +74,16 @@ async function readerFor(pool,operator,mailbox){
     authoriseRead:key=>key===mailbox,
   });
 }
-export async function mailThreads(pool,operator,mailbox){
+export async function mailThreads(pool,operator,mailbox,folder='inbox'){
+  if(!['inbox','archive','spam','trash'].includes(folder))
+    throw new Error('Invalid mailbox folder');
   // One inbox view across the two existing Resend accounts; no new mailboxes.
   if(mailbox==='all'){
     const pages=await Promise.all(
-      ['direction','support'].map(name=>mailThreads(pool,operator,name))
+      ['direction','support'].map(name=>mailThreads(pool,operator,name,folder))
     );
     return {
-      mailbox:'all',
+      mailbox:'all',folder,
       items:pages.flatMap(p=>p.items)
         .sort((a,b)=>String(b.last_message_at||'')
           .localeCompare(String(a.last_message_at||'')))
@@ -90,8 +92,26 @@ export async function mailThreads(pool,operator,mailbox){
     };
   }
   const reader=await readerFor(pool,operator,mailbox);
-  const page=await reader.listThreads({mailbox,limit:30});
-  return {...page,items:page.items.map(item=>({...item,mailbox}))};
+  const page=await reader.listThreads({mailbox,folder,limit:30});
+  const items=page.items.map(item=>({...item,mailbox}));
+  // Best-effort local index: never misrepresent a failed cache write as an
+  // unavailable provider inbox. Full email bodies are not silently stored.
+  try{
+    const scope=workspace(operator);
+    for(const item of items){
+      if(!UUID.test(item.id))continue;
+      await pool.query(
+        'INSERT INTO enkyron_mail_thread_index '
+        +'(workspace_key,mailbox_key,thread_id,folder,subject,last_message_at) '
+        +'VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT '
+        +'(workspace_key,mailbox_key,thread_id) DO UPDATE SET '
+        +'folder=EXCLUDED.folder,subject=EXCLUDED.subject,'
+        +'last_message_at=EXCLUDED.last_message_at,indexed_at=NOW()',
+        [scope,mailbox,item.id,folder,item.subject||'',item.last_message_at||'']
+      );
+    }
+  }catch(error){if(error?.code!=='42P01')throw error;}
+  return {...page,folder,items};
 }
 export async function mailMessages(pool,operator,mailbox,threadId){
   const reader=await readerFor(pool,operator,mailbox);
