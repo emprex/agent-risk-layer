@@ -2070,6 +2070,13 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
     def closeEvent(self, event):
+        # Detached drafts must not expose customer data after workstation exit.
+        # Closing a draft first avoids an orphan/read-only dossier dependency.
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.close()
+            if self.crm_draft_dialog.isVisible():
+                event.ignore()
+                return
         # Close both detached company views before the operator workspace exits.
         # No customer records should remain visible after ENKYRON closes.
         if (self.crm_company_followups_dialog is not None
@@ -4141,7 +4148,9 @@ class EnkyronWindow(QMainWindow):
         draft_context = getattr(self, "crm_draft_context", None) or {}
         if (draft_dialog and draft_dialog.isVisible()
                 and draft_context.get("dossier_company_id")
-                == self.crm_dossier_company_id):
+                == self.crm_dossier_company_id
+                and draft_context.get("mail_state") not in
+                ("provider_submitted", "external_send_reported")):
             return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
