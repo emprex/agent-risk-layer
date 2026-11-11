@@ -5,7 +5,7 @@ import pg from 'pg';
 import {
   localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
-  createLocalLabel,labelLocalThread,flagLocalThread
+  createLocalLabel,labelLocalThread,flagLocalThread,setLocalThreadRead
 } from '../desktop/enkyron-mail-local.mjs';
 import {calendarCreate,calendarCreateTask,calendarCompleteTask,calendarList,
   validateCalendarEvent} from '../desktop/enkyron-calendar.mjs';
@@ -391,5 +391,79 @@ test('oversized received bodies are never stored as complete in schema 112',{
       'WHERE workspace_key=$1',[scope]
     )).rows;
     assert.equal(rows[0].n,0);
+  }finally{await pool.end();}
+});
+
+
+test('read and unread transitions are durable and audited without provider mutations',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-local-read-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID();
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject,unread) '+
+      "VALUES($1,'direction',$2,'inbox','inbox','Unread case',TRUE)",
+      [scope,thread]
+    );
+    const target={mailbox:'direction',thread_id:thread};
+    const read=await setLocalThreadRead(pool,owner,{...target,unread:false});
+    assert.deepEqual(read,{unread:false,changed:true,provider_unchanged:true});
+    const repeat=await setLocalThreadRead(pool,owner,{...target,unread:false});
+    assert.equal(repeat.changed,false);
+    const unread=await setLocalThreadRead(pool,owner,{...target,unread:true});
+    assert.equal(unread.changed,true);
+    assert.equal((await localMailList(pool,owner,{
+      mailbox:'direction',folder:'inbox'
+    })).items[0].unread,true);
+    const audit=(await pool.query(
+      'SELECT event_kind FROM enkyron_mail_local_events '+
+      'WHERE workspace_key=$1 ORDER BY created_at',[scope]
+    )).rows.map(row=>row.event_kind);
+    assert.deepEqual(audit,['thread_marked_read','thread_marked_unread']);
+    await assert.rejects(setLocalThreadRead(pool,owner,{
+      ...target,unread:'yes'
+    }),/Invalid local Mail unread state/);
+    await assert.rejects(setLocalThreadRead(pool,owner,{
+      mailbox:'support',thread_id:thread,unread:false
+    }),/Mail thread not found/);
+  }finally{await pool.end();}
+});
+
+test('failed support folder remains in cursor continuation until recovered',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-partial-retry-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,id=crypto.randomUUID();
+  const attempts=[];
+  const listThreads=async(_pool,_actor,mailbox,folder,after=null)=>{
+    attempts.push([mailbox,folder,after]);
+    if(mailbox==='support'&&folder==='inbox'&&attempts.filter(
+      row=>row[0]==='support'&&row[1]==='inbox').length===1)
+      throw Error('Synthetic read timeout');
+    return {items:mailbox==='support'&&folder==='inbox'?[{
+      id,subject:'Recovered support',last_message_at:'2026-11-11T15:00:00Z'
+    }]:[],has_more:false};
+  };
+  try{
+    const first=await syncMailHeaders(pool,owner,{mailbox:'all'},{listThreads});
+    assert.equal(first.partial,true);
+    assert.ok(first.unavailable.includes('support/inbox'));
+    assert.equal(first.more_pending,true);
+    assert.ok(Object.hasOwn(first.continuation,'support/inbox'));
+    assert.equal(first.continuation['support/inbox'],null);
+    const second=await syncMailHeaders(pool,owner,{
+      mailbox:'all',cursors:first.continuation
+    },{listThreads});
+    assert.equal(second.partial,false);
+    assert.equal(second.more_pending,false);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_local_threads '+
+      'WHERE workspace_key=$1',[scope])).rows[0].n,1);
+    assert.deepEqual(attempts.filter(
+      row=>row[0]==='support'&&row[1]==='inbox').map(x=>x[2]),[null,null]);
   }finally{await pool.end();}
 });
