@@ -404,7 +404,15 @@ export async function localMailMessages(pool,actor,input){
     'AS preview_truncated,'+
     '(SELECT count(*)::int FROM enkyron_mail_attachment_quarantine q '+
     'WHERE q.workspace_key=m.workspace_key AND q.mailbox_key=m.mailbox_key '+
-    'AND q.message_id=m.message_id) AS attachment_count '+
+    'AND q.message_id=m.message_id) AS attachment_count,'+
+    '(SELECT COALESCE(jsonb_agg(jsonb_build_object('+
+    "\'filename\',q.original_filename,\'size\',q.declared_size,"+
+    "\'state\',q.safety_state)),\'[]\'::jsonb) FROM ("+
+    'SELECT original_filename,declared_size,safety_state FROM '+
+    'enkyron_mail_attachment_quarantine x WHERE '+
+    'x.workspace_key=m.workspace_key AND x.mailbox_key=m.mailbox_key '+
+    'AND x.message_id=m.message_id ORDER BY x.recorded_at,x.attachment_id '+
+    'LIMIT 8) q) AS attachment_previews '+
     'FROM enkyron_mail_local_messages m LEFT JOIN enkyron_mail_full_messages a '+
     'ON a.workspace_key=m.workspace_key AND a.mailbox_key=m.mailbox_key '+
     'AND a.message_id=m.message_id '+
