@@ -16011,11 +16011,25 @@ class EnkyronWindow(QMainWindow):
                     "snapshot_id": request["snapshot_id"],
                 }
                 counts = data["counts"]
+                lanes = data.get("queue_lanes")
+                stage_lines = []
+                if isinstance(lanes, dict):
+                    stage_lines = [
+                        "",
+                        "CURRENT CONTROL WORKFLOW STAGES (not verdicts):",
+                        "Human applicability decisions pending: " + str(lanes["human_applicability"]),
+                        "Evidence collection: " + str(lanes["evidence_collection"]),
+                        "Test planning (not authorisation): " + str(lanes["test_planning"]),
+                        "Human decision / review: " + str(lanes["human_decision"]),
+                        "Blocked follow-up: " + str(lanes["follow_up_blocked"]),
+                        "Other review required: " + str(lanes["review_required"]),
+                    ]
                 self.evidence_summary.setPlainText("\n".join([
                     "ARL CONTROL REGISTER: 108",
-                    "Assessment controls: " + str(data["assessment_controls"]),
-                    "Other workflow controls: " + str(data["other_workflow_controls"]),
-                    "Criterion count: " + str(data["criterion_count"]),
+                    "Controls ready for evidence planning: " + str(data["assessment_controls"]),
+                    "Controls in other workflow stages: " + str(data["other_workflow_controls"]),
+                    "Evidence criteria in current workplan: " + str(data["criterion_count"]),
+                    *stage_lines,
                     "",
                     "Static candidates: " + str(counts["staticCandidates"]),
                     "Static missing: " + str(counts["staticMissing"]),
@@ -16024,6 +16038,12 @@ class EnkyronWindow(QMainWindow):
                     "Source lineage issues: " + str(counts["sourceLineageIssues"]),
                     "",
                     "No evidence accepted. No tests executed. Human review required.",
+                    *(
+                        ["",
+                         "No evidence packs yet: begin with human applicability and",
+                         "scope decisions. This is NOT 108 NOT APPLICABLE/PASS."]
+                        if data["assessment_controls"] == 0 else []
+                    ),
                 ]))
                 for pack in data["packs"]:
                     widget = QListWidgetItem(
