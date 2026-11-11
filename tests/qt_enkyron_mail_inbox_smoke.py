@@ -182,6 +182,8 @@ class MailNativeUXSmoke(unittest.TestCase):
                  "subject": "Proposal", "outcome": "accepted"}
             ]))
             self.assertEqual(ui.thread_list.count(), 1)
+            self.assertTrue(ui.update_local_sent_delivery(0, "✓ Delivered"))
+            self.assertIn("✓ Delivered", ui.thread_list.item(0).text())
             ui.thread_list.setCurrentRow(0)
             self.assertEqual(requests, [("sent", 0)])
             self.assertTrue(ui.show_local_record_preview(
