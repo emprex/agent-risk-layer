@@ -81,7 +81,6 @@ class ScopeReviewDialog(QDialog):
             "I reviewed this scope personally. I understand this record does not "
             "authorise active tests or accept any security evidence."
         )
-        self.confirm.setWordWrap(True)
         layout.addWidget(self.confirm)
 
         actions = QHBoxLayout()
