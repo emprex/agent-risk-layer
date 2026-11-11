@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QDate, QProcess, QTimer, Qt
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QFileDialog,
     QInputDialog,
     QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QSpinBox, QDateEdit, QTabWidget,
@@ -12079,6 +12079,7 @@ class EnkyronWindow(QMainWindow):
             "Company: {}".format(draft.get("company_name_at_creation") or "Unknown")
         )
         prospect.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_mail_company_label = prospect
         layout.addWidget(prospect)
         warning = QLabel(
             "The operator recorded an external send. ENKYRON has not verified "
@@ -12093,10 +12094,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_from = QComboBox()
         self.crm_mail_from.setObjectName("enkyronDraftFromMailbox")
         self.crm_mail_from.addItem(
-            "Direction · guillaume.strohecker@agentrisklayer.com", "direction"
+            "guillaume.strohecker@agentrisklayer.com", "direction"
         )
         self.crm_mail_from.addItem(
-            "Support · support@agentrisklayer.com", "support"
+            "support@agentrisklayer.com", "support"
         )
         self.crm_mail_from.setCurrentIndex(
             max(0,self.crm_mail_from.findData(draft.get("mailbox_key") or "direction"))
@@ -12106,7 +12107,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_to = QLineEdit()
         self.crm_mail_to.setMaxLength(254)
         self.crm_mail_to.setPlaceholderText(
-            "Optional · manually verified email address"
+            "Type a CRM contact name or email…"
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
         self.crm_mail_to.setReadOnly(reported)
