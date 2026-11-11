@@ -850,9 +850,9 @@ test('Mail E04-04 company link uses existing schema 112 field, never sends or ch
   try{
     await pool.query(
       'INSERT INTO enkyron_local_mail_access '+
-      '(workspace_key,mailbox_key,role,can_read,can_send) '+
-      "VALUES($1,'direction','organization_owner_l5',TRUE,FALSE)",
-      [key]
+      '(workspace_key,mailbox_key,role,can_read,can_send,granted_by) '+
+      "VALUES($1,'direction','organization_owner_l5',TRUE,FALSE,$2)",
+      [key,actor]
     );
     await pool.query(
       'INSERT INTO enkyron_mail_local_threads '+
