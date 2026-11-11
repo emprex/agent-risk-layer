@@ -12111,6 +12111,13 @@ class EnkyronWindow(QMainWindow):
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
         self.crm_mail_to.setReadOnly(reported)
+        self.crm_mail_to_completer = QCompleter([], self.crm_mail_to)
+        self.crm_mail_to_completer.setCompletionMode(
+            QCompleter.CompletionMode.UnfilteredPopupCompletion
+        )
+        self.crm_mail_to_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.crm_mail_to_completer.setMaxVisibleItems(8)
+        self.crm_mail_to.setCompleter(self.crm_mail_to_completer)
         form.addRow("To", self.crm_mail_to)
         self.crm_mail_subject = QLineEdit()
         self.crm_mail_subject.setMaxLength(200)
