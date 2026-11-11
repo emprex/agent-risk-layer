@@ -255,7 +255,7 @@ class MailInboxView(QWidget):
             if len(address) > 254 or "@" not in address or "\n" in address:
                 continue
             validated.append((key, address))
-        if {key for key, _ in validated} != {"direction", "support") or len(validated) != 2:
+        if {key for key, _ in validated} != {"direction", "support"} or len(validated) != 2:
             self._mailboxes = {}
             self.account_picker.blockSignals(True)
             self.account_picker.clear()
