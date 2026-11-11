@@ -52,7 +52,7 @@ import { listCompanyTickets, listLinkableTickets, ticketLinkedCompany, linkTicke
 import {listContactTickets,linkContactToTicket,validateContactTicketLink,requireContactId} from './enkyron-crm-contact-tickets.mjs';
 import {assessmentPreflight,linkOrCreateTicketAssessment,readLinkedAssessmentContext} from './enkyron-ticket-assessment.mjs';
 import {readTicketControlQueue,readTicketControlDetail,recordTicketControlApplicability,prepareTicketSourceReview} from './enkyron-ticket-controls.mjs';
-import {prepareTicketControlDossiers} from './enkyron-control-preparation.mjs';
+import {prepareTicketControlDossiers,readPreparedTicketControlQueue} from './enkyron-control-preparation.mjs';
 import {revokeTicketAssociation,validateTicketRevocation,listTicketRevocations} from './enkyron-crm-ticket-corrections.mjs';
 import {listReassignmentCandidates,reassignTicket,validateTicketReassignment,validateReassignmentLookup} from './enkyron-crm-ticket-reassignments.mjs';
 import {listPrivacyRequests,recordPrivacyRequest,validatePrivacyIntake} from './enkyron-crm-privacy.mjs';
@@ -474,7 +474,7 @@ async function main() {
       command === 'assessment-preflight' ? await assessmentPreflight(pool, payload, os.userInfo().username) :
       command === 'assessment-link' ? await linkOrCreateTicketAssessment(pool, payload, os.userInfo().username) :
       command === 'assessment-context' ? await readLinkedAssessmentContext(pool, arg) :
-      command === 'control-queue' ? await readTicketControlQueue(pool, arg) :
+      command === 'control-queue' ? await readPreparedTicketControlQueue(pool, arg) :
       command === 'source-review' ? await prepareTicketSourceReview(pool, arg) :
       command === 'control-preparation' ? await prepareTicketControlDossiers(pool, arg) :
       command === 'control-detail' ? await readTicketControlDetail(pool, payload) :
