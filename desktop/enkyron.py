@@ -779,8 +779,8 @@ class EnkyronWindow(QMainWindow):
         self.evidence_step_guide = QLabel(
             "HOW THE ASSESSMENT WORKS\n"
             "1 · Applicability — Decide whether each security question concerns this agent.\n"
-            "2 · Evidence collection — Gather code references, documents and observed records.\n"
-            "3 · Test planning — Define a safe test; permission is still required before execution.\n"
+            "2 · Test planning — Define a safe test; permission is required before execution.\n"
+            "3 · Evidence collection — Gather source references, observed results and records.\n"
             "4 · Human decision — Review the results and record the accountable conclusion.\n"
             "5 · Blocked follow-up — Resolve missing information, findings or retesting needs.\n"
             "Other review — The control needs another specialist or additional context."
