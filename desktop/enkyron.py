@@ -298,6 +298,7 @@ class EnkyronWindow(QMainWindow):
         self.evidence_seq = 0
         self.evidence_source_seq = 0
         self.evidence_source_ticket = None
+        self.evidence_workplan_ticket = None
         self.evidence_context = None
         self.evidence_page = 0
         self.evidence_page_count = 0
@@ -792,17 +793,18 @@ class EnkyronWindow(QMainWindow):
             "border-radius: 6px; padding: 10px; line-height: 1.35;"
         )
         evidence_l.addWidget(self.evidence_step_guide)
-        self.evidence_button = QPushButton("Read existing 108-control evidence workplan")
-        self.evidence_button.setObjectName("primary")
+        # Requirements load when the tab opens; a second read-only button
+        # should not compete with the engineer's one meaningful next action.
+        self.evidence_button = QPushButton("Refresh evidence requirements")
+        self.evidence_button.setVisible(False)
         self.evidence_button.setEnabled(False)
         self.evidence_button.clicked.connect(self.inspect_evidence)
         work_actions = QHBoxLayout()
-        self.control_review_button = QPushButton("Review applicability · 108 controls…")
+        self.control_review_button = QPushButton("Continue assessment · Review controls…")
         self.control_review_button.setObjectName("primary")
         self.control_review_button.setEnabled(False)
         self.control_review_button.clicked.connect(self.open_control_review)
         work_actions.addWidget(self.control_review_button)
-        work_actions.addWidget(self.evidence_button)
         work_actions.addStretch()
         evidence_l.addLayout(work_actions)
         self.evidence_summary = make_text_area()
@@ -15733,6 +15735,7 @@ class EnkyronWindow(QMainWindow):
         self.evidence_seq += 1
         self.evidence_source_seq += 1
         self.evidence_source_ticket = None
+        self.evidence_workplan_ticket = None
         self.evidence_source_notice.setText(
             "ARL technical preparation: opens automatically for a linked Git assessment."
         )
@@ -15898,14 +15901,14 @@ class EnkyronWindow(QMainWindow):
             if self.tabs.currentIndex() == 1:
                 self.load_master()
             elif self.tabs.currentIndex() == 5:
-                self.prepare_source_review()
+                self.show_evidence_workflow()
         self.bridge.call("ticket", ticket_id, callback=received)
 
     def tab_changed(self, index):
         if index == 1 and self.current_ticket:
             self.load_master()
         elif index == 5 and self.current_ticket:
-            self.prepare_source_review()
+            self.show_evidence_workflow()
 
     def load_master(self):
         ticket_id = self.current_id
@@ -16040,6 +16043,18 @@ class EnkyronWindow(QMainWindow):
         self.control_review_dialog = dialog
         dialog.show()
         dialog.load_queue()
+
+    def show_evidence_workflow(self):
+        """Load the read-only workplan and source preparation without extra clicks."""
+        ticket = self.current_ticket or {}
+        if (not self.current_id or ticket.get("target_kind") != "git"
+                or not ticket.get("linked_project_id")
+                or not ticket.get("linked_assessment_id")):
+            return
+        if self.evidence_workplan_ticket != self.current_id:
+            self.evidence_workplan_ticket = self.current_id
+            self.inspect_evidence()
+        self.prepare_source_review()
 
     def prepare_source_review(self):
         """Run ARL's existing frozen-source Inspector once per selected ticket."""
