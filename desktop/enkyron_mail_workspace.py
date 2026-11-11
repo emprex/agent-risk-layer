@@ -64,6 +64,7 @@ class MailInboxView(QWidget):
     localCreateFolderRequested = Signal(str)
     localCreateLabelRequested = Signal(str)
     localAssignLabelRequested = Signal(str, str, str, bool)
+    localFlagRequested = Signal(str, str, bool)
     localSearchRequested = Signal(str)
     localPageRequested = Signal(int)
     localRecordRequested = Signal(str, int)
@@ -470,6 +471,14 @@ class MailInboxView(QWidget):
         if mailbox not in self._mailboxes:
             return
         menu = QMenu(self)
+        entry_index = self.thread_list.row(item)
+        entry = self.items[entry_index] if 0 <= entry_index < len(self.items) else {}
+        flagged = bool(isinstance(entry, dict) and entry.get("flagged") is True)
+        action = menu.addAction("Remove follow-up flag" if flagged else "Flag for follow-up")
+        action.triggered.connect(
+            lambda _checked=False: self.localFlagRequested.emit(
+                mailbox, thread_id, not flagged))
+        menu.addSeparator()
         move = menu.addMenu("Move to folder")
         for folder in self.local_folders:
             key = folder.get("key")
@@ -692,6 +701,8 @@ class MailInboxView(QWidget):
                 sender = str(item.get("sender") or "").strip()[:120]
                 if sender:
                     label = ("● " if unread else "") + sender + "\n" + subject
+                if item.get("flagged") is True:
+                    label = "★ " + label.removeprefix("★ ")
                 tags = str(item.get("labels") or "").strip()
                 if tags:
                     label += "   [" + tags[:80] + "]"
