@@ -103,6 +103,66 @@ class MailNativeUXSmoke(unittest.TestCase):
         finally:
             self._dispose(ui)
 
+    def test_clean_empty_state_and_detachable_conversation(self):
+        prior = DesktopBridge.call
+        commands = []
+        def fake(_self, command, arg="", payload=None, callback=None):
+            commands.append((command, arg, payload))
+            if command == "mail-messages" and callback:
+                callback({
+                    "mailbox": "direction", "thread_id": THREAD,
+                    "items": [{
+                        "subject": "Assessment request",
+                        "from": "sender@example.invalid",
+                        "to": ["support@example.invalid"],
+                        "created_at": "2026-11-11",
+                        "text": "Hello <script>not markup</script>",
+                    }]
+                }, None)
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            inbox = window.mail_inbox
+            inbox.set_owner_mailboxes(CARD)
+            inbox.set_connection_state("connected")
+            self.assertTrue(inbox.show_threads("all", []))
+            self.assertEqual(inbox.mail_stack.currentIndex(), 0)
+            self.assertFalse(inbox.splitter.isVisible())
+            self.assertIn("empty", inbox.empty_title.text().lower())
+            self.assertTrue(inbox.show_threads("all", [{
+                "id": THREAD, "mailbox": "direction",
+                "subject": "Assessment request", "unread": True,
+                "last_message_at": "2026-11-11T09:00:00Z",
+            }]))
+            self.assertEqual(inbox.mail_stack.currentIndex(), 1)
+            self.assertTrue(inbox.thread_list.item(0).font().bold())
+            inbox.search.setText("nothing matches")
+            self.assertEqual(inbox.mail_stack.currentIndex(), 0)
+            self.assertIn("matching", inbox.empty_title.text().lower())
+            inbox.search.setText("")
+            self.assertEqual(inbox.mail_stack.currentIndex(), 1)
+            item = inbox.thread_list.item(0)
+            inbox.thread_list.itemDoubleClicked.emit(item)
+            self.assertEqual(len(window.mail_thread_windows), 1)
+            popout = list(window.mail_thread_windows.values())[0]
+            self.assertTrue(popout.isVisible())
+            self.assertIsNone(popout.parent())
+            self.assertFalse(popout.isModal())
+            body = popout.findChild(
+                type(inbox.body), "enkyronMailDetachedBody")
+            self.assertTrue(body.isReadOnly())
+            self.assertIn("<script>not markup</script>", body.toPlainText())
+            self.assertFalse(any(x[0] == "mail-send-draft" for x in commands))
+            window.close()
+            self.assertFalse(popout.isVisible())
+        finally:
+            if window:
+                for dialog in list(window.mail_thread_windows.values()):
+                    dialog.close()
+                self._dispose(window)
+            DesktopBridge.call = prior
+
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
         calls = []
