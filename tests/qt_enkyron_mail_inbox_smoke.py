@@ -54,6 +54,32 @@ class MailNativeUXSmoke(unittest.TestCase):
         finally:
             self._dispose(ui)
 
+    def test_forward_prepares_unsent_draft_action(self):
+        ui = MailInboxView()
+        requested = []
+        ui.forwardRequested.connect(
+            lambda mailbox, thread: requested.append((mailbox, thread)))
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.set_connection_state("connected")
+            self.assertTrue(ui.show_threads("all", [{
+                "id": THREAD, "mailbox": "direction", "subject": "Request",
+                "last_message_at": "2026-11-11T10:00:00Z",
+            }]))
+            ui.thread_list.setCurrentRow(0)
+            self.assertTrue(ui.show_messages("direction", THREAD, [{
+                "id": THREAD, "from": "client@example.invalid",
+                "subject": "Request", "text": "Synthetic text",
+            }]))
+            self.assertFalse(ui.forward_button.isHidden())
+            ui.forward_button.click()
+            self.assertEqual(requested, [("direction", THREAD)])
+            # Forward does not send or change provider state by itself.
+            self.assertFalse(ui.reply_editor.isVisible())
+        finally:
+            self._dispose(ui)
+
     def test_account_switch_clears_old_threads_and_never_changes_mail(self):
         ui = MailInboxView()
         changed = []
