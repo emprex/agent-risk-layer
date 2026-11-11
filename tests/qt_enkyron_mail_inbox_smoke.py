@@ -229,13 +229,27 @@ class MailNativeUXSmoke(unittest.TestCase):
             for n in range(1, 109)
         ]
 
+        preparation = {
+            "available": True,"snapshot_id":snapshot,"target_sha":"a"*40,
+            "controls_total":108,
+            "dossiers":[{
+                "control_id":"ARL-KB-{:03d}".format(n),
+                "next_step":"Review the actual agent purpose before deciding.",
+                "required_evidence":[{
+                    "number":1,"requirement":"Approved agent purpose and change history",
+                    "route":"human_only"
+                }]
+            } for n in range(1,109)]
+        }
+
         def fake(_bridge, command, arg="", payload=None, callback=None):
             calls.append((command, arg, payload))
             if command == "control-queue":
                 callback({"available":True,"ticket_id":ticket,"total":108,
                           "project_id":project,"assessment_id":assessment,
                           "snapshot_id":snapshot,"target_sha":"a"*40,
-                          "stages":{"applicability":108},"items":items},None)
+                          "stages":{"applicability":108},"items":items,
+                          "preparation":preparation},None)
             elif command == "control-detail":
                 callback({"available":True,"ticket_id":ticket,
                           "control_id":payload["control_id"],"project_id":project,
@@ -275,7 +289,16 @@ class MailNativeUXSmoke(unittest.TestCase):
                 self.assertIn("Not applicable requires verified architecture facts",
                               dialog.facts_help.text())
                 self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
+                self.assertEqual(len(dialog.preparation_by_id),108)
+                self.assertIn("Approved agent purpose and change history",
+                              dialog.info.toPlainText())
+                self.assertIn("HUMAN VERIFICATION REQUIRED",
+                              dialog.info.toPlainText())
                 self.assertFalse(dialog.save.isEnabled())
+                dialog.controls.setCurrentRow(1)
+                dialog.controls.setCurrentRow(0)
+                self.assertEqual(len([c for c in calls if c[0]=="control-detail"]),2)
+                self.assertEqual(dialog.detail["control_id"],"ARL-KB-001")
                 # Non-applicable is unavailable without confirmed architecture facts.
                 self.assertFalse(dialog.decision.model().item(3).isEnabled())
                 dialog.decision.setCurrentIndex(1)
