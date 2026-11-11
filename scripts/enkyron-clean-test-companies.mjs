@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Archive exactly TWO specified ENKYRON LOCAL CRM test-company records.
 // This is intentionally NON-DESTRUCTIVE: relationships, contacts and audit
-// history remain in PostgreSQL. No DELETE, cascade, TRUNCATE or FK changes.
+// history remain in PostgreSQL. No destructive SQL or FK changes.
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import path from 'node:path';
