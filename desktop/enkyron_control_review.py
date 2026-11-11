@@ -21,6 +21,8 @@ class ControlReviewDialog(QDialog):
         self.on_recorded = on_recorded
         self.context = None
         self.detail = None
+        self.preparation_by_id = {}
+        self.detail_cache = {}
         self.sequence = 0
         self.busy = False
         self.setWindowTitle("ENKYRON · 108-control assessment review")
@@ -134,6 +136,8 @@ class ControlReviewDialog(QDialog):
         self.status.setText("Verifying the current frozen Git target and 108-control register…")
         self.context = None
         self.detail = None
+        self.preparation_by_id = {}
+        self.detail_cache = {}
         self.controls.blockSignals(True)
         self.controls.clear()
         self.controls.blockSignals(False)
@@ -150,6 +154,17 @@ class ControlReviewDialog(QDialog):
                 )
                 return
             self.context = data
+            proposal = data.get("preparation") or {}
+            prepared = proposal.get("dossiers") or []
+            if (proposal.get("available") is True and
+                    proposal.get("snapshot_id") == data.get("snapshot_id") and
+                    proposal.get("target_sha") == data.get("target_sha") and
+                    proposal.get("controls_total") == 108 and
+                    len(prepared) == 108):
+                self.preparation_by_id = {
+                    p["control_id"]: p for p in prepared
+                    if isinstance(p, dict) and p.get("control_id")
+                }
             items = data.get("items")
             if not isinstance(items, list) or len(items) != 108:
                 self.status.setText("Control queue refused: incomplete 108-control register.")
@@ -184,8 +199,12 @@ class ControlReviewDialog(QDialog):
                 self.controls.addItem(item)
             pending = (data.get("stages") or {}).get("applicability", 0)
             self.status.setText(
-                "{} controls · {} awaiting applicability · snapshot {}. "
-                "No tests authorised.".format(data["total"], pending, data["snapshot_id"])
+                "{} controls · {} need human applicability review · "
+                "{} evidence checklists prepared by ARL. "
+                "Snapshot {}. No tests authorised.".format(
+                    data["total"], pending, len(self.preparation_by_id),
+                    data["snapshot_id"]
+                )
             )
             row = next(
                 (i for i, entry in enumerate(items)
@@ -224,21 +243,52 @@ class ControlReviewDialog(QDialog):
                 self.info.setPlainText("Control detail refused: snapshot or ID changed.")
                 return
             self.detail = data
+            self.detail_cache[control_id] = data
             self.title.setText("{} · {}".format(control_id, data.get("title", "")))
+            preparation = self.preparation_by_id.get(control_id) or {}
+            requirements = preparation.get("required_evidence") or []
+            route_labels = {
+                "machine_collectable": "Source/configuration metadata to inspect",
+                "human_only": "Document or accountable human evidence to request",
+                "active_test_or_runtime": "Runtime observation: separate test authorisation required"
+            }
+            proof_lines = []
+            for requirement in requirements:
+                route = route_labels.get(
+                    requirement.get("route"), "Requires manual classification"
+                )
+                proof_lines.append(
+                    "{}. {}\\n   HOW TO OBTAIN: {}\\n   STATUS: Not verified".format(
+                        requirement.get("number", len(proof_lines) + 1),
+                        requirement.get("requirement", ""),
+                        route
+                    )
+                )
+            if not proof_lines:
+                proof_lines = [
+                    "No complete canonical evidence checklist was prepared. "
+                    "Do not assume there are no requirements."
+                ]
             self.info.setPlainText("\n".join([
+                "YOUR NEXT STEP",
+                str(preparation.get("next_step") or data.get("next_action", "")),
+                "",
+                "CURRENT ASSESSMENT STATE",
                 "Category: " + str(data.get("category", "")),
-                "Workflow stage: " + str(data.get("stage", "")),
+                "Stage: " + str(data.get("stage", "")),
                 "Applicability: " + str(data.get("applicability_status", "")),
-                "Current reason: " + str(data.get("applicability_reason", "")),
+                "Recorded explanation: " + str(data.get("applicability_reason", "")),
                 "",
-                "Next action: " + str(data.get("next_action", "")),
+                "ARL-PREPARED EVIDENCE CHECKLIST · HUMAN VERIFICATION REQUIRED",
+                *proof_lines,
                 "",
-                "Canonical test objective: " + str(data.get("check_objective", "")),
-                "Method: " + str(data.get("check_method", "")),
+                "CANONICAL SECURITY QUESTION",
+                str(data.get("check_objective", "")),
+                "Assessment method: " + str(data.get("check_method", "")),
                 "",
                 "Snapshot: " + str(data.get("snapshot_id", "")),
                 "Target SHA: " + str(data.get("target_sha", "")),
-                "No test or security verdict is inferred.",
+                "ARL has not accepted evidence, approved tests or determined PASS/FAIL.",
             ]))
             for fact in data.get("confirmed_facts") or []:
                 fact_item = QListWidgetItem(fact)
@@ -250,11 +300,15 @@ class ControlReviewDialog(QDialog):
                 n_a.setEnabled(self.facts.count() > 0)
             self.validate_save()
 
-        self.bridge.call(
-            "control-detail",
-            payload={"ticket_id": self.ticket_id, "control_id": control_id},
-            callback=loaded,
-        )
+        cached = self.detail_cache.get(control_id)
+        if cached and cached.get("snapshot_id") == self.context.get("snapshot_id"):
+            loaded(cached, None)
+        else:
+            self.bridge.call(
+                "control-detail",
+                payload={"ticket_id": self.ticket_id, "control_id": control_id},
+                callback=loaded,
+            )
 
     def selected_facts(self):
         return [
