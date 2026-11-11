@@ -5,7 +5,7 @@ import pg from 'pg';
 import {
   localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
   localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
-  createLocalLabel,labelLocalThread
+  createLocalLabel,labelLocalThread,flagLocalThread
 } from '../desktop/enkyron-mail-local.mjs';
 import {calendarCreate,calendarCreateTask,calendarCompleteTask,calendarList,
   validateCalendarEvent} from '../desktop/enkyron-calendar.mjs';
@@ -277,5 +277,90 @@ test('body pages resume after interruption and preserve exactly 65 unique messag
     })).has_more,true); // preview is bounded; persistence is not.
     assert.deepEqual(calls.slice(0,2),[null,ids[29]]);
     assert.equal(calls.at(-1),ids[59]);
+  }finally{await pool.end();}
+});
+
+
+test('saved-mail search finds cached bodies, recipients and labels across folders, with paging and audit',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-search-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,match=crypto.randomUUID();
+  try{
+    const ids=[match,...Array.from({length:52},()=>crypto.randomUUID())];
+    for(let i=0;i<ids.length;i++){
+      await pool.query(
+        'INSERT INTO enkyron_mail_local_threads '+
+        '(workspace_key,mailbox_key,thread_id,folder_key,subject,last_message_at) '+
+        'VALUES($1,$2,$3,$4,$5,$6)',
+        [scope,'direction',ids[i],i===0?'archive':'inbox',
+          'Case '+i,'2026-11-11T10:00:00Z']
+      );
+    }
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_messages '+
+      '(workspace_key,mailbox_key,thread_id,message_id,sender,recipients,'+
+      'subject,body_text,created_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)',
+      [scope,'direction',match,crypto.randomUUID(),
+        'operator@example.invalid',JSON.stringify(['destination@example.invalid']),
+        'Normal subject','The sapphireCipher request body',
+        '2026-11-11T10:00:00Z']
+    );
+    const first=await localMailList(pool,owner,{folder:'inbox',page:0});
+    assert.equal(first.items.length,50);
+    assert.equal(first.has_more,true);
+    const second=await localMailList(pool,owner,{folder:'inbox',page:1});
+    assert.equal(second.items.length,2);
+    assert.equal(second.has_more,false);
+    assert.equal(new Set([...first.items,...second.items].map(x=>x.id)).size,52);
+    for(const search of ['sapphireCipher','destination@','operator@example.invalid']){
+      const hits=await localMailList(pool,owner,{
+        mailbox:'direction',folder:'all',search
+      });
+      assert.equal(hits.items.length,1);
+      assert.equal(hits.items[0].id,match);
+      assert.equal(hits.items[0].folder_key,'archive');
+    }
+    // LIKE wildcard is literal, not a way to return every secret record.
+    assert.equal((await localMailList(pool,owner,{folder:'all',search:'%'})).items.length,0);
+    const label=await createLocalLabel(pool,owner,{name:'Purple Follow Up'});
+    await labelLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:match,label_id:label.id,applied:true
+    });
+    assert.equal((await localMailList(pool,owner,{
+      folder:'all',search:'Purple Follow Up'
+    })).items[0].id,match);
+    const firstFlag=await flagLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:match,flagged:true
+    });
+    assert.deepEqual(firstFlag,{flagged:true,changed:true});
+    const repeated=await flagLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:match,flagged:true
+    });
+    assert.deepEqual(repeated,{flagged:true,changed:false});
+    const flagged=(await localMailList(pool,owner,{
+      folder:'all',search:'sapphireCipher'
+    })).items[0];
+    assert.equal(flagged.flagged,true);
+    await flagLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:match,flagged:false
+    });
+    const history=(await pool.query(
+      'SELECT event_kind FROM enkyron_mail_local_events '+
+      'WHERE workspace_key=$1 AND event_kind LIKE $2 ORDER BY occurred_at',
+      [scope,'thread_%flagged']
+    )).rows;
+    assert.deepEqual(history.map(x=>x.event_kind),
+      ['thread_flagged','thread_unflagged']);
+    await assert.rejects(localMailList(pool,owner,{
+      folder:'all',search:''
+    }),/search term is required/i);
+    await assert.rejects(localMailList(pool,owner,{
+      folder:'inbox',page:-1
+    }),/Invalid Mail page/);
+    await assert.rejects(flagLocalThread(pool,owner,{
+      mailbox:'direction',thread_id:crypto.randomUUID(),flagged:true
+    }),/not found/);
   }finally{await pool.end();}
 });
