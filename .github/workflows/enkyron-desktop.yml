@@ -197,6 +197,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_inbox_smoke.py'
 
+      - name: ENKYRON CRM recipient autocomplete (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_recipient_autocomplete_smoke.py'
+
       - name: ENKYRON single-user Mail and compose UX (offline)
         env:
           QT_QPA_PLATFORM: offscreen
