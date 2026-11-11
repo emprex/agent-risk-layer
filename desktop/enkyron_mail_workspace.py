@@ -1139,7 +1139,7 @@ class MailInboxView(QWidget):
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
                 or not self.current_thread_id or self.selected_folder in
                 ("sent", "drafts", "spam", "trash")
-                or not self.crm_link_button.isVisible()
+                or self.crm_link_button.isHidden()
                 or not self.crm_link_button.isEnabled()):
             return
         self.localCompanyLinkRequested.emit(
