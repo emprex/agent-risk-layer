@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 from desktop.enkyron import DesktopBridge, EnkyronWindow
-from desktop.enkyron_mail_workspace import MailInboxView
+from desktop.enkyron_mail_workspace import MailInboxView, format_mail_messages
 
 CARD = {
     "mailboxes": [
@@ -31,6 +31,22 @@ class MailNativeUXSmoke(unittest.TestCase):
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
         gc.collect()
+
+    def test_archive_preview_explicitly_labels_truncation_and_quarantine(self):
+        rendered = format_mail_messages([{
+            "from": "sender@example.invalid",
+            "subject": "Invoice",
+            "text": "<script>untrusted plaintext</script>",
+            "created_at": "2026-11-11T16:44:00Z",
+            "archive_state": "body_captured",
+            "preview_truncated": True,
+            "attachment_count": 2,
+        }])
+        self.assertIn("PREVIEW ONLY", rendered)
+        self.assertIn("20,000 characters", rendered)
+        self.assertIn("2 attachment reference(s)", rendered)
+        self.assertIn("NOT stored or approved", rendered)
+        self.assertIn("<script>untrusted plaintext</script>", rendered)
 
     def test_inbox_is_disconnected_and_actions_are_not_live(self):
         ui = MailInboxView()
