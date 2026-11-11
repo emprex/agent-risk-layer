@@ -191,6 +191,12 @@ jobs:
           node --check scripts/enkyron-clean-test-companies.mjs
           node --test tests/enkyron-crm-test-archive.test.js
 
+      - name: ENKYRON local three-pane Mail and Calendar (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_local_mail_calendar_smoke.py'
+
       - name: ENKYRON Mail folder and filing navigation (offline)
         env:
           QT_QPA_PLATFORM: offscreen
