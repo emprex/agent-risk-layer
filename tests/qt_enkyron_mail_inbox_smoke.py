@@ -7,7 +7,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 from desktop.enkyron import DesktopBridge, EnkyronWindow
-from desktop.enkyron_mail_workspace import MailInboxView, format_mail_messages
+from desktop.enkyron_mail_workspace import (MailInboxView, format_mail_messages,
+    format_mail_message_cards, _safe_sender_label)
 
 CARD = {
     "mailboxes": [
@@ -31,6 +32,60 @@ class MailNativeUXSmoke(unittest.TestCase):
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
         gc.collect()
+
+    def test_safe_conversation_cards_escape_provider_html(self):
+        entries = [{
+            "from": "Attacker <attacker@example.invalid>",
+            "to": ["direction@agentrisklayer.com"],
+            "subject": "<img src='https://evil.invalid/t'>",
+            "text": "<script>alert(1)</script>\\nLine two",
+            "created_at": "2026-11-11T16:44:00Z",
+            "attachment_count": 2,
+            "preview_truncated": True,
+        }, {
+            "from": "Client <client@example.invalid>",
+            "to": ["direction@agentrisklayer.com"],
+            "subject": "Re: Hello",
+            "text": "Second message",
+            "created_at": "2026-11-11T16:46:00Z",
+        }]
+        html = format_mail_message_cards(entries)
+        self.assertEqual(html.count("<table"), 2)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
+        self.assertIn("&lt;img src=", html)
+        self.assertNotIn("<script>", html)
+        self.assertNotIn("<img ", html)
+        self.assertNotIn("href=", html)
+        self.assertIn("attachment reference(s)", html)
+        self.assertIn("first 20,000 characters", html)
+        self.assertEqual(_safe_sender_label(entries[0]["from"]), "Attacker")
+        self.assertEqual(format_mail_message_cards([{"text": "safe"}]).count("<table"), 1)
+
+        ui = MailInboxView()
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.set_connection_state("connected")
+            self.assertTrue(ui.show_threads("all", [{
+                "id":THREAD,"mailbox":"direction",
+                "sender":entries[0]["from"],
+                "subject":"Mail with a very long email address",
+                "last_message_at":"2026-11-11T16:44:00Z"
+            }]))
+            row = ui.thread_list.item(0)
+            self.assertTrue(row.text().startswith("Attacker"))
+            self.assertIn("attacker@example.invalid", row.toolTip())
+            self.assertEqual(ui.thread_list.horizontalScrollBarPolicy(),
+                             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            ui.thread_list.setCurrentRow(0)
+            self.assertTrue(ui.show_messages("direction", THREAD, entries))
+            self.assertIn("<script>alert(1)</script>", ui.body.toPlainText())
+            self.assertIn("Second message", ui.body.toPlainText())
+            self.assertNotIn("<img src=", ui.body.toHtml())
+            self.assertFalse(ui.body.openExternalLinks())
+            self.assertFalse(ui.body.openLinks())
+        finally:
+            self._dispose(ui)
 
     def test_archive_preview_explicitly_labels_truncation_and_quarantine(self):
         rendered = format_mail_messages([{
