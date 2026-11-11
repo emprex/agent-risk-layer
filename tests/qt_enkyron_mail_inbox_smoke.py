@@ -43,7 +43,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertTrue(ui.body.isReadOnly())
             self.assertEqual(ui.mail_stack.currentIndex(), 0)
             self.assertIn("unavailable", ui.empty_title.text().lower())
-            self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailReply"))
+            self.assertTrue(ui.findChildren(type(ui.refresh_button), "enkyronMailReply"))
+            self.assertFalse(ui.reply_button.isVisible())
             self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailTicket"))
             self.assertFalse(ui.findChildren(type(ui.refresh_button), "enkyronMailCompany"))
             self.assertIn("no messages yet", ui.body.toPlainText().lower())
@@ -349,8 +350,9 @@ class MailNativeUXSmoke(unittest.TestCase):
             window.findChild(type(window.mail_inbox.refresh_button), "enkyronHomeOpenMail").click()
             self.assertEqual(window.navigation.currentRow(), 3)
             self.assertEqual(window.crm_tabs.currentIndex(), 3)
-            self.assertFalse(window.mail_inbox.findChildren(
+            self.assertTrue(window.mail_inbox.findChildren(
                 type(window.mail_inbox.new_email_button), "enkyronMailReply"))
+            self.assertFalse(window.mail_inbox.reply_button.isVisible())
         finally:
             if window:
                 self._dispose(window)
