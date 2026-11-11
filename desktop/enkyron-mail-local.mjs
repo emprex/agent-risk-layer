@@ -200,7 +200,7 @@ export async function syncLocalMailBodies(pool,actor,input={},{
     if(!current){
       const row=(await pool.query(
         'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
-        'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
+        'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
         'AND ($3::text IS NULL OR (t.mailbox_key,t.thread_id) > '+
         '($3::text,$4::uuid)) '+
         'ORDER BY t.mailbox_key,t.thread_id LIMIT 1',
@@ -227,7 +227,7 @@ export async function syncLocalMailBodies(pool,actor,input={},{
         const next={mailbox:current.mailbox,thread_id:current.thread};
         const more=(await pool.query(
           'SELECT 1 FROM enkyron_mail_local_threads t '+
-          'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
+          'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
           'AND (t.mailbox_key,t.thread_id)>($3::text,$4::uuid) LIMIT 1',
           [key,selected,current.mailbox,current.thread]
         )).rows.length>0;
@@ -252,7 +252,7 @@ export async function syncLocalMailBodies(pool,actor,input={},{
   }
   const candidates=(await pool.query(
     'SELECT t.mailbox_key,t.thread_id FROM enkyron_mail_local_threads t '+
-    'WHERE t.workspace_key=$1 AND ($2::text=\\'all\\' OR t.mailbox_key=$2) '+
+    'WHERE t.workspace_key=$1 AND ($2::text=\'all\' OR t.mailbox_key=$2) '+
     'AND NOT EXISTS (SELECT 1 FROM enkyron_mail_local_messages m '+
     'WHERE m.workspace_key=t.workspace_key AND m.mailbox_key=t.mailbox_key '+
     'AND m.thread_id=t.thread_id) '+
