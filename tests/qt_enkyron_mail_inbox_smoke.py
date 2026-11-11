@@ -41,6 +41,12 @@ class MailNativeUXSmoke(unittest.TestCase):
             "text": "<script>alert(1)</script>\\nLine two",
             "created_at": "2026-11-11T16:44:00Z",
             "attachment_count": 2,
+            "attachment_previews": [
+                {"filename": "<img src=x onerror=alert(1)>.pdf",
+                 "size": 100, "state": "metadata_only"},
+                {"filename": "trusted.pdf",
+                 "size": 512, "state": "quarantined_unscanned"},
+            ],
             "preview_truncated": True,
         }, {
             "from": "Client <client@example.invalid>",
@@ -57,6 +63,10 @@ class MailNativeUXSmoke(unittest.TestCase):
         self.assertNotIn("<img ", html)
         self.assertNotIn("href=", html)
         self.assertIn("attachment reference(s)", html)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;.pdf", html)
+        self.assertNotIn("<img src=", html)
+        self.assertIn("file NOT downloaded", html)
+        self.assertIn("NOT scanned", html)
         self.assertIn("first 20,000 characters", html)
         self.assertEqual(_safe_sender_label(entries[0]["from"]), "Attacker")
         self.assertEqual(format_mail_message_cards([{"text": "safe"}]).count("<table"), 1)
