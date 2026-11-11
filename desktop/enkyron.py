@@ -12195,6 +12195,87 @@ class EnkyronWindow(QMainWindow):
         dialog.open()
 
 
+    def mail_recipient_text_edited(self, _text):
+        """Typing invalidates a previously chosen contact."""
+        ctx = self.crm_draft_context or {}
+        ctx["recipient_contact_id"] = None
+        if not ctx.get("original_company_id") and not ctx.get("opportunity_id"):
+            ctx["company_id"] = None
+            self.crm_mail_company_label.setText("Company: Independent email")
+        self.crm_mail_recipient_timer.start()
+
+    def search_mail_recipients(self):
+        dialog = self.crm_draft_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        query = self.crm_mail_to.text().strip()
+        self.crm_mail_recipient_seq += 1
+        seq = self.crm_mail_recipient_seq
+        self.crm_mail_recipient_matches = {}
+        if len(query) < 2 or len(query) > 120:
+            self.crm_mail_to_completer.model().setStringList([])
+            return
+
+        def received(data, error):
+            if (not dialog.isVisible() or seq != self.crm_mail_recipient_seq
+                    or query != self.crm_mail_to.text().strip()):
+                return
+            if error or not isinstance(data, dict) or not data.get("available"):
+                self.crm_mail_to_completer.model().setStringList([])
+                return
+            labels = []
+            records = {}
+            exact = []
+            for item in (data.get("items") or [])[:12]:
+                if not isinstance(item, dict) or not item.get("email"):
+                    continue
+                email = str(item["email"])
+                label = "{} · {} <{}>".format(
+                    item.get("full_name") or "Contact",
+                    item.get("company_name") or "Company", email
+                )
+                labels.append(label)
+                records[label] = item
+                if email.casefold() == query.casefold():
+                    exact.append(item)
+            self.crm_mail_recipient_matches = records
+            self.crm_mail_to_completer.model().setStringList(labels)
+            if (len(exact) == 1 and not data.get("more")
+                    and not (self.crm_draft_context or {}).get("original_company_id")
+                    and not (self.crm_draft_context or {}).get("opportunity_id")):
+                self._set_mail_recipient_company(exact[0])
+            elif labels and self.crm_mail_to.hasFocus():
+                self.crm_mail_to_completer.complete()
+
+        self.bridge.call("crm-mail-recipients", query, callback=received)
+
+    def _set_mail_recipient_company(self, item):
+        ctx = self.crm_draft_context or {}
+        if ctx.get("original_company_id") and ctx["original_company_id"] != item.get("company_id"):
+            return
+        if ctx.get("opportunity_id"):
+            return
+        ctx["company_id"] = item.get("company_id")
+        ctx["recipient_contact_id"] = item.get("contact_id")
+        self.crm_mail_company_label.setText(
+            "Company: {} · Contact: {}".format(
+                item.get("company_name") or "CRM company",
+                item.get("full_name") or "CRM contact"
+            )
+        )
+
+    def choose_mail_recipient(self, label):
+        item = self.crm_mail_recipient_matches.get(label)
+        if not item:
+            return
+        # Qt inserts address only, never a display name into the To field.
+        self.crm_mail_to.blockSignals(True)
+        self.crm_mail_to.setText(str(item["email"]))
+        self.crm_mail_to.blockSignals(False)
+        self.crm_mail_recipient_timer.stop()
+        self.crm_mail_recipient_seq += 1
+        self._set_mail_recipient_company(item)
+
     def open_mail_manual_send(self):
         """Manually link a saved draft revision to a provider-side send report."""
         parent = self.crm_draft_dialog
