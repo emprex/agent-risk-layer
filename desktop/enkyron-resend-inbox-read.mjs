@@ -120,7 +120,9 @@ export function createResendInboxReader({organizationId,mailboxes,credentialProv
         reply_to:Array.isArray(item.reply_to)
           ?item.reply_to.slice(0,10).map(x=>safeText(x,254))
           :typeof item.reply_to==='string'?[safeText(item.reply_to,254)]:[],
-        text:safeText(item.text,20000),
+        // One extra character signals an over-limit body to the local
+        // repository. Never silently persist a shortened email as complete.
+        text:safeText(item.text,20001),
         created_at:safeText(item.received_at??item.created_at,64),
         html_only:!item.text&&typeof item.html==='string',
       })),has_more:payload.has_more};
