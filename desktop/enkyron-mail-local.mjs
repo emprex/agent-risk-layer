@@ -371,6 +371,34 @@ export async function moveLocalThread(pool,actor,input){
     return {moved:true,folder:target,provider_unchanged:true};
   });
 }
+// Read/unread state belongs to NEMORYTH, not to the mail provider.
+// Only a local operator action changes it; each change is immutably audited.
+export async function setLocalThreadRead(pool,actor,input){
+  const key=scope(actor),{mailbox,thread}=checkTarget(input);
+  if(typeof input.unread!=='boolean')throw Error('Invalid local Mail unread state');
+  return withTransaction(pool,async client=>{
+    const changed=await client.query(
+      'UPDATE enkyron_mail_local_threads SET unread=$4 '+
+      'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3 '+
+      'AND unread IS DISTINCT FROM $4 RETURNING unread',
+      [key,mailbox,thread,input.unread]
+    );
+    if(changed.rowCount===0){
+      const found=(await client.query(
+        'SELECT unread FROM enkyron_mail_local_threads '+
+        'WHERE workspace_key=$1 AND mailbox_key=$2 AND thread_id=$3',
+        [key,mailbox,thread]
+      )).rows[0];
+      if(!found)throw Error('Mail thread not found');
+      return {unread:found.unread,changed:false};
+    }
+    await audit(client,key,actor,
+      input.unread?'thread_marked_unread':'thread_marked_read',
+      {},mailbox,thread);
+    return {unread:input.unread,changed:true,provider_unchanged:true};
+  });
+}
+
 // Flag is local-only and versioned by the already immutable Mail event log.
 export async function flagLocalThread(pool,actor,input){
   const key=scope(actor),{mailbox,thread}=checkTarget(input);
