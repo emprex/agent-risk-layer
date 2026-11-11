@@ -69,6 +69,7 @@ class MailInboxView(QWidget):
     localRecordLinkRequested = Signal(int)
     replyRequested = Signal(str, str)
     replySubmitRequested = Signal()
+    sentFollowUpRequested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -253,7 +254,7 @@ class MailInboxView(QWidget):
         reply_toolbar = QHBoxLayout()
         self.reply_button = QPushButton("Reply")
         self.reply_button.setObjectName("enkyronMailReply")
-        self.reply_button.setToolTip("Reply in this conversation")
+        self.reply_button.setToolTip("Reply to this message")
         self.reply_button.clicked.connect(self._request_reply)
         self.reply_button.hide()
         reply_toolbar.addWidget(self.reply_button)
@@ -732,6 +733,19 @@ class MailInboxView(QWidget):
         self.body.setPlainText(str(body or "")[:20000])
         self.meta.setText(str(metadata or "")[:500])
         self.reader_stack.setCurrentIndex(1)
+        # For an outbound message, continuing the relationship is a new
+        # human-approved follow-up, not a reply to a received email.
+        record = self.items[index] if 0 <= index < len(self.items) else {}
+        follow_up_ready = (
+            kind == "sent" and isinstance(record, dict)
+            and record.get("outcome") == "accepted"
+            and bool(record.get("draft_id"))
+            and bool(record.get("recipient_email"))
+            and record.get("mailbox_key") in self._mailboxes
+        )
+        self.reply_button.setText("Follow up")
+        self.reply_button.setToolTip("Write a new follow-up to this recipient")
+        self.reply_button.setVisible(follow_up_ready)
         return True
 
     def _filter(self, value):
@@ -824,6 +838,17 @@ class MailInboxView(QWidget):
             self.threadOpenRequested.emit(source, thread_id)
 
     def _request_reply(self):
+        current = self.thread_list.currentItem()
+        reference = (current.data(Qt.ItemDataRole.UserRole)
+                     if current is not None else None)
+        if (self.local_mode and self.selected_folder == "sent"
+                and isinstance(reference, tuple) and len(reference) == 2
+                and reference[0] == "local-sent"
+                and isinstance(reference[1], int)
+                and 0 <= reference[1] < len(self.items)):
+            if self.reply_button.isVisible():
+                self.sentFollowUpRequested.emit(reference[1])
+            return
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
                 or not self.current_thread_id
                 or self.selected_folder in ("sent", "drafts")):
@@ -837,6 +862,23 @@ class MailInboxView(QWidget):
             return False
         self.reply_target.setText("Reply to: " + recipient)
         self.reply_body.clear()
+        self.reply_send.setText("Send reply…")
+        self.reply_send.setEnabled(True)
+        self.reply_editor.show()
+        self.reply_body.setFocus()
+        return True
+
+    def show_followup_editor(self, index, recipient):
+        current = self.thread_list.currentItem()
+        reference = (current.data(Qt.ItemDataRole.UserRole)
+                     if current is not None else None)
+        if (not self.local_mode or self.selected_folder != "sent"
+                or reference != ("local-sent", index)
+                or not isinstance(recipient, str) or "@" not in recipient):
+            return False
+        self.reply_target.setText("New follow-up to: " + recipient)
+        self.reply_body.clear()
+        self.reply_send.setText("Send follow-up…")
         self.reply_send.setEnabled(True)
         self.reply_editor.show()
         self.reply_body.setFocus()
@@ -857,6 +899,8 @@ class MailInboxView(QWidget):
         )
         self.meta.setText("{} message(s) · Plain text".format(len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
+        self.reply_button.setText("Reply")
+        self.reply_button.setToolTip("Reply in this conversation")
         self.reply_button.setVisible(self.local_mode and bool(messages)
                                      and self.selected_folder not in ("sent","drafts"))
         return True
