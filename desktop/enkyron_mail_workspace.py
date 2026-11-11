@@ -189,6 +189,7 @@ class MailInboxView(QWidget):
     replyRequested = Signal(str, str)
     forwardRequested = Signal(str, str)
     fullTextRequested = Signal(str, str, str)
+    localCompanyLinkRequested = Signal(str, str)
     replySubmitRequested = Signal()
     sentFollowUpRequested = Signal(int)
 
@@ -416,6 +417,13 @@ class MailInboxView(QWidget):
         self.full_text_button.clicked.connect(self._request_full_text)
         self.full_text_button.hide()
         reply_toolbar.addWidget(self.full_text_button)
+        self.crm_link_button = QPushButton("Link to CRM…")
+        self.crm_link_button.setObjectName("enkyronMailLinkCRM")
+        self.crm_link_button.setToolTip(
+            "Explicitly associate this saved conversation with one existing CRM company")
+        self.crm_link_button.clicked.connect(self._request_company_link)
+        self.crm_link_button.hide()
+        reply_toolbar.addWidget(self.crm_link_button)
         reply_toolbar.addStretch()
         right_layout.addLayout(reply_toolbar)
         self.reply_editor = QFrame()
@@ -746,6 +754,9 @@ class MailInboxView(QWidget):
         self.reply_button.hide()
         self.forward_button.hide()
         self.full_text_button.hide()
+        self.crm_link_button.hide()
+        self.crm_link_button.setEnabled(True)
+        self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
         self.current_thread_id = None
         self.current_thread_mailbox = None
@@ -1051,6 +1062,9 @@ class MailInboxView(QWidget):
         self.reply_button.hide()
         self.forward_button.hide()
         self.full_text_button.hide()
+        self.crm_link_button.hide()
+        self.crm_link_button.setEnabled(True)
+        self.crm_link_button.setText("Link to CRM…")
         self._full_text_options = []
         self.current_thread_id = None
         self.current_thread_mailbox = None
@@ -1120,6 +1134,37 @@ class MailInboxView(QWidget):
                 or self.selected_folder in ("sent", "drafts")):
             return
         self.replyRequested.emit(self.current_thread_mailbox, self.current_thread_id)
+
+    def _request_company_link(self):
+        if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
+                or not self.current_thread_id or self.selected_folder in
+                ("sent", "drafts", "spam", "trash")
+                or not self.crm_link_button.isVisible()
+                or not self.crm_link_button.isEnabled()):
+            return
+        self.localCompanyLinkRequested.emit(
+            self.current_thread_mailbox, self.current_thread_id)
+
+    def show_company_link(self, mailbox, thread_id, data):
+        """Display the server-confirmed association; never infer from email sender."""
+        if (not self.local_mode or mailbox != self.current_thread_mailbox
+                or thread_id != self.current_thread_id):
+            return False
+        if not isinstance(data, dict) or data.get("mailbox") != mailbox or (
+                data.get("thread_id") != thread_id):
+            return False
+        if data.get("linked"):
+            self.crm_link_button.setText(
+                "CRM: " + str(data.get("company_name") or "Linked company")[:50])
+            self.crm_link_button.setEnabled(False)
+            self.crm_link_button.setToolTip(
+                "Company association saved. Correction needs a separate reviewed workflow.")
+        else:
+            self.crm_link_button.setText("Link to CRM…")
+            self.crm_link_button.setEnabled(True)
+            self.crm_link_button.setToolTip(
+                "Review and select one existing company; no automatic identity matching.")
+        return True
 
     def _request_full_text(self):
         if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
@@ -1213,4 +1258,9 @@ class MailInboxView(QWidget):
         ]
         self.full_text_button.setVisible(
             self.local_mode and bool(self._full_text_options))
+        self.crm_link_button.setText("Link to CRM…")
+        self.crm_link_button.setEnabled(False)  # pending server-side link-status check
+        self.crm_link_button.setVisible(
+            self.local_mode and bool(messages)
+            and self.selected_folder not in ("sent", "drafts", "spam", "trash"))
         return True
