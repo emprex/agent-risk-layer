@@ -112,11 +112,11 @@ class MailInboxView(QWidget):
         root.addWidget(self.connection_label)
 
         # Backward-compatible navigation hooks; not extra buttons in the Inbox.
-        self.local_drafts_button = QPushButton("Open local drafts")
+        self.local_drafts_button = QPushButton("Open local drafts", self)
         self.local_drafts_button.setObjectName("enkyronMailOpenDrafts")
         self.local_drafts_button.clicked.connect(self.draftsRequested.emit)
         self.local_drafts_button.hide()
-        self.client_desk_button = QPushButton("Open Client Desk")
+        self.client_desk_button = QPushButton("Open Client Desk", self)
         self.client_desk_button.setObjectName("enkyronMailOpenClientDesk")
         self.client_desk_button.clicked.connect(self.deskRequested.emit)
         self.client_desk_button.hide()
