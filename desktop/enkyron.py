@@ -2352,6 +2352,7 @@ class EnkyronWindow(QMainWindow):
         search.setPlaceholderText("Search existing company name (2+ characters)")
         search_row.addWidget(search, 1)
         find = QPushButton("Find companies")
+        find.setObjectName("enkyronMailCompanyFind")
         search_row.addWidget(find)
         layout.addLayout(search_row)
         status = QLabel("No company selected. No link created.")
