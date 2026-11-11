@@ -186,8 +186,10 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_new_company_window_smoke.py'
 
-      - name: Validate strictly scoped local CRM test-cleanup script syntax
-        run: node --check scripts/enkyron-clean-test-companies.mjs
+      - name: Validate strictly scoped local CRM test-archive
+        run: |
+          node --check scripts/enkyron-clean-test-companies.mjs
+          node --test tests/enkyron-crm-test-archive.test.js
 
       - name: ENKYRON Mail native inbox UX smoke (offline)
         env:
