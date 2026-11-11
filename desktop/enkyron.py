@@ -12179,8 +12179,19 @@ class EnkyronWindow(QMainWindow):
             "loaded_body": draft.get("body_text") or "",
             "mailbox_key": draft.get("mailbox_key") or "direction",
             "loaded_mailbox": draft.get("mailbox_key") or "direction",
+            "recipient_contact_id": None,
+            "original_company_id": draft.get("company_id"),
         }
         self.crm_draft_dialog = dialog
+        self.crm_mail_recipient_seq = 0
+        self.crm_mail_recipient_matches = {}
+        self.crm_mail_recipient_timer = QTimer(dialog)
+        self.crm_mail_recipient_timer.setSingleShot(True)
+        self.crm_mail_recipient_timer.setInterval(250)
+        self.crm_mail_recipient_timer.timeout.connect(self.search_mail_recipients)
+        if not reported:
+            self.crm_mail_to.textEdited.connect(self.mail_recipient_text_edited)
+            self.crm_mail_to_completer.activated[str].connect(self.choose_mail_recipient)
         dialog.open()
 
 
