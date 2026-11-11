@@ -317,6 +317,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
         self.mail_full_text_windows = {}
+        self.mail_company_link_dialog = None
         self._reply_context = None
         self._sent_followup_context = None
         self.mail_detached_window = None
@@ -1361,6 +1362,7 @@ class EnkyronWindow(QMainWindow):
         self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
         self.mail_inbox.forwardRequested.connect(self.prepare_mail_forward)
         self.mail_inbox.fullTextRequested.connect(self.open_archived_full_text)
+        self.mail_inbox.localCompanyLinkRequested.connect(self.open_mail_company_link)
         self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
         self.mail_inbox.sentFollowUpRequested.connect(self.prepare_sent_follow_up)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
@@ -2281,9 +2283,9 @@ class EnkyronWindow(QMainWindow):
                     "Unable to read saved mail. No email was changed."
                 )
                 return
-            self.mail_inbox.show_messages(
-                mailbox,thread_id,data.get("items") or []
-            )
+            if self.mail_inbox.show_messages(
+                    mailbox, thread_id, data.get("items") or []):
+                self.load_mail_company_link(mailbox, thread_id)
         def cached(data,error):
             if error or not isinstance(data,dict):
                 display(data,error)
@@ -2296,6 +2298,177 @@ class EnkyronWindow(QMainWindow):
             else:
                 display(data,None)
         self.bridge.call("mail-local-messages",payload=payload,callback=cached)
+
+    def load_mail_company_link(self, mailbox, thread_id):
+        """Read the exact locally stored company link; never guess identity."""
+        def received(data, error):
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data, dict):
+                self.mail_inbox.crm_link_button.setText("CRM unavailable")
+                self.mail_inbox.crm_link_button.setEnabled(False)
+                return
+            self.mail_inbox.show_company_link(mailbox, thread_id, data)
+        self.bridge.call("mail-local-company",
+            payload={"mailbox":mailbox,"thread_id":thread_id},
+            callback=received)
+
+    def open_mail_company_link(self, mailbox, thread_id):
+        """E04-04: operator-selected existing company, not inferred client."""
+        if (mailbox != self.mail_inbox.current_thread_mailbox
+                or thread_id != self.mail_inbox.current_thread_id
+                or self.mail_inbox.selected_folder in ("spam","trash","sent","drafts")
+                or not self.mail_inbox.crm_link_button.isEnabled()):
+            return
+        old = self.mail_company_link_dialog
+        if old is not None and old.isVisible():
+            old.raise_()
+            old.activateWindow()
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("ENKYRON · Link Mail to existing CRM company")
+        dialog.setMinimumWidth(610)
+        layout = QVBoxLayout(dialog)
+        heading = QLabel("Human-reviewed CRM company association")
+        heading.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(heading)
+        warning = QLabel(
+            "Select the correct EXISTING company. An email sender or domain "
+            "does not prove client identity, contact identity or consent. "
+            "This action only links the saved conversation to the company "
+            "in NEMORYTH. It does not create a ticket, contact, assessment, "
+            "email or provider change. Changing the link later requires "
+            "a separate reviewed workflow; schema 112 has no dedicated "
+            "append-only audit event for this link."
+        )
+        warning.setTextFormat(Qt.TextFormat.PlainText)
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
+        search_row = QHBoxLayout()
+        search = QLineEdit()
+        search.setObjectName("enkyronMailCompanySearch")
+        search.setMaxLength(120)
+        search.setPlaceholderText("Search existing company name (2+ characters)")
+        search_row.addWidget(search, 1)
+        find = QPushButton("Find companies")
+        search_row.addWidget(find)
+        layout.addLayout(search_row)
+        status = QLabel("No company selected. No link created.")
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        choice = QComboBox()
+        choice.setObjectName("enkyronMailCompanyChoice")
+        choice.addItem("Choose a reviewed company…", None)
+        layout.addWidget(choice)
+        agree = QCheckBox(
+            "I checked the selected company record and explicitly approve "
+            "linking this conversation to it."
+        )
+        agree.setObjectName("enkyronMailCompanyConfirm")
+        layout.addWidget(agree)
+        actions = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dialog.reject)
+        actions.addWidget(cancel)
+        actions.addStretch()
+        link = QPushButton("Link conversation")
+        link.setObjectName("enkyronMailCompanySubmit")
+        link.setEnabled(False)
+        actions.addWidget(link)
+        layout.addLayout(actions)
+        self.mail_company_link_dialog = dialog
+        state = {"seq":0,"records":{}}
+
+        def update_enabled():
+            link.setEnabled(
+                agree.isChecked() and choice.currentData() in state["records"]
+            )
+        choice.currentIndexChanged.connect(update_enabled)
+        agree.toggled.connect(update_enabled)
+
+        def search_companies():
+            query = search.text().strip()
+            if len(query) < 2:
+                status.setText("Enter at least two characters to search.")
+                return
+            state["seq"] += 1
+            generation = state["seq"]
+            state["records"] = {}
+            choice.clear()
+            choice.addItem("Searching…", None)
+            link.setEnabled(False)
+            status.setText("Searching existing CRM records…")
+            def received(data, error):
+                if (not dialog.isVisible() or generation != state["seq"]
+                        or search.text().strip() != query):
+                    return
+                choice.clear()
+                choice.addItem("Choose a reviewed company…", None)
+                if (error or not isinstance(data, dict)
+                        or not data.get("available")):
+                    status.setText("Company search unavailable. Nothing changed.")
+                    return
+                records = data.get("items")
+                if not isinstance(records, list):
+                    status.setText("Invalid CRM search response.")
+                    return
+                for record in records[:100]:
+                    if not isinstance(record, dict):
+                        continue
+                    cid = str(record.get("id") or "")
+                    if (len(cid) != 36 or
+                            record.get("relationship_state") == "inactive"):
+                        continue
+                    name = str(record.get("name") or "").strip()
+                    if not name:
+                        continue
+                    state["records"][cid] = name
+                    choice.addItem(name[:150] + " · " + cid[:8], cid)
+                status.setText(
+                    "{} eligible company record(s) loaded{}".format(
+                        len(state["records"]),
+                        " · narrow the search to see all candidates"
+                        if data.get("more") else "")
+                )
+            self.bridge.call("crm-companies", query, callback=received)
+        find.clicked.connect(search_companies)
+        search.returnPressed.connect(search_companies)
+
+        def submit():
+            cid = choice.currentData()
+            if (not dialog.isVisible() or cid not in state["records"]
+                    or not agree.isChecked()
+                    or mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            answer = QMessageBox.question(
+                dialog, "Confirm Mail → CRM association",
+                "Link this saved conversation to the existing CRM company "
+                "'{}'?\n\nNo automatic contact, ticket, assessment or provider "
+                "operation will occur.".format(state["records"][cid]),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            link.setEnabled(False)
+            def saved(result, error):
+                if not dialog.isVisible():
+                    return
+                if error or not isinstance(result, dict) or not result.get("linked"):
+                    status.setText(
+                        "Association not saved: " + str(error or "Review required")[:200])
+                    update_enabled()
+                    return
+                dialog.accept()
+                self.load_mail_company_link(mailbox, thread_id)
+            self.bridge.call("mail-local-company-link",
+                payload={"mailbox":mailbox,"thread_id":thread_id,
+                         "company_id":cid,"confirmed":True}, callback=saved)
+        link.clicked.connect(submit)
+        dialog.open()
 
     def prepare_mail_reply(self, mailbox, thread_id):
         """Resolve the real reply target from Resend before opening the editor."""
