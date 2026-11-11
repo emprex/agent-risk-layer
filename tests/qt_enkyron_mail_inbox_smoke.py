@@ -33,6 +33,74 @@ class MailNativeUXSmoke(unittest.TestCase):
         self.app.processEvents()
         gc.collect()
 
+    def test_read_full_archived_text_requires_explicit_selection(self):
+        ui = MailInboxView()
+        seen = []
+        ui.fullTextRequested.connect(lambda *args: seen.append(args))
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.set_connection_state("connected")
+            self.assertTrue(ui.show_threads("all", [{
+                "id":THREAD,"mailbox":"direction","subject":"Long customer mail",
+                "last_message_at":"2026-11-11T16:40:00Z",
+            }]))
+            ui.thread_list.setCurrentRow(0)
+            self.assertTrue(ui.show_messages("direction",THREAD,[{
+                "id":"a24c4dba-723c-42e4-85e6-0fef70de3a92",
+                "from":"client@example.invalid",
+                "text":"short preview",
+                "created_at":"2026-11-11T16:40:00Z",
+                "preview_truncated":True,
+                "archive_state":"body_captured"
+            }]))
+            self.assertTrue(ui.full_text_button.isVisible() or
+                            not ui.full_text_button.isHidden())
+            ui.full_text_button.click()
+            self.assertEqual(seen,[(
+                "direction",THREAD,"a24c4dba-723c-42e4-85e6-0fef70de3a92")])
+            self.assertIn("short preview",ui.body.toPlainText())
+            self.assertTrue(ui.show_messages("direction",THREAD,[{
+                "id":"a24c4dba-723c-42e4-85e6-0fef70de3a92",
+                "text":"small body","preview_truncated":False
+            }]))
+            self.assertTrue(ui.full_text_button.isHidden())
+        finally:
+            self._dispose(ui)
+
+    def test_full_archived_text_window_is_read_only_and_local(self):
+        previous = DesktopBridge.call
+        calls = []
+        message_id = "a24c4dba-723c-42e4-85e6-0fef70de3a92"
+        def fake(_bridge,command,arg="",payload=None,callback=None):
+            if command=="mail-local-full-text":
+                calls.append((command,payload))
+                if callback:
+                    callback({
+                        "available":True,"mailbox":"direction",
+                        "thread_id":THREAD,"message_id":message_id,
+                        "text":"X"*25000,
+                        "notice":"Body captured in NEMORYTH; attachments not certified"
+                    },None)
+        DesktopBridge.call = fake
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.open_archived_full_text("direction",THREAD,message_id)
+            self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0][1]["message_id"],message_id)
+            self.assertEqual(len(window.mail_full_text_windows),1)
+            dialog = next(iter(window.mail_full_text_windows.values()))
+            body = dialog.findChild(QPlainTextEdit,"enkyronMailFullTextBody")
+            self.assertTrue(body.isReadOnly())
+            self.assertEqual(len(body.toPlainText()),25000)
+            self.assertFalse(any(c[0] in ("mail-send-draft","mail-reply-draft")
+                                 for c in calls))
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = previous
+
     def test_safe_conversation_cards_escape_provider_html(self):
         entries = [{
             "from": "Attacker <attacker@example.invalid>",
