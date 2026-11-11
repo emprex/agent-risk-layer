@@ -162,3 +162,120 @@ test('bounded body import persists received text once, without transport mutatio
     )).rows[0].provider_folder,'trash');
   }finally{await pool.end();}
 });
+
+
+test('header paging stores all 65 provider conversations without duplicates after restart',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-paged-head-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner;
+  const ids=Array.from({length:65},()=>crypto.randomUUID());
+  const calls=[];
+  const listThreads=async(_pool,_actor,mailbox,folder,after=null)=>{
+    calls.push({mailbox,folder,after});
+    if(folder!=='inbox')return {items:[],has_more:false};
+    const start=after===null?0:ids.indexOf(after)+1;
+    assert.ok(start>=0);
+    const page=ids.slice(start,start+30);
+    return {items:page.map((id,i)=>({
+      id,subject:'Synthetic '+String(start+i),
+      last_message_at:'2026-11-11T11:00:00Z',unread:false
+    })),has_more:start+page.length<ids.length};
+  };
+  try{
+    const first=await syncMailHeaders(pool,owner,{mailbox:'direction'},{listThreads});
+    assert.equal(first.imported,30);
+    assert.equal(first.more_pending,true);
+    assert.deepEqual(Object.keys(first.continuation),['direction/inbox']);
+    // Simulate a terminated UI: starting from page one only replays the same IDs.
+    await syncMailHeaders(pool,owner,{mailbox:'direction'},{listThreads});
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_local_threads WHERE workspace_key=$1',
+      [scope])).rows[0].n,30);
+    const second=await syncMailHeaders(pool,owner,{
+      mailbox:'direction',cursors:first.continuation
+    },{listThreads});
+    assert.equal(second.imported,30);
+    assert.equal(second.more_pending,true);
+    const third=await syncMailHeaders(pool,owner,{
+      mailbox:'direction',cursors:second.continuation
+    },{listThreads});
+    assert.equal(third.imported,5);
+    assert.equal(third.more_pending,false);
+    const record=(await pool.query(
+      'SELECT count(*)::int AS n,count(DISTINCT thread_id)::int AS unique_n '+
+      'FROM enkyron_mail_local_threads WHERE workspace_key=$1',[scope]
+    )).rows[0];
+    assert.equal(record.n,65);
+    assert.equal(record.unique_n,65);
+    assert.ok(calls.every(x=>x.mailbox==='direction'));
+    await assert.rejects(syncMailHeaders(pool,owner,{
+      mailbox:'direction',cursors:{'support/inbox':ids[0]}
+    },{listThreads}),/Invalid Mail pagination state/);
+  }finally{await pool.end();}
+});
+
+test('body pages resume after interruption and preserve exactly 65 unique messages',{
+  skip:!url&&'Disposable PostgreSQL CI only'
+},async()=>{
+  const pool=new pg.Pool({connectionString:ciConnection(),max:2});
+  const owner='ci-paged-body-'+crypto.randomUUID().slice(0,8);
+  const scope='local:'+owner,thread=crypto.randomUUID();
+  const ids=Array.from({length:65},()=>crypto.randomUUID());
+  const calls=[];
+  const listMessages=async(_pool,_actor,mailbox,threadId,after=null)=>{
+    assert.equal(mailbox,'direction');
+    assert.equal(threadId,thread);
+    calls.push(after);
+    const start=after===null?0:ids.indexOf(after)+1;
+    assert.ok(start>=0);
+    const page=ids.slice(start,start+30);
+    return {items:page.map((id,i)=>({
+      id,from:'client@example.invalid',to:['owner@example.invalid'],
+      subject:'Synthetic reply '+String(start+i),
+      text:'Safe synthetic content '+String(start+i),
+      created_at:'2026-11-11T10:00:00Z',html_only:false
+    })),has_more:start+page.length<ids.length};
+  };
+  try{
+    await pool.query(
+      'INSERT INTO enkyron_mail_local_threads '+
+      '(workspace_key,mailbox_key,thread_id,provider_folder,folder_key,subject) '+
+      "VALUES($1,'direction',$2,'inbox','inbox','Paginated test')",
+      [scope,thread]
+    );
+    const first=await syncLocalMailBodies(pool,owner,{
+      mailbox:'direction',rescan:true
+    },{listMessages});
+    assert.equal(first.failed_threads,0);
+    assert.equal(first.more_pending,true);
+    assert.equal(calls.length,2);
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_local_messages '+
+      'WHERE workspace_key=$1',[scope])).rows[0].n,60);
+    // Crash/restart without the in-memory continuation: repeat first two pages.
+    await syncLocalMailBodies(pool,owner,{
+      mailbox:'direction',rescan:true
+    },{listMessages});
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_mail_local_messages '+
+      'WHERE workspace_key=$1',[scope])).rows[0].n,60);
+    const finished=await syncLocalMailBodies(pool,owner,{
+      mailbox:'direction',rescan:true,...first.continuation
+    },{listMessages});
+    assert.equal(finished.failed_threads,0);
+    assert.equal(finished.more_pending,false);
+    const totals=(await pool.query(
+      'SELECT count(*)::int AS n,count(DISTINCT message_id)::int AS unique_n '+
+      'FROM enkyron_mail_local_messages WHERE workspace_key=$1',[scope]
+    )).rows[0];
+    assert.equal(totals.n,65);
+    assert.equal(totals.unique_n,65);
+    assert.equal((await localMailMessages(pool,owner,{
+      mailbox:'direction',thread_id:thread
+    })).has_more,true); // preview is bounded; persistence is not.
+    assert.deepEqual(calls.slice(0,2),[null,ids[29]]);
+    assert.equal(calls.at(-1),ids[59]);
+  }finally{await pool.end();}
+});
