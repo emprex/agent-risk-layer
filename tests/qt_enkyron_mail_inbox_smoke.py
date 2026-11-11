@@ -108,7 +108,9 @@ class MailNativeUXSmoke(unittest.TestCase):
         commands = []
         def fake(_self, command, arg="", payload=None, callback=None):
             commands.append((command, arg, payload))
-            if command == "mail-messages" and callback:
+            if command == "mail-local-messages" and callback:
+                callback({"mailbox":"direction","thread_id":THREAD,"items":[]},None)
+            if command == "mail-local-fetch" and callback:
                 callback({
                     "mailbox": "direction", "thread_id": THREAD,
                     "items": [{
@@ -127,8 +129,8 @@ class MailNativeUXSmoke(unittest.TestCase):
             inbox.set_owner_mailboxes(CARD)
             inbox.set_connection_state("connected")
             self.assertTrue(inbox.show_threads("all", []))
-            self.assertEqual(inbox.mail_stack.currentIndex(), 0)
-            self.assertFalse(inbox.splitter.isVisible())
+            self.assertEqual(inbox.mail_stack.currentIndex(), 1)
+            self.assertTrue(inbox.splitter.isVisible())
             self.assertIn("empty", inbox.empty_title.text().lower())
             self.assertTrue(inbox.show_threads("all", [{
                 "id": THREAD, "mailbox": "direction",
@@ -138,7 +140,7 @@ class MailNativeUXSmoke(unittest.TestCase):
             self.assertEqual(inbox.mail_stack.currentIndex(), 1)
             self.assertTrue(inbox.thread_list.item(0).font().bold())
             inbox.search.setText("nothing matches")
-            self.assertEqual(inbox.mail_stack.currentIndex(), 0)
+            self.assertEqual(inbox.mail_stack.currentIndex(), 1)
             self.assertIn("matching", inbox.empty_title.text().lower())
             inbox.search.setText("")
             self.assertEqual(inbox.mail_stack.currentIndex(), 1)
@@ -173,9 +175,9 @@ class MailNativeUXSmoke(unittest.TestCase):
         window = None
         try:
             window = EnkyronWindow()
-            self.assertEqual([window.navigation.item(i).text() for i in range(4)],
-                             ["Home", "Tickets", "CRM", "Mail"])
-            self.assertEqual(window.pages.count(), 3)
+            self.assertEqual([window.navigation.item(i).text() for i in range(5)],
+                             ["Home", "Tickets", "CRM", "Mail", "Calendar"])
+            self.assertEqual(window.pages.count(), 4)
             self.assertEqual(window.crm_tabs.tabText(3), "Mail")
             self.assertEqual([window.crm_mail_folders.tabText(i) for i in range(3)],
                              ["Inbox", "Sent", "Drafts"])
