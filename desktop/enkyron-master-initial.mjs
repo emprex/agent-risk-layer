@@ -209,7 +209,15 @@ export async function recordInitialMaster(pool,payload,actor,dependencies={}) {
      !SHA.test(payload.target_sha||'') || typeof payload.snapshot_id!=='string')
     reject('exact preview digest, snapshot, SHA and explicit human confirmation required');
   const ticketId=requireTicketId(payload.ticket_id);
-  const draft=await previewInitialMaster(pool,ticketId,actor,dependencies);
+  let draft;
+  try {
+    draft=await previewInitialMaster(pool,ticketId,actor,dependencies);
+  } catch(error) {
+    if(String(error?.message||'').startsWith('Master initialization:')) throw error;
+    const state=typeof error?.code==='string' && /^[0-9A-Z]{5}$/.test(error.code)
+      ? ' [SQLSTATE '+error.code+']' : '';
+    throw new Error('Master initialization: canonical preview revalidation failed'+state);
+  }
   if(!draft.available) reject(draft.reason||'existing Master Dossier');
   if(payload.preview_digest!==draft.preview_digest ||
      payload.snapshot_id!==draft.snapshot_id ||
