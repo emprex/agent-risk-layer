@@ -273,11 +273,8 @@ class DetachableModuleWindow(QMainWindow):
         self.resize(1180, 760)
         self.setMinimumSize(650, 450)
         self._on_return = on_return
-        toolbar = self.addToolBar("Window")
-        toolbar.setMovable(False)
-        button = QPushButton("Return to ENKYRON")
-        button.clicked.connect(self.close)
-        toolbar.addWidget(button)
+        # Only the module's own Open/Return action is visible.
+        # No duplicate navigation toolbar inside this native window.
 
     def closeEvent(self, event):
         self._on_return()
@@ -2811,35 +2808,15 @@ class EnkyronWindow(QMainWindow):
             self.bridge.call("mail-send-draft",payload=payload,callback=sent_result)
         self.bridge.call("crm-mail-create",payload=draft,callback=saved)
 
-    def _detached_notice(self, label, window_getter):
+    def _detached_notice(self, label):
+        """Passive placeholder: window management belongs to the desktop."""
         placeholder = QWidget()
         layout = QVBoxLayout(placeholder)
         layout.addStretch()
         title = QLabel(label + " is open in another window.")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(title)
-        button = QPushButton("Switch to " + label)
-        button.setToolTip("Minimise ENKYRON to reveal the separate window")
-        def focus_window():
-            window = window_getter()
-            if window is None:
-                return
-            # Mutter/GNOME may reject requestActivate() from another window;
-            # minimising the covering ENKYRON window is a dependable fallback
-            # that does not require changing GNOME settings or installing tools.
-            window.showNormal()
-            self.showMinimized()
-            window.raise_()
-            window.activateWindow()
-        button.clicked.connect(focus_window)
-        layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
-        explanation = QLabel(
-            "This switches away from ENKYRON. Use Alt+Tab to return "
-            "or select the other window from the desktop overview."
-        )
-        explanation.setWordWrap(True)
-        explanation.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(explanation)
         layout.addStretch()
         return placeholder
 
@@ -2851,9 +2828,7 @@ class EnkyronWindow(QMainWindow):
         slot = self.crm_tabs.indexOf(self.mail_page)
         if slot < 0:
             return
-        placeholder = self._detached_notice(
-            "Mail", lambda: self.mail_detached_window
-        )
+        placeholder = self._detached_notice("Mail")
         self.crm_tabs.removeTab(slot)
         self.crm_tabs.insertTab(slot, placeholder, "Mail")
         self.crm_tabs.setCurrentIndex(slot)
@@ -2895,9 +2870,7 @@ class EnkyronWindow(QMainWindow):
         slot = self.pages.indexOf(self.calendar_view)
         if slot < 0:
             return
-        placeholder = self._detached_notice(
-            "Calendar", lambda: self.calendar_detached_window
-        )
+        placeholder = self._detached_notice("Calendar")
         self.pages.removeWidget(self.calendar_view)
         self.pages.insertWidget(slot, placeholder)
         self.pages.setCurrentIndex(slot)
@@ -3029,11 +3002,10 @@ class EnkyronWindow(QMainWindow):
         self.crm_tabs.tabBar().setVisible(index != 3)
         if index == 4:
             self.pages.setCurrentIndex(3)
-            self.load_calendar()
-            if self.calendar_detached_window is not None:
-                self.calendar_detached_window.showNormal()
-                self.calendar_detached_window.raise_()
-                self.calendar_detached_window.activateWindow()
+            # Do not raise or minimise another window. Desktop users decide
+            # which monitor and window to focus.
+            if self.calendar_detached_window is None:
+                self.load_calendar()
             return
         if index == 3:
             self.pages.setCurrentIndex(2)
@@ -3041,10 +3013,6 @@ class EnkyronWindow(QMainWindow):
             if not self.crm_drafts_loaded:
                 self.load_mail_drafts()
             self.load_mail_status()
-            if self.mail_detached_window is not None:
-                self.mail_detached_window.showNormal()
-                self.mail_detached_window.raise_()
-                self.mail_detached_window.activateWindow()
             return
         if index < 0 or index >= self.pages.count():
             return
