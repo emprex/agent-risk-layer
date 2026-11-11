@@ -158,5 +158,31 @@ test('approved first revision uses a single locked transaction and existing bigi
     assert.ok(statements.some(q=>q.sql.startsWith('LOCK TABLE')));
     assert.ok(statements.some(q=>q.sql==='COMMIT'));
     assert.ok(!statements.some(q=>q.sql==='ROLLBACK'));
+    // A real PostgreSQL failure must disclose a safe stage and SQLSTATE,
+    // not the generic "Local PostgreSQL operation failed" or raw DB values.
+    const failureQueries=[];
+    const failurePool={query:dbQuery,connect:async()=>({
+      query:async(sql,values=[])=>{
+        failureQueries.push(sql);
+        if(sql.startsWith('INSERT INTO assessment_master_dossier_revisions')){
+          const error=new Error('SECRET DATABASE DETAILS MUST NOT BE SHOWN');
+          error.code='23514';
+          throw error;
+        }
+        return dbQuery(sql,values);
+      },
+      release:()=>{}
+    })};
+    await assert.rejects(recordInitialMaster(failurePool,{
+      ticket_id:ticketId,confirmed:true,
+      preview_digest:candidate.preview_digest,
+      snapshot_id:snapshot,target_sha:frozen
+    },'emprex',deps),error=>{
+      assert.match(error.message,
+        /Master initialization: Master revision INSERT failed: check constraint conflict \\[SQLSTATE 23514\\]/);
+      assert.doesNotMatch(error.message,/SECRET DATABASE DETAILS/);
+      return true;
+    });
+    assert.ok(failureQueries.includes('ROLLBACK'));
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
