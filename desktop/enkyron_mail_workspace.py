@@ -1,18 +1,59 @@
-"""Native ENKYRON email inbox presentation; provider permissions stay server-side."""
+"""Native ENKYRON Inbox: clean list/detail mail experience, provider read-only.
+
+All data remains text-only. Mailbox permissions and Resend access are handled
+by the backend; this presentation creates no authenticated actions or sends.
+"""
+from datetime import datetime
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QSplitter,
-    QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget,
 )
 
 
+def _display_date(value):
+    """Short local display only; preserve untrusted values as plain text."""
+    if not isinstance(value, str) or not value:
+        return ""
+    try:
+        instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return instant.astimezone().strftime("%d %b %Y · %H:%M")
+    except (ValueError, OverflowError):
+        return value[:32]
+
+
+def format_mail_messages(messages):
+    """Safe text-only conversation rendering; never interpret HTML or links."""
+    if not isinstance(messages, list):
+        return ""
+    parts = []
+    for item in messages[:50]:
+        if not isinstance(item, dict):
+            continue
+        recipients = item.get("to") if isinstance(item.get("to"), list) else []
+        header = "From: {}\nTo: {}\nDate: {}\nSubject: {}".format(
+            str(item.get("from") or "")[:254],
+            ", ".join(str(v) for v in recipients[:20])[:500],
+            str(item.get("created_at") or "")[:64],
+            str(item.get("subject") or "")[:300],
+        )
+        body = str(item.get("text") or "")[:20000]
+        if not body and item.get("html_only"):
+            body = "[HTML-only message: safe text preview not available]"
+        parts.append(header + "\n\n" + body)
+    return ("\n\n" + ("─" * 30) + "\n\n").join(parts)
+
+
 class MailInboxView(QWidget):
-    """Accessible inbox layout: account -> thread -> plain-text conversation."""
+    """Compact Inbox with an empty state, searchable list and reading pane."""
 
     mailboxChanged = Signal(str)
     refreshRequested = Signal(str)
     threadRequested = Signal(str, str)
+    threadOpenRequested = Signal(str, str)
     draftsRequested = Signal()
     deskRequested = Signal()
     newEmailRequested = Signal()
@@ -28,37 +69,44 @@ class MailInboxView(QWidget):
 
     def _build(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 14)
-        root.setSpacing(12)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(10)
 
-        title_row = QHBoxLayout()
+        heading = QHBoxLayout()
         title = QLabel("Inbox")
         title.setObjectName("sectionTitle")
-        title_row.addWidget(title)
-        title_row.addStretch()
-        self.new_email_button = QPushButton("New email")
-        self.new_email_button.setObjectName("enkyronMailCompose")
-        self.new_email_button.clicked.connect(lambda: self.newEmailRequested.emit())
-        title_row.addWidget(self.new_email_button)
-        root.addLayout(title_row)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Show"))
-        self.account_picker = QComboBox()
-        self.account_picker.setObjectName("enkyronMailAccountPicker")
-        self.account_picker.setMinimumWidth(170)
-        self.account_picker.setAccessibleName("Filter messages by email account")
-        self.account_picker.setToolTip("All mail or one address")
-        self.account_picker.currentIndexChanged.connect(self._account_changed)
-        row.addWidget(self.account_picker)
-        row.addStretch()
+        heading.addWidget(title)
+        heading.addStretch()
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setObjectName("enkyronMailRefresh")
+        self.refresh_button.setToolTip("Fetch the latest conversations from Resend.")
         self.refresh_button.setEnabled(False)
-        self.refresh_button.setToolTip("Refresh the selected professional mailbox.")
         self.refresh_button.clicked.connect(self._refresh)
-        row.addWidget(self.refresh_button)
-        root.addLayout(row)
+        heading.addWidget(self.refresh_button)
+        self.new_email_button = QPushButton("New email")
+        self.new_email_button.setObjectName("enkyronMailCompose")
+        self.new_email_button.clicked.connect(self.newEmailRequested.emit)
+        heading.addWidget(self.new_email_button)
+        root.addLayout(heading)
+
+        controls = QHBoxLayout()
+        controls.setSpacing(10)
+        self.account_picker = QComboBox()
+        self.account_picker.setObjectName("enkyronMailAccountPicker")
+        self.account_picker.setMinimumWidth(230)
+        self.account_picker.setAccessibleName("Filter messages by email account")
+        self.account_picker.setToolTip("Inbox account")
+        self.account_picker.currentIndexChanged.connect(self._account_changed)
+        controls.addWidget(self.account_picker, 0)
+        self.search = QLineEdit()
+        self.search.setObjectName("enkyronMailSearch")
+        self.search.setPlaceholderText("Search conversations…")
+        self.search.setAccessibleName("Search loaded conversations")
+        self.search.setMaxLength(120)
+        self.search.setEnabled(False)
+        self.search.textChanged.connect(self._filter)
+        controls.addWidget(self.search, 1)
+        root.addLayout(controls)
 
         self.connection_label = QLabel(
             "Email is offline. Connect the mail service to receive messages."
@@ -67,94 +115,140 @@ class MailInboxView(QWidget):
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
         self.connection_label.setWordWrap(True)
         root.addWidget(self.connection_label)
-        # These routes remain useful even without a Resend connection.
-        quick = QHBoxLayout()
+
+        # Backward-compatible navigation hooks; not extra buttons in the Inbox.
         self.local_drafts_button = QPushButton("Open local drafts")
         self.local_drafts_button.setObjectName("enkyronMailOpenDrafts")
-        self.local_drafts_button.clicked.connect(lambda: self.draftsRequested.emit())
-        quick.addWidget(self.local_drafts_button)
+        self.local_drafts_button.clicked.connect(self.draftsRequested.emit)
+        self.local_drafts_button.hide()
         self.client_desk_button = QPushButton("Open Client Desk")
         self.client_desk_button.setObjectName("enkyronMailOpenClientDesk")
-        self.client_desk_button.clicked.connect(lambda: self.deskRequested.emit())
-        quick.addWidget(self.client_desk_button)
-        quick.addStretch()
-        self.local_drafts_button.hide()
+        self.client_desk_button.clicked.connect(self.deskRequested.emit)
         self.client_desk_button.hide()
-        root.addLayout(quick)
+
+        self.mail_stack = QStackedWidget()
+        self.mail_stack.setObjectName("enkyronMailContentStack")
+
+        empty_page = QWidget()
+        empty_layout = QVBoxLayout(empty_page)
+        empty_layout.setContentsMargins(20, 30, 20, 30)
+        empty_layout.addStretch(2)
+        empty_symbol = QLabel("✉")
+        empty_symbol.setObjectName("enkyronMailEmptySymbol")
+        empty_symbol.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_symbol.setStyleSheet("font-size: 34px; color: #7891a1;")
+        empty_layout.addWidget(empty_symbol)
+        self.empty_title = QLabel("Inbox is empty")
+        self.empty_title.setObjectName("enkyronMailEmptyTitle")
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_title.setStyleSheet(
+            "font-size: 17px; font-weight: 600; color: #20354a;"
+        )
+        empty_layout.addWidget(self.empty_title)
+        self.empty_explanation = QLabel("No messages yet.")
+        self.empty_explanation.setObjectName("enkyronMailEmptyExplanation")
+        self.empty_explanation.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_explanation.setTextFormat(Qt.TextFormat.PlainText)
+        self.empty_explanation.setWordWrap(True)
+        self.empty_explanation.setStyleSheet("color: #60768a;")
+        empty_layout.addWidget(self.empty_explanation)
+        empty_layout.addStretch(3)
+        self.mail_stack.addWidget(empty_page)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
         self.splitter.setObjectName("enkyronMailSplitView")
+        self.splitter.setHandleWidth(5)
 
         left = QFrame()
+        left.setObjectName("enkyronMailListPane")
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.addWidget(QLabel("Messages"))
-        self.search = QLineEdit()
-        self.search.setObjectName("enkyronMailSearch")
-        self.search.setAccessibleName("Search loaded conversations")
-        self.search.setPlaceholderText("Search messages…")
-        self.search.setMaxLength(120)
-        self.search.setEnabled(False)
-        self.search.textChanged.connect(self._filter)
-        left_layout.addWidget(self.search)
-
+        left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(8)
+        list_heading = QHBoxLayout()
+        list_heading.addWidget(QLabel("Conversations"))
+        list_heading.addStretch()
+        self.count = QLabel("0 conversations")
+        self.count.setObjectName("enkyronMailCount")
+        self.count.setTextFormat(Qt.TextFormat.PlainText)
+        self.count.setStyleSheet("color: #60768a;")
+        list_heading.addWidget(self.count)
+        left_layout.addLayout(list_heading)
         self.thread_list = QListWidget()
         self.thread_list.setObjectName("enkyronMailThreadList")
         self.thread_list.setAccessibleName("Conversations in selected mailbox")
         self.thread_list.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
+        self.thread_list.setStyleSheet(
+            "QListWidget { background: white; border: 1px solid #d8e2ea;"
+            " border-radius: 6px; outline: 0; }"
+            "QListWidget::item { padding: 11px 9px; border-bottom: 1px solid #edf2f6; }"
+            "QListWidget::item:selected { background: #e4f3f8; color: #20354a; }"
+            "QListWidget::item:hover { background: #f0f6fa; }"
+        )
         self.thread_list.currentItemChanged.connect(self._selected)
+        self.thread_list.itemDoubleClicked.connect(self._open_current_thread)
         left_layout.addWidget(self.thread_list, 1)
-        self.count = QLabel("0 messages")
-        self.count.setTextFormat(Qt.TextFormat.PlainText)
-        left_layout.addWidget(self.count)
         self.splitter.addWidget(left)
 
+        self.reader_stack = QStackedWidget()
+        self.reader_stack.setObjectName("enkyronMailReaderStack")
+        choose_page = QWidget()
+        choose_layout = QVBoxLayout(choose_page)
+        choose_layout.addStretch()
+        choose_text = QLabel("Select a conversation to read it")
+        choose_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        choose_text.setStyleSheet("color: #60768a; font-size: 14px;")
+        choose_layout.addWidget(choose_text)
+        choose_layout.addStretch()
+        self.reader_stack.addWidget(choose_page)
+
         right = QFrame()
+        right.setObjectName("enkyronMailReadingPane")
         right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(12, 8, 8, 8)
+        right_layout.setContentsMargins(14, 0, 0, 0)
+        right_layout.setSpacing(8)
         self.subject = QLabel("Select a message")
         self.subject.setObjectName("enkyronMailSubject")
         self.subject.setTextFormat(Qt.TextFormat.PlainText)
         self.subject.setWordWrap(True)
+        self.subject.setStyleSheet("font-size: 16px; font-weight: 600;")
         right_layout.addWidget(self.subject)
         self.meta = QLabel("")
+        self.meta.setObjectName("enkyronMailMeta")
         self.meta.setTextFormat(Qt.TextFormat.PlainText)
         self.meta.setWordWrap(True)
+        self.meta.setStyleSheet("color: #60768a;")
         right_layout.addWidget(self.meta)
         self.body = QPlainTextEdit()
         self.body.setObjectName("enkyronMailPlainTextPreview")
-        self.body.setAccessibleName("Read-only conversation content")
+        self.body.setAccessibleName("Read-only plain-text conversation")
         self.body.setReadOnly(True)
         self.body.setPlainText("")
         right_layout.addWidget(self.body, 1)
-        actions = QHBoxLayout()
-        self.reply_button = QPushButton("Reply")
-        self.reply_button.setObjectName("enkyronMailReply")
-        self.ticket_button = QPushButton("Create ticket")
-        self.ticket_button.setObjectName("enkyronMailTicket")
-        self.company_button = QPushButton("Link company")
-        self.company_button.setObjectName("enkyronMailCompany")
-        for button in (self.reply_button, self.ticket_button, self.company_button):
-            button.setEnabled(False)
-            button.setToolTip("Requires a verified message and an authenticated workflow.")
-            actions.addWidget(button)
-        actions.addStretch()
-        right_layout.addLayout(actions)
-        self.splitter.addWidget(right)
-        self.splitter.setSizes([360, 700])
-        root.addWidget(self.splitter, 1)
+        self.reader_stack.addWidget(right)
+        self.reader_stack.setCurrentIndex(0)
+        self.splitter.addWidget(self.reader_stack)
+        self.splitter.setSizes([440, 720])
+        self.mail_stack.addWidget(self.splitter)
+        root.addWidget(self.mail_stack, 1)
 
-        # Technical integration notes do not belong in the everyday inbox.
+        # No inert Reply, Create ticket or Link company buttons: those workflows
+        # are not authenticated/implemented. Their absence is deliberate.
+        self._show_empty("Inbox is empty", "No messages yet.")
 
     @property
     def selected_mailbox(self):
         return self.account_picker.currentData()
 
+    def _show_empty(self, title, detail):
+        self.empty_title.setText(title)
+        self.empty_explanation.setText(detail)
+        self.mail_stack.setCurrentIndex(0)
+
     def set_owner_mailboxes(self, card):
-        """Use the existing Owner card for labels only, never as a login token."""
+        """Labels supplied by trusted Owner card; no permission derived in Qt."""
         entries = card.get("mailboxes", []) if isinstance(card, dict) else []
         validated = []
         for entry in entries:
@@ -166,7 +260,7 @@ class MailInboxView(QWidget):
             if len(address) > 254 or "@" not in address or "\n" in address:
                 continue
             validated.append((key, address))
-        if {key for key, _ in validated} != {"direction", "support"} or len(validated) != 2:
+        if {key for key, _ in validated} != {"direction", "support") or len(validated) != 2:
             self._mailboxes = {}
             self.account_picker.blockSignals(True)
             self.account_picker.clear()
@@ -186,15 +280,15 @@ class MailInboxView(QWidget):
         self._clear_threads("No messages yet.")
 
     def set_connection_state(self, state, explanation=None):
-        """Presentation state only; this cannot grant authorization to Resend."""
+        """Display only. Never grants any authorization or sends mail."""
         if state not in ("disconnected", "loading", "connected", "error"):
             raise ValueError("Invalid mail connection state")
         self.connection_state = state
         defaults = {
             "disconnected": "Email is offline. Connect the mail service to receive messages.",
-            "loading": "Loading messages…",
+            "loading": "Loading conversations…",
             "connected": "",
-            "error": "Unable to load messages. Try Refresh.",
+            "error": "Unable to load conversations. Try Refresh.",
         }
         self.connection_label.setText(str(explanation or defaults[state])[:180])
         self.connection_label.setVisible(state != "connected")
@@ -202,9 +296,7 @@ class MailInboxView(QWidget):
         self.refresh_button.setEnabled(active)
         self.search.setEnabled(state == "connected" and bool(self._mailboxes))
         if not active:
-            self._clear_threads(
-                "No messages yet." if state == "disconnected" else defaults[state]
-            )
+            self._clear_threads(defaults[state])
 
     def _clear_threads(self, explanation):
         self.current_thread_id = None
@@ -213,13 +305,22 @@ class MailInboxView(QWidget):
         self.thread_list.blockSignals(True)
         self.thread_list.clear()
         self.thread_list.blockSignals(False)
+        self.search.blockSignals(True)
         self.search.clear()
-        self.count.setText("0 messages")
+        self.search.blockSignals(False)
+        self.count.setText("0 conversations")
         self.subject.setText("Select a message")
         self.meta.setText("")
         self.body.setPlainText(explanation)
-        for b in (self.reply_button, self.ticket_button, self.company_button):
-            b.setEnabled(False)
+        self.reader_stack.setCurrentIndex(0)
+        if self.connection_state == "loading":
+            self._show_empty("Checking for new mail", explanation)
+        elif self.connection_state == "error":
+            self._show_empty("Couldn't load mail", explanation)
+        elif self.connection_state == "disconnected":
+            self._show_empty("Mail unavailable", explanation)
+        else:
+            self._show_empty("Inbox is empty", explanation)
 
     def _account_changed(self, _index):
         self._clear_threads("No messages yet.")
@@ -233,12 +334,12 @@ class MailInboxView(QWidget):
             self.refreshRequested.emit(self.selected_mailbox)
 
     def show_threads(self, mailbox, items, has_more=False):
-        """Call only with data from trusted Owner-scoped backend, not the Qt IPC caller."""
+        """Provider-scoped, bounded plain-text thread listing."""
         if self.connection_state != "connected" or mailbox != self.selected_mailbox:
             return False
         if not isinstance(items, list) or len(items) > 50:
             return False
-        self._clear_threads("Select a conversation to read its messages.")
+        self._clear_threads("No conversations in this inbox.")
         self.items = list(items)
         self.thread_list.blockSignals(True)
         for item in items:
@@ -247,15 +348,21 @@ class MailInboxView(QWidget):
             thread_id = str(item.get("id") or "")
             if not thread_id or len(thread_id) > 100:
                 continue
-            subject = str(item.get("subject") or "(No subject)")[:300]
-            date = str(item.get("last_message_at") or "")[:32]
-            text = ("● " if item.get("unread") else "") + subject + ("\n" + date if date else "")
-            row = QListWidgetItem(text)
             source = str(item.get("mailbox") or mailbox)
             if source not in self._mailboxes:
                 continue
-            row.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
-            self.thread_list.addItem(row)
+            subject = str(item.get("subject") or "(No subject)")[:300]
+            date = _display_date(item.get("last_message_at"))
+            unread = item.get("unread") is True
+            label = ("● " if unread else "") + subject + ("\n" + date if date else "")
+            entry = QListWidgetItem(label)
+            entry.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
+            entry.setToolTip(subject + ("\n" + date if date else ""))
+            if unread:
+                font = QFont(entry.font())
+                font.setBold(True)
+                entry.setFont(font)
+            self.thread_list.addItem(entry)
         self.thread_list.blockSignals(False)
         count = self.thread_list.count()
         self.count.setText(
@@ -266,66 +373,68 @@ class MailInboxView(QWidget):
 
     def _filter(self, value):
         query = value.strip().casefold()
-        shown = 0
-        for i in range(self.thread_list.count()):
-            item = self.thread_list.item(i)
+        visible = 0
+        for index in range(self.thread_list.count()):
+            item = self.thread_list.item(index)
             hidden = query not in item.text().casefold()
             item.setHidden(hidden)
-            shown += not hidden
-        if self.connection_state == "connected" and self.thread_list.count():
-            self.count.setText("{} of {} conversation(s) shown.".format(
-                shown, self.thread_list.count()
-            ))
+            visible += not hidden
+        total = self.thread_list.count()
+        self.count.setText(
+            "{} of {} conversations".format(visible, total)
+            if query else "{} conversation(s)".format(total)
+        )
+        if self.connection_state != "connected":
+            return
+        if total == 0:
+            self._show_empty("Inbox is empty",
+                "No conversations in this mailbox. New messages will appear here.")
+        elif visible == 0:
+            self._show_empty("No matching conversations",
+                "Try a different search term.")
+        else:
+            self.mail_stack.setCurrentIndex(1)
 
     def _selected(self, current, _previous):
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.subject.setText("Select a message")
         self.body.clear()
-        self.meta.setText("Select a conversation to load its messages.")
-        for b in (self.reply_button, self.ticket_button, self.company_button):
-            b.setEnabled(False)
-        if (not current or self.connection_state != "connected"
-                or not self._mailboxes):
+        self.meta.setText("")
+        self.reader_stack.setCurrentIndex(0)
+        if not current or self.connection_state != "connected" or not self._mailboxes:
             return
         reference = current.data(Qt.ItemDataRole.UserRole)
         if not isinstance(reference, tuple) or len(reference) != 2:
             return
-        source,thread_id = reference
+        source, thread_id = reference
         if source not in self._mailboxes:
             return
         self.current_thread_mailbox = source
         self.current_thread_id = thread_id
         self.subject.setText(current.text().split("\n", 1)[0].removeprefix("● "))
         self.body.setPlainText("Loading conversation…")
+        self.reader_stack.setCurrentIndex(1)
         self.threadRequested.emit(source, thread_id)
 
+    def _open_current_thread(self, current):
+        if not current or self.connection_state != "connected":
+            return
+        reference = current.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(reference, tuple) or len(reference) != 2:
+            return
+        source, thread_id = reference
+        if source in self._mailboxes:
+            self.threadOpenRequested.emit(source, thread_id)
+
     def show_messages(self, mailbox, thread_id, messages):
-        """Render text only. External links and embedded images are never loaded."""
+        """Render only plain text; no HTML, resources or attachment downloads."""
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
-        view = []
-        for item in messages[:50]:
-            if not isinstance(item, dict):
-                continue
-            recipients = item.get("to") if isinstance(item.get("to"), list) else []
-            header = "From: {}\nTo: {}\nDate: {}\nSubject: {}".format(
-                str(item.get("from") or "")[:254],
-                ", ".join(map(str, recipients[:20]))[:500],
-                str(item.get("created_at") or "")[:64],
-                str(item.get("subject") or "")[:300],
-            )
-            message = str(item.get("text") or "")[:20000]
-            if not message and item.get("html_only"):
-                message = "[HTML-only message: safe text preview not available]"
-            view.append(header + "\n\n" + message)
         self.body.setPlainText(
-            ("\n\n" + ("─" * 30) + "\n\n").join(view)
-            if view else "No messages in this thread."
+            format_mail_messages(messages) or "No messages in this conversation."
         )
-        self.meta.setText("{} message(s) · Plain text only.".format(len(view)))
-        # Reply, ticket and company actions stay disabled until a separate
-        # authenticated, auditable workflow is wired. A displayed message is
-        # not proof of the sender identity or permission to contact them.
+        self.meta.setText("{} message(s) · Plain text".format(len(messages[:50])))
+        self.reader_stack.setCurrentIndex(1)
         return True
