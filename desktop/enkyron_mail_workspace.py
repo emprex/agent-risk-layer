@@ -4,6 +4,7 @@ All data remains text-only. Mailbox permissions and Resend access are handled
 by the backend; this presentation creates no authenticated actions or sends.
 """
 from datetime import datetime
+from html import escape
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QSplitter,
     QStackedWidget, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QInputDialog,
+    QTextBrowser,
 )
 
 
@@ -58,6 +60,79 @@ def format_mail_messages(messages):
                      "for opening yet.]").format(quarantined)
         parts.append(header + "\n\n" + body)
     return ("\n\n" + ("─" * 30) + "\n\n").join(parts)
+
+
+def _safe_sender_label(sender):
+    """Prefer a readable display name; keep the full address in the tooltip."""
+    raw = str(sender or "").strip()
+    if "<" in raw and raw.endswith(">"):
+        name = raw.rsplit("<", 1)[0].strip().strip('"')
+        if name:
+            return name[:55]
+    return raw[:52] + ("…" if len(raw) > 52 else "")
+
+
+def format_mail_message_cards(messages):
+    """Only OUR generated HTML. Provider HTML/URLs are never interpreted.
+
+    All external fields are escaped. No img, anchor, remote CSS, file URL,
+    JavaScript or raw attachment content can reach the QTextBrowser.
+    """
+    if not isinstance(messages, list):
+        return ""
+    cards = []
+    for index, item in enumerate(messages[:50], start=1):
+        if not isinstance(item, dict):
+            continue
+        def safe(value, size):
+            return escape(str(value or "")[:size], quote=True)
+        sender = safe(item.get("from"), 254) or "Unknown sender"
+        to = item.get("to") if isinstance(item.get("to"), list) else []
+        recipient = safe(", ".join(str(x) for x in to[:20]), 500)
+        sent = safe(_display_date(item.get("created_at")), 80)
+        subject = safe(item.get("subject") or "(No subject)", 300)
+        plain = str(item.get("text") or "")[:20000]
+        if not plain and item.get("html_only"):
+            plain = "[HTML-only message: safe text preview unavailable]"
+        body = escape(plain, quote=True).replace("\r\n", "\n").replace(
+            "\r", "\n").replace("\n", "<br>")
+        notices = []
+        if item.get("preview_truncated") is True:
+            notices.append("Preview only — complete body stored in NEMORYTH; "
+                           "showing the first 20,000 characters")
+        if item.get("archive_state") == "incomplete":
+            notices.append("Archive incomplete — source verification required")
+        try:
+            attachments = max(0, int(item.get("attachment_count") or 0))
+        except (TypeError, ValueError):
+            attachments = 0
+        if attachments:
+            notices.append("{} attachment reference(s) — file contents "
+                           "not approved for opening".format(attachments))
+        notes = "".join(
+            "<p style='color:#785e28;background-color:#fff8e6;"
+            "padding:6px;border:1px solid #ead9af;'>"
+            + escape(n, quote=True) + "</p>" for n in notices
+        )
+        cards.append(
+            "<table width='100%' cellspacing='0' cellpadding='0' "
+            "style='border:1px solid #d6e2eb;background-color:#ffffff;'>"
+            "<tr><td style='background-color:#edf4f8;"
+            "padding:10px 12px;border-bottom:1px solid #d6e2eb;'>"
+            "<b>" + sender + "</b>"
+            "<p style='color:#536c80;margin:3px 0;'>"
+            + ("To: " + recipient + " · " if recipient else "")
+            + sent + "</p><span style='color:#334f63;'>"
+            + subject + "</span></td></tr>"
+            "<tr><td style='padding:12px 14px;'>"
+            "<p style='margin:0;white-space:pre-wrap;'>"
+            + body + "</p>" + notes + "</td></tr></table>"
+            "<p style='margin:0 0 12px 0;'>&nbsp;</p>"
+        )
+    return "<html><body style='font-family:DejaVu Sans;font-size:12px;" + (
+        "background-color:#f7fafc;color:#20354a;'>" +
+        "".join(cards) + "</body></html>"
+    ) if cards else ""
 
 
 class MailInboxView(QWidget):
@@ -221,6 +296,9 @@ class MailInboxView(QWidget):
         self.thread_list = QListWidget()
         self.thread_list.setObjectName("enkyronMailThreadList")
         self.thread_list.setAccessibleName("Conversations in selected mailbox")
+        self.thread_list.setWordWrap(True)
+        self.thread_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.thread_list.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -282,9 +360,11 @@ class MailInboxView(QWidget):
         self.meta.setWordWrap(True)
         self.meta.setStyleSheet("color: #60768a;")
         right_layout.addWidget(self.meta)
-        self.body = QPlainTextEdit()
+        self.body = QTextBrowser()
         self.body.setObjectName("enkyronMailPlainTextPreview")
-        self.body.setAccessibleName("Read-only plain-text conversation")
+        self.body.setAccessibleName("Read-only conversation; external links disabled")
+        self.body.setOpenExternalLinks(False)
+        self.body.setOpenLinks(False)
         self.body.setReadOnly(True)
         self.body.setPlainText("")
         right_layout.addWidget(self.body, 1)
@@ -774,9 +854,9 @@ class MailInboxView(QWidget):
             if self.local_mode and item.get("flagged") is True:
                 label = "★ " + label
             if self.local_mode:
-                sender = str(item.get("sender") or "").strip()[:120]
-                if sender:
-                    label = ("● " if unread else "") + sender + "\n" + subject
+                full_sender = str(item.get("sender") or "").strip()
+                if full_sender:
+                    label = ("● " if unread else "") + _safe_sender_label(full_sender) + "\n" + subject
                 if item.get("flagged") is True:
                     label = "★ " + label.removeprefix("★ ")
                 tags = str(item.get("labels") or "").strip()
@@ -785,7 +865,9 @@ class MailInboxView(QWidget):
             label += ("\n" + date if date else "")
             entry = QListWidgetItem(label)
             entry.setData(Qt.ItemDataRole.UserRole, (source, thread_id))
-            entry.setToolTip(subject + ("\n" + date if date else ""))
+            full_sender = str(item.get("sender") or "") if self.local_mode else ""
+            entry.setToolTip((full_sender + "\n" if full_sender else "")
+                             + subject + ("\n" + date if date else ""))
             if unread:
                 font = QFont(entry.font())
                 font.setBold(True)
@@ -1048,10 +1130,13 @@ class MailInboxView(QWidget):
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
                 or thread_id != self.current_thread_id or not isinstance(messages, list)):
             return False
-        self.body.setPlainText(
-            format_mail_messages(messages) or "No messages in this conversation."
-        )
-        self.meta.setText("{} message(s) · Plain text".format(len(messages[:50])))
+        cards = format_mail_message_cards(messages)
+        if cards:
+            self.body.setHtml(cards)
+        else:
+            self.body.setPlainText("No messages in this conversation.")
+        self.meta.setText("{} message(s) · Safe text view · No remote content".format(
+            len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
         self.reply_button.setText("Reply")
         self.reply_button.setToolTip("Reply in this conversation")
