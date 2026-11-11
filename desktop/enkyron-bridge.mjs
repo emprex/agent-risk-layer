@@ -31,6 +31,7 @@ import {readCompanyProfile,recordCompanyProfile,validateCompanyProfile} from './
 import {readPersonalProfile,recordPersonalProfile,validatePersonalProfile} from './enkyron-operator-personal-profile.mjs';
 import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
 import {explainLocalError} from './enkyron-db-errors.mjs';
+import {explainMailOperationError} from './enkyron-mail-errors.mjs';
 import {readBuyerReview,recordBuyerReview,validateBuyerReview} from './enkyron-crm-buyer-review.mjs';
 import {readCommercialTerms,recordCommercialTerms,validateCommercialTerms} from './enkyron-crm-commercial-terms.mjs';
 import {readInternalReview,recordInternalDecision,validateInternalDecision} from './enkyron-crm-internal-review.mjs';
@@ -299,7 +300,7 @@ async function main() {
   if (command === 'crm-quote-external-record') validateQuoteExternalReport(payload);
   if (command === 'crm-service-catalog-create') validateServiceCatalog(payload);
   if (command === 'crm-service-catalog-update') validateServiceCatalog(payload, true);
-  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-send-draft', 'mail-link-sent', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-send-draft', 'mail-link-sent', 'mail-threads', 'mail-file-thread', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -453,9 +454,12 @@ main().catch(error => {
   const message = String(error?.message || '');
   const expected =
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|CRM )/.test(message);
-  const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(process.argv[2]);
+  const operation=process.argv[2];
+  const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
+  const mailOperation=['mail-threads','mail-messages','mail-status','mail-file-thread'].includes(operation);
   emit({ ok: false, error: profileOperation
     ? explainLocalError(error)
+    : mailOperation ? explainMailOperationError(error)
     : expected ? message.slice(0, 250)
     : 'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;
