@@ -73,7 +73,7 @@ test('reported external send prevents later edits to the source draft',async()=>
   const pool={connect:async()=>({
     query:async sql=>{
       statements.push(sql);
-      if(sql.startsWith('SELECT id,recipient_email'))return {rows:[{
+      if(sql.startsWith('SELECT id,mailbox_key,recipient_email'))return {rows:[{
         id,revision:2,recipient_email:'buyer@example.invalid',
         subject:'Original',body_text:'Source text',
         external_send_reported:true

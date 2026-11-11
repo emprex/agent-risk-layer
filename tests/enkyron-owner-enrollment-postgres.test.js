@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {
-  inspectOwnerEnrollment,enrollPendingLocalOwner,
+  inspectOwnerEnrollment,enrollPendingLocalOwner,activatePendingLocalOwner,
 } from '../desktop/enkyron-owner-enrollment.mjs';
 import {
   createEnkyronTotpSecret,decryptEnkyronTotpSecret,verifyEnkyronPassword,
@@ -125,5 +125,89 @@ test('UX-15B3 synthetic CEO enrollment creates ONE pending principal, never live
       role:'organization_owner_l5',
     },'crm:read',{organizationId:enrolled.organizationId});
     assert.equal(denied.allowed,false);
+  }finally{await pool.end();}
+});
+
+
+test('UX-15B Owner one-time setup activates a single CEO with two assigned mailboxes',{
+  skip:!url&&'Dedicated disposable PostgreSQL CI only',timeout:60000,
+},async()=>{
+  const pool=new pg.Pool({connectionString:disposable(),max:2});
+  const operator='ci-single-'+crypto.randomUUID().slice(0,8);
+  const secret=createEnkyronTotpSecret(),key=crypto.randomBytes(32);
+  const nowMs=1_900_000_000_000;
+  const result=await enrollPendingLocalOwner(pool,{
+    operator,password:'CI synthetic private Owner passphrase',
+    totpSecret:secret,totpCode:totpCode(secret,Math.floor(nowMs/30000)),
+    nowMs,key,activate:true,
+  });
+  try{
+    assert.equal(result.status,'active');
+    const people=(await pool.query(
+      'SELECT p.id,p.login_name,p.role,p.effective_status FROM '+
+      'enkyron_identity_principal_effective p WHERE p.workspace_key=$1',
+      ['local:'+operator]
+    )).rows;
+    assert.equal(people.length,1);
+    assert.equal(people[0].login_name,'ceo');
+    assert.equal(people[0].role,'organization_owner_l5');
+    assert.equal(people[0].effective_status,'active');
+    const status=(await pool.query(
+      'SELECT event_type FROM enkyron_identity_status_events WHERE principal_id=$1',
+      [result.principalId]
+    )).rows;
+    assert.deepEqual(status.map(x=>x.event_type),['activated']);
+    const events=(await pool.query(
+      'SELECT event_type FROM enkyron_identity_auth_events WHERE principal_id=$1',
+      [result.principalId]
+    )).rows;
+    assert.deepEqual(events.map(x=>x.event_type),['credential_enrolled']);
+    assert.deepEqual((await inspectOwnerEnrollment(pool,operator)).counts,
+      {persons:1,principals:1,credentials:1,sessions:0});
+    await assert.rejects(enrollPendingLocalOwner(pool,{
+      operator,password:'CI synthetic private Owner passphrase',
+      totpSecret:secret,totpCode:totpCode(secret,Math.floor(nowMs/30000)),
+      nowMs,key,activate:true,
+    }),/Owner bootstrap refused/);
+  }finally{await pool.end();}
+});
+
+test('UX-15B pending Owner can self-activate only with original credentials and fresh MFA',{
+  skip:!url&&'Dedicated disposable PostgreSQL CI only',timeout:60000,
+},async()=>{
+  const pool=new pg.Pool({connectionString:disposable(),max:2});
+  const operator='ci-recover-'+crypto.randomUUID().slice(0,8);
+  const secret=createEnkyronTotpSecret(),key=crypto.randomBytes(32);
+  const nowMs=1_900_000_000_000,step=Math.floor(nowMs/30000);
+  const password='CI synthetic pending owner passphrase';
+  try{
+    const enrolled=await enrollPendingLocalOwner(pool,{
+      operator,password,totpSecret:secret,
+      totpCode:totpCode(secret,step),key,nowMs,
+    });
+    assert.equal(enrolled.status,'pending');
+    await assert.rejects(activatePendingLocalOwner(pool,{
+      operator,password:'wrong phrase',totpCode:totpCode(secret,step+1),
+      key,nowMs:nowMs+30000,
+    }),/Owner activation/);
+    await assert.rejects(activatePendingLocalOwner(pool,{
+      operator,password,totpCode:totpCode(secret,step),
+      key,nowMs,
+    }),/Owner activation/,'MFA cannot be reused');
+    const active=await activatePendingLocalOwner(pool,{
+      operator,password,totpCode:totpCode(secret,step+1),
+      key,nowMs:nowMs+30000,
+    });
+    assert.equal(active.status,'active');
+    const state=(await pool.query(
+      'SELECT effective_status FROM enkyron_identity_principal_effective '+
+      'WHERE workspace_key=$1 AND login_name=$2',
+      ['local:'+operator,'ceo']
+    )).rows;
+    assert.deepEqual(state.map(x=>x.effective_status),['active']);
+    await assert.rejects(activatePendingLocalOwner(pool,{
+      operator,password,totpCode:totpCode(secret,step+2),
+      key,nowMs:nowMs+60000,
+    }),/Owner activation/,'Cannot activate twice');
   }finally{await pool.end();}
 });

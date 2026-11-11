@@ -53,7 +53,9 @@ test('company and contact listing are bounded and workspace scoped',async()=>{
   const companies=await listCompanies(pool,'  acme  ','ci-operator');
   assert.equal(companies.available,true);
   assert.deepEqual(queries[0][1],['local:ci-operator','acme']);
-  assert.match(queries[0][0],/LIMIT 101/);
+  assert.match(queries[0][0],/ORDER BY created_at ASC,id ASC LIMIT 101/);
+  assert.match(queries[0][0],/\(\$2<>'' OR relationship_state<>'inactive'\)/,
+    'Default list hides archived company rows, but searches can find them');
   const contacts=await listContacts(pool,companyId,'ci-operator');
   assert.equal(contacts.items.length,0);
   assert.deepEqual(queries[1][1],[companyId,'local:ci-operator']);

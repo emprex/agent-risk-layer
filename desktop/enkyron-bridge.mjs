@@ -10,7 +10,9 @@ import { listSalesProspects, listSalesProspectsPage, validateProspectPage } from
 import { listOpportunities, prospectOpportunity, createOpportunity, createCompanyOpportunity, createDirectCompanyOpportunity, correctCommercialOrigin, updateOpportunity, validateOpportunityCreate, validateCompanyOpportunityCreate, validateDirectCompanyOpportunityCreate, validateOriginCorrection, validateOpportunityUpdate } from './enkyron-crm-opportunities.mjs';
 import { listActivityTimeline, recordActivity, validateActivity, requireOpportunityId } from './enkyron-crm-activities.mjs';
 import { listMailDrafts, readMailDraft, createMailDraft, updateMailDraft, validateDraftCreate, validateDraftUpdate } from './enkyron-crm-mail-drafts.mjs';
+import {suggestMailRecipients,recipientSearchTerm} from './enkyron-crm-mail-recipients.mjs';
 import {recordManualSend,validateManualSend} from './enkyron-crm-mail-manual-sends.mjs';
+import {mailAccess,mailStatus,mailThreads,mailMessages,mailSent,mailSendDraft,mailLinkSent,mailCheckProviderStatus,validateMailSendRequest,validateMailLinkRequest} from './enkyron-mail-service.mjs';
 import { getSalesOverview } from './enkyron-crm-overview.mjs';
 import { getSalesPipeline } from './enkyron-crm-pipeline.mjs';
 import { getCompanyDossier } from './enkyron-crm-company-dossier.mjs';
@@ -26,7 +28,14 @@ import {listServiceCatalog,readServiceCatalog,createServiceCatalog,updateService
 import { getTaxReviews, recordTaxReview, validateTaxReview } from './enkyron-crm-tax-review.mjs';
 import {readCompanyProfile,recordCompanyProfile,validateCompanyProfile} from './enkyron-company-profile.mjs';
 import {readPersonalProfile,recordPersonalProfile,validatePersonalProfile} from './enkyron-operator-personal-profile.mjs';
+import {ownerMailAccessCard} from './enkyron-owner-mail-access.mjs';
 import {explainLocalError} from './enkyron-db-errors.mjs';
+import {explainMailOperationError} from './enkyron-mail-errors.mjs';
+import {localMailFolders,createLocalMailFolder,localMailList,syncMailHeaders,
+  localMailMessages,fetchAndCacheThread,syncLocalMailBodies,moveLocalThread,localMailLabels,
+  createLocalLabel,labelLocalThread} from './enkyron-mail-local.mjs';
+import {calendarList,calendarCreate,calendarCreateTask,calendarCompleteTask}
+  from './enkyron-calendar.mjs';
 import {readBuyerReview,recordBuyerReview,validateBuyerReview} from './enkyron-crm-buyer-review.mjs';
 import {readCommercialTerms,recordCommercialTerms,validateCommercialTerms} from './enkyron-crm-commercial-terms.mjs';
 import {readInternalReview,recordInternalDecision,validateInternalDecision} from './enkyron-crm-internal-review.mjs';
@@ -210,12 +219,14 @@ async function evidenceRegister(pool, request) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command)) {
+  if (!['tickets', 'tickets-archived', 'ticket', 'master', 'note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-actions', 'ticket-action-save', 'crm-prospects', 'crm-companies', 'crm-contacts', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-record-changes', 'crm-contact-tickets', 'crm-privacy-requests', 'crm-record-privacy-request', 'crm-retention-reviews', 'crm-record-retention-review', 'crm-link-contact-ticket', 'crm-prospect-review', 'crm-prospect-link', 'crm-prospects-page', 'crm-company-tickets', 'crm-ticket-revocations', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-revoke-ticket-link', 'crm-ticket-options', 'crm-ticket-company', 'crm-link-ticket', 'crm-opportunities', 'crm-prospect-opportunity', 'crm-create-opportunity', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity', 'crm-mail-drafts', 'crm-mail-recipients', 'crm-mail-draft', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-status', 'mail-threads', 'mail-messages', 'mail-sent', 'mail-send-draft', 'mail-link-sent', 'mail-provider-status', 'mail-local-folders', 'mail-local-folder-create', 'mail-local-list', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-messages', 'mail-local-fetch', 'mail-local-move', 'mail-local-labels', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-sales-overview', 'crm-sales-pipeline', 'crm-company-dossier', 'crm-company-followups', 'crm-company-followups-upcoming', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-company-csv', 'crm-csv-export-history', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-record-qualification', 'crm-proposals', 'crm-proposal', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines', 'crm-proposal-lines-save', 'crm-proposal-export', 'crm-sow-sources', 'crm-sow-draft', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-reviews', 'crm-tax-record', 'crm-own-profile', 'crm-own-profile-save', 'operator-profile', 'operator-profile-save', 'crm-buyer-review', 'crm-buyer-record', 'crm-commercial-terms', 'crm-commercial-record', 'crm-internal-review', 'crm-internal-decision', 'crm-billing-preparation', 'crm-billing-record', 'crm-invoice-drafts', 'crm-invoice-draft', 'crm-invoice-prepare', 'crm-invoice-record', 'crm-invoice-issue-review', 'crm-invoice-issue-record', 'crm-invoice-issue-preflight', 'crm-invoice-issue', 'crm-invoices-issued', 'crm-invoice-issued', 'crm-invoice-payment-record', 'crm-quote-issue-preflight', 'crm-quote-evidence-review', 'crm-quote-evidence-record', 'crm-quote-external-report', 'crm-quote-external-record', 'crm-service-catalog-list', 'crm-service-catalog-read', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command)) {
     throw new Error('Unsupported desktop operation');
   }
   const arg = process.argv[3] || '';
   if (['tickets', 'tickets-archived', 'crm-prospects', 'crm-companies', 'crm-ticket-options', 'crm-opportunities', 'crm-mail-drafts','crm-service-catalog-list'].includes(command)) boundedSearch(arg);
-  if (command === 'crm-company-tickets') requireCompanyId(arg);
+  if (command === 'crm-mail-recipients') recipientSearchTerm(arg);
+   if (command === 'mail-provider-status' && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(arg)) throw new Error('Invalid submitted draft ID');
+   if (command === 'crm-company-tickets') requireCompanyId(arg);
   if (command === 'crm-ticket-revocations') requireCompanyId(arg);
   if (command === 'crm-contact-tickets') requireContactId(arg);
   if (command === 'crm-privacy-requests') requireContactId(arg);
@@ -232,7 +243,7 @@ async function main() {
   if (command === 'crm-prospect-opportunity') requireProspectId(arg);
   if (command === 'crm-activity-timeline') requireOpportunityId(arg);
   if (command === 'crm-mail-draft' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(arg)) throw new Error('Invalid CRM draft ID');
-  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command) ? await stdinJson(['crm-csv-import-check','crm-csv-import-commit'].includes(command) ? 350000 : 16000) : null;
+  const payload = ['note', 'evidence-register', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-company-duplicates', 'crm-contact-duplicates', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-prospects-page', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassignment-options', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-check', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-threads', 'mail-messages', 'mail-send-draft', 'mail-link-sent', 'mail-local-folder-create', 'mail-local-list', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-messages', 'mail-local-fetch', 'mail-local-move', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-list', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command) ? await stdinJson(['crm-csv-import-check','crm-csv-import-commit'].includes(command) ? 350000 : 16000) : null;
   if (command === 'note') noteInput(payload);
   if (command === 'evidence-register') validatedEvidenceRequest(payload);
   if (command === 'create-ticket') validateIntake(payload);
@@ -269,6 +280,8 @@ async function main() {
   if (command === 'crm-mail-create') validateDraftCreate(payload);
   if (command === 'crm-mail-update') validateDraftUpdate(payload);
   if (command === 'crm-mail-manual-send') validateManualSend(payload);
+  if (command === 'mail-send-draft') validateMailSendRequest(payload);
+   if (command === 'mail-link-sent') validateMailLinkRequest(payload);
   if (command === 'crm-record-qualification') validateQualificationReview(payload);
   if (command === 'crm-proposal-create') validateProposalCreate(payload);
   if (command === 'crm-proposal-update') validateProposalUpdate(payload);
@@ -290,7 +303,7 @@ async function main() {
   if (command === 'crm-quote-external-record') validateQuoteExternalReport(payload);
   if (command === 'crm-service-catalog-create') validateServiceCatalog(payload);
   if (command === 'crm-service-catalog-update') validateServiceCatalog(payload, true);
-  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
+  const readOnly = !['note', 'create-ticket', 'ticket-status', 'ticket-assignment', 'ticket-archive', 'ticket-triage-save', 'ticket-action-save', 'crm-company-opportunity-create', 'crm-company-direct-opportunity-create', 'crm-correct-commercial-origin', 'crm-create-company', 'crm-create-contact', 'crm-edit-company', 'crm-edit-contact', 'crm-prospect-link', 'crm-link-ticket', 'crm-revoke-ticket-link', 'crm-ticket-reassign', 'crm-link-contact-ticket', 'crm-record-privacy-request', 'crm-record-retention-review', 'crm-csv-export-start', 'crm-csv-export-finish', 'crm-csv-import-commit', 'crm-create-opportunity', 'crm-update-opportunity', 'crm-record-activity', 'crm-company-followup-create', 'crm-company-followup-update', 'crm-mail-create', 'crm-mail-update', 'crm-mail-manual-send', 'mail-send-draft', 'mail-link-sent', 'mail-threads', 'mail-local-folder-create', 'mail-local-sync', 'mail-local-sync-bodies', 'mail-local-fetch', 'mail-local-move', 'mail-local-label-create', 'mail-local-label-assign', 'calendar-create', 'calendar-task-create', 'calendar-task-complete', 'crm-record-qualification', 'crm-proposal-create', 'crm-proposal-update', 'crm-proposal-lines-save', 'crm-sow-draft-save', 'crm-contract-reference-save', 'crm-tax-record', 'crm-own-profile-save', 'operator-profile-save', 'crm-buyer-record', 'crm-commercial-record', 'crm-internal-decision', 'crm-billing-record', 'crm-invoice-record', 'crm-invoice-issue-record', 'crm-invoice-issue', 'crm-invoice-payment-record', 'crm-quote-evidence-record', 'crm-quote-external-record', 'crm-service-catalog-create', 'crm-service-catalog-update'].includes(command);
   const pool = new pg.Pool({
     ...config,
     options: readOnly
@@ -340,7 +353,22 @@ async function main() {
       command === 'crm-tax-record' ? await recordTaxReview(pool, payload, os.userInfo().username) :
       command === 'crm-own-profile' ? await readCompanyProfile(pool, os.userInfo().username) :
       command === 'crm-own-profile-save' ? await recordCompanyProfile(pool, payload, os.userInfo().username) :
-      command === 'operator-profile' ? await readPersonalProfile(pool, os.userInfo().username) :
+      command === 'operator-profile' ? await (async()=>{
+         const operator=os.userInfo().username;
+         const personal=await readPersonalProfile(pool,operator);
+         const grant=await mailAccess(pool,operator);
+         const card=ownerMailAccessCard(personal.current||{});
+         card.mailboxes=card.mailboxes.map(m=>{
+           const scoped=grant.mailboxes.find(x=>x.key===m.key);
+           return {...m,permissions:scoped
+             ?[...(scoped.can_read?['read']:[]),...(scoped.can_send?['send','reply']:[])]
+             :[]};
+         });
+         card.notice=grant.schema_ready
+           ?'Mailbox permissions recorded in local PostgreSQL.'
+           :'Mail permissions are not provisioned yet; account profile is display only.';
+         return {...personal,owner_access:card};
+       })() :
       command === 'operator-profile-save' ? await recordPersonalProfile(pool, payload, os.userInfo().username) :
       command === 'crm-buyer-review' ? await readBuyerReview(pool, arg, os.userInfo().username) :
       command === 'crm-buyer-record' ? await recordBuyerReview(pool, payload, os.userInfo().username) :
@@ -390,10 +418,33 @@ async function main() {
       command === 'crm-sales-overview' ? await getSalesOverview(pool, os.userInfo().username) :
       command === 'crm-sales-pipeline' ? await getSalesPipeline(pool, os.userInfo().username) :
       command === 'crm-mail-drafts' ? await listMailDrafts(pool, arg, os.userInfo().username) :
+       command === 'crm-mail-recipients' ? await suggestMailRecipients(pool, arg, os.userInfo().username) :
       command === 'crm-mail-draft' ? await readMailDraft(pool, arg, os.userInfo().username) :
       command === 'crm-mail-create' ? await createMailDraft(pool, payload, os.userInfo().username) :
       command === 'crm-mail-update' ? await updateMailDraft(pool, payload, os.userInfo().username) :
       command === 'crm-mail-manual-send' ? await recordManualSend(pool, payload, os.userInfo().username) :
+      command === 'mail-status' ? await mailStatus(pool,os.userInfo().username) :
+      command === 'mail-threads' ? await mailThreads(pool,os.userInfo().username,payload?.mailbox,payload?.folder??'inbox') :
+      command === 'mail-local-folders' ? await localMailFolders(pool,os.userInfo().username) :
+      command === 'mail-local-folder-create' ? await createLocalMailFolder(pool,os.userInfo().username,payload) :
+      command === 'mail-local-list' ? await localMailList(pool,os.userInfo().username,payload) :
+      command === 'mail-local-sync' ? await syncMailHeaders(pool,os.userInfo().username,payload) :
+      command === 'mail-local-sync-bodies' ? await syncLocalMailBodies(pool,os.userInfo().username,payload) :
+      command === 'mail-local-messages' ? await localMailMessages(pool,os.userInfo().username,payload) :
+      command === 'mail-local-fetch' ? await fetchAndCacheThread(pool,os.userInfo().username,payload) :
+      command === 'mail-local-move' ? await moveLocalThread(pool,os.userInfo().username,payload) :
+      command === 'mail-local-labels' ? await localMailLabels(pool,os.userInfo().username) :
+      command === 'mail-local-label-create' ? await createLocalLabel(pool,os.userInfo().username,payload) :
+      command === 'mail-local-label-assign' ? await labelLocalThread(pool,os.userInfo().username,payload) :
+      command === 'calendar-list' ? await calendarList(pool,os.userInfo().username,payload) :
+      command === 'calendar-create' ? await calendarCreate(pool,os.userInfo().username,payload) :
+      command === 'calendar-task-create' ? await calendarCreateTask(pool,os.userInfo().username,payload) :
+      command === 'calendar-task-complete' ? await calendarCompleteTask(pool,os.userInfo().username,payload) :
+      command === 'mail-messages' ? await mailMessages(pool,os.userInfo().username,payload?.mailbox,payload?.thread_id) :
+      command === 'mail-sent' ? await mailSent(pool,os.userInfo().username) :
+      command === 'mail-send-draft' ? await mailSendDraft(pool,os.userInfo().username,payload) :
+       command === 'mail-link-sent' ? await mailLinkSent(pool,os.userInfo().username,payload) :
+       command === 'mail-provider-status' ? await mailCheckProviderStatus(pool,os.userInfo().username,arg) :
       command === 'crm-prospect-review' ? await previewProspectLink(pool, arg, os.userInfo().username) :
       command === 'crm-prospect-link' ? await associateProspect(pool, payload, os.userInfo().username) :
       command === 'crm-create-company' ? await createCompany(pool, payload, os.userInfo().username) :
@@ -420,9 +471,12 @@ main().catch(error => {
   const message = String(error?.message || '');
   const expected =
     /^(Invalid |Search |Note |Request |Malformed |Ticket not found|Reopen closed|Unsupported |Local assessment|Master |No recorded|Verified assessment|Status transition|title is|required|client is|request description is|Archived |Close ticket|Archive reason|Ticket already|Ticket assignment|Ticket action|Closed or archived|Only the assigned|CRM )/.test(message);
-  const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(process.argv[2]);
+  const operation=process.argv[2];
+  const profileOperation=['crm-own-profile','crm-own-profile-save'].includes(operation);
+  const mailOperation=['mail-threads','mail-messages','mail-status','mail-local-folders','mail-local-folder-create','mail-local-list','mail-local-sync','mail-local-sync-bodies','mail-local-messages','mail-local-fetch','mail-local-move','mail-local-labels','mail-local-label-create','mail-local-label-assign','calendar-list','calendar-create','calendar-task-create','calendar-task-complete'].includes(operation);
   emit({ ok: false, error: profileOperation
     ? explainLocalError(error)
+    : mailOperation ? explainMailOperationError(error)
     : expected ? message.slice(0, 250)
     : 'Local PostgreSQL operation failed. Check database, permissions and migrations.' });
   process.exitCode = 1;

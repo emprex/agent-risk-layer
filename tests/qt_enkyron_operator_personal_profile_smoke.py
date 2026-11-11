@@ -57,13 +57,13 @@ class PersonalProfileSmoke(unittest.TestCase):
             with patch.object(QMessageBox, "information", return_value=None):
                 window.operator_profile_save.click()
             self.assertFalse(dialog.isVisible())
-            self.assertEqual(window.account_identity_label.text(), "Synthetic Founder · Founder")
+            self.assertEqual(window.account_identity_label.text(), "Synthetic Founder")
             self.assertTrue(any(command == "operator-profile-save" for command,_ in calls))
             self.assertNotIn("synthetic-os",window.account_identity_label.text())
             window.close()
             window = None
             reboot = EnkyronWindow()
-            self.assertEqual(reboot.account_identity_label.text(),"Synthetic Founder · Founder")
+            self.assertEqual(reboot.account_identity_label.text(),"Synthetic Founder")
             reboot.account_profile_button.click()
             self.assertEqual(reboot.operator_profile_fields["display_name"].text(),
                              "Synthetic Founder")

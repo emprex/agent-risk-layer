@@ -11,8 +11,9 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QProcess, QTimer, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QHBoxLayout,
+    QApplication, QCheckBox, QComboBox, QCompleter, QDialog, QFormLayout, QFrame, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QFileDialog,
     QInputDialog,
     QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QSpinBox, QDateEdit, QTabWidget,
@@ -26,6 +27,8 @@ if __package__:
     from .enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from .enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from .enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
+    from .enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from .enkyron_calendar_view import MailCalendarView
 else:
     from enkyron_proposal_pdf import export_draft_pdf
     from enkyron_invoice_pdf import export_issued_invoice_pdf
@@ -33,9 +36,31 @@ else:
     from enkyron_invoice_lifecycle_pdf import export_lifecycle_test_pdf
     from enkyron_crm_csv import write_company_csv, csv_export_bytes, csv_file_receipt
     from enkyron_crm_csv_import import preview_company_csv, CsvPreflightError
+    from enkyron_mail_workspace import MailInboxView, format_mail_messages
+    from enkyron_calendar_view import MailCalendarView
 
 ROOT = Path(__file__).resolve().parent.parent
 BRIDGE = ROOT / "desktop" / "enkyron-bridge.mjs"
+OWNER_LOGIN_BRIDGE = ROOT / "desktop" / "enkyron-owner-login-bridge.mjs"
+
+# Controlled primary-sector vocabulary. Preserve old values until reviewed.
+CRM_SECTORS = (
+    "AI & Automation", "Software & IT Services", "Cybersecurity",
+    "Financial Services", "Healthcare & Life Sciences", "Retail & E-commerce",
+    "Manufacturing & Industrial", "Professional Services",
+    "Telecommunications", "Education", "Public Sector", "Other",
+)
+
+
+def crm_sector_selector(current=""):
+    selector = QComboBox()
+    selector.setEditable(False)
+    selector.addItems(["", *CRM_SECTORS])
+    if current and current not in CRM_SECTORS:
+        selector.addItem(current)  # Keep this record's previous value.
+    selector.setCurrentText(current)
+    return selector
+
 
 STYLE = """
 QMainWindow { background: #edf2f6; }
@@ -177,7 +202,11 @@ class DesktopBridge:
             process.setArguments(["-m", module])
         else:
             process.setProgram("node")
-            args = [str(BRIDGE), action]
+            target = (OWNER_LOGIN_BRIDGE if action in (
+                "owner-setup-status", "owner-login", "owner-session-status", "owner-logout",
+                "owner-mail-status", "owner-mail-threads", "owner-mail-messages"
+            ) else BRIDGE)
+            args = [str(target), action]
             if arg:
                 args.append(arg)
             process.setArguments(args)
@@ -229,7 +258,7 @@ class DesktopBridge:
         # return a structured refusal before the Qt supervisor terminates it.
         timer.start(95000 if action == "operator-state" else
                     60000 if action in ("evidence-summary", "evidence-pack") else
-                    45000 if action == "crm-csv-import-commit" else
+                    45000 if action in ("crm-csv-import-commit", "mail-local-sync", "mail-local-sync-bodies") else
                     15000)
 
 
@@ -267,6 +296,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_record_history_dialog = None
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
+        self.mail_thread_windows = {}
         self.crm_company_followups_dialog = None
         self.crm_csv_import_dialog = None
         self.crm_dossier_company_id = None
@@ -301,6 +331,8 @@ class EnkyronWindow(QMainWindow):
         self.crm_draft_items = []
         self.crm_draft_dialog = None
         self.crm_draft_context = None
+        self.mail_provider_ready = False
+        self.mail_status_loaded = False
         self.crm_proposal_seq = 0
         self.crm_proposal_loaded = False
         self.crm_proposal_items = []
@@ -380,6 +412,7 @@ class EnkyronWindow(QMainWindow):
         self.account_profile_button.setObjectName("enkyronMyAccount")
         self.account_profile_button.clicked.connect(self.open_personal_profile)
         top_layout.addWidget(self.account_profile_button)
+        # My account is an existing DB-backed profile, not an email login form.
         self.operator_profile_state = None
         self.operator_profile_dialog = None
         outer.addWidget(top)
@@ -398,8 +431,8 @@ class EnkyronWindow(QMainWindow):
         nav_l.addWidget(QLabel("WORKSPACE"))
         self.navigation = QListWidget()
         self.navigation.setObjectName("moduleNavigation")
-        self.navigation.addItems(["Home", "Tickets", "CRM"])
-        self.navigation.setMaximumHeight(204)
+        self.navigation.addItems(["Home", "Tickets", "CRM", "Mail", "Calendar"])
+        self.navigation.setMaximumHeight(255)
         nav_l.addWidget(self.navigation)
         nav_l.addStretch()
         workspace.addWidget(navigation)
@@ -421,6 +454,10 @@ class EnkyronWindow(QMainWindow):
         go_tickets = QPushButton("Open Client Desk")
         go_tickets.clicked.connect(lambda: self.navigation.setCurrentRow(1))
         home_l.addWidget(go_tickets, alignment=Qt.AlignmentFlag.AlignLeft)
+        go_mail = QPushButton("Open Mail")
+        go_mail.setObjectName("enkyronHomeOpenMail")
+        go_mail.clicked.connect(lambda: self.navigation.setCurrentRow(3))
+        home_l.addWidget(go_mail, alignment=Qt.AlignmentFlag.AlignLeft)
 
         overview_header = QHBoxLayout()
         overview_header.addWidget(section_title("COMMERCIAL OVERVIEW"))
@@ -783,13 +820,15 @@ class EnkyronWindow(QMainWindow):
         crm_page = QWidget()
         crm_l = QVBoxLayout(crm_page)
         crm_l.setContentsMargins(25, 18, 25, 18)
-        crm_header = QHBoxLayout()
+        self.crm_header_panel = QWidget()
+        crm_header = QHBoxLayout(self.crm_header_panel)
+        crm_header.setContentsMargins(0,0,0,0)
         crm_header.addWidget(section_title("CRM · COMPANIES, CONTACTS AND RESEARCH"))
         crm_header.addStretch()
         self.crm_company_profile_button = QPushButton("Issuing company profile…")
         self.crm_company_profile_button.clicked.connect(self.open_issuing_company_profile)
         crm_header.addWidget(self.crm_company_profile_button)
-        crm_l.addLayout(crm_header)
+        crm_l.addWidget(self.crm_header_panel)
         self.crm_tabs = QTabWidget()
         crm_l.addWidget(self.crm_tabs, 1)
 
@@ -1234,33 +1273,97 @@ class EnkyronWindow(QMainWindow):
         self.crm_edit_draft.clicked.connect(self.open_selected_draft)
         draft_footer.addWidget(self.crm_edit_draft)
         drafts_l.addLayout(draft_footer)
-        # Mail workspace is structurally ready, but no provider is configured.
-        # Do not invent received/sent messages or enable transport controls.
+        # One professional Mail workspace, reusing the existing local Drafts.
+        # No network calls until trusted Owner authentication is connected.
         mail_page = QWidget()
         mail_l = QVBoxLayout(mail_page)
         mail_l.setSpacing(10)
         mail_head = QHBoxLayout()
-        mail_head.addWidget(section_title("EMAIL"))
+        mail_head.addWidget(section_title("Mail"))
         mail_head.addStretch()
-        self.crm_mail_connection = QLabel("Mailbox not connected")
+        self.crm_mail_connection = QLabel("Mail · Compose and local drafts available")
+        self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
+        self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_mail_connection.hide()  # Status lives once, inside Inbox.
         mail_head.addWidget(self.crm_mail_connection)
+        # Mail is one workspace; mailbox transport configuration is back-office.
         mail_l.addLayout(mail_head)
         self.crm_mail_folders = QTabWidget()
         mail_l.addWidget(self.crm_mail_folders, 1)
-        for folder, explanation in (
-            ("Inbox", "Connect a professional mailbox later to receive messages here."),
-            ("Sent", "Mailbox not connected. Externally sent messages reported by the operator are labelled in Drafts; no provider verification is claimed.")
-        ):
-            folder_page = QWidget()
-            folder_layout = QVBoxLayout(folder_page)
-            folder_layout.setContentsMargins(16, 18, 16, 18)
-            title = QLabel(explanation)
-            title.setWordWrap(True)
-            folder_layout.addWidget(title)
-            folder_layout.addStretch()
-            self.crm_mail_folders.addTab(folder_page, folder)
+        self.mail_inbox = MailInboxView()
+        self.mail_inbox.set_local_mode()
+        self.mail_inbox.localMoveRequested.connect(self.move_local_mail)
+        self.mail_inbox.localCreateFolderRequested.connect(self.create_local_folder)
+        self.mail_inbox.localCreateLabelRequested.connect(self.create_local_label)
+        self.mail_inbox.localAssignLabelRequested.connect(self.assign_local_label)
+        self.mail_inbox.draftsRequested.connect(
+            lambda: self.crm_mail_folders.setCurrentIndex(2)
+        )
+        self.mail_inbox.sentRequested.connect(
+            lambda: self.crm_mail_folders.setCurrentIndex(1)
+        )
+        self.mail_inbox.deskRequested.connect(
+            lambda: self.navigation.setCurrentRow(1)
+        )
+        self.mail_inbox.refreshRequested.connect(self.sync_local_mail)
+        self.mail_inbox.mailboxChanged.connect(self.load_local_mail)
+        self.mail_inbox.folderChanged.connect(
+            lambda _folder: self.load_local_mail(self.mail_inbox.selected_mailbox)
+        )
+        self.mail_inbox.threadRequested.connect(self.read_mail_thread)
+        self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
+        self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
+        self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
+        sent_page = QWidget()
+        sent_layout = QVBoxLayout(sent_page)
+        sent_layout.setContentsMargins(20, 20, 20, 20)
+        sent_note = QLabel(
+            "Messages submitted by ENKYRON through Resend. Accepted means the "
+            "provider accepted the request, not that it was delivered."
+        )
+        sent_note.setTextFormat(Qt.TextFormat.PlainText)
+        sent_note.setWordWrap(True)
+        sent_layout.addWidget(sent_note)
+        sent_actions = QHBoxLayout()
+        sent_actions.addStretch()
+        self.mail_sent_link_button = QPushButton("Link selected email to CRM…")
+        self.mail_sent_link_button.setEnabled(False)
+        self.mail_sent_link_button.clicked.connect(self.link_selected_sent_mail)
+        sent_actions.addWidget(self.mail_sent_link_button)
+        sent_layout.addLayout(sent_actions)
+        self.mail_sent_items = []
+        self.mail_sent_table = QTableWidget(0,5)
+        self.mail_sent_table.setObjectName("enkyronMailSentTable")
+        self.mail_sent_table.setHorizontalHeaderLabels(
+            ["From","To","Subject","Status","CRM"]
+        )
+        self.mail_sent_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.mail_sent_table.horizontalHeader().setSectionResizeMode(
+            2,QHeaderView.ResizeMode.Stretch
+        )
+        self.mail_sent_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.mail_sent_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.mail_sent_table.itemSelectionChanged.connect(
+            self.sent_mail_selected
+        )
+        self.mail_sent_table.cellDoubleClicked.connect(
+            lambda row, _column: self.view_sent_mail_row(row)
+        )
+        sent_layout.addWidget(self.mail_sent_table,1)
+        self.mail_sent_status = QLabel("Sent history has not been loaded.")
+        sent_layout.addWidget(self.mail_sent_status)
+        self.crm_mail_folders.currentChanged.connect(
+            lambda idx: self.load_mail_sent() if idx==1 else None
+        )
+        self.crm_mail_folders.addTab(sent_page, "Sent")
         self.crm_mail_folders.addTab(drafts_page, "Drafts")
-        self.crm_mail_folders.setCurrentIndex(2)
+        self.crm_mail_folders.setCurrentIndex(0)
         self.crm_tabs.addTab(mail_page, "Mail")
 
         # Pipeline is an overview of the existing human-owned opportunities;
@@ -1574,6 +1677,12 @@ class EnkyronWindow(QMainWindow):
         invoice_l.addLayout(invoice_buttons)
         self.crm_tabs.addTab(invoice_page, "Invoices")
         self.pages.addWidget(crm_page)
+        self.calendar_view = MailCalendarView()
+        self.calendar_view.rangeRequested.connect(self.load_calendar)
+        self.calendar_view.eventCreateRequested.connect(self.create_calendar_event)
+        self.calendar_view.taskCreateRequested.connect(self.create_calendar_task)
+        self.calendar_view.taskCompleteRequested.connect(self.complete_calendar_task)
+        self.pages.addWidget(self.calendar_view)
 
         self.crm_search_timer = QTimer(self)
         self.crm_search_timer.setSingleShot(True)
@@ -1622,19 +1731,611 @@ class EnkyronWindow(QMainWindow):
         self.load_tickets()
         self.reload_operator_profile()
 
+    def load_mail_status(self):
+        """Read mail permissions from PostgreSQL; never prompt to enrol a user."""
+        if self.mail_status_loaded:
+            return
+        self.mail_status_loaded = True
+        self.crm_mail_connection.setText("Checking email connection…")
+        def received(data, error):
+            if error or not data:
+                self.mail_status_loaded = False
+                self.mail_provider_ready = False
+                self.crm_mail_connection.setText("Email connection unavailable · Drafts remain local")
+                self.mail_inbox.set_connection_state(
+                    "disconnected", "Compose an email or use saved local drafts."
+                )
+                return
+            self.mail_provider_ready = bool(data.get("provider_configured"))
+            permitted = data.get("mailboxes") or []
+            if permitted:
+                self.mail_inbox.set_owner_mailboxes({"mailboxes": permitted})
+            self.mail_inbox.set_filing_mailboxes(
+                [x.get("key") for x in permitted if x.get("can_manage") is True]
+            )
+            if not data.get("schema_ready"):
+                msg = "Mail database update required for new drafts and saved messages."
+            elif not permitted:
+                msg = "Mailbox permissions have not been provisioned in PostgreSQL."
+            elif not self.mail_provider_ready:
+                msg = "Compose drafts now · Resend connection needed for send/receive."
+            else:
+                msg = "Email configured · Direction and Support"
+            self.crm_mail_connection.setText(msg)
+            self.load_local_mail_metadata()
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-status", callback=received)
+
+    def load_local_mail_metadata(self):
+        def folders(data, error):
+            if not error and isinstance(data, dict):
+                self.mail_inbox.set_local_folders(data.get("folders") or [])
+        def labels(data, error):
+            if not error and isinstance(data, dict):
+                self.mail_inbox.set_local_labels(data.get("labels") or [])
+        self.bridge.call("mail-local-folders", callback=folders)
+        self.bridge.call("mail-local-labels", callback=labels)
+
+    def load_local_mail(self, mailbox=None):
+        if not hasattr(self, "mail_inbox") or not self.mail_inbox.local_mode:
+            return
+        mailbox = mailbox or self.mail_inbox.selected_mailbox or "all"
+        if mailbox not in ("all", "direction", "support"):
+            return
+        folder = self.mail_inbox.selected_folder
+        if folder in ("sent", "drafts"):
+            self.crm_mail_folders.setCurrentIndex(1 if folder=="sent" else 2)
+            return
+        self.mail_inbox.set_connection_state("connected")
+        self.mail_inbox.search.setEnabled(True)
+        self.mail_inbox.refresh_button.setEnabled(self.mail_provider_ready)
+        self.mail_inbox.connection_label.setVisible(False)
+        self.mail_inbox._clear_threads("Loading saved mail…")
+        def received(data, error):
+            if (self.mail_inbox.selected_mailbox not in (None, mailbox)
+                    or folder != self.mail_inbox.selected_folder):
+                return
+            if error or not isinstance(data, dict):
+                self.mail_inbox._show_empty(
+                    "Local mail unavailable",
+                    "Apply the local Mail database update (schema 112)."
+                )
+                return
+            self.mail_inbox.show_threads(mailbox,
+                data.get("items") or [], bool(data.get("has_more")), folder)
+        self.bridge.call("mail-local-list",
+            payload={"mailbox":mailbox, "folder":folder}, callback=received)
+
+    def sync_local_mail(self, mailbox=None):
+        if not self.mail_provider_ready:
+            self.mail_inbox.connection_label.setText(
+                "Resend unavailable. Cached ENKYRON messages remain accessible."
+            )
+            self.mail_inbox.connection_label.setVisible(True)
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+            return
+        chosen = mailbox if mailbox in ("all","direction","support") else "all"
+        self.mail_inbox.refresh_button.setEnabled(False)
+        self.mail_inbox.connection_label.setText(
+            "Receiving new message headers from Resend…"
+        )
+        self.mail_inbox.connection_label.setVisible(True)
+        def received(data, error):
+            self.mail_inbox.refresh_button.setEnabled(True)
+            if error or not isinstance(data, dict) or not data.get("synced"):
+                self.mail_inbox.connection_label.setText(
+                    "Receiving failed. Saved local mail is still available."
+                )
+            elif data.get("partial"):
+                self.mail_inbox.connection_label.setText(
+                    "Some provider folders could not be synchronized. "
+                    "Saved local mail was preserved."
+                )
+            else:
+                self.mail_inbox.connection_label.setText(
+                    "Importing received message contents into ENKYRON…"
+                )
+                self.mail_inbox.connection_label.setVisible(True)
+            if error or not isinstance(data, dict) or not data.get("synced"):
+                self.load_local_mail(self.mail_inbox.selected_mailbox)
+                self.mail_inbox.connection_label.setText(
+                    "Receiving failed. Saved ENKYRON mail remains accessible."
+                )
+                self.mail_inbox.connection_label.setVisible(True)
+                return
+            def cached(result, failure):
+                self.load_local_mail_metadata()
+                self.load_local_mail(self.mail_inbox.selected_mailbox)
+                if failure or not isinstance(result, dict):
+                    self.mail_inbox.connection_label.setText(
+                        "Message content import incomplete; saved messages are safe."
+                    )
+                    self.mail_inbox.connection_label.setVisible(True)
+                elif (result.get("failed_threads") or result.get("more_pending")
+                      or data.get("partial")):
+                    self.mail_inbox.connection_label.setText(
+                        "Some messages are not yet cached locally. "
+                        "Use Send / Receive again to continue importing."
+                    )
+                    self.mail_inbox.connection_label.setVisible(True)
+                else:
+                    self.mail_inbox.connection_label.setVisible(False)
+            self.bridge.call("mail-local-sync-bodies",
+                payload={"mailbox":chosen}, callback=cached)
+        self.bridge.call("mail-local-sync",
+            payload={"mailbox":chosen}, callback=received)
+
+    def create_local_folder(self, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail folders",
+                    "Could not create local folder. Check name and database.")
+                return
+            self.load_local_mail_metadata()
+        self.bridge.call("mail-local-folder-create",
+            payload={"name":name},callback=received)
+
+    def move_local_mail(self, mailbox, thread_id, folder):
+        # Local-only operation; never changes the Resend Inbox or sends an email.
+        def received(data, error):
+            if error or not isinstance(data, dict) or not data.get("moved"):
+                QMessageBox.warning(self, "Mail folders",
+                    "Could not move message locally. No provider changes.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-move",
+            payload={"mailbox":mailbox,"thread_id":thread_id,"folder":folder},
+            callback=received)
+
+    def create_local_label(self, name):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail labels", "Could not create label.")
+                return
+            self.load_local_mail_metadata()
+        self.bridge.call("mail-local-label-create",
+            payload={"name":name},callback=received)
+
+    def assign_local_label(self, mailbox, thread_id, label, applied):
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Mail labels", "Could not update label.")
+                return
+            self.load_local_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-local-label-assign",
+            payload={"mailbox":mailbox,"thread_id":thread_id,
+                     "label_id":label,"applied":applied},callback=received)
+
+    def refresh_mail(self, mailbox):
+        """Read selected Resend Inbox under the local DB mailbox permission."""
+        if not self.mail_provider_ready or mailbox not in ("direction", "support", "all"):
+            return
+        folder = self.mail_inbox.selected_folder
+        self.mail_inbox.set_connection_state("loading")
+        self.crm_mail_connection.setText("Refreshing email…")
+        def received(data, error):
+            if (mailbox != self.mail_inbox.selected_mailbox
+                    or folder != self.mail_inbox.selected_folder):
+                return
+            if (error or not data or data.get("mailbox") != mailbox
+                    or data.get("folder") != folder):
+                # Never expose provider responses, API keys or raw IPC errors.
+                import re
+                status = re.search(r"HTTP (\d{3})", str(error or ""))
+                detail = (" (Resend HTTP {})".format(status.group(1))
+                          if status else "")
+                self.mail_inbox.set_connection_state(
+                    "error", "Could not read {} / {}{}. "
+                    "Check the account or try Refresh.".format(
+                        mailbox, folder, detail)
+                )
+                self.crm_mail_connection.setText(
+                    "Mail unavailable · Folder read failed"
+                )
+                return
+            self.mail_inbox.set_connection_state("connected")
+            self.mail_inbox.show_threads(
+                mailbox, data.get("items") or [], bool(data.get("has_more")), folder
+            )
+            unavailable = (data.get("unavailable_mailboxes") or []) if mailbox == "all" else []
+            unavailable = [key for key in unavailable
+                           if key in ("direction", "support")]
+            if unavailable:
+                note = ("Partial results: {} unavailable. "
+                        "Choose an account to diagnose or try Refresh.".format(
+                            ", ".join(unavailable)))
+                self.mail_inbox.connection_label.setText(note)
+                self.mail_inbox.connection_label.setVisible(True)
+                if not self.mail_inbox.thread_list.count():
+                    self.mail_inbox._show_empty("Mail partially loaded", note)
+                self.crm_mail_connection.setText("Mail partially loaded")
+            else:
+                self.crm_mail_connection.setText(
+                    "{} · {} refreshed".format(mailbox.title(), folder.title())
+                )
+        self.bridge.call("mail-threads", payload={"mailbox":mailbox,
+                                                  "folder":folder}, callback=received)
+
+    def file_mail_thread(self, mailbox, thread_id, source, target):
+        """Explicit operator filing, no permanent deletion or automatic retry."""
+        if (mailbox not in ("direction", "support")
+                or source not in ("inbox","archive","spam","trash")
+                or target not in ("inbox","archive","spam","trash")
+                or source == target or
+                source != self.mail_inbox.selected_folder):
+            return
+        labels = {"inbox":"Inbox","archive":"Archive","spam":"Spam","trash":"Trash"}
+        if target == "trash":
+            response = QMessageBox.question(
+                self, "Move conversation to Trash",
+                "Move this conversation to Trash?\n\n"
+                "Resend may permanently delete items in Trash after 30 days. "
+                "No local email copy is guaranteed.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if response != QMessageBox.StandardButton.Yes:
+                return
+        payload = {"mailbox":mailbox,"thread_id":thread_id,
+                   "from_folder":source,"to_folder":target,"confirmed":True}
+        def received(data, error):
+            if error or not data or data.get("moved") is not True:
+                QMessageBox.warning(
+                    self, "Filing not verified",
+                    str(error or (data or {}).get("notice")
+                        or "The provider outcome is unknown. Do not repeat blindly.")
+                )
+                return
+            self.refresh_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-file-thread",payload=payload,callback=received)
+
+    def read_mail_thread(self, mailbox, thread_id):
+        if mailbox not in ("direction","support") or not thread_id:
+            return
+        payload={"mailbox":mailbox,"thread_id":thread_id}
+        def display(data,error):
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data,dict):
+                self.mail_inbox.body.setPlainText(
+                    "Unable to read saved mail. No email was changed."
+                )
+                return
+            self.mail_inbox.show_messages(
+                mailbox,thread_id,data.get("items") or []
+            )
+        def cached(data,error):
+            if error or not isinstance(data,dict):
+                display(data,error)
+                return
+            if data.get("items"):
+                display(data,None)
+            elif self.mail_provider_ready:
+                self.bridge.call("mail-local-fetch",
+                    payload=payload,callback=display)
+            else:
+                display(data,None)
+        self.bridge.call("mail-local-messages",payload=payload,callback=cached)
+
+    def open_mail_thread_window(self, mailbox, thread_id):
+        """Double-click: detachable, read-only plain-text conversation."""
+        if (mailbox not in ("direction", "support")
+                or not isinstance(thread_id, str) or not thread_id):
+            return
+        key = (mailbox, thread_id)
+        opened = self.mail_thread_windows.get(key)
+        if opened is not None and opened.isVisible():
+            opened.raise_()
+            opened.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · Mail conversation", size=(850, 640), minimum=(580, 410)
+        )
+        layout = QVBoxLayout(dialog)
+        subject = QLabel(self.mail_inbox.subject.text() or "Conversation")
+        subject.setTextFormat(Qt.TextFormat.PlainText)
+        subject.setWordWrap(True)
+        subject.setObjectName("enkyronMailDetachedSubject")
+        layout.addWidget(subject)
+        account = QLabel("Inbox: {}".format(
+            self.mail_inbox._mailboxes.get(mailbox) or mailbox
+        ))
+        account.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(account)
+        body = QPlainTextEdit()
+        body.setObjectName("enkyronMailDetachedBody")
+        body.setReadOnly(True)
+        body.setPlainText("Loading conversation…")
+        layout.addWidget(body, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(dialog.close)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(close)
+        layout.addLayout(actions)
+        self.mail_thread_windows[key] = dialog
+        dialog.finished.connect(
+            lambda _value, ref=key: self.mail_thread_windows.pop(ref, None)
+        )
+        dialog.show()
+
+        def received(data, error):
+            if not dialog.isVisible():
+                return
+            if (error or not isinstance(data, dict)
+                    or data.get("mailbox") != mailbox
+                    or data.get("thread_id") != thread_id):
+                body.setPlainText(
+                    "Unable to load this conversation. Close and try again."
+                )
+                return
+            messages = data.get("items")
+            if not isinstance(messages, list):
+                body.setPlainText("Invalid conversation response.")
+                return
+            body.setPlainText(
+                format_mail_messages(messages) or "No messages in this thread."
+            )
+
+        payload = {"mailbox":mailbox,"thread_id":thread_id}
+        def cached(data,error):
+            if error:
+                received(data,error)
+            elif isinstance(data,dict) and data.get("items"):
+                received(data,None)
+            elif self.mail_provider_ready:
+                self.bridge.call("mail-local-fetch",payload=payload,callback=received)
+            else:
+                received(data,None)
+        self.bridge.call("mail-local-messages",payload=payload,callback=cached)
+
+    def load_mail_sent(self):
+        """Display recorded submissions; refresh delivery status read-only."""
+        if not hasattr(self, "mail_sent_table"):
+            return
+        self.mail_sent_generation = getattr(self, "mail_sent_generation", 0) + 1
+        generation = self.mail_sent_generation
+        self.mail_sent_status.setText("Loading submitted messages…")
+        self.mail_sent_items = []
+        self.mail_sent_verification_queue = []
+        self.mail_sent_verified_rows = set()
+        self.mail_sent_verifying = False
+
+        def received(data, error):
+            if generation != self.mail_sent_generation:
+                return
+            self.mail_sent_items = []
+            self.mail_sent_link_button.setEnabled(False)
+            self.mail_sent_table.blockSignals(True)
+            self.mail_sent_table.setRowCount(0)
+            if error or not data or not data.get("available"):
+                self.mail_sent_table.blockSignals(False)
+                self.mail_sent_status.setText(
+                    "Submitted message history unavailable."
+                )
+                return
+            entries = data.get("items") or []
+            self.mail_sent_items = entries
+            self.mail_sent_table.setRowCount(len(entries))
+            for n, entry in enumerate(entries):
+                fields = [
+                    "Direction" if entry.get("mailbox_key") == "direction" else "Support",
+                    entry.get("recipient_email") or "",
+                    entry.get("subject") or "",
+                    "·" if entry.get("outcome") == "accepted" else "?",
+                    entry.get("company_name") or "Not linked"
+                ]
+                for column, value in enumerate(fields):
+                    item = QTableWidgetItem(str(value))
+                    if column == 3:
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        item.setForeground(QColor("#66788a"))
+                        item.setToolTip(
+                            "Accepted by Resend; delivery not yet confirmed."
+                            if entry.get("outcome") == "accepted" else
+                            "Provider submission outcome uncertain; do not resend."
+                        )
+                    self.mail_sent_table.setItem(n, column, item)
+            self.mail_sent_table.blockSignals(False)
+            self.mail_sent_status.setText(
+                "{} submitted message(s). A green tick means Resend "
+                "confirmed delivery.".format(len(entries))
+            )
+            # Read-only checks, sequential and bounded to avoid provider flooding.
+            # Older rows can be verified by selecting them.
+            self.mail_sent_verification_queue = list(range(min(len(entries), 12)))
+            if entries:
+                self.mail_sent_table.selectRow(0)
+            self._verify_next_sent_mail()
+
+        self.bridge.call("mail-sent", callback=received)
+
+    def sent_mail_selected(self):
+        row = self.mail_sent_table.currentRow()
+        selected = (self.mail_sent_items[row]
+                    if 0 <= row < len(self.mail_sent_items) else {})
+        self.mail_sent_link_button.setEnabled(
+            bool(selected.get("draft_id")) and not selected.get("company_id")
+        )
+        # Only display the association action when it is applicable.
+        self.mail_sent_link_button.setVisible(
+            bool(selected.get("draft_id")) and not selected.get("company_id")
+        )
+        if selected and hasattr(self, "mail_sent_verification_queue"):
+            if (row not in self.mail_sent_verified_rows
+                    and row not in self.mail_sent_verification_queue):
+                self.mail_sent_verification_queue.insert(0, row)
+            self._verify_next_sent_mail()
+
+    def _verify_next_sent_mail(self):
+        if (not hasattr(self, "mail_sent_items")
+                or self.mail_sent_verifying
+                or not self.mail_sent_verification_queue):
+            return
+        row = self.mail_sent_verification_queue.pop(0)
+        if row in self.mail_sent_verified_rows or not (
+                0 <= row < len(self.mail_sent_items)):
+            self._verify_next_sent_mail()
+            return
+        draft_id = self.mail_sent_items[row].get("draft_id")
+        if not draft_id:
+            self.mail_sent_verified_rows.add(row)
+            self._verify_next_sent_mail()
+            return
+        generation = self.mail_sent_generation
+        self.mail_sent_verifying = True
+        item = self.mail_sent_table.item(row, 3)
+        if item:
+            item.setText("…")
+            item.setToolTip("Checking Resend status (read-only)…")
+
+        def received(data, error):
+            if generation != self.mail_sent_generation:
+                return
+            self.mail_sent_verifying = False
+            self.mail_sent_verified_rows.add(row)
+            item = self.mail_sent_table.item(row, 3)
+            if item:
+                if error or not isinstance(data, dict) or not data.get("verified"):
+                    item.setText("?")
+                    item.setForeground(QColor("#9b6b24"))
+                    item.setToolTip(
+                        str(error or (data or {}).get("notice")
+                            or "Delivery could not be verified.")[:400]
+                    )
+                else:
+                    event = data.get("last_event") or "unknown"
+                    if event == "delivered":
+                        item.setText("✓")
+                        item.setForeground(QColor("#17803d"))
+                        item.setToolTip("Delivered — confirmed by Resend.")
+                    elif event in ("bounced", "failed", "suppressed", "complained"):
+                        item.setText("×")
+                        item.setForeground(QColor("#b42318"))
+                        item.setToolTip("Resend event: " + event)
+                    else:
+                        item.setText("·")
+                        item.setForeground(QColor("#66788a"))
+                        item.setToolTip(
+                            "Resend event: {}. Delivery not confirmed.".format(event)
+                        )
+            self._verify_next_sent_mail()
+
+        self.bridge.call("mail-provider-status", str(draft_id), callback=received)
+
+    def view_sent_mail_row(self, row):
+        """Double-click opens the existing standalone, read-only message viewer."""
+        if not 0 <= row < len(self.mail_sent_items):
+            return
+        sent = self.mail_sent_items[row]
+        if not sent.get("draft_id"):
+            return
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            self.crm_draft_dialog.activateWindow()
+            return
+
+        def received(data, error):
+            if error or not isinstance(data, dict) or not isinstance(
+                    data.get("draft"), dict):
+                QMessageBox.warning(self, "Email unavailable",
+                    str(error or "Cannot read the submitted email."))
+                return
+            self.show_mail_draft_dialog(data["draft"])
+
+        self.bridge.call("crm-mail-draft", sent["draft_id"], callback=received)
+
+    def link_selected_sent_mail(self):
+        row = self.mail_sent_table.currentRow()
+        if not 0 <= row < len(self.mail_sent_items):
+            return
+        sent = self.mail_sent_items[row]
+        if sent.get("company_id") or not sent.get("draft_id"):
+            return
+        email = str(sent.get("recipient_email") or "")
+        if not email:
+            return
+        draft_id = sent["draft_id"]
+        self.mail_sent_link_button.setEnabled(False)
+
+        def received(data, error):
+            if error or not data or not data.get("available"):
+                self.sent_mail_selected()
+                QMessageBox.warning(self, "CRM lookup unavailable",
+                    str(error or "Could not search CRM contacts."))
+                return
+            matches = [
+                c for c in (data.get("items") or [])
+                if isinstance(c, dict)
+                and str(c.get("email") or "").casefold() == email.casefold()
+            ]
+            if len(matches) != 1 or data.get("more"):
+                self.sent_mail_selected()
+                QMessageBox.information(self, "No unique CRM match",
+                    "There is no unique CRM contact for this exact address. "
+                    "No association has been changed.")
+                return
+            match = matches[0]
+            decision = QMessageBox.question(
+                self, "Confirm CRM association",
+                "Link this already submitted message to\n\n"
+                "{} · {}\n{}\n\n"
+                "Only CRM metadata will change. No email will be sent."
+                .format(match.get("company_name") or "Company",
+                        match.get("full_name") or "Contact", email),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if decision != QMessageBox.StandardButton.Yes:
+                self.sent_mail_selected()
+                return
+            payload = {
+                "draft_id": draft_id,
+                "company_id": match["company_id"],
+                "contact_id": match["contact_id"],
+                "confirmed": True
+            }
+
+            def linked(result, failure):
+                if failure or not result or not result.get("linked"):
+                    self.sent_mail_selected()
+                    QMessageBox.warning(self, "Link not recorded",
+                        str(failure or "Could not confirm CRM association."))
+                    return
+                self.load_mail_sent()
+                QMessageBox.information(self, "CRM association recorded",
+                    "The message is now associated with the CRM company. "
+                    "It has NOT been sent again.")
+
+            self.bridge.call("mail-link-sent", payload=payload, callback=linked)
+
+        self.bridge.call("crm-mail-recipients", email, callback=received)
+
+    def open_mail_compose(self):
+        """New business email from Mail, no CRM company or login required."""
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.raise_()
+            return
+        selected = self.mail_inbox.selected_mailbox
+        self.show_mail_draft_dialog({
+            "mailbox_key": selected if selected in ("direction","support") else "direction",
+            "company_name_at_creation": "Independent email",
+        })
+
     def reload_operator_profile(self):
         """Read only the currently logged-in local operator's display identity."""
         def received(result, error):
             if error or not result or not result.get("available"):
                 self.operator_profile_state = None
                 self.account_identity_label.setText("LOCAL WORKSPACE")
+                self.mail_inbox.set_owner_mailboxes({})
                 return
             self.operator_profile_state = result
+            self.mail_inbox.set_owner_mailboxes(result.get("owner_access") or {})
             current = result.get("current") or {}
             self.account_identity_label.setText(
-                "{} · {}".format(
-                    current.get("display_name"), current.get("job_title")
-                ) if current.get("display_name") else "LOCAL WORKSPACE"
+                current.get("display_name") or "LOCAL WORKSPACE"
             )
         self.bridge.call("operator-profile", callback=received)
 
@@ -1669,10 +2370,41 @@ class EnkyronWindow(QMainWindow):
             "Your name is separate from the Linux operator and the legal "
             "issuing-company profile. Founder / Owner is a local self-declared "
             "label, NOT an authentication role or a permission grant. "
-            "L5 RBAC, MFA and multi-user access are not implemented yet."
+            "My account is a saved local profile. Mailbox permissions are stored "
+            "separately in PostgreSQL. Multi-user RBAC is not implemented; "
+            "the local workstation uses its existing operator identity."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
+        # Read-only Owner permissions card: server-provided configuration, NOT a live session.
+        access = result.get("owner_access") or {}
+        mailboxes = access.get("mailboxes") or []
+        if access:
+            account_text = (
+                "Account: {}  |  Role: {}  |  Position: {}\n"
+                "Organisation: {}\n"
+                "Access: CRM, Tickets, Client dossiers and assigned mailboxes\n"
+            ).format(
+                access.get("login") or "ceo",
+                access.get("role") or "organization_owner_l5",
+                access.get("position") or "CEO",
+                access.get("organisation") or "AGENTRISKLAYER LTD"
+            )
+            for mailbox in mailboxes:
+                rights = ", ".join(mailbox.get("permissions") or [])
+                account_text += "{}: {}  |  {}\n".format(
+                    mailbox.get("label") or "Mailbox",
+                    mailbox.get("address") or "Not assigned", rights
+                )
+            account_text += (
+                "Mail rights are recorded in PostgreSQL when provisioned. "
+                "The Resend connection belongs to the Mail service, not My account."
+            )
+            account_card = QLabel(account_text)
+            account_card.setTextFormat(Qt.TextFormat.PlainText)
+            account_card.setWordWrap(True)
+            account_card.setObjectName("enkyronOwnerAccessCard")
+            layout.addWidget(account_card)
         form = QFormLayout()
         self.operator_profile_fields = {}
         for key, label, max_len, hint in (
@@ -1762,6 +2494,20 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("operator-profile-save", payload=payload, callback=received)
 
     def closeEvent(self, event):
+        # Calendar editors are independent windows and must close with ENKYRON.
+        if hasattr(self, "calendar_view"):
+            self.calendar_view.close_editors()
+        # Close independently opened mail conversations on workstation exit.
+        for window in list(self.mail_thread_windows.values()):
+            window.close()
+        self.mail_thread_windows.clear()
+        # Detached drafts must not expose customer data after workstation exit.
+        # Closing a draft first avoids an orphan/read-only dossier dependency.
+        if self.crm_draft_dialog and self.crm_draft_dialog.isVisible():
+            self.crm_draft_dialog.close()
+            if self.crm_draft_dialog.isVisible():
+                event.ignore()
+                return
         # Close both detached company views before the operator workspace exits.
         # No customer records should remain visible after ENKYRON closes.
         if (self.crm_company_followups_dialog is not None
@@ -1778,12 +2524,27 @@ class EnkyronWindow(QMainWindow):
         super().closeEvent(event)
 
     def module_changed(self, index):
+        # Reuse the CRM data pages without surrounding Mail in CRM controls.
+        self.crm_header_panel.setVisible(index != 3)
+        self.crm_tabs.tabBar().setVisible(index != 3)
+        if index == 4:
+            self.pages.setCurrentIndex(3)
+            self.load_calendar()
+            return
+        if index == 3:
+            self.pages.setCurrentIndex(2)
+            self.crm_tabs.setCurrentIndex(3)
+            if not self.crm_drafts_loaded:
+                self.load_mail_drafts()
+            self.load_mail_status()
+            return
         if index < 0 or index >= self.pages.count():
             return
         self.pages.setCurrentIndex(index)
         if index == 0:
             self.load_sales_overview()
         if index == 2:
+            self.crm_tabs.setCurrentIndex(0)
             if not self.crm_company_loaded:
                 self.load_companies()
             if not self.crm_loaded:
@@ -1795,7 +2556,59 @@ class EnkyronWindow(QMainWindow):
             if not self.crm_proposal_loaded:
                 self.load_proposals()
 
+    def load_calendar(self, interval=None):
+        if not hasattr(self, "calendar_view"):
+            return
+        if not isinstance(interval, dict):
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            day = self.calendar_view.calendar.selectedDate()
+            first = QDate(day.year(), day.month(), 1)
+            last = first.addMonths(1)
+            tz = ZoneInfo("Europe/London")
+            interval = {
+                "start": datetime(first.year(),first.month(),first.day(),
+                                  tzinfo=tz).isoformat(),
+                "end": datetime(last.year(),last.month(),last.day(),
+                                tzinfo=tz).isoformat(),
+            }
+        self.calendar_view.status.setText("Loading local calendar…")
+        def received(data, error):
+            if error or not isinstance(data, dict):
+                self.calendar_view.status.setText(
+                    "Calendar unavailable. Local schema may need updating."
+                )
+                return
+            self.calendar_view.show_data(data)
+        self.bridge.call("calendar-list", payload=interval, callback=received)
+
+    def create_calendar_event(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("id"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not save appointment."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-create", payload=data, callback=received)
+
+    def create_calendar_task(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("id"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not save task."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-task-create", payload=data, callback=received)
+
+    def complete_calendar_task(self, data):
+        def received(result, error):
+            if error or not isinstance(result, dict) or not result.get("completed"):
+                QMessageBox.warning(self, "Calendar", str(error or "Could not complete task."))
+                return
+            self.load_calendar()
+        self.bridge.call("calendar-task-complete", payload=data, callback=received)
+
     def crm_tab_changed(self, index):
+        if index == 3:
+            self.load_mail_status()
         if index == 4 and self.navigation.currentRow() == 2:
             self.load_pipeline()
         if index == 5 and self.navigation.currentRow() == 2:
@@ -2686,9 +3499,12 @@ class EnkyronWindow(QMainWindow):
         form = QFormLayout()
         inputs = {}
         for key, label, maximum in fields:
-            editor = QLineEdit()
-            editor.setMaxLength(maximum)
-            editor.setText(str(record.get(key) or ""))
+            if kind == "company" and key == "sector":
+                editor = crm_sector_selector(str(record.get(key) or ""))
+            else:
+                editor = QLineEdit()
+                editor.setMaxLength(maximum)
+                editor.setText(str(record.get(key) or ""))
             inputs[key] = editor
             form.addRow(label, editor)
         rationale = QPlainTextEdit()
@@ -2714,7 +3530,11 @@ class EnkyronWindow(QMainWindow):
         layout.addLayout(buttons)
         record_id = record["id"]
         company_id = self.crm_company_id
-        baseline = {key: editor.text() for key, editor in inputs.items()}
+        def edit_value(editor):
+            return (editor.currentText() if isinstance(editor, QComboBox)
+                    else editor.text())
+
+        baseline = {key: edit_value(editor) for key, editor in inputs.items()}
         history = QPushButton("View correction history…")
         history.clicked.connect(
             lambda: self.open_crm_record_history(kind, record_id)
@@ -2724,7 +3544,7 @@ class EnkyronWindow(QMainWindow):
         def changed_fields():
             return {
                 key for key, editor in inputs.items()
-                if editor.text() != baseline[key]
+                if edit_value(editor) != baseline[key]
             }
 
         def sensitive_change():
@@ -2765,7 +3585,7 @@ class EnkyronWindow(QMainWindow):
             payload = {
                 "id": record_id, "expected_version": expected,
                 "review_note": note, "confirmed": True,
-                **{k: editor.text() for k, editor in inputs.items()}
+                **{k: edit_value(editor) for k, editor in inputs.items()}
             }
             if kind == "contact":
                 payload["company_id"] = company_id
@@ -2794,7 +3614,8 @@ class EnkyronWindow(QMainWindow):
             )
 
         for widget in inputs.values():
-            widget.textChanged.connect(update_save)
+            (widget.currentTextChanged if isinstance(widget, QComboBox)
+             else widget.textChanged).connect(update_save)
         rationale.textChanged.connect(update_save)
         confirmed.toggled.connect(update_save)
         update_save()
@@ -3812,7 +4633,9 @@ class EnkyronWindow(QMainWindow):
         draft_context = getattr(self, "crm_draft_context", None) or {}
         if (draft_dialog and draft_dialog.isVisible()
                 and draft_context.get("dossier_company_id")
-                == self.crm_dossier_company_id):
+                == self.crm_dossier_company_id
+                and draft_context.get("mail_state") not in
+                ("provider_submitted", "external_send_reported")):
             return True, ["Finish the open email draft before closing the dossier"]
         if (self.crm_dossier_activity_saving
                 or self.crm_dossier_followup_saving
@@ -6017,9 +6840,16 @@ class EnkyronWindow(QMainWindow):
     def open_new_company(self):
         if not self.crm_company_add.isEnabled():
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("ENKYRON · New company")
-        dialog.setMinimumWidth(540)
+        # A standalone, modeless window can be dragged freely (also to
+        # another monitor); keep the existing CRM form and save workflow.
+        if self.crm_company_dialog and self.crm_company_dialog.isVisible():
+            self.crm_company_dialog.raise_()
+            self.crm_company_dialog.activateWindow()
+            return
+        dialog = make_workspace_window(
+            "ENKYRON · New company",
+            size=(620, 555), minimum=(540, 495)
+        )
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title("REGISTER A COMPANY"))
         explanation = QLabel(
@@ -6035,8 +6865,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_legal_input = QLineEdit()
         self.crm_legal_input.setMaxLength(160)
         form.addRow("Legal name", self.crm_legal_input)
-        self.crm_sector_input = QLineEdit()
-        self.crm_sector_input.setMaxLength(120)
+        self.crm_sector_input = crm_sector_selector()
         form.addRow("Sector", self.crm_sector_input)
         self.crm_city_input = QLineEdit()
         self.crm_city_input.setMaxLength(120)
@@ -6045,6 +6874,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_country_input.setMaxLength(90)
         form.addRow("Country", self.crm_country_input)
         self.crm_website_input = QLineEdit()
+        self.crm_website_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.crm_website_input.setMaxLength(500)
         self.crm_website_input.setPlaceholderText("https://example.com (optional)")
         form.addRow("Website (optional)", self.crm_website_input)
@@ -6059,7 +6889,7 @@ class EnkyronWindow(QMainWindow):
         buttons.addWidget(self.crm_company_submit)
         layout.addLayout(buttons)
         self.crm_company_dialog = dialog
-        dialog.open()
+        dialog.show()
 
     def create_company(self):
         dialog = self.crm_company_dialog
@@ -6068,7 +6898,7 @@ class EnkyronWindow(QMainWindow):
         payload = {
             "name": self.crm_name_input.text(),
             "legal_name": self.crm_legal_input.text(),
-            "sector": self.crm_sector_input.text(),
+            "sector": self.crm_sector_input.currentText(),
             "city": self.crm_city_input.text(),
             "country": self.crm_country_input.text(),
             "website": self.crm_website_input.text()
@@ -6094,7 +6924,7 @@ class EnkyronWindow(QMainWindow):
             current = {
                 "name": self.crm_name_input.text(),
                 "legal_name": self.crm_legal_input.text(),
-                "sector": self.crm_sector_input.text(),
+                "sector": self.crm_sector_input.currentText(),
                 "city": self.crm_city_input.text(),
                 "country": self.crm_country_input.text(),
                 "website": self.crm_website_input.text()
@@ -11821,17 +12651,22 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("crm-mail-draft", draft_id, callback=received)
 
     def show_mail_draft_dialog(self, draft):
-        dialog = QDialog(self)
         existing = bool(draft.get("id"))
-        reported = draft.get("mail_state") == "external_send_reported"
-        dialog.setWindowTitle(
+        state = draft.get("mail_state", "draft")
+        reported = state == "external_send_reported"
+        submitted = state == "provider_submitted"
+        read_only = reported or submitted
+        title = (
+            "ENKYRON · Resend submission" if submitted else
             "ENKYRON · Reported external send" if reported else
             "ENKYRON · Edit draft" if existing else "ENKYRON · New draft"
         )
-        dialog.resize(720, 590)
-        dialog.setMinimumSize(610, 500)
+        dialog = make_workspace_window(
+            title, size=(770, 620), minimum=(610, 500)
+        )
         layout = QVBoxLayout(dialog)
         layout.addWidget(section_title(
+            "MESSAGE SUBMITTED THROUGH RESEND" if submitted else
             "EXTERNAL SEND (OPERATOR REPORTED)" if reported else
             "EDIT DRAFT" if existing else "NEW DRAFT"
         ))
@@ -11839,30 +12674,54 @@ class EnkyronWindow(QMainWindow):
             "Company: {}".format(draft.get("company_name_at_creation") or "Unknown")
         )
         prospect.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_mail_company_label = prospect
         layout.addWidget(prospect)
         warning = QLabel(
             "The operator recorded an external send. ENKYRON has not verified "
             "provider transmission, delivery or reading. This saved revision "
             "is read-only." if reported else
-            "This is a local draft, not an email sent by ENKYRON. "
-            "Check the recipient before recording any external sending."
+            "ENKYRON has recorded a submission to Resend. "
+            "The provider's acceptance is not delivery confirmation. "
+            "This submitted message is read-only; do not resend it." if submitted else
+            "Compose a message, save it locally or send with explicit recipient "
+            "confirmation when Resend is configured. Saving never sends."
         )
         warning.setWordWrap(True)
         layout.addWidget(warning)
         form = QFormLayout()
+        self.crm_mail_from = QComboBox()
+        self.crm_mail_from.setObjectName("enkyronDraftFromMailbox")
+        self.crm_mail_from.addItem(
+            "guillaume.strohecker@agentrisklayer.com", "direction"
+        )
+        self.crm_mail_from.addItem(
+            "support@agentrisklayer.com", "support"
+        )
+        self.crm_mail_from.setCurrentIndex(
+            max(0,self.crm_mail_from.findData(draft.get("mailbox_key") or "direction"))
+        )
+        self.crm_mail_from.setEnabled(not read_only)
+        form.addRow("From",self.crm_mail_from)
         self.crm_mail_to = QLineEdit()
         self.crm_mail_to.setMaxLength(254)
         self.crm_mail_to.setPlaceholderText(
-            "Optional · manually verified email address"
+            "Type a CRM contact name or email…"
         )
         self.crm_mail_to.setText(draft.get("recipient_email") or "")
-        self.crm_mail_to.setReadOnly(reported)
+        self.crm_mail_to.setReadOnly(read_only)
+        self.crm_mail_to_completer = QCompleter([], self.crm_mail_to)
+        self.crm_mail_to_completer.setCompletionMode(
+            QCompleter.CompletionMode.UnfilteredPopupCompletion
+        )
+        self.crm_mail_to_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.crm_mail_to_completer.setMaxVisibleItems(8)
+        self.crm_mail_to.setCompleter(self.crm_mail_to_completer)
         form.addRow("To", self.crm_mail_to)
         self.crm_mail_subject = QLineEdit()
         self.crm_mail_subject.setMaxLength(200)
         self.crm_mail_subject.setPlaceholderText("Subject")
         self.crm_mail_subject.setText(draft.get("subject") or "")
-        self.crm_mail_subject.setReadOnly(reported)
+        self.crm_mail_subject.setReadOnly(read_only)
         form.addRow("Subject", self.crm_mail_subject)
         layout.addLayout(form)
         self.crm_mail_body = QPlainTextEdit()
@@ -11870,7 +12729,7 @@ class EnkyronWindow(QMainWindow):
             "Write your message here."
         )
         self.crm_mail_body.setPlainText(draft.get("body_text") or "")
-        self.crm_mail_body.setReadOnly(reported)
+        self.crm_mail_body.setReadOnly(read_only)
         layout.addWidget(self.crm_mail_body, 1)
         if reported:
             receipt = QLabel(
@@ -11885,17 +12744,36 @@ class EnkyronWindow(QMainWindow):
             receipt.setTextFormat(Qt.TextFormat.PlainText)
             receipt.setWordWrap(True)
             layout.addWidget(receipt)
+        if submitted:
+            outcome = draft.get("provider_outcome") or "uncertain"
+            receipt = QLabel(
+                "Provider response: {}\nResend email ID: {}\n"
+                "Delivery status: not independently verified".format(
+                    "Accepted by Resend" if outcome == "accepted"
+                    else "Uncertain — check provider",
+                    draft.get("provider_message_id") or "Not available"
+                )
+            )
+            receipt.setObjectName("enkyronSubmittedMailReceipt")
+            receipt.setTextFormat(Qt.TextFormat.PlainText)
+            receipt.setWordWrap(True)
+            layout.addWidget(receipt)
         buttons = QHBoxLayout()
-        close = QPushButton("Close without saving")
+        close = QPushButton("Close" if read_only else "Close without saving")
         close.clicked.connect(dialog.reject)
         buttons.addWidget(close)
         buttons.addStretch()
         self.crm_mail_save = QPushButton("Save draft")
         self.crm_mail_save.setObjectName("primary")
-        self.crm_mail_save.clicked.connect(self.save_mail_draft)
-        self.crm_mail_save.setVisible(not reported)
+        self.crm_mail_save.clicked.connect(lambda: self.save_mail_draft())
+        self.crm_mail_save.setVisible(not read_only)
         buttons.addWidget(self.crm_mail_save)
-        if existing and not reported:
+        self.crm_mail_send = QPushButton("Send email…")
+        self.crm_mail_send.setObjectName("enkyronMailSend")
+        self.crm_mail_send.setVisible(not read_only)
+        self.crm_mail_send.clicked.connect(self.request_mail_send)
+        buttons.addWidget(self.crm_mail_send)
+        if existing and not read_only:
             report_button = QPushButton("Record external send…")
             report_button.setObjectName("crmMailManualSend")
             report_button.clicked.connect(self.open_mail_manual_send)
@@ -11910,11 +12788,105 @@ class EnkyronWindow(QMainWindow):
             "mail_state": draft.get("mail_state", "draft"),
             "loaded_to": draft.get("recipient_email") or "",
             "loaded_subject": draft.get("subject") or "",
-            "loaded_body": draft.get("body_text") or ""
+            "loaded_body": draft.get("body_text") or "",
+            "mailbox_key": draft.get("mailbox_key") or "direction",
+            "loaded_mailbox": draft.get("mailbox_key") or "direction",
+            "recipient_contact_id": None,
+            "original_company_id": draft.get("company_id"),
         }
         self.crm_draft_dialog = dialog
-        dialog.open()
+        self.crm_mail_recipient_seq = 0
+        self.crm_mail_recipient_matches = {}
+        self.crm_mail_recipient_timer = QTimer(dialog)
+        self.crm_mail_recipient_timer.setSingleShot(True)
+        self.crm_mail_recipient_timer.setInterval(250)
+        self.crm_mail_recipient_timer.timeout.connect(self.search_mail_recipients)
+        if not read_only:
+            self.crm_mail_to.textEdited.connect(self.mail_recipient_text_edited)
+            self.crm_mail_to_completer.activated[str].connect(self.choose_mail_recipient)
+        dialog.show()
 
+
+    def mail_recipient_text_edited(self, _text):
+        """Typing invalidates a previously chosen contact."""
+        ctx = self.crm_draft_context or {}
+        ctx["recipient_contact_id"] = None
+        if not ctx.get("original_company_id") and not ctx.get("opportunity_id"):
+            ctx["company_id"] = None
+            self.crm_mail_company_label.setText("Company: Independent email")
+        self.crm_mail_recipient_timer.start()
+
+    def search_mail_recipients(self):
+        dialog = self.crm_draft_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        query = self.crm_mail_to.text().strip()
+        self.crm_mail_recipient_seq += 1
+        seq = self.crm_mail_recipient_seq
+        self.crm_mail_recipient_matches = {}
+        if len(query) < 2 or len(query) > 120:
+            self.crm_mail_to_completer.model().setStringList([])
+            return
+
+        def received(data, error):
+            if (not dialog.isVisible() or seq != self.crm_mail_recipient_seq
+                    or query != self.crm_mail_to.text().strip()):
+                return
+            if error or not isinstance(data, dict) or not data.get("available"):
+                self.crm_mail_to_completer.model().setStringList([])
+                return
+            labels = []
+            records = {}
+            exact = []
+            for item in (data.get("items") or [])[:12]:
+                if not isinstance(item, dict) or not item.get("email"):
+                    continue
+                email = str(item["email"])
+                label = "{} · {} <{}>".format(
+                    item.get("full_name") or "Contact",
+                    item.get("company_name") or "Company", email
+                )
+                labels.append(label)
+                records[label] = item
+                if email.casefold() == query.casefold():
+                    exact.append(item)
+            self.crm_mail_recipient_matches = records
+            self.crm_mail_to_completer.model().setStringList(labels)
+            if (len(exact) == 1 and not data.get("more")
+                    and not (self.crm_draft_context or {}).get("original_company_id")
+                    and not (self.crm_draft_context or {}).get("opportunity_id")):
+                self._set_mail_recipient_company(exact[0])
+            elif labels and self.crm_mail_to.hasFocus():
+                self.crm_mail_to_completer.complete()
+
+        self.bridge.call("crm-mail-recipients", query, callback=received)
+
+    def _set_mail_recipient_company(self, item):
+        ctx = self.crm_draft_context or {}
+        if ctx.get("original_company_id") and ctx["original_company_id"] != item.get("company_id"):
+            return
+        if ctx.get("opportunity_id"):
+            return
+        ctx["company_id"] = item.get("company_id")
+        ctx["recipient_contact_id"] = item.get("contact_id")
+        self.crm_mail_company_label.setText(
+            "Company: {} · Contact: {}".format(
+                item.get("company_name") or "CRM company",
+                item.get("full_name") or "CRM contact"
+            )
+        )
+
+    def choose_mail_recipient(self, label):
+        item = self.crm_mail_recipient_matches.get(label)
+        if not item:
+            return
+        # Qt inserts address only, never a display name into the To field.
+        self.crm_mail_to.blockSignals(True)
+        self.crm_mail_to.setText(str(item["email"]))
+        self.crm_mail_to.blockSignals(False)
+        self.crm_mail_recipient_timer.stop()
+        self.crm_mail_recipient_seq += 1
+        self._set_mail_recipient_company(item)
 
     def open_mail_manual_send(self):
         """Manually link a saved draft revision to a provider-side send report."""
@@ -12034,13 +13006,14 @@ class EnkyronWindow(QMainWindow):
         self.crm_mail_send_save = record
         dialog.open()
 
-    def save_mail_draft(self):
+    def save_mail_draft(self, send_after=False):
         dialog = self.crm_draft_dialog
         if not dialog or not dialog.isVisible() or not self.crm_draft_context:
             return
         recipient = self.crm_mail_to.text().strip()
         subject = self.crm_mail_subject.text().strip()
         body = self.crm_mail_body.toPlainText().strip()
+        mailbox_key = self.crm_mail_from.currentData()
         if not subject and not body:
             QMessageBox.warning(dialog, "Empty draft",
                                 "Enter a subject or some text before saving.")
@@ -12057,18 +13030,23 @@ class EnkyronWindow(QMainWindow):
                 "expected_revision": context["revision"],
                 "recipient_email": recipient,
                 "subject": subject,
-                "body_text": body
+                "body_text": body,
+                "mailbox_key": mailbox_key,
             }
         else:
             command = "crm-mail-create"
             payload = {
-                ("company_id" if context["company_id"] else "opportunity_id"):
-                    (context["company_id"] if context["company_id"]
-                     else context["opportunity_id"]),
                 "recipient_email": recipient,
                 "subject": subject,
-                "body_text": body
+                "body_text": body,
+                "mailbox_key": mailbox_key,
             }
+            if context.get("company_id"):
+                payload["company_id"] = context["company_id"]
+                if context.get("recipient_contact_id"):
+                    payload["recipient_contact_id"] = context["recipient_contact_id"]
+            elif context.get("opportunity_id"):
+                payload["opportunity_id"] = context["opportunity_id"]
         self.crm_mail_save.setEnabled(False)
 
         def received(data, error):
@@ -12076,8 +13054,20 @@ class EnkyronWindow(QMainWindow):
                 return
             if error or not data or not data.get("id"):
                 self.crm_mail_save.setEnabled(True)
+                if hasattr(self,"crm_mail_send"):
+                    self.crm_mail_send.setEnabled(True)
                 QMessageBox.warning(dialog, "Draft not saved",
                                     error or "The local draft could not be saved.")
+                return
+            if send_after:
+                # Save the exact revision before transmitting; provider receives
+                # only the backend-frozen database contents.
+                context.update({
+                    "id": data["id"], "revision": data["revision"],
+                    "mailbox_key":mailbox_key, "loaded_mailbox":mailbox_key,
+                    "loaded_to":recipient,"loaded_subject":subject,"loaded_body":body
+                })
+                self.submit_mail_send(data["id"],data["revision"])
                 return
             dialog.accept()
             if (context.get("dossier_company_id")
@@ -12092,6 +13082,76 @@ class EnkyronWindow(QMainWindow):
                 self.load_mail_drafts()
 
         self.bridge.call(command, payload=payload, callback=received)
+
+    def request_mail_send(self):
+        """Human-approved send of the exact saved draft revision."""
+        dialog = self.crm_draft_dialog
+        ctx = self.crm_draft_context or {}
+        if not dialog or not dialog.isVisible() or ctx.get("mail_state") == "external_send_reported":
+            return
+        to = self.crm_mail_to.text().strip()
+        subject = self.crm_mail_subject.text().strip()
+        body = self.crm_mail_body.toPlainText().strip()
+        mailbox = self.crm_mail_from.currentData()
+        if (not to or not subject or not body or
+                "@" not in to or any(x in to for x in (" ", ",", ";", "<", ">"))):
+            QMessageBox.warning(dialog, "Incomplete email",
+                "Enter one valid recipient, a subject and a message body.")
+            return
+        if not self.mail_provider_ready:
+            QMessageBox.information(dialog, "Resend connection needed",
+                "You can save the draft now. Sending requires the "
+                "professional Resend connection to be provisioned.")
+            return
+        sender = ("guillaume.strohecker@agentrisklayer.com"
+                  if mailbox=="direction" else "support@agentrisklayer.com")
+        decision = QMessageBox.question(
+            dialog, "Confirm email send",
+            ("SEND this message now?\n\nFrom: {}\nTo: {}\nSubject: {}\n\n"
+             "Resend acceptance is not proof of delivery.").format(sender,to,subject),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        modified = (
+            not ctx.get("id") or to != ctx.get("loaded_to") or
+            subject != ctx.get("loaded_subject") or body != ctx.get("loaded_body") or
+            mailbox != ctx.get("loaded_mailbox")
+        )
+        self.crm_mail_send.setEnabled(False)
+        if modified:
+            self.save_mail_draft(send_after=True)
+        else:
+            self.submit_mail_send(ctx["id"],ctx["revision"])
+
+    def submit_mail_send(self,draft_id,revision):
+        dialog=self.crm_draft_dialog
+        if not dialog or not dialog.isVisible():
+            return
+        self.crm_mail_send.setEnabled(False)
+        self.bridge.call("mail-send-draft",payload={
+            "draft_id":draft_id,"expected_revision":revision,
+            "recipient_verified":True,"confirmed":True,
+        },callback=lambda result,error:self.mail_send_completed(dialog,result,error))
+
+    def mail_send_completed(self,dialog,result,error):
+        if not dialog.isVisible():
+            return
+        if error or not result:
+            self.crm_mail_send.setEnabled(True)
+            QMessageBox.warning(dialog,"Email not confirmed",
+                str(error or "Check local drafts and Resend before retrying."))
+            return
+        dialog.accept()
+        self.load_mail_drafts()
+        self.crm_tabs.setCurrentIndex(3)
+        self.crm_mail_folders.setCurrentIndex(1)
+        self.load_mail_sent()
+        QMessageBox.information(
+            self,"Resend send result",
+            result.get("notice") or "The email status could not be confirmed."
+        )
 
     def open_activity_history(self):
         row = self.crm_followup_table.currentRow()

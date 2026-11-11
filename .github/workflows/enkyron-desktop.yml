@@ -180,6 +180,65 @@ jobs:
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_company_followups_smoke.py'
 
+      - name: ENKYRON New company movable window smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_new_company_window_smoke.py'
+
+      - name: Validate strictly scoped local CRM test-archive
+        run: |
+          node --check scripts/enkyron-clean-test-companies.mjs
+          node --test tests/enkyron-crm-test-archive.test.js
+
+      - name: ENKYRON local Mail + Calendar integration and DST (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_local_office_smoke.py'
+
+      - name: ENKYRON local three-pane Mail and Calendar (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_local_mail_calendar_smoke.py'
+
+      - name: ENKYRON Mail folder and filing navigation (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_folders_smoke.py'
+
+      - name: ENKYRON Mail native inbox UX smoke (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_inbox_smoke.py'
+
+      - name: ENKYRON CRM recipient autocomplete (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_recipient_autocomplete_smoke.py'
+
+      - name: ENKYRON compact sent-row double click and status (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_mail_sent_compact_smoke.py'
+
+      - name: ENKYRON detached read-only sent-mail viewer (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_standalone_mail_viewer_smoke.py'
+
+      - name: ENKYRON single-user Mail and compose UX (offline)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_owner_login_smoke.py'
+
       - name: UX-14 native manual external send smoke
         env:
           QT_QPA_PLATFORM: offscreen
@@ -203,7 +262,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           "$RUNNER_TEMP/enkyron-venv/bin/python" - <<'PY'
-          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget
+          from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QListWidgetItem, QLineEdit, QHeaderView, QPlainTextEdit, QCheckBox, QPushButton, QTableWidget, QComboBox
           from PySide6.QtCore import Qt, QDate
           from pathlib import Path
           from unittest.mock import patch
@@ -219,9 +278,9 @@ jobs:
           assert window.tabs.tabText(5) == 'Evidence Requests'
           assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
-          assert window.pages.count() == 3
-          assert [window.navigation.item(i).text() for i in range(3)] == [
-              "Home", "Tickets", "CRM"
+          assert window.pages.count() == 4
+          assert [window.navigation.item(i).text() for i in range(5)] == [
+              "Home", "Tickets", "CRM", "Mail", "Calendar"
           ]
           assert window.pages.currentIndex() == 0
           assert window.ticket_views.count() == 2
@@ -472,7 +531,8 @@ jobs:
           assert [window.crm_mail_folders.tabText(i) for i in range(3)] == [
               "Inbox", "Sent", "Drafts"
           ]
-          assert "not connected" in window.crm_mail_connection.text().lower()
+          assert "compose" in window.crm_mail_connection.text().lower()
+          assert window.mail_inbox.new_email_button.isEnabled()
           assert window.crm_company_table.rowCount() == 1
           assert window.crm_company_add.isEnabled()
           # UX-01: controls are easy to find, without a wall of disabled buttons.
@@ -651,8 +711,14 @@ jobs:
           assert window.crm_record_history_dialog.isVisible()
           window.crm_record_history_dialog.reject()
           fields = window.crm_record_edit_dialog.findChildren(QLineEdit)
-          assert len(fields) == 6
-          fields[2].setText("Cybersecurity services")
+          assert len(fields) == 5
+          sector_selectors = [
+              box for box in window.crm_record_edit_dialog.findChildren(QComboBox)
+              if box.findText("AI & Automation") >= 0
+          ]
+          assert len(sector_selectors) == 1
+          assert not sector_selectors[0].isEditable()
+          sector_selectors[0].setCurrentText("AI & Automation")
           rationale = window.crm_record_edit_dialog.findChildren(QPlainTextEdit)[0]
           rationale.setPlainText(
               "Correcting an operator-entered sector after checking the original source."
@@ -667,7 +733,7 @@ jobs:
           assert calls[-1][0] == "crm-edit-company"
           assert calls[-1][2]["id"] == company_id
           assert calls[-1][2]["expected_version"] == 1
-          assert calls[-1][2]["sector"] == "Cybersecurity services"
+          assert calls[-1][2]["sector"] == "AI & Automation"
           assert calls[-1][2]["confirmed"] is True
           assert "relationship_state" not in calls[-1][2]
           window.crm_record_edit_dialog.reject()
@@ -922,7 +988,8 @@ jobs:
               "company_id": company_id,
               "recipient_email": "public@example.invalid",
               "subject": "Unsent synthetic introduction",
-              "body_text": "This message is only saved locally."
+              "body_text": "This message is only saved locally.",
+              "mailbox_key": "direction"
           }
           window.crm_draft_dialog.reject()
           # UX-08: company correction reuses an existing audited/versioned

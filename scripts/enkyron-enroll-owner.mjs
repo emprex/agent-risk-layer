@@ -12,12 +12,12 @@ import {createInterface} from 'node:readline/promises';
 import pg from 'pg';
 import {createEnkyronTotpSecret} from '../desktop/enkyron-auth-crypto.mjs';
 import {
-  inspectOwnerEnrollment,enrollPendingLocalOwner,
+  inspectOwnerEnrollment,enrollPendingLocalOwner,activatePendingLocalOwner,
 } from '../desktop/enkyron-owner-enrollment.mjs';
 
 const mode=process.argv[2];
-if(!['--check','--enroll'].includes(mode)||process.argv.length!==3)
-  throw new Error('Usage: node scripts/enkyron-enroll-owner.mjs --check | --enroll');
+if(!['--check','--enroll','--activate'].includes(mode)||process.argv.length!==3)
+  throw new Error('Usage: node scripts/enkyron-enroll-owner.mjs --check | --enroll | --activate');
 
 const operator=os.userInfo().username;
 if(!/^[A-Za-z0-9_.-]{1,80}$/.test(operator))
@@ -105,7 +105,9 @@ function secretPrompt(label){
 }
 async function confirmation(){
   const rl=createInterface({input:process.stdin,output:process.stderr});
-  try{return (await rl.question('Type ENROLL to prepare a pending CEO account: ')).trim()==='ENROLL';}
+  try{return (await rl.question(
+    'Type ENROLL to create and activate your ONE CEO account: '
+  )).trim()==='ENROLL';}
   finally{rl.close();}
 }
 
@@ -116,14 +118,46 @@ try{
     console.log('ENKYRON owner enrollment:',census.empty?'NOT ENROLLED':'IDENTITY REGISTRY NONEMPTY');
     console.log('Workspace:',census.workspace);
     console.log('Identity counts:',JSON.stringify(census.counts));
-    console.log('Desktop authentication/permissions: NOT ENABLED');
+    const ready=(await pool.query(
+      "SELECT p.effective_status FROM enkyron_identity_principal_effective p "+
+      "WHERE p.workspace_key=$1 AND p.login_name='ceo'",
+      [census.workspace]
+    )).rows;
+    console.log('CEO account status:',
+      ready.length===1?ready[0].effective_status:'not enrolled or needs review');
+  }else if(mode==='--activate'){
+    if(!process.stdin.isTTY||!process.stderr.isTTY)
+      throw new Error('Activation requires a private interactive terminal');
+    if(census.empty)
+      throw new Error('No pending CEO: first run --enroll');
+    console.error('Activate the ONE existing pending CEO using its original passphrase and a fresh MFA code.');
+    await backupDatabase();
+    // Do not generate/rewrite the original encryption key during activation.
+    const folder=path.join(os.homedir(),'.local','share','enkyron','auth');
+    const location=path.join(folder,'local-key-v1.bin');
+    const fd=await fs.open(location,FSC.O_RDONLY|FSC.O_NOFOLLOW);
+    let key;
+    try{
+      const stat=await fd.stat();
+      if(!stat.isFile()||stat.uid!==process.getuid()||stat.nlink!==1||
+         (stat.mode&0o777)!==0o600||stat.size!==32)
+        throw new Error('Unsafe original encryption key');
+      key=await fd.readFile();
+    }finally{await fd.close();}
+    const password=secretPrompt('Existing CEO passphrase (hidden): ');
+    const code=secretPrompt('Fresh 6-digit authenticator code (hidden): ');
+    const activated=await activatePendingLocalOwner(pool,{
+      operator,password,totpCode:code,key
+    });
+    console.log('CEO account:',activated.status.toUpperCase());
+    console.log('One Owner sign-in now covers the assigned Direction and Support mailboxes.');
   }else{
     if(!process.stdin.isTTY||!process.stderr.isTTY)
       throw new Error('Enrollment requires an interactive local terminal');
     if(!census.empty)
       throw new Error('Identity registry is not empty; refusing any owner bootstrap');
-    console.error('This enrolls ONE pending CEO principal for the current Linux user.');
-    console.error('It does not log you into ENKYRON or grant live desktop rights.');
+    console.error('This creates ONE CEO account for the current Linux user.');
+    console.error('After activation, this account is used for both Direction and Support.');
     if(!await confirmation())throw new Error('Enrollment not confirmed');
     await backupDatabase();
     const key=await encryptionKey();
@@ -139,12 +173,12 @@ try{
     console.error('Manual setup key (PRIVATE; do not paste into chat):',totpSecret);
     const code=secretPrompt('Enter the current 6-digit authenticator code: ');
     const result=await enrollPendingLocalOwner(pool,{
-      operator,password,totpSecret,totpCode:code,key,
+      operator,password,totpSecret,totpCode:code,key,activate:true,
     });
-    console.log('CEO credential enrollment:',result.status.toUpperCase());
+    console.log('CEO account:',result.status.toUpperCase());
     console.log('Login name:',result.loginName);
     console.log('Workspace:',result.workspace);
-    console.log('No app permissions were enabled; developer account not created.');
+    console.log('One CEO login covers assigned Direction and Support; no additional accounts created.');
   }
 }catch(error){
   console.error('ENKYRON owner enrollment:',String(error?.message||'failed'));
