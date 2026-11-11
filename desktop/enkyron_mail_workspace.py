@@ -64,6 +64,8 @@ class MailInboxView(QWidget):
     localCreateFolderRequested = Signal(str)
     localCreateLabelRequested = Signal(str)
     localAssignLabelRequested = Signal(str, str, str, bool)
+    localSearchRequested = Signal(str)
+    localPageRequested = Signal(int)
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
@@ -78,6 +80,8 @@ class MailInboxView(QWidget):
         self.current_thread_mailbox = None
         self.items = []
         self._has_more = False
+        self._local_page = 0
+        self._local_search_query = None
         self._mailboxes = {}
         self._filing_mailboxes = set()
         self._folder = 'inbox'
@@ -116,6 +120,7 @@ class MailInboxView(QWidget):
         self.search.setMaxLength(120)
         self.search.setEnabled(False)
         self.search.textChanged.connect(self._filter)
+        self.search.returnPressed.connect(self._search_saved_mail)
         toolbar.addWidget(self.search, 1)
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setObjectName("enkyronMailRefresh")
@@ -213,6 +218,20 @@ class MailInboxView(QWidget):
         self.thread_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.thread_list.customContextMenuRequested.connect(self._thread_context_menu)
         left_layout.addWidget(self.thread_list, 1)
+        self.local_page_toolbar = QHBoxLayout()
+        self.local_earlier_button = QPushButton("Newer")
+        self.local_earlier_button.setObjectName("enkyronMailNewerPage")
+        self.local_earlier_button.clicked.connect(
+            lambda: self.localPageRequested.emit(max(0, self._local_page - 1)))
+        self.local_later_button = QPushButton("Older")
+        self.local_later_button.setObjectName("enkyronMailOlderPage")
+        self.local_later_button.clicked.connect(
+            lambda: self.localPageRequested.emit(self._local_page + 1))
+        self.local_earlier_button.hide()
+        self.local_later_button.hide()
+        self.local_page_toolbar.addWidget(self.local_earlier_button)
+        self.local_page_toolbar.addWidget(self.local_later_button)
+        left_layout.addLayout(self.local_page_toolbar)
         self.splitter.addWidget(left)
 
         self.reader_stack = QStackedWidget()
@@ -322,7 +341,12 @@ class MailInboxView(QWidget):
         self.refresh_button.setToolTip(
             "Import new Resend conversations into ENKYRON; does not move provider mail."
         )
-        self.search.setPlaceholderText("Search saved subjects…")
+        self.search.setPlaceholderText("Search all saved mail · press Enter")
+        self.search.setAccessibleName("Search saved mail in NEMORYTH; press Enter")
+        self.local_earlier_button.show()
+        self.local_later_button.show()
+        self.local_earlier_button.setEnabled(False)
+        self.local_later_button.setEnabled(False)
         left = QFrame()
         left.setObjectName("enkyronMailFolderSidebar")
         layout = QVBoxLayout(left)
@@ -535,19 +559,26 @@ class MailInboxView(QWidget):
             # The previous loading pane must never remain visible on failure.
             self._clear_threads(str(explanation or defaults[state])[:180])
 
-    def _clear_threads(self, explanation):
+    def _clear_threads(self, explanation, preserve_search=False):
         self.hide_reply_editor()
         self.reply_button.hide()
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
         self._has_more = False
+        self._local_page = 0
+        if not preserve_search:
+            self._local_search_query = None
         self.thread_list.blockSignals(True)
         self.thread_list.clear()
         self.thread_list.blockSignals(False)
-        self.search.blockSignals(True)
-        self.search.clear()
-        self.search.blockSignals(False)
+        if not preserve_search:
+            self.search.blockSignals(True)
+            self.search.clear()
+            self.search.blockSignals(False)
+        if self.local_mode:
+            self.local_earlier_button.setEnabled(False)
+            self.local_later_button.setEnabled(False)
         self.count.setText("0 conversations")
         self.subject.setText("Select a message")
         self.meta.setText("")
@@ -620,14 +651,25 @@ class MailInboxView(QWidget):
                      or self.selected_mailbox == "all")):
             self.refreshRequested.emit(self.selected_mailbox)
 
-    def show_threads(self, mailbox, items, has_more=False, folder='inbox'):
+    def show_threads(self, mailbox, items, has_more=False, folder='inbox',
+                     search_query=None, page=0):
         """Provider-scoped, bounded plain-text thread listing."""
         if (self.connection_state != 'connected' or mailbox != self.selected_mailbox
                 or folder != self.selected_folder):
             return False
         if not isinstance(items, list) or len(items) > (200 if self.local_mode else 50):
             return False
-        self._clear_threads("No conversations in this folder.")
+        self._clear_threads("No conversations in this folder.",
+                            preserve_search=search_query is not None)
+        self._local_search_query = (
+            search_query.strip().casefold()
+            if self.local_mode and isinstance(search_query, str) and search_query.strip()
+            else None
+        )
+        self._local_page = page if isinstance(page, int) and page >= 0 else 0
+        if self.local_mode:
+            self.local_earlier_button.setEnabled(self._local_page > 0)
+            self.local_later_button.setEnabled(bool(has_more))
         self.items = list(items)
         self._has_more = bool(has_more)
         self.thread_list.blockSignals(True)
@@ -644,6 +686,8 @@ class MailInboxView(QWidget):
             date = _display_date(item.get("last_message_at"))
             unread = item.get("unread") is True
             label = ("● " if unread else "") + subject
+            if self.local_mode and item.get("flagged") is True:
+                label = "★ " + label
             if self.local_mode:
                 sender = str(item.get("sender") or "").strip()[:120]
                 if sender:
@@ -748,12 +792,20 @@ class MailInboxView(QWidget):
         self.reply_button.setVisible(follow_up_ready)
         return True
 
+    def _search_saved_mail(self):
+        if self.local_mode and self.connection_state == "connected":
+            self.localSearchRequested.emit(self.search.text().strip())
+
     def _filter(self, value):
         query = value.strip().casefold()
         visible = 0
         for index in range(self.thread_list.count()):
             item = self.thread_list.item(index)
-            hidden = query not in item.text().casefold()
+            # Database search can match cached bodies, recipients and labels,
+            # none of which need to appear in the row's visible title.
+            server_match = (self.local_mode and self._local_search_query
+                            and query == self._local_search_query)
+            hidden = False if server_match else query not in item.text().casefold()
             item.setHidden(hidden)
             visible += not hidden
         total = self.thread_list.count()
