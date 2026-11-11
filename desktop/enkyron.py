@@ -1945,6 +1945,13 @@ class EnkyronWindow(QMainWindow):
                 elif partial:
                     warning = ("One provider Inbox was unavailable; "
                                "automatic checking will retry.")
+                else:
+                    checked = datetime.now().astimezone().strftime("%H:%M")
+                    new = int(data.get("new_threads") or 0)
+                    updated = int(data.get("updated_threads") or 0)
+                    warning = ("Inbox checked automatically at {} · "
+                               "{} new, {} updated conversation(s).").format(
+                                   checked, new, updated)
                 complete(warning, refresh=changed)
             self.bridge.call("mail-local-sync-bodies",
                 payload={"mailbox":"all","recent":True},
