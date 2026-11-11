@@ -1297,6 +1297,10 @@ class EnkyronWindow(QMainWindow):
         )
         self.mail_inbox.refreshRequested.connect(self.refresh_mail)
         self.mail_inbox.mailboxChanged.connect(self.refresh_mail)
+        self.mail_inbox.folderChanged.connect(
+            lambda _folder: self.refresh_mail(self.mail_inbox.selected_mailbox)
+        )
+        self.mail_inbox.threadMoveRequested.connect(self.file_mail_thread)
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
@@ -1750,12 +1754,15 @@ class EnkyronWindow(QMainWindow):
         """Read selected Resend Inbox under the local DB mailbox permission."""
         if not self.mail_provider_ready or mailbox not in ("direction", "support", "all"):
             return
+        folder = self.mail_inbox.selected_folder
         self.mail_inbox.set_connection_state("loading")
         self.crm_mail_connection.setText("Refreshing email…")
         def received(data, error):
-            if mailbox != self.mail_inbox.selected_mailbox:
+            if (mailbox != self.mail_inbox.selected_mailbox
+                    or folder != self.mail_inbox.selected_folder):
                 return
-            if error or not data or data.get("mailbox") != mailbox:
+            if (error or not data or data.get("mailbox") != mailbox
+                    or data.get("folder") != folder):
                 self.mail_inbox.set_connection_state(
                     "error", "Could not read this mailbox. Retry with Refresh inbox."
                 )
@@ -1763,12 +1770,46 @@ class EnkyronWindow(QMainWindow):
                 return
             self.mail_inbox.set_connection_state("connected")
             self.mail_inbox.show_threads(
-                mailbox, data.get("items") or [], bool(data.get("has_more"))
+                mailbox, data.get("items") or [], bool(data.get("has_more")), folder
             )
             self.crm_mail_connection.setText(
                 "{} · Inbox refreshed".format(mailbox.title())
             )
-        self.bridge.call("mail-threads", payload={"mailbox":mailbox}, callback=received)
+        self.bridge.call("mail-threads", payload={"mailbox":mailbox,
+                                                  "folder":folder}, callback=received)
+
+    def file_mail_thread(self, mailbox, thread_id, source, target):
+        """Explicit operator filing, no permanent deletion or automatic retry."""
+        if (mailbox not in ("direction", "support")
+                or source not in ("inbox","archive","spam","trash")
+                or target not in ("inbox","archive","spam","trash")
+                or source == target or
+                source != self.mail_inbox.selected_folder):
+            return
+        labels = {"inbox":"Inbox","archive":"Archive","spam":"Spam","trash":"Trash"}
+        if target == "trash":
+            response = QMessageBox.question(
+                self, "Move conversation to Trash",
+                "Move this conversation to Trash?\n\n"
+                "Resend may permanently delete items in Trash after 30 days. "
+                "No local email copy is guaranteed.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if response != QMessageBox.StandardButton.Yes:
+                return
+        payload = {"mailbox":mailbox,"thread_id":thread_id,
+                   "from_folder":source,"to_folder":target,"confirmed":True}
+        def received(data, error):
+            if error or not data or data.get("moved") is not True:
+                QMessageBox.warning(
+                    self, "Filing not verified",
+                    str(error or (data or {}).get("notice")
+                        or "The provider outcome is unknown. Do not repeat blindly.")
+                )
+                return
+            self.refresh_mail(self.mail_inbox.selected_mailbox)
+        self.bridge.call("mail-file-thread",payload=payload,callback=received)
 
     def read_mail_thread(self, mailbox, thread_id):
         if mailbox not in ("direction","support") or not thread_id:
