@@ -211,6 +211,35 @@ class MailNativeUXSmoke(unittest.TestCase):
         finally:
             self._dispose(ui)
 
+    def test_saved_mail_search_uses_database_results_and_pages(self):
+        ui = MailInboxView()
+        searches, pages = [], []
+        ui.localSearchRequested.connect(searches.append)
+        ui.localPageRequested.connect(pages.append)
+        try:
+            ui.set_local_mode()
+            ui.set_owner_mailboxes(CARD)
+            ui.search.setText("sapphireCipher")
+            ui.search.returnPressed.emit()
+            self.assertEqual(searches, ["sapphireCipher"])
+            # Subject does not contain query: NEMORYTH matched the body.
+            self.assertTrue(ui.show_threads("all", [{
+                "id": THREAD, "mailbox": "direction",
+                "subject": "Normal subject", "sender": "client@example.invalid",
+                "last_message_at": "2026-11-11", "flagged": True
+            }], True, "inbox", search_query="sapphireCipher", page=1))
+            self.assertEqual(ui.thread_list.count(), 1)
+            self.assertFalse(ui.thread_list.item(0).isHidden())
+            self.assertIn("★", ui.thread_list.item(0).text())
+            self.assertEqual(ui.search.text(), "sapphireCipher")
+            self.assertTrue(ui.local_earlier_button.isEnabled())
+            self.assertTrue(ui.local_later_button.isEnabled())
+            ui.local_later_button.click()
+            ui.local_earlier_button.click()
+            self.assertEqual(pages, [2, 0])
+        finally:
+            self._dispose(ui)
+
     def test_mail_and_calendar_detach_and_reattach(self):
         prior = DesktopBridge.call
         DesktopBridge.call = lambda _self, command, arg="", payload=None, callback=None: None
