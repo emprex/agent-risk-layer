@@ -166,12 +166,14 @@ class MailNativeUXSmoke(unittest.TestCase):
                 window.current_ticket={"target_kind":"git","linked_project_id":project,
                                        "linked_assessment_id":assessment}
                 window.inspect_evidence()
-                self.assertIn("ARL CONTROL REGISTER: 108",
+                self.assertIn("ASSESSMENT PROGRESS · 108 SECURITY CONTROLS",
                               window.evidence_summary.toPlainText())
                 self.assertGreaterEqual(window.evidence_summary.minimumHeight(), 150)
                 self.assertIn("Applicability", window.evidence_step_guide.text())
                 self.assertIn("not that the security checks passed",
                               window.evidence_pack_explanation.text())
+                self.assertIn("Continue assessment",window.control_review_button.text())
+                self.assertFalse(window.evidence_button.isVisible())
                 self.assertLessEqual(window.evidence_packs.maximumHeight(), 72)
                 self.assertIn("No evidence request packs",
                               window.evidence_details.toPlainText())
