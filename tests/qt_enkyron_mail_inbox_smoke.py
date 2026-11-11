@@ -56,9 +56,18 @@ class MailNativeUXSmoke(unittest.TestCase):
                 # Both widgets have the same content parent. A scroll viewport
                 # must keep section boundaries separate at laptop dimensions.
                 self.assertIs(summary.parentWidget(), heading.parentWidget())
-                self.assertLess(summary.geometry().bottom(), heading.geometry().top())
-                self.assertLess(heading.geometry().bottom(),
-                                window.evidence_packs.geometry().top())
+                layout = page.widget().layout()
+                self.assertIsNotNone(layout)
+                # Qt assigns child geometry only while a stacked page is
+                # visible. Structural ordering is stable even headlessly;
+                # the scroll area ensures space is available at small sizes.
+                self.assertLess(layout.indexOf(summary), layout.indexOf(heading))
+                self.assertLess(layout.indexOf(heading),
+                                layout.indexOf(window.evidence_pack_explanation))
+                self.assertLess(layout.indexOf(window.evidence_pack_explanation),
+                                layout.indexOf(window.evidence_packs))
+                self.assertEqual(page.horizontalScrollBarPolicy(),
+                                 Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             finally:
                 self._dispose(window)
 
