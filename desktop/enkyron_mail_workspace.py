@@ -687,7 +687,7 @@ class MailInboxView(QWidget):
                 continue
             subject = str(record.get("subject") or "(No subject)")[:300]
             recipient = str(record.get("recipient_email") or "Recipient not set")[:120]
-            date = _display_date(record.get("updated_at") or record.get("created_at"))
+            date = _display_date(record.get("updated_at") or record.get("created_at") or record.get("recorded_at") or record.get("completed_at"))
             state = (str(record.get("mail_state") or "draft").replace("_", " ")
                      if kind == "drafts" else
                      "Submitted to provider" if record.get("outcome") == "accepted"
@@ -718,7 +718,7 @@ class MailInboxView(QWidget):
                 continue
             recipient = str(record.get("recipient_email") or "Recipient not set")[:120]
             subject = str(record.get("subject") or "(No subject)")[:300]
-            date = _display_date(record.get("updated_at") or record.get("created_at"))
+            date = _display_date(record.get("updated_at") or record.get("created_at") or record.get("recorded_at") or record.get("completed_at"))
             item.setText(recipient + "\n" + subject + "\n"
                          + str(status)[:100] + (" · " + date if date else ""))
             return True
