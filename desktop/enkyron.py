@@ -13905,6 +13905,8 @@ class EnkyronWindow(QMainWindow):
                     self.refresh_company_dossier()
                 else:
                     self.load_mail_drafts()
+                if self.mail_inbox.selected_folder == "drafts":
+                    self.load_unsent_mail_drafts()
             self.bridge.call("crm-mail-manual-send",
                              payload=payload, callback=saved)
         record.clicked.connect(submit)
@@ -13990,6 +13992,8 @@ class EnkyronWindow(QMainWindow):
                 self.crm_mail_folders.setCurrentIndex(2)
                 self.crm_draft_search.clear()
                 self.load_mail_drafts()
+            if self.mail_inbox.selected_folder == "drafts":
+                self.load_unsent_mail_drafts()
 
         self.bridge.call(command, payload=payload, callback=received)
 
