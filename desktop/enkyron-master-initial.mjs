@@ -216,20 +216,25 @@ export async function recordInitialMaster(pool,payload,actor,dependencies={}) {
      payload.target_sha!==draft.target_sha)
     reject('preview is stale; reopen and review the draft');
   const client=await pool.connect();
+  let stage='transaction start';
   try {
     await client.query('BEGIN');
+    stage='locked ticket and accountable operator';
     const ticket=await ticketRow(client,ticketId,true);
     checkOperator(ticket,actor);
     if(ticket.linked_project_id!==draft.project_id ||
        ticket.linked_assessment_id!==draft.assessment_id ||
        ticket.ticket_number!==draft.dossier_key)
       reject('ticket changed before record');
+    stage='frozen Git binding verification';
     const frozen=frozenLocalTarget(ticket.target_reference);
     if(frozen.sha!==draft.target_sha)
       reject('frozen target changed before record');
     // The real table has a bigint ID WITHOUT a default. Serialize inserts
     // before allocating MAX(id)+1; no migration or hidden sequence is presumed.
+    stage='Master table lock';
     await client.query('LOCK TABLE assessment_master_dossier_revisions IN SHARE ROW EXCLUSIVE MODE');
+    stage='canonical snapshot verification';
     const snap=(await client.query(
       'SELECT id,project_id,status,assessment_configuration_json FROM system_snapshots WHERE id=$1',
       [draft.snapshot_id])).rows[0];
@@ -240,13 +245,16 @@ export async function recordInitialMaster(pool,payload,actor,dependencies={}) {
        config?.assessmentBinding?.assessmentId!==draft.assessment_id ||
        config?.targetBinding?.revision!==draft.target_sha)
       reject('current canonical snapshot binding changed before record');
+    stage='existing Master collision check';
     if(await exists(client,draft))
       reject('Master already recorded; inspect the existing dossier');
+    stage='Master bigint ID allocation';
     const next=(await client.query(
       'SELECT (COALESCE(MAX(id),0::bigint)+1)::text AS next_id FROM assessment_master_dossier_revisions'
     )).rows[0]?.next_id;
     if(!/^[1-9][0-9]*$/.test(String(next||'')))
       reject('cannot allocate initial Master revision identifier');
+    stage='Master revision INSERT';
     const result=await client.query(
       'INSERT INTO assessment_master_dossier_revisions '+
       '(id,project_id,system_snapshot_id,assessment_id,dossier_key,revision,target_sha,'+
@@ -259,6 +267,7 @@ export async function recordInitialMaster(pool,payload,actor,dependencies={}) {
        'internal_documentary_workpaper']
     );
     if(result.rows.length!==1) reject('initial Master write could not be verified');
+    stage='Master transaction COMMIT';
     await client.query('COMMIT');
     return {saved:true,dossier_key:draft.dossier_key,revision:1,
       snapshot_id:draft.snapshot_id,target_sha:draft.target_sha,
@@ -267,7 +276,22 @@ export async function recordInitialMaster(pool,payload,actor,dependencies={}) {
       notice:'Documentary revision 1 recorded. No control result, evidence acceptance, test authorisation or security verdict.'};
   } catch(error) {
     await client.query('ROLLBACK').catch(()=>{});
-    throw error;
+    // Do not expose SQL text, connection strings, document contents or DB values.
+    // The preflight already passed, so a generic bridge error hides the root cause.
+    const sqlState=typeof error?.code==='string' && /^[0-9A-Z]{5}$/.test(error.code)
+      ? ' [SQLSTATE '+error.code+']' : '';
+    const category=error?.code==='42501' ? 'permission denied' :
+      error?.code==='55P03' ? 'lock unavailable' :
+      error?.code==='57014' ? 'statement cancelled or timeout' :
+      error?.code==='23505' ? 'unique constraint conflict' :
+      error?.code==='23503' ? 'foreign key constraint conflict' :
+      error?.code==='23502' ? 'not-null constraint conflict' :
+      error?.code==='23514' ? 'check constraint conflict' :
+      error?.code==='42P01' ? 'missing table' :
+      error?.code==='42703' ? 'missing column' :
+      error?.code ? 'PostgreSQL operation failed' :
+      String(error?.message||'validation failed').slice(0,170);
+    throw new Error('Master initialization: '+stage+' failed: '+category+sqlState);
   } finally {
     client.release();
   }
