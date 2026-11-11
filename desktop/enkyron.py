@@ -2236,6 +2236,12 @@ class EnkyronWindow(QMainWindow):
                 return
             self.mail_sent_verifying = False
             self.mail_sent_verified_rows.add(row)
+            event = (str(data.get("last_event") or "unknown")
+                     if isinstance(data, dict) else "unknown")
+            if event not in ("delivered", "bounced", "failed",
+                             "suppressed", "complained", "sent", "queued",
+                             "opened", "clicked", "unknown"):
+                event = "unknown"
             item = self.mail_sent_table.item(row, 3)
             if item:
                 if error or not isinstance(data, dict) or not data.get("verified"):
@@ -2246,7 +2252,6 @@ class EnkyronWindow(QMainWindow):
                             or "Delivery could not be verified.")[:400]
                     )
                 else:
-                    event = data.get("last_event") or "unknown"
                     if event == "delivered":
                         item.setText("✓")
                         item.setForeground(QColor("#17803d"))
