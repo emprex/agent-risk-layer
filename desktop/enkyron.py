@@ -15855,44 +15855,47 @@ class EnkyronWindow(QMainWindow):
         self.bridge.call("master", ticket_id, callback=received)
 
     def inspect_engine(self):
-        """Use the verified master to scope the existing ARL Operator inspection."""
+        """Inspect the canonical current Git snapshot even before a Master is written."""
         ticket_id = self.current_id
         ticket = self.current_ticket
         if not ticket or not ticket_id:
             return
         if (ticket.get("target_kind") != "git" or
-            not ticket.get("linked_project_id") or
-            not ticket.get("linked_assessment_id")):
+                not ticket.get("linked_project_id") or
+                not ticket.get("linked_assessment_id")):
             self.engine_view.setPlainText("A linked local Git assessment is required.")
             return
         self.engine_button.setEnabled(False)
-        self.engine_view.setPlainText("Verifying historical master and frozen target…")
+        self.engine_view.setPlainText("Verifying the existing canonical snapshot and frozen Git target…")
 
-        def master_loaded(master, error):
+        def context_loaded(context, error):
             if self.current_id != ticket_id:
                 return
-            if error or not isinstance(master, dict) or not master.get("available"):
+            if error or not isinstance(context, dict) or not context.get("available"):
                 self.engine_view.setPlainText(
-                    "ARL inspection blocked: verified master dossier unavailable."
+                    "ARL inspection blocked: " + str(error or (
+                        context.get("reason", "Canonical snapshot unavailable")
+                        if isinstance(context, dict) else "Canonical snapshot unavailable"
+                    ))
                 )
                 self.engine_button.setEnabled(True)
                 return
-            if master.get("snapshot_status") != "current":
-                self.engine_view.setPlainText(
-                    "ARL inspection blocked: the recorded master snapshot is not current."
-                )
+            if (context.get("project_id") != ticket["linked_project_id"] or
+                    context.get("assessment_id") != ticket["linked_assessment_id"] or
+                    context.get("target_kind") != "git"):
+                self.engine_view.setPlainText("ARL inspection blocked: ticket and canonical scope mismatch.")
                 self.engine_button.setEnabled(True)
                 return
             request = {
                 "target_kind": "git",
-                "target_reference": ticket["target_reference"],
-                "target_sha": master["target_sha"],
-                "project_id": ticket["linked_project_id"],
-                "assessment_id": ticket["linked_assessment_id"],
-                "snapshot_id": master["snapshot_id"],
+                "target_reference": context["target_reference"],
+                "target_sha": context["target_sha"],
+                "project_id": context["project_id"],
+                "assessment_id": context["assessment_id"],
+                "snapshot_id": context["snapshot_id"],
             }
             self.engine_view.setPlainText(
-                "Inspecting existing assessment through canonical ARL Operator…"
+                "Reading existing assessment through the canonical ARL Operator…"
             )
 
             def state_loaded(data, state_error):
@@ -15923,15 +15926,18 @@ class EnkyronWindow(QMainWindow):
                     "Readiness: " + data["readiness_decision"],
                     "Human review required: YES",
                     "",
+                    "Master Dossier: check the separate Master Dossier tab.",
+                    "Current snapshot inspection does NOT validate a Master Dossier.",
+                    "",
                     data["notice"],
                 ]))
                 self.status.setText(
-                    "Canonical ARL identity confirmed. No security state was changed."
+                    "Canonical current snapshot identity confirmed. No security state changed."
                 )
 
             self.bridge.call("operator-state", payload=request, callback=state_loaded)
 
-        self.bridge.call("master", ticket_id, callback=master_loaded)
+        self.bridge.call("assessment-context", ticket_id, callback=context_loaded)
 
     def inspect_evidence(self):
         """Read existing evidence requirements; never accept evidence or run tests."""
@@ -15949,27 +15955,36 @@ class EnkyronWindow(QMainWindow):
         self.evidence_next.setEnabled(False)
         self.evidence_packs.clear()
         self.evidence_details.clear()
-        self.evidence_summary.setPlainText("Verifying master and exact snapshot binding…")
+        self.evidence_summary.setPlainText("Verifying the current canonical snapshot and Git target…")
 
-        def master_loaded(master, error):
+        def context_loaded(context, error):
             if ticket_id != self.current_id or sequence != self.evidence_seq:
                 return
-            if (error or not isinstance(master, dict)
-                or not master.get("available")
-                or master.get("snapshot_status") != "current"):
+            if (error or not isinstance(context, dict) or
+                    not context.get("available")):
                 self.evidence_summary.setPlainText(
-                    "Evidence workplan blocked: current verified master unavailable."
+                    "Evidence workplan blocked: " + str(error or (
+                        context.get("reason", "Canonical snapshot unavailable")
+                        if isinstance(context, dict) else "Canonical snapshot unavailable"
+                    ))
+                )
+                self.evidence_button.setEnabled(True)
+                return
+            if (context.get("project_id") != ticket["linked_project_id"] or
+                    context.get("assessment_id") != ticket["linked_assessment_id"]):
+                self.evidence_summary.setPlainText(
+                    "Evidence workplan blocked: linked assessment identity mismatch."
                 )
                 self.evidence_button.setEnabled(True)
                 return
             request = {
                 "action": "summary",
                 "target_kind": "git",
-                "target_reference": ticket["target_reference"],
-                "target_sha": master["target_sha"],
-                "project_id": ticket["linked_project_id"],
-                "assessment_id": ticket["linked_assessment_id"],
-                "snapshot_id": master["snapshot_id"],
+                "target_reference": context["target_reference"],
+                "target_sha": context["target_sha"],
+                "project_id": context["project_id"],
+                "assessment_id": context["assessment_id"],
+                "snapshot_id": context["snapshot_id"],
             }
             self.evidence_summary.setPlainText(
                 "Reading canonical ARL evidence requirements…"
@@ -16026,7 +16041,7 @@ class EnkyronWindow(QMainWindow):
 
             self.bridge.call("evidence-summary", payload=request, callback=summary_loaded)
 
-        self.bridge.call("master", ticket_id, callback=master_loaded)
+        self.bridge.call("assessment-context", ticket_id, callback=context_loaded)
 
     def open_evidence_pack(self):
         if not self.evidence_context or not self.evidence_packs.currentItem():
