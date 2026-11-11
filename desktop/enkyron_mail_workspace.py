@@ -67,6 +67,8 @@ class MailInboxView(QWidget):
     localRecordRequested = Signal(str, int)
     localRecordOpenRequested = Signal(str, int)
     localRecordLinkRequested = Signal(int)
+    replyRequested = Signal(str, str)
+    replySubmitRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -248,6 +250,40 @@ class MailInboxView(QWidget):
         self.body.setReadOnly(True)
         self.body.setPlainText("")
         right_layout.addWidget(self.body, 1)
+        reply_toolbar = QHBoxLayout()
+        self.reply_button = QPushButton("Reply")
+        self.reply_button.setObjectName("enkyronMailReply")
+        self.reply_button.setToolTip("Reply in this conversation")
+        self.reply_button.clicked.connect(self._request_reply)
+        self.reply_button.hide()
+        reply_toolbar.addWidget(self.reply_button)
+        reply_toolbar.addStretch()
+        right_layout.addLayout(reply_toolbar)
+        self.reply_editor = QFrame()
+        self.reply_editor.setObjectName("enkyronMailInlineReply")
+        reply_layout = QVBoxLayout(self.reply_editor)
+        reply_layout.setContentsMargins(0, 6, 0, 0)
+        self.reply_target = QLabel("")
+        self.reply_target.setWordWrap(True)
+        self.reply_target.setTextFormat(Qt.TextFormat.PlainText)
+        reply_layout.addWidget(self.reply_target)
+        self.reply_body = QPlainTextEdit()
+        self.reply_body.setObjectName("enkyronMailReplyBody")
+        self.reply_body.setPlaceholderText("Write your reply…")
+        self.reply_body.setMinimumHeight(130)
+        reply_layout.addWidget(self.reply_body)
+        reply_actions = QHBoxLayout()
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(self.hide_reply_editor)
+        reply_actions.addWidget(cancel)
+        reply_actions.addStretch()
+        self.reply_send = QPushButton("Send reply…")
+        self.reply_send.setObjectName("enkyronMailSendReply")
+        self.reply_send.clicked.connect(self.replySubmitRequested.emit)
+        reply_actions.addWidget(self.reply_send)
+        reply_layout.addLayout(reply_actions)
+        self.reply_editor.hide()
+        right_layout.addWidget(self.reply_editor)
         self.reader_stack.addWidget(right)
         self.reader_stack.setCurrentIndex(0)
         self.splitter.addWidget(self.reader_stack)
@@ -255,8 +291,6 @@ class MailInboxView(QWidget):
         self.mail_stack.addWidget(self.splitter)
         root.addWidget(self.mail_stack, 1)
 
-        # No inert Reply, Create ticket or Link company buttons: those workflows
-        # are not authenticated/implemented. Their absence is deliberate.
         self._show_empty("Inbox is empty", "No messages yet.")
 
     @property
@@ -501,6 +535,8 @@ class MailInboxView(QWidget):
             self._clear_threads(str(explanation or defaults[state])[:180])
 
     def _clear_threads(self, explanation):
+        self.hide_reply_editor()
+        self.reply_button.hide()
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.items = []
@@ -734,6 +770,8 @@ class MailInboxView(QWidget):
             self.mail_stack.setCurrentIndex(1)
 
     def _selected(self, current, _previous):
+        self.hide_reply_editor()
+        self.reply_button.hide()
         self.current_thread_id = None
         self.current_thread_mailbox = None
         self.subject.setText("Select a message")
@@ -785,6 +823,30 @@ class MailInboxView(QWidget):
         elif source in self._mailboxes:
             self.threadOpenRequested.emit(source, thread_id)
 
+    def _request_reply(self):
+        if (not self.local_mode or self.current_thread_mailbox not in self._mailboxes
+                or not self.current_thread_id
+                or self.selected_folder in ("sent", "drafts")):
+            return
+        self.replyRequested.emit(self.current_thread_mailbox, self.current_thread_id)
+
+    def show_reply_editor(self, mailbox, thread_id, recipient):
+        if (mailbox != self.current_thread_mailbox
+                or thread_id != self.current_thread_id
+                or not isinstance(recipient, str) or "@" not in recipient):
+            return False
+        self.reply_target.setText("Reply to: " + recipient)
+        self.reply_body.clear()
+        self.reply_send.setEnabled(True)
+        self.reply_editor.show()
+        self.reply_body.setFocus()
+        return True
+
+    def hide_reply_editor(self):
+        self.reply_editor.hide()
+        self.reply_send.setEnabled(True)
+        self.reply_target.clear()
+
     def show_messages(self, mailbox, thread_id, messages):
         """Render only plain text; no HTML, resources or attachment downloads."""
         if (self.connection_state != "connected" or mailbox != self.current_thread_mailbox
@@ -795,4 +857,6 @@ class MailInboxView(QWidget):
         )
         self.meta.setText("{} message(s) · Plain text".format(len(messages[:50])))
         self.reader_stack.setCurrentIndex(1)
+        self.reply_button.setVisible(self.local_mode and bool(messages)
+                                     and self.selected_folder not in ("sent","drafts"))
         return True
