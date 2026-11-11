@@ -191,7 +191,10 @@ class MailNativeUXSmoke(unittest.TestCase):
                 "sent", 0, "Safe text only", "Delivery not confirmed"
             ))
             self.assertEqual(ui.body.toPlainText(), "Safe text only")
+            self.assertEqual(ui.reply_button.text(), "Follow up")
+            self.assertFalse(ui.reply_button.isHidden())
             ui.activate_local_folder("drafts")
+            self.assertTrue(ui.reply_button.isHidden())
             self.assertTrue(ui.show_local_records("drafts", [
                 {"mailbox_key": "support", "recipient_email": "lead@example.invalid",
                  "subject": "Initial response", "mail_state": "draft"}
@@ -312,6 +315,97 @@ class MailNativeUXSmoke(unittest.TestCase):
             DesktopBridge.call = prior_bridge
             QMessageBox.question = prior_question
             QMessageBox.information = prior_info
+
+    def test_sent_follow_up_prefills_and_does_not_send_without_approval(self):
+        from PySide6.QtWidgets import QMessageBox
+        prior_bridge = DesktopBridge.call
+        prior_question = QMessageBox.question
+        prior_info = QMessageBox.information
+        approved = [False]
+        calls = []
+        sent = {
+            "mailbox_key": "direction", "recipient_email": "sam@example.invalid",
+            "subject": "Independent assessment", "outcome": "accepted",
+            "draft_id": "11111111-1111-4111-8111-111111111111",
+        }
+
+        def fake(_self, command, arg="", payload=None, callback=None):
+            calls.append((command, payload))
+            if command == "crm-mail-create" and callback:
+                callback({"id":"22222222-2222-4222-8222-222222222222",
+                          "revision":1}, None)
+            if command == "mail-send-draft" and callback:
+                callback({"outcome":"accepted","notice":"Test sent"}, None)
+        DesktopBridge.call = fake
+        QMessageBox.question = lambda *args, **kwargs: (
+            QMessageBox.StandardButton.Yes if approved[0] else
+            QMessageBox.StandardButton.No
+        )
+        QMessageBox.information = lambda *args, **kwargs: None
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.show()
+            window.navigation.setCurrentRow(3)
+            window.mail_provider_ready = True
+            inbox = window.mail_inbox
+            inbox.set_owner_mailboxes(CARD)
+            inbox.set_connection_state("connected")
+            inbox.activate_local_folder("sent")
+            window.mail_sent_items = [sent]
+            self.assertTrue(inbox.show_local_records("sent", [sent]))
+            inbox.thread_list.setCurrentRow(0)
+            self.assertTrue(inbox.show_local_record_preview(
+                "sent", 0, "Original outbound text", "Provider accepted"
+            ))
+            inbox.reply_button.click()
+            self.assertTrue(inbox.reply_editor.isVisible())
+            self.assertEqual(inbox.reply_target.text(),
+                             "New follow-up to: sam@example.invalid")
+            self.assertEqual(window._sent_followup_context["subject"],
+                             "Re: Independent assessment")
+            inbox.reply_body.setPlainText("Just following up on my last email.")
+            inbox.reply_send.click()
+            self.assertFalse(any(c[0] == "mail-send-draft" for c in calls))
+            approved[0] = True
+            inbox.reply_send.click()
+            drafts = [p for c,p in calls if c == "crm-mail-create"]
+            sends = [p for c,p in calls if c == "mail-send-draft"]
+            self.assertEqual(len(drafts),1)
+            self.assertEqual(drafts[0]["recipient_email"],"sam@example.invalid")
+            self.assertEqual(drafts[0]["subject"],"Re: Independent assessment")
+            self.assertEqual(drafts[0]["body_text"],
+                             "Just following up on my last email.")
+            self.assertEqual(len(sends),1)
+            self.assertTrue(sends[0]["confirmed"])
+            self.assertFalse(inbox.reply_editor.isVisible())
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = prior_bridge
+            QMessageBox.question = prior_question
+            QMessageBox.information = prior_info
+
+    def test_detached_window_switch_minimizes_covering_main_window(self):
+        prior_bridge = DesktopBridge.call
+        DesktopBridge.call = lambda *_args, **_kwargs: None
+        window = None
+        try:
+            window = EnkyronWindow()
+            window.show()
+            window.toggle_mail_window()
+            self.assertTrue(window.mail_detached_window.isVisible())
+            from PySide6.QtWidgets import QPushButton
+            switch = window.mail_detach_placeholder.findChild(QPushButton)
+            self.assertEqual(switch.text(), "Switch to Mail")
+            switch.click()
+            self.assertTrue(window.isMinimized())
+            self.assertTrue(window.mail_detached_window.isVisible())
+            window.mail_detached_window.close()
+        finally:
+            if window:
+                self._dispose(window)
+            DesktopBridge.call = prior_bridge
 
     def test_mail_main_navigation_reuses_crm_tab_and_drafts(self):
         prior = DesktopBridge.call
