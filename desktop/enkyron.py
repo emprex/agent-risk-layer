@@ -797,13 +797,15 @@ class EnkyronWindow(QMainWindow):
         crm_page = QWidget()
         crm_l = QVBoxLayout(crm_page)
         crm_l.setContentsMargins(25, 18, 25, 18)
-        crm_header = QHBoxLayout()
+        self.crm_header_panel = QWidget()
+        crm_header = QHBoxLayout(self.crm_header_panel)
+        crm_header.setContentsMargins(0,0,0,0)
         crm_header.addWidget(section_title("CRM · COMPANIES, CONTACTS AND RESEARCH"))
         crm_header.addStretch()
         self.crm_company_profile_button = QPushButton("Issuing company profile…")
         self.crm_company_profile_button.clicked.connect(self.open_issuing_company_profile)
         crm_header.addWidget(self.crm_company_profile_button)
-        crm_l.addLayout(crm_header)
+        crm_l.addWidget(self.crm_header_panel)
         self.crm_tabs = QTabWidget()
         crm_l.addWidget(self.crm_tabs, 1)
 
@@ -1254,11 +1256,12 @@ class EnkyronWindow(QMainWindow):
         mail_l = QVBoxLayout(mail_page)
         mail_l.setSpacing(10)
         mail_head = QHBoxLayout()
-        mail_head.addWidget(section_title("MAIL · DIRECTION & SUPPORT"))
+        mail_head.addWidget(section_title("Mail"))
         mail_head.addStretch()
         self.crm_mail_connection = QLabel("Mail · Compose and local drafts available")
         self.crm_mail_connection.setObjectName("enkyronMailHeaderState")
         self.crm_mail_connection.setTextFormat(Qt.TextFormat.PlainText)
+        self.crm_mail_connection.hide()  # Status lives once, inside Inbox.
         mail_head.addWidget(self.crm_mail_connection)
         # Mail is one workspace; mailbox transport configuration is back-office.
         mail_l.addLayout(mail_head)
@@ -1703,7 +1706,7 @@ class EnkyronWindow(QMainWindow):
 
     def refresh_mail(self, mailbox):
         """Read selected Resend Inbox under the local DB mailbox permission."""
-        if not self.mail_provider_ready or mailbox not in ("direction", "support"):
+        if not self.mail_provider_ready or mailbox not in ("direction", "support", "all"):
             return
         self.mail_inbox.set_connection_state("loading")
         self.crm_mail_connection.setText("Refreshing email…")
@@ -1729,7 +1732,7 @@ class EnkyronWindow(QMainWindow):
         if mailbox not in ("direction","support") or not thread_id:
             return
         def received(data,error):
-            if (mailbox != self.mail_inbox.selected_mailbox
+            if (mailbox != self.mail_inbox.current_thread_mailbox
                     or thread_id != self.mail_inbox.current_thread_id):
                 return
             if error or not data or data.get("thread_id") != thread_id:
@@ -1793,9 +1796,7 @@ class EnkyronWindow(QMainWindow):
             self.mail_inbox.set_owner_mailboxes(result.get("owner_access") or {})
             current = result.get("current") or {}
             self.account_identity_label.setText(
-                "{} · {}".format(
-                    current.get("display_name"), current.get("job_title")
-                ) if current.get("display_name") else "LOCAL WORKSPACE"
+                current.get("display_name") or "LOCAL WORKSPACE"
             )
         self.bridge.call("operator-profile", callback=received)
 
@@ -1970,8 +1971,9 @@ class EnkyronWindow(QMainWindow):
         super().closeEvent(event)
 
     def module_changed(self, index):
-        # The top-level Mail shortcut focuses the existing CRM Mail tab.
-        # There is one shared draft list and no duplicated mail workspace.
+        # Reuse the CRM data pages without surrounding Mail in CRM controls.
+        self.crm_header_panel.setVisible(index != 3)
+        self.crm_tabs.tabBar().setVisible(index != 3)
         if index == 3:
             self.pages.setCurrentIndex(2)
             self.crm_tabs.setCurrentIndex(3)
