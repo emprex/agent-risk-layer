@@ -106,9 +106,10 @@ export function combineMailboxPages(folder,settled){
     partial:unavailable.length!==0,
   };
 }
-export async function mailThreads(pool,operator,mailbox,folder='inbox'){
+export async function mailThreads(pool,operator,mailbox,folder='inbox',after=null){
   if(!['inbox','archive','spam','trash'].includes(folder))
     throw new Error('Invalid mailbox folder');
+  if(after!==null&&!UUID.test(after))throw new Error('Invalid mail pagination cursor');
   // The two mail accounts are read independently and failures are explicit.
   if(mailbox==='all'){
     const pages=await Promise.allSettled(
@@ -117,7 +118,7 @@ export async function mailThreads(pool,operator,mailbox,folder='inbox'){
     return combineMailboxPages(folder,pages);
   }
   const reader=await readerFor(pool,operator,mailbox);
-  const page=await reader.listThreads({mailbox,folder,limit:30});
+  const page=await reader.listThreads({mailbox,folder,limit:30,after});
   const items=page.items.map(item=>({...item,mailbox}));
   // Best-effort local index: never misrepresent a failed cache write as an
   // unavailable provider inbox. Full email bodies are not silently stored.
@@ -138,9 +139,10 @@ export async function mailThreads(pool,operator,mailbox,folder='inbox'){
   }catch(error){if(error?.code!=='42P01')throw error;}
   return {...page,folder,items};
 }
-export async function mailMessages(pool,operator,mailbox,threadId){
+export async function mailMessages(pool,operator,mailbox,threadId,after=null){
+  if(after!==null&&!UUID.test(after))throw new Error('Invalid mail pagination cursor');
   const reader=await readerFor(pool,operator,mailbox);
-  return reader.listThreadEmails({mailbox,threadId,limit:30});
+  return reader.listThreadEmails({mailbox,threadId,limit:30,after});
 }
 export async function mailSent(pool,operator){
   const key=workspace(operator);
