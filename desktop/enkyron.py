@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from email.utils import parseaddr
 from datetime import datetime, timezone
 import json
 import re
@@ -318,6 +319,7 @@ class EnkyronWindow(QMainWindow):
         self.crm_contact_dialog = None
         self.crm_dossier_dialog = None
         self.mail_thread_windows = {}
+        self._reply_context = None
         self.mail_detached_window = None
         self.calendar_detached_window = None
         self.mail_detach_placeholder = None
@@ -1348,6 +1350,8 @@ class EnkyronWindow(QMainWindow):
         )
         self.mail_inbox.threadRequested.connect(self.read_mail_thread)
         self.mail_inbox.threadOpenRequested.connect(self.open_mail_thread_window)
+        self.mail_inbox.replyRequested.connect(self.prepare_mail_reply)
+        self.mail_inbox.replySubmitRequested.connect(self.send_inline_mail_reply)
         self.mail_inbox.newEmailRequested.connect(self.open_mail_compose)
         self.crm_mail_folders.addTab(self.mail_inbox, "Inbox")
         sent_page = QWidget()
@@ -2056,6 +2060,140 @@ class EnkyronWindow(QMainWindow):
             else:
                 display(data,None)
         self.bridge.call("mail-local-messages",payload=payload,callback=cached)
+
+    def prepare_mail_reply(self, mailbox, thread_id):
+        """Resolve the real reply target from Resend before opening the editor."""
+        self._reply_context = None
+        if not self.mail_provider_ready:
+            QMessageBox.information(
+                self, "Reply unavailable",
+                "Saved messages remain readable, but replying requires Resend."
+            )
+            return
+        if mailbox not in ("direction", "support") or not thread_id:
+            return
+        self.mail_inbox.reply_button.setEnabled(False)
+
+        def received(data, error):
+            self.mail_inbox.reply_button.setEnabled(True)
+            if (mailbox != self.mail_inbox.current_thread_mailbox
+                    or thread_id != self.mail_inbox.current_thread_id):
+                return
+            if error or not isinstance(data, dict):
+                QMessageBox.warning(self, "Reply unavailable",
+                    str(error or "Cannot verify the selected conversation."))
+                return
+            messages = data.get("items")
+            if not isinstance(messages, list):
+                return
+            own = self.mail_inbox._mailboxes.get(mailbox, "").casefold()
+            selected = None
+            address = None
+            for message in reversed(messages):
+                if not isinstance(message, dict):
+                    continue
+                _, from_email = parseaddr(str(message.get("from") or ""))
+                if not from_email or from_email.casefold() == own:
+                    continue
+                proposed = message.get("reply_to") or []
+                if not isinstance(proposed, list):
+                    proposed = [proposed] if isinstance(proposed, str) else []
+                if len(proposed) > 1:
+                    QMessageBox.warning(self, "Reply unavailable",
+                        "This message has multiple Reply-To recipients. "
+                        "Review them before sending a separate email.")
+                    return
+                _, target = parseaddr(str(proposed[0] if proposed else
+                                          message.get("from") or ""))
+                if (not target or "@" not in target or
+                        any(c in target for c in (" ", ",", ";", "<", ">", "\r", "\n")) or
+                        target.casefold() == own):
+                    QMessageBox.warning(self, "Reply unavailable",
+                        "The message recipient could not be verified.")
+                    return
+                selected, address = message, target.lower()
+                break
+            if not selected:
+                QMessageBox.information(self, "Reply unavailable",
+                    "No external sender could be found in this conversation.")
+                return
+            email_id = str(selected.get("id") or "")
+            if not email_id:
+                return
+            if not self.mail_inbox.show_reply_editor(mailbox,thread_id,address):
+                return
+            subject = str(selected.get("subject") or
+                          self.mail_inbox.subject.text() or "Message")[:180]
+            self._reply_context = {
+                "mailbox":mailbox,"thread_id":thread_id,"email_id":email_id,
+                "recipient":address,"subject":subject if subject.lower().startswith("re:")
+                else "Re: " + subject,
+            }
+
+        self.bridge.call("mail-messages",payload={
+            "mailbox":mailbox,"thread_id":thread_id
+        },callback=received)
+
+    def send_inline_mail_reply(self):
+        """Persist exact text first; a separately confirmed send stays in-thread."""
+        ctx = self._reply_context
+        inbox = self.mail_inbox
+        if not isinstance(ctx,dict) or not inbox.reply_editor.isVisible():
+            return
+        if (ctx["mailbox"] != inbox.current_thread_mailbox
+                or ctx["thread_id"] != inbox.current_thread_id):
+            return
+        body = inbox.reply_body.toPlainText().strip()
+        if not body or len(body.encode("utf-8")) > 12000:
+            QMessageBox.warning(self, "Reply text",
+                "Enter your reply (maximum 12 KB of text).")
+            return
+        decision = QMessageBox.question(
+            self, "Confirm reply in conversation",
+            ("Send this reply in the existing Resend thread?\n\n"
+             "From: {}\nTo: {}\nSubject: {}\n\n"
+             "The exact recipient is rechecked by the backend. "
+             "If it changes, sending is blocked.").format(
+                 self.mail_inbox._mailboxes.get(ctx["mailbox"],ctx["mailbox"]),
+                 ctx["recipient"],ctx["subject"]),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        inbox.reply_send.setEnabled(False)
+        fields = {
+            "mailbox_key":ctx["mailbox"],"recipient_email":ctx["recipient"],
+            "subject":ctx["subject"],"body_text":body
+        }
+        def saved(data,error):
+            if error or not isinstance(data,dict) or not data.get("id"):
+                inbox.reply_send.setEnabled(True)
+                QMessageBox.warning(self, "Reply not saved",
+                    str(error or "Could not save the reply draft."))
+                return
+            payload = {
+                "draft_id":data["id"],"expected_revision":data["revision"],
+                "mailbox":ctx["mailbox"],"thread_id":ctx["thread_id"],
+                "email_id":ctx["email_id"],
+                "recipient_verified":True,"confirmed":True,
+            }
+            def sent(result,send_error):
+                if send_error or not isinstance(result,dict):
+                    inbox.reply_send.setEnabled(False)
+                    QMessageBox.warning(self, "Reply outcome unknown",
+                        "The reply was saved locally, but sending could not be "
+                        "confirmed. Check Sent and Resend before attempting another.")
+                    return
+                inbox.hide_reply_editor()
+                self._reply_context = None
+                self.load_mail_sent()
+                if result.get("outcome") == "accepted":
+                    self.sync_local_mail(ctx["mailbox"])
+                QMessageBox.information(self, "Reply status",
+                    str(result.get("notice") or "Provider result unavailable."))
+            self.bridge.call("mail-reply-draft",payload=payload,callback=sent)
+        self.bridge.call("crm-mail-create",payload=fields,callback=saved)
 
     def open_mail_thread_window(self, mailbox, thread_id):
         """Double-click: detachable, read-only plain-text conversation."""
