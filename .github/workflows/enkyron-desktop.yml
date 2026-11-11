@@ -272,9 +272,9 @@ jobs:
           assert window.tabs.tabText(5) == 'Evidence Requests'
           assert window.tabs.tabText(6) == 'Evidence Register'
           assert window.windowTitle().startswith("ENKYRON")
-          assert window.pages.count() == 3
-          assert [window.navigation.item(i).text() for i in range(4)] == [
-              "Home", "Tickets", "CRM", "Mail"
+          assert window.pages.count() == 4
+          assert [window.navigation.item(i).text() for i in range(5)] == [
+              "Home", "Tickets", "CRM", "Mail", "Calendar"
           ]
           assert window.pages.currentIndex() == 0
           assert window.ticket_views.count() == 2
