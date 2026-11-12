@@ -261,6 +261,7 @@ class Kb001NativeHandoffSmoke(unittest.TestCase):
         second = "1445aa99-e08a-4471-b8e5-9d0b36a8412b"
         try:
             w.show()
+            w.pages.setCurrentIndex(1)  # Make Tickets the visible native module.
             w.ticket_views.setCurrentIndex(1)
             w.tabs.setCurrentIndex(5)
             w.batch_review_table.setRowCount(108)
