@@ -41,7 +41,7 @@ entries AS (
     ON c.workspace_key=e.workspace_key
    AND c.id=e.resource_id AND c.company_id=$2
    AND e.resource_kind='contact'
-  WHERE e.workspace_key=$1 AND e.event_type<>'updated'
+  WHERE e.workspace_key=$1 AND e.event_type NOT IN ('updated','linked')
     AND ((e.resource_kind='company' AND e.resource_id=$2)
       OR (e.resource_kind='contact' AND c.id IS NOT NULL))
   UNION ALL
