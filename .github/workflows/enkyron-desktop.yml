@@ -1384,8 +1384,8 @@ jobs:
           assert not window.crm_dossier_activity_confirm.isChecked()
           # Read-only snapshot refresh is requested; no auto-sent message.
           assert window.crm_dossier_tabs.currentIndex() == 5
-          assert "Latest recorded follow-up:" in window.crm_dossier_next_action.text() or (
-              "No next action recorded" in window.crm_dossier_next_action.text()
+          assert "Opportunity next action:" in window.crm_dossier_next_action.text() or (
+              "No opportunity next action recorded." in window.crm_dossier_next_action.text()
           )
           # One control manages the extended sections. No competing
           # "View commercial documents" button or second reveal mechanism.
