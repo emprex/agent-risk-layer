@@ -41,6 +41,7 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-update-opportunity', 'crm-activity-timeline',
     'crm-record-activity', 'crm-record-qualification',
     'crm-company-proposal-readiness',
+    'crm-company-proposal-create', 'crm-proposal', 'crm-proposals',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
@@ -97,6 +98,34 @@ test('ENK-04 allows read-only company proposal preparation and still blocks draf
     'mail-send-draft','create-ticket']){
     assert.throws(()=>requireEnkyronUatCommand(target,write),/UAT blocks/);
   }
+});
+
+test('ENK-04 guarded UAT authorises reviewed unsent company draft, not legacy issuance',()=>{
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const good={
+    company_id:'11111111-2222-4333-8444-555555555555',
+    opportunity_id:'22222222-3333-4444-8555-666666666666',
+    qualification_id:'33333333-4444-4555-8666-777777777777',
+    expected_opportunity_version:2,title:'Synthetic manual review proposal',
+    scope_text:'Synthetic agent security check, no client consent.',
+    currency:'GBP',amount_minor:120000,confirmed:true
+  };
+  for(const command of [
+    'crm-company-proposal-create','crm-proposal','crm-proposals'
+  ])assert.doesNotThrow(()=>requireEnkyronUatCommand(target,command));
+  assert.doesNotThrow(()=>requireEnkyronUatPayload(target,'crm-company-proposal-create',good));
+  for(const bad of [
+    null,{}, {...good,confirmed:false},{...good,company_id:'bad'},
+    {...good,qualification_id:'bad'}, {...good,amount_minor:0},
+    {...good,amount_minor:'120000'}, {...good,expected_opportunity_version:0}
+  ])assert.throws(
+    ()=>requireEnkyronUatPayload(target,'crm-company-proposal-create',bad),
+    /reviewed company, qualification and explicit price/
+  );
+  for(const prohibited of [
+    'crm-proposal-create','crm-proposal-update','crm-invoice-issue',
+    'mail-send-draft','assessment-link','create-ticket'
+  ])assert.throws(()=>requireEnkyronUatCommand(target,prohibited),/UAT blocks/);
 });
 
 test('ENK-04 qualification UAT allows only reviewed company-level potential fit', () => {

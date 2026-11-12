@@ -14,6 +14,7 @@ const UAT_COMMANDS = new Set([
   'crm-opportunities', 'crm-activity-timeline', 'crm-update-opportunity',
   'crm-record-activity', 'crm-record-qualification',
   'crm-company-proposal-readiness',
+  'crm-company-proposal-create', 'crm-proposal', 'crm-proposals',
   'crm-company-followups',
   'crm-company-followups-upcoming', 'crm-company-followup-create',
   'crm-company-followup-update',
@@ -66,6 +67,20 @@ export function requireEnkyronUatPayload(target, command, payload) {
        payload?.fit_status !== 'potential_fit' ||
        payload?.priority !== 'normal')) {
     throw new Error('ENKYRON UAT qualification requires reviewed company-level potential fit');
+  }
+  // Only an explicitly priced/reviewed company-owned *unsent* draft may be
+  // created on the synthetic UAT database; legacy proposal writes stay denied.
+  if (target.uat && command === 'crm-company-proposal-create' &&
+      (payload?.confirmed !== true ||
+       typeof payload?.company_id !== 'string' ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.company_id) ||
+       typeof payload?.qualification_id !== 'string' ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.qualification_id) ||
+       !Number.isSafeInteger(payload?.expected_opportunity_version) ||
+       payload.expected_opportunity_version < 1 ||
+       !Number.isSafeInteger(payload?.amount_minor) ||
+       payload.amount_minor < 1)) {
+    throw new Error('ENKYRON UAT internal draft requires reviewed company, qualification and explicit price');
   }
 }
 
