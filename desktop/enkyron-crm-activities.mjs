@@ -31,7 +31,12 @@ export function validateActivity(input){
     throw new Error('CRM manual activity detail must have 10–2000 characters');
   if(input.reviewed!==true)
     throw new Error('CRM operator confirmation required');
-  return {opportunity_id,company_id,activity_type:input.activity_type,detail:detail.trim()};
+  const reviewed_company_id=input.reviewed_company_id==null?null:
+    requireCompanyId(input.reviewed_company_id);
+  if(reviewed_company_id!==null && opportunity_id===null)
+    throw new Error('CRM reviewed company context requires an opportunity');
+  return {opportunity_id,company_id,reviewed_company_id,
+    activity_type:input.activity_type,detail:detail.trim()};
 }
 export async function listActivityTimeline(pool,id,actor){
   const opportunityId=requireOpportunityId(id),owner=scope(actor);
@@ -85,6 +90,24 @@ export async function recordActivity(pool,input,actor,options={}){
     if(!result.rows[0])throw new Error(
       'CRM '+(companyMode?'company':'opportunity')+' not found in local workspace'
     );
+    if(activity.reviewed_company_id!==null){
+      // Resolve the SAME explicit company association as Company 360 at
+      // write time. Matching company names never grant journal linkage.
+      const linked=(await client.query(
+        'SELECT EXISTS(SELECT 1 FROM enkyron_crm_opportunities o '
+        +'WHERE o.workspace_key=$1 AND o.id=$2 AND ('
+        +'EXISTS(SELECT 1 FROM enkyron_crm_prospect_links l '
+        +'WHERE l.workspace_key=o.workspace_key AND l.prospect_id=o.prospect_id '
+        +'AND l.company_id=$3) OR '
+        +'(o.company_id=$3 AND (o.source_ticket_id IS NULL OR EXISTS('
+        +'SELECT 1 FROM enkyron_crm_effective_ticket_links e '
+        +'WHERE e.workspace_key=o.workspace_key AND e.company_id=o.company_id '
+        +'AND e.ticket_id=o.source_ticket_id))))) AS linked',
+        [owner.key,activity.opportunity_id,activity.reviewed_company_id]
+      )).rows[0];
+      if(linked?.linked!==true)
+        throw new Error('CRM activity opportunity no longer linked to reviewed company');
+    }
     const id=uuid();
     await client.query(
       'INSERT INTO enkyron_crm_activities '

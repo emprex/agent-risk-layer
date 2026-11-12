@@ -38,12 +38,12 @@ test('UAT permits only synthetic Company 360 flow and no mail/ARL/tickets writes
     'crm-create-company', 'crm-create-contact', 'crm-company-dossier',
     'crm-company-direct-opportunity-create', 'crm-company-followup-create',
     'crm-company-followup-update', 'crm-edit-company', 'crm-edit-contact',
-    'crm-update-opportunity', 'crm-activity-timeline',
+    'crm-update-opportunity', 'crm-activity-timeline', 'crm-record-activity',
   ]) assert.doesNotThrow(() => requireEnkyronUatCommand(target, command));
   for (const command of [
     'mail-send-draft', 'mail-threads', 'assessment-link', 'create-ticket',
     'crm-invoice-issue', 'crm-mail-manual-send', 'calendar-create',
-    'crm-proposal-create', 'crm-record-activity', 'crm-record-qualification',
+    'crm-proposal-create', 'crm-record-qualification',
     'crm-invoice-prepare',
   ]) assert.throws(() => requireEnkyronUatCommand(target, command), /UAT blocks/);
 });
@@ -58,6 +58,27 @@ test('ENK-04 UAT limits update to explicitly reviewed company record', () => {
   assert.doesNotThrow(() => requireEnkyronUatPayload(target,'crm-activity-timeline',null));
   assert.doesNotThrow(() => requireEnkyronUatPayload({database:'arl_local',uat:false},'crm-update-opportunity',{}));
   assert.throws(() => requireEnkyronUatCommand(target,'mail-send-draft'), /UAT blocks/);
+});
+
+test('ENK-04 UAT requires a reviewed company context for manual activity only', () => {
+  const target={database:'enkyron_uat_enk03',uat:true};
+  const base={activity_type:'call_note', detail:'Synthetic note only', reviewed:true, confirmed:true};
+  const company_id='22222222-3333-4444-8555-666666666666';
+  const opportunity_id='11111111-2222-4333-8444-555555555555';
+  for (const record of [
+    {...base,company_id},
+    {...base,opportunity_id,reviewed_company_id:company_id}
+  ]) assert.doesNotThrow(() => requireEnkyronUatPayload(target,'crm-record-activity',record));
+  for (const bad of [
+    null,{}, {...base,confirmed:false}, {...base,reviewed:false},
+    {...base,opportunity_id}, {...base,company_id,opportunity_id},
+    {...base,company_id,reviewed_company_id:company_id},
+    {...base,opportunity_id,reviewed_company_id:42}
+  ]) assert.throws(() => requireEnkyronUatPayload(target,'crm-record-activity',bad),
+    /activity requires explicit reviewed company context/);
+  assert.doesNotThrow(() => requireEnkyronUatPayload({database:'arl_local',uat:false},
+    'crm-record-activity',{}));
+  assert.throws(() => requireEnkyronUatCommand(target,'crm-proposal-create'),/UAT blocks/);
 });
 
 test('UAT refuses unmarked, wrong or unreadable database before business operation', async () => {

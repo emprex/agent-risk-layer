@@ -4,6 +4,9 @@ import {randomUUID} from 'node:crypto';
 import pg from 'pg';
 import {createOpportunity,updateOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
 import {recordActivity,listActivityTimeline} from '../desktop/enkyron-crm-activities.mjs';
+import {createCompany} from '../desktop/enkyron-crm.mjs';
+import {createDirectCompanyOpportunity} from '../desktop/enkyron-crm-opportunities.mjs';
+import {getCompanyDossier} from '../desktop/enkyron-crm-company-dossier.mjs';
 
 const database=process.env.ARL_CI_POSTGRES_URL||'';
 function ephemeral(){
@@ -99,5 +102,64 @@ test('PostgreSQL activity notes: immutable provenance, local isolation and no se
       pool.query('SELECT count(*)::int AS n FROM arl_workbench_tickets')
     ]);
     assert.deepEqual(finalCounts.map(r=>r.rows[0].n),counts.map(r=>r.rows[0].n));
+  }finally{await pool.end();}
+});
+
+test('ENK-04 PostgreSQL: reviewed opportunity activity remains scoped to exact company', {
+  skip:!database&&'Dedicated disposable PostgreSQL only',
+  timeout:45_000
+},async()=>{
+  const pool=new pg.Pool({connectionString:ephemeral(),max:3});
+  const actor='ci-journal-'+randomUUID().slice(0,8);
+  try{
+    const company=await createCompany(pool,{
+      name:'Synthetic Journal Primary '+randomUUID().slice(0,8)
+    },actor);
+    const different=await createCompany(pool,{
+      name:'Synthetic Journal Foreign '+randomUUID().slice(0,8)
+    },actor);
+    const opportunity=await createDirectCompanyOpportunity(pool,{
+      company_id:company.id,company_name_at_review:company.name,
+      next_action:'Review the manual security discovery questions',
+      due_date:'2026-11-16',confirmed:true
+    },actor);
+    const before=(await pool.query(
+      'SELECT count(*)::int AS n FROM arl_workbench_tickets'
+    )).rows[0].n;
+    const note=await recordActivity(pool,{
+      opportunity_id:opportunity.id,reviewed_company_id:company.id,
+      activity_type:'call_note',
+      detail:'Synthetic discovery notes only; no real call or message was sent.',
+      reviewed:true
+    },actor);
+    assert.equal(note.opportunity_id,opportunity.id);
+    assert.equal(note.company_id,null);
+    const dossier=await getCompanyDossier(pool,company.id,actor);
+    assert.ok(dossier.sections.activities.items.some(x=>
+      x.id===note.id&&x.opportunity_id===opportunity.id&&x.company_id===null
+      &&x.activity_type==='call_note'
+      &&x.detail==='Synthetic discovery notes only; no real call or message was sent.'
+    ),'canonical dossier must include the exact immutable opportunity journal record');
+    const timeline=await listActivityTimeline(pool,opportunity.id,actor);
+    assert.ok(timeline.items.some(x=>x.id===note.id&&x.entry_kind==='activity'));
+    await assert.rejects(()=>recordActivity(pool,{
+      opportunity_id:opportunity.id,reviewed_company_id:different.id,
+      activity_type:'note',detail:'Do not bind a note to the wrong CRM company.',
+      reviewed:true
+    },actor),/no longer linked to reviewed company/);
+    const rows=(await pool.query(
+      'SELECT id FROM enkyron_crm_activities '
+      +'WHERE workspace_key=$1 AND opportunity_id=$2',
+      ['local:'+actor,opportunity.id]
+    )).rows;
+    assert.deepEqual(rows.map(r=>r.id),[note.id],
+      'wrong-company association must not insert a second activity');
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM arl_workbench_tickets'
+    )).rows[0].n,before,'manual journal never creates a service ticket');
+    assert.equal((await pool.query(
+      'SELECT count(*)::int AS n FROM enkyron_crm_mail_drafts WHERE workspace_key=$1',
+      ['local:'+actor]
+    )).rows[0].n,0,'journal never creates a mail draft');
   }finally{await pool.end();}
 });
