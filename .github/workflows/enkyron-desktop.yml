@@ -143,6 +143,12 @@ jobs:
         run: |
           python3 -m venv "$RUNNER_TEMP/enkyron-venv"
           "$RUNNER_TEMP/enkyron-venv/bin/python" -m pip install --disable-pip-version-check "PySide6_Essentials>=6.9,<7"
+      - name: Native QProcess lifecycle smoke (normal, timeout, shutdown)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          "$RUNNER_TEMP/enkyron-venv/bin/python" -m unittest discover -s tests -p 'qt_enkyron_qprocess_lifecycle_smoke.py'
+
       - name: Native draft PDF renderer smoke (synthetic, offline)
         env:
           QT_QPA_PLATFORM: offscreen
