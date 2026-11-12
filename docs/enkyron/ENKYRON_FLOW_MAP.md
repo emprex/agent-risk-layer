@@ -63,7 +63,7 @@ Utilisateur dans ENKYRON (QMainWindow/PySide6)
 
 | Étape | Composants | Limite |
 | --- | --- | --- |
-| Boîte fournisseur | `enkyron-mail-service.mjs`, `enkyron-mail-resend-inbox-read.mjs` selon branche | credentials/fournisseur et statut réels à revalider |
+| Boîte fournisseur | `enkyron-mail-service.mjs`, `desktop/enkyron-resend-inbox-read.mjs` selon branche | credentials/fournisseur et statut réels à revalider |
 | Archive locale | `enkyron_mail_local_threads`, `enkyron_mail_local_messages` (112) | données locales ≠ totalité de la boîte distante |
 | Message complet / pièce jointe | `enkyron_mail_full_messages`, `enkyron_mail_attachment_quarantine` (113) | métadonnées ≠ pièce jointe inspectée et validée |
 | Associer à CRM | `mail-local-company-link`, `crm-mail-*` | association explicite et preuve du compte requises |
