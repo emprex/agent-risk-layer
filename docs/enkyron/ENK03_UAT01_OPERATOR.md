@@ -77,6 +77,34 @@ performed by the preflight. A failed authentication or missing CREATE DATABASE
 privilege requires a separately reviewed provisioning route, not ad hoc
 privilege escalation.
 
+### Bootstrap after a fresh synthetic DB is independently confirmed
+
+Only after a brand-new `enkyron_uat_enk03` has been created with `template0`,
+owned by the current operator, and source HEAD / clean worktree have been
+verified, run `npm ci --ignore-scripts` in **the #583 preview**, and then:
+
+```bash
+ENKYRON_UAT_DATABASE=enkyron_uat_enk03 \
+ENKYRON_UAT_GUARD=ENK03_SYNTHETIC_ONLY \
+node scripts/enkyron-enk03-uat-bootstrap.mjs --apply
+```
+
+The bootstrap performs its own exact database and owner checks, refuses
+preexisting user tables, applies the original versioned migrations and creates
+`public.enkyron_uat_guard` **inside the same PostgreSQL transaction**. Failure
+rolls back the migration and marker together. A previous partial or complete
+database is **never reset or overwritten**; investigate before rerunning.
+This script is separate from the ARL service startup and does not send mail,
+start assessments, create tickets or access `arl_local`.
+
+After bootstrap, verify from the test database (read-only): migration count,
+latest migration, guard marker and `current_database()`. Only then consider
+launching `python3 -m desktop.enkyron` from the preview **with the same two UAT
+variables exported to the full parent process**. Omission of the variables
+would target `arl_local` by legacy design. The presence of a marker does
+not constitute test acceptance; UAT-01 requires business-level evidence.
+
+
 ## Acceptance scenario UAT-01 (after test workspace isolation is proven)
 
 1. Open the PR #583 native ENKYRON preview and select **CRM → Companies & Contacts**. Create one clearly synthetic company, e.g. `ENK03-UAT Synthetic Company`; confirm it is selected by canonical company ID, not a matching name.
